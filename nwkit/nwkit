@@ -1,0 +1,52 @@
+#!/usr/bin/env python
+
+import argparse
+
+
+# Main parser
+parser = argparse.ArgumentParser(description='A toolkit for newick trees')
+subparsers = parser.add_subparsers()
+
+
+
+def command_drop(args):
+    from nwkit.drop import drop_main
+    drop_main(args)
+
+parser_drop = subparsers.add_parser('drop', help='see `nwkit drop -h`')
+parser_drop.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
+                         help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+parser_drop.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
+                         help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
+parser_drop.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
+                         help='default=%(default)s: ETE3 tree format.')
+parser_drop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False, action='store',
+                         choices=['all','root','leaf','intnode'],
+                         help='default=%(default)s: Nodes to be edited.')
+parser_drop.add_argument('--name', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+                         help='default=%(default)s: Drop node names.')
+parser_drop.add_argument('--support', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+                         help='default=%(default)s: Drop support values.')
+parser_drop.add_argument('--length', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+                         help='default=%(default)s: Drop branch length.')
+parser_drop.set_defaults(handler=command_drop)
+
+
+
+
+
+def command_help(args):
+    print(parser.parse_args([args.command, '--help']))
+
+parser_help = subparsers.add_parser('help', help='show help messages')
+parser_help.add_argument('command', help='command name which help is shown')
+parser_help.set_defaults(handler=command_help)
+
+
+
+# Handler
+args = parser.parse_args()
+if hasattr(args, 'handler'):
+    args.handler(args)
+else:
+    parser.print_help()
