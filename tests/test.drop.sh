@@ -7,6 +7,8 @@ cd ${wd}
 
 echo "Testing file to stdout"
 nwkit drop --infile ../data/OG0001999.dated.pruned.nwk --outfile - --target root --length yes
+nwkit drop --infile ../data/OG0001999.dated.pruned.nwk --outfile - --target root --length yes --fill 0
+
 
 echo "Testing stdin to stdout"
 cat ../data/OG0001999.dated.pruned.nwk \

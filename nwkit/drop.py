@@ -10,12 +10,16 @@ def drop_main(args):
         nodes = [ node for node in tree.traverse() if node.is_leaf() ]
     elif (args.target=='intnode'):
         nodes = [ node for node in tree.traverse() if not node.is_leaf() ]
+    if args.fill is None:
+        placeholder = 123456789
+    else:
+        placeholder = args.fill
     for node in nodes:
         if (args.name=='yes'):
-            node.name = 123456789 # placeholder
+            node.name = placeholder
         if (args.support=='yes'):
-            node.support = 123456789 # placeholder
+            node.support = placeholder
         if (args.length=='yes'):
-            node.dist = 123456789 # placeholder
+            node.dist = placeholder
     write_tree(tree, args)
 

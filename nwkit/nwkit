@@ -29,6 +29,8 @@ parser_drop.add_argument('--support', metavar='yes|no', default='no', type=str, 
                          help='default=%(default)s: Drop support values.')
 parser_drop.add_argument('--length', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
                          help='default=%(default)s: Drop branch length.')
+parser_drop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
+                         help='default=%(default)s: Fill values instead of simply dropping them.')
 parser_drop.set_defaults(handler=command_drop)
 
 
