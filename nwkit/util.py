@@ -3,7 +3,8 @@ from ete3 import TreeNode
 
 def read_tree(args):
     if args.infile=='-':
-        tree = TreeNode(newick=sys.stdin, format=args.format)
+        nwk_string = sys.stdin.readlines()[0]
+        tree = TreeNode(newick=nwk_string, format=args.format)
     else:
         tree = TreeNode(newick=args.infile, format=args.format)
     return tree
