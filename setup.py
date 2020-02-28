@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
         name             = 'nwkit',
-        version          = "0.1",
+        version          = "0.2",
         description      = 'Tools for processing newick trees',
         license          = "BSD 3-clause License",
         author           = "Kenji Fukushima",

@@ -13,28 +13,39 @@ def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
 
-parser_drop = subparsers.add_parser('drop', help='see `nwkit drop -h`')
-parser_drop.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
-                         help='default=%(default)s: Input newick file. Use "-" for STDIN.')
-parser_drop.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
-                         help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
-parser_drop.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
-                         help='default=%(default)s: ETE3 tree format.')
-parser_drop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False, action='store',
-                         choices=['all','root','leaf','intnode'],
-                         help='default=%(default)s: Nodes to be edited.')
-parser_drop.add_argument('--name', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
-                         help='default=%(default)s: Drop node names.')
-parser_drop.add_argument('--support', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
-                         help='default=%(default)s: Drop support values.')
-parser_drop.add_argument('--length', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
-                         help='default=%(default)s: Drop branch length.')
-parser_drop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
-                         help='default=%(default)s: Fill values instead of simply dropping them.')
-parser_drop.set_defaults(handler=command_drop)
+pdrop = subparsers.add_parser('drop', help='see `nwkit drop -h`')
+pdrop.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
+                   help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+pdrop.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
+                   help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
+pdrop.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
+                   help='default=%(default)s: ETE3 tree format.')
+pdrop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False, action='store',
+                   choices=['all','root','leaf','intnode'],
+                   help='default=%(default)s: Nodes to be edited.')
+pdrop.add_argument('--name', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+                   help='default=%(default)s: Drop node names.')
+pdrop.add_argument('--support', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+                   help='default=%(default)s: Drop support values.')
+pdrop.add_argument('--length', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+                   help='default=%(default)s: Drop branch length.')
+pdrop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
+                   help='default=%(default)s: Fill values instead of simply dropping them.')
+pdrop.set_defaults(handler=command_drop)
 
 
+def command_nhx2nwk(args):
+    from nwkit.nhx2nwk import nhx2nwk_main
+    nhx2nwk_main(args)
 
+pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`')
+pnhx2nwk.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
+                   help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+pnhx2nwk.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
+                   help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
+pnhx2nwk.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
+                   help='default=%(default)s: ETE3 tree format.')
+pnhx2nwk.set_defaults(handler=command_nhx2nwk)
 
 
 def command_help(args):
