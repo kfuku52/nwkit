@@ -1,7 +1,7 @@
 from nwkit.util import *
 
 def drop_main(args):
-    tree = read_tree(args)
+    tree = read_tree(args.infile, args.format)
     if (args.target=='all'):
         nodes = list(tree.traverse())
     elif (args.target=='root'):
