@@ -2,32 +2,38 @@
 
 import argparse
 
-
 # Main parser
 parser = argparse.ArgumentParser(description='A toolkit for newick trees')
 subparsers = parser.add_subparsers()
 
+# Parent parser for shared options
+p_parent = argparse.ArgumentParser(add_help=False)
+p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
+                      help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
+                      help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
+p_parent.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
+                      help='default=%(default)s: ETE3 tree format.')
 
 
 def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
 
-pdrop = subparsers.add_parser('drop', help='see `nwkit drop -h`')
-pdrop.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
-                   help='default=%(default)s: Input newick file. Use "-" for STDIN.')
-pdrop.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
-                   help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
-pdrop.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
-                   help='default=%(default)s: ETE3 tree format.')
-pdrop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False, action='store',
-                   choices=['all','root','leaf','intnode'],
+
+pdrop = subparsers.add_parser('drop', help='see `nwkit drop -h`', parents=[p_parent])
+pdrop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
+                   action='store',
+                   choices=['all', 'root', 'leaf', 'intnode'],
                    help='default=%(default)s: Nodes to be edited.')
-pdrop.add_argument('--name', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+pdrop.add_argument('--name', metavar='yes|no', default='no', type=str, required=False, action='store',
+                   choices=['yes', 'no'],
                    help='default=%(default)s: Drop node names.')
-pdrop.add_argument('--support', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+pdrop.add_argument('--support', metavar='yes|no', default='no', type=str, required=False, action='store',
+                   choices=['yes', 'no'],
                    help='default=%(default)s: Drop support values.')
-pdrop.add_argument('--length', metavar='yes|no', default='no', type=str, required=False, action='store', choices=['yes','no'],
+pdrop.add_argument('--length', metavar='yes|no', default='no', type=str, required=False, action='store',
+                   choices=['yes', 'no'],
                    help='default=%(default)s: Drop branch length.')
 pdrop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
                    help='default=%(default)s: Fill values instead of simply dropping them.')
@@ -38,13 +44,8 @@ def command_nhx2nwk(args):
     from nwkit.nhx2nwk import nhx2nwk_main
     nhx2nwk_main(args)
 
-pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`')
-pnhx2nwk.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
-                   help='default=%(default)s: Input newick file. Use "-" for STDIN.')
-pnhx2nwk.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
-                   help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
-pnhx2nwk.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
-                   help='default=%(default)s: ETE3 tree format.')
+
+pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`', parents=[p_parent])
 pnhx2nwk.set_defaults(handler=command_nhx2nwk)
 
 
@@ -52,28 +53,53 @@ def command_dist(args):
     from nwkit.dist import dist_main
     dist_main(args)
 
-pdist = subparsers.add_parser('dist', help='see `nwkit dist -h`')
-pdist.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
-                      help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+
+pdist = subparsers.add_parser('dist', help='see `nwkit dist -h`', parents=[p_parent])
 pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
-                      help='default=%(default)s: Input newick file 2.')
-pdist.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
-                      help='default=%(default)s: ETE3 tree format.')
+                   help='default=%(default)s: Input newick file 2.')
 pdist.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
-                      help='default=%(default)s: ETE3 tree format for --infile2.')
+                   help='default=%(default)s: ETE3 tree format for --infile2.')
 pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
-                      help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
+                   help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
 pdist.set_defaults(handler=command_dist)
 
+
+def command_mcmctree(args):
+    from nwkit.mcmctree import mcmctree_main
+    mcmctree_main(args)
+
+pmcmctree = subparsers.add_parser('mcmctree', help='see `nwkit mcmctree -h`', parents=[p_parent])
+pmcmctree.add_argument('--left_species', metavar='STR', default=None, type=str, required=True,
+                       help='default=%(default)s: Any species in the left clade. '
+                            'If you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, '
+                            'specify one of them (e.g., Homo_sapiens).')
+pmcmctree.add_argument('--right_species', metavar='STR', default=None, type=str, required=True,
+                       help='default=%(default)s: Any species in the right clade deriving from the common ancestor. If '
+                            'you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, specify the '
+                            'other one that is not used as the left species (e.g., Mus_musculus).')
+pmcmctree.add_argument('--lower_bound', metavar='FLOAT', default=None, type=str,
+                       help='default=%(default)s: Lower bound of the calibration point.')
+pmcmctree.add_argument('--lower_offset', metavar='FLOAT', default='0.1', type=str, help='default=%(default)s: ')
+pmcmctree.add_argument('--lower_scale', metavar='FLOAT', default='1', type=str, help='default=%(default)s: ')
+pmcmctree.add_argument('--lower_tailProb', metavar='FLOAT', default='0.025', type=str,
+                       help='default=%(default)s: Lower tail probability. Use 1e-300 for hard bound. Default=0.025')
+pmcmctree.add_argument('--upper_bound', metavar='FLOAT', default=None, type=str,
+                       help='default=%(default)s: Upper bound of the calibration point. A point estimate can be '
+                            'specified by setting the same age in both lower and upper bounds '
+                            '(e.g., --lower_bound 5.2 --upper_bound 5.2)')
+pmcmctree.add_argument('--upper_tailProb', metavar='FLOAT', default='0.025', type=str,
+                       help='default=%(default)s: Upper tail probability. Use 1e-300 for hard bound. Default=0.025')
+pmcmctree.add_argument('--add_header', action='store_true',
+                       help='default=%(default)s: Add the header required for mcmctree.')
+pmcmctree.set_defaults(handler=command_mcmctree)
 
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))
 
+
 parser_help = subparsers.add_parser('help', help='show help messages')
 parser_help.add_argument('command', help='command name which help is shown')
 parser_help.set_defaults(handler=command_help)
-
-
 
 # Handler
 args = parser.parse_args()

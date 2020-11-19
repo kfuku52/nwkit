@@ -9,17 +9,19 @@
 ## Installation
 ```
 # Installation with pip
-pip install -U git+https://github.com/kfuku52/nwkit
+pip install git+https://github.com/kfuku52/nwkit
 
 # This should show complete options
 nwkit -h 
 ```
 
-## Example
+## Subcommands
+See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
-### nwkit drop
-
-### nwkit nhx2nwk
+- nwkit drop
+- nwkit dist
+- nwkit mcmctree
+- nwkit nhx2nwk
 
 # Licensing
 This program is BSD-licensed (3 clause). See [LICENSE](LICENSE) for details.
