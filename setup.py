@@ -3,7 +3,7 @@ import os
 import re
 import ast
 
-with open(os.path.join('cdskit', '__init__.py')) as f:
+with open(os.path.join('nwkit', '__init__.py')) as f:
         match = re.search(r'__version__\s+=\s+(.*)', f.read())
 version = str(ast.literal_eval(match.group(1)))
 
