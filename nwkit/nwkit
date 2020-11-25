@@ -20,7 +20,6 @@ def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
 
-
 pdrop = subparsers.add_parser('drop', help='see `nwkit drop -h`', parents=[p_parent])
 pdrop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
                    action='store',
@@ -44,7 +43,6 @@ def command_nhx2nwk(args):
     from nwkit.nhx2nwk import nhx2nwk_main
     nhx2nwk_main(args)
 
-
 pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`', parents=[p_parent])
 pnhx2nwk.set_defaults(handler=command_nhx2nwk)
 
@@ -52,7 +50,6 @@ pnhx2nwk.set_defaults(handler=command_nhx2nwk)
 def command_dist(args):
     from nwkit.dist import dist_main
     dist_main(args)
-
 
 pdist = subparsers.add_parser('dist', help='see `nwkit dist -h`', parents=[p_parent])
 pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
@@ -62,6 +59,20 @@ pdist.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, requi
 pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
                    help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
 pdist.set_defaults(handler=command_dist)
+
+
+def command_intersection(args):
+    from nwkit.intersection import intersection_main
+    intersection_main(args)
+
+pintersection = subparsers.add_parser('intersection', help='see `nwkit intersection -h`', parents=[p_parent])
+pintersection.add_argument('-si', '--seqin', metavar='PATH', default='', type=str, required=True, action='store',
+                           help='default=%(default)s: Input sequence file.')
+pintersection.add_argument('-so', '--seqout', metavar='PATH', default='', type=str, required=True, action='store',
+                           help='default=%(default)s: Output sequence file.')
+pintersection.add_argument('-sf', '--seqformat', metavar='STR', default='fasta', type=str, required=False, action='store',
+                           help='default=%(default)s: Alignment format for --seqfile. See https://biopython.org/wiki/SeqIO')
+pintersection.set_defaults(handler=command_intersection)
 
 
 def command_mcmctree(args):
@@ -93,13 +104,14 @@ pmcmctree.add_argument('--add_header', action='store_true',
                        help='default=%(default)s: Add the header required for mcmctree.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
+
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))
-
 
 parser_help = subparsers.add_parser('help', help='show help messages')
 parser_help.add_argument('command', help='command name which help is shown')
 parser_help.set_defaults(handler=command_help)
+
 
 # Handler
 args = parser.parse_args()

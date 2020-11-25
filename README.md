@@ -5,6 +5,7 @@
 ## Dependency
 * [python 3](https://www.python.org/)
 * [ete3](https://github.com/etetoolkit/ete)
+* [biopython](https://biopython.org/)
 
 ## Installation
 ```
@@ -20,6 +21,7 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
 - nwkit drop
 - nwkit dist
+- nwkit intersection
 - nwkit mcmctree
 - nwkit nhx2nwk
 
