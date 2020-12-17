@@ -5,9 +5,9 @@ from ete3 import TreeNode
 def read_tree(infile, format, quiet=False):
     if infile=='-':
         nwk_string = sys.stdin.readlines()[0]
-        tree = TreeNode(newick=nwk_string, format=format)
+        tree = TreeNode(newick=nwk_string, format=format, quoted_node_names=True)
     else:
-        tree = TreeNode(newick=infile, format=format)
+        tree = TreeNode(newick=infile, format=format, quoted_node_names=True)
     if not quiet:
         num_leaves = len([ n for n in tree.traverse() if n.is_leaf() ])
         sys.stderr.write('number of leaves in input tree: {:,}\n'.format(num_leaves))
