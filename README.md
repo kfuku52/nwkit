@@ -25,6 +25,7 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 - nwkit mcmctree
 - nwkit nhx2nwk
 - nwkit printlabel
+- nwkit constrain
 
 # Licensing
 This program is BSD-licensed (3 clause). See [LICENSE](LICENSE) for details.

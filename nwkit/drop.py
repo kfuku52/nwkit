@@ -21,5 +21,5 @@ def drop_main(args):
             node.support = placeholder
         if (args.length=='yes'):
             node.dist = placeholder
-    write_tree(tree, args)
+    write_tree(tree, args, format=args.format)
 

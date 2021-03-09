@@ -112,11 +112,22 @@ def command_printlabel(args):
 pprintlabel = subparsers.add_parser('printlabel', help='see `nwkit printlabel -h`', parents=[p_parent])
 pprintlabel.add_argument('-p', '--pattern', metavar='PATH', default='', type=str, required=True, action='store',
                          help='default=%(default)s: Input sequence file.')
-pprintlabel.set_defaults(handler=command_printlabel)
 pprintlabel.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
                          action='store',
                          choices=['all', 'root', 'leaf', 'intnode'],
                          help='default=%(default)s: Nodes to be edited.')
+pprintlabel.set_defaults(handler=command_printlabel)
+
+
+def command_constrain(args):
+    from nwkit.constrain import constrain_main
+    constrain_main(args)
+
+pconstrain = subparsers.add_parser('constrain', help='see `nwkit constrain -h`', parents=[p_parent])
+pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
+                        help='default=%(default)s: Text file containing species names, one per line.')
+pconstrain.set_defaults(handler=command_constrain)
+
 
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))

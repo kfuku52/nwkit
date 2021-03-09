@@ -13,11 +13,11 @@ def read_tree(infile, format, quiet=False):
         sys.stderr.write('number of leaves in input tree: {:,}\n'.format(num_leaves))
     return tree
 
-def write_tree(tree, args, quiet=False):
+def write_tree(tree, args, format, quiet=False):
     if not quiet:
         num_leaves = len([ n for n in tree.traverse() if n.is_leaf() ])
-        sys.stderr.write('number of leaves in input tree: {:,}\n'.format(num_leaves))
-    tree_str = tree.write(format=args.format, format_root_node=True)
+        sys.stderr.write('number of leaves in output tree: {:,}\n'.format(num_leaves))
+    tree_str = tree.write(format=format, format_root_node=True)
     tree_str = tree_str.replace(':123456789','').replace(':1.23457e+08','')
     tree_str = tree_str.replace('123456789','').replace('1.23457e+08','')
     if args.outfile=='-':

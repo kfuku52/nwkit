@@ -16,6 +16,6 @@ def intersection_main(args):
     for seq in seqs:
         if not seq.name in seqs_to_remove:
             new_seqs.append(seq)
-    write_tree(tree, args)
+    write_tree(tree, args, format=args.format)
     write_seqs(records=new_seqs, outfile=args.seqout, seqformat=args.seqformat, quiet=False)
 
