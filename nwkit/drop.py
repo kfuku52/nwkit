@@ -15,11 +15,11 @@ def drop_main(args):
     else:
         placeholder = args.fill
     for node in nodes:
-        if (args.name=='yes'):
+        if (args.name):
             node.name = placeholder
-        if (args.support=='yes'):
+        if (args.support):
             node.support = placeholder
-        if (args.length=='yes'):
+        if (args.length):
             node.dist = placeholder
     write_tree(tree, args, format=args.format)
 
