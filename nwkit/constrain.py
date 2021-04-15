@@ -1,7 +1,9 @@
 import ete3
 import numpy
 
+import pkg_resources
 import re
+import sys
 import warnings
 
 from nwkit.util import *
@@ -38,7 +40,7 @@ def match_taxa(tree, splist):
         ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
         ancestor = list(ancestor)
         if (len(ancestor)>1):
-            txt = 'Multiple hits. Taxon in the list = {}, Taxa in the tree = {} '
+            txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {} '
             warnings.warn(txt.format(sp, ','.join(list(ancestor))))
             continue
         elif (len(ancestor)==0):
@@ -55,7 +57,7 @@ def match_taxa(tree, splist):
 def delete_nomatch_leaves(tree):
     for leaf in tree.get_leaves():
         if not leaf.has_taxon:
-            warnings.warn('Deleting taxon with no match: {}'.format(leaf.name))
+            sys.stderr.write('Deleting taxon in the tree with no match: {}'.format(leaf.name))
             leaf.delete()
     return tree
 
@@ -67,10 +69,8 @@ def polytomize_one2many_matches(tree):
             leaf.name = leaf.taxon_names[0]
         else:
             for i in range(len(leaf.taxon_names)):
-                if (i==0):
-                    leaf.name = leaf.taxon_names[i]
-                else:
-                    leaf.up.add_child(name=leaf.taxon_names[i])
+                leaf.add_child(name=leaf.taxon_names[i])
+            leaf.name = ''
     return tree
 
 def read_splist(species_list):
@@ -189,20 +189,19 @@ def taxid2tree(lineages, taxid_counts):
 
 def constrain_main(args):
     splist = read_splist(args.species_list)
-    if (args.ncbi):
+    if (args.backbone=='ncbi'):
         lineages = get_lineages(splist)
         taxid_counts = get_taxid_counts(lineages)
         tree = taxid2tree(lineages, taxid_counts)
     else:
-        tree = read_tree(args.infile, args.format)
+        if (args.backbone=='user'):
+            tree = read_tree(args.infile, args.format)
+        else:
+            file_path = 'data_tree/'+args.backbone+'.nwk'
+            nwk_string = pkg_resources.resource_string(__name__, file_path).decode("utf-8")
+            tree = ete3.TreeNode(newick=nwk_string, format=0, quoted_node_names=True)
         tree = initialize_tree(tree)
         tree = match_taxa(tree, splist)
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     write_tree(tree, args, format=9)
-
-
-#hoge = ete3.PhyloNode(name='hoge')
-#fuga = ete3.PhyloNode(name='fuga')
-
-#hoge.add_sister(sister=fuga)

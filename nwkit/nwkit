@@ -123,11 +123,14 @@ def command_constrain(args):
 
 pconstrain = subparsers.add_parser('constrain', help='see `nwkit constrain -h`', parents=[p_parent])
 pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
-                        help='default=%(default)s: Text file containing species names, one per line.')
-pconstrain.add_argument('--ncbi', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
-                        help='default=%(default)s: Infer NCBI Taxonomy ID from species name, '
-                             'and generate a tree based on the rank information. '
-                             '--infile is ignored if "yes".')
+                        help='default=%(default)s: Text file containing species names, one per line. '
+                             'The expected format is "GENUS_SPECIES" or "GENUS SPECIES".')
+pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi', type=str, required=False,
+                        action='store', choices=['ncbi', 'apgiv', 'user'],
+                        help='default=%(default)s: The backbone for tree constraint. '
+                             'ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. '
+                             'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385).'
+                             'user: User-provided tree in --infile.')
 pconstrain.set_defaults(handler=command_constrain)
 
 
