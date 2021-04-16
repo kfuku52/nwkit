@@ -134,6 +134,22 @@ pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi',
 pconstrain.set_defaults(handler=command_constrain)
 
 
+def command_sanitize(args):
+    from nwkit.sanitize import sanitize_main
+    sanitize_main(args)
+
+psanitize = subparsers.add_parser('sanitize', help='see `nwkit sanitize -h`', parents=[p_parent])
+psanitize.add_argument('--remove_singleton', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Remove singleton nodes represented as double brackets.')
+psanitize.add_argument('--name_quote', metavar='none|single|double', default='none', type=str, required=False,
+                       action='store', choices=['none','single','double'],
+                       help='default=%(default)s: Quotation of node and leaf names.'
+                            'none = no quote, single = \', double = \" ')
+
+
+psanitize.set_defaults(handler=command_sanitize)
+
+
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))
 

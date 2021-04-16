@@ -43,3 +43,15 @@ def write_seqs(records, outfile, seqformat='fasta', quiet=False):
         Bio.SeqIO.write(records, sys.stdout, seqformat)
     else:
         Bio.SeqIO.write(records, outfile, seqformat)
+
+def remove_singleton(tree, verbose=False, preserve_branch_length=True):
+    for node in tree.traverse():
+        if node.is_leaf():
+            continue
+        num_children = len(node.get_children())
+        if (num_children>1):
+            continue
+        if verbose:
+            sys.stderr.write('Deleting a singleton node: {}\n'.format(node.name))
+        node.delete(prevent_nondicotomic=False, preserve_branch_length=preserve_branch_length)
+    return tree

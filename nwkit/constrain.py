@@ -57,7 +57,7 @@ def match_taxa(tree, splist):
 def delete_nomatch_leaves(tree):
     for leaf in tree.get_leaves():
         if not leaf.has_taxon:
-            sys.stderr.write('Deleting taxon in the tree with no match: {}'.format(leaf.name))
+            sys.stderr.write('Deleting taxon in the tree with no match: {}\n'.format(leaf.name))
             leaf.delete()
     return tree
 
@@ -204,4 +204,5 @@ def constrain_main(args):
         tree = match_taxa(tree, splist)
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
+    tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
     write_tree(tree, args, format=9)
