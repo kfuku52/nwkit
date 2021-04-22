@@ -17,6 +17,37 @@ p_parent.add_argument('-f', '--format', metavar='INT', default=1, type=int, requ
                       help='default=%(default)s: ETE3 tree format.')
 
 
+def command_constrain(args):
+    from nwkit.constrain import constrain_main
+    constrain_main(args)
+
+pconstrain = subparsers.add_parser('constrain', help='see `nwkit constrain -h`', parents=[p_parent])
+pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
+                        help='default=%(default)s: Text file containing species names, one per line. '
+                             'The expected format is "GENUS_SPECIES" or "GENUS SPECIES".')
+pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi', type=str, required=False,
+                        action='store', choices=['ncbi', 'apgiv', 'user'],
+                        help='default=%(default)s: The backbone for tree constraint. '
+                             'ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. '
+                             'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385).'
+                             'user: User-provided tree in --infile.')
+pconstrain.set_defaults(handler=command_constrain)
+
+
+def command_dist(args):
+    from nwkit.dist import dist_main
+    dist_main(args)
+
+pdist = subparsers.add_parser('dist', help='see `nwkit dist -h`', parents=[p_parent])
+pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
+                   help='default=%(default)s: Input newick file 2.')
+pdist.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
+                   help='default=%(default)s: ETE3 tree format for --infile2.')
+pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
+                   help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
+pdist.set_defaults(handler=command_dist)
+
+
 def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
@@ -35,28 +66,6 @@ pdrop.add_argument('--length', metavar='yes|no', default='no', type=strtobool, r
 pdrop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
                    help='default=%(default)s: Fill values instead of simply dropping them.')
 pdrop.set_defaults(handler=command_drop)
-
-
-def command_nhx2nwk(args):
-    from nwkit.nhx2nwk import nhx2nwk_main
-    nhx2nwk_main(args)
-
-pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`', parents=[p_parent])
-pnhx2nwk.set_defaults(handler=command_nhx2nwk)
-
-
-def command_dist(args):
-    from nwkit.dist import dist_main
-    dist_main(args)
-
-pdist = subparsers.add_parser('dist', help='see `nwkit dist -h`', parents=[p_parent])
-pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
-                   help='default=%(default)s: Input newick file 2.')
-pdist.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
-                   help='default=%(default)s: ETE3 tree format for --infile2.')
-pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
-                   help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
-pdist.set_defaults(handler=command_dist)
 
 
 def command_intersection(args):
@@ -103,6 +112,14 @@ pmcmctree.add_argument('--add_header', action='store_true',
 pmcmctree.set_defaults(handler=command_mcmctree)
 
 
+def command_nhx2nwk(args):
+    from nwkit.nhx2nwk import nhx2nwk_main
+    nhx2nwk_main(args)
+
+pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`', parents=[p_parent])
+pnhx2nwk.set_defaults(handler=command_nhx2nwk)
+
+
 def command_printlabel(args):
     from nwkit.printlabel import printlabel_main
     printlabel_main(args)
@@ -117,23 +134,6 @@ pprintlabel.add_argument('-t', '--target', metavar='all|root|leaf|intnode', defa
 pprintlabel.set_defaults(handler=command_printlabel)
 
 
-def command_constrain(args):
-    from nwkit.constrain import constrain_main
-    constrain_main(args)
-
-pconstrain = subparsers.add_parser('constrain', help='see `nwkit constrain -h`', parents=[p_parent])
-pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
-                        help='default=%(default)s: Text file containing species names, one per line. '
-                             'The expected format is "GENUS_SPECIES" or "GENUS SPECIES".')
-pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi', type=str, required=False,
-                        action='store', choices=['ncbi', 'apgiv', 'user'],
-                        help='default=%(default)s: The backbone for tree constraint. '
-                             'ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. '
-                             'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385).'
-                             'user: User-provided tree in --infile.')
-pconstrain.set_defaults(handler=command_constrain)
-
-
 def command_sanitize(args):
     from nwkit.sanitize import sanitize_main
     sanitize_main(args)
@@ -146,6 +146,21 @@ psanitize.add_argument('--name_quote', metavar='none|single|double', default='no
                        help='default=%(default)s: Quotation of node and leaf names.'
                             'none = no quote, single = \', double = \" ')
 
+
+def command_subtree(args):
+    from nwkit.subtree import subtree_main
+    subtree_main(args)
+
+psubtree = subparsers.add_parser('subtree', help='see `nwkit subtree -h`', parents=[p_parent])
+psubtree.add_argument('--left_leaf', metavar='STR', default=None, type=str, required=True,
+                      help='default=%(default)s: Any leaf names in the left clade. For example, '
+                           'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '
+                           'specify one of them (e.g., Homo_sapiens).')
+psubtree.add_argument('--right_leaf', metavar='STR', default=None, type=str, required=True,
+                      help='default=%(default)s: Any leaf names in the right clade. For example, '
+                           'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '
+                           'specify the other one that is not used as --left_leaf (e.g., Mus_musculus).')
+psubtree.set_defaults(handler=command_subtree)
 
 psanitize.set_defaults(handler=command_sanitize)
 
