@@ -25,7 +25,8 @@ def command_constrain(args):
 pconstrain = subparsers.add_parser('constrain', help='see `nwkit constrain -h`', parents=[p_parent])
 pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
                         help='default=%(default)s: Text file containing species names, one per line. '
-                             'The expected format is "GENUS_SPECIES" or "GENUS SPECIES".')
+                             'Expected formats are "GENUS SPECIES", "GENUS_SPECIES", or "GENUS_SPECIES_OTHERINFO". '
+                             'e.g., "Arabidopsis thaliana" and "Arabidopsis_thaliana_TAIR10"')
 pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi', type=str, required=False,
                         action='store', choices=['ncbi', 'apgiv', 'user'],
                         help='default=%(default)s: The backbone for tree constraint. '

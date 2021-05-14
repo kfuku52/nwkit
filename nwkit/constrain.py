@@ -73,12 +73,6 @@ def polytomize_one2many_matches(tree):
             leaf.name = ''
     return tree
 
-def read_splist(species_list):
-    with open(species_list, 'r') as f:
-        splist = f.read().split('\n')
-    splist = [ sp.replace('_', '') for sp in splist ]
-    return splist
-
 def get_lineages(splist):
     ncbi = ete3.NCBITaxa()
     lineages = dict()
@@ -187,8 +181,25 @@ def taxid2tree(lineages, taxid_counts):
     tree = clades[0]
     return tree
 
+def tree_sciname2label(tree, labels):
+    for label in labels:
+        flag = True
+        for leaf in tree.iter_leaves():
+            label_sciname = label2sciname(labels=label)
+            if label_sciname==leaf.name:
+                leaf.name = label
+                flag = False
+                break
+        if flag:
+            warnings.warn('Original label not found: {}'.format(label))
+    return tree
+
 def constrain_main(args):
-    splist = read_splist(args.species_list)
+    labels = read_item_per_line_file(args.species_list)
+    if '_' in labels[0]:
+        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
+    else:
+        splist = labels
     if (args.backbone=='ncbi'):
         lineages = get_lineages(splist)
         taxid_counts = get_taxid_counts(lineages)
@@ -207,4 +218,6 @@ def constrain_main(args):
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
     for node in tree.traverse():
         node.name = node.name.replace(' ', '_')
+    if '_' in labels[0]:
+        tree = tree_sciname2label(tree, labels)
     write_tree(tree, args, format=9)

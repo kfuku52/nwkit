@@ -55,3 +55,25 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
             sys.stderr.write('Deleting a singleton node: {}\n'.format(node.name))
         node.delete(prevent_nondicotomic=False, preserve_branch_length=preserve_branch_length)
     return tree
+
+def label2sciname(labels, in_delim='_', out_delim='_'):
+    is_str_input = isinstance(labels, str)
+    if is_str_input:
+        labels = [labels,]
+    scinames = list()
+    for label in labels:
+        splitted = label.split(in_delim)
+        if len(splitted)>=2:
+            sciname = splitted[0]+out_delim+splitted[1]
+        else:
+            sciname = None
+        scinames.append(sciname)
+    if is_str_input:
+        scinames = scinames[0]
+    return scinames
+
+def read_item_per_line_file(file):
+    with open(file, 'r') as f:
+        out = f.read().split('\n')
+    out = [ o for o in out if o!='' ]
+    return out
