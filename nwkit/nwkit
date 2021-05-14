@@ -14,7 +14,8 @@ p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, r
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
 p_parent.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
-                      help='default=%(default)s: ETE3 tree format.')
+                      help='default=%(default)s: ETE3 tree format. '
+                           'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
 
 
 def command_constrain(args):
@@ -28,8 +29,9 @@ pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, 
 pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi', type=str, required=False,
                         action='store', choices=['ncbi', 'apgiv', 'user'],
                         help='default=%(default)s: The backbone for tree constraint. '
+                             '--infile is not required except for "user". '
                              'ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. '
-                             'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385).'
+                             'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). '
                              'user: User-provided tree in --infile.')
 pconstrain.set_defaults(handler=command_constrain)
 
