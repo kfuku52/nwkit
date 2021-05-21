@@ -4,7 +4,6 @@ import numpy
 import pkg_resources
 import re
 import sys
-import warnings
 
 from nwkit.util import *
 
@@ -24,33 +23,38 @@ def name_to_taxid(sp, ncbi):
 def get_lineage(sp, ncbi):
     name2taxid = name_to_taxid(sp, ncbi)
     if (len(name2taxid)==0):
-        txt = 'Genus-level match was not found in the NCBI database. Excluded from the output: {}'
-        warnings.warn(txt.format(sp))
+        txt = 'Genus-level match was not found in the NCBI database. Excluded from the output: {}\n'
+        sys.stderr.write(txt.format(sp))
         return []
-    lineage = ncbi.get_lineage(name2taxid[sp][0])
+    key = sp if sp in name2taxid.keys() else re.sub(' .*', '', sp)
+    lineage = ncbi.get_lineage(name2taxid[key][0])
     return lineage
 
-def match_taxa(tree, splist):
+def match_taxa(tree, labels):
+    if '_' in labels[0]:
+        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
+    else:
+        splist = labels
     ncbi = ete3.NCBITaxa()
     leaf_names = [ ln.replace('_','') for ln in tree.get_leaf_names() ]
     leaf_name_set = set(leaf_names)
-    for sp in splist:
+    for sp,label in zip(splist,labels):
         lineage = get_lineage(sp, ncbi)
         ancestor_names = ncbi.get_taxid_translator(lineage)
         ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
         ancestor = list(ancestor)
         if (len(ancestor)>1):
-            txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {} '
-            warnings.warn(txt.format(sp, ','.join(list(ancestor))))
+            txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n'
+            sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
             continue
         elif (len(ancestor)==0):
-            txt = 'No hit. Excluded from the output. Taxon = {}'
-            warnings.warn(txt.format(sp, ','.join(list(ancestor))))
+            txt = 'No hit. Excluded from the output. Taxon = {}\n'
+            sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
             continue
         for leaf in tree.get_leaves():
             if (leaf.name==ancestor[0]):
                 leaf.has_taxon = True
-                leaf.taxon_names.append(sp)
+                leaf.taxon_names.append(label)
                 break
     return tree
 
@@ -73,11 +77,15 @@ def polytomize_one2many_matches(tree):
             leaf.name = ''
     return tree
 
-def get_lineages(splist):
+def get_lineages(labels):
+    if '_' in labels[0]:
+        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
+    else:
+        splist = labels
     ncbi = ete3.NCBITaxa()
     lineages = dict()
-    for sp in splist:
-        lineages[sp] = get_lineage(sp, ncbi)
+    for sp,label in zip(splist,labels):
+        lineages[label] = get_lineage(sp, ncbi)
     return lineages
 
 def get_taxid_counts(lineages):
@@ -191,17 +199,13 @@ def tree_sciname2label(tree, labels):
                 flag = False
                 break
         if flag:
-            warnings.warn('Original label not found: {}'.format(label))
+            sys.stderr.write('Original label not found: {}\n'.format(label))
     return tree
 
 def constrain_main(args):
     labels = read_item_per_line_file(args.species_list)
-    if '_' in labels[0]:
-        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
-    else:
-        splist = labels
     if (args.backbone=='ncbi'):
-        lineages = get_lineages(splist)
+        lineages = get_lineages(labels)
         taxid_counts = get_taxid_counts(lineages)
         tree = taxid2tree(lineages, taxid_counts)
     else:
@@ -212,12 +216,10 @@ def constrain_main(args):
             nwk_string = pkg_resources.resource_string(__name__, file_path).decode("utf-8")
             tree = ete3.TreeNode(newick=nwk_string, format=0, quoted_node_names=True)
         tree = initialize_tree(tree)
-        tree = match_taxa(tree, splist)
+        tree = match_taxa(tree, labels)
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
     for node in tree.traverse():
         node.name = node.name.replace(' ', '_')
-    if '_' in labels[0]:
-        tree = tree_sciname2label(tree, labels)
     write_tree(tree, args, format=9)
