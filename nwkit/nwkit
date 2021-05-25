@@ -34,6 +34,11 @@ pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi',
                              'ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. '
                              'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). '
                              'user: User-provided tree in --infile.')
+pconstrain.add_argument('--rank', metavar='no|species|genus|family|order|...', default='no', type=str, required=False,
+                        action='store', 
+                        help='default=%(default)s: Constrain at a particular taxonomic rank and above. '
+                             'For example, if "family" is specified, "genus" and "species" are not considered. '
+                             'This option is currently compatible only with --backbone ncbi')
 pconstrain.set_defaults(handler=command_constrain)
 
 

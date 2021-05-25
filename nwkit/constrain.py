@@ -20,7 +20,7 @@ def name_to_taxid(sp, ncbi):
         name2taxid = ncbi.get_name_translator([genus,])
     return name2taxid
 
-def get_lineage(sp, ncbi):
+def get_lineage(sp, ncbi, rank):
     name2taxid = name_to_taxid(sp, ncbi)
     if (len(name2taxid)==0):
         txt = 'Genus-level match was not found in the NCBI database. Excluded from the output: {}\n'
@@ -28,7 +28,16 @@ def get_lineage(sp, ncbi):
         return []
     key = sp if sp in name2taxid.keys() else re.sub(' .*', '', sp)
     lineage = ncbi.get_lineage(name2taxid[key][0])
-    return lineage
+    if rank=='no':
+        return lineage
+    ranks = ncbi.get_rank(lineage)
+    sorted_ranks = [ ranks[l] for l in lineage ]
+    lineage_ge_rank = list()
+    for taxid,my_rank in zip(lineage, sorted_ranks):
+        lineage_ge_rank.append(int(taxid))
+        if my_rank==rank:
+            break
+    return lineage_ge_rank
 
 def match_taxa(tree, labels):
     if '_' in labels[0]:
@@ -77,7 +86,7 @@ def polytomize_one2many_matches(tree):
             leaf.name = ''
     return tree
 
-def get_lineages(labels):
+def get_lineages(labels, rank):
     if '_' in labels[0]:
         splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
     else:
@@ -85,7 +94,7 @@ def get_lineages(labels):
     ncbi = ete3.NCBITaxa()
     lineages = dict()
     for sp,label in zip(splist,labels):
-        lineages[label] = get_lineage(sp, ncbi)
+        lineages[label] = get_lineage(sp, ncbi, rank)
     return lineages
 
 def get_taxid_counts(lineages):
@@ -205,8 +214,9 @@ def tree_sciname2label(tree, labels):
 def constrain_main(args):
     labels = read_item_per_line_file(args.species_list)
     if (args.backbone=='ncbi'):
-        lineages = get_lineages(labels)
+        lineages = get_lineages(labels=labels, rank=args.rank)
         taxid_counts = get_taxid_counts(lineages)
+        #taxid_counts = limit_rank(taxid_counts=taxid_counts, rank=args.rank)
         tree = taxid2tree(lineages, taxid_counts)
     else:
         if (args.backbone=='user'):
