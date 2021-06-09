@@ -48,7 +48,7 @@ def match_taxa(tree, labels):
     leaf_names = [ ln.replace('_','') for ln in tree.get_leaf_names() ]
     leaf_name_set = set(leaf_names)
     for sp,label in zip(splist,labels):
-        lineage = get_lineage(sp, ncbi)
+        lineage = get_lineage(sp, ncbi, rank='no')
         ancestor_names = ncbi.get_taxid_translator(lineage)
         ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
         ancestor = list(ancestor)
@@ -221,6 +221,8 @@ def constrain_main(args):
     else:
         if (args.backbone=='user'):
             tree = read_tree(args.infile, args.format)
+            for node in tree.traverse():
+                node.name = node.name.replace('_', ' ')
         else:
             file_path = 'data_tree/'+args.backbone+'.nwk'
             nwk_string = pkg_resources.resource_string(__name__, file_path).decode("utf-8")

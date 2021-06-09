@@ -35,7 +35,7 @@ pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi',
                              'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). '
                              'user: User-provided tree in --infile.')
 pconstrain.add_argument('--rank', metavar='no|species|genus|family|order|...', default='no', type=str, required=False,
-                        action='store', 
+                        action='store',
                         help='default=%(default)s: Constrain at a particular taxonomic rank and above. '
                              'For example, if "family" is specified, "genus" and "species" are not considered. '
                              'This option is currently compatible only with --backbone ncbi')
