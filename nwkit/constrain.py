@@ -23,7 +23,7 @@ def name_to_taxid(sp, ncbi):
 def get_lineage(sp, ncbi, rank):
     name2taxid = name_to_taxid(sp, ncbi)
     if (len(name2taxid)==0):
-        txt = 'Genus-level match was not found in the NCBI database. Excluded from the output: {}\n'
+        txt = 'Genus-level match was not found in the NCBI database: Excluded from the output: {}\n'
         sys.stderr.write(txt.format(sp))
         return []
     key = sp if sp in name2taxid.keys() else re.sub(' .*', '', sp)
@@ -39,27 +39,31 @@ def get_lineage(sp, ncbi, rank):
             break
     return lineage_ge_rank
 
-def match_taxa(tree, labels):
+def match_taxa(tree, labels, backbone_method):
     if '_' in labels[0]:
         splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
     else:
         splist = labels
-    ncbi = ete3.NCBITaxa()
-    leaf_names = [ ln.replace('_','') for ln in tree.get_leaf_names() ]
+    if backbone_method.startswith('ncbi'):
+        ncbi = ete3.NCBITaxa()
+    leaf_names = [ ln.replace('_',' ') for ln in tree.get_leaf_names() ]
     leaf_name_set = set(leaf_names)
     for sp,label in zip(splist,labels):
-        lineage = get_lineage(sp, ncbi, rank='no')
-        ancestor_names = ncbi.get_taxid_translator(lineage)
-        ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
-        ancestor = list(ancestor)
-        if (len(ancestor)>1):
-            txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n'
-            sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
-            continue
-        elif (len(ancestor)==0):
-            txt = 'No hit. Excluded from the output. Taxon = {}\n'
-            sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
-            continue
+        if backbone_method.startswith('ncbi'):
+            lineage = get_lineage(sp, ncbi, rank='no')
+            ancestor_names = ncbi.get_taxid_translator(lineage)
+            ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
+            ancestor = list(ancestor)
+            if (len(ancestor)>1):
+                txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n'
+                sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
+                continue
+            elif (len(ancestor)==0):
+                txt = 'No hit. Excluded from the output. Taxon = {}\n'
+                sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
+                continue
+        elif backbone_method=='user':
+            ancestor = [sp]
         for leaf in tree.get_leaves():
             if (leaf.name==ancestor[0]):
                 leaf.has_taxon = True
@@ -68,7 +72,7 @@ def match_taxa(tree, labels):
     return tree
 
 def delete_nomatch_leaves(tree):
-    for leaf in tree.get_leaves():
+    for leaf in tree.iter_leaves():
         if not leaf.has_taxon:
             sys.stderr.write('Deleting taxon in the tree with no match: {}\n'.format(leaf.name))
             leaf.delete()
@@ -219,16 +223,16 @@ def constrain_main(args):
         #taxid_counts = limit_rank(taxid_counts=taxid_counts, rank=args.rank)
         tree = taxid2tree(lineages, taxid_counts)
     else:
-        if (args.backbone=='user'):
+        if (args.backbone.endswith('user')):
             tree = read_tree(args.infile, args.format)
             for node in tree.traverse():
                 node.name = node.name.replace('_', ' ')
-        else:
-            file_path = 'data_tree/'+args.backbone+'.nwk'
+        elif (args.backbone=='ncbi_apgiv'):
+            file_path = 'data_tree/apgiv.nwk'
             nwk_string = pkg_resources.resource_string(__name__, file_path).decode("utf-8")
             tree = ete3.TreeNode(newick=nwk_string, format=0, quoted_node_names=True)
         tree = initialize_tree(tree)
-        tree = match_taxa(tree, labels)
+        tree = match_taxa(tree, labels, args.backbone)
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)

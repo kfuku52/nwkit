@@ -27,12 +27,14 @@ pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, 
                         help='default=%(default)s: Text file containing species names, one per line. '
                              'Expected formats are "GENUS SPECIES", "GENUS_SPECIES", or "GENUS_SPECIES_OTHERINFO". '
                              'e.g., "Arabidopsis thaliana" and "Arabidopsis_thaliana_TAIR10"')
-pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|user', default='ncbi', type=str, required=False,
-                        action='store', choices=['ncbi', 'apgiv', 'user'],
+pconstrain.add_argument('--backbone', metavar='ncbi|apgiv|ncbi_user|user', default='ncbi', type=str, required=False,
+                        action='store', choices=['ncbi', 'ncbi_apgiv', 'ncbi_user', 'user'],
                         help='default=%(default)s: The backbone for tree constraint. '
                              '--infile is not required except for "user". '
                              'ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. '
-                             'apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). '
+                             'ncbi_apgiv: The order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). '
+                             'ncbi_user: Infer NCBI Taxonomy ID from species name, and match the ranks with '
+                             'the labels of the user-provided tree. '
                              'user: User-provided tree in --infile.')
 pconstrain.add_argument('--rank', metavar='no|species|genus|family|order|...', default='no', type=str, required=False,
                         action='store',
