@@ -153,6 +153,25 @@ pprintlabel.add_argument('-t', '--target', metavar='all|root|leaf|intnode', defa
 pprintlabel.set_defaults(handler=command_printlabel)
 
 
+def command_root(args):
+    from nwkit.root import root_main
+    root_main(args)
+
+proot = subparsers.add_parser('root', help='see `nwkit root -h`', parents=[p_parent])
+proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
+                   help='default=%(default)s: Input newick file 2. Used when --method "transfer". '
+                        'Leaf labels should be matched to those in --infile.')
+proot.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
+                   help='default=%(default)s: ETE3 tree format for --infile2.')
+proot.add_argument('-t', '--method', metavar='transfer', default='transfer', type=str, required=False,
+                   action='store',
+                   choices=['transfer',],
+                   help='default=%(default)s: '
+                        'transfer: Transfer the root position from --infile2 to --infile. '
+                        'The two trees should have the same bipartitions at the root node.')
+proot.set_defaults(handler=command_root)
+
+
 def command_sanitize(args):
     from nwkit.sanitize import sanitize_main
     sanitize_main(args)
