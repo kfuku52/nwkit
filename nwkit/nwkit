@@ -81,12 +81,21 @@ def command_intersection(args):
     intersection_main(args)
 
 pintersection = subparsers.add_parser('intersection', help='see `nwkit intersection -h`', parents=[p_parent])
-pintersection.add_argument('-si', '--seqin', metavar='PATH', default='', type=str, required=True, action='store',
+pintersection.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
+                           help='default=%(default)s: Input newick file 2. The intersected version of this file '
+                                'will not be generated, so if necessary, replace --infile and --infile2 and run again.')
+pintersection.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
+                           help='default=%(default)s: ETE3 tree format for --infile2.')
+pintersection.add_argument('-si', '--seqin', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Input sequence file.')
-pintersection.add_argument('-so', '--seqout', metavar='PATH', default='', type=str, required=True, action='store',
+pintersection.add_argument('-so', '--seqout', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Output sequence file.')
 pintersection.add_argument('-sf', '--seqformat', metavar='STR', default='fasta', type=str, required=False, action='store',
                            help='default=%(default)s: Alignment format for --seqfile. See https://biopython.org/wiki/SeqIO')
+pintersection.add_argument('--match', metavar='complete|prefix|backward', default='complete', type=str,
+                           required=False, action='store', choices=['complete','prefix','backward'],
+                           help='default=%(default)s: Method for ID matching.')
+
 pintersection.set_defaults(handler=command_intersection)
 
 
@@ -133,12 +142,12 @@ def command_printlabel(args):
     printlabel_main(args)
 
 pprintlabel = subparsers.add_parser('printlabel', help='see `nwkit printlabel -h`', parents=[p_parent])
-pprintlabel.add_argument('-p', '--pattern', metavar='PATH', default='', type=str, required=True, action='store',
-                         help='default=%(default)s: Input sequence file.')
+pprintlabel.add_argument('-p', '--pattern', metavar='PATH', default='.*', type=str, required=True, action='store',
+                         help='default=%(default)s: Regular expression for label search.')
 pprintlabel.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
                          action='store',
                          choices=['all', 'root', 'leaf', 'intnode'],
-                         help='default=%(default)s: Nodes to be edited.')
+                         help='default=%(default)s: Nodes to be searched.')
 pprintlabel.set_defaults(handler=command_printlabel)
 
 
