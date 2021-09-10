@@ -4,7 +4,7 @@ import argparse
 from distutils.util import strtobool
 
 # Main parser
-parser = argparse.ArgumentParser(description='A toolkit for newick trees')
+parser = argparse.ArgumentParser(description='A toolkit for Newick trees. See `nwkit SUBCOMMAND -h` for usage (e.g., nwkit constrain -h)')
 subparsers = parser.add_subparsers()
 
 # Parent parser for shared options
@@ -21,8 +21,7 @@ p_parent.add_argument('-f', '--format', metavar='INT', default=1, type=int, requ
 def command_constrain(args):
     from nwkit.constrain import constrain_main
     constrain_main(args)
-
-pconstrain = subparsers.add_parser('constrain', help='see `nwkit constrain -h`', parents=[p_parent])
+pconstrain = subparsers.add_parser('constrain', help='Generate a Newick tree for topological constraint', parents=[p_parent])
 pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
                         help='default=%(default)s: Text file containing species names, one per line. '
                              'Expected formats are "GENUS SPECIES", "GENUS_SPECIES", or "GENUS_SPECIES_OTHERINFO". '
@@ -47,8 +46,7 @@ pconstrain.set_defaults(handler=command_constrain)
 def command_dist(args):
     from nwkit.dist import dist_main
     dist_main(args)
-
-pdist = subparsers.add_parser('dist', help='see `nwkit dist -h`', parents=[p_parent])
+pdist = subparsers.add_parser('dist', help='Calculate topological distance', parents=[p_parent])
 pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
                    help='default=%(default)s: Input newick file 2.')
 pdist.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
@@ -61,8 +59,7 @@ pdist.set_defaults(handler=command_dist)
 def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
-
-pdrop = subparsers.add_parser('drop', help='see `nwkit drop -h`', parents=[p_parent])
+pdrop = subparsers.add_parser('drop', help='Remove node and branch information', parents=[p_parent])
 pdrop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
                    action='store',
                    choices=['all', 'root', 'leaf', 'intnode'],
@@ -81,8 +78,7 @@ pdrop.set_defaults(handler=command_drop)
 def command_intersection(args):
     from nwkit.intersection import intersection_main
     intersection_main(args)
-
-pintersection = subparsers.add_parser('intersection', help='see `nwkit intersection -h`', parents=[p_parent])
+pintersection = subparsers.add_parser('intersection', help='Drop non-overlapping leaves/sequences in 2 trees or tree+alignment', parents=[p_parent])
 pintersection.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Input newick file 2. The intersected version of this file '
                                 'will not be generated, so if necessary, replace --infile and --infile2 and run again.')
@@ -97,15 +93,13 @@ pintersection.add_argument('-sf', '--seqformat', metavar='STR', default='fasta',
 pintersection.add_argument('--match', metavar='complete|prefix|backward', default='complete', type=str,
                            required=False, action='store', choices=['complete','prefix','backward'],
                            help='default=%(default)s: Method for ID matching.')
-
 pintersection.set_defaults(handler=command_intersection)
 
 
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
     mcmctree_main(args)
-
-pmcmctree = subparsers.add_parser('mcmctree', help='see `nwkit mcmctree -h`', parents=[p_parent])
+pmcmctree = subparsers.add_parser('mcmctree', help='Introduce divergence time constraints on the command line', parents=[p_parent])
 pmcmctree.add_argument('--left_species', metavar='STR', default=None, type=str, required=True,
                        help='default=%(default)s: Any species in the left clade. '
                             'If you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, '
@@ -134,16 +128,14 @@ pmcmctree.set_defaults(handler=command_mcmctree)
 def command_nhx2nwk(args):
     from nwkit.nhx2nwk import nhx2nwk_main
     nhx2nwk_main(args)
-
-pnhx2nwk = subparsers.add_parser('nhx2nwk', help='see `nwkit hx2nwk -h`', parents=[p_parent])
+pnhx2nwk = subparsers.add_parser('nhx2nwk', help='Generate Newick from NHX', parents=[p_parent])
 pnhx2nwk.set_defaults(handler=command_nhx2nwk)
 
 
 def command_printlabel(args):
     from nwkit.printlabel import printlabel_main
     printlabel_main(args)
-
-pprintlabel = subparsers.add_parser('printlabel', help='see `nwkit printlabel -h`', parents=[p_parent])
+pprintlabel = subparsers.add_parser('printlabel', help='Search and print node labels', parents=[p_parent])
 pprintlabel.add_argument('-p', '--pattern', metavar='PATH', default='.*', type=str, required=True, action='store',
                          help='default=%(default)s: Regular expression for label search.')
 pprintlabel.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
@@ -156,8 +148,7 @@ pprintlabel.set_defaults(handler=command_printlabel)
 def command_root(args):
     from nwkit.root import root_main
     root_main(args)
-
-proot = subparsers.add_parser('root', help='see `nwkit root -h`', parents=[p_parent])
+proot = subparsers.add_parser('root', help='Place or transfer the tree root', parents=[p_parent])
 proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
                    help='default=%(default)s: Input newick file 2. Used when --method "transfer". '
                         'Leaf labels should be matched to those in --infile.')
@@ -175,21 +166,20 @@ proot.set_defaults(handler=command_root)
 def command_sanitize(args):
     from nwkit.sanitize import sanitize_main
     sanitize_main(args)
-
-psanitize = subparsers.add_parser('sanitize', help='see `nwkit sanitize -h`', parents=[p_parent])
+psanitize = subparsers.add_parser('sanitize', help='Eliminate non-standard Newick flavors', parents=[p_parent])
 psanitize.add_argument('--remove_singleton', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Remove singleton nodes represented as double brackets.')
 psanitize.add_argument('--name_quote', metavar='none|single|double', default='none', type=str, required=False,
                        action='store', choices=['none','single','double'],
                        help='default=%(default)s: Quotation of node and leaf names.'
                             'none = no quote, single = \', double = \" ')
+psanitize.set_defaults(handler=command_sanitize)
 
 
 def command_subtree(args):
     from nwkit.subtree import subtree_main
     subtree_main(args)
-
-psubtree = subparsers.add_parser('subtree', help='see `nwkit subtree -h`', parents=[p_parent])
+psubtree = subparsers.add_parser('subtree', help='Generate a subtree Newick file', parents=[p_parent])
 psubtree.add_argument('--left_leaf', metavar='STR', default=None, type=str, required=True,
                       help='default=%(default)s: Any leaf names in the left clade. For example, '
                            'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '
@@ -200,13 +190,25 @@ psubtree.add_argument('--right_leaf', metavar='STR', default=None, type=str, req
                            'specify the other one that is not used as --left_leaf (e.g., Mus_musculus).')
 psubtree.set_defaults(handler=command_subtree)
 
-psanitize.set_defaults(handler=command_sanitize)
+
+def command_shuffle(args):
+    from nwkit.shuffle import shuffle_main
+    shuffle_main(args)
+pshuffle = subparsers.add_parser('shuffle', help='Shuffle branches and/or labels', parents=[p_parent])
+pshuffle.add_argument('--topology', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Randomize entire tree topology and branch length. '
+                            'Without --label yes, new topology preserve the leaf label orders and is not completely randomized.')
+pshuffle.add_argument('--branch_length', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Shuffle branch length. Automatically activated when --topology yes.')
+pshuffle.add_argument('--label', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Shuffle leaf labels.')
+pshuffle.set_defaults(handler=command_shuffle)
 
 
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))
 
-parser_help = subparsers.add_parser('help', help='show help messages')
+parser_help = subparsers.add_parser('help', help='Show help messages')
 parser_help.add_argument('command', help='command name which help is shown')
 parser_help.set_defaults(handler=command_help)
 
