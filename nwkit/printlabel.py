@@ -13,4 +13,7 @@ def printlabel_main(args):
         nodes = [ node for node in tree.traverse() if not node.is_leaf() ]
     for node in nodes:
         if re.fullmatch(args.pattern, node.name):
-            print(node.name)
+            if args.sister:
+                print(' '.join( s.name for s in node.get_sisters() ))
+            else:
+                print(node.name)
