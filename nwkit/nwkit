@@ -96,6 +96,30 @@ pintersection.add_argument('--match', metavar='complete|prefix|backward', defaul
 pintersection.set_defaults(handler=command_intersection)
 
 
+def command_mark(args):
+    from nwkit.mark import mark_main
+    mark_main(args)
+pmark = subparsers.add_parser('mark', help='Search and print node labels', parents=[p_parent])
+pmark.add_argument('-p', '--pattern', metavar='REGEX', default='.*', type=str, required=True, action='store',
+                   help='default=%(default)s: Regular expression for label search.')
+pmark.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
+                   action='store', choices=['all', 'root', 'leaf', 'intnode'],
+                   help='default=%(default)s: Nodes to be searched.')
+pmark.add_argument('--mrca', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Mark the label of the most-recent common ancestor instead of targets.')
+pmark.add_argument('--target_only_clade', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Mark the label of MRCA whose clade contains only targets. '
+                        'Use with --mrca yes.')
+pmark.add_argument('--insert_txt', metavar='STR', default='#1', type=str, required=True, action='store',
+                   help='default=%(default)s: Label to insert to the target node labels.')
+pmark.add_argument('--insert_sep', metavar='STR', default='', type=str, required=False, action='store',
+                   help='default=%(default)s: Separator for --insert_txt.')
+pmark.add_argument('--insert_pos', metavar='prefix|suffix', default='suffix', type=str, required=False,
+                   action='store', choices=['prefix', 'suffix'],
+                   help='default=%(default)s: Place to insert --insert_txt.')
+pmark.set_defaults(handler=command_mark)
+
+
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
     mcmctree_main(args)
