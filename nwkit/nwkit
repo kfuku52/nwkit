@@ -153,6 +153,8 @@ def command_nhx2nwk(args):
     from nwkit.nhx2nwk import nhx2nwk_main
     nhx2nwk_main(args)
 pnhx2nwk = subparsers.add_parser('nhx2nwk', help='Generate Newick from NHX', parents=[p_parent])
+pnhx2nwk.add_argument('-p', '--node_label', metavar='B|D|H|S|...', default='', type=str, required=False, action='store',
+                         help='default=%(default)s: NHX attribute to use as internal node labels.')
 pnhx2nwk.set_defaults(handler=command_nhx2nwk)
 
 
