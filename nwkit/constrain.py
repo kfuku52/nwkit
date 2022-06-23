@@ -192,7 +192,7 @@ def taxid2tree(lineages, taxid_counts):
     clades = list()
     for i in numpy.arange(multi_counts.shape[0]):
         taxid = multi_counts[i,0]
-        count = multi_counts[i,1]
+        #count = multi_counts[i,1]
         ancestors = ncbi.get_lineage(taxid)
         new_clade = ete3.PhyloNode()
         new_clade.ancestors = ancestors
@@ -213,6 +213,17 @@ def tree_sciname2label(tree, labels):
                 break
         if flag:
             sys.stderr.write('Original label not found: {}\n'.format(label))
+    return tree
+
+def collapse_genes(tree):
+    for leaf in tree.iter_leaves():
+        splitted = leaf.name.split('_')
+        genus_species = splitted[0] + '_' + splitted[1]
+        leaf.name = genus_species
+    for leaf in tree.iter_leaves():
+        num_same_name = sum([ ln==leaf.name for ln in tree.get_leaf_names() ])
+        if num_same_name > 1:
+            leaf.delete(prevent_nondicotomic=False, preserve_branch_length=True)
     return tree
 
 def constrain_main(args):
@@ -236,6 +247,8 @@ def constrain_main(args):
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
+    if args.collapse:
+        tree = collapse_genes(tree)
     for node in tree.traverse():
         node.name = node.name.replace(' ', '_')
     write_tree(tree, args, format=9)
