@@ -185,12 +185,17 @@ proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, req
                         'Leaf labels should be matched to those in --infile.')
 proot.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
                    help='default=%(default)s: ETE3 tree format for --infile2.')
-proot.add_argument('-t', '--method', metavar='transfer', default='transfer', type=str, required=False,
-                   action='store',
-                   choices=['transfer',],
+proot.add_argument('--method', metavar='STR', default='midpoint', type=str, required=False, action='store',
+                   choices=['midpoint','outgroup','transfer',],
                    help='default=%(default)s: '
+                        'midpoint: Midpoint rooting. '
+                        'midpoint: Outgroup rooting with --outgroup. '
                         'transfer: Transfer the root position from --infile2 to --infile. '
                         'The two trees should have the same bipartitions at the root node.')
+proot.add_argument('--outgroup', metavar='STR', default='', type=str, required=False, action='store',
+                   help='default=%(default)s: An outgroup label or a comma-separated list of outgroup labels. '
+                        'For the latter, the clade containing all specified labels are used as an outgroup, '
+                        'so all labels do not have to be specified for a large clade.')
 proot.set_defaults(handler=command_root)
 
 

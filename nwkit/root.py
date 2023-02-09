@@ -32,9 +32,37 @@ def transfer_root(tree_to, tree_from, verbose=False):
             break
     return tree_to
 
+def midpoint_rooting(tree):
+    outgroup_node = tree.get_midpoint_outgroup()
+    tree.set_outgroup(outgroup_node)
+    return tree
+
+def outgroup_rooting(tree, outgroup_str):
+    outgroup_list = outgroup_str.split(',')
+    sys.stderr.write('Specified outgroup labels: {}\n'.format(' '.join(outgroup_list)))
+    outgroup_nodes = [ node for node in tree.traverse() if node.name in outgroup_list ]
+    if len(outgroup_nodes)==0:
+        sys.stderr.write('Outgroup node not found. Exiting.\n')
+        sys.exit(1)
+    elif len(outgroup_nodes)==1:
+        outgroup_node = outgroup_nodes[0]
+    else:
+        outgroup_node = outgroup_nodes[0].get_common_ancestor(outgroup_nodes)
+    if outgroup_node is tree:
+        sys.stderr.write('Outgroup clade should not represent the whole tree. Please check --outgroup carefully. Exiting.\n')
+        sys.exit(1)
+    outgroup_leaf_names = outgroup_node.get_leaf_names()
+    sys.stderr.write('All leaf labels in the outgroup clade: {}\n'.format(' '.join(outgroup_leaf_names)))
+    tree.set_outgroup(outgroup_node)
+    return tree
+
 def root_main(args):
     tree = read_tree(args.infile, args.format)
     if (args.method=='transfer'):
         tree2 = read_tree(args.infile2, args.format2)
         tree = transfer_root(tree_to=tree, tree_from=tree2, verbose=True)
+    elif (args.method=='midpoint'):
+        tree = midpoint_rooting(tree=tree)
+    elif (args.method=='outgroup'):
+        tree = outgroup_rooting(tree=tree, outgroup_str=args.outgroup)
     write_tree(tree, args, format=args.format)
