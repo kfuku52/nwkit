@@ -127,11 +127,11 @@ def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
     mcmctree_main(args)
 pmcmctree = subparsers.add_parser('mcmctree', help='Introduce divergence time constraints on the command line', parents=[p_parent])
-pmcmctree.add_argument('--left_species', metavar='STR', default=None, type=str, required=True,
+pmcmctree.add_argument('--left_species', metavar='STR', default=None, type=str, required=False,
                        help='default=%(default)s: Any species in the left clade. '
                             'If you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, '
                             'specify one of them (e.g., Homo_sapiens).')
-pmcmctree.add_argument('--right_species', metavar='STR', default=None, type=str, required=True,
+pmcmctree.add_argument('--right_species', metavar='STR', default=None, type=str, required=False,
                        help='default=%(default)s: Any species in the right clade deriving from the common ancestor. If '
                             'you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, specify the '
                             'other one that is not used as the left species (e.g., Mus_musculus).')
@@ -149,6 +149,11 @@ pmcmctree.add_argument('--upper_tailProb', metavar='FLOAT', default='0.025', typ
                        help='default=%(default)s: Upper tail probability. Use 1e-300 for hard bound. Default=0.025')
 pmcmctree.add_argument('--add_header', action='store_true',
                        help='default=%(default)s: Add the header required for mcmctree.')
+pmcmctree.add_argument('--timetree', metavar='point|ci|no', default='no', type=str, required=False, action='store',
+                       choices=['point', 'ci', 'no'],
+                        help='default=%(default)s: Obtain the divergence time from timetree.org. '
+                             'point: point estimate, ci: 95% confidence interval as upper and lower bounds. '
+                             'no: disable the function.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
 
