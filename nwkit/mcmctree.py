@@ -49,6 +49,8 @@ def is_mrca_clade_root(node, timetree_result, ncbi):
     missing_ids = timetree_result.replace('"', '').replace('\'', '').replace('\n', '')
     missing_ids = re.sub('.*missing_ids:\[', '', missing_ids)
     missing_ids = re.sub('\].*', '', missing_ids)
+    if (len(missing_ids)==0):
+        return True
     missing_ids = [ int(mid) for mid in missing_ids.split(',') ]
     taxid2name = ncbi.get_taxid_translator(missing_ids)
     missing_sci_names = list(taxid2name.values())
@@ -82,15 +84,19 @@ def add_timetree_constraint(tree, args):
             sys.stderr.write(txt.format(','.join(leaf_names)))
         timetree_result = re.sub('.*;</script>', '', response.text)
         if "MRCA node not found" in timetree_result:
-            txt = "Skipping. MRCA node not found at timetree.org: {}\n"
+            txt = "Skipping. No MRCA found at timetree.org for the node containing: {}\n"
+            sys.stderr.write(txt.format(','.join(leaf_names)))
+            continue
+        if "No study info found for node" in timetree_result:
+            txt = "Skipping. No study info found at timetree.org for the node containing: {}\n"
             sys.stderr.write(txt.format(','.join(leaf_names)))
             continue
         if not is_mrca_clade_root(node, timetree_result, ncbi):
             txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
             sys.stderr.write(txt.format(','.join(leaf_names)))
             continue
-        timetree_keys = re.sub('<br>.*', '', timetree_result).split(',')
-        timetree_values = re.sub('.*<br>', '', timetree_result).split(',')
+        timetree_keys = re.sub('\r\n.*', '', re.sub('<br>.*', '', timetree_result)).split(',')
+        timetree_values = re.sub('.*\r\n', '', re.sub('.*<br>', '', timetree_result)).split(',')
         timetree_dict = dict()
         for key,value in zip(timetree_keys, timetree_values):
             timetree_dict[key] = value
