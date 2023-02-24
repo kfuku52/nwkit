@@ -152,8 +152,12 @@ pmcmctree.add_argument('--add_header', action='store_true',
 pmcmctree.add_argument('--timetree', metavar='point|ci|no', default='no', type=str, required=False, action='store',
                        choices=['point', 'ci', 'no'],
                         help='default=%(default)s: Obtain the divergence time from timetree.org. '
+                             'Tip labels are expected to be GENUS_SPECIES. '
                              'point: point estimate, ci: 95% confidence interval as upper and lower bounds. '
                              'no: disable the function.')
+pmcmctree.add_argument('--higher_rank_search', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Attempt to obtain timetree data using the taxids for higher taxonomic ranks '
+                            'if the species-level search failed.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
 
