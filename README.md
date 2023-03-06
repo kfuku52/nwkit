@@ -1,5 +1,6 @@
-## Overview
+![](logo/logo_nwkit_large.svg)
 
+## Overview
 **nwkit** is a pre- and post-processing tool for phylogenetic trees. 
 
 ## Dependency
@@ -18,6 +19,9 @@ nwkit -h
 
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
+
+## Citation
+There is no published paper on NWKIT itself, but we used and cited NWKIT in several papers including [Fukushima & Pollock (2023, Nat Ecol Evol 7: 155-170)](https://www.nature.com/articles/s41559-022-01932-7).
 
 # Licensing
 This program is BSD-licensed (3 clause). See [LICENSE](LICENSE) for details.
