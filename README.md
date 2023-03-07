@@ -1,7 +1,7 @@
 ![](logo/logo_nwkit_large.svg)
 
 ## Overview
-**nwkit** is a pre- and post-processing tool for phylogenetic trees. 
+**NWKIT** ([/njuːkit/](http://ipa-reader.xyz/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format). 
 
 ## Dependency
 * [python 3](https://www.python.org/)
