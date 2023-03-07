@@ -102,7 +102,7 @@ pintersection.set_defaults(handler=command_intersection)
 def command_mark(args):
     from nwkit.mark import mark_main
     mark_main(args)
-pmark = subparsers.add_parser('mark', help='Search and print node labels', parents=[p_parent])
+pmark = subparsers.add_parser('mark', help='Add texts to node labels', parents=[p_parent])
 pmark.add_argument('-p', '--pattern', metavar='REGEX', default='.*', type=str, required=True, action='store',
                    help='default=%(default)s: Regular expression for label search.')
 pmark.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
@@ -221,6 +221,20 @@ psanitize.add_argument('--name_quote', metavar='none|single|double', default='no
 psanitize.set_defaults(handler=command_sanitize)
 
 
+def command_shuffle(args):
+    from nwkit.shuffle import shuffle_main
+    shuffle_main(args)
+pshuffle = subparsers.add_parser('shuffle', help='Shuffle branches and/or labels', parents=[p_parent])
+pshuffle.add_argument('--topology', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Randomize entire tree topology and branch length. '
+                            'Without --label yes, new topology preserve the leaf label orders and is not completely randomized.')
+pshuffle.add_argument('--branch_length', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Shuffle branch length. Automatically activated when --topology yes.')
+pshuffle.add_argument('--label', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Shuffle leaf labels.')
+pshuffle.set_defaults(handler=command_shuffle)
+
+
 def command_subtree(args):
     from nwkit.subtree import subtree_main
     subtree_main(args)
@@ -234,20 +248,6 @@ psubtree.add_argument('--right_leaf', metavar='STR', default=None, type=str, req
                            'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '
                            'specify the other one that is not used as --left_leaf (e.g., Mus_musculus).')
 psubtree.set_defaults(handler=command_subtree)
-
-
-def command_shuffle(args):
-    from nwkit.shuffle import shuffle_main
-    shuffle_main(args)
-pshuffle = subparsers.add_parser('shuffle', help='Shuffle branches and/or labels', parents=[p_parent])
-pshuffle.add_argument('--topology', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
-                       help='default=%(default)s: Randomize entire tree topology and branch length. '
-                            'Without --label yes, new topology preserve the leaf label orders and is not completely randomized.')
-pshuffle.add_argument('--branch_length', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
-                       help='default=%(default)s: Shuffle branch length. Automatically activated when --topology yes.')
-pshuffle.add_argument('--label', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
-                       help='default=%(default)s: Shuffle leaf labels.')
-pshuffle.set_defaults(handler=command_shuffle)
 
 
 def command_help(args):
