@@ -7,7 +7,7 @@ def get_leaf_names(tree):
     return leaf_names
 
 def get_seq_names(seqs):
-    seq_names = set([ s.name for s in seqs ])
+    seq_names = list(set([ s.name for s in seqs ]))
     is_unique = (len(seq_names)==len(set(seq_names)))
     assert is_unique, 'Sequence names are not unique.'
     return seq_names
