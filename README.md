@@ -16,7 +16,7 @@ nwkit -h
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
-- [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance
+- [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
