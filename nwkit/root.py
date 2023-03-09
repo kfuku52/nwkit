@@ -4,18 +4,21 @@ from nwkit.util import *
 
 def transfer_root(tree_to, tree_from, verbose=False):
     same_leaf_set = len(set(tree_to.get_leaf_names()) - set(tree_from.get_leaf_names())) == 0
-    assert same_leaf_set, 'Input tree and iqtree\'s treefile did not have identical leaves.'
+    assert same_leaf_set, 'The two input tree files did not have identical leaves.'
     subroot_leaves = [ n.get_leaf_names() for n in tree_from.get_children() ]
     is_n0_bigger_than_n1 = (len(subroot_leaves[0]) > len(subroot_leaves[1]))
     ingroups = subroot_leaves[0] if is_n0_bigger_than_n1 else subroot_leaves[1]
     outgroups = subroot_leaves[0] if not is_n0_bigger_than_n1 else subroot_leaves[1]
     if verbose:
-        sys.stderr.write('outgroups: {}\n'.format(outgroups))
+        sys.stderr.write('Outgroups: {}\n'.format(outgroups))
     tree_to.set_outgroup(ingroups[0])
     if (len(outgroups) == 1):
         outgroup_ancestor = [n for n in tree_to.iter_leaves() if n.name == outgroups[0]][0]
     else:
         outgroup_ancestor = tree_to.get_common_ancestor(outgroups)
+    if not set(outgroups) == set(outgroup_ancestor.get_leaf_names()):
+        sys.stderr.write('No root bipartition found in --infile. Exiting.\n')
+        sys.exit(1)
     tree_to.set_outgroup(outgroup_ancestor)
     subroot_to = tree_to.get_children()
     subroot_from = tree_from.get_children()

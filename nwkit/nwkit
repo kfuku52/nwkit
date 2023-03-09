@@ -198,7 +198,7 @@ proot.add_argument('--method', metavar='STR', default='midpoint', type=str, requ
                    choices=['midpoint','outgroup','transfer',],
                    help='default=%(default)s: '
                         'midpoint: Midpoint rooting. '
-                        'midpoint: Outgroup rooting with --outgroup. '
+                        'outgroup: Outgroup rooting with --outgroup. '
                         'transfer: Transfer the root position from --infile2 to --infile. '
                         'The two trees should have the same bipartitions at the root node.')
 proot.add_argument('--outgroup', metavar='STR', default='', type=str, required=False, action='store',
