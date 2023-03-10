@@ -1,4 +1,4 @@
-![](logo/logo_nwkit_large.svg)
+![](logo/logo_nwkit_large.png)
 
 ## Overview
 **NWKIT** ([/njuːkit/](http://ipa-reader.xyz/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format). 
