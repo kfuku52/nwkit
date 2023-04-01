@@ -168,7 +168,7 @@ def mcmctree_main(args):
     nwk_text = nwk_text.replace('\"', '')
     if args.add_header:
         num_leaf = len(list(tree.get_leaf_names()))
-        print(num_leaf, '1')
+        nwk_text = '{:} 1\n{}'.format(num_leaf, nwk_text)
     if args.outfile=='-':
         print(nwk_text)
     else:
