@@ -78,6 +78,7 @@ def add_timetree_constraint(tree, args):
     for node in tree.traverse():
         if node.is_leaf():
             continue
+        node.name = ''
         leaf_names = node.get_leaf_names()
         sci_names = [ leaf_name.replace('_', ' ') for leaf_name in leaf_names ]
         name2taxid = ncbi.get_name_translator(sci_names)
@@ -138,6 +139,10 @@ def add_timetree_constraint(tree, args):
             timetree_dict = dict()
             for key,value in zip(timetree_keys, timetree_values):
                 timetree_dict[key] = value
+            if float(timetree_dict['precomputed_ci_high'])==0:
+                txt = "Skipping. Upper age estimate at timetree.org is zero for the MRCA of {}\n"
+                sys.stderr.write(txt.format(','.join(leaf_names)))
+                continue
             if (args.timetree=='point'):
                 constraint = '@' + timetree_dict['precomputed_age']
             elif (args.timetree=='ci'):
@@ -146,6 +151,21 @@ def add_timetree_constraint(tree, args):
             constraint = '\'' + constraint + '\''
             node.name = constraint
             break
+    return tree
+
+def remove_constraint_equal_upper(tree):
+    removed_constraint_count = 0
+    for node in tree.traverse(strategy='postorder'):
+        if node.is_root():
+            continue
+        if (node.name==''):
+            continue
+        if (node.up.name==''):
+            continue
+        if (node.name==node.up.name):
+            node.name = ''
+            removed_constraint_count += 1
+    print('Removed {} constraints that are equal to that of the parent node.'.format(removed_constraint_count), flush=True)
     return tree
 
 def mcmctree_main(args):
@@ -163,6 +183,7 @@ def mcmctree_main(args):
         tree = add_timetree_constraint(tree, args)
     elif (args.timetree=='ci'):
         tree = add_timetree_constraint(tree, args)
+    tree = remove_constraint_equal_upper(tree)
     nwk_text = tree.write(format=8, format_root_node=True, quoted_node_names=True)
     nwk_text = nwk_text.replace('NoName', '')
     nwk_text = nwk_text.replace('\"', '')
