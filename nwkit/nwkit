@@ -155,8 +155,11 @@ pmcmctree.add_argument('--timetree', metavar='point|ci|no', default='no', type=s
                             'Tip labels are expected to be GENUS_SPECIES. '
                             'point: point estimate, ci: 95 percent confidence interval as upper and lower bounds. '
                             'no: disable the function.')
+pmcmctree.add_argument('--min_clade_prop', metavar='0.0<FLOAT<1.0', default=0, type=float, required=False, action='store',
+                       help='default=%(default)s: Minimum proportion of the clade size to the total number of species. '
+                            'If the clade proportion is smaller than this value, time constraints are removed.')
 pmcmctree.add_argument('--higher_rank_search', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
-                       help='default=%(default)s: Attempt to obtain timetree data using the taxids for higher taxonomic ranks '
+                       help='default=%(default)s: Attempt to obtain timetree data using the taxids for higher taxonomic ranks '                            
                             'if the species-level search failed.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 

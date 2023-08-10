@@ -158,6 +158,8 @@ def remove_constraint_equal_upper(tree):
     for node in tree.traverse(strategy='postorder'):
         if node.is_root():
             continue
+        if node.is_leaf():
+            continue
         if (node.name==''):
             continue
         if (node.up.name==''):
@@ -165,7 +167,25 @@ def remove_constraint_equal_upper(tree):
         if (node.name==node.up.name):
             node.name = ''
             removed_constraint_count += 1
-    print('Removed {} constraints that are equal to that of the parent node.'.format(removed_constraint_count), flush=True)
+    txt = 'Removed {:,} constraints that are equal to that of the parent node.'
+    print(txt.format(removed_constraint_count), flush=True)
+    return tree
+
+def apply_min_clade_prop(tree, min_clade_prop):
+    tree_size = len(tree.get_leaves())
+    min_clade_size = min_clade_prop * tree_size
+    removed_constraint_count = 0
+    for node in tree.traverse():
+        if node.is_root():
+            continue
+        if node.is_leaf():
+            continue
+        clade_size = len(node.get_leaves())
+        if (clade_size < min_clade_size)&(node.name!=''):
+            node.name = ''
+            removed_constraint_count += 1
+    txt = 'Removed {} constraints that are in clades smaller than {:,.1f}% ({:,.1f} tips) of the tree size ({:,} tips).'
+    print(txt.format(removed_constraint_count, min_clade_prop*100, min_clade_size, tree_size), flush=True)
     return tree
 
 def mcmctree_main(args):
@@ -184,6 +204,7 @@ def mcmctree_main(args):
     elif (args.timetree=='ci'):
         tree = add_timetree_constraint(tree, args)
     tree = remove_constraint_equal_upper(tree)
+    tree = apply_min_clade_prop(tree, min_clade_prop=args.min_clade_prop)
     nwk_text = tree.write(format=8, format_root_node=True, quoted_node_names=True)
     nwk_text = nwk_text.replace('NoName', '')
     nwk_text = nwk_text.replace('\"', '')
