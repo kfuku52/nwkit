@@ -1,7 +1,7 @@
 from nwkit.util import *
 
 def nhx2nwk_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if (args.node_label!=''):
         for node in tree.traverse():
             if node.is_leaf():

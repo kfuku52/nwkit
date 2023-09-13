@@ -14,7 +14,7 @@ def print_rf_dist(tree1, tree2):
     sys.stderr.write('Robinson-Foulds distance = {:,} (max = {:,})\n'.format(rf, rf_max))
 
 def shuffle_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     tree_original = tree
     if args.topology:
         num_leaf = len(tree.get_leaves())

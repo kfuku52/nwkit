@@ -47,12 +47,12 @@ def get_remove_names(arr1, arr2, match):
     return remove_names
 
 def intersection_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     leaf_names = get_leaf_names(tree)
     if (args.infile2 == ''):
         leaf_names2 = []
     else:
-        tree2 = read_tree(args.infile2, args.format2)
+        tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
         leaf_names2 = get_leaf_names(tree2)
     if (args.seqin == ''):
         seq_names = []

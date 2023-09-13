@@ -1,7 +1,7 @@
 from nwkit.util import *
 
 def subtree_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     leaf_names = tree.get_leaf_names()
     if not args.left_leaf in leaf_names:
         raise Exception('--left_leaf not found in the tree: {}'.format(args.left_leaf))

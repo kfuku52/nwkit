@@ -8,7 +8,7 @@ def add_quote(tree, quote_char):
     return tree
 
 def sanitize_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if args.remove_singleton:
         tree = remove_singleton(tree, verbose=True)
     if (args.name_quote=='none'):

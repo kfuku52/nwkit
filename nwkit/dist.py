@@ -2,8 +2,8 @@ from nwkit.util import *
 
 def dist_main(args):
     assert args.dist in ['RF',], '`--dist {}` is not supported'.format(args.dist)
-    tree1 = read_tree(args.infile, args.format)
-    tree2 = read_tree(args.infile2, args.format2)
+    tree1 = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
     assert set(tree1.get_leaf_names())==set(tree2.get_leaf_names()), 'Leaf name(s) did not match.'
     if args.dist=='RF':
         out = tree1.robinson_foulds(t2=tree2, unrooted_trees=False)

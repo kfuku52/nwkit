@@ -235,7 +235,7 @@ def constrain_main(args):
         tree = taxid2tree(lineages, taxid_counts)
     else:
         if (args.backbone.endswith('user')):
-            tree = read_tree(args.infile, args.format)
+            tree = read_tree(args.infile, args.format, args.quoted_node_names)
             for node in tree.traverse():
                 node.name = node.name.replace('_', ' ')
         elif (args.backbone=='ncbi_apgiv'):

@@ -2,12 +2,12 @@ import sys
 import Bio.SeqIO
 from ete3 import TreeNode
 
-def read_tree(infile, format, quiet=False):
+def read_tree(infile, format, quoted_node_names, quiet=False):
     if infile=='-':
         nwk_string = sys.stdin.readlines()[0]
-        tree = TreeNode(newick=nwk_string, format=format, quoted_node_names=True)
+        tree = TreeNode(newick=nwk_string, format=format, quoted_node_names=quoted_node_names)
     else:
-        tree = TreeNode(newick=infile, format=format, quoted_node_names=True)
+        tree = TreeNode(newick=infile, format=format, quoted_node_names=quoted_node_names)
     if not quiet:
         num_leaves = len([ n for n in tree.traverse() if n.is_leaf() ])
         sys.stderr.write('Number of leaves in input tree: {:,}\n'.format(num_leaves))

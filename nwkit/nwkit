@@ -16,7 +16,8 @@ p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, 
 p_parent.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
                       help='default=%(default)s: ETE3 tree format. '
                            'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
-
+p_parent.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                        help='default=%(default)s: Whether node names are quoted in the input file.')
 
 def command_constrain(args):
     from nwkit.constrain import constrain_main

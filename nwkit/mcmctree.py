@@ -189,7 +189,7 @@ def apply_min_clade_prop(tree, min_clade_prop):
     return tree
 
 def mcmctree_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     assert (len(list(tree.get_children()))==2), 'The input tree should be rooted.'
     for node in tree.traverse():
         if not node.is_leaf():

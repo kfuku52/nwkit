@@ -60,9 +60,9 @@ def outgroup_rooting(tree, outgroup_str):
     return tree
 
 def root_main(args):
-    tree = read_tree(args.infile, args.format)
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if (args.method=='transfer'):
-        tree2 = read_tree(args.infile2, args.format2)
+        tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
         tree = transfer_root(tree_to=tree, tree_from=tree2, verbose=True)
     elif (args.method=='midpoint'):
         tree = midpoint_rooting(tree=tree)
