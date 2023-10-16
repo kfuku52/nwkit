@@ -99,20 +99,20 @@ def add_timetree_constraint(tree, args):
             lineage_taxids.append(lin_dict)
         search_ranks = ['species','genus','tribe','family','order','class','subphylum','phylum','kingdom','superkingdom']
         for search_rank in search_ranks:
+            taxids = [ d[search_rank] for d in lineage_taxids if search_rank in list(d.keys()) ]
+            ta_leaf_names = [ l for l,d in zip(taxid_assigned_leaf_names,lineage_taxids) if search_rank in list(d.keys()) ]
+            if not are_both_lineage_included(node=node, leaf_names=ta_leaf_names):
+                #txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
+                #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
+                continue
+            if not are_two_lineage_rank_differentiated(node=node, taxids=taxids, ta_leaf_names=ta_leaf_names):
+                #txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
+                #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
+                continue
             if search_rank!='species':
                 if not args.higher_rank_search:
                     continue
                 sys.stderr.write('Searching higher taxonomic ranks to find MRCA at timetree.org: {}\n'.format(search_rank))
-            taxids = [ d[search_rank] for d in lineage_taxids if search_rank in list(d.keys()) ]
-            ta_leaf_names = [ l for l,d in zip(taxid_assigned_leaf_names,lineage_taxids) if search_rank in list(d.keys()) ]
-            if not are_both_lineage_included(node=node, leaf_names=ta_leaf_names):
-                txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
-                sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
-                continue
-            if not are_two_lineage_rank_differentiated(node=node, taxids=taxids, ta_leaf_names=ta_leaf_names):
-                txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
-                sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
-                continue
             request_url = '{}/mrca/id/{}'.format(endpoint_url, '+'.join([ str(t) for t in taxids ]))
             sys.stderr.write('Waiting for the REST API at timetree.org. ')
             start = time.time()
@@ -167,8 +167,8 @@ def remove_constraint_equal_upper(tree):
         if (node.name==node.up.name):
             node.name = ''
             removed_constraint_count += 1
-    txt = 'Removed {:,} constraints that are equal to that of the parent node.'
-    print(txt.format(removed_constraint_count), flush=True)
+    txt = 'Removed {:,} constraints that are equal to that of the parent node.\n'
+    sys.stderr.write(txt.format(removed_constraint_count))
     return tree
 
 def apply_min_clade_prop(tree, min_clade_prop):
@@ -184,8 +184,8 @@ def apply_min_clade_prop(tree, min_clade_prop):
         if (clade_size < min_clade_size)&(node.name!=''):
             node.name = ''
             removed_constraint_count += 1
-    txt = 'Removed {} constraints that are in clades smaller than {:,.1f}% ({:,.1f} tips) of the tree size ({:,} tips).'
-    print(txt.format(removed_constraint_count, min_clade_prop*100, min_clade_size, tree_size), flush=True)
+    txt = 'Removed {} constraints that are in clades smaller than {:,.1f}% ({:,.1f} tips) of the tree size ({:,} tips).\n'
+    sys.stderr.write(txt.format(removed_constraint_count, min_clade_prop*100, min_clade_size, tree_size))
     return tree
 
 def mcmctree_main(args):
