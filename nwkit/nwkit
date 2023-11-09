@@ -188,6 +188,17 @@ pprintlabel.add_argument('--sister', metavar='yes|no', default='no', type=strtob
                          help='default=%(default)s: Show labels of the sisters instead of targets.')
 pprintlabel.set_defaults(handler=command_printlabel)
 
+def command_rescale(args):
+    from nwkit.rescale import rescale_main
+    rescale_main(args)
+prescale = subparsers.add_parser('rescale', help='Rescale branch length with a given factor', parents=[p_parent])
+prescale.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
+                   action='store',
+                   choices=['all', 'root', 'leaf', 'intnode'],
+                   help='default=%(default)s: Nodes to be edited.')
+prescale.add_argument('--factor', metavar='FLOAT', default=1.0, type=float, required=True, action='store',
+                   help='default=%(default)s: Rescaling factor of branch length.')
+prescale.set_defaults(handler=command_rescale)
 
 def command_root(args):
     from nwkit.root import root_main
