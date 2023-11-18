@@ -249,19 +249,30 @@ pshuffle.add_argument('--label', metavar='yes|no', default='no', type=strtobool,
                        help='default=%(default)s: Shuffle leaf labels.')
 pshuffle.set_defaults(handler=command_shuffle)
 
-
 def command_subtree(args):
     from nwkit.subtree import subtree_main
     subtree_main(args)
 psubtree = subparsers.add_parser('subtree', help='Generate a subtree Newick file', parents=[p_parent])
-psubtree.add_argument('--left_leaf', metavar='STR', default=None, type=str, required=True,
+psubtree.add_argument('--left_leaf', metavar='STR', default=None, type=str, required=False,
                       help='default=%(default)s: Any leaf names in the left clade. For example, '
                            'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '
                            'specify one of them (e.g., Homo_sapiens).')
-psubtree.add_argument('--right_leaf', metavar='STR', default=None, type=str, required=True,
+psubtree.add_argument('--right_leaf', metavar='STR', default=None, type=str, required=False,
                       help='default=%(default)s: Any leaf names in the right clade. For example, '
                            'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '
                            'specify the other one that is not used as --left_leaf (e.g., Mus_musculus).')
+psubtree.add_argument('--leaves', metavar='leaf1,leaf2,leaf3,...', default=None, type=str, required=False,
+                      help='default=%(default)s: Comma-separated list of leaves. '
+                           'The output subtree has their most-recent common ancestor as the root. '
+                           '--left_leaf and --right_leaf are ignored if this option is specified. '
+                           'Single leaf name may be specified in combination with --orthogroup yes.')
+psubtree.add_argument('--orthogroup', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: The output subtree represents orthogroup(s) that contain all '
+                            'specified leaves. The expected format of leaf names is "GENUS_SPECIES_OTHERINFO".')
+psubtree.add_argument('--dup_conf_score_threshold', metavar='FLOAT', default=0, type=float, required=False, action='store',
+                       help='default=%(default)s: The threshold of duplication-confidence score for orthogroup delimitation. '
+                            '0 = most stringent, 1 = most relaxed. '
+                            'For the score, see https://www.ensembl.org/info/genome/compara/homology_types.html')
 psubtree.set_defaults(handler=command_subtree)
 
 

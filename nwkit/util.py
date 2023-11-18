@@ -77,3 +77,19 @@ def read_item_per_line_file(file):
         out = f.read().split('\n')
     out = [ o for o in out if o!='' ]
     return out
+
+def annotate_scientific_names(tree):
+    for node in tree.iter_leaves():
+        node.sci_name = label2sciname(node.name)
+    return tree
+
+def annotate_duplication_confidence_scores(tree):
+    for node in tree.traverse():
+        if node.is_leaf():
+            continue
+        sp_child1 = set([leaf.sci_name for leaf in node.children[0].iter_leaves()])
+        sp_child2 = set([leaf.sci_name for leaf in node.children[1].iter_leaves()])
+        num_union = len(sp_child1.union(sp_child2))
+        num_intersection = len(sp_child1.intersection(sp_child2))
+        node.dup_conf_score = num_intersection / num_union
+    return tree
