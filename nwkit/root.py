@@ -3,8 +3,6 @@ import sys
 from nwkit.util import *
 
 def transfer_root(tree_to, tree_from, verbose=False):
-    same_leaf_set = len(set(tree_to.get_leaf_names()) - set(tree_from.get_leaf_names())) == 0
-    assert same_leaf_set, 'The two input tree files did not have identical leaves.'
     subroot_leaves = [ n.get_leaf_names() for n in tree_from.get_children() ]
     is_n0_bigger_than_n1 = (len(subroot_leaves[0]) > len(subroot_leaves[1]))
     ingroups = subroot_leaves[0] if is_n0_bigger_than_n1 else subroot_leaves[1]
@@ -63,9 +61,11 @@ def root_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if (args.method=='transfer'):
         tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
+        if not is_all_leaf_names_identical(tree, tree2, verbose=True):
+            raise Exception('Leaf labels in the two trees should be completely matched.')
         tree = transfer_root(tree_to=tree, tree_from=tree2, verbose=True)
     elif (args.method=='midpoint'):
         tree = midpoint_rooting(tree=tree)
     elif (args.method=='outgroup'):
         tree = outgroup_rooting(tree=tree, outgroup_str=args.outgroup)
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)

@@ -44,4 +44,4 @@ def subtree_main(args):
         sys.stderr.write('Number of species in output orthogroup tree: {:,}\n'.format(num_species_subtree))
     else:
         subtree = mrca
-    write_tree(subtree, args, format=args.format)
+    write_tree(subtree, args, format=args.outformat)

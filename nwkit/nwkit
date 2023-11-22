@@ -13,9 +13,11 @@ p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, r
                       help='default=%(default)s: Input newick file. Use "-" for STDIN.')
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
-p_parent.add_argument('-f', '--format', metavar='INT', default=1, type=int, required=False, action='store',
+p_parent.add_argument('-f', '--format', metavar='INT', default='auto', type=str, required=False, action='store',
                       help='default=%(default)s: ETE3 tree format. '
                            'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
+p_parent.add_argument('-of', '--outformat', metavar='INT', default='auto', type=str, required=False, action='store',
+                      help='ETE3 tree format for --outfile. "auto" indicates the same format as --format.')
 p_parent.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                         help='default=%(default)s: Whether node names are quoted in the input file.')
 
@@ -46,27 +48,24 @@ pconstrain.add_argument('--collapse', metavar='yes|no', default='no', type=strto
                              'The output file may be used as a species tree for phylogeny reconciliation. ')
 pconstrain.set_defaults(handler=command_constrain)
 
-
 def command_dist(args):
     from nwkit.dist import dist_main
     dist_main(args)
 pdist = subparsers.add_parser('dist', help='Calculate topological distance between two trees', parents=[p_parent])
 pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
                    help='default=%(default)s: Input newick file 2.')
-pdist.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
+pdist.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
                    help='default=%(default)s: ETE3 tree format for --infile2.')
 pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
                    help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
 pdist.set_defaults(handler=command_dist)
-
 
 def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
 pdrop = subparsers.add_parser('drop', help='Remove node and branch information', parents=[p_parent])
 pdrop.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
-                   action='store',
-                   choices=['all', 'root', 'leaf', 'intnode'],
+                   action='store', choices=['all', 'root', 'leaf', 'intnode'],
                    help='default=%(default)s: Nodes to be edited.')
 pdrop.add_argument('--name', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Drop node names.')
@@ -78,7 +77,6 @@ pdrop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, requ
                    help='default=%(default)s: Fill values instead of simply dropping them.')
 pdrop.set_defaults(handler=command_drop)
 
-
 def command_intersection(args):
     from nwkit.intersection import intersection_main
     intersection_main(args)
@@ -86,7 +84,7 @@ pintersection = subparsers.add_parser('intersection', help='Drop non-overlapping
 pintersection.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Input newick file 2. The intersected version of this file '
                                 'will not be generated, so if necessary, replace --infile and --infile2 and run again.')
-pintersection.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
+pintersection.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
                            help='default=%(default)s: ETE3 tree format for --infile2.')
 pintersection.add_argument('-si', '--seqin', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Input sequence file.')
@@ -98,7 +96,6 @@ pintersection.add_argument('--match', metavar='complete|prefix|backward', defaul
                            required=False, action='store', choices=['complete','prefix','backward'],
                            help='default=%(default)s: Method for ID matching.')
 pintersection.set_defaults(handler=command_intersection)
-
 
 def command_mark(args):
     from nwkit.mark import mark_main
@@ -122,7 +119,6 @@ pmark.add_argument('--insert_pos', metavar='prefix|suffix', default='suffix', ty
                    action='store', choices=['prefix', 'suffix'],
                    help='default=%(default)s: Place to insert --insert_txt.')
 pmark.set_defaults(handler=command_mark)
-
 
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
@@ -164,7 +160,6 @@ pmcmctree.add_argument('--higher_rank_search', metavar='yes|no', default='yes', 
                             'if the species-level search failed.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
-
 def command_nhx2nwk(args):
     from nwkit.nhx2nwk import nhx2nwk_main
     nhx2nwk_main(args)
@@ -172,7 +167,6 @@ pnhx2nwk = subparsers.add_parser('nhx2nwk', help='Generate Newick from NHX', par
 pnhx2nwk.add_argument('-p', '--node_label', metavar='B|D|H|S|...', default='', type=str, required=False, action='store',
                          help='default=%(default)s: NHX attribute to use as internal node labels.')
 pnhx2nwk.set_defaults(handler=command_nhx2nwk)
-
 
 def command_printlabel(args):
     from nwkit.printlabel import printlabel_main
@@ -207,7 +201,7 @@ proot = subparsers.add_parser('root', help='Place or transfer the tree root', pa
 proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
                    help='default=%(default)s: Input newick file 2. Used when --method "transfer". '
                         'Leaf labels should be matched to those in --infile.')
-proot.add_argument('-f2', '--format2', metavar='INT', default=1, type=int, required=False, action='store',
+proot.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
                    help='default=%(default)s: ETE3 tree format for --infile2.')
 proot.add_argument('--method', metavar='STR', default='midpoint', type=str, required=False, action='store',
                    choices=['midpoint','outgroup','transfer',],
@@ -222,7 +216,6 @@ proot.add_argument('--outgroup', metavar='STR', default='', type=str, required=F
                         'so all labels do not have to be specified for a large clade.')
 proot.set_defaults(handler=command_root)
 
-
 def command_sanitize(args):
     from nwkit.sanitize import sanitize_main
     sanitize_main(args)
@@ -234,7 +227,6 @@ psanitize.add_argument('--name_quote', metavar='none|single|double', default='no
                        help='default=%(default)s: Quotation of node and leaf names.'
                             'none = no quote, single = \', double = \" ')
 psanitize.set_defaults(handler=command_sanitize)
-
 
 def command_shuffle(args):
     from nwkit.shuffle import shuffle_main
@@ -275,6 +267,27 @@ psubtree.add_argument('--dup_conf_score_threshold', metavar='FLOAT', default=0, 
                             'For the score, see https://www.ensembl.org/info/genome/compara/homology_types.html')
 psubtree.set_defaults(handler=command_subtree)
 
+def command_transfer(args):
+    from nwkit.transfer import transfer_main
+    transfer_main(args)
+ptransfer = subparsers.add_parser('transfer', help='Tranfer info between two trees with matching tip names', parents=[p_parent])
+ptransfer.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
+                       help='default=%(default)s: Input newick file 2. Specified infor will be transferred from this file '
+                        'to --infile. Topologies may deviate but leaf labels should be matched between the two trees.')
+ptransfer.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
+                       help='default=%(default)s: ETE3 tree format for --infile2.')
+ptransfer.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
+                       action='store', choices=['all', 'root', 'leaf', 'intnode'],
+                       help='default=%(default)s: Nodes to be edited.')
+ptransfer.add_argument('--name', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: transfer node names.')
+ptransfer.add_argument('--support', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: transfer support values.')
+ptransfer.add_argument('--length', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: transfer branch length.')
+ptransfer.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
+                       help='default=%(default)s: Fill values instead of leaving as is, if no corresponding node is found.')
+ptransfer.set_defaults(handler=command_transfer)
 
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))

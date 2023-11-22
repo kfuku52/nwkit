@@ -42,4 +42,4 @@ def shuffle_main(args):
         for leaf,new_name in zip(tree.get_leaves(), leaf_names):
             leaf.name = new_name
     print_rf_dist(tree1=tree_original, tree2=tree)
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)

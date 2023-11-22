@@ -12,5 +12,5 @@ def rescale_main(args):
         nodes = [ node for node in tree.traverse() if not node.is_leaf() ]
     for node in nodes:
         node.dist = node.dist * args.factor
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)
 

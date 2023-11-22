@@ -18,4 +18,4 @@ def sanitize_main(args):
     if (args.name_quote=='double'):
         quote_char = '\"'
     tree = add_quote(tree, quote_char)
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)

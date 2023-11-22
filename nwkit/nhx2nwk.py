@@ -8,4 +8,4 @@ def nhx2nwk_main(args):
                 continue
             if args.node_label in dir(node):
                 node.name = getattr(node, args.node_label)
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)

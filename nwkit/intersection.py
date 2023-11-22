@@ -67,5 +67,5 @@ def intersection_main(args):
     for leaf in tree.get_leaves():
         if leaf.name in leaves_to_remove:
             leaf.delete(preserve_branch_length=True)
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)
 

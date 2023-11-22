@@ -2,16 +2,9 @@ from nwkit.util import *
 
 def drop_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    if (args.target=='all'):
-        nodes = list(tree.traverse())
-    elif (args.target=='root'):
-        nodes = [ node for node in tree.traverse() if node.is_root() ]
-    elif (args.target=='leaf'):
-        nodes = [ node for node in tree.traverse() if node.is_leaf() ]
-    elif (args.target=='intnode'):
-        nodes = [ node for node in tree.traverse() if not node.is_leaf() ]
+    nodes = get_target_nodes(tree=tree, target=args.target)
     if args.fill is None:
-        placeholder = 123456789
+        placeholder = -999999
     else:
         placeholder = args.fill
     for node in nodes:
@@ -21,5 +14,5 @@ def drop_main(args):
             node.support = placeholder
         if (args.length):
             node.dist = placeholder
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)
 

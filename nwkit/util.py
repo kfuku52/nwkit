@@ -3,23 +3,59 @@ import Bio.SeqIO
 from ete3 import TreeNode
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
+    global infile_format
     if infile=='-':
-        nwk_string = sys.stdin.readlines()[0]
-        tree = TreeNode(newick=nwk_string, format=format, quoted_node_names=quoted_node_names)
+        infile = sys.stdin.readlines()[0]
+    if format=='auto':
+        format_original = format
+        for format in [0,1,2,3,4,5,6,7,8,9,100,'exception']:
+            if format == 'exception':
+                raise Exception('Failed to parse the input tree.')
+            try:
+                tree = TreeNode(newick=infile, format=format, quoted_node_names=True)
+                infile_format = format
+                break
+            except:
+                pass
+            try:
+                tree = TreeNode(newick=infile, format=format, quoted_node_names=False)
+                infile_format = format
+                break
+            except:
+                pass
     else:
+        format_original = format
+        format = int(format)
         tree = TreeNode(newick=infile, format=format, quoted_node_names=quoted_node_names)
+    if format==0: # flexible with support values
+        max_support = max([ node.support for node in tree.traverse() ])
+        if max_support > 1.0:
+            for node in tree.traverse():
+                if (node.support - 1.0) < 10**-9: # 1.0 is the default value for missing support values
+                    node.support = -999999
+    if format==1: # flexible with internal node names
+        for node in tree.traverse():
+            node.support = -999999
     if not quiet:
-        num_leaves = len([ n for n in tree.traverse() if n.is_leaf() ])
-        sys.stderr.write('Number of leaves in input tree: {:,}\n'.format(num_leaves))
+        num_leaves = len(tree.get_leaf_names())
+        txt = 'Number of leaves in input tree = {:,}, Input tree format = {}\n'
+        sys.stderr.write(txt.format(num_leaves, format))
     return tree
 
 def write_tree(tree, args, format, quiet=False):
+    if format=='auto':
+        format_original = format
+        format = infile_format
+    else:
+        format_original = format
+        format = int(format)
     if not quiet:
-        num_leaves = len([ n for n in tree.traverse() if n.is_leaf() ])
-        sys.stderr.write('Number of leaves in output tree: {:,}\n'.format(num_leaves))
+        num_leaves = len(tree.get_leaf_names())
+        txt = 'Number of leaves in output tree = {:,}, Output tree format = {}\n'
+        sys.stderr.write(txt.format(num_leaves, format))
     tree_str = tree.write(format=format, format_root_node=True)
-    tree_str = tree_str.replace(':123456789','').replace(':1.23457e+08','')
-    tree_str = tree_str.replace('123456789','').replace('1.23457e+08','')
+    tree_str = tree_str.replace(':-999999.0', '').replace(':-999999','')
+    tree_str = tree_str.replace('-999999.0', '').replace('-999999','')
     if args.outfile=='-':
         print(tree_str)
     else:
@@ -93,3 +129,33 @@ def annotate_duplication_confidence_scores(tree):
         num_intersection = len(sp_child1.intersection(sp_child2))
         node.dup_conf_score = num_intersection / num_union
     return tree
+
+def is_all_leaf_names_identical(tree1, tree2, verbose=False):
+    leaf_names1 = set(tree1.get_leaf_names())
+    leaf_names2 = set(tree2.get_leaf_names())
+    is_all_leaf_names_identical = (leaf_names1 == leaf_names2)
+    if verbose:
+        if not is_all_leaf_names_identical:
+            unmatched_names = leaf_names1.symmetric_difference(leaf_names2)
+            sys.stderr.write('Unmatched leaf labels: {}\n'.format(' '.join(unmatched_names)))
+    return is_all_leaf_names_identical
+
+def get_target_nodes(tree, target):
+    if (target=='all'):
+        nodes = list(tree.traverse())
+    elif (target=='root'):
+        nodes = [ node for node in tree.traverse() if node.is_root() ]
+    elif (target=='leaf'):
+        nodes = [ node for node in tree.traverse() if node.is_leaf() ]
+    elif (target=='intnode'):
+        nodes = [ node for node in tree.traverse() if not node.is_leaf() ]
+    return nodes
+
+def is_rooted(tree):
+    num_subroot_nodes = len(tree.get_children())
+    if num_subroot_nodes==2:
+        return True
+    elif num_subroot_nodes==3:
+        return False
+    else:
+        raise Exception('Number of subroot nodes should be either 2 or 3.')

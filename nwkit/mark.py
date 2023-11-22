@@ -56,4 +56,4 @@ def mark_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     tree = initialize_tree_attr(tree)
     tree = label_insert_nodes(tree, args)
-    write_tree(tree, args, format=args.format)
+    write_tree(tree, args, format=args.outformat)
