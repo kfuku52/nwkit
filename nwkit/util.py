@@ -3,7 +3,7 @@ import Bio.SeqIO
 from ete3 import TreeNode
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
-    global infile_format
+    global INFILE_FORMAT
     if infile=='-':
         infile = sys.stdin.readlines()[0]
     if format=='auto':
@@ -13,13 +13,13 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
                 raise Exception('Failed to parse the input tree.')
             try:
                 tree = TreeNode(newick=infile, format=format, quoted_node_names=True)
-                infile_format = format
+                INFILE_FORMAT = format
                 break
             except:
                 pass
             try:
                 tree = TreeNode(newick=infile, format=format, quoted_node_names=False)
-                infile_format = format
+                INFILE_FORMAT = format
                 break
             except:
                 pass
@@ -45,7 +45,10 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
 def write_tree(tree, args, format, quiet=False):
     if format=='auto':
         format_original = format
-        format = infile_format
+        if sys.argv[1] == 'mark':
+            format = 1
+        else:
+            format = INFILE_FORMAT
     else:
         format_original = format
         format = int(format)

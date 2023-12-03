@@ -103,15 +103,13 @@ def command_mark(args):
 pmark = subparsers.add_parser('mark', help='Add texts to node labels', parents=[p_parent])
 pmark.add_argument('-p', '--pattern', metavar='REGEX', default='.*', type=str, required=True, action='store',
                    help='default=%(default)s: Regular expression for label search.')
-pmark.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
-                   action='store', choices=['all', 'root', 'leaf', 'intnode'],
-                   help='default=%(default)s: Nodes to be searched.')
-pmark.add_argument('--mrca', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
-                   help='default=%(default)s: Mark the label of the most-recent common ancestor instead of targets.')
-pmark.add_argument('--target_only_clade', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
-                   help='default=%(default)s: Mark the label of MRCA whose clade contains only targets. '
-                        'Use with --mrca yes.')
-pmark.add_argument('--insert_txt', metavar='STR', default='#1', type=str, required=True, action='store',
+pmark.add_argument('-t', '--target', metavar='mrca|clade|leaf', default='clade', type=str, required=False,
+                   action='store', choices=['mrca', 'clade', 'leaf'],
+                   help='default=%(default)s: Nodes to be marked.')
+pmark.add_argument('--target_only_clade', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Mark the label of MRCA/clade whose clade contains only target leaves. '
+                        'Use with --target mrca/clade')
+pmark.add_argument('--insert_txt', metavar='STR', default='', type=str, required=True, action='store',
                    help='default=%(default)s: Label to insert to the target node labels.')
 pmark.add_argument('--insert_sep', metavar='STR', default='', type=str, required=False, action='store',
                    help='default=%(default)s: Separator for --insert_txt.')
