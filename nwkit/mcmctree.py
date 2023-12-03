@@ -184,7 +184,7 @@ def apply_min_clade_prop(tree, min_clade_prop):
         if (clade_size < min_clade_size)&(node.name!=''):
             node.name = ''
             removed_constraint_count += 1
-    txt = 'Removed {} constraints that are in clades smaller than {:,.1f}% ({:,.1f} tips) of the tree size ({:,} tips).\n'
+    txt = 'Removed {} constraints that are in clades smaller than {:,.1f}% ({:,} tips) of the tree size ({:,} tips).\n'
     sys.stderr.write(txt.format(removed_constraint_count, min_clade_prop*100, min_clade_size, tree_size))
     return tree
 
