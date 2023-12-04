@@ -25,14 +25,15 @@ def annotate_tree_attr(tree, args):
                 clade_node.is_target_only_mrca_clade = True
     target_leaves = [ leaf for leaf in tree.iter_leaves() if leaf.is_target_leaf ]
     num_target_leaves = len(target_leaves)
-    for ancestor in target_leaves[0].iter_ancestors():
-        num_anc_target_leaves = len([ leaf for leaf in ancestor.iter_leaves() if leaf.is_target_leaf ])
-        if num_target_leaves == num_anc_target_leaves:
-            ancestor.is_all_mrca = True
-            ancestor.is_all_mrca_clade = True
-            for clade_node in ancestor.iter_descendants():
-                clade_node.is_all_mrca_clade = True
-            break
+    if len(target_leaves) > 0:
+        for ancestor in target_leaves[0].iter_ancestors():
+            num_anc_target_leaves = len([ leaf for leaf in ancestor.iter_leaves() if leaf.is_target_leaf ])
+            if num_target_leaves == num_anc_target_leaves:
+                ancestor.is_all_mrca = True
+                ancestor.is_all_mrca_clade = True
+                for clade_node in ancestor.iter_descendants():
+                    clade_node.is_all_mrca_clade = True
+                break
     return tree
 
 def get_insert_nodes(tree, args):
