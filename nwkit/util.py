@@ -60,7 +60,7 @@ def write_tree(tree, args, format, quiet=False):
     i = 0
     for node in tree.traverse():
         if node.name!='':
-            placeholder_name = 'PLACEHOLDER'+str(i)
+            placeholder_name = 'NODENAME_PLACEHOLDER'+str(i).zfill(10)
             node_name_dict[placeholder_name] = node.name
             node.name = placeholder_name
             i += 1
