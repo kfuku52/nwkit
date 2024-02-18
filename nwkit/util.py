@@ -56,9 +56,19 @@ def write_tree(tree, args, format, quiet=False):
         num_leaves = len(tree.get_leaf_names())
         txt = 'Number of leaves in output tree = {:,}, Output tree format = {}\n'
         sys.stderr.write(txt.format(num_leaves, format))
+    node_name_dict = dict()
+    i = 0
+    for node in tree.traverse():
+        if node.name!='':
+            placeholder_name = 'PLACEHOLDER'+str(i)
+            node_name_dict[placeholder_name] = node.name
+            node.name = placeholder_name
+            i += 1
     tree_str = tree.write(format=format, format_root_node=True)
     tree_str = tree_str.replace(':-999999.0', '').replace(':-999999','')
     tree_str = tree_str.replace('-999999.0', '').replace('-999999','')
+    for placeholder_name, node_name in node_name_dict.items():
+        tree_str = tree_str.replace(placeholder_name, node_name)
     if args.outfile=='-':
         print(tree_str)
     else:

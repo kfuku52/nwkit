@@ -180,6 +180,16 @@ pprintlabel.add_argument('--sister', metavar='yes|no', default='no', type=strtob
                          help='default=%(default)s: Show labels of the sisters instead of targets.')
 pprintlabel.set_defaults(handler=command_printlabel)
 
+def command_prune(args):
+    from nwkit.prune import prune_main
+    prune_main(args)
+pprune = subparsers.add_parser('prune', help='Prune leaves', parents=[p_parent])
+pprune.add_argument('-p', '--pattern', metavar='STR', default='.*', type=str, required=True, action='store',
+                         help='default=%(default)s: Regular expression for label search.')
+pprune.add_argument('--invert_match', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                         help='default=%(default)s: Prune unmatched leaves.')
+pprune.set_defaults(handler=command_prune)
+
 def command_rescale(args):
     from nwkit.rescale import rescale_main
     rescale_main(args)
