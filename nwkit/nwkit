@@ -77,6 +77,12 @@ pdrop.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, requ
                    help='default=%(default)s: Fill values instead of simply dropping them.')
 pdrop.set_defaults(handler=command_drop)
 
+def command_info(args):
+    from nwkit.info import info_main
+    info_main(args)
+pinfo = subparsers.add_parser('info', help='Printing tree information', parents=[p_parent])
+pinfo.set_defaults(handler=command_info)
+
 def command_intersection(args):
     from nwkit.intersection import intersection_main
     intersection_main(args)
