@@ -59,13 +59,12 @@ def write_tree(tree, args, format, quiet=False):
     node_name_dict = dict()
     i = 0
     for node in tree.traverse():
-        if node.name!='':
+        if (node.name!='')&(str(node.name)!='-999999'):
             placeholder_name = 'NODENAME_PLACEHOLDER'+str(i).zfill(10)
             node_name_dict[placeholder_name] = node.name
             node.name = placeholder_name
             i += 1
     tree_str = tree.write(format=format, format_root_node=True)
-    tree_str = tree_str.replace(':-999999.0', '').replace(':-999999','')
     tree_str = tree_str.replace('-999999.0', '').replace('-999999','')
     for placeholder_name, node_name in node_name_dict.items():
         tree_str = tree_str.replace(placeholder_name, node_name)
