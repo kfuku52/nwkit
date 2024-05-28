@@ -20,6 +20,7 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment
+- [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
 - [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Introducing divergence time constraints for PAML's mcmctree
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX

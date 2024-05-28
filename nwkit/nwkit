@@ -103,6 +103,19 @@ pintersection.add_argument('--match', metavar='complete|prefix|backward', defaul
                            help='default=%(default)s: Method for ID matching.')
 pintersection.set_defaults(handler=command_intersection)
 
+def command_label(args):
+    from nwkit.label import label_main
+    label_main(args)
+plabel = subparsers.add_parser('label', help='Add unique node labels', parents=[p_parent])
+plabel.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
+                   action='store', choices=['all', 'root', 'leaf', 'intnode'],
+                   help='default=%(default)s: Nodes to be edited.')
+plabel.add_argument('--prefix', metavar='STR', default='n', type=str, required=False, action='store',
+                   help='default=%(default)s: Prefix for node labels.')
+plabel.add_argument('--force', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Whether to overwrite existing node names.')
+plabel.set_defaults(handler=command_label)
+
 def command_mark(args):
     from nwkit.mark import mark_main
     mark_main(args)
