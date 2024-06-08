@@ -140,7 +140,7 @@ pmark.set_defaults(handler=command_mark)
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
     mcmctree_main(args)
-pmcmctree = subparsers.add_parser('mcmctree', help='Introduce divergence time constraints on the command line', parents=[p_parent])
+pmcmctree = subparsers.add_parser('mcmctree', help=' Introduce divergence time constraints for PAML\'s mcmctree', parents=[p_parent])
 pmcmctree.add_argument('--left_species', metavar='STR', default=None, type=str, required=False,
                        help='default=%(default)s: Any species in the left clade. '
                             'If you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, '

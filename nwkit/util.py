@@ -66,6 +66,8 @@ def write_tree(tree, args, format, quiet=False):
             i += 1
     tree_str = tree.write(format=format, format_root_node=True)
     tree_str = tree_str.replace('-999999.0', '').replace('-999999','')
+    if tree_str.endswith(':;'):
+        tree_str = tree_str[:-2]+';'
     for placeholder_name, node_name in node_name_dict.items():
         tree_str = tree_str.replace(placeholder_name, node_name)
     if args.outfile=='-':
