@@ -49,6 +49,10 @@ def outgroup_rooting(tree, outgroup_str):
         outgroup_node = outgroup_nodes[0]
     else:
         outgroup_node = outgroup_nodes[0].get_common_ancestor(outgroup_nodes)
+    if outgroup_node is tree: # Reroot if the outgroup clade represents the whole tree
+        non_outgroup_leaves = [ node for node in tree.iter_leaves() if node not in outgroup_nodes ]
+        tree.set_outgroup(non_outgroup_leaves[0])
+        outgroup_node = outgroup_nodes[0].get_common_ancestor(outgroup_nodes)
     if outgroup_node is tree:
         sys.stderr.write('Outgroup clade should not represent the whole tree. Please check --outgroup carefully. Exiting.\n')
         sys.exit(1)
