@@ -130,6 +130,10 @@ def add_timetree_constraint(tree, args):
                 txt = "Skipping. No study info found at timetree.org for the node containing: {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
                 continue
+            if "No TimeTree study info available for this MRCA" in timetree_result:
+                txt = "Skipping. No TimeTree study info available for this MRCA for the node containing: {}\n"
+                sys.stderr.write(txt.format(','.join(leaf_names)))
+                continue
             if not is_mrca_clade_root(node, timetree_result, ncbi):
                 txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
