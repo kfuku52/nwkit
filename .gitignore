@@ -1,0 +1,7 @@
+/data/*
+/nwkit/__pycache__/*
+/.DS_Store
+/*/.DS_Store
+/tests/*
+/nwkit.iml
+nwkit/.DS_Store

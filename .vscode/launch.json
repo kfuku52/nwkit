@@ -1,0 +1,48 @@
+{
+    // Use IntelliSense to learn about possible attributes.
+    // Hover to view descriptions of existing attributes.
+    // For more information, visit: https://go.microsoft.com/fwlink/?linkid=830387
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "mcmctree4",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/Users/kf/Library/CloudStorage/GoogleDrive-kenji.fukushima@nig.ac.jp/My Drive/psnl/repos/nwkit/nwkit/nwkit",
+            "console": "integratedTerminal",
+            "cwd": "/Users/kf/Library/CloudStorage/GoogleDrive-kenji.fukushima@nig.ac.jp/My Drive/psnl/repos/nwkit/data/mcmctree4",
+            "env": {
+                "PYTHONPATH": "/Users/kf/Library/CloudStorage/GoogleDrive-kenji.fukushima@nig.ac.jp/My Drive/psnl/repos/nwkit",
+            },
+            "python": "/Users/kf/miniforge3/bin/python",
+            "args": [
+                "mcmctree",
+                "--infile", "tree.nwk",
+                "--timetree", "point",
+                "--add_header",
+                "--min_clade_prop", "0.2",
+                "--outfile", "out.nwk",
+            ]
+        },
+        {
+            "name": "mcmctree5",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "/Users/kf/Library/CloudStorage/GoogleDrive-kenji.fukushima@nig.ac.jp/My Drive/psnl/repos/nwkit/nwkit/nwkit",
+            "console": "integratedTerminal",
+            "cwd": "/Users/kf/Library/CloudStorage/GoogleDrive-kenji.fukushima@nig.ac.jp/My Drive/psnl/repos/nwkit/data/mcmctree5",
+            "env": {
+                "PYTHONPATH": "/Users/kf/Library/CloudStorage/GoogleDrive-kenji.fukushima@nig.ac.jp/My Drive/psnl/repos/nwkit",
+            },
+            "python": "/Users/kf/miniforge3/bin/python",
+            "args": [
+                "mcmctree",
+                "--infile", "tree.nwk",
+                "--timetree", "ci",
+                "--add_header",
+                "--min_clade_prop", "0.2",
+                "--outfile", "out.nwk",
+            ]
+        },
+    ]
+}
