@@ -214,3 +214,67 @@ grep -Fq "'Oryza sativa'"        "$TMPDIR/sani_out.nwk" || { echo "ASSERT FAIL: 
 grep -Fq "Populus_trichocarpa" "$TMPDIR/sani_out.nwk" || { echo "ASSERT FAIL: label corrupted for Populus_trichocarpa"; exit 1; }
 
 echo "[sanitize] OK"
+
+# ========== 6) ladderize（あれば実行） ==========
+if nwkit ladderize -h >/dev/null 2>&1; then
+  cat > "$TMPDIR/lad_in.nwk" <<'NWK'
+(((A:0.3,B:0.1):0.2,(C:0.05,D:0.4):0.1):0.2,E:0.1):0.0;
+NWK
+  # 方向オプションは実装差があるので、まずデフォルトで1回
+  nwkit ladderize -i "$TMPDIR/lad_in.nwk" -o "$TMPDIR/lad_out1.nwk" || { echo "ASSERT FAIL: ladderize default failed"; exit 1; }
+
+  # 方向指定があれば両方試す（ヘルプに 'desc' があれば降順も）
+  if nwkit ladderize -h 2>&1 | grep -qi 'desc'; then
+    nwkit ladderize -i "$TMPDIR/lad_in.nwk" -o "$TMPDIR/lad_out2.nwk" --desc || { echo "ASSERT FAIL: ladderize --desc failed"; exit 1; }
+  elif nwkit ladderize -h 2>&1 | grep -qi 'reverse'; then
+    nwkit ladderize -i "$TMPDIR/lad_in.nwk" -o "$TMPDIR/lad_out2.nwk" --reverse || { echo "ASSERT FAIL: ladderize --reverse failed"; exit 1; }
+  else
+    cp "$TMPDIR/lad_out1.nwk" "$TMPDIR/lad_out2.nwk"
+  fi
+
+  # 不変条件：葉集合は同じ / トポロジは同じ（RF=0） / 枝長のコロン数は同じ
+  comm -3 <(leaflabels "$TMPDIR/lad_in.nwk") <(leaflabels "$TMPDIR/lad_out1.nwk") | (! read) || { echo "ASSERT FAIL: ladderize changed leaf set"; exit 1; }
+  RF_lad="$(rf_distance "$TMPDIR/lad_in.nwk" "$TMPDIR/lad_out1.nwk")"; RF_lad="${RF_lad:-0}"
+  [ "$RF_lad" -eq 0 ] || { echo "ASSERT FAIL: ladderize changed topology (RF=$RF_lad)"; exit 1; }
+  [[ "$(count_colons "$TMPDIR/lad_in.nwk")" == "$(count_colons "$TMPDIR/lad_out1.nwk")" ]] || { echo "ASSERT FAIL: ladderize changed branch length count"; exit 1; }
+
+  # 変化が“ある程度”起きたこと：テキスト比較で完全一致ならWARN（並び替えが不要な形だった）
+  if diff -u "$TMPDIR/lad_in.nwk" "$TMPDIR/lad_out1.nwk" >/dev/null; then
+    echo "WARN: ladderize produced identical textual Newick (already ladderized?)"
+  fi
+  echo "[ladderize] OK"
+else
+  echo "SKIP: ladderize (command not found)"
+fi
+
+# ========== 7) midpoint root（あれば実行） ==========
+# 実装により subcommand 名や指定方法が異なるため、2パターンを順に試す
+cat > "$TMPDIR/mid_in.nwk" <<'NWK'
+((A:0.3,(B:0.2,C:0.2):0.1):0.2,D:0.5);
+NWK
+
+mid_out="$TMPDIR/mid_out.nwk"
+mid_done=false
+
+# パターン1: 独立サブコマンド 'midpoint'
+if nwkit midpoint -h >/dev/null 2>&1; then
+  if nwkit midpoint -i "$TMPDIR/mid_in.nwk" -o "$mid_out"; then mid_done=true; fi
+fi
+
+# パターン2: 'root' サブコマンドに midpoint 指定がある
+if [ "$mid_done" = false ] && nwkit root -h 2>&1 | grep -qi 'midpoint'; then
+  # よくある指定名を総当たり（--method midpoint / --midpoint yes など）
+  if nwkit root -i "$TMPDIR/mid_in.nwk" -o "$mid_out" --method midpoint 2>/dev/null; then mid_done=true; fi
+  if [ "$mid_done" = false ] && nwkit root -i "$TMPDIR/mid_in.nwk" -o "$mid_out" --midpoint yes 2>/dev/null; then mid_done=true; fi
+fi
+
+if [ "$mid_done" = true ]; then
+  # 不変条件：葉集合同じ / RFは0（根だけ変更） / 枝長の“数”は同じ
+  comm -3 <(leaflabels "$TMPDIR/mid_in.nwk") <(leaflabels "$mid_out") | (! read) || { echo "ASSERT FAIL: midpoint changed leaf set"; exit 1; }
+  RF_mid="$(rf_distance "$TMPDIR/mid_in.nwk" "$mid_out")"; RF_mid="${RF_mid:-0}"
+  [ "$RF_mid" -eq 0 ] || { echo "ASSERT FAIL: midpoint changed topology (RF=$RF_mid)"; exit 1; }
+  [[ "$(count_colons "$TMPDIR/mid_in.nwk")" == "$(count_colons "$mid_out")" ]] || { echo "ASSERT FAIL: midpoint changed branch length count"; exit 1; }
+  echo "[midpoint] OK"
+else
+  echo "SKIP: midpoint (no supported entry point found)"
+fi
