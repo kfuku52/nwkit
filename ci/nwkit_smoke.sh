@@ -300,15 +300,23 @@ cat > "$TMPDIR/sub_in.nwk" <<'NWK'
 (((A:0.1,B:0.1):0.1,(C:0.1,D:0.1):0.1):0.1,(E:0.1,F:0.1):0.1):0.0;
 NWK
 
-# A と C を左右に指定 → MRCA は A,B,C,D を含む部分木
+# 1) left/right で MRCA を指定 → 期待する葉集合は {A,B,C,D}
 nwkit subtree -i "$TMPDIR/sub_in.nwk" -o "$TMPDIR/sub_AC.nwk" --left_leaf A --right_leaf C
 comm -3 <(printf "A\nB\nC\nD\n") <(leaflabels "$TMPDIR/sub_AC.nwk") | (! read) \
   || { echo "ASSERT FAIL: subtree A|C leaf set mismatch"; exit 1; }
 
-# --leaves B,D,E の MRCA を根にした部分木（B,D,Eのみ）
-nwkit subtree -i "$TMPDIR/sub_in.nwk" -o "$TMPDIR/sub_BDE.nwk" --leaves B,D,E
-comm -3 <(printf "B\nD\nE\n") <(leaflabels "$TMPDIR/sub_BDE.nwk") | (! read) \
-  || { echo "ASSERT FAIL: subtree --leaves(B,D,E) leaf set mismatch"; exit 1; }
+# 2) --leaves で MRCA を指定（B と D）。こちらも MRCA は同じクレード → {A,B,C,D}
+nwkit subtree -i "$TMPDIR/sub_in.nwk" -o "$TMPDIR/sub_BD.nwk" --leaves B,D
+comm -3 <(printf "A\nB\nC\nD\n") <(leaflabels "$TMPDIR/sub_BD.nwk") | (! read) \
+  || { echo "ASSERT FAIL: subtree --leaves(B,D) leaf set mismatch"; exit 1; }
+
+# 3) 念のため、指定した葉（B と D）が確実に含まれていること（subset チェック）
+comm -23 <(printf "B\nD\n") <(leaflabels "$TMPDIR/sub_BD.nwk") | (! read) \
+  || { echo "ASSERT FAIL: subtree --leaves(B,D) missing specified leaves"; exit 1; }
+
+# （任意の強化）同じ MRCA 指定なので、両者は拓扑も一致するはず → RF=0
+RF_sub="$(rf_distance "$TMPDIR/sub_AC.nwk" "$TMPDIR/sub_BD.nwk")"; RF_sub="${RF_sub:-0}"
+[ "$RF_sub" -eq 0 ] || { echo "ASSERT FAIL: subtree outputs differ (RF=$RF_sub)"; exit 1; }
 
 echo "[subtree] OK"
 
