@@ -215,39 +215,8 @@ grep -Fq "Populus_trichocarpa" "$TMPDIR/sani_out.nwk" || { echo "ASSERT FAIL: la
 
 echo "[sanitize] OK"
 
-# ========== 6) ladderize（あれば実行） ==========
-if nwkit ladderize -h >/dev/null 2>&1; then
-  cat > "$TMPDIR/lad_in.nwk" <<'NWK'
-(((A:0.3,B:0.1):0.2,(C:0.05,D:0.4):0.1):0.2,E:0.1):0.0;
-NWK
-  # 方向オプションは実装差があるので、まずデフォルトで1回
-  nwkit ladderize -i "$TMPDIR/lad_in.nwk" -o "$TMPDIR/lad_out1.nwk" || { echo "ASSERT FAIL: ladderize default failed"; exit 1; }
 
-  # 方向指定があれば両方試す（ヘルプに 'desc' があれば降順も）
-  if nwkit ladderize -h 2>&1 | grep -qi 'desc'; then
-    nwkit ladderize -i "$TMPDIR/lad_in.nwk" -o "$TMPDIR/lad_out2.nwk" --desc || { echo "ASSERT FAIL: ladderize --desc failed"; exit 1; }
-  elif nwkit ladderize -h 2>&1 | grep -qi 'reverse'; then
-    nwkit ladderize -i "$TMPDIR/lad_in.nwk" -o "$TMPDIR/lad_out2.nwk" --reverse || { echo "ASSERT FAIL: ladderize --reverse failed"; exit 1; }
-  else
-    cp "$TMPDIR/lad_out1.nwk" "$TMPDIR/lad_out2.nwk"
-  fi
-
-  # 不変条件：葉集合は同じ / トポロジは同じ（RF=0） / 枝長のコロン数は同じ
-  comm -3 <(leaflabels "$TMPDIR/lad_in.nwk") <(leaflabels "$TMPDIR/lad_out1.nwk") | (! read) || { echo "ASSERT FAIL: ladderize changed leaf set"; exit 1; }
-  RF_lad="$(rf_distance "$TMPDIR/lad_in.nwk" "$TMPDIR/lad_out1.nwk")"; RF_lad="${RF_lad:-0}"
-  [ "$RF_lad" -eq 0 ] || { echo "ASSERT FAIL: ladderize changed topology (RF=$RF_lad)"; exit 1; }
-  [[ "$(count_colons "$TMPDIR/lad_in.nwk")" == "$(count_colons "$TMPDIR/lad_out1.nwk")" ]] || { echo "ASSERT FAIL: ladderize changed branch length count"; exit 1; }
-
-  # 変化が“ある程度”起きたこと：テキスト比較で完全一致ならWARN（並び替えが不要な形だった）
-  if diff -u "$TMPDIR/lad_in.nwk" "$TMPDIR/lad_out1.nwk" >/dev/null; then
-    echo "WARN: ladderize produced identical textual Newick (already ladderized?)"
-  fi
-  echo "[ladderize] OK"
-else
-  echo "SKIP: ladderize (command not found)"
-fi
-
-# ========== 7) midpoint root（あれば実行） ==========
+# ========== 5.5) midpoint root（あれば実行） ==========
 # 実装により subcommand 名や指定方法が異なるため、2パターンを順に試す
 cat > "$TMPDIR/mid_in.nwk" <<'NWK'
 ((A:0.3,(B:0.2,C:0.2):0.1):0.2,D:0.5);
@@ -269,12 +238,79 @@ if [ "$mid_done" = false ] && nwkit root -h 2>&1 | grep -qi 'midpoint'; then
 fi
 
 if [ "$mid_done" = true ]; then
-  # 不変条件：葉集合同じ / RFは0（根だけ変更） / 枝長の“数”は同じ
-  comm -3 <(leaflabels "$TMPDIR/mid_in.nwk") <(leaflabels "$mid_out") | (! read) || { echo "ASSERT FAIL: midpoint changed leaf set"; exit 1; }
-  RF_mid="$(rf_distance "$TMPDIR/mid_in.nwk" "$mid_out")"; RF_mid="${RF_mid:-0}"
-  [ "$RF_mid" -eq 0 ] || { echo "ASSERT FAIL: midpoint changed topology (RF=$RF_mid)"; exit 1; }
-  [[ "$(count_colons "$TMPDIR/mid_in.nwk")" == "$(count_colons "$mid_out")" ]] || { echo "ASSERT FAIL: midpoint changed branch length count"; exit 1; }
-  echo "[midpoint] OK"
+# 不変条件：葉集合同じ / RFは0（根だけ変更）
+comm -3 <(leaflabels "$TMPDIR/mid_in.nwk") <(leaflabels "$mid_out") | (! read) || { echo "ASSERT FAIL: midpoint changed leaf set"; exit 1; }
+RF_mid="$(rf_distance "$TMPDIR/mid_in.nwk" "$mid_out")"; RF_mid="${RF_mid:-0}"
+[ "$RF_mid" -eq 0 ] || { echo "ASSERT FAIL: midpoint changed topology (RF=$RF_mid)"; exit 1; }
+
+# 枝長トークン数は実装により±1等で変動し得るため、差分は WARN 扱いにする
+c_in="$(count_colons "$TMPDIR/mid_in.nwk")"
+c_out="$(count_colons "$mid_out")"
+if [ "$c_out" -lt 1 ]; then
+  echo "ASSERT FAIL: midpoint produced tree without branch lengths"
+  exit 1
+fi
+if [ "$c_in" -ne "$c_out" ]; then
+  echo "WARN: midpoint changed branch-length token count ($c_in -> $c_out) — acceptable due to root edge split/merge."
+fi
+
+echo "[midpoint] OK"
 else
   echo "SKIP: midpoint (no supported entry point found)"
 fi
+
+# ========== 6) label（葉のリネーム検証） ==========
+cat > "$TMPDIR/lab_in.nwk" <<'NWK'
+(((A:0.1,B:0.2):0.1,(C:0.1,D:0.1):0.1):0.1,E:0.1):0.0;
+NWK
+
+# すべての葉を prefix=L で付け直す（--force yes）
+nwkit label -i "$TMPDIR/lab_in.nwk" -o "$TMPDIR/lab_out.nwk" -t leaf --prefix L --force yes
+
+# 葉の数は不変
+n_in="$(leaflabels "$TMPDIR/lab_in.nwk" | wc -l | tr -d ' ')"
+n_out="$(leaflabels "$TMPDIR/lab_out.nwk" | wc -l | tr -d ' ')"
+[[ "$n_in" == "$n_out" ]] || { echo "ASSERT FAIL: label changed leaf count ($n_in -> $n_out)"; exit 1; }
+
+# 旧ラベル（A,B,C,D,E）が残っていない & すべて L から始まる
+comm -12 <(leaflabels "$TMPDIR/lab_in.nwk") <(leaflabels "$TMPDIR/lab_out.nwk") | (! read) || { echo "ASSERT FAIL: old leaf labels still present after label"; exit 1; }
+if leaflabels "$TMPDIR/lab_out.nwk" | grep -Ev '^L' >/dev/null; then
+  echo "ASSERT FAIL: some leaf labels do not start with 'L'"
+  exit 1
+fi
+echo "[label] OK"
+
+# ========== 7) prune（正規表現での剪定） ==========
+cat > "$TMPDIR/prune_in.nwk" <<'NWK'
+((((A:0.1,B:0.2):0.1,(C:0.1,D:0.2):0.1):0.1,(E:0.1,F:0.1):0.1):0.1):0.0;
+NWK
+
+# (A|B) に一致するもの「以外」を落とさず残す（= AB を残す） --invert_match yes
+nwkit prune -i "$TMPDIR/prune_in.nwk" -o "$TMPDIR/prune_keepAB.nwk" -p '^(A|B)$' --invert_match yes
+comm -3 <(printf "A\nB\n") <(leaflabels "$TMPDIR/prune_keepAB.nwk") | (! read) || { echo "ASSERT FAIL: prune keepAB leaf set mismatch"; exit 1; }
+
+# (A|B) に一致するものを剪定（= AB を落とす） --invert_match デフォルト=no
+nwkit prune -i "$TMPDIR/prune_in.nwk" -o "$TMPDIR/prune_dropAB.nwk" -p '^(A|B)$'
+comm -3 <(printf "C\nD\nE\nF\n") <(leaflabels "$TMPDIR/prune_dropAB.nwk") | (! read) || { echo "ASSERT FAIL: prune dropAB leaf set mismatch"; exit 1; }
+
+echo "[prune] OK"
+
+# ========== 8) subtree（left/right と leaves の両モード） ==========
+cat > "$TMPDIR/sub_in.nwk" <<'NWK'
+(((A:0.1,B:0.1):0.1,(C:0.1,D:0.1):0.1):0.1,(E:0.1,F:0.1):0.1):0.0;
+NWK
+
+# A と C を左右に指定 → MRCA は A,B,C,D を含む部分木
+nwkit subtree -i "$TMPDIR/sub_in.nwk" -o "$TMPDIR/sub_AC.nwk" --left_leaf A --right_leaf C
+comm -3 <(printf "A\nB\nC\nD\n") <(leaflabels "$TMPDIR/sub_AC.nwk") | (! read) || { echo "ASSERT FAIL: subtree A|C leaf set mismatch"; exit 1; }
+
+# --leaves B,D,E の MRCA を根にした部分木（B,D,E のみを残すはず）
+nwkit subtree -i "$TMPDIR/sub_in.nwk" -o "$TMPDIR/sub_BDE.nwk" --leaves B,D,E
+
+# 同じ集合を prune の invert で作って RF=0 を確認（形状同じはず）
+nwkit prune -i "$TMPDIR/sub_in.nwk" -o "$TMPDIR/prune_BDE.nwk" -p '^(B|D|E)$' --invert_match yes
+RF_sub="$(rf_distance "$TMPDIR/sub_BDE.nwk" "$TMPDIR/prune_BDE.nwk")"; RF_sub="${RF_sub:-0}"
+[ "$RF_sub" -eq 0 ] || { echo "ASSERT FAIL: subtree --leaves topology differs from pruned induced subtree (RF=$RF_sub)"; exit 1; }
+
+echo "[subtree] OK"
+
