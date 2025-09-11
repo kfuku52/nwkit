@@ -412,17 +412,22 @@ nwkit root -i "$TMPDIR/root_xfer_src.nwk" -o "$TMPDIR/root_out_xfer.nwk" --metho
 comm -3 <(leaflabels "$TMPDIR/root_ref_for_transfer.nwk") <(leaflabels "$TMPDIR/root_out_xfer.nwk") | (! read) \
   || { echo "ASSERT FAIL: root(transfer) changed leaf set"; exit 1; }
 
+# 参照ファイルが本当に出来ているかチェック
+[ -f "$TMPDIR/root_ref_for_transfer.nwk" ] || { echo "ASSERT FAIL: missing root_ref_for_transfer.nwk"; ls -l "$TMPDIR"; exit 1; }
+[ -f "$TMPDIR/root_out_xfer.nwk" ] || { echo "ASSERT FAIL: missing root_out_xfer.nwk"; ls -l "$TMPDIR"; exit 1; }
+
 # ルート分割（root split）が一致するかを ETE3 で厳密確認
-python - <<'PY'
+python - <<PY
 from ete3 import Tree
 def root_split(path):
     t = Tree(open(path).read())
     ch = t.get_children()
     assert len(ch) == 2, f"root is not binary in {path}"
     return tuple(sorted([";".join(sorted([lf.name for lf in c.iter_leaves()])) for c in ch]))
-ref = root_split("$TMPDIR/root_ref_for_transfer.nwk")
-got = root_split("$TMPDIR/root_out_xfer.nwk")
-assert ref == got, f"root split mismatch:\n  ref={ref}\n  got={got}"
+
+ref = root_split("${TMPDIR}/root_ref_for_transfer.nwk")
+got = root_split("${TMPDIR}/root_out_xfer.nwk")
+assert ref == got, f"root split mismatch:\\n  ref={ref}\\n  got={got}"
 PY
 
 echo "[root:transfer] OK"
