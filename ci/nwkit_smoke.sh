@@ -19,12 +19,29 @@ leafset () { tr ',();:\047\"' '\n' < "$1" | grep -E '^[^[:space:]]+$' | sort -u;
 # ラベル集合（英数字と_で始まるトークンのみを葉候補とみなす）
 leaflabels () { tr ',();:\047\"' '\n' < "$1" | grep -E '^[A-Za-z_][A-Za-z0-9_]*$' | sort -u; }
 
-# RF距離を堅牢に抽出（stdout/stderr 両方から整数を取り出す）
+# RF距離を堅牢に抽出（stdout/stderr 両取り & 2形式対応）
 rf_distance () {
   local A="$1" B="$2"
-  nwkit dist -i "$A" -i2 "$B" 2>&1 \
-    | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' \
-    | head -n1
+  nwkit dist -i "$A" -i2 "$B" 2>&1 | awk '
+    # 旧形式: "... Robinson-Foulds distance = 2 ..."
+    /Robinson-Foulds distance/ {
+      if (match($0, /Robinson-Foulds distance = ([0-9]+)/, m)) { print m[1]; exit }
+    }
+    # 新形式: 数値2列（空白 or タブ区切り）。1列目がRF。
+    /^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]*$/ { print $1; exit }
+  ' | head -n1
+}
+
+rf_max_distance () {
+  local A="$1" B="$2"
+  nwkit dist -i "$A" -i2 "$B" 2>&1 | awk '
+    # 旧形式: "... (max = 6)"
+    /Robinson-Foulds distance/ {
+      if (match($0, /\(max = ([0-9]+)\)/, m)) { print m[1]; exit }
+    }
+    # 新形式: 数値2列（空白 or タブ区切り）。2列目がmax。
+    /^[[:space:]]*[0-9]+[[:space:]]+[0-9]+[[:space:]]*$/ { print $2; exit }
+  ' | head -n1
 }
 
 # “:数字” の大まかなカウント
@@ -552,8 +569,8 @@ NWK
 
 # 1) 同一木どうし → RF=0
 rf_same="$(rf_distance "$TMPDIR/rf_t1.nwk" "$TMPDIR/rf_t1.nwk")"
-# 万一まだ空なら、ログ確認用に生出力を保存して落とす
 if [ -z "${rf_same:-}" ]; then
+  # デバッグ用に生出力を保存して落とす
   nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t1.nwk" > "$TMPDIR/rf_same_raw.txt" 2>&1 || true
   echo "ASSERT FAIL: dist identical trees should be RF=0 (got empty). Raw output:"
   sed -n '1,120p' "$TMPDIR/rf_same_raw.txt"
@@ -561,14 +578,7 @@ if [ -z "${rf_same:-}" ]; then
 fi
 [ "$rf_same" -eq 0 ] || { echo "ASSERT FAIL: dist identical trees should be RF=0 (got $rf_same)"; exit 1; }
 
-# 2) 別木どうし → nwkit の出力値が ETE3 の計算と一致
-python - <<PY
-from ete3 import Tree
-t1=Tree(open("${TMPDIR}/rf_t1.nwk").read())
-t2=Tree(open("${TMPDIR}/rf_t2.nwk").read())
-rf,maxrf = t1.robinson_foulds(t2, unrooted_trees=False)[:2]
-print(rf, maxrf)
-PY
+# 2) 別木どうし → nwkit の値（RF/Max）が ETE3 と一致
 read rf_true max_true < <(python - <<PY
 from ete3 import Tree
 t1=Tree(open("${TMPDIR}/rf_t1.nwk").read())
@@ -578,12 +588,14 @@ print(rf, maxrf)
 PY
 )
 
-out_diff="$(nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t2.nwk" 2>&1)"
-rf_diff="$(printf "%s\n" "$out_diff" | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' | head -n1)"
-max_diff="$(printf "%s\n" "$out_diff" | sed -n 's/.*(max = \([0-9][0-9]*\)).*/\1/p' | head -n1)"
+rf_diff="$(rf_distance "$TMPDIR/rf_t1.nwk" "$TMPDIR/rf_t2.nwk")"
+max_diff="$(rf_max_distance "$TMPDIR/rf_t1.nwk" "$TMPDIR/rf_t2.nwk")"
 
-[ "${rf_diff:-999}" = "$rf_true" ] || { echo "ASSERT FAIL: dist RF mismatch (nwkit=$rf_diff, ete3=$rf_true)"; exit 1; }
-[ "${max_diff:-999}" = "$max_true" ] || { echo "ASSERT FAIL: dist MAX mismatch (nwkit=$max_diff, ete3=$max_true)"; exit 1; }
+[ -n "${rf_diff:-}" ]  || { echo "ASSERT FAIL: dist RF (different trees) empty";  exit 1; }
+[ -n "${max_diff:-}" ] || { echo "ASSERT FAIL: dist MAX (different trees) empty"; exit 1; }
+
+[ "$rf_diff"  = "$rf_true" ] || { echo "ASSERT FAIL: dist RF mismatch (nwkit=$rf_diff, ete3=$rf_true)"; exit 1; }
+[ "$max_diff" = "$max_true" ] || { echo "ASSERT FAIL: dist MAX mismatch (nwkit=$max_diff, ete3=$max_true)"; exit 1; }
 
 # 3) 葉集合が一致しない → エラー終了し、メッセージを含む
 cat > "$TMPDIR/rf_bad.nwk" <<'NWK'
