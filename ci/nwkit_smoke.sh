@@ -314,3 +314,131 @@ RF_sub="$(rf_distance "$TMPDIR/sub_BDE.nwk" "$TMPDIR/prune_BDE.nwk")"; RF_sub="$
 
 echo "[subtree] OK"
 
+# ========== 9) rescale ==========
+cat > "$TMPDIR/scale_in.nwk" <<'NWK'
+((A:1.0,B:3.0):2.0,C:4.0):0.0;
+NWK
+
+factor=0.5
+nwkit rescale -i "$TMPDIR/scale_in.nwk" -o "$TMPDIR/scale_out.nwk" --factor "$factor"
+
+python - <<PY
+import re, math, sys
+def lens(path):
+    s=open(path).read()
+    return [float(x[1:]) for x in re.findall(r':[0-9]*\.?[0-9]+', s)]
+l0=lens("$TMPDIR/scale_in.nwk")
+l1=lens("$TMPDIR/scale_out.nwk")
+assert len(l0)==len(l1), f"count changed: {len(l0)}->{len(l1)}"
+fac=$factor
+# 許容誤差（浮動小数フォーマット差吸収）
+tol=1e-6
+for a,b in zip(l0,l1):
+    assert abs(b - a*fac) <= tol, f"value {a}->{b} not scaled by {fac}"
+s0=sum(l0); s1=sum(l1)
+assert abs(s1 - s0*fac) <= tol, f"sum {s0}->{s1} not scaled by {fac}"
+PY
+
+echo "[rescale] OK"
+
+# ========== 10) constrain ==========
+# ユーザー提供のバックボーン木（小さめ）
+cat > "$TMPDIR/con_backbone.nwk" <<'NWK'
+((Arabidopsis_thaliana:1,Populus_trichocarpa:1):1,(Vitis_vinifera:1,Oryza_sativa:1):1):0;
+NWK
+
+# 種リスト：空白・下線・OTHERINFO を混在
+cat > "$TMPDIR/species.txt" <<'TXT'
+Arabidopsis thaliana
+Populus_trichocarpa
+Oryza_sativa_EXTRAINFO
+TXT
+
+# ネット依存を避けるため --backbone user を使用
+nwkit constrain \
+  --backbone user \
+  -i "$TMPDIR/con_backbone.nwk" \
+  -o "$TMPDIR/con_out.nwk" \
+  --species_list "$TMPDIR/species.txt" \
+  --collapse yes \
+  || { echo "ASSERT FAIL: constrain execution failed"; exit 1; }
+
+# 出力がNewickであること（;を含む）
+assert_contains_lit "$TMPDIR/con_out.nwk" ';'
+
+# 期待する種が（下線形で）現れること
+grep -Eq 'Arabidopsis_thaliana' "$TMPDIR/con_out.nwk" || grep -Eq 'Arabidopsis thaliana' "$TMPDIR/con_out.nwk" || { echo "ASSERT FAIL: Arabidopsis_thaliana missing in constrain output"; exit 1; }
+grep -Fq 'Populus_trichocarpa' "$TMPDIR/con_out.nwk" || { echo "ASSERT FAIL: Populus_trichocarpa missing in constrain output"; exit 1; }
+grep -Fq 'Oryza_sativa' "$TMPDIR/con_out.nwk" || { echo "ASSERT FAIL: Oryza_sativa missing in constrain output"; exit 1; }
+
+echo "[constrain] OK"
+
+# ========== 11) root --method outgroup ==========
+cat > "$TMPDIR/root_in.nwk" <<'NWK'
+((A:0.3,(B:0.2,C:0.2):0.1):0.2,D:0.5);
+NWK
+
+nwkit root -i "$TMPDIR/root_in.nwk" -o "$TMPDIR/root_out_og.nwk" --method outgroup --outgroup D
+
+# 葉集合は同じ
+comm -3 <(leaflabels "$TMPDIR/root_in.nwk") <(leaflabels "$TMPDIR/root_out_og.nwk") | (! read) \
+  || { echo "ASSERT FAIL: root(outgroup) changed leaf set"; exit 1; }
+
+# RF=0（根の移動のみでトポロジは不変）
+RF_root_og="$(rf_distance "$TMPDIR/root_in.nwk" "$TMPDIR/root_out_og.nwk")"; RF_root_og="${RF_root_og:-0}"
+[ "$RF_root_og" -eq 0 ] || { echo "ASSERT FAIL: root(outgroup) changed topology (RF=$RF_root_og)"; exit 1; }
+
+# 枝長トークン数は実装により±1等で変動あり → 0本になっていないことだけ確認
+c_in="$(count_colons "$TMPDIR/root_in.nwk")"
+c_og="$(count_colons "$TMPDIR/root_out_og.nwk")"
+[ "$c_og" -ge 1 ] || { echo "ASSERT FAIL: root(outgroup) produced tree without branch lengths"; exit 1; }
+
+echo "[root:outgroup] OK"
+
+# ========== 12) root --method transfer ==========
+# 参照：外群Dでルートした木（上の outgroup 出力を再利用）
+cp "$TMPDIR/root_out_og.nwk" "$TMPDIR/root_ref_for_transfer.nwk"
+
+# 入力をもう一度用意（transferの入力元）
+cp "$TMPDIR/root_in.nwk" "$TMPDIR/root_xfer_src.nwk"
+
+# transfer 実行（--infile2 に参照木）
+nwkit root -i "$TMPDIR/root_xfer_src.nwk" -o "$TMPDIR/root_out_xfer.nwk" --method transfer --infile2 "$TMPDIR/root_ref_for_transfer.nwk"
+
+# 葉集合は同じ
+comm -3 <(leaflabels "$TMPDIR/root_ref_for_transfer.nwk") <(leaflabels "$TMPDIR/root_out_xfer.nwk") | (! read) \
+  || { echo "ASSERT FAIL: root(transfer) changed leaf set"; exit 1; }
+
+# ルート分割（root split）が一致するかを ETE3 で厳密確認
+python - <<'PY'
+from ete3 import Tree
+def root_split(path):
+    t = Tree(open(path).read())
+    ch = t.get_children()
+    assert len(ch) == 2, f"root is not binary in {path}"
+    return tuple(sorted([";".join(sorted([lf.name for lf in c.iter_leaves()])) for c in ch]))
+ref = root_split("$TMPDIR/root_ref_for_transfer.nwk")
+got = root_split("$TMPDIR/root_out_xfer.nwk")
+assert ref == got, f"root split mismatch:\n  ref={ref}\n  got={got}"
+PY
+
+echo "[root:transfer] OK"
+
+# ========== 13) intersection ==========
+cat > "$TMPDIR/int_a.nwk" <<'NWK'
+(((A:0.1,B:0.1):0.1,C:0.1):0.1,D:0.1);
+NWK
+cat > "$TMPDIR/int_b.nwk" <<'NWK'
+((B:0.2,(C:0.2,E:0.2):0.1):0.1);
+NWK
+
+nwkit intersection -i "$TMPDIR/int_a.nwk" -i2 "$TMPDIR/int_b.nwk" -o "$TMPDIR/int_out.nwk"
+
+# 出力がNewick（;を含む）
+assert_contains_lit "$TMPDIR/int_out.nwk" ';'
+
+# 葉集合が {B,C} に一致
+comm -3 <(printf "B\nC\n") <(leaflabels "$TMPDIR/int_out.nwk") | (! read) \
+  || { echo "ASSERT FAIL: intersection leaf set mismatch (expected B,C)"; exit 1; }
+
+echo "[intersection] OK"
