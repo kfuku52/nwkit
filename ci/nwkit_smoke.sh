@@ -19,10 +19,10 @@ leafset () { tr ',();:\047\"' '\n' < "$1" | grep -E '^[^[:space:]]+$' | sort -u;
 # ラベル集合（英数字と_で始まるトークンのみを葉候補とみなす）
 leaflabels () { tr ',();:\047\"' '\n' < "$1" | grep -E '^[A-Za-z_][A-Za-z0-9_]*$' | sort -u; }
 
-# RF距離を堅牢に抽出（整数のみ取り出し）
+# RF距離を堅牢に抽出（stdout/stderr 両方から整数を取り出す）
 rf_distance () {
   local A="$1" B="$2"
-  nwkit dist -i "$A" -i2 "$B" \
+  nwkit dist -i "$A" -i2 "$B" 2>&1 \
     | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' \
     | head -n1
 }
@@ -551,9 +551,15 @@ cat > "$TMPDIR/rf_t2.nwk" <<'NWK'
 NWK
 
 # 1) 同一木どうし → RF=0
-out_same="$(nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t1.nwk")"
-rf_same="$(printf "%s\n" "$out_same" | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' | head -n1)"
-[ "${rf_same:-999}" -eq 0 ] || { echo "ASSERT FAIL: dist identical trees should be RF=0 (got $rf_same)"; exit 1; }
+rf_same="$(rf_distance "$TMPDIR/rf_t1.nwk" "$TMPDIR/rf_t1.nwk")"
+# 万一まだ空なら、ログ確認用に生出力を保存して落とす
+if [ -z "${rf_same:-}" ]; then
+  nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t1.nwk" > "$TMPDIR/rf_same_raw.txt" 2>&1 || true
+  echo "ASSERT FAIL: dist identical trees should be RF=0 (got empty). Raw output:"
+  sed -n '1,120p' "$TMPDIR/rf_same_raw.txt"
+  exit 1
+fi
+[ "$rf_same" -eq 0 ] || { echo "ASSERT FAIL: dist identical trees should be RF=0 (got $rf_same)"; exit 1; }
 
 # 2) 別木どうし → nwkit の出力値が ETE3 の計算と一致
 python - <<PY
@@ -572,7 +578,7 @@ print(rf, maxrf)
 PY
 )
 
-out_diff="$(nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t2.nwk")"
+out_diff="$(nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t2.nwk" 2>&1)"
 rf_diff="$(printf "%s\n" "$out_diff" | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' | head -n1)"
 max_diff="$(printf "%s\n" "$out_diff" | sed -n 's/.*(max = \([0-9][0-9]*\)).*/\1/p' | head -n1)"
 
