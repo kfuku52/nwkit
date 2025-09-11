@@ -456,16 +456,25 @@ cat > "$TMPDIR/pl_in.nwk" <<'NWK'
 (((A:0.1,B:0.1):0.1,(C:0.1,D:0.1):0.1):0.1):0.0;
 NWK
 
-# 1) 対象そのものを出力（A と C）
-nwkit printlabel -i "$TMPDIR/pl_in.nwk" -o "$TMPDIR/pl_targets.txt" -p '^(A|C)$' -t leaf
-# 出力からラベル様トークンだけを拾って集合比較
-targets="$(grep -Eo '[A-Za-z_][A-Za-z0-9_]*' "$TMPDIR/pl_targets.txt" | sort -u)"
-diff -u <(printf "A\nC\n") <(printf "%s\n" "$targets") >/dev/null || { echo "ASSERT FAIL: printlabel targets mismatch"; exit 1; }
+# 1) ターゲットそのもの（A と C）を出力
+#    一部環境では -o が無視され STDOUT に出るため、明示的にリダイレクトする
+nwkit printlabel -i "$TMPDIR/pl_in.nwk" -p '^(A|C)$' -t leaf > "$TMPDIR/pl_targets.txt"
 
-# 2) 姉妹ノードを出力（A→B, C→D が期待）
-nwkit printlabel -i "$TMPDIR/pl_in.nwk" -o "$TMPDIR/pl_sisters.txt" -p '^(A|C)$' -t leaf --sister yes
-sisters="$(grep -Eo '[A-Za-z_][A-Za-z0-9_]*' "$TMPDIR/pl_sisters.txt" | sort -u)"
-diff -u <(printf "B\nD\n") <(printf "%s\n" "$sisters") >/dev/null || { echo "ASSERT FAIL: printlabel sisters mismatch"; exit 1; }
+# 出力から「葉集合に属するラベル」だけを抽出して集合比較
+printf "A\nC\n" > "$TMPDIR/exp_targets.txt"
+grep -Eo '[A-Za-z_][A-Za-z0-9_]*' "$TMPDIR/pl_targets.txt" | sort -u \
+  | comm -12 - <(leaflabels "$TMPDIR/pl_in.nwk") > "$TMPDIR/seen_targets.txt"
+diff -u "$TMPDIR/exp_targets.txt" "$TMPDIR/seen_targets.txt" >/dev/null \
+  || { echo "ASSERT FAIL: printlabel targets mismatch"; exit 1; }
+
+# 2) 姉妹ノード（A→B, C→D）を出力
+nwkit printlabel -i "$TMPDIR/pl_in.nwk" -p '^(A|C)$' -t leaf --sister yes > "$TMPDIR/pl_sisters.txt"
+
+printf "B\nD\n" > "$TMPDIR/exp_sisters.txt"
+grep -Eo '[A-Za-z_][A-Za-z0-9_]*' "$TMPDIR/pl_sisters.txt" | sort -u \
+  | comm -12 - <(leaflabels "$TMPDIR/pl_in.nwk") > "$TMPDIR/seen_sisters.txt"
+diff -u "$TMPDIR/exp_sisters.txt" "$TMPDIR/seen_sisters.txt" >/dev/null \
+  || { echo "ASSERT FAIL: printlabel sisters mismatch"; exit 1; }
 
 echo "[printlabel] OK"
 
