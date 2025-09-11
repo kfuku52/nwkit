@@ -450,3 +450,84 @@ comm -3 <(printf "B\nC\n") <(leaflabels "$TMPDIR/int_out.nwk") | (! read) \
   || { echo "ASSERT FAIL: intersection leaf set mismatch (expected B,C)"; exit 1; }
 
 echo "[intersection] OK"
+
+# ========== 14) printlabel ==========
+cat > "$TMPDIR/pl_in.nwk" <<'NWK'
+(((A:0.1,B:0.1):0.1,(C:0.1,D:0.1):0.1):0.1):0.0;
+NWK
+
+# 1) 対象そのものを出力（A と C）
+nwkit printlabel -i "$TMPDIR/pl_in.nwk" -o "$TMPDIR/pl_targets.txt" -p '^(A|C)$' -t leaf
+# 出力からラベル様トークンだけを拾って集合比較
+targets="$(grep -Eo '[A-Za-z_][A-Za-z0-9_]*' "$TMPDIR/pl_targets.txt" | sort -u)"
+diff -u <(printf "A\nC\n") <(printf "%s\n" "$targets") >/dev/null || { echo "ASSERT FAIL: printlabel targets mismatch"; exit 1; }
+
+# 2) 姉妹ノードを出力（A→B, C→D が期待）
+nwkit printlabel -i "$TMPDIR/pl_in.nwk" -o "$TMPDIR/pl_sisters.txt" -p '^(A|C)$' -t leaf --sister yes
+sisters="$(grep -Eo '[A-Za-z_][A-Za-z0-9_]*' "$TMPDIR/pl_sisters.txt" | sort -u)"
+diff -u <(printf "B\nD\n") <(printf "%s\n" "$sisters") >/dev/null || { echo "ASSERT FAIL: printlabel sisters mismatch"; exit 1; }
+
+echo "[printlabel] OK"
+
+# ========== 15) mark ==========
+cat > "$TMPDIR/mark_in.nwk" <<'NWK'
+(((A:0.1,B:0.2):0.1,(C:0.1,D:0.2):0.1):0.1,E:0.1):0.0;
+NWK
+
+# 1) 葉ラベルに印（A と C に _TAG を接尾）
+nwkit mark -i "$TMPDIR/mark_in.nwk" -o "$TMPDIR/mark_leaf.nwk" \
+  -p '^(A|C)$' -t leaf --insert_txt TAG --insert_sep _ --insert_pos suffix
+
+grep -Fq 'A_TAG' "$TMPDIR/mark_leaf.nwk" || { echo "ASSERT FAIL: A_TAG not found after mark leaf"; exit 1; }
+grep -Fq 'C_TAG' "$TMPDIR/mark_leaf.nwk" || { echo "ASSERT FAIL: C_TAG not found after mark leaf"; exit 1; }
+! grep -Fq 'B_TAG' "$TMPDIR/mark_leaf.nwk" || { echo "ASSERT FAIL: B should not be tagged"; exit 1; }
+! grep -Fq 'D_TAG' "$TMPDIR/mark_leaf.nwk" || { echo "ASSERT FAIL: D should not be tagged"; exit 1; }
+
+# 2) MRCA に印（A と B の MRCA に CLD を付与）。内部ノードに何らかのラベルが付く想定。
+nwkit mark -i "$TMPDIR/mark_in.nwk" -o "$TMPDIR/mark_mrca.nwk" \
+  -p '^(A|B)$' -t mrca --insert_txt CLD --insert_sep _ --insert_pos suffix
+
+# 内部ノードに 'CLD' が一回以上は現れること
+grep -Fq 'CLD' "$TMPDIR/mark_mrca.nwk" || { echo "ASSERT FAIL: no MRCA tag inserted"; exit 1; }
+# 葉には CLD が付いていない（葉の印ではない）
+! grep -Eq 'A_?CLD|B_?CLD|C_?CLD|D_?CLD|E_?CLD' "$TMPDIR/mark_mrca.nwk" || { echo "ASSERT FAIL: MRCA tag should not be on leaves"; exit 1; }
+
+echo "[mark] OK"
+
+# ========== 16) transfer ==========
+# base: トポロジのみ（長さも支持も名前もなし）
+cat > "$TMPDIR/xfer_base.nwk" <<'NWK'
+((A,B),(C,D));
+NWK
+
+# src1: 長さ＆支持値あり
+cat > "$TMPDIR/xfer_src_support.nwk" <<'NWK'
+((A:0.1,B:0.2)90:0.3,(C:0.15,D:0.25)80:0.35):0.01;
+NWK
+
+# 長さ＆支持値を移送
+nwkit transfer -i "$TMPDIR/xfer_base.nwk" -i2 "$TMPDIR/xfer_src_support.nwk" \
+  -o "$TMPDIR/xfer_out_ls.nwk" --length yes --support yes
+
+# 葉集合は同じ
+comm -3 <(leaflabels "$TMPDIR/xfer_base.nwk") <(leaflabels "$TMPDIR/xfer_out_ls.nwk") | (! read) \
+  || { echo "ASSERT FAIL: transfer(length/support) changed leaf set"; exit 1; }
+
+# 枝長と支持値が入っている（フォーマット差は許容、存在だけ確認）
+grep -Eq ':[0-9]' "$TMPDIR/xfer_out_ls.nwk" || { echo "ASSERT FAIL: no branch lengths after transfer"; exit 1; }
+grep -Eq '\)[0-9]+:' "$TMPDIR/xfer_out_ls.nwk" || { echo "ASSERT FAIL: no support values after transfer"; exit 1; }
+
+# src2: 内部ノード名あり
+cat > "$TMPDIR/xfer_src_names.nwk" <<'NWK'
+((A:0.1,B:0.2)Nleft:0.3,(C:0.15,D:0.25)Nright:0.35)Nroot:0.0;
+NWK
+
+# base に名前を移送（内部ノード対象）
+nwkit transfer -i "$TMPDIR/xfer_base.nwk" -i2 "$TMPDIR/xfer_src_names.nwk" \
+  -o "$TMPDIR/xfer_out_names.nwk" -t intnode --name yes
+
+grep -Fq 'Nleft'  "$TMPDIR/xfer_out_names.nwk" || { echo "ASSERT FAIL: Nleft not transferred"; exit 1; }
+grep -Fq 'Nright' "$TMPDIR/xfer_out_names.nwk" || { echo "ASSERT FAIL: Nright not transferred"; exit 1; }
+grep -Fq 'Nroot'  "$TMPDIR/xfer_out_names.nwk" || { echo "ASSERT FAIL: Nroot not transferred"; exit 1; }
+
+echo "[transfer] OK"
