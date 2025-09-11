@@ -540,3 +540,73 @@ grep -Fq 'Nright' "$TMPDIR/xfer_out_names.nwk" || { echo "ASSERT FAIL: Nright no
 grep -Fq 'Nroot'  "$TMPDIR/xfer_out_names.nwk" || { echo "ASSERT FAIL: Nroot not transferred"; exit 1; }
 
 echo "[transfer] OK"
+
+# ========== 17) dist（RF距離の検証とエラー系） ==========
+# 5葉の決定的な2木を用意（E は外側固定）
+cat > "$TMPDIR/rf_t1.nwk" <<'NWK'
+((((A:0.1,B:0.1):0.1,C:0.1):0.1,D:0.1):0.1,E:0.1);
+NWK
+cat > "$TMPDIR/rf_t2.nwk" <<'NWK'
+((((A:0.1,C:0.1):0.1,B:0.1):0.1,D:0.1):0.1,E:0.1);
+NWK
+
+# 1) 同一木どうし → RF=0
+out_same="$(nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t1.nwk")"
+rf_same="$(printf "%s\n" "$out_same" | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' | head -n1)"
+[ "${rf_same:-999}" -eq 0 ] || { echo "ASSERT FAIL: dist identical trees should be RF=0 (got $rf_same)"; exit 1; }
+
+# 2) 別木どうし → nwkit の出力値が ETE3 の計算と一致
+python - <<PY
+from ete3 import Tree
+t1=Tree(open("${TMPDIR}/rf_t1.nwk").read())
+t2=Tree(open("${TMPDIR}/rf_t2.nwk").read())
+rf,maxrf = t1.robinson_foulds(t2, unrooted_trees=False)[:2]
+print(rf, maxrf)
+PY
+read rf_true max_true < <(python - <<PY
+from ete3 import Tree
+t1=Tree(open("${TMPDIR}/rf_t1.nwk").read())
+t2=Tree(open("${TMPDIR}/rf_t2.nwk").read())
+rf,maxrf = t1.robinson_foulds(t2, unrooted_trees=False)[:2]
+print(rf, maxrf)
+PY
+)
+
+out_diff="$(nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_t2.nwk")"
+rf_diff="$(printf "%s\n" "$out_diff" | sed -n 's/.*Robinson-Foulds distance = \([0-9][0-9]*\).*/\1/p' | head -n1)"
+max_diff="$(printf "%s\n" "$out_diff" | sed -n 's/.*(max = \([0-9][0-9]*\)).*/\1/p' | head -n1)"
+
+[ "${rf_diff:-999}" = "$rf_true" ] || { echo "ASSERT FAIL: dist RF mismatch (nwkit=$rf_diff, ete3=$rf_true)"; exit 1; }
+[ "${max_diff:-999}" = "$max_true" ] || { echo "ASSERT FAIL: dist MAX mismatch (nwkit=$max_diff, ete3=$max_true)"; exit 1; }
+
+# 3) 葉集合が一致しない → エラー終了し、メッセージを含む
+cat > "$TMPDIR/rf_bad.nwk" <<'NWK'
+(((A:0.1,B:0.1):0.1,C:0.1):0.1,X:0.1);
+NWK
+if nwkit dist -i "$TMPDIR/rf_t1.nwk" -i2 "$TMPDIR/rf_bad.nwk" >"$TMPDIR/rf_err.txt" 2>&1; then
+  echo "ASSERT FAIL: dist should fail on mismatched leaf sets"; exit 1;
+fi
+grep -Fq 'Leaf name(s) did not match' "$TMPDIR/rf_err.txt" || { echo "ASSERT FAIL: expected mismatch message not found"; exit 1; }
+
+echo "[dist] OK"
+
+# ========== 18) info（基本統計の妥当性） ==========
+# 1) 下線のみの木
+cat > "$TMPDIR/info_in1.nwk" <<'NWK'
+((A:1.0,(B:1.0,C:1.0):1.0):1.0,(D:1.0,E:1.0):1.0):0.0;
+NWK
+n_expect="$(leaflabels "$TMPDIR/info_in1.nwk" | wc -l | tr -d ' ')"
+nwkit info -i "$TMPDIR/info_in1.nwk" > "$TMPDIR/info_out1.txt"
+n_seen="$(sed -n 's/.*Number of leaves[^=]*=\s*\([0-9][0-9]*\).*/\1/p' "$TMPDIR/info_out1.txt" | head -n1)"
+[ "${n_seen:-999}" = "$n_expect" ] || { echo "ASSERT FAIL: info leaf count mismatch (got $n_seen, expect $n_expect)"; exit 1; }
+
+# 2) 空白を含むラベル（クォート済み）
+cat > "$TMPDIR/info_in2.nwk" <<'NWK'
+(('Arabidopsis thaliana':1,'Oryza sativa':1):1,'Vitis vinifera':1);
+NWK
+n_expect2="$(leaflabels "$TMPDIR/info_in2.nwk" | wc -l | tr -d ' ')"
+nwkit info -i "$TMPDIR/info_in2.nwk" > "$TMPDIR/info_out2.txt"
+n_seen2="$(sed -n 's/.*Number of leaves[^=]*=\s*\([0-9][0-9]*\).*/\1/p' "$TMPDIR/info_out2.txt" | head -n1)"
+[ "${n_seen2:-999}" = "$n_expect2" ] || { echo "ASSERT FAIL: info leaf count mismatch for quoted labels (got $n_seen2, expect $n_expect2)"; exit 1; }
+
+echo "[info] OK"
