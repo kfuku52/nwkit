@@ -1,0 +1,7 @@
+name: nwkit-test
+channels: [conda-forge, defaults]
+dependencies:
+  - python=3.11
+  - ete3
+  - requests
+  - pip

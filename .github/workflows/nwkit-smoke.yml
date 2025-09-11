@@ -1,0 +1,46 @@
+name: nwkit smoke
+on: [push, pull_request]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup micromamba
+        uses: mamba-org/setup-micromamba@v1
+        with:
+          environment-file: environment.yml
+          cache-environment: true
+          cache-downloads: true
+
+      - name: Show env
+        shell: bash -l {0}
+        run: |
+          micromamba info
+          python -V
+          which nwkit || true
+
+      - name: Install nwkit (editable or wheel)
+        shell: bash -l {0}
+        run: |
+          # 例: リポジトリ直下がパッケージなら
+          pip install -e .
+          nwkit -h | head -n 1
+
+      - name: Run smoke
+        shell: bash -l {0}
+        env:
+          # 必要なら APG のパスを上書きできます
+          APG: apgiv.nwk
+        run: |
+          chmod +x ci/nwkit_smoke.sh
+          bash ci/nwkit_smoke.sh
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nwkit-smoke-logs
+          path: |
+            ci/nwkit_smoke.sh
