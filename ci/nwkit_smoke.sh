@@ -609,22 +609,42 @@ grep -Fq 'Leaf name(s) did not match' "$TMPDIR/rf_err.txt" || { echo "ASSERT FAI
 echo "[dist] OK"
 
 # ========== 18) info（基本統計の妥当性） ==========
-# 1) 下線のみの木
+# 出力形式のゆらぎ対策：stdout/stderr 両方を同一ファイルに集約し、
+# 「Number of leaves ... <数字>」をゆるく抽出する。
+extract_leaves () {
+  sed -n -E 's/.*Number of leaves[^0-9]*([0-9]+).*/\1/p' "$1" | head -n1
+}
+
+# 1) 下線のみの木（葉=5）
 cat > "$TMPDIR/info_in1.nwk" <<'NWK'
 ((A:1.0,(B:1.0,C:1.0):1.0):1.0,(D:1.0,E:1.0):1.0):0.0;
 NWK
 n_expect="$(leaflabels "$TMPDIR/info_in1.nwk" | wc -l | tr -d ' ')"
-nwkit info -i "$TMPDIR/info_in1.nwk" > "$TMPDIR/info_out1.txt"
-n_seen="$(sed -n 's/.*Number of leaves[^=]*=\s*\([0-9][0-9]*\).*/\1/p' "$TMPDIR/info_out1.txt" | head -n1)"
-[ "${n_seen:-999}" = "$n_expect" ] || { echo "ASSERT FAIL: info leaf count mismatch (got $n_seen, expect $n_expect)"; exit 1; }
 
-# 2) 空白を含むラベル（クォート済み）
+nwkit info -i "$TMPDIR/info_in1.nwk" > "$TMPDIR/info_out1.txt" 2>&1
+n_seen="$(extract_leaves "$TMPDIR/info_out1.txt")"
+if [ -z "${n_seen:-}" ]; then
+  echo "ASSERT FAIL: info leaf count missing. Raw output:"
+  sed -n '1,120p' "$TMPDIR/info_out1.txt"
+  exit 1
+fi
+[ "$n_seen" = "$n_expect" ] || { echo "ASSERT FAIL: info leaf count mismatch (got $n_seen, expect $n_expect)"; exit 1; }
+
+# 2) 空白を含むラベル（クォート済み；葉=3）
 cat > "$TMPDIR/info_in2.nwk" <<'NWK'
 (('Arabidopsis thaliana':1,'Oryza sativa':1):1,'Vitis vinifera':1);
 NWK
-n_expect2="$(leaflabels "$TMPDIR/info_in2.nwk" | wc -l | tr -d ' ')"
-nwkit info -i "$TMPDIR/info_in2.nwk" > "$TMPDIR/info_out2.txt"
-n_seen2="$(sed -n 's/.*Number of leaves[^=]*=\s*\([0-9][0-9]*\).*/\1/p' "$TMPDIR/info_out2.txt" | head -n1)"
-[ "${n_seen2:-999}" = "$n_expect2" ] || { echo "ASSERT FAIL: info leaf count mismatch for quoted labels (got $n_seen2, expect $n_expect2)"; exit 1; }
+# 期待値はクォートで数える（'...' が葉ラベル）
+n_expect2="$(grep -oE \"'[^']+'\" \"$TMPDIR/info_in2.nwk\" | wc -l | tr -d ' ')"
+
+nwkit info -i "$TMPDIR/info_in2.nwk" > "$TMPDIR/info_out2.txt" 2>&1
+n_seen2="$(extract_leaves "$TMPDIR/info_out2.txt")"
+if [ -z "${n_seen2:-}" ]; then
+  echo "ASSERT FAIL: info leaf count (quoted) missing. Raw output:"
+  sed -n '1,120p' "$TMPDIR/info_out2.txt"
+  exit 1
+fi
+[ "$n_seen2" = "$n_expect2" ] || { echo "ASSERT FAIL: info leaf count mismatch for quoted labels (got $n_seen2, expect $n_expect2)"; exit 1; }
 
 echo "[info] OK"
+
