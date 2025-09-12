@@ -609,8 +609,7 @@ grep -Fq 'Leaf name(s) did not match' "$TMPDIR/rf_err.txt" || { echo "ASSERT FAI
 echo "[dist] OK"
 
 # ========== 18) info（基本統計の妥当性） ==========
-# 出力形式のゆらぎ対策：stdout/stderr 両方を同一ファイルに集約し、
-# 「Number of leaves ... <数字>」をゆるく抽出する。
+# 出力形式ゆらぎ対策：stdout/stderr をまとめてパース
 extract_leaves () {
   sed -n -E 's/.*Number of leaves[^0-9]*([0-9]+).*/\1/p' "$1" | head -n1
 }
@@ -619,6 +618,7 @@ extract_leaves () {
 cat > "$TMPDIR/info_in1.nwk" <<'NWK'
 ((A:1.0,(B:1.0,C:1.0):1.0):1.0,(D:1.0,E:1.0):1.0):0.0;
 NWK
+
 n_expect="$(leaflabels "$TMPDIR/info_in1.nwk" | wc -l | tr -d ' ')"
 
 nwkit info -i "$TMPDIR/info_in1.nwk" > "$TMPDIR/info_out1.txt" 2>&1
@@ -634,8 +634,17 @@ fi
 cat > "$TMPDIR/info_in2.nwk" <<'NWK'
 (('Arabidopsis thaliana':1,'Oryza sativa':1):1,'Vitis vinifera':1);
 NWK
-# 期待値はクォートで数える（'...' が葉ラベル）
-n_expect2="$(grep -oE \"'[^']+'\" \"$TMPDIR/info_in2.nwk\" | wc -l | tr -d ' ')"
+
+# 期待値は ETE3 で厳密に数える（引用符の扱いで壊れない）
+INFO2="$TMPDIR/info_in2.nwk"
+n_expect2="$(INFO2="$INFO2" python - <<'PY'
+import os
+from ete3 import Tree
+p = os.environ['INFO2']
+t = Tree(open(p).read())
+print(len(t.get_leaf_names()))
+PY
+)"
 
 nwkit info -i "$TMPDIR/info_in2.nwk" > "$TMPDIR/info_out2.txt" 2>&1
 n_seen2="$(extract_leaves "$TMPDIR/info_out2.txt")"
