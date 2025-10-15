@@ -276,6 +276,33 @@ pshuffle.add_argument('--label', metavar='yes|no', default='no', type=strtobool,
                        help='default=%(default)s: Shuffle leaf labels.')
 pshuffle.set_defaults(handler=command_shuffle)
 
+def command_skim(args):
+    from nwkit.skim import skim_main
+    skim_main(args)
+pskim = subparsers.add_parser('skim', help='Sample leaves from clades with shared traits', parents=[p_parent])
+pskim.add_argument('--trait', metavar='PATH', default=None, type=str, required=False, action='store',
+                       help='default=%(default)s: Path to a trait table (TSV) containing leaf names in the "leaf_name" column and one or more trait columns. '
+                            'If not specified, all leaves are treated as a single group and randomly sampled.')
+pskim.add_argument('--group_by', metavar='STR', default=None, type=str, required=False, action='store',
+                       help='default=%(default)s: Column name in the trait table used to group leaves before sampling. '
+                            'Leaves in a clade are treated as a group if all non-missing values in the specified column are identical. '
+                            'If not specified, all leaves are treated as a single group.')
+pskim.add_argument('--retain_per_clade', metavar='INT', default=1, type=int, required=False, action='store',
+                       help='default=%(default)s: Number of leaves to retain per clade (group). '
+                            'If a clade (group) contains fewer leaves than this value, all of its leaves are retained.')
+pskim.add_argument('--prioritize_non_missing', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Whether to prioritize leaves with non-missing trait values when sampling.')
+pskim.add_argument('--filter_by', metavar='STR', default=None, type=str, required=False, action='store',
+                       help='default=%(default)s: Column name in the trait table used to rank leaves within each group before sampling. '
+                            'If not specified, leaves are randomly sampled within each group.')
+pskim.add_argument('--filter_mode', metavar='ascending|descending', default='ascending', type=str, required=False, action='store',
+                       help='default=%(default)s: Sorting order for --filter_by values. '
+                            'If multiple leaves within a group have the same value, they are randomly sampled.')
+pskim.add_argument('--output_groupfile', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Whether to output group assignment files. '
+                            'The output filenames are <output>.all.tsv and <output>.sampled.tsv, where <output> is the value of --outfile without the .nwk extension.')
+pskim.set_defaults(handler=command_skim)
+
 def command_subtree(args):
     from nwkit.subtree import subtree_main
     subtree_main(args)
