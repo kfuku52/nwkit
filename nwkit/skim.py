@@ -17,7 +17,7 @@ def read_trait(args, tree):
 
 def mark_traits_to_nodes(tree, trait_df, args):
     if args.group_by is None:
-        leafname2trait = {leaf_name: pandas.NA for leaf_name in trait_df['leaf_name']}
+        leafname2trait = {leaf_name: None for leaf_name in trait_df['leaf_name']}
     else:
         leafname2trait = {leaf_name: trait for leaf_name, trait in zip(trait_df['leaf_name'], trait_df[args.group_by])}
     for node in tree.traverse('postorder'):
