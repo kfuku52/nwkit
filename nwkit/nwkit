@@ -298,6 +298,8 @@ pskim.add_argument('--filter_by', metavar='STR', default=None, type=str, require
 pskim.add_argument('--filter_mode', metavar='ascending|descending', default='ascending', type=str, required=False, action='store',
                        help='default=%(default)s: Sorting order for --filter_by values. '
                             'If multiple leaves within a group have the same value, they are randomly sampled.')
+pskim.add_argument('--only_contrastive_clades', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Whether to output a pruned tree retaining only minimal clades with multiple non-missing trait values.')
 pskim.add_argument('--output_groupfile', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Whether to output group assignment files. '
                             'The output filenames are <output>.all.tsv and <output>.sampled.tsv, where <output> is the value of --outfile without the .nwk extension.')
