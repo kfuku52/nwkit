@@ -85,7 +85,9 @@ def sample_from_groups(trait_df, args):
                 sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).sort_values(by=args.filter_by, ascending=False).head(args.retain_per_clade), include_groups=False)
             else:
                 raise ValueError(f"Invalid value for '--filter_mode': {args.filter_mode}")
-    return sampled_df.merge(trait_df[['leaf_name', 'group']], on=['leaf_name'])
+    sampled_df = sampled_df.merge(trait_df[['leaf_name', 'group']], on=['leaf_name'])
+    sampled_df = sampled_df[trait_df.columns]
+    return sampled_df
 
 def iter_contrastive_nodes(root):
     if root.trait != '_MIXED_':
