@@ -13,8 +13,14 @@ def check_input_file(args):
         raise ValueError('Either --species_list or --taxid_tsv must be specified.')
     if (args.species_list is not None) and (args.taxid_tsv is not None):
         raise ValueError('Only one of --species_list or --taxid_tsv can be specified.')
-    if (args.backbone !='ncbi') and (args.taxid_tsv is not None):
+    if (args.backbone != 'ncbi') and (args.taxid_tsv is not None):
         raise ValueError('--taxid_tsv is currently compatible only with --backbone ncbi.')
+    if args.taxid_tsv is not None:
+        taxid_df = pandas.read_csv(args.taxid_tsv, sep='\t')
+        if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
+            raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
+        if taxid_df.empty:
+            raise ValueError('--taxid_tsv is empty.')
 
 def initialize_tree(tree):
     for leaf in tree.get_leaves():
@@ -29,14 +35,7 @@ def name_to_taxid(sp, ncbi):
         name2taxid = ncbi.get_name_translator([genus,])
     return name2taxid
 
-def get_lineage(sp, ncbi, rank):
-    name2taxid = name_to_taxid(sp, ncbi)
-    if (len(name2taxid)==0):
-        txt = 'Genus-level match was not found in the NCBI database: Excluded from the output: {}\n'
-        sys.stderr.write(txt.format(sp))
-        return []
-    key = sp if sp in name2taxid.keys() else re.sub(' .*', '', sp)
-    lineage = ncbi.get_lineage(name2taxid[key][0])
+def limit_lineage_to_rank(lineage, ncbi, rank):
     if rank=='no':
         return lineage
     ranks = ncbi.get_rank(lineage)
@@ -47,6 +46,16 @@ def get_lineage(sp, ncbi, rank):
         if my_rank==rank:
             break
     return lineage_ge_rank
+
+def get_lineage(sp, ncbi, rank):
+    name2taxid = name_to_taxid(sp, ncbi)
+    if (len(name2taxid)==0):
+        txt = 'Genus-level match was not found in the NCBI database: Excluded from the output: {}\n'
+        sys.stderr.write(txt.format(sp))
+        return []
+    key = sp if sp in name2taxid.keys() else re.sub(' .*', '', sp)
+    lineage = ncbi.get_lineage(name2taxid[key][0])
+    return limit_lineage_to_rank(lineage, ncbi, rank)
 
 def get_lineages(labels, rank):
     if '_' in labels[0]:
@@ -61,16 +70,7 @@ def get_lineages(labels, rank):
 
 def get_lineage_from_taxid(taxid, ncbi, rank):
     lineage = ncbi.get_lineage(taxid)
-    if rank=='no':
-        return lineage
-    ranks = ncbi.get_rank(lineage)
-    sorted_ranks = [ ranks[l] for l in lineage ]
-    lineage_ge_rank = list()
-    for lineage_taxid,my_rank in zip(lineage, sorted_ranks):
-        lineage_ge_rank.append(int(lineage_taxid))
-        if my_rank==rank:
-            break
-    return lineage_ge_rank
+    return limit_lineage_to_rank(lineage, ncbi, rank)
 
 def get_lineages_from_taxid(taxid_df, rank):
     ncbi = ete3.NCBITaxa()
