@@ -33,10 +33,15 @@ def command_constrain(args):
     from nwkit.constrain import constrain_main
     constrain_main(args)
 pconstrain = subparsers.add_parser('constrain', help='Generate a species-tree-like Newick file for topological constraint', parents=[p_parent])
-pconstrain.add_argument('--species_list', metavar='PATH', default='', type=str, required=True, action='store',
+pconstrain.add_argument('--species_list', metavar='PATH', default=None, type=str, required=False, action='store',
                         help='default=%(default)s: Text file containing species names, one per line. '
                              'Expected formats are "GENUS SPECIES", "GENUS_SPECIES", or "GENUS_SPECIES_OTHERINFO". '
                              'e.g., "Arabidopsis thaliana" and "Arabidopsis_thaliana_TAIR10"')
+pconstrain.add_argument('--taxid_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: TSV file containing species names in the "leaf_name" column and their NCBI Taxonomy IDs in the "taxid" column. '
+                             'When specified, the provided NCBI Taxonomy IDs are used instead of inferring them from species names. '
+                             'Either --species_list or --taxid_tsv must be specified, but not both. '
+                             'This option is currently compatible only with --backbone ncbi.')
 pconstrain.add_argument('--backbone', metavar='ncbi|ncbi_apgiv|ncbi_user|user', default='ncbi', type=str, required=False,
                         action='store', choices=['ncbi', 'ncbi_apgiv', 'ncbi_user', 'user'],
                         help='default=%(default)s: The backbone for tree constraint. '
