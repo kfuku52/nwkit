@@ -1,11 +1,20 @@
 import ete3
 import numpy
+import pandas
 
 import pkg_resources
 import re
 import sys
 
 from nwkit.util import *
+
+def check_input_file(args):
+    if (args.species_list is None) and (args.taxid_tsv is None):
+        raise ValueError('Either --species_list or --taxid_tsv must be specified.')
+    if (args.species_list is not None) and (args.taxid_tsv is not None):
+        raise ValueError('Only one of --species_list or --taxid_tsv can be specified.')
+    if (args.backbone !='ncbi') and (args.taxid_tsv is not None):
+        raise ValueError('--taxid_tsv is currently compatible only with --backbone ncbi.')
 
 def initialize_tree(tree):
     for leaf in tree.get_leaves():
@@ -38,6 +47,37 @@ def get_lineage(sp, ncbi, rank):
         if my_rank==rank:
             break
     return lineage_ge_rank
+
+def get_lineages(labels, rank):
+    if '_' in labels[0]:
+        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
+    else:
+        splist = labels
+    ncbi = ete3.NCBITaxa()
+    lineages = dict()
+    for sp,label in zip(splist,labels):
+        lineages[label] = get_lineage(sp, ncbi, rank)
+    return lineages
+
+def get_lineage_from_taxid(taxid, ncbi, rank):
+    lineage = ncbi.get_lineage(taxid)
+    if rank=='no':
+        return lineage
+    ranks = ncbi.get_rank(lineage)
+    sorted_ranks = [ ranks[l] for l in lineage ]
+    lineage_ge_rank = list()
+    for lineage_taxid,my_rank in zip(lineage, sorted_ranks):
+        lineage_ge_rank.append(int(lineage_taxid))
+        if my_rank==rank:
+            break
+    return lineage_ge_rank
+
+def get_lineages_from_taxid(taxid_df, rank):
+    ncbi = ete3.NCBITaxa()
+    lineages = dict()
+    for label, taxid in zip(taxid_df['leaf_name'], taxid_df['taxid']):
+        lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
+    return lineages
 
 def match_taxa(tree, labels, backbone_method):
     if '_' in labels[0]:
@@ -89,17 +129,6 @@ def polytomize_one2many_matches(tree):
                 leaf.add_child(name=leaf.taxon_names[i])
             leaf.name = ''
     return tree
-
-def get_lineages(labels, rank):
-    if '_' in labels[0]:
-        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
-    else:
-        splist = labels
-    ncbi = ete3.NCBITaxa()
-    lineages = dict()
-    for sp,label in zip(splist,labels):
-        lineages[label] = get_lineage(sp, ncbi, rank)
-    return lineages
 
 def get_taxid_counts(lineages):
     taxids = []
@@ -227,13 +256,19 @@ def collapse_genes(tree):
     return tree
 
 def constrain_main(args):
-    labels = read_item_per_line_file(args.species_list)
+    check_input_file(args)
     if (args.backbone=='ncbi'):
-        lineages = get_lineages(labels=labels, rank=args.rank)
+        if args.taxid_tsv is not None:
+            taxid_df = pandas.read_csv(args.taxid_tsv, sep='\t')
+            lineages = get_lineages_from_taxid(taxid_df, rank=args.rank)
+        else:
+            labels = read_item_per_line_file(args.species_list)
+            lineages = get_lineages(labels=labels, rank=args.rank)
         taxid_counts = get_taxid_counts(lineages)
         #taxid_counts = limit_rank(taxid_counts=taxid_counts, rank=args.rank)
         tree = taxid2tree(lineages, taxid_counts)
     else:
+        labels = read_item_per_line_file(args.species_list)
         if (args.backbone.endswith('user')):
             tree = read_tree(args.infile, args.format, args.quoted_node_names)
             for node in tree.traverse():
