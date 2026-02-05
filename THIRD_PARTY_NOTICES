@@ -1,0 +1,15 @@
+Third-Party Software Notices
+============================
+
+MAD (Minimal Ancestor Deviation) v2.2
+--------------------------------------
+File: nwkit/_mad.py
+Authors: Fernando DeSilva Tria, Giddy Landan, Tal Dagan
+Source: https://www.mikrobio.uni-kiel.de/de/ag-dagan/ressourcen
+Paper: Tria et al. (2017) "Phylogenetic rooting using minimal ancestor
+       deviation." Nature Ecology & Evolution, 1: 0193.
+       DOI: 10.1038/s41559-017-0193
+
+The MAD script is distributed by the authors for academic use. No explicit
+license file is provided with the software. The authors request citation of
+the above paper when using the software.

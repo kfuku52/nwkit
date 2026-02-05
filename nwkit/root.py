@@ -38,6 +38,29 @@ def midpoint_rooting(tree):
     tree.set_outgroup(outgroup_node)
     return tree
 
+def mad_rooting(tree):
+    """MAD (Minimal Ancestor Deviation) rooting. Tria et al. 2017, DOI:10.1038/s41559-017-0193"""
+    import os, subprocess, tempfile
+    mad_script = os.path.join(os.path.dirname(__file__), '_mad.py')
+    with tempfile.NamedTemporaryFile(suffix='.nwk', mode='w', delete=False) as f:
+        f.write(tree.write(format=5, dist_formatter='%0.8f'))
+        tmpfile = f.name
+    try:
+        result = subprocess.run(
+            [sys.executable, mad_script, tmpfile],
+            check=True, capture_output=True, text=True,
+        )
+        sys.stderr.write(result.stdout)
+        with open(tmpfile + '.rooted') as fh:
+            lines = [l.strip() for l in fh if l.strip() and l.strip().endswith(';')]
+        rooted_nwk = lines[0]
+        rooted_tree = TreeNode(newick=rooted_nwk, format=1)
+    finally:
+        for p in [tmpfile, tmpfile + '.rooted']:
+            if os.path.exists(p):
+                os.unlink(p)
+    return rooted_tree
+
 def outgroup_rooting(tree, outgroup_str):
     outgroup_list = outgroup_str.split(',')
     sys.stderr.write('Specified outgroup labels: {}\n'.format(' '.join(outgroup_list)))
@@ -72,4 +95,6 @@ def root_main(args):
         tree = midpoint_rooting(tree=tree)
     elif (args.method=='outgroup'):
         tree = outgroup_rooting(tree=tree, outgroup_str=args.outgroup)
+    elif (args.method=='mad'):
+        tree = mad_rooting(tree=tree)
     write_tree(tree, args, format=args.outformat)

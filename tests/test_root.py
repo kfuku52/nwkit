@@ -2,7 +2,7 @@ import os
 import pytest
 from ete3 import TreeNode
 
-from nwkit.root import midpoint_rooting, outgroup_rooting, transfer_root, root_main
+from nwkit.root import midpoint_rooting, outgroup_rooting, transfer_root, mad_rooting, root_main
 from nwkit.util import read_tree, is_rooted
 from tests.helpers import make_args, DATA_DIR
 
@@ -43,6 +43,24 @@ class TestOutgroupRooting:
         tree = TreeNode(newick='((A:1,B:1):1,(C:1,D:1):1);', format=1)
         with pytest.raises(SystemExit):
             outgroup_rooting(tree, 'Z')
+
+
+class TestMadRooting:
+    def test_basic(self):
+        tree = TreeNode(newick='((A:1,B:2):1,(C:3,(D:1,E:2):1):1);', format=1)
+        rooted = mad_rooting(tree)
+        assert is_rooted(rooted)
+
+    def test_preserves_leaves(self):
+        tree = TreeNode(newick='((A:1,B:2):1,(C:3,(D:1,E:2):1):1);', format=1)
+        rooted = mad_rooting(tree)
+        assert set(rooted.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
+
+    def test_asymmetric_branch_lengths(self):
+        tree = TreeNode(newick='((A:10,B:1):1,(C:1,D:1):1);', format=1)
+        rooted = mad_rooting(tree)
+        assert is_rooted(rooted)
+        assert set(rooted.get_leaf_names()) == {'A', 'B', 'C', 'D'}
 
 
 class TestTransferRoot:
@@ -98,6 +116,17 @@ class TestRootMain:
         )
         with pytest.raises(Exception, match='Leaf labels'):
             root_main(args)
+
+    def test_mad(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:2):1,(C:3,(D:1,E:2):1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            method='mad',
+        )
+        root_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert is_rooted(tree)
+        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
 
     def test_wiki_outgroup_single(self, tmp_nwk, tmp_outfile):
         """Wiki example: nwkit root --method outgroup --outgroup a

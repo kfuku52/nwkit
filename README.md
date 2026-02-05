@@ -58,6 +58,8 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 ## Citation
 There is no published paper on NWKIT itself, but we used and cited NWKIT in several papers including [Fukushima & Pollock (2023, Nat Ecol Evol 7: 155-170)](https://www.nature.com/articles/s41559-022-01932-7).
 
+The `--method mad` option in `nwkit root` uses [MAD](https://www.mikrobio.uni-kiel.de/de/ag-dagan/ressourcen) by Tria, Landan & Dagan. If you use this option, please cite: [Tria et al. (2017, Nat Ecol Evol 1: 0193)](https://doi.org/10.1038/s41559-017-0193).
+
 # Licensing
 This program is BSD-licensed (3 clause). See [LICENSE](LICENSE) for details.
 
