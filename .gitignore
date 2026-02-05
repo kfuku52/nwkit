@@ -2,6 +2,6 @@
 /nwkit/__pycache__/*
 /.DS_Store
 /*/.DS_Store
-/tests/*
+/tests/__pycache__/*
 /nwkit.iml
 nwkit/.DS_Store

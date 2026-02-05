@@ -1,0 +1,81 @@
+import pytest
+from ete3 import TreeNode
+
+from nwkit.label import label_main
+from nwkit.util import read_tree
+from tests.helpers import make_args
+
+
+class TestLabelMain:
+    def test_label_unnamed_nodes(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='all', prefix='n', force=False,
+        )
+        label_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        for node in tree.traverse():
+            assert node.name != ''
+
+    def test_label_with_custom_prefix(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='all', prefix='node_', force=False,
+        )
+        label_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        internal_names = [n.name for n in tree.traverse() if not n.is_leaf()]
+        assert all(name.startswith('node_') for name in internal_names)
+
+    def test_label_leaves_only(self, tmp_nwk, tmp_outfile):
+        # Use a tree where leaves have names but we force-overwrite them
+        path = tmp_nwk('((X:1,Y:1):1,(Z:1,W:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='leaf', prefix='leaf', force=True,
+        )
+        label_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        for leaf in tree.iter_leaves():
+            assert leaf.name.startswith('leaf')
+
+    def test_label_force_overwrite(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='all', prefix='n', force=True,
+        )
+        label_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        names = [n.name for n in tree.traverse()]
+        # With force, all names should be overwritten
+        assert all(name.startswith('n') for name in names)
+
+    def test_label_no_force_preserves_existing(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='all', prefix='n', force=False,
+        )
+        label_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        names = [n.name for n in tree.traverse()]
+        # AB should be preserved, unnamed nodes should get new names
+        assert 'AB' in names
+
+    def test_label_intnode_only(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='intnode', prefix='int', force=False,
+        )
+        label_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        # Leaf names should be preserved
+        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        # Internal nodes should have new labels
+        for node in tree.traverse():
+            if not node.is_leaf():
+                assert node.name.startswith('int')
