@@ -47,8 +47,8 @@ def is_mrca_clade_root(node, timetree_result, ncbi):
     if 'missing_ids' not in timetree_result:
         return True
     missing_ids = timetree_result.replace('"', '').replace('\'', '').replace('\n', '')
-    missing_ids = re.sub('.*missing_ids:\[', '', missing_ids)
-    missing_ids = re.sub('\].*', '', missing_ids)
+    missing_ids = re.sub(r'.*missing_ids:\[', '', missing_ids)
+    missing_ids = re.sub(r'\].*', '', missing_ids)
     if (len(missing_ids)==0):
         return True
     missing_ids = [ int(mid) for mid in missing_ids.split(',') ]

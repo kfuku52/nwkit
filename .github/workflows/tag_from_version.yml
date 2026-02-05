@@ -3,7 +3,7 @@ name: Create GitHub Tag from __version__
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch:
 
 jobs:
