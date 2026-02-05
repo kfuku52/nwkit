@@ -72,3 +72,46 @@ class TestTransferMain:
         )
         transfer_main(args)
         assert os.path.exists(tmp_outfile)
+
+    def test_wiki_name_transfer_exact(self, tmp_nwk, tmp_outfile):
+        """Wiki example: transfer internal node names.
+
+        Input1: ((A:1,B:2):3,(C:4,D:5):6);
+        Input2: ((A:0.1,B:0.2)clade_AB:0.3,(C:0.4,D:0.5)clade_CD:0.6)root;
+        Output: ((A:1,B:2)clade_AB:3,(C:4,D:5)clade_CD:6)root:0;
+        """
+        path1 = tmp_nwk('((A:1,B:2):3,(C:4,D:5):6);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:0.1,B:0.2)clade_AB:0.3,(C:0.4,D:0.5)clade_CD:0.6)root;', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='intnode',
+            name=True, support=False, length=False, fill=None,
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        internal_names = [n.name for n in tree.traverse() if not n.is_leaf()]
+        assert 'clade_AB' in internal_names
+        assert 'clade_CD' in internal_names
+        assert 'root' in internal_names
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['A'] - 1.0) < 1e-6
+        assert abs(leaves['B'] - 2.0) < 1e-6
+        assert abs(leaves['C'] - 4.0) < 1e-6
+        assert abs(leaves['D'] - 5.0) < 1e-6
+
+    def test_wiki_length_transfer_exact(self, tmp_nwk, tmp_outfile):
+        """Transfer branch lengths from tree2 to tree1: all 4 leaves exact."""
+        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:10,B:20):30,(C:40,D:50):60);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='all',
+            name=False, support=False, length=True, fill=None,
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['A'] - 10.0) < 1e-6
+        assert abs(leaves['B'] - 20.0) < 1e-6
+        assert abs(leaves['C'] - 40.0) < 1e-6
+        assert abs(leaves['D'] - 50.0) < 1e-6

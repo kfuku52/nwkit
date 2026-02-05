@@ -215,3 +215,45 @@ class TestSanitizeMain:
             if not node.is_leaf():
                 assert len(node.get_children()) == 2
         assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E', 'F'}
+
+    def test_wiki_singleton_exact_branch_length(self, tmp_nwk, tmp_outfile):
+        """Wiki example: singleton collapse sums branch lengths 1+1=2.
+
+        Input:  ((((a:1,b:1):1):1,c:1):1,((d:1,e:1),f:1):1):0;
+        After singleton removal: (a,b) parent gets dist 1+1=2.
+        """
+        path = tmp_nwk('((((a:1,b:1):1):1,c:1):1,((d:1,e:1),f:1):1):0;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=True, resolve_polytomy=False, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.get_leaf_names()) == {'a', 'b', 'c', 'd', 'e', 'f'}
+        ab_parent = tree.get_common_ancestor(['a', 'b'])
+        assert abs(ab_parent.dist - 2.0) < 1e-6
+        # Leaf branch lengths preserved
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['a'] - 1.0) < 1e-6
+        assert abs(leaves['b'] - 1.0) < 1e-6
+        assert abs(leaves['c'] - 1.0) < 1e-6
+        assert abs(leaves['f'] - 1.0) < 1e-6
+
+    def test_pairwise_distances_after_singleton_removal(self, tmp_nwk, tmp_outfile):
+        """Singleton removal must preserve all pairwise distances."""
+        nwk = '(((A:1,B:2):3):4,C:10);'
+        original = TreeNode(newick=nwk, format=1)
+        path = tmp_nwk(nwk)
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=True, resolve_polytomy=False, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        for l1 in tree.get_leaves():
+            for l2 in tree.get_leaves():
+                if l1.name != l2.name:
+                    orig_d = original.get_distance(l1.name, l2.name)
+                    new_d = tree.get_distance(l1, l2)
+                    assert abs(orig_d - new_d) < 1e-6, \
+                        f'{l1.name}-{l2.name}: {orig_d} vs {new_d}'

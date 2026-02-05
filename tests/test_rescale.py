@@ -54,3 +54,56 @@ class TestRescaleMain:
         rescale_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_wiki_all_factor_half(self, tmp_nwk, tmp_outfile):
+        """Wiki example: rescale all branches by factor 0.5.
+
+        Input:  ((A:2,B:4):6,(C:8,D:10):12);
+        Output: ((A:1,B:2):3,(C:4,D:5):6);
+        """
+        path = tmp_nwk('((A:2,B:4):6,(C:8,D:10):12);')
+        args = make_args(infile=path, outfile=tmp_outfile, target='all', factor=0.5)
+        rescale_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['A'] - 1.0) < 1e-6
+        assert abs(leaves['B'] - 2.0) < 1e-6
+        assert abs(leaves['C'] - 4.0) < 1e-6
+        assert abs(leaves['D'] - 5.0) < 1e-6
+        for node in tree.traverse():
+            if not node.is_leaf() and not node.is_root():
+                assert abs(node.dist - 3.0) < 1e-6 or abs(node.dist - 6.0) < 1e-6
+
+    def test_wiki_leaf_only_factor_tenth(self, tmp_nwk, tmp_outfile):
+        """Wiki example: rescale only leaf branches by factor 0.1.
+
+        Input:  ((A:2,B:4):6,(C:8,D:10):12);
+        Output: ((A:0.2,B:0.4):6,(C:0.8,D:1):12);
+        """
+        path = tmp_nwk('((A:2,B:4):6,(C:8,D:10):12);')
+        args = make_args(infile=path, outfile=tmp_outfile, target='leaf', factor=0.1)
+        rescale_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['A'] - 0.2) < 1e-6
+        assert abs(leaves['B'] - 0.4) < 1e-6
+        assert abs(leaves['C'] - 0.8) < 1e-6
+        assert abs(leaves['D'] - 1.0) < 1e-6
+        for node in tree.traverse():
+            if not node.is_leaf() and not node.is_root():
+                assert abs(node.dist - 6.0) < 1e-6 or abs(node.dist - 12.0) < 1e-6
+
+    def test_intnode_exact_values(self, tmp_nwk, tmp_outfile):
+        """Rescale only internal branches: leaves unchanged, internals scaled."""
+        path = tmp_nwk('((A:1,B:2):3,(C:4,D:5):6);')
+        args = make_args(infile=path, outfile=tmp_outfile, target='intnode', factor=0.5)
+        rescale_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['A'] - 1.0) < 1e-6
+        assert abs(leaves['B'] - 2.0) < 1e-6
+        assert abs(leaves['C'] - 4.0) < 1e-6
+        assert abs(leaves['D'] - 5.0) < 1e-6
+        for node in tree.traverse():
+            if not node.is_leaf() and not node.is_root():
+                assert abs(node.dist - 1.5) < 1e-6 or abs(node.dist - 3.0) < 1e-6

@@ -61,6 +61,63 @@ def mad_rooting(tree):
                 os.unlink(p)
     return rooted_tree
 
+def mv_rooting(tree):
+    """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
+    import numpy as np
+    # Unroot bifurcating root so each edge is a proper edge in the unrooted tree.
+    # Manual unroot because ete3's unroot() drops the dissolved node's branch length.
+    children = tree.get_children()
+    if len(children) == 2:
+        c0, c1 = children
+        to_dissolve = c0 if not c0.is_leaf() else (c1 if not c1.is_leaf() else None)
+        if to_dissolve is not None:
+            to_keep = c1 if to_dissolve is c0 else c0
+            to_keep.dist = (to_keep.dist or 0) + (to_dissolve.dist or 0)
+            for gc in list(to_dissolve.get_children()):
+                tree.add_child(gc)
+            tree.remove_child(to_dissolve)
+    leaves = tree.get_leaves()
+    all_leaf_names = set(tree.get_leaf_names())
+    best_var = float('inf')
+    best_node = None
+    best_x = 0.0
+    best_L = 0.0
+    for node in tree.traverse():
+        if node.is_root():
+            continue
+        L = node.dist if node.dist is not None else 0.0
+        subtree_leaf_names = set(node.get_leaf_names())
+        other_leaf_names = all_leaf_names - subtree_leaf_names
+        if not subtree_leaf_names or not other_leaf_names:
+            continue
+        # Distances from node to all leaves
+        dists_from_node = {leaf.name: node.get_distance(leaf) for leaf in leaves}
+        a = [dists_from_node[name] for name in subtree_leaf_names]
+        b = [dists_from_node[name] - L for name in other_leaf_names]
+        mean_a = np.mean(a)
+        mean_b = np.mean(b)
+        # Optimal root position x from node toward parent, constrained to [0, L]
+        x = (L + mean_b - mean_a) / 2.0
+        x = max(0.0, min(float(L), x))
+        # Root-to-tip distances at this position
+        all_dists = [ai + x for ai in a] + [bj + (L - x) for bj in b]
+        var = np.var(all_dists)
+        if var < best_var:
+            best_var = var
+            best_node = node
+            best_x = x
+            best_L = L
+    sys.stderr.write('MV rooting variance: {:.6g}\n'.format(best_var))
+    tree.set_outgroup(best_node)
+    # Adjust branch lengths at root: best_x from root to best_node, (L - best_x) to sibling
+    best_subtree_leaves = set(best_node.get_leaf_names())
+    for child in tree.get_children():
+        if set(child.get_leaf_names()) == best_subtree_leaves:
+            child.dist = best_x
+        else:
+            child.dist = best_L - best_x
+    return tree
+
 def outgroup_rooting(tree, outgroup_str):
     outgroup_list = outgroup_str.split(',')
     sys.stderr.write('Specified outgroup labels: {}\n'.format(' '.join(outgroup_list)))
@@ -97,4 +154,6 @@ def root_main(args):
         tree = outgroup_rooting(tree=tree, outgroup_str=args.outgroup)
     elif (args.method=='mad'):
         tree = mad_rooting(tree=tree)
+    elif (args.method=='mv'):
+        tree = mv_rooting(tree=tree)
     write_tree(tree, args, format=args.outformat)

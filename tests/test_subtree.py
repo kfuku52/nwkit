@@ -108,3 +108,37 @@ class TestSubtreeMain:
         assert abs(a_leaf.dist - 1.0) < 1e-6
         c_leaf = [l for l in tree.iter_leaves() if l.name == 'c'][0]
         assert abs(c_leaf.dist - 1.0) < 1e-6
+
+    def test_subtree_all_branch_lengths_preserved(self, tmp_nwk, tmp_outfile):
+        """Subtree extraction must preserve all internal branch lengths."""
+        path = tmp_nwk('(((a:2,b:3):4,c:5):6,((d:1,e:1):1,f:1):1):0;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            left_leaf='a', right_leaf='c', leaves=None,
+            orthogroup=False,
+        )
+        subtree_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.get_leaf_names()) == {'a', 'b', 'c'}
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['a'] - 2.0) < 1e-6
+        assert abs(leaves['b'] - 3.0) < 1e-6
+        assert abs(leaves['c'] - 5.0) < 1e-6
+        # Internal branch (a,b) parent should have dist 4
+        ab_parent = tree.get_common_ancestor(['a', 'b'])
+        assert abs(ab_parent.dist - 4.0) < 1e-6
+
+    def test_leaves_mode_exact_distances(self, tmp_nwk, tmp_outfile):
+        """Wiki --leaves mode: verify pairwise distances in extracted subtree."""
+        path = tmp_nwk('(((a:2,b:3):4,c:5):6,(d:1,e:1):1):0;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            left_leaf=None, right_leaf=None, leaves='a,b',
+            orthogroup=False,
+        )
+        subtree_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.get_leaf_names()) == {'a', 'b'}
+        # a-b pairwise distance should be 2+3 = 5
+        ab_dist = tree.get_distance('a', 'b')
+        assert abs(ab_dist - 5.0) < 1e-6

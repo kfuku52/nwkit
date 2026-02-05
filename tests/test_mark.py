@@ -218,3 +218,80 @@ class TestMarkMain:
         # No leaves should be marked
         for leaf in tree.iter_leaves():
             assert '#1' not in leaf.name
+
+    def test_wiki_target_mrca_only(self, tmp_nwk, tmp_outfile, monkeypatch):
+        """Wiki --target mrca: only the MRCA node of matched leaves is marked.
+
+        Pattern B.*, target mrca, target_only_clade yes:
+        Output: (((A1:2,(B1:1,B2:1)#1:1):1,(A2:1,C1:1):2):1,C2:4):0.25;
+
+        Only the parent of B1/B2 gets #1; B1/B2 themselves are NOT marked.
+        """
+        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
+        path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
+        args = make_mark_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='B.*', target='mrca', target_only_clade=True,
+            insert_txt='#1', insert_sep='', insert_pos='suffix',
+        )
+        mark_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        # B1 and B2 leaves should NOT be marked
+        for leaf in tree.iter_leaves():
+            if leaf.name.startswith('B'):
+                assert '#1' not in leaf.name
+        # The MRCA internal node should be marked
+        marked_internal = [n for n in tree.traverse()
+                           if not n.is_leaf() and '#1' in n.name]
+        assert len(marked_internal) >= 1
+
+    def test_wiki_target_leaf_only(self, tmp_nwk, tmp_outfile, monkeypatch):
+        """Wiki --target leaf: only matched leaves are marked, not internal nodes.
+
+        Pattern B.*, target leaf:
+        Output: (((A1:2,(B1#1:1,B2#1:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;
+        """
+        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
+        path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
+        args = make_mark_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='B.*', target='leaf', target_only_clade=True,
+            insert_txt='#1', insert_sep='', insert_pos='suffix',
+        )
+        mark_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        # B1, B2 should be marked
+        b_leaves = [l for l in tree.iter_leaves() if l.name.startswith('B')]
+        assert len(b_leaves) == 2
+        for leaf in b_leaves:
+            assert '#1' in leaf.name
+        # Non-B leaves should NOT be marked
+        other_leaves = [l for l in tree.iter_leaves() if not l.name.startswith('B')]
+        for leaf in other_leaves:
+            assert '#1' not in leaf.name
+        # Internal nodes should NOT be marked
+        for node in tree.traverse():
+            if not node.is_leaf():
+                assert '#1' not in node.name
+
+    def test_wiki_clade_branch_lengths_preserved(self, tmp_nwk, tmp_outfile, monkeypatch):
+        """Marking should not alter branch lengths."""
+        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
+        path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
+        args = make_mark_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='B.*', target='clade', target_only_clade=True,
+            insert_txt='#1', insert_sep='', insert_pos='suffix',
+        )
+        mark_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        leaves = {}
+        for l in tree.iter_leaves():
+            clean_name = l.name.replace('#1', '')
+            leaves[clean_name] = l.dist
+        assert abs(leaves['A1'] - 2.0) < 1e-6
+        assert abs(leaves['B1'] - 1.0) < 1e-6
+        assert abs(leaves['B2'] - 1.0) < 1e-6
+        assert abs(leaves['A2'] - 1.0) < 1e-6
+        assert abs(leaves['C1'] - 1.0) < 1e-6
+        assert abs(leaves['C2'] - 4.0) < 1e-6

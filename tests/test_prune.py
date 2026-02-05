@@ -85,3 +85,49 @@ class TestPruneMain:
         assert leaf_names == {'A1', 'B2', 'A2', 'C1'}
         assert 'B1' not in leaf_names
         assert 'C2' not in leaf_names
+
+    def test_wiki_prune_branch_length_after_removal(self, tmp_nwk, tmp_outfile):
+        """Wiki: when B1 is pruned, B2 absorbs the dissolved parent's branch length.
+
+        Input:  (((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;
+        After pruning B1|C2:
+        Output: (((A1:2,B2:2):1,(A2:1,C1:1):2):1):0.25;
+
+        B2 dist = 1.0 (original) + 1.0 (dissolved parent) = 2.0
+        A1 dist = 2.0 (unchanged)
+        """
+        path = tmp_nwk('(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='B1|C2', invert_match=False,
+        )
+        prune_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['B2'] - 2.0) < 1e-6
+        assert abs(leaves['A1'] - 2.0) < 1e-6
+        assert abs(leaves['A2'] - 1.0) < 1e-6
+        assert abs(leaves['C1'] - 1.0) < 1e-6
+
+    def test_wiki_invert_match_exact(self, tmp_nwk, tmp_outfile):
+        """Wiki invert_match example: keep only A.* and B.* tips.
+
+        Input:  (((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;
+        Output: (((A1:2,(B1:1,B2:1):1):1,A2:3):1):0.25;
+
+        A2 absorbs C1's dissolved parent: dist = 1.0 + 2.0 = 3.0
+        """
+        path = tmp_nwk('(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='A.*|B.*', invert_match=True,
+        )
+        prune_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaf_names = set(tree.get_leaf_names())
+        assert leaf_names == {'A1', 'A2', 'B1', 'B2'}
+        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert abs(leaves['A1'] - 2.0) < 1e-6
+        assert abs(leaves['B1'] - 1.0) < 1e-6
+        assert abs(leaves['B2'] - 1.0) < 1e-6
+        assert abs(leaves['A2'] - 3.0) < 1e-6
