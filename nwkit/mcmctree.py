@@ -72,7 +72,7 @@ def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names):
         return True
 
 def add_timetree_constraint(tree, args):
-    endpoint_url = 'http://timetree.temple.edu/api'
+    endpoint_url = 'http://timetree.org/api'
     ncbi = NCBITaxa()
     check_leaf_taxid_availability(tree, ncbi)
     for node in tree.traverse():

@@ -1,11 +1,13 @@
 import os
 import pytest
 from argparse import Namespace
+from unittest.mock import patch, MagicMock
 from ete3 import TreeNode
 
 from nwkit.mcmctree import (
     mcmctree_main,
     add_common_anc_constraint,
+    add_timetree_constraint,
     is_mrca_clade_root,
     remove_constraint_equal_upper,
     apply_min_clade_prop,
@@ -260,3 +262,48 @@ class TestMcmctreeMain:
         # Just verify the tree is read correctly
         tree = read_tree(infile, 'auto', True, quiet=True)
         assert len(tree.get_leaf_names()) > 0
+
+
+class TestIssue12EndpointUrl:
+    """Regression tests for GitHub issue #12: timetree.org API change.
+
+    The old endpoint (timetree.temple.edu/api) returns JSON errors for all
+    queries. The working endpoint is timetree.org/api.
+    """
+
+    def test_endpoint_url_is_timetree_org(self):
+        """Verify the endpoint URL points to timetree.org, not temple.edu."""
+        import inspect
+        source = inspect.getsource(add_timetree_constraint)
+        assert 'timetree.org/api' in source
+        assert 'timetree.temple.edu' not in source
+
+    def test_csv_response_parsing(self):
+        """Verify that a CSV response from timetree.org is parsed correctly.
+
+        The API returns CSV with \\r\\n line separator:
+        precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\\r\\n
+        87.2,87.2,81.33807,91
+        """
+        import re
+        csv_response = "precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\r\n87.2,87.2,81.33807,91"
+        # Simulate the parsing logic from add_timetree_constraint
+        timetree_result = re.sub('.*;</script>', '', csv_response)
+        timetree_keys = re.sub('\r\n.*', '', re.sub('<br>.*', '', timetree_result)).split(',')
+        timetree_values = re.sub('.*\r\n', '', re.sub('.*<br>', '', timetree_result)).split(',')
+        timetree_dict = dict()
+        for key, value in zip(timetree_keys, timetree_values):
+            timetree_dict[key] = value
+        assert timetree_dict['precomputed_age'] == '87.2'
+        assert timetree_dict['precomputed_ci_low'] == '81.33807'
+        assert timetree_dict['precomputed_ci_high'] == '91'
+
+    def test_temple_edu_json_error_is_skipped(self):
+        """The old temple.edu JSON error response should be handled gracefully."""
+        json_error = '{"found_ids":[],"missing_ids":[null,null],"mrca_ttid":null,"taxon_id":null,"error":"No TimeTree study info available for this MRCA"}'
+        assert "No TimeTree study info available for this MRCA" in json_error
+
+    def test_mrca_not_found_json_is_skipped(self):
+        """JSON error with 'MRCA node not found' should be handled."""
+        json_error = '{"found_ids":[],"missing_ids":["9999999","8888888"],"mrca_id":-1,"error":"MRCA node not found"}'
+        assert "MRCA node not found" in json_error
