@@ -1,5 +1,6 @@
 ![](logo/logo_nwkit_large.png)
 
+[![Run Tests](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml/badge.svg)](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml)
 [![Bioconda](https://img.shields.io/conda/vn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
 [![Downloads](https://img.shields.io/conda/dn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
 [![Platforms](https://img.shields.io/conda/pn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
