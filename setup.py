@@ -17,7 +17,7 @@ setup(
         url              = 'https://github.com/kfuku52/nwkit.git',
         keywords         = 'phylogenetics',
         packages         = find_packages(),
-        install_requires = ['ete3','biopython','pandas',],
+        install_requires = ['ete3','biopython','pandas','requests','numpy',],
         scripts          = ['nwkit/nwkit',],
         include_package_data = True,
         package_data     = {
