@@ -1,15 +1,33 @@
 ![](logo/logo_nwkit_large.png)
 
+[![Bioconda](https://img.shields.io/conda/vn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
+[![Downloads](https://img.shields.io/conda/dn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
+[![Platforms](https://img.shields.io/conda/pn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
+[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+
 ## Overview
 **NWKIT** ([/njuːkit/](http://ipa-reader.xyz/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format). 
 
 ## Installation
-```
-# Installation with pip
-pip install git+https://github.com/kfuku52/nwkit
 
-# This should show complete options
-nwkit -h 
+The latest version of NWKIT is available from [Bioconda](https://anaconda.org/bioconda/nwkit). For users requiring a `conda` installation, please refer to [Miniforge](https://github.com/conda-forge/miniforge) for a lightweight conda environment.
+
+#### Install from Bioconda
+
+```
+conda install bioconda::nwkit
+```
+
+#### Verify the installation by displaying the available options
+
+```
+nwkit -h
+```
+
+#### (For advanced users) Install the development version from GitHub
+
+```
+pip install git+https://github.com/kfuku52/nwkit
 ```
 
 ## Subcommands
