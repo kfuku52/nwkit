@@ -262,6 +262,8 @@ def command_sanitize(args):
 psanitize = subparsers.add_parser('sanitize', help='Eliminate non-standard Newick flavors', parents=[p_parent])
 psanitize.add_argument('--remove_singleton', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Remove singleton nodes represented as double brackets.')
+psanitize.add_argument('--resolve_polytomy', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Resolve multifurcation (polytomy) nodes into dichotomies with zero-length branches.')
 psanitize.add_argument('--name_quote', metavar='none|single|double', default='none', type=str, required=False,
                        action='store', choices=['none','single','double'],
                        help='default=%(default)s: Quotation of node and leaf names.'

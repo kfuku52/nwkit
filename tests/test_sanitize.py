@@ -43,7 +43,7 @@ class TestSanitizeMain:
         path = tmp_nwk('((((a:1,b:1):1):1,c:1):1,((d:1,e:1),f:1):1):0;')
         args = make_args(
             infile=path, outfile=tmp_outfile,
-            remove_singleton=True, name_quote='none',
+            remove_singleton=True, resolve_polytomy=False, name_quote='none',
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
@@ -57,7 +57,7 @@ class TestSanitizeMain:
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
         args = make_args(
             infile=path, outfile=tmp_outfile,
-            remove_singleton=False, name_quote='single',
+            remove_singleton=False, resolve_polytomy=False, name_quote='single',
         )
         sanitize_main(args)
         with open(tmp_outfile) as f:
@@ -68,7 +68,7 @@ class TestSanitizeMain:
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
         args = make_args(
             infile=path, outfile=tmp_outfile,
-            remove_singleton=False, name_quote='double',
+            remove_singleton=False, resolve_polytomy=False, name_quote='double',
         )
         sanitize_main(args)
         with open(tmp_outfile) as f:
@@ -79,7 +79,7 @@ class TestSanitizeMain:
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
         args = make_args(
             infile=path, outfile=tmp_outfile,
-            remove_singleton=False, name_quote='none',
+            remove_singleton=False, resolve_polytomy=False, name_quote='none',
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
@@ -91,7 +91,7 @@ class TestSanitizeMain:
             pytest.skip('Test data not found')
         args = make_args(
             infile=infile, outfile=tmp_outfile,
-            remove_singleton=True, name_quote='single',
+            remove_singleton=True, resolve_polytomy=False, name_quote='single',
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
@@ -111,7 +111,7 @@ class TestSanitizeMain:
         path = tmp_nwk('((((a:1,b:1):1):1,c:1):1,((d:1,e:1),f:1):1):0;')
         args = make_args(
             infile=path, outfile=tmp_outfile,
-            remove_singleton=True, name_quote='single',
+            remove_singleton=True, resolve_polytomy=False, name_quote='single',
         )
         sanitize_main(args)
         # Check raw output for single-quoted leaf names
@@ -130,7 +130,7 @@ class TestSanitizeMain:
         path = tmp_nwk('(((A:1,B:1):2):3,C:6);')
         args = make_args(
             infile=path, outfile=tmp_outfile,
-            remove_singleton=True, name_quote='none',
+            remove_singleton=True, resolve_polytomy=False, name_quote='none',
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
@@ -138,3 +138,80 @@ class TestSanitizeMain:
         # The parent of A,B should have combined branch length 2+3=5
         ab_parent = tree.get_common_ancestor(['A', 'B'])
         assert abs(ab_parent.dist - 5.0) < 1e-6
+
+    def test_resolve_polytomy_basic(self, tmp_nwk, tmp_outfile):
+        """Polytomy (A,B,C,D) should be resolved into dichotomies."""
+        path = tmp_nwk('(A:1,B:1,C:1,D:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=False, resolve_polytomy=True, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        for node in tree.traverse():
+            if not node.is_leaf():
+                assert len(node.get_children()) == 2
+        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_resolve_polytomy_zero_branch_length(self, tmp_nwk, tmp_outfile):
+        """Newly created branches from polytomy resolution should have zero length."""
+        path = tmp_nwk('(A:1,B:1,C:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=False, resolve_polytomy=True, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        for leaf in tree.iter_leaves():
+            assert abs(leaf.dist - 1.0) < 1e-6
+
+    def test_resolve_polytomy_no_change_on_dichotomy(self, tmp_nwk, tmp_outfile):
+        """A fully dichotomous tree should not be changed."""
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=False, resolve_polytomy=True, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert len(list(tree.traverse())) == 7  # 4 leaves + 2 internal + root
+
+    def test_resolve_polytomy_disabled(self, tmp_nwk, tmp_outfile):
+        """When resolve_polytomy=False, polytomies should be preserved."""
+        path = tmp_nwk('(A:1,B:1,C:1,D:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=False, resolve_polytomy=False, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert len(tree.get_children()) == 4
+
+    def test_resolve_polytomy_with_singleton_removal(self, tmp_nwk, tmp_outfile):
+        """Singleton removal + polytomy resolution should both work together."""
+        path = tmp_nwk('(((A:1,B:1):1):1,C:1,D:1,E:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=True, resolve_polytomy=True, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        for node in tree.traverse():
+            if not node.is_leaf():
+                assert len(node.get_children()) == 2
+        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
+
+    def test_resolve_polytomy_nested(self, tmp_nwk, tmp_outfile):
+        """Multiple nested polytomies should all be resolved."""
+        path = tmp_nwk('((A:1,B:1,C:1):1,(D:1,E:1,F:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=False, resolve_polytomy=True, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        for node in tree.traverse():
+            if not node.is_leaf():
+                assert len(node.get_children()) == 2
+        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E', 'F'}
