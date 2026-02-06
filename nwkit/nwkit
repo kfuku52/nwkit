@@ -22,10 +22,10 @@ p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, r
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
 p_parent.add_argument('-f', '--format', metavar='INT', default='auto', type=str, required=False, action='store',
-                      help='default=%(default)s: ETE3 tree format. '
+                      help='default=%(default)s: ETE tree format. '
                            'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
 p_parent.add_argument('-of', '--outformat', metavar='INT', default='auto', type=str, required=False, action='store',
-                      help='ETE3 tree format for --outfile. "auto" indicates the same format as --format.')
+                      help='ETE tree format for --outfile. "auto" indicates the same format as --format.')
 p_parent.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                         help='default=%(default)s: Whether node names are quoted in the input file.')
 
@@ -68,7 +68,7 @@ pdist = subparsers.add_parser('dist', help='Calculate topological distance betwe
 pdist.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
                    help='default=%(default)s: Input newick file 2.')
 pdist.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
-                   help='default=%(default)s: ETE3 tree format for --infile2.')
+                   help='default=%(default)s: ETE tree format for --infile2.')
 pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
                    help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
 pdist.set_defaults(handler=command_dist)
@@ -104,7 +104,7 @@ pintersection.add_argument('-i2', '--infile2', metavar='PATH', default='', type=
                            help='default=%(default)s: Input newick file 2. The intersected version of this file '
                                 'will not be generated, so if necessary, replace --infile and --infile2 and run again.')
 pintersection.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
-                           help='default=%(default)s: ETE3 tree format for --infile2.')
+                           help='default=%(default)s: ETE tree format for --infile2.')
 pintersection.add_argument('-si', '--seqin', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Input sequence file.')
 pintersection.add_argument('-so', '--seqout', metavar='PATH', default='', type=str, required=False, action='store',
@@ -242,7 +242,7 @@ proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, req
                    help='default=%(default)s: Input newick file 2. Used when --method "transfer". '
                         'Leaf labels should be matched to those in --infile.')
 proot.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
-                   help='default=%(default)s: ETE3 tree format for --infile2.')
+                   help='default=%(default)s: ETE tree format for --infile2.')
 proot.add_argument('--method', metavar='STR', default='midpoint', type=str, required=False, action='store',
                    choices=['midpoint','outgroup','transfer','mad','mv',],
                    help='default=%(default)s: '
@@ -348,7 +348,7 @@ ptransfer.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str,
                        help='default=%(default)s: Input newick file 2. Specified infor will be transferred from this file '
                         'to --infile. Topologies may deviate but leaf labels should be matched between the two trees.')
 ptransfer.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
-                       help='default=%(default)s: ETE3 tree format for --infile2.')
+                       help='default=%(default)s: ETE tree format for --infile2.')
 ptransfer.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
                        action='store', choices=['all', 'root', 'leaf', 'intnode'],
                        help='default=%(default)s: Nodes to be edited.')

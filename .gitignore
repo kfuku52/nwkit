@@ -5,3 +5,6 @@
 /tests/__pycache__/*
 /nwkit.iml
 nwkit/.DS_Store
+/nwkit.egg-info/
+/build/
+/dist/

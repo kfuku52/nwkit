@@ -82,7 +82,7 @@ def mv_rooting(tree):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
     import numpy as np
     # Unroot bifurcating root so each edge is a proper edge in the unrooted tree.
-    # Manual unroot because ete3's unroot() drops the dissolved node's branch length.
+    # Manual unroot because unroot() can drop the dissolved node's branch length.
     children = tree.get_children()
     if len(children) == 2:
         c0, c1 = children
