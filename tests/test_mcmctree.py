@@ -2,7 +2,7 @@ import os
 import pytest
 from argparse import Namespace
 from unittest.mock import patch, MagicMock
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.mcmctree import (
     mcmctree_main,
@@ -42,38 +42,38 @@ def make_mcmctree_args(**kwargs):
 
 class TestAddCommonAncConstraint:
     def test_bound_constraint(self):
-        tree = TreeNode(newick='((a:1,b:1):1,(c:1,d:1):1);', format=1)
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
         args = make_mcmctree_args(
             left_species='a', right_species='b',
             lower_bound='10.0', upper_bound='20.0',
         )
         tree = add_common_anc_constraint(tree, args)
-        common_anc = tree.get_common_ancestor('a', 'b')
+        common_anc = tree.common_ancestor('a', 'b')
         assert 'B(10.0, 20.0' in common_anc.name
 
     def test_point_constraint(self):
-        tree = TreeNode(newick='((a:1,b:1):1,(c:1,d:1):1);', format=1)
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
         args = make_mcmctree_args(
             left_species='a', right_species='b',
             lower_bound='15.0', upper_bound='15.0',
         )
         tree = add_common_anc_constraint(tree, args)
-        common_anc = tree.get_common_ancestor('a', 'b')
+        common_anc = tree.common_ancestor('a', 'b')
         assert '@15.0' in common_anc.name
 
 
 class TestIsMrcaCladeRoot:
     def test_no_missing_ids_in_result(self):
         """If 'missing_ids' not in result, should return True."""
-        tree = TreeNode(newick='((a:1,b:1):1,(c:1,d:1):1);', format=1)
-        node = tree.get_common_ancestor('a', 'b')
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        node = tree.common_ancestor('a', 'b')
         result = 'some_api_response_data'
         assert is_mrca_clade_root(node, result, ncbi=None) is True
 
     def test_empty_missing_ids(self):
         """If missing_ids list is empty, should return True."""
-        tree = TreeNode(newick='((a:1,b:1):1,(c:1,d:1):1);', format=1)
-        node = tree.get_common_ancestor('a', 'b')
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        node = tree.common_ancestor('a', 'b')
         result = 'missing_ids:[]'
         assert is_mrca_clade_root(node, result, ncbi=None) is True
 
@@ -86,8 +86,8 @@ class TestIsMrcaCladeRoot:
         'No TimeTree study info available for this MRCA' before calling
         is_mrca_clade_root. This test documents the known behavior.
         """
-        tree = TreeNode(newick='((a:1,b:1):1,(c:1,d:1):1);', format=1)
-        node = tree.get_common_ancestor('a', 'b')
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        node = tree.common_ancestor('a', 'b')
         result = 'missing_ids:[null]'
         # The function itself still raises ValueError on 'null' input;
         # the fix is that callers filter out such responses before reaching here
@@ -97,32 +97,32 @@ class TestIsMrcaCladeRoot:
 
 class TestRemoveConstraintEqualUpper:
     def test_removes_duplicate_constraints(self):
-        tree = TreeNode(newick='(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', format=1)
+        tree = Tree('(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', parser=1)
         # Set same constraint on parent and child
-        ab_node = tree.get_common_ancestor('a', 'b')
-        abc_node = tree.get_common_ancestor('a', 'b', 'c')
+        ab_node = tree.common_ancestor('a', 'b')
+        abc_node = tree.common_ancestor('a', 'b', 'c')
         ab_node.name = "'B(10.0, 20.0, 0.025, 0.025)'"
         abc_node.name = "'B(10.0, 20.0, 0.025, 0.025)'"
         tree = remove_constraint_equal_upper(tree)
         # Child constraint should be removed (it matches parent)
-        assert ab_node.name == ''
+        assert ab_node.name == 'NoName'
         # Parent constraint should remain
         assert abc_node.name == "'B(10.0, 20.0, 0.025, 0.025)'"
 
 
 class TestApplyMinCladeProp:
     def test_removes_small_clades(self):
-        tree = TreeNode(newick='(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', format=1)
-        ab_node = tree.get_common_ancestor('a', 'b')
+        tree = Tree('(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', parser=1)
+        ab_node = tree.common_ancestor('a', 'b')
         ab_node.name = "'B(10.0, 20.0)'"
         # min_clade_prop=0.5 means clade must have >= 2.5 leaves (50% of 5)
         tree = apply_min_clade_prop(tree, min_clade_prop=0.5)
         # ab_node has only 2 leaves (< 2.5), so its constraint should be removed
-        assert ab_node.name == ''
+        assert ab_node.name == 'NoName'
 
     def test_keeps_large_clades(self):
-        tree = TreeNode(newick='(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', format=1)
-        abc_node = tree.get_common_ancestor('a', 'b', 'c')
+        tree = Tree('(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', parser=1)
+        abc_node = tree.common_ancestor('a', 'b', 'c')
         abc_node.name = "'B(10.0, 20.0)'"
         # min_clade_prop=0.5 means clade must have >= 2.5 leaves
         tree = apply_min_clade_prop(tree, min_clade_prop=0.5)
@@ -261,7 +261,7 @@ class TestMcmctreeMain:
         # because add_common_anc_constraint needs left/right species
         # Just verify the tree is read correctly
         tree = read_tree(infile, 'auto', True, quiet=True)
-        assert len(tree.get_leaf_names()) > 0
+        assert len(list(tree.leaf_names())) > 0
 
 
 class TestIssue12EndpointUrl:

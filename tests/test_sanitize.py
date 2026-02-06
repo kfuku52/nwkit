@@ -1,6 +1,6 @@
 import os
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.sanitize import sanitize_main, add_quote
 from nwkit.util import read_tree
@@ -9,31 +9,31 @@ from tests.helpers import make_args, DATA_DIR
 
 class TestAddQuote:
     def test_single_quote(self):
-        tree = TreeNode(newick='((A:1,B:1):1,(C:1,D:1):1);', format=1)
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         tree = add_quote(tree, "'")
         for node in tree.traverse():
-            if node.name != '':
+            if node.name:
                 assert node.name.startswith("'")
                 assert node.name.endswith("'")
 
     def test_double_quote(self):
-        tree = TreeNode(newick='((A:1,B:1):1,(C:1,D:1):1);', format=1)
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         tree = add_quote(tree, '"')
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert leaf.name.startswith('"')
             assert leaf.name.endswith('"')
 
     def test_no_quote(self):
-        tree = TreeNode(newick='((A:1,B:1):1,(C:1,D:1):1);', format=1)
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         tree = add_quote(tree, '')
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert leaf.name in ['A', 'B', 'C', 'D']
 
     def test_empty_names_skipped(self):
-        tree = TreeNode(newick='((A:1,B:1):1,(C:1,D:1):1);', format=1)
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         tree = add_quote(tree, "'")
         for node in tree.traverse():
-            if node.name == '':
+            if not node.name:
                 continue
             assert node.name.startswith("'")
 
@@ -49,9 +49,9 @@ class TestSanitizeMain:
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         # Check singleton is removed
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert len(node.get_children()) != 1
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c', 'd', 'e', 'f'}
+        assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd', 'e', 'f'}
 
     def test_add_single_quote(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
@@ -83,7 +83,7 @@ class TestSanitizeMain:
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c', 'd'}
+        assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd'}
 
     def test_with_data_file(self, tmp_outfile):
         infile = os.path.join(DATA_DIR, 'sanitize2', 'input.nwk')
@@ -97,7 +97,7 @@ class TestSanitizeMain:
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         # Singletons should be removed
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert len(node.get_children()) != 1
 
     def test_wiki_exact_example(self, tmp_nwk, tmp_outfile):
@@ -122,7 +122,7 @@ class TestSanitizeMain:
         # Verify tree structure: no singleton nodes should remain
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert len(node.get_children()) >= 2
 
     def test_singleton_branch_length_summed(self, tmp_nwk, tmp_outfile):
@@ -134,9 +134,9 @@ class TestSanitizeMain:
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C'}
         # The parent of A,B should have combined branch length 2+3=5
-        ab_parent = tree.get_common_ancestor(['A', 'B'])
+        ab_parent = tree.common_ancestor(['A', 'B'])
         assert abs(ab_parent.dist - 5.0) < 1e-6
 
     def test_resolve_polytomy_basic(self, tmp_nwk, tmp_outfile):
@@ -149,9 +149,9 @@ class TestSanitizeMain:
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert len(node.get_children()) == 2
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
     def test_resolve_polytomy_zero_branch_length(self, tmp_nwk, tmp_outfile):
         """Newly created branches from polytomy resolution should have zero length."""
@@ -162,7 +162,7 @@ class TestSanitizeMain:
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert abs(leaf.dist - 1.0) < 1e-6
 
     def test_resolve_polytomy_no_change_on_dichotomy(self, tmp_nwk, tmp_outfile):
@@ -174,7 +174,7 @@ class TestSanitizeMain:
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
         assert len(list(tree.traverse())) == 7  # 4 leaves + 2 internal + root
 
     def test_resolve_polytomy_disabled(self, tmp_nwk, tmp_outfile):
@@ -198,9 +198,9 @@ class TestSanitizeMain:
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert len(node.get_children()) == 2
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
 
     def test_resolve_polytomy_nested(self, tmp_nwk, tmp_outfile):
         """Multiple nested polytomies should all be resolved."""
@@ -212,9 +212,9 @@ class TestSanitizeMain:
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert len(node.get_children()) == 2
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D', 'E', 'F'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D', 'E', 'F'}
 
     def test_wiki_singleton_exact_branch_length(self, tmp_nwk, tmp_outfile):
         """Wiki example: singleton collapse sums branch lengths 1+1=2.
@@ -229,11 +229,11 @@ class TestSanitizeMain:
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c', 'd', 'e', 'f'}
-        ab_parent = tree.get_common_ancestor(['a', 'b'])
+        assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd', 'e', 'f'}
+        ab_parent = tree.common_ancestor(['a', 'b'])
         assert abs(ab_parent.dist - 2.0) < 1e-6
         # Leaf branch lengths preserved
-        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        leaves = {l.name: l.dist for l in tree.leaves()}
         assert abs(leaves['a'] - 1.0) < 1e-6
         assert abs(leaves['b'] - 1.0) < 1e-6
         assert abs(leaves['c'] - 1.0) < 1e-6
@@ -242,7 +242,7 @@ class TestSanitizeMain:
     def test_pairwise_distances_after_singleton_removal(self, tmp_nwk, tmp_outfile):
         """Singleton removal must preserve all pairwise distances."""
         nwk = '(((A:1,B:2):3):4,C:10);'
-        original = TreeNode(newick=nwk, format=1)
+        original = Tree(nwk, parser=1)
         path = tmp_nwk(nwk)
         args = make_args(
             infile=path, outfile=tmp_outfile,
@@ -250,8 +250,8 @@ class TestSanitizeMain:
         )
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        for l1 in tree.get_leaves():
-            for l2 in tree.get_leaves():
+        for l1 in tree.leaves():
+            for l2 in tree.leaves():
                 if l1.name != l2.name:
                     orig_d = original.get_distance(l1.name, l2.name)
                     new_d = tree.get_distance(l1, l2)

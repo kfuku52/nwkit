@@ -1,7 +1,7 @@
 from nwkit.util import *
 
 def get_leaf_names(tree):
-    leaf_names = tree.get_leaf_names()
+    leaf_names = list(tree.leaf_names())
     is_unique = (len(leaf_names)==len(set(leaf_names)))
     assert is_unique, 'Leaf names are not unique.'
     return leaf_names
@@ -64,8 +64,7 @@ def intersection_main(args):
         write_seqs(records=new_seqs, outfile=args.seqout, seqformat=args.seqformat, quiet=False)
     leaves_to_remove = get_remove_names(leaf_names, seq_names + leaf_names2, match=args.match)
     assert len(leaves_to_remove)!=len(leaf_names), 'No overlap was found. Check tree and sequence labels in the input files.'
-    for leaf in tree.get_leaves():
+    for leaf in tree.leaves():
         if leaf.name in leaves_to_remove:
             leaf.delete(preserve_branch_length=True)
     write_tree(tree, args, format=args.outformat)
-

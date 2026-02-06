@@ -6,7 +6,7 @@ def label_main(args):
     counter = 0
     for node in nodes:
         flag_label = False
-        if node.name == '':
+        if not node.name:
             flag_label = True
         else:
             if args.force:

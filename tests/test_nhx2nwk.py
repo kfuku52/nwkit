@@ -1,6 +1,6 @@
 import os
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.nhx2nwk import nhx2nwk_main
 from nwkit.util import read_tree
@@ -16,7 +16,7 @@ class TestNhx2nwkMain:
         )
         nhx2nwk_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
     def test_with_node_label_name_attr(self, tmp_nwk, tmp_outfile):
         # Test with the 'name' attribute (string type, avoids float issue with 'support')
@@ -38,7 +38,7 @@ class TestNhx2nwkMain:
         )
         nhx2nwk_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert len(tree.get_leaf_names()) > 0
+        assert len(list(tree.leaf_names())) > 0
 
     def test_preserves_leaf_names(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((species_A:1,species_B:1):1,(species_C:1,species_D:1):1);')
@@ -48,4 +48,4 @@ class TestNhx2nwkMain:
         )
         nhx2nwk_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'species_A', 'species_B', 'species_C', 'species_D'}
+        assert set(tree.leaf_names()) == {'species_A', 'species_B', 'species_C', 'species_D'}

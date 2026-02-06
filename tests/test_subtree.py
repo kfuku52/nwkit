@@ -1,6 +1,6 @@
 import os
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.subtree import subtree_main
 from nwkit.util import read_tree
@@ -17,7 +17,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaf_names = set(tree.get_leaf_names())
+        leaf_names = set(tree.leaf_names())
         assert leaf_names == {'a', 'b', 'c'}
 
     def test_extract_subtree_with_leaves(self, tmp_nwk, tmp_outfile):
@@ -29,7 +29,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c'}
+        assert set(tree.leaf_names()) == {'a', 'b', 'c'}
 
     def test_extract_subtree_two_leaves(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('(((a:1,b:1):1,c:1):1,((d:1,e:1),f:1):1):0;')
@@ -40,7 +40,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'d', 'e'}
+        assert set(tree.leaf_names()) == {'d', 'e'}
 
     def test_single_leaf(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('(((a:1,b:1):1,c:1):1,((d:1,e:1),f:1):1):0;')
@@ -51,7 +51,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a'}
+        assert set(tree.leaf_names()) == {'a'}
 
     def test_leaf_not_found_raises(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((a:1,b:1):1,c:1);')
@@ -74,7 +74,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c'}
+        assert set(tree.leaf_names()) == {'a', 'b', 'c'}
 
     def test_orthogroup_mode(self, tmp_nwk, tmp_outfile):
         nwk = '((Homo_sapiens_G1:1,(Homo_sapiens_G2:1,Mus_musculus_G1:1):1):1,(Danio_rerio_G1:1,Xenopus_laevis_G1:1):1);'
@@ -86,7 +86,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert len(tree.get_leaf_names()) >= 1
+        assert len(list(tree.leaf_names())) >= 1
 
     def test_wiki_exact_example(self, tmp_nwk, tmp_outfile):
         """Wiki example: nwkit subtree --left_leaf a --right_leaf c
@@ -102,11 +102,11 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c'}
+        assert set(tree.leaf_names()) == {'a', 'b', 'c'}
         # Verify branch lengths are preserved
-        a_leaf = [l for l in tree.iter_leaves() if l.name == 'a'][0]
+        a_leaf = [l for l in tree.leaves() if l.name == 'a'][0]
         assert abs(a_leaf.dist - 1.0) < 1e-6
-        c_leaf = [l for l in tree.iter_leaves() if l.name == 'c'][0]
+        c_leaf = [l for l in tree.leaves() if l.name == 'c'][0]
         assert abs(c_leaf.dist - 1.0) < 1e-6
 
     def test_subtree_all_branch_lengths_preserved(self, tmp_nwk, tmp_outfile):
@@ -119,13 +119,13 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b', 'c'}
-        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        assert set(tree.leaf_names()) == {'a', 'b', 'c'}
+        leaves = {l.name: l.dist for l in tree.leaves()}
         assert abs(leaves['a'] - 2.0) < 1e-6
         assert abs(leaves['b'] - 3.0) < 1e-6
         assert abs(leaves['c'] - 5.0) < 1e-6
         # Internal branch (a,b) parent should have dist 4
-        ab_parent = tree.get_common_ancestor(['a', 'b'])
+        ab_parent = tree.common_ancestor(['a', 'b'])
         assert abs(ab_parent.dist - 4.0) < 1e-6
 
     def test_leaves_mode_exact_distances(self, tmp_nwk, tmp_outfile):
@@ -138,7 +138,7 @@ class TestSubtreeMain:
         )
         subtree_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'a', 'b'}
+        assert set(tree.leaf_names()) == {'a', 'b'}
         # a-b pairwise distance should be 2+3 = 5
         ab_dist = tree.get_distance('a', 'b')
         assert abs(ab_dist - 5.0) < 1e-6

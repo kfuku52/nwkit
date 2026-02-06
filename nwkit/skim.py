@@ -5,11 +5,12 @@ from nwkit.util import *
 def read_trait(args, tree):
     if args.trait is None:
         sys.stderr.write(f"'--trait' not specified. Sampling leaves at random.\n")
-        trait_df = pandas.DataFrame({'leaf_name': tree.get_leaf_names()})
+        trait_df = pandas.DataFrame({'leaf_name': list(tree.leaf_names())})
         return trait_df
     trait_df = pandas.read_csv(args.trait, sep='\t')
-    trait_df = trait_df[trait_df['leaf_name'].isin(tree.get_leaf_names())]
-    for leaf_name in tree.get_leaf_names():
+    leaf_names_list = list(tree.leaf_names())
+    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_names_list)]
+    for leaf_name in leaf_names_list:
         if leaf_name not in trait_df['leaf_name'].values:
             sys.stderr.write(f"'{leaf_name}' not found in '{args.trait}'. Treating its trait information as missing.\n")
             trait_df = pandas.concat([trait_df, pandas.DataFrame({'leaf_name': [leaf_name]})], ignore_index=True)
@@ -21,24 +22,25 @@ def mark_traits_to_nodes(tree, trait_df, args):
     else:
         leafname2trait = {leaf_name: trait for leaf_name, trait in zip(trait_df['leaf_name'], trait_df[args.group_by])}
     for node in tree.traverse('postorder'):
-        if node.is_leaf():
-            node.add_feature('trait', leafname2trait[node.name])
+        if node.is_leaf:
+            node.add_props(trait=leafname2trait[node.name])
         else:
             trait = None
             for child in node.children:
-                if pandas.isna(child.trait):
+                child_trait = child.props.get('trait')
+                if pandas.isna(child_trait):
                     continue
-                elif child.trait == '_MIXED_':
+                elif child_trait == '_MIXED_':
                     trait = '_MIXED_'
                     break
                 elif pandas.isna(trait):
-                    trait = child.trait
-                elif trait == child.trait:
+                    trait = child_trait
+                elif trait == child_trait:
                     continue
                 else:
                     trait = '_MIXED_'
                     break
-            node.add_feature('trait', trait)
+            node.add_props(trait=trait)
     return tree
 
 def iter_frontier_nodes(root, stop_condition):
@@ -53,12 +55,12 @@ def iter_frontier_nodes(root, stop_condition):
 def add_group_ids(trait_df, marked_tree):
     group_id = 1
     leafname2group = {}
-    for node in iter_frontier_nodes(root=marked_tree.get_tree_root(), stop_condition=lambda node: pandas.isna(node.trait) or node.trait != '_MIXED_'):
-        if node.is_leaf():
+    for node in iter_frontier_nodes(root=marked_tree.root, stop_condition=lambda node: pandas.isna(node.props.get('trait')) or node.props.get('trait') != '_MIXED_'):
+        if node.is_leaf:
             leafname2group[node.name] = group_id
             group_id += 1
         else:
-            for leaf_name in node.get_leaf_names():
+            for leaf_name in node.leaf_names():
                 leafname2group[leaf_name] = group_id
             group_id += 1
     trait_df['group'] = trait_df['leaf_name'].map(leafname2group)
@@ -90,14 +92,14 @@ def sample_from_groups(trait_df, args):
     return sampled_df
 
 def iter_contrastive_nodes(root):
-    if root.trait != '_MIXED_':
+    if root.props.get('trait') != '_MIXED_':
         return
     stack = [root]
     while stack:
         node = stack.pop()
         flag_has_mixed_child = False
         for child in node.children:
-            if child.trait == '_MIXED_':
+            if child.props.get('trait') == '_MIXED_':
                 stack.append(child)
                 flag_has_mixed_child = True
         if not flag_has_mixed_child:
@@ -106,8 +108,8 @@ def iter_contrastive_nodes(root):
 def add_contrastive_clade_ids(trait_df, marked_tree):
     contrastive_clade_id = 1
     leafname2contrastive_clade = {}
-    for node in iter_contrastive_nodes(root=marked_tree.get_tree_root()):
-        for leaf_name in node.get_leaf_names():
+    for node in iter_contrastive_nodes(root=marked_tree.root):
+        for leaf_name in node.leaf_names():
             leafname2contrastive_clade[leaf_name] = contrastive_clade_id
         contrastive_clade_id += 1
     trait_df['contrastive_clade'] = trait_df['leaf_name'].map(leafname2contrastive_clade).astype('Int64')

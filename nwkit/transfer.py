@@ -24,7 +24,7 @@ def transfer_main(args):
                 break
         if tree2_node == 'undefined':
             txt = 'Skipping. No matching node found in --infile2. Node name in --infile = {}, Leaf names = {}\n'
-            sys.stderr.write(txt.format(node.name, ' '.join(node.get_leaf_names())))
+            sys.stderr.write(txt.format(node.name, ' '.join(list(node.leaf_names()))))
             if args.fill is not None:
                 if (args.name):
                     node.name = str(args.fill)

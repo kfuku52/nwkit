@@ -1,6 +1,6 @@
 import os
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.transfer import transfer_main
 from nwkit.util import read_tree
@@ -20,7 +20,7 @@ class TestTransferMain:
         )
         transfer_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
     def test_transfer_branch_lengths(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
@@ -32,7 +32,7 @@ class TestTransferMain:
         )
         transfer_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        leaves = {l.name: l.dist for l in tree.leaves()}
         assert abs(leaves['A'] - 10) < 1e-6
         assert abs(leaves['B'] - 20) < 1e-6
 
@@ -46,7 +46,7 @@ class TestTransferMain:
         )
         transfer_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        leaves = {l.name: l.dist for l in tree.leaves()}
         assert abs(leaves['A'] - 10) < 1e-6
 
     def test_mismatched_leaves_raises(self, tmp_nwk):
@@ -89,11 +89,11 @@ class TestTransferMain:
         )
         transfer_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        internal_names = [n.name for n in tree.traverse() if not n.is_leaf()]
+        internal_names = [n.name for n in tree.traverse() if not n.is_leaf]
         assert 'clade_AB' in internal_names
         assert 'clade_CD' in internal_names
         assert 'root' in internal_names
-        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        leaves = {l.name: l.dist for l in tree.leaves()}
         assert abs(leaves['A'] - 1.0) < 1e-6
         assert abs(leaves['B'] - 2.0) < 1e-6
         assert abs(leaves['C'] - 4.0) < 1e-6
@@ -110,7 +110,7 @@ class TestTransferMain:
         )
         transfer_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaves = {l.name: l.dist for l in tree.iter_leaves()}
+        leaves = {l.name: l.dist for l in tree.leaves()}
         assert abs(leaves['A'] - 10.0) < 1e-6
         assert abs(leaves['B'] - 20.0) < 1e-6
         assert abs(leaves['C'] - 40.0) < 1e-6

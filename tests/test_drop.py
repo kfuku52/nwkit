@@ -1,6 +1,6 @@
 import os
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.drop import drop_main
 from nwkit.util import read_tree
@@ -45,7 +45,7 @@ class TestDropMain:
         drop_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         # Leaf names should be preserved
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
     def test_drop_with_fill(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;')
@@ -55,7 +55,7 @@ class TestDropMain:
         )
         drop_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert leaf.name == 'UNKNOWN'
 
     def test_drop_support(self, tmp_nwk, tmp_outfile):
@@ -105,7 +105,7 @@ class TestDropMain:
         drop_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         # Leaf names should all be preserved
-        assert len(tree.get_leaf_names()) == 29
+        assert len(list(tree.leaf_names())) == 29
         # Internal node labels (n1-n28) should be removed
         with open(tmp_outfile) as f:
             content = f.read()
@@ -146,15 +146,15 @@ class TestDropMain:
         )
         drop_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert leaf.name == 'unknown'
         # Internal names preserved
-        internal_names = [n.name for n in tree.traverse() if not n.is_leaf() and n.name]
+        internal_names = [n.name for n in tree.traverse() if not n.is_leaf and n.name]
         assert 'AB' in internal_names
         assert 'CD' in internal_names
         assert 'root' in internal_names
         # Branch lengths preserved
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert abs(leaf.dist - 1.0) < 1e-6
 
     def test_drop_length_with_fill_exact(self, tmp_nwk, tmp_outfile):
@@ -166,11 +166,11 @@ class TestDropMain:
         )
         drop_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
         # Leaf branch lengths should be 0 (filled)
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert abs(leaf.dist) < 1e-6
         # Internal branch lengths should be preserved
         for node in tree.traverse():
-            if not node.is_leaf() and not node.is_root():
+            if not node.is_leaf and not node.is_root:
                 assert abs(node.dist - 3.0) < 1e-6 or abs(node.dist - 6.0) < 1e-6

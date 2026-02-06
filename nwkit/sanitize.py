@@ -2,7 +2,7 @@ from nwkit.util import *
 
 def add_quote(tree, quote_char):
     for node in tree.traverse():
-        if node.name=='':
+        if not node.name:
             continue
         node.name = quote_char+node.name+quote_char
     return tree
@@ -12,7 +12,7 @@ def sanitize_main(args):
     if args.remove_singleton:
         tree = remove_singleton(tree, verbose=True)
     if args.resolve_polytomy:
-        tree.resolve_polytomy(recursive=True)
+        tree.resolve_polytomy()
     if (args.name_quote=='none'):
         quote_char = ''
     if (args.name_quote=='single'):

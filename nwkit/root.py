@@ -1,40 +1,56 @@
 import sys
 
+from ete4 import Tree
+from ete4.parser.newick import make_parser
+
 from nwkit.util import *
 
 def transfer_root(tree_to, tree_from, verbose=False):
-    subroot_leaves = [ n.get_leaf_names() for n in tree_from.get_children() ]
+    # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
+    for node in tree_to.traverse():
+        if node.dist is None:
+            node.dist = 0.0
+    subroot_leaves = [ list(n.leaf_names()) for n in tree_from.get_children() ]
     is_n0_bigger_than_n1 = (len(subroot_leaves[0]) > len(subroot_leaves[1]))
     ingroups = subroot_leaves[0] if is_n0_bigger_than_n1 else subroot_leaves[1]
     outgroups = subroot_leaves[0] if not is_n0_bigger_than_n1 else subroot_leaves[1]
     if verbose:
         sys.stderr.write('Outgroups: {}\n'.format(outgroups))
+    # Save original root name before set_outgroup (ete4 loses it)
+    original_root_name = tree_to.name
     tree_to.set_outgroup(ingroups[0])
     if (len(outgroups) == 1):
-        outgroup_ancestor = [n for n in tree_to.iter_leaves() if n.name == outgroups[0]][0]
+        outgroup_ancestor = [n for n in tree_to.leaves() if n.name == outgroups[0]][0]
     else:
-        outgroup_ancestor = tree_to.get_common_ancestor(outgroups)
-    if not set(outgroups) == set(outgroup_ancestor.get_leaf_names()):
+        outgroup_ancestor = tree_to.common_ancestor(outgroups)
+    if not set(outgroups) == set(outgroup_ancestor.leaf_names()):
         sys.stderr.write('No root bipartition found in --infile. Exiting.\n')
         sys.exit(1)
     tree_to.set_outgroup(outgroup_ancestor)
     subroot_to = tree_to.get_children()
     subroot_from = tree_from.get_children()
-    total_subroot_length_to = sum([n.dist for n in subroot_to])
-    total_subroot_length_from = sum([n.dist for n in subroot_from])
+    total_subroot_length_to = sum([(n.dist or 0) for n in subroot_to])
+    total_subroot_length_from = sum([(n.dist or 0) for n in subroot_from])
     for n_to in subroot_to:
         for n_from in subroot_from:
-            if (set(n_to.get_leaf_names()) == set(n_from.get_leaf_names())):
+            if (set(n_to.leaf_names()) == set(n_from.leaf_names())):
                 n_to.dist = total_subroot_length_to * (n_from.dist / total_subroot_length_from)
-    for n_to in tree_to.traverse():
-        if n_to.name == '':
-            n_to.name = tree_to.name
-            tree_to.name = 'Root'
-            break
+    # Restore root name or assign 'Root' if it was unnamed
+    if original_root_name:
+        tree_to.name = original_root_name
+    else:
+        tree_to.name = 'Root'
     return tree_to
 
 def midpoint_rooting(tree):
+    # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
+    for node in tree.traverse():
+        if node.dist is None:
+            node.dist = 0.0
     outgroup_node = tree.get_midpoint_outgroup()
+    # If the outgroup is the root itself, tree is already optimally rooted
+    if outgroup_node.is_root:
+        return tree
     tree.set_outgroup(outgroup_node)
     return tree
 
@@ -42,8 +58,9 @@ def mad_rooting(tree):
     """MAD (Minimal Ancestor Deviation) rooting. Tria et al. 2017, DOI:10.1038/s41559-017-0193"""
     import os, subprocess, tempfile
     mad_script = os.path.join(os.path.dirname(__file__), '_mad.py')
+    parser = make_parser(5, dist='%0.8f')
     with tempfile.NamedTemporaryFile(suffix='.nwk', mode='w', delete=False) as f:
-        f.write(tree.write(format=5, dist_formatter='%0.8f'))
+        f.write(tree.write(parser=parser))
         tmpfile = f.name
     try:
         result = subprocess.run(
@@ -54,7 +71,7 @@ def mad_rooting(tree):
         with open(tmpfile + '.rooted') as fh:
             lines = [l.strip() for l in fh if l.strip() and l.strip().endswith(';')]
         rooted_nwk = lines[0]
-        rooted_tree = TreeNode(newick=rooted_nwk, format=1)
+        rooted_tree = Tree(rooted_nwk, parser=1)
     finally:
         for p in [tmpfile, tmpfile + '.rooted']:
             if os.path.exists(p):
@@ -69,29 +86,29 @@ def mv_rooting(tree):
     children = tree.get_children()
     if len(children) == 2:
         c0, c1 = children
-        to_dissolve = c0 if not c0.is_leaf() else (c1 if not c1.is_leaf() else None)
+        to_dissolve = c0 if not c0.is_leaf else (c1 if not c1.is_leaf else None)
         if to_dissolve is not None:
             to_keep = c1 if to_dissolve is c0 else c0
             to_keep.dist = (to_keep.dist or 0) + (to_dissolve.dist or 0)
             for gc in list(to_dissolve.get_children()):
                 tree.add_child(gc)
             tree.remove_child(to_dissolve)
-    leaves = tree.get_leaves()
-    all_leaf_names = set(tree.get_leaf_names())
+    leaves = list(tree.leaves())
+    all_leaf_names = set(tree.leaf_names())
     best_var = float('inf')
     best_node = None
     best_x = 0.0
     best_L = 0.0
     for node in tree.traverse():
-        if node.is_root():
+        if node.is_root:
             continue
         L = node.dist if node.dist is not None else 0.0
-        subtree_leaf_names = set(node.get_leaf_names())
+        subtree_leaf_names = set(node.leaf_names())
         other_leaf_names = all_leaf_names - subtree_leaf_names
         if not subtree_leaf_names or not other_leaf_names:
             continue
         # Distances from node to all leaves
-        dists_from_node = {leaf.name: node.get_distance(leaf) for leaf in leaves}
+        dists_from_node = {leaf.name: tree.get_distance(node, leaf) for leaf in leaves}
         a = [dists_from_node[name] for name in subtree_leaf_names]
         b = [dists_from_node[name] - L for name in other_leaf_names]
         mean_a = np.mean(a)
@@ -110,15 +127,19 @@ def mv_rooting(tree):
     sys.stderr.write('MV rooting variance: {:.6g}\n'.format(best_var))
     tree.set_outgroup(best_node)
     # Adjust branch lengths at root: best_x from root to best_node, (L - best_x) to sibling
-    best_subtree_leaves = set(best_node.get_leaf_names())
+    best_subtree_leaves = set(best_node.leaf_names())
     for child in tree.get_children():
-        if set(child.get_leaf_names()) == best_subtree_leaves:
+        if set(child.leaf_names()) == best_subtree_leaves:
             child.dist = best_x
         else:
             child.dist = best_L - best_x
     return tree
 
 def outgroup_rooting(tree, outgroup_str):
+    # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
+    for node in tree.traverse():
+        if node.dist is None:
+            node.dist = 0.0
     outgroup_list = outgroup_str.split(',')
     sys.stderr.write('Specified outgroup labels: {}\n'.format(' '.join(outgroup_list)))
     outgroup_nodes = [ node for node in tree.traverse() if node.name in outgroup_list ]
@@ -128,15 +149,15 @@ def outgroup_rooting(tree, outgroup_str):
     elif len(outgroup_nodes)==1:
         outgroup_node = outgroup_nodes[0]
     else:
-        outgroup_node = outgroup_nodes[0].get_common_ancestor(outgroup_nodes)
+        outgroup_node = tree.common_ancestor(outgroup_nodes)
     if outgroup_node is tree: # Reroot if the outgroup clade represents the whole tree
-        non_outgroup_leaves = [ node for node in tree.iter_leaves() if node not in outgroup_nodes ]
+        non_outgroup_leaves = [ node for node in tree.leaves() if node not in outgroup_nodes ]
         tree.set_outgroup(non_outgroup_leaves[0])
-        outgroup_node = outgroup_nodes[0].get_common_ancestor(outgroup_nodes)
+        outgroup_node = tree.common_ancestor(outgroup_nodes)
     if outgroup_node is tree:
         sys.stderr.write('Outgroup clade should not represent the whole tree. Please check --outgroup carefully. Exiting.\n')
         sys.exit(1)
-    outgroup_leaf_names = outgroup_node.get_leaf_names()
+    outgroup_leaf_names = list(outgroup_node.leaf_names())
     sys.stderr.write('All leaf labels in the outgroup clade: {}\n'.format(' '.join(outgroup_leaf_names)))
     tree.set_outgroup(outgroup_node)
     return tree

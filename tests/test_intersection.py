@@ -1,6 +1,6 @@
 import os
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.intersection import (
     get_leaf_names,
@@ -18,12 +18,12 @@ from tests.helpers import make_args, DATA_DIR
 
 class TestGetLeafNames:
     def test_unique_names(self):
-        tree = TreeNode(newick='((A,B),(C,D));', format=1)
+        tree = Tree('((A,B),(C,D));', parser=1)
         names = get_leaf_names(tree)
         assert set(names) == {'A', 'B', 'C', 'D'}
 
     def test_duplicate_raises(self):
-        tree = TreeNode(newick='((A,A),(C,D));', format=1)
+        tree = Tree('((A,A),(C,D));', parser=1)
         with pytest.raises(AssertionError, match='unique'):
             get_leaf_names(tree)
 
@@ -87,7 +87,7 @@ class TestIntersectionMain:
         )
         intersection_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaf_names = set(tree.get_leaf_names())
+        leaf_names = set(tree.leaf_names())
         assert leaf_names == {'A', 'B', 'C'}
 
     def test_no_overlap_raises(self, tmp_nwk, tmp_outfile):
@@ -115,7 +115,7 @@ class TestIntersectionMain:
         )
         intersection_main(args)
         tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
-        leaf_names = set(tree.get_leaf_names())
+        leaf_names = set(tree.leaf_names())
         assert leaf_names == {'A', 'C', 'D', 'F'}
         assert os.path.exists(out_seq)
 
@@ -131,7 +131,7 @@ class TestIntersectionMain:
         )
         intersection_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaf_names = set(tree.get_leaf_names())
+        leaf_names = set(tree.leaf_names())
         assert leaf_names == {'A', 'B', 'C'}
 
     def test_wiki_tree_seq_intersection(self, tmp_path):
@@ -155,7 +155,7 @@ class TestIntersectionMain:
         )
         intersection_main(args)
         tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'C', 'D', 'F'}
+        assert set(tree.leaf_names()) == {'A', 'C', 'D', 'F'}
         # Output FASTA should contain all 4 sequences (all are in the tree)
         import Bio.SeqIO
         out_records = list(Bio.SeqIO.parse(out_seq, 'fasta'))
@@ -177,7 +177,7 @@ class TestIntersectionMain:
         )
         intersection_main(args)
         tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'C', 'D', 'F'}
+        assert set(tree.leaf_names()) == {'A', 'C', 'D', 'F'}
         import Bio.SeqIO
         out_records = list(Bio.SeqIO.parse(out_seq, 'fasta'))
         assert len(out_records) == 4

@@ -1,5 +1,5 @@
 import pytest
-from ete3 import TreeNode
+from ete4 import Tree
 
 from nwkit.label import label_main
 from nwkit.util import read_tree
@@ -26,7 +26,7 @@ class TestLabelMain:
         )
         label_main(args)
         tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
-        internal_names = [n.name for n in tree.traverse() if not n.is_leaf()]
+        internal_names = [n.name for n in tree.traverse() if not n.is_leaf]
         assert all(name.startswith('node_') for name in internal_names)
 
     def test_label_leaves_only(self, tmp_nwk, tmp_outfile):
@@ -38,7 +38,7 @@ class TestLabelMain:
         )
         label_main(args)
         tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert leaf.name.startswith('leaf')
 
     def test_label_force_overwrite(self, tmp_nwk, tmp_outfile):
@@ -74,10 +74,10 @@ class TestLabelMain:
         label_main(args)
         tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
         # Leaf names should be preserved
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
         # Internal nodes should have new labels
         for node in tree.traverse():
-            if not node.is_leaf():
+            if not node.is_leaf:
                 assert node.name.startswith('int')
 
     def test_wiki_intnode_exact_names(self, tmp_nwk, tmp_outfile):
@@ -95,11 +95,11 @@ class TestLabelMain:
         )
         label_main(args)
         tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
-        internal_names = sorted([n.name for n in tree.traverse() if not n.is_leaf()])
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
+        internal_names = sorted([n.name for n in tree.traverse() if not n.is_leaf])
         assert set(internal_names) == {'n0', 'n1', 'n2'}
         # Branch lengths preserved
-        for leaf in tree.iter_leaves():
+        for leaf in tree.leaves():
             assert abs(leaf.dist - 1.0) < 1e-6
 
     def test_wiki_preserve_existing_names(self, tmp_nwk, tmp_outfile):
@@ -119,7 +119,7 @@ class TestLabelMain:
         assert 'AB' in all_names
         new_names = [n for n in all_names if n.startswith('n')]
         assert len(new_names) == 2
-        assert set(tree.get_leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
     def test_wiki_force_overwrite_all(self, tmp_nwk, tmp_outfile):
         """Wiki example: force overwrite all names with custom prefix.

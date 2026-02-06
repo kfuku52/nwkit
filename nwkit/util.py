@@ -1,24 +1,22 @@
+import os
 import sys
 import Bio.SeqIO
-from ete3 import TreeNode
+from ete4 import Tree
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
     global INFILE_FORMAT
     if infile=='-':
         infile = sys.stdin.readlines()[0]
+    elif os.path.isfile(infile):
+        with open(infile) as f:
+            infile = f.read().strip()
     if format=='auto':
         format_original = format
         for format in [0,1,2,3,4,5,6,7,8,9,100,'exception']:
             if format == 'exception':
                 raise Exception('Failed to parse the input tree.')
             try:
-                tree = TreeNode(newick=infile, format=format, quoted_node_names=True)
-                INFILE_FORMAT = format
-                break
-            except:
-                pass
-            try:
-                tree = TreeNode(newick=infile, format=format, quoted_node_names=False)
+                tree = Tree(infile, parser=format)
                 INFILE_FORMAT = format
                 break
             except:
@@ -26,18 +24,22 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
     else:
         format_original = format
         format = int(format)
-        tree = TreeNode(newick=infile, format=format, quoted_node_names=quoted_node_names)
+        tree = Tree(infile, parser=format)
     if format==0: # flexible with support values
-        max_support = max([ node.support for node in tree.traverse() ])
-        if max_support > 1.0:
-            for node in tree.traverse():
-                if (node.support - 1.0) < 10**-9: # 1.0 is the default value for missing support values
-                    node.support = -999999
+        supports = [node.support for node in tree.traverse() if node.support is not None]
+        if supports:
+            max_support = max(supports)
+            if max_support > 1.0:
+                for node in tree.traverse():
+                    if not node.is_root:  # Don't set support on root (breaks ete4 set_outgroup)
+                        if node.support is None or (node.support - 1.0) < 10**-9: # 1.0 is the default value for missing support values
+                            node.support = -999999
     if format==1: # flexible with internal node names
         for node in tree.traverse():
-            node.support = -999999
+            if not node.is_root:  # Don't set support on root (breaks ete4 set_outgroup)
+                node.support = -999999
     if not quiet:
-        num_leaves = len(tree.get_leaf_names())
+        num_leaves = len(list(tree.leaf_names()))
         txt = 'Number of leaves in input tree = {:,}, Input tree format = {}\n'
         sys.stderr.write(txt.format(num_leaves, format))
     return tree
@@ -53,18 +55,18 @@ def write_tree(tree, args, format, quiet=False):
         format_original = format
         format = int(format)
     if not quiet:
-        num_leaves = len(tree.get_leaf_names())
+        num_leaves = len(list(tree.leaf_names()))
         txt = 'Number of leaves in output tree = {:,}, Output tree format = {}\n'
         sys.stderr.write(txt.format(num_leaves, format))
     node_name_dict = dict()
     i = 0
     for node in tree.traverse():
-        if (node.name!='')&(str(node.name)!='-999999'):
+        if node.name and str(node.name) != '-999999':
             placeholder_name = 'NODENAME_PLACEHOLDER'+str(i).zfill(10)
             node_name_dict[placeholder_name] = node.name
             node.name = placeholder_name
             i += 1
-    tree_str = tree.write(format=format, format_root_node=True)
+    tree_str = tree.write(parser=format, format_root_node=True)
     tree_str = tree_str.replace('-999999.0', '').replace('-999999','')
     if tree_str.endswith(':;'):
         tree_str = tree_str[:-2]+';'
@@ -96,7 +98,7 @@ def write_seqs(records, outfile, seqformat='fasta', quiet=False):
 
 def remove_singleton(tree, verbose=False, preserve_branch_length=True):
     for node in tree.traverse():
-        if node.is_leaf():
+        if node.is_leaf:
             continue
         num_children = len(node.get_children())
         if (num_children>1):
@@ -129,24 +131,24 @@ def read_item_per_line_file(file):
     return out
 
 def annotate_scientific_names(tree):
-    for node in tree.iter_leaves():
-        node.sci_name = label2sciname(node.name)
+    for node in tree.leaves():
+        node.add_props(sci_name=label2sciname(node.name))
     return tree
 
 def annotate_duplication_confidence_scores(tree):
     for node in tree.traverse():
-        if node.is_leaf():
+        if node.is_leaf:
             continue
-        sp_child1 = set([leaf.sci_name for leaf in node.children[0].iter_leaves()])
-        sp_child2 = set([leaf.sci_name for leaf in node.children[1].iter_leaves()])
+        sp_child1 = set([leaf.props.get('sci_name') for leaf in node.children[0].leaves()])
+        sp_child2 = set([leaf.props.get('sci_name') for leaf in node.children[1].leaves()])
         num_union = len(sp_child1.union(sp_child2))
         num_intersection = len(sp_child1.intersection(sp_child2))
-        node.dup_conf_score = num_intersection / num_union
+        node.add_props(dup_conf_score=num_intersection / num_union)
     return tree
 
 def is_all_leaf_names_identical(tree1, tree2, verbose=False):
-    leaf_names1 = set(tree1.get_leaf_names())
-    leaf_names2 = set(tree2.get_leaf_names())
+    leaf_names1 = set(tree1.leaf_names())
+    leaf_names2 = set(tree2.leaf_names())
     is_all_leaf_names_identical = (leaf_names1 == leaf_names2)
     if verbose:
         if not is_all_leaf_names_identical:
@@ -158,11 +160,11 @@ def get_target_nodes(tree, target):
     if (target=='all'):
         nodes = list(tree.traverse())
     elif (target=='root'):
-        nodes = [ node for node in tree.traverse() if node.is_root() ]
+        nodes = [ node for node in tree.traverse() if node.is_root ]
     elif (target=='leaf'):
-        nodes = [ node for node in tree.traverse() if node.is_leaf() ]
+        nodes = [ node for node in tree.traverse() if node.is_leaf ]
     elif (target=='intnode'):
-        nodes = [ node for node in tree.traverse() if not node.is_leaf() ]
+        nodes = [ node for node in tree.traverse() if not node.is_leaf ]
     return nodes
 
 def is_rooted(tree):
