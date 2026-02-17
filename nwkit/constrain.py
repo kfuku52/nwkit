@@ -1,8 +1,9 @@
 import ete4
 import numpy
 import pandas
+from collections import Counter, defaultdict
+from importlib import resources
 
-import pkg_resources
 import re
 import sys
 
@@ -87,6 +88,7 @@ def match_taxa(tree, labels, backbone_method):
         ncbi = ete4.NCBITaxa()
     leaf_names = [ ln.replace('_',' ') for ln in tree.leaf_names() ]
     leaf_name_set = set(leaf_names)
+    leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
     for sp,label in zip(splist,labels):
         if backbone_method.startswith('ncbi'):
             lineage = get_lineage(sp, ncbi, rank='no')
@@ -103,11 +105,10 @@ def match_taxa(tree, labels, backbone_method):
                 continue
         elif backbone_method=='user':
             ancestor = [sp]
-        for leaf in tree.leaves():
-            if (leaf.name==ancestor[0]):
-                leaf.props['has_taxon'] = True
-                leaf.props['taxon_names'].append(label)
-                break
+        leaf = leaf_by_name.get(ancestor[0])
+        if leaf is not None:
+            leaf.props['has_taxon'] = True
+            leaf.props['taxon_names'].append(label)
     return tree
 
 def delete_nomatch_leaves(tree):
@@ -131,14 +132,12 @@ def polytomize_one2many_matches(tree):
     return tree
 
 def get_taxid_counts(lineages):
-    taxids = []
-    for sp in lineages.keys():
-        taxids += lineages[sp]
-    uniq_taxids = list(set(taxids))
-    counts = []
-    for ut in uniq_taxids:
-        counts.append(taxids.count(ut))
-    taxid_counts = numpy.array([uniq_taxids,counts]).T
+    taxid_counter = Counter()
+    for lineage in lineages.values():
+        taxid_counter.update(lineage)
+    uniq_taxids = list(taxid_counter.keys())
+    counts = [taxid_counter[taxid] for taxid in uniq_taxids]
+    taxid_counts = numpy.array([uniq_taxids, counts]).T
     count_order = numpy.argsort(taxid_counts[:,1])
     taxid_counts = taxid_counts[count_order,:]
     return taxid_counts
@@ -168,42 +167,61 @@ def get_max_ancestor_overlap_node(tree, ancestors):
     return return_node
 
 def populate_leaves(new_clade, taxid, lineages):
-    for sp in lineages.keys():
-        lineage = lineages[sp]
-        if not taxid in lineage:
+    for sp, lineage in lineages.items():
+        if taxid not in lineage:
             continue
         new_leaf = ete4.Tree({'name': sp})
         new_leaf.add_props(ancestors=lineage)
         new_clade.add_child(new_leaf)
     return new_clade
 
-def add_new_clade(clades, new_clade):
+def _add_new_clade_with_leaf_set_cache(clades, clade_leaf_sets, new_clade, new_leaf_set):
     flag_append = True
-    new_leaf_set = set(new_clade.leaf_names())
     delete_index = list()
-    for j in range(len(clades)):
-        clade = clades[j]
-        clade_leaf_set = set(clade.leaf_names())
-        intersection_set = clade_leaf_set.intersection(new_leaf_set)
-        if (intersection_set==new_leaf_set):
-            flag_append = False
-            continue
-        elif (intersection_set==clade_leaf_set):
-            for nnode in new_clade.leaves():
-                for int_name in intersection_set:
-                    if nnode.name==int_name:
+    reference_new_leaf_set = set(new_leaf_set)
+    leaf_name_to_nodes = None
+    if len(reference_new_leaf_set) > 0:
+        for j, (clade, clade_leaf_set) in enumerate(zip(clades, clade_leaf_sets)):
+            if reference_new_leaf_set <= clade_leaf_set:
+                flag_append = False
+                continue
+            if clade_leaf_set <= reference_new_leaf_set:
+                if leaf_name_to_nodes is None:
+                    leaf_name_to_nodes = defaultdict(list)
+                    for leaf in new_clade.leaves():
+                        leaf_name_to_nodes[leaf.name].append(leaf)
+                for leaf_name in clade_leaf_set:
+                    nodes = leaf_name_to_nodes.get(leaf_name, [])
+                    if len(nodes) == 0:
+                        continue
+                    for nnode in nodes:
                         nnode.delete()
-                        break
-            new_clade.add_child(clade)
-            delete_index.append(j)
-    for di in sorted(delete_index)[::-1]:
+                    nodes.clear()
+                new_clade.add_child(clade)
+                for leaf in clade.leaves():
+                    leaf_name_to_nodes[leaf.name].append(leaf)
+                delete_index.append(j)
+    for di in sorted(delete_index, reverse=True):
         del clades[di]
+        del clade_leaf_sets[di]
     if flag_append:
         new_clade_leaves = list(new_clade.leaf_names())
-        if (len(new_clade_leaves)!=len(set(new_clade_leaves))):
+        if (len(new_clade_leaves) != len(set(new_clade_leaves))):
             txt = 'Redundant leaves in the new clade: {}'.format(', '.join(new_clade_leaves))
             raise Exception(txt)
         clades.append(new_clade)
+        clade_leaf_sets.append(reference_new_leaf_set)
+    return clades, clade_leaf_sets
+
+def add_new_clade(clades, new_clade):
+    new_leaf_set = set(new_clade.leaf_names())
+    clade_leaf_sets = [set(clade.leaf_names()) for clade in clades]
+    clades, _ = _add_new_clade_with_leaf_set_cache(
+        clades=clades,
+        clade_leaf_sets=clade_leaf_sets,
+        new_clade=new_clade,
+        new_leaf_set=new_leaf_set,
+    )
     return clades
 
 def get_polytomy_index(tree):
@@ -219,28 +237,45 @@ def taxid2tree(lineages, taxid_counts):
     is_multiple = (taxid_counts[:,1]>1)
     multi_counts = taxid_counts[is_multiple,:]
     clades = list()
+    clade_leaf_sets = list()
+    taxid_to_species = defaultdict(list)
+    for sp, lineage in lineages.items():
+        for taxid in lineage:
+            taxid_to_species[taxid].append(sp)
+    taxid_to_lineage_cache = dict()
     for i in numpy.arange(multi_counts.shape[0]):
         taxid = multi_counts[i,0]
         #count = multi_counts[i,1]
-        ancestors = ncbi.get_lineage(taxid)
+        if taxid not in taxid_to_lineage_cache:
+            taxid_to_lineage_cache[taxid] = ncbi.get_lineage(taxid)
+        ancestors = taxid_to_lineage_cache[taxid]
         new_clade = ete4.Tree()
         new_clade.add_props(ancestors=ancestors)
-        new_clade = populate_leaves(new_clade, taxid, lineages)
-        clades = add_new_clade(clades, new_clade)
+        species_names = taxid_to_species.get(taxid, [])
+        for sp in species_names:
+            new_leaf = ete4.Tree({'name': sp})
+            new_leaf.add_props(ancestors=lineages[sp])
+            new_clade.add_child(new_leaf)
+        clades, clade_leaf_sets = _add_new_clade_with_leaf_set_cache(
+            clades=clades,
+            clade_leaf_sets=clade_leaf_sets,
+            new_clade=new_clade,
+            new_leaf_set=set(species_names),
+        )
     assert len(clades)==1, 'Failed to merge clades into a single tree.'
     tree = clades[0]
     return tree
 
 def tree_sciname2label(tree, labels):
+    leaf_name_to_nodes = defaultdict(list)
+    for leaf in tree.leaves():
+        leaf_name_to_nodes[leaf.name].append(leaf)
     for label in labels:
-        flag = True
-        for leaf in tree.leaves():
-            label_sciname = label2sciname(labels=label)
-            if label_sciname==leaf.name:
-                leaf.name = label
-                flag = False
-                break
-        if flag:
+        label_sciname = label2sciname(labels=label)
+        candidate_nodes = leaf_name_to_nodes.get(label_sciname, [])
+        if len(candidate_nodes) > 0:
+            candidate_nodes.pop(0).name = label
+        else:
             sys.stderr.write('Original label not found: {}\n'.format(label))
     return tree
 
@@ -249,10 +284,11 @@ def collapse_genes(tree):
         splitted = leaf.name.split('_')
         genus_species = splitted[0] + '_' + splitted[1]
         leaf.name = genus_species
-    for leaf in tree.leaves():
-        num_same_name = sum([ ln==leaf.name for ln in tree.leaf_names() ])
-        if num_same_name > 1:
+    leaf_name_counts = Counter(tree.leaf_names())
+    for leaf in list(tree.leaves()):
+        if leaf_name_counts[leaf.name] > 1:
             leaf.delete(prevent_nondicotomic=False, preserve_branch_length=True)
+            leaf_name_counts[leaf.name] -= 1
     return tree
 
 def constrain_main(args):
@@ -275,7 +311,8 @@ def constrain_main(args):
                 node.name = (node.name or '').replace('_', ' ')
         elif (args.backbone=='ncbi_apgiv'):
             file_path = 'data_tree/apgiv.nwk'
-            nwk_string = pkg_resources.resource_string(__name__, file_path).decode("utf-8")
+            package_name = __package__ or 'nwkit'
+            nwk_string = resources.files(package_name).joinpath(file_path).read_text(encoding='utf-8')
             tree = ete4.Tree(nwk_string, parser=0)
         tree = initialize_tree(tree)
         tree = match_taxa(tree, labels, args.backbone)

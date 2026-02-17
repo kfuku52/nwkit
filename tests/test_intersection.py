@@ -1,6 +1,8 @@
 import os
 import pytest
 from ete4 import Tree
+from Bio.Seq import Seq
+from Bio.SeqRecord import SeqRecord
 
 from nwkit.intersection import (
     get_leaf_names,
@@ -26,6 +28,23 @@ class TestGetLeafNames:
         tree = Tree('((A,A),(C,D));', parser=1)
         with pytest.raises(AssertionError, match='unique'):
             get_leaf_names(tree)
+
+class TestGetSeqNames:
+    def test_unique_names(self):
+        seqs = [
+            SeqRecord(Seq('ATG'), id='A', name='A'),
+            SeqRecord(Seq('ATG'), id='B', name='B'),
+        ]
+        names = get_seq_names(seqs)
+        assert names == ['A', 'B']
+
+    def test_duplicate_raises(self):
+        seqs = [
+            SeqRecord(Seq('ATG'), id='A', name='A'),
+            SeqRecord(Seq('ATG'), id='A', name='A'),
+        ]
+        with pytest.raises(AssertionError, match='unique'):
+            get_seq_names(seqs)
 
 
 class TestMatchFunctions:

@@ -1,11 +1,6 @@
 from nwkit.util import *
 from nwkit.root import transfer_root
 
-
-def _clade_key(node):
-    return frozenset(node.leaf_names())
-
-
 def transfer_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
@@ -21,18 +16,26 @@ def transfer_main(args):
     num_target_nodes = len(target_nodes)
     tree2_leaf_index = None
     tree2_clade_index = None
+    target_clade_keys = None
     if args.target == 'leaf':
         tree2_leaf_index = {leaf.name: leaf for leaf in tree2.leaves()}
     elif args.target != 'root':
-        tree2_clade_index = {_clade_key(node): node for node in tree2.traverse()}
+        leaf_name_to_bit = {leaf.name: i for i, leaf in enumerate(tree.leaves())}
+        tree2_subtree_leaf_masks = get_subtree_leaf_bitmasks(tree2, leaf_name_to_bit)
+        tree2_clade_index = {
+            tree2_subtree_leaf_masks[node]: node
+            for node in tree2.traverse()
+        }
+        target_subtree_leaf_masks = get_subtree_leaf_bitmasks(tree, leaf_name_to_bit)
+        target_clade_keys = [target_subtree_leaf_masks[node] for node in target_nodes]
     transferred_node_count = 0
-    for node in target_nodes:
+    for i, node in enumerate(target_nodes):
         if args.target == 'root':
             tree2_node = tree2
         elif args.target == 'leaf':
             tree2_node = tree2_leaf_index.pop(node.name, None)
         else:
-            tree2_node = tree2_clade_index.pop(_clade_key(node), None)
+            tree2_node = tree2_clade_index.pop(target_clade_keys[i], None)
         if tree2_node is None:
             txt = 'Skipping. No matching node found in --infile2. Node name in --infile = {}, Leaf names = {}\n'
             sys.stderr.write(txt.format(node.name, ' '.join(list(node.leaf_names()))))

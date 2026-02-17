@@ -3,27 +3,41 @@ from nwkit.util import *
 
 def info_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    print(f'Tree file PATH: {os.path.realpath(args.infile)}')
-    print(f'Tree length: {sum([ n.dist for n in tree.traverse() if not n.is_root and n.dist is not None ])}')
-    print(f'Number of leaves: {len(list(tree.leaves()))}')
-    print(f'Number of nodes: {len(list(tree.traverse()))}')
+    tree_length = 0
+    num_leaves = 0
+    num_nodes = 0
     num_singleton_node = 0
-    for node in tree.traverse():
-        if node.is_leaf:
-            continue
-        if len(node.get_children())==1:
-            num_singleton_node += 1
-    print(f'Number of singleton nodes: {num_singleton_node}')
     num_multifurcation_node = 0
+    num_zero_branch_nodes = 0
+    num_negative_branch_nodes = 0
+    species_name_set = set()
     for node in tree.traverse():
+        num_nodes += 1
         if node.is_leaf:
-            continue
-        if len(node.get_children())>2:
-            num_multifurcation_node += 1
-    print(f'Number of multifurcation nodes: {num_multifurcation_node}')
-    print(f'Number of nodes with zero branch length: {len([ n.name for n in tree.traverse() if (n.dist is not None and n.dist==0 and not n.is_root) ])}')
-    print(f'Number of nodes with negative branch length: {len([ n for n in tree.traverse() if n.dist is not None and n.dist<0 ])}')
-    species_names = sorted(list(set([ '_'.join(n.name.split('_')[:2]) for n in tree.leaves() ])))
+            num_leaves += 1
+            species_name = '_'.join((node.name or '').split('_')[:2])
+            species_name_set.add(species_name)
+        else:
+            num_children = len(node.get_children())
+            if num_children == 1:
+                num_singleton_node += 1
+            elif num_children > 2:
+                num_multifurcation_node += 1
+        if (not node.is_root) and (node.dist is not None):
+            tree_length += node.dist
+            if node.dist == 0:
+                num_zero_branch_nodes += 1
+        if (node.dist is not None) and (node.dist < 0):
+            num_negative_branch_nodes += 1
+    species_names = sorted(species_name_set)
     num_species = len(species_names)
+    print(f'Tree file PATH: {os.path.realpath(args.infile)}')
+    print(f'Tree length: {tree_length}')
+    print(f'Number of leaves: {num_leaves}')
+    print(f'Number of nodes: {num_nodes}')
+    print(f'Number of singleton nodes: {num_singleton_node}')
+    print(f'Number of multifurcation nodes: {num_multifurcation_node}')
+    print(f'Number of nodes with zero branch length: {num_zero_branch_nodes}')
+    print(f'Number of nodes with negative branch length: {num_negative_branch_nodes}')
     print(f'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: {num_species}')
     print(f'Species names: {", ".join(species_names)}')

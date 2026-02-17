@@ -9,11 +9,20 @@ def read_trait(args, tree):
         return trait_df
     trait_df = pandas.read_csv(args.trait, sep='\t')
     leaf_names_list = list(tree.leaf_names())
-    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_names_list)]
-    for leaf_name in leaf_names_list:
-        if leaf_name not in trait_df['leaf_name'].values:
-            sys.stderr.write(f"'{leaf_name}' not found in '{args.trait}'. Treating its trait information as missing.\n")
-            trait_df = pandas.concat([trait_df, pandas.DataFrame({'leaf_name': [leaf_name]})], ignore_index=True)
+    leaf_name_set = set(leaf_names_list)
+    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)]
+    observed_leaf_names = set(trait_df['leaf_name'].tolist())
+    missing_leaf_names = [leaf_name for leaf_name in leaf_names_list if leaf_name not in observed_leaf_names]
+    if len(missing_leaf_names) > 0:
+        log_txt = ''.join(
+            f"'{leaf_name}' not found in '{args.trait}'. Treating its trait information as missing.\n"
+            for leaf_name in missing_leaf_names
+        )
+        sys.stderr.write(log_txt)
+        trait_df = pandas.concat(
+            [trait_df, pandas.DataFrame({'leaf_name': missing_leaf_names})],
+            ignore_index=True,
+        )
     return trait_df
 
 def mark_traits_to_nodes(tree, trait_df, args):
@@ -55,38 +64,59 @@ def iter_frontier_nodes(root, stop_condition):
 def add_group_ids(trait_df, marked_tree):
     group_id = 1
     leafname2group = {}
+    subtree_leaf_name_sets = get_subtree_leaf_name_sets(marked_tree)
     for node in iter_frontier_nodes(root=marked_tree.root, stop_condition=lambda node: pandas.isna(node.props.get('trait')) or node.props.get('trait') != '_MIXED_'):
         if node.is_leaf:
             leafname2group[node.name] = group_id
             group_id += 1
         else:
-            for leaf_name in node.leaf_names():
+            for leaf_name in subtree_leaf_name_sets[node]:
                 leafname2group[leaf_name] = group_id
             group_id += 1
     trait_df['group'] = trait_df['leaf_name'].map(leafname2group)
     return trait_df
 
 def sample_from_groups(trait_df, args):
+    shuffled_df = trait_df.sample(frac=1)
     if args.prioritize_non_missing and args.group_by is not None:
         if args.filter_by is None:
-            sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).sort_values(by=[args.group_by]).head(args.retain_per_clade), include_groups=False)
+            sorted_df = shuffled_df.sort_values(by=[args.group_by], ascending=True, kind='mergesort')
         else:
             if args.filter_mode == 'ascending':
-                sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).sort_values(by=[args.group_by, args.filter_by], ascending=True).head(args.retain_per_clade), include_groups=False)
+                sorted_df = shuffled_df.sort_values(
+                    by=[args.group_by, args.filter_by],
+                    ascending=[True, True],
+                    kind='mergesort',
+                )
             elif args.filter_mode == 'descending':
-                sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).sort_values(by=[args.group_by, args.filter_by], ascending=False).head(args.retain_per_clade), include_groups=False)
+                sorted_df = shuffled_df.sort_values(
+                    by=[args.group_by, args.filter_by],
+                    ascending=[False, False],
+                    kind='mergesort',
+                )
             else:
                 raise ValueError(f"Invalid value for '--filter_mode': {args.filter_mode}")
     else:
         if args.filter_by is None:
-            sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).head(args.retain_per_clade), include_groups=False)
+            sorted_df = shuffled_df
         else:
             if args.filter_mode == 'ascending':
-                sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).sort_values(by=args.filter_by, ascending=True).head(args.retain_per_clade), include_groups=False)
+                sorted_df = shuffled_df.sort_values(
+                    by=[args.filter_by],
+                    ascending=True,
+                    kind='mergesort',
+                )
             elif args.filter_mode == 'descending':
-                sampled_df = trait_df.groupby('group', group_keys=False).apply(lambda g: g.sample(frac=1).sort_values(by=args.filter_by, ascending=False).head(args.retain_per_clade), include_groups=False)
+                sorted_df = shuffled_df.sort_values(
+                    by=[args.filter_by],
+                    ascending=False,
+                    kind='mergesort',
+                )
             else:
                 raise ValueError(f"Invalid value for '--filter_mode': {args.filter_mode}")
+    sampled_df = sorted_df.groupby('group', group_keys=False).head(args.retain_per_clade)
+    if 'group' in sampled_df.columns:
+        sampled_df = sampled_df.drop(columns=['group'])
     sampled_df = sampled_df.merge(trait_df[['leaf_name', 'group']], on=['leaf_name'])
     sampled_df = sampled_df[trait_df.columns]
     return sampled_df
@@ -108,8 +138,9 @@ def iter_contrastive_nodes(root):
 def add_contrastive_clade_ids(trait_df, marked_tree):
     contrastive_clade_id = 1
     leafname2contrastive_clade = {}
+    subtree_leaf_name_sets = get_subtree_leaf_name_sets(marked_tree)
     for node in iter_contrastive_nodes(root=marked_tree.root):
-        for leaf_name in node.leaf_names():
+        for leaf_name in subtree_leaf_name_sets[node]:
             leafname2contrastive_clade[leaf_name] = contrastive_clade_id
         contrastive_clade_id += 1
     trait_df['contrastive_clade'] = trait_df['leaf_name'].map(leafname2contrastive_clade).astype('Int64')

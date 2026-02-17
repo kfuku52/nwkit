@@ -1,4 +1,5 @@
 import os
+import sys
 import pytest
 from ete4 import Tree
 
@@ -10,6 +11,8 @@ from nwkit.util import (
     read_item_per_line_file,
     annotate_scientific_names,
     annotate_duplication_confidence_scores,
+    get_subtree_leaf_name_sets,
+    get_subtree_leaf_bitmasks,
     is_all_leaf_names_identical,
     get_target_nodes,
     is_rooted,
@@ -75,6 +78,25 @@ class TestWriteTree:
             content = f.read()
         assert 'AB' in content
         assert 'CD' in content
+
+    def test_write_auto_no_subcommand_in_argv(self, tmp_nwk, tmp_outfile, monkeypatch):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        tree = read_tree(path, format='auto', quoted_node_names=True, quiet=True)
+        args = make_args(outfile=tmp_outfile)
+        monkeypatch.setattr(sys, 'argv', ['nwkit'])
+        write_tree(tree, args, format='auto', quiet=True)
+        tree2 = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree2.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_write_auto_without_infile_format_global(self, tmp_outfile, monkeypatch):
+        import nwkit.util as util_mod
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        args = make_args(outfile=tmp_outfile)
+        monkeypatch.delattr(util_mod, 'INFILE_FORMAT', raising=False)
+        monkeypatch.setattr(sys, 'argv', ['nwkit'])
+        write_tree(tree, args, format='auto', quiet=True)
+        tree2 = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree2.leaf_names()) == {'A', 'B', 'C', 'D'}
 
 
 class TestRemoveSingleton:
@@ -176,6 +198,29 @@ class TestAnnotateDuplicationConfidenceScores:
         assert tree.props.get('dup_conf_score') == 1.0
 
 
+class TestGetSubtreeLeafNameSets:
+    def test_sets_are_correct(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        sets = get_subtree_leaf_name_sets(tree)
+        assert sets[tree] == {'A', 'B', 'C', 'D'}
+        assert sets[tree.common_ancestor(['A', 'B'])] == {'A', 'B'}
+        assert sets[tree.common_ancestor(['C', 'D'])] == {'C', 'D'}
+        for leaf in tree.leaves():
+            assert sets[leaf] == {leaf.name}
+
+
+class TestGetSubtreeLeafBitmasks:
+    def test_bitmasks_are_correct(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        leaf_name_to_bit = {'A': 0, 'B': 1, 'C': 2, 'D': 3}
+        masks = get_subtree_leaf_bitmasks(tree, leaf_name_to_bit)
+        assert masks[tree] == 0b1111
+        assert masks[tree.common_ancestor(['A', 'B'])] == 0b0011
+        assert masks[tree.common_ancestor(['C', 'D'])] == 0b1100
+        for leaf in tree.leaves():
+            assert masks[leaf] == (1 << leaf_name_to_bit[leaf.name])
+
+
 class TestIsAllLeafNamesIdentical:
     def test_identical(self):
         t1 = Tree('((A,B),(C,D));', parser=1)
@@ -206,6 +251,10 @@ class TestGetTargetNodes:
     def test_intnode(self, simple_tree):
         nodes = get_target_nodes(simple_tree, 'intnode')
         assert all(not n.is_leaf for n in nodes)
+
+    def test_invalid_target_raises(self, simple_tree):
+        with pytest.raises(ValueError, match='Unknown target'):
+            get_target_nodes(simple_tree, 'unknown_target')
 
 
 class TestIsRooted:

@@ -20,8 +20,8 @@ def shuffle_main(args):
         num_leaf = len(list(tree.leaves()))
         new_tree = ete4.Tree()
         new_tree.populate(size=num_leaf)
-        num_new_branch = len([ n for n in new_tree.traverse() ])
-        branch_lengths = get_shuffled_branch_lengths(nodes=tree)
+        num_new_branch = sum(1 for _ in new_tree.traverse())
+        branch_lengths = get_shuffled_branch_lengths(nodes=tree.traverse())
         population = branch_lengths+branch_lengths # Random tree may have more branches
         new_branch_lengths = random.sample(population=population, k=num_new_branch)
         new_branch_lengths[0] = 0 # Root node
@@ -31,15 +31,16 @@ def shuffle_main(args):
         for leaf, leaf_name in zip(new_tree.leaves(), leaf_names):
             leaf.name = leaf_name
         tree = new_tree
-    if args.topology|args.branch_length:
+    if args.topology or args.branch_length:
         nodes = [n for n in tree.traverse() if not n.is_root]
         branch_lengths = get_shuffled_branch_lengths(nodes)
         for node,new_bl in zip(nodes,branch_lengths):
             node.dist = new_bl
     if args.label:
-        leaf_names = list(tree.leaf_names())
+        leaf_nodes = list(tree.leaves())
+        leaf_names = [leaf.name for leaf in leaf_nodes]
         random.shuffle(leaf_names)
-        for leaf,new_name in zip(tree.leaves(), leaf_names):
+        for leaf,new_name in zip(leaf_nodes, leaf_names):
             leaf.name = new_name
     print_rf_dist(tree1=tree_original, tree2=tree)
     write_tree(tree, args, format=args.outformat)

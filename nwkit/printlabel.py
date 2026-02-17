@@ -3,14 +3,7 @@ from nwkit.util import *
 
 def printlabel_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    if (args.target=='all'):
-        nodes = list(tree.traverse())
-    elif (args.target=='root'):
-        nodes = [ node for node in tree.traverse() if node.is_root ]
-    elif (args.target=='leaf'):
-        nodes = [ node for node in tree.traverse() if node.is_leaf ]
-    elif (args.target=='intnode'):
-        nodes = [ node for node in tree.traverse() if not node.is_leaf ]
+    nodes = get_target_nodes(tree=tree, target=args.target)
     for node in nodes:
         if re.fullmatch(args.pattern, node.name or ''):
             if args.sister:

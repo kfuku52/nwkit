@@ -7,11 +7,16 @@ from ete4 import NCBITaxa
 
 from nwkit.util import *
 
+SEARCH_RANKS = [
+    'species', 'genus', 'tribe', 'family', 'order',
+    'class', 'subphylum', 'phylum', 'kingdom', 'superkingdom',
+]
+
 def add_common_anc_constraint(tree, args):
     common_anc = tree.common_ancestor([args.left_species, args.right_species])
     if (args.lower_bound==args.upper_bound):
         constraint = '@' + args.lower_bound
-    elif (args.lower_bound is not None) & (args.upper_bound is not None):
+    elif (args.lower_bound is not None) and (args.upper_bound is not None):
         constraint = 'B(' + ', '.join(
             [args.lower_bound, args.upper_bound, args.lower_tailProb, args.upper_tailProb]) + ')'
     elif (args.lower_bound is not None):
@@ -27,23 +32,29 @@ def check_leaf_taxid_availability(tree, ncbi):
     leaf_names = list(tree.leaf_names())
     leaf_names = [ ln.replace('_', ' ') for ln in leaf_names ]
     name2taxid = ncbi.get_name_translator(leaf_names)
-    taxid_keys = name2taxid.keys()
+    taxid_keys = set(name2taxid.keys())
     for ln in leaf_names:
         if not ln in taxid_keys:
             txt = 'NCBI Taxonomy ID was not found and thus not used as query to timetree.org: {}\n'
             sys.stderr.write(txt.format(ln))
 
-def are_both_lineage_included(node, leaf_names):
-    child_names_list = [ list(child.leaf_names()) for child in node.get_children() ]
-    flag_child_found = True
-    for child_names in child_names_list:
-        is_child_found = any([ child_name in leaf_names for child_name in child_names ])
-        if not is_child_found:
-            flag_child_found = False
-            break
-    return flag_child_found
+def are_both_lineage_included(node, leaf_names, subtree_leaf_name_sets=None):
+    if isinstance(leaf_names, set):
+        leaf_name_set = leaf_names
+    else:
+        leaf_name_set = set(leaf_names)
+    if len(leaf_name_set) == 0:
+        return False
+    for child in node.get_children():
+        if subtree_leaf_name_sets is None:
+            child_leaf_set = set(child.leaf_names())
+        else:
+            child_leaf_set = subtree_leaf_name_sets[child]
+        if child_leaf_set.isdisjoint(leaf_name_set):
+            return False
+    return True
 
-def is_mrca_clade_root(node, timetree_result, ncbi):
+def is_mrca_clade_root(node, timetree_result, ncbi, subtree_leaf_name_sets=None):
     if 'missing_ids' not in timetree_result:
         return True
     missing_ids = timetree_result.replace('"', '').replace('\'', '').replace('\n', '')
@@ -55,63 +66,94 @@ def is_mrca_clade_root(node, timetree_result, ncbi):
     taxid2name = ncbi.get_taxid_translator(missing_ids)
     missing_sci_names = list(taxid2name.values())
     missing_leaf_names = [ sn.replace(' ', '_') for sn in missing_sci_names ]
-    return are_both_lineage_included(node=node, leaf_names=missing_leaf_names)
+    return are_both_lineage_included(
+        node=node,
+        leaf_names=missing_leaf_names,
+        subtree_leaf_name_sets=subtree_leaf_name_sets,
+    )
 
-def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names):
-    child_taxids = list()
-    for child in node.get_children():
-        child_leaf_names = list(child.leaf_names())
-        ch_taxids = [ t for t,ln in zip(taxids,ta_leaf_names) if ln in child_leaf_names ]
-        child_taxids.append(ch_taxids)
-    assert len(child_taxids)==2, 'Non-bifurcation at the node containing: {}'.format(','.join(list(node.leaf_names())))
-    if len(set(child_taxids[0]) - set(child_taxids[1]))==0:
+def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names, subtree_leaf_name_sets=None):
+    children = node.get_children()
+    assert len(children)==2, 'Non-bifurcation at the node containing: {}'.format(','.join(list(node.leaf_names())))
+    if subtree_leaf_name_sets is None:
+        child0_leaf_set = set(children[0].leaf_names())
+        child1_leaf_set = set(children[1].leaf_names())
+    else:
+        child0_leaf_set = subtree_leaf_name_sets[children[0]]
+        child1_leaf_set = subtree_leaf_name_sets[children[1]]
+    child0_taxids = set()
+    child1_taxids = set()
+    for taxid, leaf_name in zip(taxids, ta_leaf_names):
+        if leaf_name in child0_leaf_set:
+            child0_taxids.add(taxid)
+        elif leaf_name in child1_leaf_set:
+            child1_taxids.add(taxid)
+    if len(child0_taxids - child1_taxids)==0:
         return False
-    elif len(set(child_taxids[1]) - set(child_taxids[0]))==0:
+    elif len(child1_taxids - child0_taxids)==0:
         return False
     else:
         return True
 
 def add_timetree_constraint(tree, args):
     endpoint_url = 'http://timetree.org/api'
+    search_ranks = SEARCH_RANKS if args.higher_rank_search else SEARCH_RANKS[:1]
     ncbi = NCBITaxa()
     check_leaf_taxid_availability(tree, ncbi)
+    subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
+    leaf_name_to_sci_name = {leaf.name: leaf.name.replace('_', ' ') for leaf in tree.leaves()}
+    taxid_lineage_rank_dict_cache = dict()
     for node in tree.traverse():
         if node.is_leaf:
             continue
         node.name = 'NoName'
-        leaf_names = list(node.leaf_names())
-        sci_names = [ leaf_name.replace('_', ' ') for leaf_name in leaf_names ]
+        leaf_names = sorted(subtree_leaf_name_sets[node])
+        sci_names = [leaf_name_to_sci_name[leaf_name] for leaf_name in leaf_names]
         name2taxid = ncbi.get_name_translator(sci_names)
         taxid_assigned_sci_names = list(name2taxid.keys())
         taxid_assigned_leaf_names = [ sci_name.replace(' ', '_') for sci_name in taxid_assigned_sci_names ]
-        if not are_both_lineage_included(node=node, leaf_names=taxid_assigned_leaf_names):
+        if not are_both_lineage_included(
+            node=node,
+            leaf_names=taxid_assigned_leaf_names,
+            subtree_leaf_name_sets=subtree_leaf_name_sets,
+        ):
             txt = "Skipping. Lack of NCBI Taxonomy information for the MRCA of {}\n"
             sys.stderr.write(txt.format(','.join(leaf_names)))
             continue
         species_taxids = [ t for ts in name2taxid.values() for t in ts ]
         lineage_taxids = list()
         for sp_taxid in species_taxids:
-            lineages = ncbi.get_lineage(sp_taxid)
-            ranks = ncbi.get_rank(lineages)
-            lin_dict = dict()
-            for taxid in ranks.keys():
-                lin_dict[ranks[taxid]] = taxid
-            lineage_taxids.append(lin_dict)
-        search_ranks = ['species','genus','tribe','family','order','class','subphylum','phylum','kingdom','superkingdom']
+            if sp_taxid not in taxid_lineage_rank_dict_cache:
+                lineages = ncbi.get_lineage(sp_taxid)
+                ranks = ncbi.get_rank(lineages)
+                lin_dict = dict()
+                for taxid in ranks.keys():
+                    lin_dict[ranks[taxid]] = taxid
+                taxid_lineage_rank_dict_cache[sp_taxid] = lin_dict
+            lineage_taxids.append(taxid_lineage_rank_dict_cache[sp_taxid])
+        leaf_rank_pairs = list(zip(taxid_assigned_leaf_names, lineage_taxids))
         for search_rank in search_ranks:
-            taxids = [ d[search_rank] for d in lineage_taxids if search_rank in list(d.keys()) ]
-            ta_leaf_names = [ l for l,d in zip(taxid_assigned_leaf_names,lineage_taxids) if search_rank in list(d.keys()) ]
-            if not are_both_lineage_included(node=node, leaf_names=ta_leaf_names):
+            taxids = [d[search_rank] for d in lineage_taxids if search_rank in d]
+            ta_leaf_names = [l for l, d in leaf_rank_pairs if search_rank in d]
+            ta_leaf_name_set = set(ta_leaf_names)
+            if not are_both_lineage_included(
+                node=node,
+                leaf_names=ta_leaf_name_set,
+                subtree_leaf_name_sets=subtree_leaf_name_sets,
+            ):
                 #txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
                 #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
                 continue
-            if not are_two_lineage_rank_differentiated(node=node, taxids=taxids, ta_leaf_names=ta_leaf_names):
+            if not are_two_lineage_rank_differentiated(
+                node=node,
+                taxids=taxids,
+                ta_leaf_names=ta_leaf_names,
+                subtree_leaf_name_sets=subtree_leaf_name_sets,
+            ):
                 #txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
                 #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
                 continue
             if search_rank!='species':
-                if not args.higher_rank_search:
-                    continue
                 sys.stderr.write('Searching higher taxonomic ranks to find MRCA at timetree.org: {}\n'.format(search_rank))
             request_url = '{}/mrca/id/{}'.format(endpoint_url, '+'.join([ str(t) for t in taxids ]))
             sys.stderr.write('Waiting for the REST API at timetree.org. ')
@@ -134,7 +176,12 @@ def add_timetree_constraint(tree, args):
                 txt = "Skipping. No TimeTree study info available for this MRCA for the node containing: {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
                 continue
-            if not is_mrca_clade_root(node, timetree_result, ncbi):
+            if not is_mrca_clade_root(
+                node,
+                timetree_result,
+                ncbi,
+                subtree_leaf_name_sets=subtree_leaf_name_sets,
+            ):
                 txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
                 continue
@@ -179,12 +226,13 @@ def apply_min_clade_prop(tree, min_clade_prop):
     tree_size = len(list(tree.leaves()))
     min_clade_size = min_clade_prop * tree_size
     removed_constraint_count = 0
+    subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
     for node in tree.traverse():
         if node.is_root:
             continue
         if node.is_leaf:
             continue
-        clade_size = len(list(node.leaves()))
+        clade_size = len(subtree_leaf_name_sets[node])
         if (clade_size < min_clade_size) and node.name:
             node.name = 'NoName'
             removed_constraint_count += 1
@@ -194,7 +242,7 @@ def apply_min_clade_prop(tree, min_clade_prop):
 
 def mcmctree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    assert (len(list(tree.get_children()))==2), 'The input tree should be rooted.'
+    assert (len(tree.get_children())==2), 'The input tree should be rooted.'
     for node in tree.traverse():
         if not node.is_leaf:
             if any([kw in (node.name or '') for kw in ['@', 'B(', 'L(', 'U(']]):
@@ -216,7 +264,7 @@ def mcmctree_main(args):
     nwk_text = nwk_text.replace('NoName', '')
     nwk_text = nwk_text.replace('"', '')
     if args.add_header:
-        num_leaf = len(list(tree.leaf_names()))
+        num_leaf = len(list(tree.leaves()))
         nwk_text = '{:} 1\n{}'.format(num_leaf, nwk_text)
     if args.outfile=='-':
         print(nwk_text)
