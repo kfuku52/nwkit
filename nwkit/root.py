@@ -6,10 +6,13 @@ from ete4.parser.newick import make_parser
 from nwkit.util import *
 
 def transfer_root(tree_to, tree_from, verbose=False):
-    # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
+    support_backup = list()
+    # Ensure all None dists are 0 and clear support before rerooting.
     for node in tree_to.traverse():
         if node.dist is None:
             node.dist = 0.0
+        support_backup.append((node, node.support))
+        node.support = None
     subroot_leaves = [ list(n.leaf_names()) for n in tree_from.get_children() ]
     is_n0_bigger_than_n1 = (len(subroot_leaves[0]) > len(subroot_leaves[1]))
     ingroups = subroot_leaves[0] if is_n0_bigger_than_n1 else subroot_leaves[1]
@@ -40,6 +43,8 @@ def transfer_root(tree_to, tree_from, verbose=False):
         tree_to.name = original_root_name
     else:
         tree_to.name = 'Root'
+    for node, support in support_backup:
+        node.support = support
     return tree_to
 
 def midpoint_rooting(tree):
