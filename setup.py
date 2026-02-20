@@ -21,7 +21,7 @@ setup(
     description="Tools for processing Newick trees",
     long_description=README_PATH.read_text(encoding="utf-8"),
     long_description_content_type="text/markdown",
-    license="BSD-3-Clause",
+    license="MIT",
     author="Kenji Fukushima",
     author_email="kfuku52@gmail.com",
     url="https://github.com/kfuku52/nwkit",
@@ -36,7 +36,7 @@ setup(
     classifiers=[
         "Environment :: Console",
         "Intended Audience :: Science/Research",
-        "License :: OSI Approved :: BSD License",
+        "License :: OSI Approved :: MIT License",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3",
         "Programming Language :: Python :: 3 :: Only",

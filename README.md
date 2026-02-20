@@ -6,7 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://github.com/kfuku52/nwkit)
 [![Platforms](https://img.shields.io/conda/pn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
 [![Downloads](https://img.shields.io/conda/dn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
-[![License](https://img.shields.io/badge/License-BSD_3--Clause-blue.svg)](https://opensource.org/licenses/BSD-3-Clause)
+[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
 **NWKIT** ([/njuːkit/](http://ipa-reader.xyz/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format). 
@@ -61,5 +61,4 @@ There is no published paper on NWKIT itself, but we used and cited NWKIT in seve
 The `--method mad` option in `nwkit root` uses [MAD](https://www.mikrobio.uni-kiel.de/de/ag-dagan/ressourcen) by Tria, Landan & Dagan. If you use this option, please cite: [Tria et al. (2017, Nat Ecol Evol 1: 0193)](https://doi.org/10.1038/s41559-017-0193).
 
 # Licensing
-This program is BSD-licensed (3 clause). See [LICENSE](LICENSE) for details.
-
+This program is MIT-licensed. See [LICENSE](LICENSE) for details.
