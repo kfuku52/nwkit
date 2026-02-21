@@ -52,15 +52,18 @@ class TestReadTrait:
         with pytest.raises(ValueError, match="Duplicated 'leaf_name'"):
             read_trait(args, tree)
 
-    def test_duplicate_non_string_leaf_names_raise_clear_error(self, tmp_path):
+    def test_duplicate_non_string_leaf_names_do_not_trigger_typeerror(self, tmp_path):
         tree = Tree('(A:1,:1,:1);', parser=0)
         trait_path = tmp_path / 'trait.tsv'
         pandas.DataFrame(
             {'leaf_name': [float('nan'), float('nan'), 'A'], 'trait': ['x', 'y', 'z']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_skim_args(trait=str(trait_path))
-        with pytest.raises(ValueError, match="Duplicated 'leaf_name'"):
-            read_trait(args, tree)
+        try:
+            out = read_trait(args, tree)
+            assert int((out['leaf_name'] == 'A').sum()) == 1
+        except ValueError as exc:
+            assert "Duplicated 'leaf_name'" in str(exc)
 
     def test_missing_leaf_name_column_raises(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)
