@@ -20,11 +20,34 @@ class TestSubtreeMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {'a', 'b', 'c'}
 
+    def test_extract_subtree_left_right_with_whitespace(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('(((a:1,b:1):1,c:1):1,((d:1,e:1),f:1):1):0;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            left_leaf=' a ', right_leaf=' c ', leaves=None,
+            orthogroup=False,
+        )
+        subtree_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaf_names = set(tree.leaf_names())
+        assert leaf_names == {'a', 'b', 'c'}
+
     def test_extract_subtree_with_leaves(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('(((a:1,b:1):1,c:1):1,((d:1,e:1),f:1):1):0;')
         args = make_args(
             infile=path, outfile=tmp_outfile,
             left_leaf=None, right_leaf=None, leaves='a,b,c',
+            orthogroup=False,
+        )
+        subtree_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'a', 'b', 'c'}
+
+    def test_extract_subtree_with_leaves_whitespace_and_trailing_comma(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('(((a:1,b:1):1,c:1):1,((d:1,e:1),f:1):1):0;')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            left_leaf=None, right_leaf=None, leaves=' a, b, c, ',
             orthogroup=False,
         )
         subtree_main(args)
@@ -61,6 +84,26 @@ class TestSubtreeMain:
             orthogroup=False,
         )
         with pytest.raises(Exception, match='Specified leaf not found'):
+            subtree_main(args)
+
+    def test_no_seed_leaves_specified_raises(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((a:1,b:1):1,c:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            left_leaf=None, right_leaf=None, leaves=None,
+            orthogroup=False,
+        )
+        with pytest.raises(ValueError, match='Specify either'):
+            subtree_main(args)
+
+    def test_duplicate_leaf_names_raise(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((a:1,a:1):1,c:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            left_leaf=None, right_leaf=None, leaves='a',
+            orthogroup=False,
+        )
+        with pytest.raises(ValueError, match='not unique'):
             subtree_main(args)
 
     def test_with_data_file(self, tmp_outfile):

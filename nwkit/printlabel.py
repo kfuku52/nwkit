@@ -7,6 +7,7 @@ def printlabel_main(args):
     for node in nodes:
         if re.fullmatch(args.pattern, node.name or ''):
             if args.sister:
-                print(' '.join( s.name for s in node.get_sisters() ))
+                sister_names = [s.name for s in node.get_sisters() if s.name]
+                print(' '.join(sister_names))
             else:
-                print(node.name)
+                print(node.name or '')

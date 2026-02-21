@@ -45,7 +45,7 @@ from re import sub
 fstr="".join([a.upper() for a in argv if a[0]=='-'])
 flags={f: fstr.count(f) for f in "MNSPTFGVHD"}
 if flags['V']: 
-    v=sub('\s+[^\[]+',' ',version,count=1)
+    v=sub(r'\s+[^\[]+',' ',version,count=1)
     print('mad 2.2\npython '+v)
     exit()
 if flags['G'] and flags['F']:
@@ -183,7 +183,7 @@ def nwk2tree(nwkstr):
     trip=np.full((nnode,nnode),2,np.int8)
     blen=[0]*nnode
     labs=['']*nnode
-    cld_splt=re.compile('\(([^()]*)\)')
+    cld_splt=re.compile(r'\(([^()]*)\)')
     node_splt=re.compile('[:@]')
     iotu,tlen,ntiny,prec=[0]*4
     badbsp=[]

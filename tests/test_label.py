@@ -142,3 +142,14 @@ class TestLabelMain:
         assert len(set(all_names)) == 7
         nums = sorted([int(name.replace('node', '')) for name in all_names])
         assert nums == list(range(7))
+
+    def test_respects_outformat(self, tmp_nwk, tmp_outfile, capsys):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            format='1', outformat='9',
+            target='intnode', prefix='n', force=False,
+        )
+        label_main(args)
+        captured = capsys.readouterr()
+        assert 'Output tree format = 9' in captured.err

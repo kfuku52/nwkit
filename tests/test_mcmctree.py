@@ -3,12 +3,15 @@ import pytest
 from argparse import Namespace
 from unittest.mock import patch, MagicMock
 from ete4 import Tree
+import requests
 
+import nwkit.mcmctree as mcmctree_mod
 from nwkit.mcmctree import (
     mcmctree_main,
     add_common_anc_constraint,
     add_timetree_constraint,
     is_mrca_clade_root,
+    are_two_lineage_rank_differentiated,
     remove_constraint_equal_upper,
     apply_min_clade_prop,
 )
@@ -61,6 +64,34 @@ class TestAddCommonAncConstraint:
         common_anc = tree.common_ancestor('a', 'b')
         assert '@15.0' in common_anc.name
 
+    def test_point_constraint_with_equivalent_numeric_strings(self):
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        args = make_mcmctree_args(
+            left_species='a', right_species='b',
+            lower_bound='15', upper_bound='15.0',
+        )
+        tree = add_common_anc_constraint(tree, args)
+        common_anc = tree.common_ancestor('a', 'b')
+        assert '@15' in common_anc.name
+
+    def test_species_not_found_raises(self):
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        args = make_mcmctree_args(
+            left_species='a', right_species='x',
+            lower_bound='10.0', upper_bound='20.0',
+        )
+        with pytest.raises(ValueError, match='Species not found'):
+            add_common_anc_constraint(tree, args)
+
+    def test_same_left_and_right_species_raises(self):
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        args = make_mcmctree_args(
+            left_species='a', right_species='a',
+            lower_bound='10.0', upper_bound='20.0',
+        )
+        with pytest.raises(ValueError, match='must be different'):
+            add_common_anc_constraint(tree, args)
+
 
 class TestIsMrcaCladeRoot:
     def test_no_missing_ids_in_result(self):
@@ -77,22 +108,24 @@ class TestIsMrcaCladeRoot:
         result = 'missing_ids:[]'
         assert is_mrca_clade_root(node, result, ncbi=None) is True
 
-    def test_issue11_null_missing_ids_raises(self):
+    def test_issue11_null_missing_ids_is_handled(self):
         """Regression test for GitHub issue #11.
 
-        When the TimeTree API returns 'null' for missing_ids, the function
-        crashes with ValueError: invalid literal for int() with base 10: 'null'.
-        The actual fix is in add_timetree_constraint() which catches
-        'No TimeTree study info available for this MRCA' before calling
-        is_mrca_clade_root. This test documents the known behavior.
+        'missing_ids:[null]' should not crash even when this helper is called directly.
         """
         tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
         node = tree.common_ancestor('a', 'b')
         result = 'missing_ids:[null]'
-        # The function itself still raises ValueError on 'null' input;
-        # the fix is that callers filter out such responses before reaching here
-        with pytest.raises(ValueError, match="invalid literal for int"):
-            is_mrca_clade_root(node, result, ncbi=None)
+        assert is_mrca_clade_root(node, result, ncbi=None) is True
+
+
+class TestAreTwoLineageRankDifferentiated:
+    def test_non_bifurcating_node_returns_false(self):
+        tree = Tree('(a:1,b:1,c:1);', parser=1)
+        node = tree
+        taxids = [1, 2, 3]
+        leaf_names = ['a', 'b', 'c']
+        assert are_two_lineage_rank_differentiated(node, taxids, leaf_names) is False
 
 
 class TestRemoveConstraintEqualUpper:
@@ -244,7 +277,59 @@ class TestMcmctreeMain:
             left_species='a', right_species='b',
             lower_bound='10.0', upper_bound='20.0',
         )
-        with pytest.raises(AssertionError, match='rooted'):
+        with pytest.raises(ValueError, match='rooted'):
+            mcmctree_main(args)
+
+    def test_timetree_no_requires_left_and_right_species(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        args = make_mcmctree_args(
+            infile=path, outfile=tmp_outfile,
+            left_species=None, right_species=None,
+            lower_bound='10.0', upper_bound='20.0',
+            timetree='no',
+        )
+        with pytest.raises(ValueError, match='left_species'):
+            mcmctree_main(args)
+
+    def test_timetree_no_requires_at_least_one_bound(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        args = make_mcmctree_args(
+            infile=path, outfile=tmp_outfile,
+            left_species='a', right_species='b',
+            lower_bound=None, upper_bound=None,
+            timetree='no',
+        )
+        with pytest.raises(ValueError, match='lower_bound'):
+            mcmctree_main(args)
+
+    @pytest.mark.parametrize('min_clade_prop', [-0.1, 1.1])
+    def test_min_clade_prop_out_of_range_raises(self, tmp_nwk, tmp_outfile, min_clade_prop):
+        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        args = make_mcmctree_args(
+            infile=path, outfile=tmp_outfile,
+            left_species='a', right_species='b',
+            lower_bound='10.0', upper_bound='20.0',
+            min_clade_prop=min_clade_prop,
+        )
+        with pytest.raises(ValueError, match='min_clade_prop'):
+            mcmctree_main(args)
+
+    def test_timetree_requires_named_leaves(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((:1,b:1):1,(c:1,d:1):1);')
+        args = make_mcmctree_args(
+            infile=path, outfile=tmp_outfile,
+            timetree='point',
+        )
+        with pytest.raises(ValueError, match='non-empty names'):
+            mcmctree_main(args)
+
+    def test_unknown_timetree_mode_raises(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        args = make_mcmctree_args(
+            infile=path, outfile=tmp_outfile,
+            timetree='unknown',
+        )
+        with pytest.raises(ValueError, match='Unknown'):
             mcmctree_main(args)
 
     def test_with_data_files(self, tmp_outfile):
@@ -307,3 +392,65 @@ class TestIssue12EndpointUrl:
         """JSON error with 'MRCA node not found' should be handled."""
         json_error = '{"found_ids":[],"missing_ids":["9999999","8888888"],"mrca_id":-1,"error":"MRCA node not found"}'
         assert "MRCA node not found" in json_error
+
+    def test_network_error_is_skipped_without_crash(self, monkeypatch):
+        class FakeNCBI:
+            def get_name_translator(self, names):
+                return {name: [i + 1] for i, name in enumerate(names)}
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+            def get_rank(self, lineages):
+                out = {}
+                for t in lineages:
+                    t = int(t)
+                    out[t] = 'species' if t != 1 else 'superkingdom'
+                return out
+
+            def get_taxid_translator(self, taxids):
+                return {int(t): f'sp{int(t)}' for t in taxids}
+
+        def raise_network_error(*args, **kwargs):
+            raise requests.RequestException('network down')
+
+        monkeypatch.setattr(mcmctree_mod, 'NCBITaxa', FakeNCBI)
+        monkeypatch.setattr(mcmctree_mod.requests, 'get', raise_network_error)
+
+        tree = Tree('((a:1,b:1):1);', parser=1)
+        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        out = add_timetree_constraint(tree, args)
+        assert out.name == 'NoName'
+
+    def test_non_200_response_is_skipped_without_crash(self, monkeypatch):
+        class FakeNCBI:
+            def get_name_translator(self, names):
+                return {name: [i + 1] for i, name in enumerate(names)}
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+            def get_rank(self, lineages):
+                out = {}
+                for t in lineages:
+                    t = int(t)
+                    out[t] = 'species' if t != 1 else 'superkingdom'
+                return out
+
+            def get_taxid_translator(self, taxids):
+                return {int(t): f'sp{int(t)}' for t in taxids}
+
+        class FakeResponse:
+            status_code = 500
+            text = '<html>server error</html>'
+
+        def fake_get(*args, **kwargs):
+            return FakeResponse()
+
+        monkeypatch.setattr(mcmctree_mod, 'NCBITaxa', FakeNCBI)
+        monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+
+        tree = Tree('((a:1,b:1):1);', parser=1)
+        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        out = add_timetree_constraint(tree, args)
+        assert out.name == 'NoName'

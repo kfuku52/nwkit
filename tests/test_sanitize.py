@@ -257,3 +257,12 @@ class TestSanitizeMain:
                     new_d = tree.get_distance(l1, l2)
                     assert abs(orig_d - new_d) < 1e-6, \
                         f'{l1.name}-{l2.name}: {orig_d} vs {new_d}'
+
+    def test_invalid_name_quote_raises_clear_error(self, tmp_nwk):
+        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        args = make_args(
+            infile=path, outfile='-',
+            remove_singleton=False, resolve_polytomy=False, name_quote='unsupported',
+        )
+        with pytest.raises(ValueError, match='name_quote'):
+            sanitize_main(args)

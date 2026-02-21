@@ -67,6 +67,19 @@ class TestShuffleMain:
         # Same leaf names, but potentially different positions
         assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
+    def test_shuffle_labels_reports_nonzero_rf_when_topology_changes(self, tmp_nwk, tmp_outfile, capsys):
+        random.seed(1)
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            topology=False, branch_length=False, label=True,
+        )
+        shuffle_main(args)
+        captured = capsys.readouterr()
+        rf_line = [line for line in captured.err.splitlines() if 'Robinson-Foulds distance' in line][0]
+        rf_value = int(rf_line.split('=')[1].split('(')[0].strip())
+        assert rf_value > 0
+
     def test_shuffle_topology(self, tmp_nwk, tmp_outfile):
         random.seed(42)
         path = tmp_nwk('((A:1,B:2):3,(C:4,D:5):6);')
@@ -89,3 +102,27 @@ class TestShuffleMain:
         shuffle_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert len(list(tree.leaf_names())) == 6
+
+    def test_shuffle_unrooted_tree_does_not_crash(self, tmp_nwk, tmp_outfile):
+        random.seed(7)
+        path = tmp_nwk('(A:1,B:1,C:1,D:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            topology=False, branch_length=False, label=True,
+        )
+        shuffle_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_shuffle_with_unnamed_leaf_skips_rf_but_writes_output(self, tmp_nwk, tmp_outfile, capsys):
+        random.seed(9)
+        path = tmp_nwk('((:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            topology=False, branch_length=False, label=True,
+        )
+        shuffle_main(args)
+        captured = capsys.readouterr()
+        assert 'Skipping RF distance' in captured.err
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert len(list(tree.leaf_names())) == 4

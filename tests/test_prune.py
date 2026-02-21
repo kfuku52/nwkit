@@ -56,6 +56,15 @@ class TestPruneMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {'B', 'C', 'D'}
 
+    def test_prune_all_leaves_raises(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='.*', invert_match=False,
+        )
+        with pytest.raises(ValueError, match='All leaves would be pruned'):
+            prune_main(args)
+
     def test_with_data_file(self, tmp_outfile):
         infile = os.path.join(DATA_DIR, 'prune2', 'tree.nwk')
         if not os.path.exists(infile):
@@ -131,3 +140,13 @@ class TestPruneMain:
         assert abs(leaves['B1'] - 1.0) < 1e-6
         assert abs(leaves['B2'] - 1.0) < 1e-6
         assert abs(leaves['A2'] - 3.0) < 1e-6
+
+    def test_unnamed_leaf_does_not_raise(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('(:1,B:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='B', invert_match=False,
+        )
+        prune_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {None}

@@ -1,6 +1,7 @@
 import os
 import sys
 import pytest
+import io
 from ete4 import Tree
 
 from nwkit.util import (
@@ -13,6 +14,7 @@ from nwkit.util import (
     annotate_duplication_confidence_scores,
     get_subtree_leaf_name_sets,
     get_subtree_leaf_bitmasks,
+    validate_unique_named_leaves,
     is_all_leaf_names_identical,
     get_target_nodes,
     is_rooted,
@@ -47,6 +49,11 @@ class TestReadTree:
         path = tmp_nwk('not_a_tree')
         with pytest.raises(Exception, match='Failed to parse'):
             read_tree(path, format='auto', quoted_node_names=True, quiet=True)
+
+    def test_read_from_stdin_multiline(self, monkeypatch):
+        monkeypatch.setattr(sys, 'stdin', io.StringIO('((A:1,B:1):1,\n(C:1,D:1):1);\n'))
+        tree = read_tree('-', format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
 
 class TestWriteTree:
@@ -98,6 +105,28 @@ class TestWriteTree:
         tree2 = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree2.leaf_names()) == {'A', 'B', 'C', 'D'}
 
+    def test_write_auto_respects_explicit_input_format(self, tmp_nwk, tmp_outfile, monkeypatch):
+        path = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1)CD:1)ROOT;')
+        tree = read_tree(path, format='1', quoted_node_names=True, quiet=True)
+        args = make_args(outfile=tmp_outfile)
+        monkeypatch.setattr(sys, 'argv', ['nwkit'])
+        write_tree(tree, args, format='auto', quiet=True)
+        out = open(tmp_outfile).read()
+        assert 'AB' in out
+        assert 'CD' in out
+
+    def test_write_auto_uses_tree_specific_format_after_multiple_reads(self, tmp_nwk, tmp_outfile, monkeypatch):
+        path1 = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1)CD:1)ROOT;', 'tree1.nwk')
+        path2 = tmp_nwk('((A:1,B:1)90:1,(C:1,D:1)80:1);', 'tree2.nwk')
+        tree1 = read_tree(path1, format='1', quoted_node_names=True, quiet=True)
+        _ = read_tree(path2, format='auto', quoted_node_names=True, quiet=True)
+        args = make_args(outfile=tmp_outfile)
+        monkeypatch.setattr(sys, 'argv', ['nwkit'])
+        write_tree(tree1, args, format='auto', quiet=True)
+        out = open(tmp_outfile).read()
+        assert 'AB' in out
+        assert 'CD' in out
+
 
 class TestRemoveSingleton:
     def test_remove_singleton_node(self):
@@ -147,6 +176,14 @@ class TestLabel2Sciname:
         result = label2sciname([])
         assert result == []
 
+    def test_none_scalar(self):
+        result = label2sciname(None)
+        assert result is None
+
+    def test_list_with_none(self):
+        result = label2sciname(['Homo_sapiens_GENE1', None, 'Mus_musculus_GENE2'])
+        assert result == ['Homo_sapiens', None, 'Mus_musculus']
+
 
 class TestReadItemPerLineFile:
     def test_basic(self, tmp_path):
@@ -161,6 +198,12 @@ class TestReadItemPerLineFile:
         result = read_item_per_line_file(str(f))
         assert result == ['apple', 'banana']
 
+    def test_crlf_and_whitespace_are_normalized(self, tmp_path):
+        f = tmp_path / 'items.txt'
+        f.write_bytes(b' apple \r\nbanana\r\n\r\n  cherry  \r\n')
+        result = read_item_per_line_file(str(f))
+        assert result == ['apple', 'banana', 'cherry']
+
 
 class TestAnnotateScientificNames:
     def test_annotate(self, species_tree):
@@ -169,6 +212,12 @@ class TestAnnotateScientificNames:
         assert 'Homo_sapiens' in sci_names
         assert 'Mus_musculus' in sci_names
         assert 'Danio_rerio' in sci_names
+
+    def test_annotate_with_unnamed_leaf(self):
+        tree = Tree('((:1,Homo_sapiens_gene1:1):1,Mus_musculus_gene1:1);', parser=1)
+        tree = annotate_scientific_names(tree)
+        unnamed = [leaf for leaf in tree.leaves() if not leaf.name][0]
+        assert unnamed.props.get('sci_name') is None
 
 
 class TestAnnotateDuplicationConfidenceScores:
@@ -197,6 +246,13 @@ class TestAnnotateDuplicationConfidenceScores:
         tree = annotate_duplication_confidence_scores(tree)
         assert tree.props.get('dup_conf_score') == 1.0
 
+    def test_polytomy_internal_node_gets_zero_dup_conf_score(self):
+        nwk = '(Homo_sapiens_G1:1,Homo_sapiens_G2:1,Mus_musculus_G1:1);'
+        tree = Tree(nwk, parser=1)
+        tree = annotate_scientific_names(tree)
+        tree = annotate_duplication_confidence_scores(tree)
+        assert tree.props.get('dup_conf_score') == 0.0
+
 
 class TestGetSubtreeLeafNameSets:
     def test_sets_are_correct(self):
@@ -220,6 +276,24 @@ class TestGetSubtreeLeafBitmasks:
         for leaf in tree.leaves():
             assert masks[leaf] == (1 << leaf_name_to_bit[leaf.name])
 
+    def test_missing_leaf_in_mapping_raises_clear_error(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        leaf_name_to_bit = {'A': 0, 'B': 1, 'C': 2}
+        with pytest.raises(ValueError, match='not found in reference mapping'):
+            get_subtree_leaf_bitmasks(tree, leaf_name_to_bit)
+
+
+class TestValidateUniqueNamedLeaves:
+    def test_duplicate_leaf_names_raise(self):
+        tree = Tree('((A:1,A:1):1,B:1);', parser=1)
+        with pytest.raises(ValueError, match='Duplicated leaf labels'):
+            validate_unique_named_leaves(tree, '--infile', " for 'transfer'")
+
+    def test_empty_leaf_names_raise(self):
+        tree = Tree('(A:1,:1,B:1);', parser=1)
+        with pytest.raises(ValueError, match='Empty leaf labels'):
+            validate_unique_named_leaves(tree, '--infile', " for 'transfer'")
+
 
 class TestIsAllLeafNamesIdentical:
     def test_identical(self):
@@ -231,6 +305,13 @@ class TestIsAllLeafNamesIdentical:
         t1 = Tree('((A,B),(C,D));', parser=1)
         t2 = Tree('((A,B),(C,E));', parser=1)
         assert is_all_leaf_names_identical(t1, t2) is False
+
+    def test_verbose_mode_handles_none_leaf_names(self):
+        t1 = Tree('((A,B),(C,D));', parser=1)
+        t2 = Tree('((A,B),(C,D));', parser=1)
+        first_leaf = next(iter(t2.leaves()))
+        first_leaf.name = None
+        assert is_all_leaf_names_identical(t1, t2, verbose=True) is False
 
 
 class TestGetTargetNodes:
@@ -263,3 +344,11 @@ class TestIsRooted:
 
     def test_unrooted(self, unrooted_tree):
         assert is_rooted(unrooted_tree) is False
+
+    def test_single_leaf_tree_is_rooted(self):
+        tree = Tree('A;', parser=1)
+        assert is_rooted(tree) is True
+
+    def test_polytomy_root_tree_is_unrooted(self):
+        tree = Tree('(A:1,B:1,C:1,D:1);', parser=1)
+        assert is_rooted(tree) is False

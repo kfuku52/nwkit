@@ -5,8 +5,25 @@ from ete4.parser.newick import make_parser
 
 from nwkit.util import *
 
+def _normalize_root_distance_for_reroot(tree):
+    if tree.dist is not None:
+        tree.dist = 0.0
+    return tree
+
+def _collapse_singleton_root(tree):
+    while (len(tree.get_children()) == 1) and (len(list(tree.leaves())) > 1):
+        child = tree.get_children()[0]
+        tree = Tree(child.write(parser=0, format_root_node=True), parser=0)
+    return tree
+
 def transfer_root(tree_to, tree_from, verbose=False):
+    tree_to = _collapse_singleton_root(tree_to)
+    tree_from = _collapse_singleton_root(tree_from)
+    validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
+    validate_unique_named_leaves(tree_from, option_name='--infile2', context=' for root transfer')
     subroot_from = tree_from.get_children()
+    if len(subroot_from) != 2:
+        raise ValueError('Root transfer requires the source tree root to have exactly two children.')
     tree_from_leaf_sets = tree_from.get_cached_content(prop='name')
     is_n0_bigger_than_n1 = (len(tree_from_leaf_sets[subroot_from[0]]) > len(tree_from_leaf_sets[subroot_from[1]]))
     ingroup_child = subroot_from[0] if is_n0_bigger_than_n1 else subroot_from[1]
@@ -32,6 +49,7 @@ def transfer_root(tree_to, tree_from, verbose=False):
                 node.dist = 0.0
             support_backup.append((node, node.support))
             node.support = None
+        _normalize_root_distance_for_reroot(tree_to)
         tree_to.set_outgroup(next(iter(ingroup_set)))
         if len(outgroup_set) == 1:
             outgroup_name = next(iter(outgroup_set))
@@ -41,24 +59,24 @@ def transfer_root(tree_to, tree_from, verbose=False):
                     outgroup_ancestor = leaf
                     break
             if outgroup_ancestor is None:
-                sys.stderr.write('No root bipartition found in --infile. Exiting.\n')
-                sys.exit(1)
+                raise ValueError('No root bipartition found in --infile.')
         else:
             outgroup_ancestor = tree_to.common_ancestor(outgroup_set)
         reroot_leaf_sets = tree_to.get_cached_content(prop='name')
         if not outgroup_set == reroot_leaf_sets[outgroup_ancestor]:
-            sys.stderr.write('No root bipartition found in --infile. Exiting.\n')
-            sys.exit(1)
+            raise ValueError('No root bipartition found in --infile.')
+        _normalize_root_distance_for_reroot(tree_to)
         tree_to.set_outgroup(outgroup_ancestor)
         tree_to_leaf_sets = tree_to.get_cached_content(prop='name')
     subroot_to = tree_to.get_children()
     total_subroot_length_to = sum((n.dist or 0) for n in subroot_to)
     total_subroot_length_from = sum((n.dist or 0) for n in subroot_from)
-    for n_to in subroot_to:
-        n_to_leaf_set = tree_to_leaf_sets[n_to]
-        for n_from in subroot_from:
-            if (n_to_leaf_set == tree_from_leaf_sets[n_from]):
-                n_to.dist = total_subroot_length_to * (n_from.dist / total_subroot_length_from)
+    if abs(total_subroot_length_from) > 10**-15:
+        for n_to in subroot_to:
+            n_to_leaf_set = tree_to_leaf_sets[n_to]
+            for n_from in subroot_from:
+                if (n_to_leaf_set == tree_from_leaf_sets[n_from]):
+                    n_to.dist = total_subroot_length_to * ((n_from.dist or 0) / total_subroot_length_from)
     # Restore root name or assign 'Root' if it was unnamed
     if original_root_name:
         tree_to.name = original_root_name
@@ -74,6 +92,7 @@ def midpoint_rooting(tree):
     for node in tree.traverse():
         if node.dist is None:
             node.dist = 0.0
+    _normalize_root_distance_for_reroot(tree)
     outgroup_node = tree.get_midpoint_outgroup()
     # If the outgroup is the root itself, tree is already optimally rooted
     if outgroup_node.is_root:
@@ -83,6 +102,8 @@ def midpoint_rooting(tree):
 
 def mad_rooting(tree):
     """MAD (Minimal Ancestor Deviation) rooting. Tria et al. 2017, DOI:10.1038/s41559-017-0193"""
+    if len(list(tree.leaves())) < 3:
+        raise ValueError('MAD rooting requires at least 3 leaves.')
     import os, subprocess, tempfile
     mad_script = os.path.join(os.path.dirname(__file__), '_mad.py')
     parser = make_parser(5, dist='%0.8f')
@@ -148,6 +169,9 @@ def _collect_leaf_distance_stats(tree):
 
 def mv_rooting(tree):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
+    # ete4.set_outgroup requires root.dist to be 0/None.
+    if tree.dist is not None:
+        tree.dist = 0.0
     # Unroot bifurcating root so each edge is a proper edge in the unrooted tree.
     # Manual unroot because unroot() can drop the dissolved node's branch length.
     children = tree.get_children()
@@ -216,17 +240,24 @@ def mv_rooting(tree):
     return tree
 
 def outgroup_rooting(tree, outgroup_str):
+    if outgroup_str is None:
+        raise ValueError("Specify at least one outgroup label with '--outgroup'.")
     # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
     for node in tree.traverse():
         if node.dist is None:
             node.dist = 0.0
-    outgroup_list = outgroup_str.split(',')
+    outgroup_list = [label.strip() for label in outgroup_str.split(',') if label.strip()]
+    if len(outgroup_list) == 0:
+        raise ValueError("Specify at least one outgroup label with '--outgroup'.")
     sys.stderr.write('Specified outgroup labels: {}\n'.format(' '.join(outgroup_list)))
     outgroup_name_set = set(outgroup_list)
-    outgroup_nodes = [node for node in tree.traverse() if node.name in outgroup_name_set]
+    leaf_name_set = set(tree.leaf_names())
+    missing_outgroup_names = [name for name in outgroup_list if name not in leaf_name_set]
+    if missing_outgroup_names:
+        raise ValueError('Outgroup label(s) not found in leaf names: {}'.format(', '.join(missing_outgroup_names)))
+    outgroup_nodes = [node for node in tree.leaves() if node.name in outgroup_name_set]
     if len(outgroup_nodes)==0:
-        sys.stderr.write('Outgroup node not found. Exiting.\n')
-        sys.exit(1)
+        raise ValueError('Outgroup node not found.')
     elif len(outgroup_nodes)==1:
         outgroup_node = outgroup_nodes[0]
     else:
@@ -239,25 +270,34 @@ def outgroup_rooting(tree, outgroup_str):
                 non_outgroup_leaf = node
                 break
         if non_outgroup_leaf is None:
-            sys.stderr.write('Outgroup clade should not represent the whole tree. Please check --outgroup carefully. Exiting.\n')
-            sys.exit(1)
+            raise ValueError('Outgroup clade should not represent the whole tree. Please check --outgroup carefully.')
+        _normalize_root_distance_for_reroot(tree)
         tree.set_outgroup(non_outgroup_leaf)
         outgroup_node = tree.common_ancestor(outgroup_nodes)
     if outgroup_node is tree:
-        sys.stderr.write('Outgroup clade should not represent the whole tree. Please check --outgroup carefully. Exiting.\n')
-        sys.exit(1)
+        raise ValueError('Outgroup clade should not represent the whole tree. Please check --outgroup carefully.')
     outgroup_leaf_names = list(outgroup_node.leaf_names())
     sys.stderr.write('All leaf labels in the outgroup clade: {}\n'.format(' '.join(outgroup_leaf_names)))
+    _normalize_root_distance_for_reroot(tree)
     tree.set_outgroup(outgroup_node)
     return tree
 
 def root_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if (args.method=='transfer'):
+        if args.infile2 in ['', None]:
+            raise ValueError("'--infile2' is required when '--method transfer' is used.")
         tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
+        if not is_rooted(tree2):
+            raise ValueError("'--infile2' must be rooted when '--method transfer' is used.")
+        if (len(list(tree2.leaves())) > 1) and (len(tree2.get_children()) != 2):
+            raise ValueError("'--infile2' root must have exactly two children for '--method transfer'.")
+        validate_unique_named_leaves(tree, option_name='--infile', context=' for root transfer')
+        validate_unique_named_leaves(tree2, option_name='--infile2', context=' for root transfer')
         if not is_all_leaf_names_identical(tree, tree2, verbose=True):
             raise Exception('Leaf labels in the two trees should be completely matched.')
-        tree = transfer_root(tree_to=tree, tree_from=tree2, verbose=True)
+        if (len(list(tree.leaves())) > 1) and (len(list(tree2.leaves())) > 1):
+            tree = transfer_root(tree_to=tree, tree_from=tree2, verbose=True)
     elif (args.method=='midpoint'):
         tree = midpoint_rooting(tree=tree)
     elif (args.method=='outgroup'):
@@ -266,4 +306,6 @@ def root_main(args):
         tree = mad_rooting(tree=tree)
     elif (args.method=='mv'):
         tree = mv_rooting(tree=tree)
+    else:
+        raise ValueError("Unknown rooting method: {}".format(args.method))
     write_tree(tree, args, format=args.outformat)

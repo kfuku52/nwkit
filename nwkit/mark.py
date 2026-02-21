@@ -42,10 +42,11 @@ def annotate_tree_attr(tree, args):
     target_leaves = [ leaf for leaf in tree.leaves() if leaf.props.get('is_target_leaf') ]
     num_target_leaves = len(target_leaves)
     if num_target_leaves > 0:
-        for ancestor in target_leaves[0].ancestors():
-            if num_target_leaves == target_leaf_counts[ancestor]:
-                ancestor.props['is_all_mrca'] = True
-                break
+        if num_target_leaves == 1:
+            all_mrca_node = target_leaves[0]
+        else:
+            all_mrca_node = tree.common_ancestor(target_leaves)
+        all_mrca_node.props['is_all_mrca'] = True
     all_mrca_clade_flags = dict()
     for node in tree.traverse(strategy='preorder'):
         if node.is_root:
@@ -70,6 +71,8 @@ def get_insert_nodes(tree, args):
             target_attr = 'is_all_mrca_clade'
     elif args.target == 'leaf':
         target_attr = 'is_target_leaf'
+    else:
+        raise ValueError("Unknown target: {}".format(args.target))
     insert_nodes = [ node for node in tree.traverse() if node.props.get(target_attr) ]
     return insert_nodes
 

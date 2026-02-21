@@ -15,9 +15,11 @@ def sanitize_main(args):
         tree.resolve_polytomy()
     if (args.name_quote=='none'):
         quote_char = ''
-    if (args.name_quote=='single'):
+    elif (args.name_quote=='single'):
         quote_char = '\''
-    if (args.name_quote=='double'):
+    elif (args.name_quote=='double'):
         quote_char = '\"'
+    else:
+        raise ValueError("Unsupported '--name_quote': {}. Choose from none/single/double.".format(args.name_quote))
     tree = add_quote(tree, quote_char)
     write_tree(tree, args, format=args.outformat)

@@ -13,8 +13,24 @@ SEARCH_RANKS = [
 ]
 
 def add_common_anc_constraint(tree, args):
+    if (args.left_species is None) or (args.right_species is None):
+        raise ValueError("'--left_species' and '--right_species' are required when '--timetree no'.")
+    if args.left_species == args.right_species:
+        raise ValueError("'--left_species' and '--right_species' must be different species.")
+    if (args.lower_bound is None) and (args.upper_bound is None):
+        raise ValueError("Specify at least one of '--lower_bound' or '--upper_bound' when '--timetree no'.")
+    leaf_name_set = set(tree.leaf_names())
+    missing_species = [sp for sp in [args.left_species, args.right_species] if sp not in leaf_name_set]
+    if missing_species:
+        raise ValueError("Species not found in the input tree: {}".format(', '.join(missing_species)))
     common_anc = tree.common_ancestor([args.left_species, args.right_species])
-    if (args.lower_bound==args.upper_bound):
+    is_point_bound = False
+    if (args.lower_bound is not None) and (args.upper_bound is not None):
+        try:
+            is_point_bound = (abs(float(args.lower_bound) - float(args.upper_bound)) < 10**-12)
+        except ValueError:
+            is_point_bound = (args.lower_bound == args.upper_bound)
+    if (args.lower_bound is not None) and (args.upper_bound is not None) and is_point_bound:
         constraint = '@' + args.lower_bound
     elif (args.lower_bound is not None) and (args.upper_bound is not None):
         constraint = 'B(' + ', '.join(
@@ -29,6 +45,9 @@ def add_common_anc_constraint(tree, args):
     return tree
 
 def check_leaf_taxid_availability(tree, ncbi):
+    unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]
+    if unnamed_leaves:
+        raise ValueError('All leaves must have non-empty names when using "--timetree point/ci".')
     leaf_names = list(tree.leaf_names())
     leaf_names = [ ln.replace('_', ' ') for ln in leaf_names ]
     name2taxid = ncbi.get_name_translator(leaf_names)
@@ -62,7 +81,20 @@ def is_mrca_clade_root(node, timetree_result, ncbi, subtree_leaf_name_sets=None)
     missing_ids = re.sub(r'\].*', '', missing_ids)
     if (len(missing_ids)==0):
         return True
-    missing_ids = [ int(mid) for mid in missing_ids.split(',') ]
+    parsed_missing_ids = []
+    for mid in missing_ids.split(','):
+        mid = mid.strip()
+        if mid == '':
+            continue
+        if mid.lower() == 'null':
+            continue
+        try:
+            parsed_missing_ids.append(int(mid))
+        except ValueError:
+            continue
+    if len(parsed_missing_ids) == 0:
+        return True
+    missing_ids = parsed_missing_ids
     taxid2name = ncbi.get_taxid_translator(missing_ids)
     missing_sci_names = list(taxid2name.values())
     missing_leaf_names = [ sn.replace(' ', '_') for sn in missing_sci_names ]
@@ -74,7 +106,8 @@ def is_mrca_clade_root(node, timetree_result, ncbi, subtree_leaf_name_sets=None)
 
 def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names, subtree_leaf_name_sets=None):
     children = node.get_children()
-    assert len(children)==2, 'Non-bifurcation at the node containing: {}'.format(','.join(list(node.leaf_names())))
+    if len(children) != 2:
+        return False
     if subtree_leaf_name_sets is None:
         child0_leaf_set = set(children[0].leaf_names())
         child1_leaf_set = set(children[1].leaf_names())
@@ -158,11 +191,17 @@ def add_timetree_constraint(tree, args):
             request_url = '{}/mrca/id/{}'.format(endpoint_url, '+'.join([ str(t) for t in taxids ]))
             sys.stderr.write('Waiting for the REST API at timetree.org. ')
             start = time.time()
-            response = requests.get(url=request_url)
+            try:
+                response = requests.get(url=request_url, timeout=30)
+            except requests.RequestException:
+                txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
+                sys.stderr.write(txt.format(','.join(leaf_names)))
+                continue
             sys.stderr.write('Elapsed {:,} sec\n'.format(int(time.time() - start)))
             if response.status_code!=200:
                 txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
                 sys.stderr.write(txt.format(','.join(leaf_names)))
+                continue
             timetree_result = re.sub('.*;</script>', '', response.text)
             if "MRCA node not found" in timetree_result:
                 txt = "Skipping. No MRCA found at timetree.org for the node containing: {}\n"
@@ -190,7 +229,18 @@ def add_timetree_constraint(tree, args):
             timetree_dict = dict()
             for key,value in zip(timetree_keys, timetree_values):
                 timetree_dict[key] = value
-            if float(timetree_dict['precomputed_ci_high'])==0:
+            required_keys = ['precomputed_age', 'precomputed_ci_low', 'precomputed_ci_high']
+            if any(key not in timetree_dict for key in required_keys):
+                txt = "Skipping. Unexpected response format from timetree.org for the node containing: {}\n"
+                sys.stderr.write(txt.format(','.join(leaf_names)))
+                continue
+            try:
+                ci_high = float(timetree_dict['precomputed_ci_high'])
+            except ValueError:
+                txt = "Skipping. Non-numeric age estimate from timetree.org for the node containing: {}\n"
+                sys.stderr.write(txt.format(','.join(leaf_names)))
+                continue
+            if ci_high==0:
                 txt = "Skipping. Upper age estimate at timetree.org is zero for the MRCA of {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
                 continue
@@ -242,7 +292,10 @@ def apply_min_clade_prop(tree, min_clade_prop):
 
 def mcmctree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    assert (len(tree.get_children())==2), 'The input tree should be rooted.'
+    if len(tree.get_children()) != 2:
+        raise ValueError('The input tree should be rooted.')
+    if (args.min_clade_prop < 0) or (args.min_clade_prop > 1):
+        raise ValueError("'--min_clade_prop' must be between 0 and 1.")
     for node in tree.traverse():
         if not node.is_leaf:
             if any([kw in (node.name or '') for kw in ['@', 'B(', 'L(', 'U(']]):
@@ -250,11 +303,17 @@ def mcmctree_main(args):
             else:
                 node.name = 'NoName'
     if (args.timetree=='no'):
+        if (args.left_species is None) or (args.right_species is None):
+            raise ValueError("'--left_species' and '--right_species' are required when '--timetree no'.")
+        if (args.lower_bound is None) and (args.upper_bound is None):
+            raise ValueError("Specify at least one of '--lower_bound' or '--upper_bound' when '--timetree no'.")
         tree = add_common_anc_constraint(tree, args)
     elif (args.timetree=='point'):
         tree = add_timetree_constraint(tree, args)
     elif (args.timetree=='ci'):
         tree = add_timetree_constraint(tree, args)
+    else:
+        raise ValueError("Unknown '--timetree' mode: {}. Choose from no/point/ci.".format(args.timetree))
     tree = remove_constraint_equal_upper(tree)
     tree = apply_min_clade_prop(tree, min_clade_prop=args.min_clade_prop)
     # Use parser=1 and post-process for MCMCtree format

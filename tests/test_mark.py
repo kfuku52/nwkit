@@ -84,6 +84,30 @@ class TestGetInsertNodes:
         nodes = get_insert_nodes(tree, args)
         assert len(nodes) >= 2  # B1, B2, and their MRCA
 
+    def test_unknown_target_raises(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        args = make_mark_args(pattern='A', target='unknown')
+        tree = annotate_tree_attr(tree, args)
+        with pytest.raises(ValueError, match='Unknown target'):
+            get_insert_nodes(tree, args)
+
+    def test_all_mrca_single_target_is_leaf(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        args = make_mark_args(pattern='A', target='mrca', target_only_clade=False)
+        tree = annotate_tree_attr(tree, args)
+        nodes = get_insert_nodes(tree, args)
+        assert len(nodes) == 1
+        assert nodes[0].is_leaf
+        assert nodes[0].name == 'A'
+
+    def test_all_mrca_clade_single_target_does_not_include_siblings(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        args = make_mark_args(pattern='A', target='clade', target_only_clade=False)
+        tree = annotate_tree_attr(tree, args)
+        nodes = get_insert_nodes(tree, args)
+        node_names = sorted(node.name for node in nodes)
+        assert node_names == ['A']
+
 
 class TestLabelInsertNodes:
     def test_suffix(self):

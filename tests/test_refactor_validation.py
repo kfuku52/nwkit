@@ -85,18 +85,15 @@ def old_annotate_tree_attr(tree, args):
             for clade_node in node.descendants():
                 clade_node.props['is_target_only_mrca_clade'] = True
     target_leaves = [leaf for leaf in tree.leaves() if leaf.props.get('is_target_leaf')]
-    num_target_leaves = len(target_leaves)
     if len(target_leaves) > 0:
-        for ancestor in target_leaves[0].ancestors():
-            num_anc_target_leaves = len(
-                [leaf for leaf in ancestor.leaves() if leaf.props.get('is_target_leaf')]
-            )
-            if num_target_leaves == num_anc_target_leaves:
-                ancestor.props['is_all_mrca'] = True
-                ancestor.props['is_all_mrca_clade'] = True
-                for clade_node in ancestor.descendants():
-                    clade_node.props['is_all_mrca_clade'] = True
-                break
+        if len(target_leaves) == 1:
+            all_mrca_node = target_leaves[0]
+        else:
+            all_mrca_node = tree.common_ancestor(target_leaves)
+        all_mrca_node.props['is_all_mrca'] = True
+        all_mrca_node.props['is_all_mrca_clade'] = True
+        for clade_node in all_mrca_node.descendants():
+            clade_node.props['is_all_mrca_clade'] = True
     return tree
 
 

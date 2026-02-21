@@ -3,13 +3,18 @@ from nwkit.util import *
 def subtree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     leaf_nodes = list(tree.leaves())
+    leaf_names = [leaf.name for leaf in leaf_nodes]
+    if len(leaf_names) != len(set(leaf_names)):
+        raise ValueError('Leaf names are not unique.')
     leaf_name_set = set(leaf.name for leaf in leaf_nodes)
     leaf_by_name = {leaf.name: leaf for leaf in leaf_nodes}
     if args.leaves is not None:
-        seed_leaf_names = args.leaves.split(',')
+        seed_leaf_names = [l.strip() for l in args.leaves.split(',') if l.strip() != '']
     else:
         seed_leaf_names = [args.left_leaf, args.right_leaf]
-        seed_leaf_names = [ l for l in seed_leaf_names if l is not None ]
+        seed_leaf_names = [l.strip() for l in seed_leaf_names if l is not None and l.strip() != '']
+    if len(seed_leaf_names) == 0:
+        raise ValueError("Specify either '--leaves' or '--left_leaf/--right_leaf'.")
     for l in seed_leaf_names:
         if l not in leaf_name_set:
             raise Exception('Specified leaf not found in the tree: {}'.format(l))

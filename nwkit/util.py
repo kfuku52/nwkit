@@ -1,15 +1,19 @@
 import os
 import re
 import sys
+from collections import Counter
 import Bio.SeqIO
 from ete4 import Tree
 
 NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
+TREE_FORMAT_PROP = '_nwkit_parser_format'
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
     global INFILE_FORMAT
     if infile=='-':
-        infile = sys.stdin.readlines()[0]
+        infile = ''.join(sys.stdin.readlines()).strip()
+        if infile == '':
+            raise Exception('Failed to parse the input tree.')
     elif os.path.isfile(infile):
         with open(infile) as f:
             infile = f.read().strip()
@@ -28,6 +32,10 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
         format_original = format
         format = int(format)
         tree = Tree(infile, parser=format)
+    INFILE_FORMAT = int(format)
+    # Keep per-node format metadata so writing a subtree keeps the original parser.
+    for node in tree.traverse():
+        node.props[TREE_FORMAT_PROP] = INFILE_FORMAT
     if format==0: # flexible with support values
         # Single pass over nodes to detect max support and collect candidates.
         # If max support is > 1.0, treat non-root None/1.0 as missing support.
@@ -60,7 +68,8 @@ def write_tree(tree, args, format, quiet=False):
         if len(sys.argv) > 1 and sys.argv[1] == 'mark':
             format = 1
         else:
-            format = globals().get('INFILE_FORMAT', 0)
+            format = tree.props.get(TREE_FORMAT_PROP, globals().get('INFILE_FORMAT', 0))
+        format = int(format)
     else:
         format_original = format
         format = int(format)
@@ -119,16 +128,22 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
     return tree
 
 def label2sciname(labels, in_delim='_', out_delim='_'):
+    if labels is None:
+        return None
     is_str_input = isinstance(labels, str)
     if is_str_input:
         labels = [labels,]
     scinames = list()
     for label in labels:
-        splitted = label.split(in_delim)
-        if len(splitted)>=2:
-            sciname = splitted[0]+out_delim+splitted[1]
-        else:
+        if label is None:
             sciname = None
+        else:
+            label_str = str(label)
+            splitted = label_str.split(in_delim)
+            if len(splitted)>=2:
+                sciname = splitted[0]+out_delim+splitted[1]
+            else:
+                sciname = None
         scinames.append(sciname)
     if is_str_input:
         scinames = scinames[0]
@@ -150,6 +165,8 @@ def get_subtree_leaf_bitmasks(tree, leaf_name_to_bit):
     subtree_leaf_bitmasks = dict()
     for node in tree.traverse(strategy='postorder'):
         if node.is_leaf:
+            if node.name not in leaf_name_to_bit:
+                raise ValueError('Leaf label not found in reference mapping: {}'.format(node.name))
             subtree_leaf_bitmasks[node] = 1 << leaf_name_to_bit[node.name]
             continue
         bitmask = 0
@@ -158,10 +175,18 @@ def get_subtree_leaf_bitmasks(tree, leaf_name_to_bit):
         subtree_leaf_bitmasks[node] = bitmask
     return subtree_leaf_bitmasks
 
+def validate_unique_named_leaves(tree, option_name, context=''):
+    leaf_names = list(tree.leaf_names())
+    if len(leaf_names) != len(set(leaf_names)):
+        raise ValueError("Duplicated leaf labels are not supported in '{}'{}.".format(option_name, context))
+    has_missing = any((name is None) or (str(name) == '') for name in leaf_names)
+    if has_missing:
+        raise ValueError("Empty leaf labels are not supported in '{}'{}.".format(option_name, context))
+
 def read_item_per_line_file(file):
     with open(file, 'r') as f:
-        out = f.read().split('\n')
-    out = [ o for o in out if o!='' ]
+        out = f.read().splitlines()
+    out = [o.strip() for o in out if o.strip() != '']
     return out
 
 def annotate_scientific_names(tree):
@@ -188,7 +213,7 @@ def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
         if node.is_leaf:
             continue
         children = node.get_children()
-        if len(children) < 2:
+        if len(children) != 2:
             node.add_props(dup_conf_score=0.0)
             continue
         sp_child1 = subtree_sci_name_sets[children[0]]
@@ -202,12 +227,18 @@ def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
     return tree
 
 def is_all_leaf_names_identical(tree1, tree2, verbose=False):
-    leaf_names1 = set(tree1.leaf_names())
-    leaf_names2 = set(tree2.leaf_names())
-    is_all_leaf_names_identical = (leaf_names1 == leaf_names2)
+    leaf_names1 = list(tree1.leaf_names())
+    leaf_names2 = list(tree2.leaf_names())
+    counts1 = Counter(leaf_names1)
+    counts2 = Counter(leaf_names2)
+    is_all_leaf_names_identical = (counts1 == counts2)
     if verbose:
         if not is_all_leaf_names_identical:
-            unmatched_names = leaf_names1.symmetric_difference(leaf_names2)
+            all_names = set(counts1.keys()).union(set(counts2.keys()))
+            unmatched_names = [
+                str(name) for name in sorted(all_names, key=lambda x: str(x))
+                if counts1.get(name, 0) != counts2.get(name, 0)
+            ]
             sys.stderr.write('Unmatched leaf labels: {}\n'.format(' '.join(unmatched_names)))
     return is_all_leaf_names_identical
 
@@ -226,9 +257,6 @@ def get_target_nodes(tree, target):
 
 def is_rooted(tree):
     num_subroot_nodes = len(tree.get_children())
-    if num_subroot_nodes==2:
+    if num_subroot_nodes <= 2:
         return True
-    elif num_subroot_nodes==3:
-        return False
-    else:
-        raise Exception('Number of subroot nodes should be either 2 or 3.')
+    return False

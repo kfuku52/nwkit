@@ -102,6 +102,26 @@ class TestPrintlabelMain:
         assert 'C' not in captured.out
         assert 'D' not in captured.out
 
+    def test_sister_output_unnamed_internal_does_not_raise(self, tmp_nwk, capsys):
+        path = tmp_nwk('(A:1,(B:1,C:1):1);')
+        args = make_args(
+            infile=path, format='1',
+            pattern='A', target='leaf', sister=True,
+        )
+        printlabel_main(args)
+        captured = capsys.readouterr()
+        assert captured.out.strip() == ''
+
+    def test_unnamed_node_does_not_print_literal_none(self, tmp_nwk, capsys):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, format='1',
+            pattern='.*', target='intnode', sister=False,
+        )
+        printlabel_main(args)
+        captured = capsys.readouterr()
+        assert 'None' not in captured.out
+
     def test_intnode_exact_labels(self, tmp_nwk, capsys):
         """Verify exact set of internal node names printed."""
         path = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;')

@@ -174,3 +174,21 @@ class TestDropMain:
         for node in tree.traverse():
             if not node.is_leaf and not node.is_root:
                 assert abs(node.dist - 3.0) < 1e-6 or abs(node.dist - 6.0) < 1e-6
+
+    def test_drop_non_numeric_fill_for_support_raises(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='all', name=False, support=True, length=False, fill='NA',
+        )
+        with pytest.raises(ValueError, match='must be numeric'):
+            drop_main(args)
+
+    def test_drop_non_numeric_fill_for_length_raises(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            target='all', name=False, support=False, length=True, fill='NA',
+        )
+        with pytest.raises(ValueError, match='must be numeric'):
+            drop_main(args)

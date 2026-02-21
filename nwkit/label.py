@@ -15,4 +15,7 @@ def label_main(args):
             node.name = args.prefix + str(counter)
             counter += 1
     sys.stderr.write(f'Number of labeled target nodes: {counter}/{len(nodes)}\n')
-    write_tree(tree, args, format=1)
+    outformat = args.outformat
+    if outformat == 'auto':
+        outformat = 1
+    write_tree(tree, args, format=outformat)

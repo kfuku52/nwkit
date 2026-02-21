@@ -36,6 +36,18 @@ class TestTransferMain:
         assert abs(leaves['A'] - 10) < 1e-6
         assert abs(leaves['B'] - 20) < 1e-6
 
+    def test_single_leaf_tree_does_not_crash(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('A;', 'tree1.nwk')
+        path2 = tmp_nwk('A;', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format='1', format2='1', outformat='1', target='all',
+            name=True, support=False, length=False, fill=None,
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'A'}
+
     def test_transfer_leaf_only(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
         path2 = tmp_nwk('((A:10,B:20):30,(C:40,D:50):60);', 'tree2.nwk')
@@ -58,6 +70,60 @@ class TestTransferMain:
             name=True, support=False, length=False, fill=None,
         )
         with pytest.raises(Exception, match='Leaf labels'):
+            transfer_main(args)
+
+    def test_missing_infile2_raises(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
+        args = make_args(
+            infile=path1, infile2='', outfile=tmp_outfile,
+            format2='auto', target='all',
+            name=True, support=False, length=False, fill=None,
+        )
+        with pytest.raises(ValueError, match='infile2'):
+            transfer_main(args)
+
+    def test_duplicate_leaf_names_raise(self, tmp_nwk):
+        path1 = tmp_nwk('((A:1,A:2):1,B:1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:1,A:2):1,B:1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile='-',
+            format2='auto', target='leaf',
+            name=False, support=False, length=True, fill=None,
+        )
+        with pytest.raises(ValueError, match='Duplicated leaf labels'):
+            transfer_main(args)
+
+    def test_empty_leaf_labels_raise(self, tmp_nwk):
+        path1 = tmp_nwk('(A:1,(:1,B:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:1,B:1):1,:1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile='-',
+            format2='auto', target='all',
+            name=False, support=False, length=True, fill=None,
+        )
+        with pytest.raises(ValueError, match='Empty leaf labels'):
+            transfer_main(args)
+
+    def test_non_numeric_fill_with_support_raises_clear_error(self, tmp_nwk):
+        path1 = tmp_nwk('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('(((A:1,C:1):1,B:1):1,(D:1,E:1):1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile='-',
+            format2='auto', target='intnode',
+            name=False, support=True, length=False, fill='NA',
+        )
+        with pytest.raises(ValueError, match='must be numeric'):
+            transfer_main(args)
+
+    def test_non_numeric_fill_with_length_raises_clear_error(self, tmp_nwk):
+        path1 = tmp_nwk('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('(((A:1,C:1):1,B:1):1,(D:1,E:1):1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile='-',
+            format2='auto', target='intnode',
+            name=False, support=False, length=True, fill='NA',
+        )
+        with pytest.raises(ValueError, match='must be numeric'):
             transfer_main(args)
 
     def test_transfer_with_fill(self, tmp_nwk, tmp_outfile):
@@ -145,6 +211,22 @@ class TestTransferMain:
         assert abs(leaves['C'] - 30.0) < 1e-6
         assert abs(leaves['D'] - 40.0) < 1e-6
 
+    def test_root_transfer_failure_does_not_exit(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:10,C:30):1,(B:20,D:40):1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='leaf',
+            name=False, support=False, length=True, fill=None,
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.leaves()}
+        assert abs(leaves['A'] - 10.0) < 1e-6
+        assert abs(leaves['B'] - 20.0) < 1e-6
+        assert abs(leaves['C'] - 30.0) < 1e-6
+        assert abs(leaves['D'] - 40.0) < 1e-6
+
     def test_support_transfer_root_target_with_numeric_root_support(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1)10:1,(C:1,D:1)20:1)30;', 'tree1.nwk')
         path2 = tmp_nwk('((A:1,B:1)40:1,(C:1,D:1)50:1)60;', 'tree2.nwk')
@@ -157,3 +239,67 @@ class TestTransferMain:
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         root = [n for n in tree.traverse() if n.is_root][0]
         assert abs(root.support - 60.0) < 1e-6
+
+    def test_both_unrooted_skips_root_transfer(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('(A:1,B:1,C:1,D:1);', 'tree1.nwk')
+        path2 = tmp_nwk('(A:10,B:20,C:30,D:40);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='all',
+            name=False, support=False, length=True, fill=None,
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.leaves()}
+        assert abs(leaves['A'] - 10.0) < 1e-6
+        assert abs(leaves['B'] - 20.0) < 1e-6
+        assert abs(leaves['C'] - 30.0) < 1e-6
+        assert abs(leaves['D'] - 40.0) < 1e-6
+
+    def test_singleton_root_in_one_tree_does_not_crash(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('(((A:1,B:1):1,C:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:10,B:20):30,C:40);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='leaf',
+            name=False, support=False, length=True, fill=None,
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        leaves = {l.name: l.dist for l in tree.leaves()}
+        assert abs(leaves['A'] - 10.0) < 1e-6
+        assert abs(leaves['B'] - 20.0) < 1e-6
+        assert abs(leaves['C'] - 40.0) < 1e-6
+
+    def test_singleton_root_target_intnode_does_not_create_unnamed_leaf(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('(((A:1,B:1):1,C:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:10,B:20):30,C:40);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='intnode',
+            name=True, support=False, length=False, fill=None,
+            outformat='1',
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        leaf_names = list(tree.leaf_names())
+        assert set(leaf_names) == {'A', 'B', 'C'}
+        assert None not in leaf_names
+
+    def test_intnode_transfer_with_singleton_internal_keeps_internal_mapping(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('(((A:1):1,B:1):1,C:1);', 'tree1.nwk')
+        path2 = tmp_nwk('(((A:1)uA:1,B:1)uAB:1,C:1)uABC;', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile=tmp_outfile,
+            format2='auto', target='intnode',
+            name=True, support=False, length=False, fill=None,
+            outformat='1',
+        )
+        transfer_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        unary_nodes = [
+            n for n in tree.traverse()
+            if (not n.is_leaf) and (set(n.leaf_names()) == {'A'})
+        ]
+        assert len(unary_nodes) == 1
+        assert unary_nodes[0].name == 'uA'

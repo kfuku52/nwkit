@@ -16,12 +16,27 @@ def check_input_file(args):
         raise ValueError('Only one of --species_list or --taxid_tsv can be specified.')
     if (args.backbone != 'ncbi') and (args.taxid_tsv is not None):
         raise ValueError('--taxid_tsv is currently compatible only with --backbone ncbi.')
+    if args.species_list is not None:
+        labels = read_item_per_line_file(args.species_list)
+        if len(labels) == 0:
+            raise ValueError('--species_list is empty.')
+        if len(labels) != len(set(labels)):
+            raise ValueError('Duplicate entries in --species_list are not supported.')
     if args.taxid_tsv is not None:
         taxid_df = pandas.read_csv(args.taxid_tsv, sep='\t')
         if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
             raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
         if taxid_df.empty:
             raise ValueError('--taxid_tsv is empty.')
+        if taxid_df['leaf_name'].duplicated().any():
+            raise ValueError('Duplicate values in the "leaf_name" column of --taxid_tsv are not supported.')
+        if taxid_df['taxid'].isna().any():
+            raise ValueError('--taxid_tsv contains missing values in the "taxid" column.')
+        taxid_numeric = pandas.to_numeric(taxid_df['taxid'], errors='coerce')
+        if taxid_numeric.isna().any():
+            raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
+        if (taxid_numeric % 1 != 0).any():
+            raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
 
 def initialize_tree(tree):
     for leaf in tree.leaves():
@@ -58,10 +73,10 @@ def get_lineage(sp, ncbi, rank):
     return limit_lineage_to_rank(lineage, ncbi, rank)
 
 def get_lineages(labels, rank):
-    if '_' in labels[0]:
-        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
-    else:
-        splist = labels
+    splist = [
+        label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
+        for label in labels
+    ]
     ncbi = ete4.NCBITaxa()
     lineages = dict()
     for sp,label in zip(splist,labels):
@@ -74,16 +89,21 @@ def get_lineage_from_taxid(taxid, ncbi, rank):
 
 def get_lineages_from_taxid(taxid_df, rank):
     ncbi = ete4.NCBITaxa()
+    taxid_numeric = pandas.to_numeric(taxid_df['taxid'], errors='coerce')
+    if taxid_numeric.isna().any():
+        raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
+    if (taxid_numeric % 1 != 0).any():
+        raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
     lineages = dict()
-    for label, taxid in zip(taxid_df['leaf_name'], taxid_df['taxid']):
+    for label, taxid in zip(taxid_df['leaf_name'], taxid_numeric.astype(int)):
         lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
     return lineages
 
 def match_taxa(tree, labels, backbone_method):
-    if '_' in labels[0]:
-        splist = label2sciname(labels=labels, in_delim='_', out_delim=' ')
-    else:
-        splist = labels
+    splist = [
+        label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
+        for label in labels
+    ]
     if backbone_method.startswith('ncbi'):
         ncbi = ete4.NCBITaxa()
     leaf_names = [ ln.replace('_',' ') for ln in tree.leaf_names() ]
@@ -112,7 +132,7 @@ def match_taxa(tree, labels, backbone_method):
     return tree
 
 def delete_nomatch_leaves(tree):
-    for leaf in tree.leaves():
+    for leaf in list(tree.leaves()):
         if not leaf.props.get('has_taxon'):
             sys.stderr.write('Deleting taxon in the tree with no match: {}\n'.format(leaf.name))
             leaf.delete()
@@ -122,7 +142,7 @@ def polytomize_one2many_matches(tree):
     for leaf in tree.leaves():
         taxon_names = leaf.props.get('taxon_names', [])
         if (len(taxon_names)==0):
-            raise Exception('Leaf should have at least one match: {}'.format(leaf.name))
+            raise ValueError('Leaf should have at least one match: {}'.format(leaf.name))
         if (len(taxon_names)==1):
             leaf.name = taxon_names[0]
         else:
@@ -157,9 +177,11 @@ def get_mrca_taxid(multi_counts):
     return mrca_taxid
 
 def get_max_ancestor_overlap_node(tree, ancestors):
+    ancestors = set(ancestors)
     max_num_overlap = 0
+    return_node = None
     for node in tree.traverse():
-        overlap_taxids = set(tree.props.get('ancestors', [])).intersection(set(ancestors))
+        overlap_taxids = set(node.props.get('ancestors', [])).intersection(ancestors)
         num_overlap = len(overlap_taxids)
         if (num_overlap>max_num_overlap):
             max_num_overlap = num_overlap
@@ -233,9 +255,18 @@ def get_polytomy_index(tree):
     return num_polytomy
 
 def taxid2tree(lineages, taxid_counts):
+    if len(lineages) == 0:
+        raise ValueError('No valid taxa found to build a constraint tree.')
+    if len(lineages) == 1:
+        sp = next(iter(lineages.keys()))
+        tree = ete4.Tree({'name': sp})
+        tree.add_props(ancestors=lineages[sp])
+        return tree
     ncbi = ete4.NCBITaxa()
     is_multiple = (taxid_counts[:,1]>1)
     multi_counts = taxid_counts[is_multiple,:]
+    if multi_counts.shape[0] == 0:
+        raise ValueError('No shared taxonomic ranks were found across input taxa.')
     clades = list()
     clade_leaf_sets = list()
     taxid_to_species = defaultdict(list)
@@ -262,7 +293,8 @@ def taxid2tree(lineages, taxid_counts):
             new_clade=new_clade,
             new_leaf_set=set(species_names),
         )
-    assert len(clades)==1, 'Failed to merge clades into a single tree.'
+    if len(clades) != 1:
+        raise ValueError('Failed to merge clades into a single tree.')
     tree = clades[0]
     return tree
 
@@ -281,7 +313,12 @@ def tree_sciname2label(tree, labels):
 
 def collapse_genes(tree):
     for leaf in tree.leaves():
-        splitted = leaf.name.split('_')
+        leaf_name = leaf.name or ''
+        splitted = leaf_name.split('_')
+        if len(splitted) < 2:
+            raise ValueError(
+                'Leaf name does not match the expected GENUS_SPECIES[_...] format for --collapse: {}'.format(leaf_name)
+            )
         genus_species = splitted[0] + '_' + splitted[1]
         leaf.name = genus_species
     leaf_name_counts = Counter(tree.leaf_names())
@@ -309,6 +346,7 @@ def constrain_main(args):
             tree = read_tree(args.infile, args.format, args.quoted_node_names)
             for node in tree.traverse():
                 node.name = (node.name or '').replace('_', ' ')
+            validate_unique_named_leaves(tree, option_name='--infile', context=" for '--backbone user'")
         elif (args.backbone=='ncbi_apgiv'):
             file_path = 'data_tree/apgiv.nwk'
             package_name = __package__ or 'nwkit'
@@ -316,6 +354,8 @@ def constrain_main(args):
             tree = ete4.Tree(nwk_string, parser=0)
         tree = initialize_tree(tree)
         tree = match_taxa(tree, labels, args.backbone)
+        if not any(leaf.props.get('has_taxon') for leaf in tree.leaves()):
+            raise ValueError('No taxa from --species_list matched the backbone tree labels.')
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)

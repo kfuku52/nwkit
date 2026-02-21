@@ -9,13 +9,23 @@ def get_shuffled_branch_lengths(nodes):
     return branch_lengths
 
 def print_rf_dist(tree1, tree2):
-    out = tree1.robinson_foulds(t2=tree2, unrooted_trees=False)
+    leaf_names1 = list(tree1.leaf_names())
+    leaf_names2 = list(tree2.leaf_names())
+    all_leaf_names = leaf_names1 + leaf_names2
+    if any(name is None for name in all_leaf_names):
+        sys.stderr.write('Skipping RF distance: leaf names must be non-empty for RF calculation.\n')
+        return
+    if (len(leaf_names1) != len(set(leaf_names1))) or (len(leaf_names2) != len(set(leaf_names2))):
+        sys.stderr.write('Skipping RF distance: duplicated leaf names are not supported for RF calculation.\n')
+        return
+    use_unrooted_rf = (not is_rooted(tree1)) or (not is_rooted(tree2))
+    out = tree1.robinson_foulds(t2=tree2, unrooted_trees=use_unrooted_rf)
     rf, rf_max, common_attrs, edges_t1, edges_t2, discarded_edges_t1, discarded_edges_t2 = out
     sys.stderr.write('Robinson-Foulds distance = {:,} (max = {:,})\n'.format(rf, rf_max))
 
 def shuffle_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    tree_original = tree
+    tree_original = tree.copy(method='deepcopy')
     if args.topology:
         num_leaf = len(list(tree.leaves()))
         new_tree = ete4.Tree()

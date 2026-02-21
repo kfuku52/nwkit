@@ -38,6 +38,12 @@ class TestMidpointRooting:
                     assert abs(original.get_distance(l1.name, l2.name) -
                                rooted.get_distance(l1, l2)) < 1e-6
 
+    def test_nonzero_root_distance_does_not_crash(self):
+        tree = Tree('((A:1,B:3):1,(C:1,D:1):1):2;', parser=1)
+        rooted = midpoint_rooting(tree)
+        assert is_rooted(rooted)
+        assert set(rooted.leaf_names()) == {'A', 'B', 'C', 'D'}
+
 
 class TestOutgroupRooting:
     def test_single_outgroup(self):
@@ -58,10 +64,39 @@ class TestOutgroupRooting:
         leaf_names = set(rooted.leaf_names())
         assert leaf_names == {'A', 'B', 'C', 'D', 'E'}
 
+    def test_multiple_outgroups_with_spaces(self):
+        tree = Tree('((A:1,B:1):1,(C:1,(D:1,E:1):1):1);', parser=1)
+        rooted = outgroup_rooting(tree, 'D, E')
+        children = rooted.get_children()
+        child_leaf_sets = [set(c.leaf_names()) for c in children]
+        assert {'D', 'E'} in child_leaf_sets
+
     def test_outgroup_not_found(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
-        with pytest.raises(SystemExit):
+        with pytest.raises(ValueError, match='Outgroup label'):
             outgroup_rooting(tree, 'Z')
+
+    def test_outgroup_partially_missing_raises(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        with pytest.raises(ValueError, match='Outgroup label'):
+            outgroup_rooting(tree, 'A,Z')
+
+    def test_outgroup_whole_tree_raises(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+        with pytest.raises(ValueError, match='whole tree'):
+            outgroup_rooting(tree, 'A,B')
+
+    def test_outgroup_single_leaf_tree_raises(self):
+        tree = Tree('A;', parser=1)
+        with pytest.raises(ValueError, match='whole tree'):
+            outgroup_rooting(tree, 'A')
+
+    def test_nonzero_root_distance_does_not_crash(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1):2;', parser=1)
+        rooted = outgroup_rooting(tree, 'A')
+        children = rooted.get_children()
+        child_leaf_sets = [set(c.leaf_names()) for c in children]
+        assert {'A'} in child_leaf_sets
 
     def test_pairwise_distance_preservation(self):
         """Outgroup rooting must preserve all pairwise distances."""
@@ -101,6 +136,11 @@ class TestMadRooting:
         rooted = mad_rooting(tree)
         assert is_rooted(rooted)
         assert set(rooted.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_requires_at_least_three_leaves(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+        with pytest.raises(ValueError, match='at least 3 leaves'):
+            mad_rooting(tree)
 
     def test_wiki_exact_root_split(self):
         """MAD rooting on wiki tree: verify root split and pairwise distances.
@@ -201,6 +241,12 @@ class TestMvRooting:
                     elif {l1.name, l2.name} == {'B', 'C'}:
                         assert abs(d - 8) < 1e-6
 
+    def test_nonzero_root_distance_does_not_crash(self):
+        tree = Tree('((A:1,B:2):1,C:3):2;', parser=1)
+        rooted = mv_rooting(tree)
+        assert is_rooted(rooted)
+        assert set(rooted.leaf_names()) == {'A', 'B', 'C'}
+
 
 class TestTransferRoot:
     def test_transfer(self):
@@ -226,6 +272,42 @@ class TestTransferRoot:
                     assert abs(orig_d - new_d) < 1e-6, \
                         f'{l1.name}-{l2.name}: {orig_d} vs {new_d}'
 
+    def test_zero_subroot_length_in_source_does_not_crash(self):
+        tree_from = Tree('((A:0,B:0):0,(C:0,D:0):0);', parser=1)
+        tree_to = Tree('((A:3,B:3):3,(C:1,D:1):1);', parser=1)
+        result = transfer_root(tree_to, tree_from)
+        subroot_dists = sorted([child.dist for child in result.get_children()])
+        assert subroot_dists == [1.0, 3.0]
+
+    def test_nonzero_root_distance_in_target_does_not_crash(self):
+        tree_from = Tree('((A:1,B:1):1,(C:1,D:1):1):0;', parser=1)
+        tree_to = Tree('(A:1,B:1,(C:1,D:1):1):2;', parser=1)
+        result = transfer_root(tree_to, tree_from)
+        assert is_rooted(result)
+        assert set(result.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_source_subroot_none_distance_does_not_crash(self):
+        tree_from = Tree('((A:1,B:1),(C:1,D:1):1);', parser=1)
+        tree_to = Tree('((A:1,B:1):2,(C:1,D:1):2);', parser=1)
+        result = transfer_root(tree_to, tree_from)
+        children = result.get_children()
+        child_leaf_sets = [set(c.leaf_names()) for c in children]
+        assert {'A', 'B'} in child_leaf_sets
+        assert {'C', 'D'} in child_leaf_sets
+        for child in children:
+            if set(child.leaf_names()) == {'A', 'B'}:
+                assert abs((child.dist or 0.0) - 0.0) < 1e-9
+            if set(child.leaf_names()) == {'C', 'D'}:
+                assert abs((child.dist or 0.0) - 4.0) < 1e-9
+
+    def test_singleton_root_in_target_does_not_create_unnamed_leaf(self):
+        tree_from = Tree('((A:1,B:1):1,C:1);', parser=1)
+        tree_to = Tree('(((A:1,B:1):1,C:1):1);', parser=1)
+        result = transfer_root(tree_to, tree_from)
+        leaf_names = list(result.leaf_names())
+        assert set(leaf_names) == {'A', 'B', 'C'}
+        assert None not in leaf_names
+
 
 class TestRootMain:
     def test_midpoint(self, tmp_nwk, tmp_outfile):
@@ -249,6 +331,33 @@ class TestRootMain:
         assert is_rooted(tree)
         assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
 
+    def test_outgroup_requires_label(self, tmp_nwk):
+        path = tmp_nwk('(A:1,(B:1,(C:1,D:1):1):1);')
+        args = make_args(
+            infile=path, outfile='-',
+            method='outgroup', outgroup='',
+        )
+        with pytest.raises(ValueError, match='outgroup'):
+            root_main(args)
+
+    def test_outgroup_requires_label_none(self, tmp_nwk):
+        path = tmp_nwk('(A:1,(B:1,(C:1,D:1):1):1);')
+        args = make_args(
+            infile=path, outfile='-',
+            method='outgroup', outgroup=None,
+        )
+        with pytest.raises(ValueError, match='outgroup'):
+            root_main(args)
+
+    def test_unknown_method_raises(self, tmp_nwk):
+        path = tmp_nwk('(A:1,(B:1,(C:1,D:1):1):1);')
+        args = make_args(
+            infile=path, outfile='-',
+            method='unknown',
+        )
+        with pytest.raises(ValueError, match='Unknown rooting method'):
+            root_main(args)
+
     def test_transfer(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('(A:1,B:1,(C:1,D:1):1);', 'tree1.nwk')
         path2 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree2.nwk')
@@ -260,6 +369,17 @@ class TestRootMain:
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert is_rooted(tree)
 
+    def test_transfer_single_leaf_tree(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('A;', 'tree1.nwk')
+        path2 = tmp_nwk('A;', 'tree2.nwk')
+        args = make_args(
+            infile=path1, outfile=tmp_outfile,
+            method='transfer', infile2=path2, format='1', format2='1', outformat='1',
+        )
+        root_main(args)
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'A'}
+
     def test_transfer_mismatched_raises(self, tmp_nwk):
         path1 = tmp_nwk('(A:1,B:1,(C:1,D:1):1);', 'tree1.nwk')
         path2 = tmp_nwk('((A:1,B:1):1,(C:1,E:1):1);', 'tree2.nwk')
@@ -268,6 +388,65 @@ class TestRootMain:
             method='transfer', infile2=path2, format2='auto',
         )
         with pytest.raises(Exception, match='Leaf labels'):
+            root_main(args)
+
+    def test_transfer_requires_rooted_infile2(self, tmp_nwk):
+        path1 = tmp_nwk('(A:1,B:1,(C:1,D:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('(A:1,B:1,C:1,D:1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, outfile='-',
+            method='transfer', infile2=path2, format2='auto',
+        )
+        with pytest.raises(ValueError, match='must be rooted'):
+            root_main(args)
+
+    def test_transfer_requires_bifurcating_root_infile2(self, tmp_nwk):
+        path1 = tmp_nwk('(A:1,B:1,(C:1,D:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('(((A:1,B:1):1,C:1):1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, outfile='-',
+            method='transfer', infile2=path2, format2='auto',
+        )
+        with pytest.raises(ValueError, match='exactly two children'):
+            root_main(args)
+
+    def test_transfer_incompatible_root_bipartition_raises(self, tmp_nwk):
+        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:1,C:1):1,(B:1,D:1):1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, outfile='-',
+            method='transfer', infile2=path2, format2='auto',
+        )
+        with pytest.raises(ValueError, match='No root bipartition'):
+            root_main(args)
+
+    def test_transfer_requires_infile2(self, tmp_nwk):
+        path1 = tmp_nwk('(A:1,B:1,(C:1,D:1):1);', 'tree1.nwk')
+        args = make_args(
+            infile=path1, outfile='-',
+            method='transfer', infile2='', format2='auto',
+        )
+        with pytest.raises(ValueError, match='infile2'):
+            root_main(args)
+
+    def test_transfer_duplicate_leaf_names_raise(self, tmp_nwk):
+        path1 = tmp_nwk('((A:1,A:2):1,B:1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:1,A:2):1,B:1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, outfile='-',
+            method='transfer', infile2=path2, format2='auto',
+        )
+        with pytest.raises(ValueError, match='Duplicated leaf labels'):
+            root_main(args)
+
+    def test_transfer_empty_leaf_labels_raise(self, tmp_nwk):
+        path1 = tmp_nwk('(A:1,(:1,B:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('((A:1,B:1):1,:1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, outfile='-',
+            method='transfer', infile2=path2, format2='auto',
+        )
+        with pytest.raises(ValueError, match='Empty leaf labels'):
             root_main(args)
 
     def test_mad(self, tmp_nwk, tmp_outfile):
@@ -280,6 +459,15 @@ class TestRootMain:
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert is_rooted(tree)
         assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
+
+    def test_mad_with_too_few_leaves_raises(self, tmp_nwk):
+        path = tmp_nwk('(A:1,B:1);')
+        args = make_args(
+            infile=path, outfile='-',
+            method='mad',
+        )
+        with pytest.raises(ValueError, match='at least 3 leaves'):
+            root_main(args)
 
     def test_mv(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((A:1,B:2):1,(C:3,(D:1,E:2):1):1);')

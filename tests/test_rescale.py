@@ -108,3 +108,10 @@ class TestRescaleMain:
         for node in tree.traverse():
             if not node.is_leaf and not node.is_root:
                 assert abs(node.dist - 1.5) < 1e-6 or abs(node.dist - 3.0) < 1e-6
+
+    @pytest.mark.parametrize('factor', [float('nan'), float('inf'), float('-inf')])
+    def test_non_finite_factor_raises(self, tmp_nwk, factor):
+        path = tmp_nwk('((A:1,B:2):3,(C:4,D:5):6);')
+        args = make_args(infile=path, outfile='-', target='all', factor=factor)
+        with pytest.raises(ValueError, match='finite'):
+            rescale_main(args)

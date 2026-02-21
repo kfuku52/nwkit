@@ -26,7 +26,7 @@ class TestGetLeafNames:
 
     def test_duplicate_raises(self):
         tree = Tree('((A,A),(C,D));', parser=1)
-        with pytest.raises(AssertionError, match='unique'):
+        with pytest.raises(ValueError, match='unique'):
             get_leaf_names(tree)
 
 class TestGetSeqNames:
@@ -43,7 +43,7 @@ class TestGetSeqNames:
             SeqRecord(Seq('ATG'), id='A', name='A'),
             SeqRecord(Seq('ATG'), id='A', name='A'),
         ]
-        with pytest.raises(AssertionError, match='unique'):
+        with pytest.raises(ValueError, match='unique'):
             get_seq_names(seqs)
 
 
@@ -94,6 +94,18 @@ class TestGetRemoveNames:
         result = get_remove_names(arr1, arr2, 'backward')
         assert result == ['pre_GHI']
 
+    def test_prefix_mode_with_empty_label_raises(self):
+        arr1 = ['ABC_001', None, 'GHI_003']
+        arr2 = ['ABC', 'GHI']
+        with pytest.raises(ValueError, match='match prefix'):
+            get_remove_names(arr1, arr2, 'prefix')
+
+    def test_backward_mode_with_empty_label_raises(self):
+        arr1 = ['pre_ABC', 'pre_DEF']
+        arr2 = ['ABC', None]
+        with pytest.raises(ValueError, match='match backward'):
+            get_remove_names(arr1, arr2, 'backward')
+
 
 class TestIntersectionMain:
     def test_tree_tree_intersection(self, tmp_nwk, tmp_outfile):
@@ -109,6 +121,16 @@ class TestIntersectionMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {'A', 'B', 'C'}
 
+    def test_requires_second_input_or_sequences(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
+        args = make_args(
+            infile=path1, infile2='', outfile=tmp_outfile,
+            format2='auto', seqin='', seqout='', seqformat='fasta',
+            match='complete',
+        )
+        with pytest.raises(ValueError, match='infile2'):
+            intersection_main(args)
+
     def test_no_overlap_raises(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
         path2 = tmp_nwk('((E:1,F:1):1,(G:1,H:1):1);', 'tree2.nwk')
@@ -117,7 +139,7 @@ class TestIntersectionMain:
             format2='auto', seqin='', seqout='', seqformat='fasta',
             match='complete',
         )
-        with pytest.raises(AssertionError, match='No overlap'):
+        with pytest.raises(ValueError, match='No overlap'):
             intersection_main(args)
 
     def test_tree_seq_intersection(self, tmp_path):
@@ -137,6 +159,35 @@ class TestIntersectionMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {'A', 'C', 'D', 'F'}
         assert os.path.exists(out_seq)
+
+    def test_tree_seq_intersection_with_empty_seqout_writes_to_stdout(self, tmp_path, capsys):
+        nwk_path = tmp_path / 'tree.nwk'
+        nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
+        seq_path = tmp_path / 'seq.fasta'
+        seq_path.write_text('>A\nATG\n>B\nATG\n>C\nATG\n>D\nATG\n')
+        out_tree = str(tmp_path / 'out.nwk')
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=out_tree,
+            seqin=str(seq_path), seqout='', seqformat='fasta',
+            format2='auto', match='complete',
+        )
+        intersection_main(args)
+        captured = capsys.readouterr()
+        assert '>A' in captured.out
+        assert os.path.exists(out_tree)
+
+    def test_tree_and_sequence_outputs_cannot_both_be_stdout(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
+        seq_path = tmp_path / 'seq.fasta'
+        seq_path.write_text('>A\nATG\n>B\nATG\n>C\nATG\n>D\nATG\n')
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile='-',
+            seqin=str(seq_path), seqout='', seqformat='fasta',
+            format2='auto', match='complete',
+        )
+        with pytest.raises(ValueError, match='both be written to stdout'):
+            intersection_main(args)
 
     def test_with_data_files(self, tmp_outfile):
         infile1 = os.path.join(DATA_DIR, 'intersection3', 'input1.nwk')

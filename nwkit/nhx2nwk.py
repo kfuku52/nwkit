@@ -8,4 +8,7 @@ def nhx2nwk_main(args):
                 continue
             if args.node_label in node.props:
                 node.name = node.props.get(args.node_label)
-    write_tree(tree, args, format=args.outformat)
+    outformat = args.outformat
+    if (outformat == 'auto') and (args.node_label != ''):
+        outformat = 1
+    write_tree(tree, args, format=outformat)

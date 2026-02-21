@@ -16,7 +16,8 @@ def info_main(args):
         if node.is_leaf:
             num_leaves += 1
             species_name = '_'.join((node.name or '').split('_')[:2])
-            species_name_set.add(species_name)
+            if species_name != '':
+                species_name_set.add(species_name)
         else:
             num_children = len(node.get_children())
             if num_children == 1:

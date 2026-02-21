@@ -8,9 +8,17 @@ def read_trait(args, tree):
         trait_df = pandas.DataFrame({'leaf_name': list(tree.leaf_names())})
         return trait_df
     trait_df = pandas.read_csv(args.trait, sep='\t')
+    if 'leaf_name' not in trait_df.columns:
+        raise ValueError("Column 'leaf_name' is required in '--trait'.")
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
     trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)]
+    duplicated_leaf_names = trait_df.loc[
+        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
+    ].unique().tolist()
+    duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
+    if duplicated_leaf_names:
+        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
     observed_leaf_names = set(trait_df['leaf_name'].tolist())
     missing_leaf_names = [leaf_name for leaf_name in leaf_names_list if leaf_name not in observed_leaf_names]
     if len(missing_leaf_names) > 0:
@@ -26,13 +34,16 @@ def read_trait(args, tree):
     return trait_df
 
 def mark_traits_to_nodes(tree, trait_df, args):
+    if (args.group_by is not None) and (args.group_by not in trait_df.columns):
+        raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(args.group_by))
     if args.group_by is None:
         leafname2trait = {leaf_name: None for leaf_name in trait_df['leaf_name']}
     else:
         leafname2trait = {leaf_name: trait for leaf_name, trait in zip(trait_df['leaf_name'], trait_df[args.group_by])}
     for node in tree.traverse('postorder'):
         if node.is_leaf:
-            node.add_props(trait=leafname2trait[node.name])
+            # Treat unmatched/missing leaf labels as missing trait information.
+            node.add_props(trait=leafname2trait.get(node.name))
         else:
             trait = None
             for child in node.children:
@@ -77,6 +88,10 @@ def add_group_ids(trait_df, marked_tree):
     return trait_df
 
 def sample_from_groups(trait_df, args):
+    if 'group' not in trait_df.columns:
+        raise ValueError("Column 'group' not found. Run group assignment before sampling.")
+    if (args.filter_by is not None) and (args.filter_by not in trait_df.columns):
+        raise ValueError("Column '{}' specified by '--filter_by' was not found in '--trait'.".format(args.filter_by))
     shuffled_df = trait_df.sample(frac=1)
     if args.prioritize_non_missing and args.group_by is not None:
         if args.filter_by is None:
@@ -147,7 +162,12 @@ def add_contrastive_clade_ids(trait_df, marked_tree):
     return trait_df
 
 def skim_main(args):
+    if args.retain_per_clade < 1:
+        raise ValueError("'--retain_per_clade' must be a positive integer.")
+    if args.output_groupfile and args.outfile == '-':
+        raise ValueError("'--output_groupfile yes' requires '--outfile' to be a file path, not '-'.")
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    validate_unique_named_leaves(tree, option_name='--infile', context=" for 'skim'")
     trait_df = read_trait(args, tree)
     marked_tree = mark_traits_to_nodes(tree, trait_df, args)
     trait_df = add_group_ids(trait_df, marked_tree)
@@ -157,6 +177,8 @@ def skim_main(args):
         sampled_trait_df = sampled_trait_df[~sampled_trait_df['contrastive_clade'].isna()]
     else:
         sampled_trait_df = sample_from_groups(trait_df, args)
+    if sampled_trait_df.empty:
+        raise ValueError('No leaves were selected for output. Adjust trait/grouping/sampling options.')
     if args.output_groupfile:
         filename = args.outfile.removesuffix('.nwk')
         trait_df.sort_values('group').to_csv(f'{filename}.all.tsv', sep='\t', index=False)

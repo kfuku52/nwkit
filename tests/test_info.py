@@ -98,3 +98,11 @@ class TestInfoMain:
         info_main(args)
         captured = capsys.readouterr()
         assert 'Number of nodes with negative branch length: 1' in captured.out
+
+    def test_unnamed_leaf_not_counted_as_empty_species(self, tmp_nwk, capsys):
+        path = tmp_nwk('(:1,B:1);')
+        args = make_args(infile=path)
+        info_main(args)
+        captured = capsys.readouterr()
+        assert 'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: 1' in captured.out
+        assert 'Species names: B' in captured.out
