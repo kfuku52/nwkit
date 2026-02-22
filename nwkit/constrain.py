@@ -1,6 +1,6 @@
 import ete4
-import numpy
-import pandas
+import numpy as np
+import pandas as pd
 from collections import Counter, defaultdict
 from importlib import resources
 
@@ -8,6 +8,16 @@ import re
 import sys
 
 from nwkit.util import *
+
+def _close_ncbi_db(ncbi):
+    if ncbi is None:
+        return
+    db = getattr(ncbi, 'db', None)
+    if db is not None:
+        try:
+            db.close()
+        except Exception:
+            pass
 
 def check_input_file(args):
     if (args.species_list is None) and (args.taxid_tsv is None):
@@ -23,7 +33,7 @@ def check_input_file(args):
         if len(labels) != len(set(labels)):
             raise ValueError('Duplicate entries in --species_list are not supported.')
     if args.taxid_tsv is not None:
-        taxid_df = pandas.read_csv(args.taxid_tsv, sep='\t')
+        taxid_df = pd.read_csv(args.taxid_tsv, sep='\t')
         if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
             raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
         if taxid_df.empty:
@@ -32,7 +42,7 @@ def check_input_file(args):
             raise ValueError('Duplicate values in the "leaf_name" column of --taxid_tsv are not supported.')
         if taxid_df['taxid'].isna().any():
             raise ValueError('--taxid_tsv contains missing values in the "taxid" column.')
-        taxid_numeric = pandas.to_numeric(taxid_df['taxid'], errors='coerce')
+        taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
         if taxid_numeric.isna().any():
             raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
         if (taxid_numeric % 1 != 0).any():
@@ -78,10 +88,13 @@ def get_lineages(labels, rank):
         for label in labels
     ]
     ncbi = ete4.NCBITaxa()
-    lineages = dict()
-    for sp,label in zip(splist,labels):
-        lineages[label] = get_lineage(sp, ncbi, rank)
-    return lineages
+    try:
+        lineages = dict()
+        for sp,label in zip(splist,labels):
+            lineages[label] = get_lineage(sp, ncbi, rank)
+        return lineages
+    finally:
+        _close_ncbi_db(ncbi)
 
 def get_lineage_from_taxid(taxid, ncbi, rank):
     lineage = ncbi.get_lineage(taxid)
@@ -89,47 +102,52 @@ def get_lineage_from_taxid(taxid, ncbi, rank):
 
 def get_lineages_from_taxid(taxid_df, rank):
     ncbi = ete4.NCBITaxa()
-    taxid_numeric = pandas.to_numeric(taxid_df['taxid'], errors='coerce')
-    if taxid_numeric.isna().any():
-        raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
-    if (taxid_numeric % 1 != 0).any():
-        raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
-    lineages = dict()
-    for label, taxid in zip(taxid_df['leaf_name'], taxid_numeric.astype(int)):
-        lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
-    return lineages
+    try:
+        taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
+        if taxid_numeric.isna().any():
+            raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
+        if (taxid_numeric % 1 != 0).any():
+            raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
+        lineages = dict()
+        for label, taxid in zip(taxid_df['leaf_name'], taxid_numeric.astype(int)):
+            lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
+        return lineages
+    finally:
+        _close_ncbi_db(ncbi)
 
 def match_taxa(tree, labels, backbone_method):
     splist = [
         label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
         for label in labels
     ]
-    if backbone_method.startswith('ncbi'):
-        ncbi = ete4.NCBITaxa()
-    leaf_names = [ ln.replace('_',' ') for ln in tree.leaf_names() ]
-    leaf_name_set = set(leaf_names)
-    leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
-    for sp,label in zip(splist,labels):
-        if backbone_method.startswith('ncbi'):
-            lineage = get_lineage(sp, ncbi, rank='no')
-            ancestor_names = ncbi.get_taxid_translator(lineage)
-            ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
-            ancestor = list(ancestor)
-            if (len(ancestor)>1):
-                txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n'
-                sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
-                continue
-            elif (len(ancestor)==0):
-                txt = 'No hit. Excluded from the output. Taxon = {}\n'
-                sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
-                continue
-        elif backbone_method=='user':
-            ancestor = [sp]
-        leaf = leaf_by_name.get(ancestor[0])
-        if leaf is not None:
-            leaf.props['has_taxon'] = True
-            leaf.props['taxon_names'].append(label)
-    return tree
+    ncbi = ete4.NCBITaxa() if backbone_method.startswith('ncbi') else None
+    try:
+        leaf_names = [ ln.replace('_',' ') for ln in tree.leaf_names() ]
+        leaf_name_set = set(leaf_names)
+        leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        for sp,label in zip(splist,labels):
+            if backbone_method.startswith('ncbi'):
+                lineage = get_lineage(sp, ncbi, rank='no')
+                ancestor_names = ncbi.get_taxid_translator(lineage)
+                ancestor = leaf_name_set.intersection(set(ancestor_names.values()))
+                ancestor = list(ancestor)
+                if (len(ancestor)>1):
+                    txt = 'Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n'
+                    sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
+                    continue
+                elif (len(ancestor)==0):
+                    txt = 'No hit. Excluded from the output. Taxon = {}\n'
+                    sys.stderr.write(txt.format(sp, ','.join(list(ancestor))))
+                    continue
+            elif backbone_method=='user':
+                ancestor = [sp]
+            leaf = leaf_by_name.get(ancestor[0])
+            if leaf is not None:
+                leaf.props['has_taxon'] = True
+                leaf.props['taxon_names'].append(label)
+        return tree
+    finally:
+        _close_ncbi_db(ncbi)
 
 def delete_nomatch_leaves(tree):
     for leaf in list(tree.leaves()):
@@ -157,24 +175,27 @@ def get_taxid_counts(lineages):
         taxid_counter.update(lineage)
     uniq_taxids = list(taxid_counter.keys())
     counts = [taxid_counter[taxid] for taxid in uniq_taxids]
-    taxid_counts = numpy.array([uniq_taxids, counts]).T
-    count_order = numpy.argsort(taxid_counts[:,1])
+    taxid_counts = np.array([uniq_taxids, counts]).T
+    count_order = np.argsort(taxid_counts[:,1])
     taxid_counts = taxid_counts[count_order,:]
     return taxid_counts
 
 def get_mrca_taxid(multi_counts):
     ncbi = ete4.NCBITaxa()
-    max_count = multi_counts[:,1].max()
-    is_max_count = (multi_counts[:,1]==max_count)
-    max_taxids = multi_counts[is_max_count,0]
-    mrca_taxid = 1
-    max_ancestor_num = 0
-    for mt in max_taxids:
-        ancestor_num = len(ncbi.get_lineage(mt))
-        if (ancestor_num > max_ancestor_num):
-            mrca_taxid = mt
-            max_ancestor_num = ancestor_num
-    return mrca_taxid
+    try:
+        max_count = multi_counts[:,1].max()
+        is_max_count = (multi_counts[:,1]==max_count)
+        max_taxids = multi_counts[is_max_count,0]
+        mrca_taxid = 1
+        max_ancestor_num = 0
+        for mt in max_taxids:
+            ancestor_num = len(ncbi.get_lineage(mt))
+            if (ancestor_num > max_ancestor_num):
+                mrca_taxid = mt
+                max_ancestor_num = ancestor_num
+        return mrca_taxid
+    finally:
+        _close_ncbi_db(ncbi)
 
 def get_max_ancestor_overlap_node(tree, ancestors):
     ancestors = set(ancestors)
@@ -267,36 +288,39 @@ def taxid2tree(lineages, taxid_counts):
     multi_counts = taxid_counts[is_multiple,:]
     if multi_counts.shape[0] == 0:
         raise ValueError('No shared taxonomic ranks were found across input taxa.')
-    clades = list()
-    clade_leaf_sets = list()
-    taxid_to_species = defaultdict(list)
-    for sp, lineage in lineages.items():
-        for taxid in lineage:
-            taxid_to_species[taxid].append(sp)
-    taxid_to_lineage_cache = dict()
-    for i in numpy.arange(multi_counts.shape[0]):
-        taxid = multi_counts[i,0]
-        #count = multi_counts[i,1]
-        if taxid not in taxid_to_lineage_cache:
-            taxid_to_lineage_cache[taxid] = ncbi.get_lineage(taxid)
-        ancestors = taxid_to_lineage_cache[taxid]
-        new_clade = ete4.Tree()
-        new_clade.add_props(ancestors=ancestors)
-        species_names = taxid_to_species.get(taxid, [])
-        for sp in species_names:
-            new_leaf = ete4.Tree({'name': sp})
-            new_leaf.add_props(ancestors=lineages[sp])
-            new_clade.add_child(new_leaf)
-        clades, clade_leaf_sets = _add_new_clade_with_leaf_set_cache(
-            clades=clades,
-            clade_leaf_sets=clade_leaf_sets,
-            new_clade=new_clade,
-            new_leaf_set=set(species_names),
-        )
-    if len(clades) != 1:
-        raise ValueError('Failed to merge clades into a single tree.')
-    tree = clades[0]
-    return tree
+    try:
+        clades = list()
+        clade_leaf_sets = list()
+        taxid_to_species = defaultdict(list)
+        for sp, lineage in lineages.items():
+            for taxid in lineage:
+                taxid_to_species[taxid].append(sp)
+        taxid_to_lineage_cache = dict()
+        for i in np.arange(multi_counts.shape[0]):
+            taxid = multi_counts[i,0]
+            #count = multi_counts[i,1]
+            if taxid not in taxid_to_lineage_cache:
+                taxid_to_lineage_cache[taxid] = ncbi.get_lineage(taxid)
+            ancestors = taxid_to_lineage_cache[taxid]
+            new_clade = ete4.Tree()
+            new_clade.add_props(ancestors=ancestors)
+            species_names = taxid_to_species.get(taxid, [])
+            for sp in species_names:
+                new_leaf = ete4.Tree({'name': sp})
+                new_leaf.add_props(ancestors=lineages[sp])
+                new_clade.add_child(new_leaf)
+            clades, clade_leaf_sets = _add_new_clade_with_leaf_set_cache(
+                clades=clades,
+                clade_leaf_sets=clade_leaf_sets,
+                new_clade=new_clade,
+                new_leaf_set=set(species_names),
+            )
+        if len(clades) != 1:
+            raise ValueError('Failed to merge clades into a single tree.')
+        tree = clades[0]
+        return tree
+    finally:
+        _close_ncbi_db(ncbi)
 
 def tree_sciname2label(tree, labels):
     leaf_name_to_nodes = defaultdict(list)
@@ -332,7 +356,7 @@ def constrain_main(args):
     check_input_file(args)
     if (args.backbone=='ncbi'):
         if args.taxid_tsv is not None:
-            taxid_df = pandas.read_csv(args.taxid_tsv, sep='\t')
+            taxid_df = pd.read_csv(args.taxid_tsv, sep='\t')
             lineages = get_lineages_from_taxid(taxid_df, rank=args.rank)
         else:
             labels = read_item_per_line_file(args.species_list)

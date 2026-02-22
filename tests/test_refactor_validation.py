@@ -1,7 +1,7 @@
 import re
 import random
-import numpy
-import pandas
+import numpy as np
+import pandas as pd
 import pytest
 from argparse import Namespace
 from ete4 import Tree
@@ -190,30 +190,35 @@ def old_add_new_clade(clades, new_clade):
 
 def old_taxid2tree(lineages, taxid_counts):
     ncbi = constrain.ete4.NCBITaxa()
-    is_multiple = taxid_counts[:, 1] > 1
-    multi_counts = taxid_counts[is_multiple, :]
-    clades = list()
-    for i in numpy.arange(multi_counts.shape[0]):
-        taxid = multi_counts[i, 0]
-        ancestors = ncbi.get_lineage(taxid)
-        new_clade = Tree()
-        new_clade.add_props(ancestors=ancestors)
-        new_clade = old_populate_leaves(new_clade, taxid, lineages)
-        clades = old_add_new_clade(clades, new_clade)
-    assert len(clades) == 1, 'Failed to merge clades into a single tree.'
-    return clades[0]
+    try:
+        is_multiple = taxid_counts[:, 1] > 1
+        multi_counts = taxid_counts[is_multiple, :]
+        clades = list()
+        for i in np.arange(multi_counts.shape[0]):
+            taxid = multi_counts[i, 0]
+            ancestors = ncbi.get_lineage(taxid)
+            new_clade = Tree()
+            new_clade.add_props(ancestors=ancestors)
+            new_clade = old_populate_leaves(new_clade, taxid, lineages)
+            clades = old_add_new_clade(clades, new_clade)
+        assert len(clades) == 1, 'Failed to merge clades into a single tree.'
+        return clades[0]
+    finally:
+        db = getattr(ncbi, 'db', None)
+        if db is not None:
+            db.close()
 
 
 def old_read_trait(args, tree):
     if args.trait is None:
-        return pandas.DataFrame({'leaf_name': list(tree.leaf_names())})
-    trait_df = pandas.read_csv(args.trait, sep='\t')
+        return pd.DataFrame({'leaf_name': list(tree.leaf_names())})
+    trait_df = pd.read_csv(args.trait, sep='\t')
     leaf_names_list = list(tree.leaf_names())
     trait_df = trait_df[trait_df['leaf_name'].isin(leaf_names_list)]
     for leaf_name in leaf_names_list:
         if leaf_name not in trait_df['leaf_name'].values:
-            trait_df = pandas.concat(
-                [trait_df, pandas.DataFrame({'leaf_name': [leaf_name]})],
+            trait_df = pd.concat(
+                [trait_df, pd.DataFrame({'leaf_name': [leaf_name]})],
                 ignore_index=True,
             )
     return trait_df
@@ -426,7 +431,7 @@ class TestSkimRefactorValidation:
     def test_read_trait_matches_old_logic(self, tmp_path):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {
                 'leaf_name': ['A', 'C', 'E'],
                 'trait': ['x', 'y', 'z'],
@@ -436,7 +441,7 @@ class TestSkimRefactorValidation:
         args = Namespace(trait=str(trait_path))
         old_df = old_read_trait(args, tree).sort_values('leaf_name').reset_index(drop=True)
         new_df = skim.read_trait(args, tree).sort_values('leaf_name').reset_index(drop=True)
-        pandas.testing.assert_frame_equal(new_df, old_df, check_dtype=False)
+        pd.testing.assert_frame_equal(new_df, old_df, check_dtype=False)
 
     @pytest.mark.parametrize(
         'prioritize_non_missing,filter_by,filter_mode',
@@ -451,7 +456,7 @@ class TestSkimRefactorValidation:
     def test_sample_from_groups_matches_old_on_deterministic_inputs(
         self, prioritize_non_missing, filter_by, filter_mode,
     ):
-        trait_df = pandas.DataFrame(
+        trait_df = pd.DataFrame(
             {
                 'leaf_name': ['A', 'B', 'C', 'D', 'E', 'F'],
                 'group': [1, 1, 2, 2, 3, 3],
@@ -466,11 +471,11 @@ class TestSkimRefactorValidation:
             filter_by=filter_by,
             filter_mode=filter_mode,
         )
-        numpy.random.seed(7)
+        np.random.seed(7)
         old_df = old_sample_from_groups(trait_df.copy(), args).sort_values('leaf_name').reset_index(drop=True)
-        numpy.random.seed(7)
+        np.random.seed(7)
         new_df = skim.sample_from_groups(trait_df.copy(), args).sort_values('leaf_name').reset_index(drop=True)
-        pandas.testing.assert_frame_equal(new_df, old_df, check_dtype=False)
+        pd.testing.assert_frame_equal(new_df, old_df, check_dtype=False)
 
 
 class TestRootRefactorValidation:

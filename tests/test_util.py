@@ -111,7 +111,8 @@ class TestWriteTree:
         args = make_args(outfile=tmp_outfile)
         monkeypatch.setattr(sys, 'argv', ['nwkit'])
         write_tree(tree, args, format='auto', quiet=True)
-        out = open(tmp_outfile).read()
+        with open(tmp_outfile) as f:
+            out = f.read()
         assert 'AB' in out
         assert 'CD' in out
 
@@ -123,7 +124,8 @@ class TestWriteTree:
         args = make_args(outfile=tmp_outfile)
         monkeypatch.setattr(sys, 'argv', ['nwkit'])
         write_tree(tree1, args, format='auto', quiet=True)
-        out = open(tmp_outfile).read()
+        with open(tmp_outfile) as f:
+            out = f.read()
         assert 'AB' in out
         assert 'CD' in out
 

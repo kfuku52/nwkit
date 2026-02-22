@@ -1,5 +1,5 @@
-import numpy
-import pandas
+import numpy as np
+import pandas as pd
 import pytest
 from argparse import Namespace
 from ete4 import Tree
@@ -34,7 +34,7 @@ class TestReadTrait:
     def test_read_trait_fills_missing_and_drops_unknown(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B', 'D'], 'trait': ['x', 'x', 'z']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_skim_args(trait=str(trait_path))
@@ -45,7 +45,7 @@ class TestReadTrait:
     def test_duplicate_leaf_names_raise(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'A', 'B'], 'trait': ['x', 'y', 'x']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_skim_args(trait=str(trait_path))
@@ -55,7 +55,7 @@ class TestReadTrait:
     def test_duplicate_non_string_leaf_names_do_not_trigger_typeerror(self, tmp_path):
         tree = Tree('(A:1,:1,:1);', parser=0)
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': [float('nan'), float('nan'), 'A'], 'trait': ['x', 'y', 'z']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_skim_args(trait=str(trait_path))
@@ -68,7 +68,7 @@ class TestReadTrait:
     def test_missing_leaf_name_column_raises(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'species': ['A', 'B'], 'trait': ['x', 'y']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_skim_args(trait=str(trait_path))
@@ -80,7 +80,7 @@ class TestGrouping:
     def test_add_group_ids_for_two_homogeneous_clades(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         args = make_skim_args(group_by='trait')
-        trait_df = pandas.DataFrame(
+        trait_df = pd.DataFrame(
             {'leaf_name': ['A', 'B', 'C', 'D'], 'trait': ['x', 'x', 'y', 'y']}
         )
         marked_tree = mark_traits_to_nodes(tree, trait_df, args)
@@ -93,7 +93,7 @@ class TestGrouping:
     def test_add_contrastive_clade_ids_marks_minimal_mixed_clades(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         args = make_skim_args(group_by='trait')
-        trait_df = pandas.DataFrame(
+        trait_df = pd.DataFrame(
             {'leaf_name': ['A', 'B', 'C', 'D'], 'trait': ['x', 'y', 'z', 'z']}
         )
         marked_tree = mark_traits_to_nodes(tree, trait_df, args)
@@ -105,25 +105,25 @@ class TestGrouping:
     def test_missing_group_by_column_raises(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         args = make_skim_args(group_by='trait')
-        trait_df = pandas.DataFrame({'leaf_name': ['A', 'B', 'C', 'D']})
+        trait_df = pd.DataFrame({'leaf_name': ['A', 'B', 'C', 'D']})
         with pytest.raises(ValueError, match='group_by'):
             mark_traits_to_nodes(tree, trait_df, args)
 
     def test_mark_traits_to_nodes_handles_unnamed_leaves_without_keyerror(self):
         tree = Tree('(A:1,:1,:1);', parser=0)
         args = make_skim_args(group_by=None)
-        trait_df = pandas.DataFrame({'leaf_name': list(tree.leaf_names())})
+        trait_df = pd.DataFrame({'leaf_name': list(tree.leaf_names())})
         marked = mark_traits_to_nodes(tree, trait_df, args)
         assert set(marked.leaf_names()) == {'A', None}
 
 
 class TestSampling:
     def test_sample_from_groups_prioritizes_non_missing(self):
-        trait_df = pandas.DataFrame(
+        trait_df = pd.DataFrame(
             {
                 'leaf_name': ['A', 'B', 'C', 'D'],
                 'group': [1, 1, 2, 2],
-                'trait': ['x', numpy.nan, 'y', numpy.nan],
+                'trait': ['x', np.nan, 'y', np.nan],
                 'score': [10, 0, 20, 0],
             }
         )
@@ -137,7 +137,7 @@ class TestSampling:
         assert set(sampled['leaf_name']) == {'A', 'C'}
 
     def test_missing_filter_by_column_raises(self):
-        trait_df = pandas.DataFrame(
+        trait_df = pd.DataFrame(
             {
                 'leaf_name': ['A', 'B'],
                 'group': [1, 1],
@@ -153,7 +153,7 @@ class TestSkimMainValidation:
         nwk_path = tmp_path / 'tree.nwk'
         nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B', 'C', 'D'], 'trait': ['x', 'x', 'x', 'x']}
         ).to_csv(trait_path, sep='\t', index=False)
         out_tree = tmp_path / 'out.nwk'
@@ -179,7 +179,7 @@ class TestSkimMainValidation:
         nwk_path = tmp_path / 'tree.nwk'
         nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B', 'C', 'D'], 'trait': ['x', 'x', 'y', 'y']}
         ).to_csv(trait_path, sep='\t', index=False)
         out_tree = tmp_path / 'out.nwk'
@@ -205,7 +205,7 @@ class TestSkimMainValidation:
         nwk_path = tmp_path / 'tree.nwk'
         nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
         trait_path = tmp_path / 'trait.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B', 'C', 'D'], 'trait': ['x', 'x', 'y', 'y']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_args(

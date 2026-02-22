@@ -132,127 +132,132 @@ def add_timetree_constraint(tree, args):
     endpoint_url = 'http://timetree.org/api'
     search_ranks = SEARCH_RANKS if args.higher_rank_search else SEARCH_RANKS[:1]
     ncbi = NCBITaxa()
-    check_leaf_taxid_availability(tree, ncbi)
-    subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
-    leaf_name_to_sci_name = {leaf.name: leaf.name.replace('_', ' ') for leaf in tree.leaves()}
-    taxid_lineage_rank_dict_cache = dict()
-    for node in tree.traverse():
-        if node.is_leaf:
-            continue
-        node.name = 'NoName'
-        leaf_names = sorted(subtree_leaf_name_sets[node])
-        sci_names = [leaf_name_to_sci_name[leaf_name] for leaf_name in leaf_names]
-        name2taxid = ncbi.get_name_translator(sci_names)
-        taxid_assigned_sci_names = list(name2taxid.keys())
-        taxid_assigned_leaf_names = [ sci_name.replace(' ', '_') for sci_name in taxid_assigned_sci_names ]
-        if not are_both_lineage_included(
-            node=node,
-            leaf_names=taxid_assigned_leaf_names,
-            subtree_leaf_name_sets=subtree_leaf_name_sets,
-        ):
-            txt = "Skipping. Lack of NCBI Taxonomy information for the MRCA of {}\n"
-            sys.stderr.write(txt.format(','.join(leaf_names)))
-            continue
-        species_taxids = [ t for ts in name2taxid.values() for t in ts ]
-        lineage_taxids = list()
-        for sp_taxid in species_taxids:
-            if sp_taxid not in taxid_lineage_rank_dict_cache:
-                lineages = ncbi.get_lineage(sp_taxid)
-                ranks = ncbi.get_rank(lineages)
-                lin_dict = dict()
-                for taxid in ranks.keys():
-                    lin_dict[ranks[taxid]] = taxid
-                taxid_lineage_rank_dict_cache[sp_taxid] = lin_dict
-            lineage_taxids.append(taxid_lineage_rank_dict_cache[sp_taxid])
-        leaf_rank_pairs = list(zip(taxid_assigned_leaf_names, lineage_taxids))
-        for search_rank in search_ranks:
-            taxids = [d[search_rank] for d in lineage_taxids if search_rank in d]
-            ta_leaf_names = [l for l, d in leaf_rank_pairs if search_rank in d]
-            ta_leaf_name_set = set(ta_leaf_names)
+    try:
+        check_leaf_taxid_availability(tree, ncbi)
+        subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
+        leaf_name_to_sci_name = {leaf.name: leaf.name.replace('_', ' ') for leaf in tree.leaves()}
+        taxid_lineage_rank_dict_cache = dict()
+        for node in tree.traverse():
+            if node.is_leaf:
+                continue
+            node.name = 'NoName'
+            leaf_names = sorted(subtree_leaf_name_sets[node])
+            sci_names = [leaf_name_to_sci_name[leaf_name] for leaf_name in leaf_names]
+            name2taxid = ncbi.get_name_translator(sci_names)
+            taxid_assigned_sci_names = list(name2taxid.keys())
+            taxid_assigned_leaf_names = [ sci_name.replace(' ', '_') for sci_name in taxid_assigned_sci_names ]
             if not are_both_lineage_included(
                 node=node,
-                leaf_names=ta_leaf_name_set,
+                leaf_names=taxid_assigned_leaf_names,
                 subtree_leaf_name_sets=subtree_leaf_name_sets,
             ):
-                #txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
-                #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
-                continue
-            if not are_two_lineage_rank_differentiated(
-                node=node,
-                taxids=taxids,
-                ta_leaf_names=ta_leaf_names,
-                subtree_leaf_name_sets=subtree_leaf_name_sets,
-            ):
-                #txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
-                #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
-                continue
-            if search_rank!='species':
-                sys.stderr.write('Searching higher taxonomic ranks to find MRCA at timetree.org: {}\n'.format(search_rank))
-            request_url = '{}/mrca/id/{}'.format(endpoint_url, '+'.join([ str(t) for t in taxids ]))
-            sys.stderr.write('Waiting for the REST API at timetree.org. ')
-            start = time.time()
-            try:
-                response = requests.get(url=request_url, timeout=30)
-            except requests.RequestException:
-                txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
+                txt = "Skipping. Lack of NCBI Taxonomy information for the MRCA of {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
                 continue
-            sys.stderr.write('Elapsed {:,} sec\n'.format(int(time.time() - start)))
-            if response.status_code!=200:
-                txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            timetree_result = re.sub('.*;</script>', '', response.text)
-            if "MRCA node not found" in timetree_result:
-                txt = "Skipping. No MRCA found at timetree.org for the node containing: {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            if "No study info found for node" in timetree_result:
-                txt = "Skipping. No study info found at timetree.org for the node containing: {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            if "No TimeTree study info available for this MRCA" in timetree_result:
-                txt = "Skipping. No TimeTree study info available for this MRCA for the node containing: {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            if not is_mrca_clade_root(
-                node,
-                timetree_result,
-                ncbi,
-                subtree_leaf_name_sets=subtree_leaf_name_sets,
-            ):
-                txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            timetree_keys = re.sub('\r\n.*', '', re.sub('<br>.*', '', timetree_result)).split(',')
-            timetree_values = re.sub('.*\r\n', '', re.sub('.*<br>', '', timetree_result)).split(',')
-            timetree_dict = dict()
-            for key,value in zip(timetree_keys, timetree_values):
-                timetree_dict[key] = value
-            required_keys = ['precomputed_age', 'precomputed_ci_low', 'precomputed_ci_high']
-            if any(key not in timetree_dict for key in required_keys):
-                txt = "Skipping. Unexpected response format from timetree.org for the node containing: {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            try:
-                ci_high = float(timetree_dict['precomputed_ci_high'])
-            except ValueError:
-                txt = "Skipping. Non-numeric age estimate from timetree.org for the node containing: {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            if ci_high==0:
-                txt = "Skipping. Upper age estimate at timetree.org is zero for the MRCA of {}\n"
-                sys.stderr.write(txt.format(','.join(leaf_names)))
-                continue
-            if (args.timetree=='point'):
-                constraint = '@' + timetree_dict['precomputed_age']
-            elif (args.timetree=='ci'):
-                constraint = 'B(' + ', '.join([timetree_dict['precomputed_ci_low'], timetree_dict['precomputed_ci_high'],
-                                               args.lower_tailProb, args.upper_tailProb]) + ')'
-            constraint = '\'' + constraint + '\''
-            node.name = constraint
-            break
-    return tree
+            species_taxids = [ t for ts in name2taxid.values() for t in ts ]
+            lineage_taxids = list()
+            for sp_taxid in species_taxids:
+                if sp_taxid not in taxid_lineage_rank_dict_cache:
+                    lineages = ncbi.get_lineage(sp_taxid)
+                    ranks = ncbi.get_rank(lineages)
+                    lin_dict = dict()
+                    for taxid in ranks.keys():
+                        lin_dict[ranks[taxid]] = taxid
+                    taxid_lineage_rank_dict_cache[sp_taxid] = lin_dict
+                lineage_taxids.append(taxid_lineage_rank_dict_cache[sp_taxid])
+            leaf_rank_pairs = list(zip(taxid_assigned_leaf_names, lineage_taxids))
+            for search_rank in search_ranks:
+                taxids = [d[search_rank] for d in lineage_taxids if search_rank in d]
+                ta_leaf_names = [l for l, d in leaf_rank_pairs if search_rank in d]
+                ta_leaf_name_set = set(ta_leaf_names)
+                if not are_both_lineage_included(
+                    node=node,
+                    leaf_names=ta_leaf_name_set,
+                    subtree_leaf_name_sets=subtree_leaf_name_sets,
+                ):
+                    #txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
+                    #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
+                    continue
+                if not are_two_lineage_rank_differentiated(
+                    node=node,
+                    taxids=taxids,
+                    ta_leaf_names=ta_leaf_names,
+                    subtree_leaf_name_sets=subtree_leaf_name_sets,
+                ):
+                    #txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
+                    #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
+                    continue
+                if search_rank!='species':
+                    sys.stderr.write('Searching higher taxonomic ranks to find MRCA at timetree.org: {}\n'.format(search_rank))
+                request_url = '{}/mrca/id/{}'.format(endpoint_url, '+'.join([ str(t) for t in taxids ]))
+                sys.stderr.write('Waiting for the REST API at timetree.org. ')
+                start = time.time()
+                try:
+                    response = requests.get(url=request_url, timeout=30)
+                except requests.RequestException:
+                    txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                sys.stderr.write('Elapsed {:,} sec\n'.format(int(time.time() - start)))
+                if response.status_code!=200:
+                    txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                timetree_result = re.sub('.*;</script>', '', response.text)
+                if "MRCA node not found" in timetree_result:
+                    txt = "Skipping. No MRCA found at timetree.org for the node containing: {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                if "No study info found for node" in timetree_result:
+                    txt = "Skipping. No study info found at timetree.org for the node containing: {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                if "No TimeTree study info available for this MRCA" in timetree_result:
+                    txt = "Skipping. No TimeTree study info available for this MRCA for the node containing: {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                if not is_mrca_clade_root(
+                    node,
+                    timetree_result,
+                    ncbi,
+                    subtree_leaf_name_sets=subtree_leaf_name_sets,
+                ):
+                    txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                timetree_keys = re.sub('\r\n.*', '', re.sub('<br>.*', '', timetree_result)).split(',')
+                timetree_values = re.sub('.*\r\n', '', re.sub('.*<br>', '', timetree_result)).split(',')
+                timetree_dict = dict()
+                for key,value in zip(timetree_keys, timetree_values):
+                    timetree_dict[key] = value
+                required_keys = ['precomputed_age', 'precomputed_ci_low', 'precomputed_ci_high']
+                if any(key not in timetree_dict for key in required_keys):
+                    txt = "Skipping. Unexpected response format from timetree.org for the node containing: {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                try:
+                    ci_high = float(timetree_dict['precomputed_ci_high'])
+                except ValueError:
+                    txt = "Skipping. Non-numeric age estimate from timetree.org for the node containing: {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                if ci_high==0:
+                    txt = "Skipping. Upper age estimate at timetree.org is zero for the MRCA of {}\n"
+                    sys.stderr.write(txt.format(','.join(leaf_names)))
+                    continue
+                if (args.timetree=='point'):
+                    constraint = '@' + timetree_dict['precomputed_age']
+                elif (args.timetree=='ci'):
+                    constraint = 'B(' + ', '.join([timetree_dict['precomputed_ci_low'], timetree_dict['precomputed_ci_high'],
+                                                   args.lower_tailProb, args.upper_tailProb]) + ')'
+                constraint = '\'' + constraint + '\''
+                node.name = constraint
+                break
+        return tree
+    finally:
+        db = getattr(ncbi, 'db', None)
+        if db is not None:
+            db.close()
 
 def remove_constraint_equal_upper(tree):
     removed_constraint_count = 0

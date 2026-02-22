@@ -1,4 +1,4 @@
-import pandas
+import pandas as pd
 import pytest
 from argparse import Namespace
 from ete4 import Tree
@@ -64,7 +64,7 @@ class TestCheckInputFile:
 
     def test_taxid_tsv_duplicate_leaf_name_raises(self, tmp_path):
         tsv_path = tmp_path / 'taxid.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'A'], 'taxid': [9606, 9606]}
         ).to_csv(tsv_path, sep='\t', index=False)
         args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')
@@ -73,7 +73,7 @@ class TestCheckInputFile:
 
     def test_taxid_tsv_missing_taxid_raises(self, tmp_path):
         tsv_path = tmp_path / 'taxid.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B'], 'taxid': [9606, None]}
         ).to_csv(tsv_path, sep='\t', index=False)
         args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')
@@ -82,7 +82,7 @@ class TestCheckInputFile:
 
     def test_taxid_tsv_non_numeric_taxid_raises(self, tmp_path):
         tsv_path = tmp_path / 'taxid.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B'], 'taxid': ['9606', 'abc']}
         ).to_csv(tsv_path, sep='\t', index=False)
         args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')
@@ -91,7 +91,7 @@ class TestCheckInputFile:
 
     def test_taxid_tsv_non_integer_taxid_raises(self, tmp_path):
         tsv_path = tmp_path / 'taxid.tsv'
-        pandas.DataFrame(
+        pd.DataFrame(
             {'leaf_name': ['A', 'B'], 'taxid': [9606, 123.5]}
         ).to_csv(tsv_path, sep='\t', index=False)
         args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')

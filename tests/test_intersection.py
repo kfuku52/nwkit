@@ -227,8 +227,9 @@ class TestIntersectionMain:
         tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {'A', 'C', 'D', 'F'}
         # Output FASTA should contain all 4 sequences (all are in the tree)
-        import Bio.SeqIO
-        out_records = list(Bio.SeqIO.parse(out_seq, 'fasta'))
+        import Bio.SeqIO as SeqIO
+        with open(out_seq) as fh:
+            out_records = list(SeqIO.parse(fh, 'fasta'))
         out_seq_names = {r.name for r in out_records}
         assert out_seq_names == {'A', 'C', 'D', 'F'}
 
@@ -248,6 +249,7 @@ class TestIntersectionMain:
         intersection_main(args)
         tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {'A', 'C', 'D', 'F'}
-        import Bio.SeqIO
-        out_records = list(Bio.SeqIO.parse(out_seq, 'fasta'))
+        import Bio.SeqIO as SeqIO
+        with open(out_seq) as fh:
+            out_records = list(SeqIO.parse(fh, 'fasta'))
         assert len(out_records) == 4

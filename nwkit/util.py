@@ -2,7 +2,7 @@ import os
 import re
 import sys
 from collections import Counter
-import Bio.SeqIO
+import Bio.SeqIO as SeqIO
 from ete4 import Tree
 
 NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
@@ -99,10 +99,10 @@ def write_tree(tree, args, format, quiet=False):
 
 def read_seqs(seqfile, seqformat, quiet):
     if seqfile=='-':
-        parsed = sys.stdin
+        records = list(SeqIO.parse(sys.stdin, seqformat))
     else:
-        parsed = seqfile
-    records = list(Bio.SeqIO.parse(parsed, seqformat))
+        with open(seqfile) as fh:
+            records = list(SeqIO.parse(fh, seqformat))
     if not quiet:
         sys.stderr.write('Number of input sequences: {:,}\n'.format(len(records)))
     return records
@@ -111,9 +111,9 @@ def write_seqs(records, outfile, seqformat='fasta', quiet=False):
     if not quiet:
         sys.stderr.write('Number of output sequences: {:,}\n'.format(len(records)))
     if outfile=='-':
-        Bio.SeqIO.write(records, sys.stdout, seqformat)
+        SeqIO.write(records, sys.stdout, seqformat)
     else:
-        Bio.SeqIO.write(records, outfile, seqformat)
+        SeqIO.write(records, outfile, seqformat)
 
 def remove_singleton(tree, verbose=False, preserve_branch_length=True):
     for node in tree.traverse():

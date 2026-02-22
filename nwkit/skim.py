@@ -1,13 +1,13 @@
-import pandas
+import pandas as pd
 import sys
 from nwkit.util import *
 
 def read_trait(args, tree):
     if args.trait is None:
         sys.stderr.write(f"'--trait' not specified. Sampling leaves at random.\n")
-        trait_df = pandas.DataFrame({'leaf_name': list(tree.leaf_names())})
+        trait_df = pd.DataFrame({'leaf_name': list(tree.leaf_names())})
         return trait_df
-    trait_df = pandas.read_csv(args.trait, sep='\t')
+    trait_df = pd.read_csv(args.trait, sep='\t')
     if 'leaf_name' not in trait_df.columns:
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     leaf_names_list = list(tree.leaf_names())
@@ -27,8 +27,8 @@ def read_trait(args, tree):
             for leaf_name in missing_leaf_names
         )
         sys.stderr.write(log_txt)
-        trait_df = pandas.concat(
-            [trait_df, pandas.DataFrame({'leaf_name': missing_leaf_names})],
+        trait_df = pd.concat(
+            [trait_df, pd.DataFrame({'leaf_name': missing_leaf_names})],
             ignore_index=True,
         )
     return trait_df
@@ -48,12 +48,12 @@ def mark_traits_to_nodes(tree, trait_df, args):
             trait = None
             for child in node.children:
                 child_trait = child.props.get('trait')
-                if pandas.isna(child_trait):
+                if pd.isna(child_trait):
                     continue
                 elif child_trait == '_MIXED_':
                     trait = '_MIXED_'
                     break
-                elif pandas.isna(trait):
+                elif pd.isna(trait):
                     trait = child_trait
                 elif trait == child_trait:
                     continue
@@ -76,7 +76,7 @@ def add_group_ids(trait_df, marked_tree):
     group_id = 1
     leafname2group = {}
     subtree_leaf_name_sets = get_subtree_leaf_name_sets(marked_tree)
-    for node in iter_frontier_nodes(root=marked_tree.root, stop_condition=lambda node: pandas.isna(node.props.get('trait')) or node.props.get('trait') != '_MIXED_'):
+    for node in iter_frontier_nodes(root=marked_tree.root, stop_condition=lambda node: pd.isna(node.props.get('trait')) or node.props.get('trait') != '_MIXED_'):
         if node.is_leaf:
             leafname2group[node.name] = group_id
             group_id += 1
