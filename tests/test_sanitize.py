@@ -53,6 +53,20 @@ class TestSanitizeMain:
                 assert len(node.get_children()) != 1
         assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd', 'e', 'f'}
 
+    def test_remove_singleton_root_wrapper(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((A:1,B:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            remove_singleton=True, resolve_polytomy=False, name_quote='none',
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'A', 'B'}
+        assert len(tree.get_children()) == 2
+        for node in tree.traverse():
+            if not node.is_leaf:
+                assert len(node.get_children()) != 1
+
     def test_add_single_quote(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
         args = make_args(

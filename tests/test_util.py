@@ -152,6 +152,16 @@ class TestRemoveSingleton:
         # After removing singleton, branch lengths should be preserved (summed)
         assert set(tree.leaf_names()) == {'A', 'B', 'C'}
 
+    def test_remove_singleton_root_wrapper(self):
+        tree = Tree('((A:1,B:1):1);', parser=1)
+        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
+        assert set(tree.leaf_names()) == {'A', 'B'}
+        assert len(tree.get_children()) == 2
+        assert abs(tree.get_distance('A', 'B') - 2.0) < 1e-6
+        for node in tree.traverse():
+            if not node.is_leaf:
+                assert len(node.get_children()) != 1
+
 
 class TestLabel2Sciname:
     def test_single_string(self):

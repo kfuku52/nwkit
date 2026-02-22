@@ -125,6 +125,24 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
         if verbose:
             sys.stderr.write('Deleting a singleton node: {}\n'.format(node.name))
         node.delete(prevent_nondicotomic=False, preserve_branch_length=preserve_branch_length)
+    # ete4 does not always collapse a singleton root in-place.
+    # Explicitly promote the root child while more than one tip exists.
+    while (len(tree.get_children()) == 1) and (len(list(tree.leaves())) > 1):
+        child = tree.get_children()[0]
+        if child.is_leaf:
+            break
+        if verbose:
+            sys.stderr.write('Deleting a singleton node: {}\n'.format(tree.name))
+        root_dist = tree.dist
+        child_props = {k: v for k, v in child.props.items() if k != 'dist'}
+        child_name = child.name
+        tree.remove_child(child)
+        for grandchild in list(child.get_children()):
+            tree.add_child(grandchild)
+        tree.dist = root_dist
+        tree.name = child_name
+        tree.props.clear()
+        tree.props.update(child_props)
     return tree
 
 def label2sciname(labels, in_delim='_', out_delim='_'):
