@@ -8,6 +8,7 @@ from ete4 import Tree
 from nwkit.util import (
     acquire_exclusive_lock,
     get_ete_ncbitaxa,
+    get_monophyletic_species_groups,
     resolve_download_dir,
     resolve_ete_data_dir,
     read_tree,
@@ -200,6 +201,20 @@ class TestDownloadDirHelpers:
         assert calls['lock_label'] == 'ETE4 taxonomy DB'
         assert calls['dbfile'] == os.path.join(expected_ete_dir, 'taxa.sqlite')
         assert calls['taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
+
+
+class TestSpeciesGrouping:
+    def test_monophyletic_duplicate_species_are_grouped(self):
+        tree = Tree('(((Homo_sapiens_gene1:1,Homo_sapiens_gene2:1):1,Pan_troglodytes_gene1:1):1,Mus_musculus_gene1:1);', parser=1)
+        leaf_name_to_sci_name, species_to_leaf_names = get_monophyletic_species_groups(tree)
+        assert leaf_name_to_sci_name['Homo_sapiens_gene1'] == 'Homo_sapiens'
+        assert leaf_name_to_sci_name['Homo_sapiens_gene2'] == 'Homo_sapiens'
+        assert species_to_leaf_names['Homo_sapiens'] == ['Homo_sapiens_gene1', 'Homo_sapiens_gene2']
+
+    def test_split_duplicate_species_raise(self):
+        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1,(Homo_sapiens_gene2:1,Mus_musculus_gene1:1):1);', parser=1)
+        with pytest.raises(ValueError, match='not monophyletic'):
+            get_monophyletic_species_groups(tree)
 
 
 class TestRemoveSingleton:

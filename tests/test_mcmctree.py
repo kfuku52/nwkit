@@ -245,7 +245,7 @@ class TestMcmctreeMain:
         monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
         monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
 
-        tree = Tree('((a:1,b:1):1);', parser=1)
+        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
         args = make_mcmctree_args(
             timetree='point',
             higher_rank_search=True,
@@ -254,6 +254,60 @@ class TestMcmctreeMain:
         out = add_timetree_constraint(tree, args)
         assert observed['download_dir'] == str(tmp_path / 'cache')
         assert out.name == 'NoName'
+
+    def test_timetree_allows_monophyletic_duplicate_species_labels(self, monkeypatch):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                observed.setdefault('queries', []).append(tuple(names))
+                mapping = {}
+                for i, name in enumerate(names, start=1):
+                    mapping[name] = [i]
+                return mapping
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+            def get_rank(self, lineages):
+                out = {}
+                for t in lineages:
+                    t = int(t)
+                    out[t] = 'species' if t != 1 else 'superkingdom'
+                return out
+
+            def get_taxid_translator(self, taxids):
+                return {int(t): 'sp{}'.format(int(t)) for t in taxids}
+
+        class FakeResponse:
+            status_code = 500
+            text = '<html>server error</html>'
+
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
+        monkeypatch.setattr(mcmctree_mod.requests, 'get', lambda *args, **kwargs: FakeResponse())
+
+        tree = Tree('(((Homo_sapiens_gene1:1,Homo_sapiens_gene2:1):1,Pan_troglodytes_gene1:1):1);', parser=1)
+        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        out = add_timetree_constraint(tree, args)
+        assert out.name == 'NoName'
+        flattened_queries = {name for query in observed['queries'] for name in query}
+        assert 'Homo sapiens' in flattened_queries
+        assert 'Pan troglodytes' in flattened_queries
+        assert all('gene' not in name.lower() for name in flattened_queries)
+
+    def test_timetree_split_duplicate_species_raise(self, monkeypatch):
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
+        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1,(Homo_sapiens_gene2:1,Mus_musculus_gene1:1):1);', parser=1)
+        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        with pytest.raises(ValueError, match='not monophyletic'):
+            add_timetree_constraint(tree, args)
 
     def test_issue7_quoted_node_names_in_output(self, tmp_nwk, tmp_outfile):
         """Regression test for GitHub issue #7.
@@ -465,7 +519,7 @@ class TestIssue12EndpointUrl:
         monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
         monkeypatch.setattr(mcmctree_mod.requests, 'get', raise_network_error)
 
-        tree = Tree('((a:1,b:1):1);', parser=1)
+        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
         args = make_mcmctree_args(timetree='point', higher_rank_search=True)
         out = add_timetree_constraint(tree, args)
         assert out.name == 'NoName'
@@ -498,7 +552,7 @@ class TestIssue12EndpointUrl:
         monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
         monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
 
-        tree = Tree('((a:1,b:1):1);', parser=1)
+        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
         args = make_mcmctree_args(timetree='point', higher_rank_search=True)
         out = add_timetree_constraint(tree, args)
         assert out.name == 'NoName'

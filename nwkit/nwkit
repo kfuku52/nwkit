@@ -42,6 +42,7 @@ pconstrain = subparsers.add_parser('constrain', help='Generate a species-tree-li
 pconstrain.add_argument('--species_list', metavar='PATH', default=None, type=str, required=False, action='store',
                         help='default=%(default)s: Text file containing species names, one per line. '
                              'Expected formats are "GENUS SPECIES", "GENUS_SPECIES", or "GENUS_SPECIES_OTHERINFO". '
+                             'Species-aware parsing uses the genus and species fields only, ignoring any remaining suffix. '
                              'e.g., "Arabidopsis thaliana" and "Arabidopsis_thaliana_TAIR10"')
 pconstrain.add_argument('--taxid_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
                         help='default=%(default)s: TSV file containing species names in the "leaf_name" column and their NCBI Taxonomy IDs in the "taxid" column. '
@@ -185,7 +186,8 @@ pmcmctree.add_argument('--add_header', action='store_true',
 pmcmctree.add_argument('--timetree', metavar='point|ci|no', default='no', type=str, required=False, action='store',
                        choices=['point', 'ci', 'no'],
                        help='default=%(default)s: Obtain the divergence time from timetree.org. '
-                            'Tip labels are expected to be GENUS_SPECIES. '
+                            'For point/ci, tip labels are parsed as "GENUS_SPECIES" or "GENUS_SPECIES_OTHERINFO". '
+                            'Fields after the species epithet are ignored. Repeated species labels are allowed only when their tips are monophyletic. '
                             'point: point estimate, ci: 95 percent confidence interval as upper and lower bounds. '
                             'no: disable the function.')
 pmcmctree.add_argument('--min_clade_prop', metavar='0.0<FLOAT<1.0', default=0, type=float, required=False, action='store',
@@ -265,7 +267,9 @@ proot.add_argument('--outgroup', metavar='STR', default='', type=str, required=F
                         'so all labels do not have to be specified for a large clade.')
 proot.add_argument('--taxonomy_source', metavar='ncbi[,opentree,timetree,...]', default='ncbi,opentree,timetree', type=str, required=False, action='store',
                    help='default=%(default)s: Comma-separated taxonomy/tree sources used when --method "taxonomy" is selected. '
-                        'Each source is tried in order until rooting succeeds. Supported sources: ncbi, timetree, opentree.')
+                        'Each source is tried in order until rooting succeeds. When taxids are inferred from leaf labels, '
+                        'species-aware parsing uses "GENUS_SPECIES[_...]" labels. Repeated species labels are allowed for timetree/opentree only when their tips are monophyletic. '
+                        'Supported sources: ncbi, timetree, opentree.')
 proot.add_argument('--taxid_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
                    help='default=%(default)s: TSV file containing tree leaf labels in the "leaf_name" column and '
                         'their taxonomy IDs in the "taxid" column. Used when --method "taxonomy". '
@@ -351,7 +355,8 @@ psubtree.add_argument('--leaves', metavar='leaf1,leaf2,leaf3,...', default=None,
                            'Single leaf name may be specified in combination with --orthogroup yes.')
 psubtree.add_argument('--orthogroup', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: The output subtree represents orthogroup(s) that contain all '
-                            'specified leaves. The expected format of leaf names is "GENUS_SPECIES_OTHERINFO".')
+                            'specified leaves. Species-aware parsing uses leaf labels of the form "GENUS_SPECIES[_...]", '
+                            'and fields after the species epithet are ignored when assigning species.')
 psubtree.add_argument('--dup_conf_score_threshold', metavar='FLOAT', default=0, type=float, required=False, action='store',
                        help='default=%(default)s: The threshold of duplication-confidence score for orthogroup delimitation. '
                             '0 = most stringent, 1 = most relaxed. '

@@ -518,6 +518,21 @@ class TestTaxonomyRooting:
         assert {'Homo_sapiens_gene1', 'Pan_troglodytes_gene1'} in child_leaf_sets
         assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1'} in child_leaf_sets
 
+    def test_timetree_allows_monophyletic_duplicate_species_labels(self, monkeypatch):
+        install_fake_timetree(
+            monkeypatch,
+            upload_html='<div id="prunetree-msg-box"></div>',
+            newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,((Arabidopsis_thaliana:1,Oryza_sativa:1):20,Saccharomyces_cerevisiae:1):30);',
+        )
+        tree = Tree(
+            '((Arabidopsis_thaliana_gene1:1,Oryza_sativa_gene1:1):1,(Saccharomyces_cerevisiae_gene1:1,((Homo_sapiens_gene1:1,Homo_sapiens_gene2:1):1,Pan_troglodytes_gene1:1):1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='timetree', rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens_gene1', 'Homo_sapiens_gene2', 'Pan_troglodytes_gene1'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1', 'Saccharomyces_cerevisiae_gene1'} in child_leaf_sets
+
     def test_timetree_unresolved_names_raise(self, monkeypatch):
         install_fake_timetree(
             monkeypatch,
@@ -572,6 +587,32 @@ class TestTaxonomyRooting:
         child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
         assert {'Homo_sapiens_gene1', 'Pan_troglodytes_gene1'} in child_leaf_sets
         assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1'} in child_leaf_sets
+
+    def test_opentree_allows_monophyletic_duplicate_species_labels(self, monkeypatch):
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 5, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,((Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae,Saccharomyces_cerevisiae)Opisthokonta)Eukaryota;',
+            },
+        )
+        tree = Tree(
+            '((Arabidopsis_thaliana_gene1:1,Oryza_sativa_gene1:1):1,(Saccharomyces_cerevisiae_gene1:1,((Homo_sapiens_gene1:1,Homo_sapiens_gene2:1):1,Pan_troglodytes_gene1:1):1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='opentree', rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens_gene1', 'Homo_sapiens_gene2', 'Pan_troglodytes_gene1'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1', 'Saccharomyces_cerevisiae_gene1'} in child_leaf_sets
 
     def test_opentree_unresolved_name_raises(self, monkeypatch):
         install_fake_opentree(

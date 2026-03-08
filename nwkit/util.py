@@ -3,7 +3,7 @@ import os
 import re
 import sys
 import time
-from collections import Counter
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 import Bio.SeqIO as SeqIO
 import ete4
@@ -327,6 +327,39 @@ def label2sciname(labels, in_delim='_', out_delim='_'):
     if is_str_input:
         scinames = scinames[0]
     return scinames
+
+def get_monophyletic_species_groups(tree, option_name='--infile', context=''):
+    leaf_name_to_sci_name = dict()
+    sci_name_to_leaf_names = defaultdict(list)
+    unresolved_leaf_names = list()
+    for leaf in tree.leaves():
+        sci_name = label2sciname(leaf.name)
+        if sci_name is None:
+            unresolved_leaf_names.append(str(leaf.name))
+            continue
+        leaf_name_to_sci_name[leaf.name] = sci_name
+        sci_name_to_leaf_names[sci_name].append(leaf.name)
+    if unresolved_leaf_names:
+        raise ValueError(
+            "Leaf labels must follow the 'GENUS_SPECIES[_...]' convention in '{}'{}: {}".format(
+                option_name,
+                context,
+                ', '.join(sorted(unresolved_leaf_names)),
+            )
+        )
+    for sci_name, leaf_names in sci_name_to_leaf_names.items():
+        if len(leaf_names) <= 1:
+            continue
+        mrca = tree.common_ancestor(leaf_names)
+        if set(mrca.leaf_names()) != set(leaf_names):
+            raise ValueError(
+                "Leaf labels for the same species are not monophyletic in '{}'{}: {}".format(
+                    option_name,
+                    context,
+                    sci_name,
+                )
+            )
+    return leaf_name_to_sci_name, dict(sci_name_to_leaf_names)
 
 def get_subtree_leaf_name_sets(tree):
     subtree_leaf_name_sets = dict()

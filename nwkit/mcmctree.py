@@ -42,15 +42,11 @@ def add_common_anc_constraint(tree, args):
     common_anc.name = constraint
     return tree
 
-def check_leaf_taxid_availability(tree, ncbi):
-    unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]
-    if unnamed_leaves:
-        raise ValueError('All leaves must have non-empty names when using "--timetree point/ci".')
-    leaf_names = list(tree.leaf_names())
-    leaf_names = [ ln.replace('_', ' ') for ln in leaf_names ]
-    name2taxid = ncbi.get_name_translator(leaf_names)
+def check_leaf_taxid_availability(species_names, ncbi):
+    query_names = [species_name.replace('_', ' ') for species_name in species_names]
+    name2taxid = ncbi.get_name_translator(query_names)
     taxid_keys = set(name2taxid.keys())
-    for ln in leaf_names:
+    for ln in query_names:
         if not ln in taxid_keys:
             txt = 'NCBI Taxonomy ID was not found and thus not used as query to timetree.org: {}\n'
             sys.stderr.write(txt.format(ln))
@@ -132,25 +128,33 @@ def add_timetree_constraint(tree, args):
     unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]
     if unnamed_leaves:
         raise ValueError('All leaves must have non-empty names when using "--timetree point/ci".')
+    leaf_name_to_sci_name, species_to_leaf_names = get_monophyletic_species_groups(
+        tree,
+        option_name='--infile',
+        context=' for "--timetree point/ci"',
+    )
     ncbi = get_ete_ncbitaxa(args=args)
     try:
-        check_leaf_taxid_availability(tree, ncbi)
+        check_leaf_taxid_availability(sorted(species_to_leaf_names.keys()), ncbi)
+        for leaf in tree.leaves():
+            leaf.add_props(sci_name=leaf_name_to_sci_name[leaf.name])
         subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
-        leaf_name_to_sci_name = {leaf.name: leaf.name.replace('_', ' ') for leaf in tree.leaves()}
+        subtree_sci_name_sets = get_subtree_sci_name_sets(tree)
         taxid_lineage_rank_dict_cache = dict()
         for node in tree.traverse():
             if node.is_leaf:
                 continue
             node.name = 'NoName'
             leaf_names = sorted(subtree_leaf_name_sets[node])
-            sci_names = [leaf_name_to_sci_name[leaf_name] for leaf_name in leaf_names]
-            name2taxid = ncbi.get_name_translator(sci_names)
+            sci_names = sorted(subtree_sci_name_sets[node])
+            query_sci_names = [sci_name.replace('_', ' ') for sci_name in sci_names]
+            name2taxid = ncbi.get_name_translator(query_sci_names)
             taxid_assigned_sci_names = list(name2taxid.keys())
             taxid_assigned_leaf_names = [ sci_name.replace(' ', '_') for sci_name in taxid_assigned_sci_names ]
             if not are_both_lineage_included(
                 node=node,
                 leaf_names=taxid_assigned_leaf_names,
-                subtree_leaf_name_sets=subtree_leaf_name_sets,
+                subtree_leaf_name_sets=subtree_sci_name_sets,
             ):
                 txt = "Skipping. Lack of NCBI Taxonomy information for the MRCA of {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
@@ -174,7 +178,7 @@ def add_timetree_constraint(tree, args):
                 if not are_both_lineage_included(
                     node=node,
                     leaf_names=ta_leaf_name_set,
-                    subtree_leaf_name_sets=subtree_leaf_name_sets,
+                    subtree_leaf_name_sets=subtree_sci_name_sets,
                 ):
                     #txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
                     #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
@@ -183,7 +187,7 @@ def add_timetree_constraint(tree, args):
                     node=node,
                     taxids=taxids,
                     ta_leaf_names=ta_leaf_names,
-                    subtree_leaf_name_sets=subtree_leaf_name_sets,
+                    subtree_leaf_name_sets=subtree_sci_name_sets,
                 ):
                     #txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
                     #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
@@ -221,7 +225,7 @@ def add_timetree_constraint(tree, args):
                     node,
                     timetree_result,
                     ncbi,
-                    subtree_leaf_name_sets=subtree_leaf_name_sets,
+                    subtree_leaf_name_sets=subtree_sci_name_sets,
                 ):
                     txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
                     sys.stderr.write(txt.format(','.join(leaf_names)))
