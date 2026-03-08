@@ -19,6 +19,25 @@ def _close_ncbi_db(ncbi):
         except Exception:
             pass
 
+def read_taxid_tsv(taxid_tsv):
+    taxid_df = pd.read_csv(taxid_tsv, sep='\t')
+    if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
+        raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
+    if taxid_df.empty:
+        raise ValueError('--taxid_tsv is empty.')
+    if taxid_df['leaf_name'].duplicated().any():
+        raise ValueError('Duplicate values in the "leaf_name" column of --taxid_tsv are not supported.')
+    if taxid_df['taxid'].isna().any():
+        raise ValueError('--taxid_tsv contains missing values in the "taxid" column.')
+    taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
+    if taxid_numeric.isna().any():
+        raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
+    if (taxid_numeric % 1 != 0).any():
+        raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
+    taxid_df = taxid_df.copy()
+    taxid_df['taxid'] = taxid_numeric.astype(int)
+    return taxid_df
+
 def check_input_file(args):
     if (args.species_list is None) and (args.taxid_tsv is None):
         raise ValueError('Either --species_list or --taxid_tsv must be specified.')
@@ -33,20 +52,7 @@ def check_input_file(args):
         if len(labels) != len(set(labels)):
             raise ValueError('Duplicate entries in --species_list are not supported.')
     if args.taxid_tsv is not None:
-        taxid_df = pd.read_csv(args.taxid_tsv, sep='\t')
-        if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
-            raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
-        if taxid_df.empty:
-            raise ValueError('--taxid_tsv is empty.')
-        if taxid_df['leaf_name'].duplicated().any():
-            raise ValueError('Duplicate values in the "leaf_name" column of --taxid_tsv are not supported.')
-        if taxid_df['taxid'].isna().any():
-            raise ValueError('--taxid_tsv contains missing values in the "taxid" column.')
-        taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
-        if taxid_numeric.isna().any():
-            raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
-        if (taxid_numeric % 1 != 0).any():
-            raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
+        read_taxid_tsv(args.taxid_tsv)
 
 def initialize_tree(tree):
     for leaf in tree.leaves():
@@ -82,12 +88,12 @@ def get_lineage(sp, ncbi, rank):
     lineage = ncbi.get_lineage(name2taxid[key][0])
     return limit_lineage_to_rank(lineage, ncbi, rank)
 
-def get_lineages(labels, rank):
+def get_lineages(labels, rank, args=None):
     splist = [
         label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
         for label in labels
     ]
-    ncbi = ete4.NCBITaxa()
+    ncbi = get_ete_ncbitaxa(args=args)
     try:
         lineages = dict()
         for sp,label in zip(splist,labels):
@@ -100,8 +106,8 @@ def get_lineage_from_taxid(taxid, ncbi, rank):
     lineage = ncbi.get_lineage(taxid)
     return limit_lineage_to_rank(lineage, ncbi, rank)
 
-def get_lineages_from_taxid(taxid_df, rank):
-    ncbi = ete4.NCBITaxa()
+def get_lineages_from_taxid(taxid_df, rank, args=None):
+    ncbi = get_ete_ncbitaxa(args=args)
     try:
         taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
         if taxid_numeric.isna().any():
@@ -115,12 +121,12 @@ def get_lineages_from_taxid(taxid_df, rank):
     finally:
         _close_ncbi_db(ncbi)
 
-def match_taxa(tree, labels, backbone_method):
+def match_taxa(tree, labels, backbone_method, args=None):
     splist = [
         label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
         for label in labels
     ]
-    ncbi = ete4.NCBITaxa() if backbone_method.startswith('ncbi') else None
+    ncbi = get_ete_ncbitaxa(args=args) if backbone_method.startswith('ncbi') else None
     try:
         leaf_names = [ ln.replace('_',' ') for ln in tree.leaf_names() ]
         leaf_name_set = set(leaf_names)
@@ -180,8 +186,8 @@ def get_taxid_counts(lineages):
     taxid_counts = taxid_counts[count_order,:]
     return taxid_counts
 
-def get_mrca_taxid(multi_counts):
-    ncbi = ete4.NCBITaxa()
+def get_mrca_taxid(multi_counts, args=None):
+    ncbi = get_ete_ncbitaxa(args=args)
     try:
         max_count = multi_counts[:,1].max()
         is_max_count = (multi_counts[:,1]==max_count)
@@ -275,7 +281,7 @@ def get_polytomy_index(tree):
         num_polytomy += (len(node.get_children()) - 2)
     return num_polytomy
 
-def taxid2tree(lineages, taxid_counts):
+def taxid2tree(lineages, taxid_counts, args=None):
     if len(lineages) == 0:
         raise ValueError('No valid taxa found to build a constraint tree.')
     if len(lineages) == 1:
@@ -283,7 +289,7 @@ def taxid2tree(lineages, taxid_counts):
         tree = ete4.Tree({'name': sp})
         tree.add_props(ancestors=lineages[sp])
         return tree
-    ncbi = ete4.NCBITaxa()
+    ncbi = get_ete_ncbitaxa(args=args)
     is_multiple = (taxid_counts[:,1]>1)
     multi_counts = taxid_counts[is_multiple,:]
     if multi_counts.shape[0] == 0:
@@ -356,14 +362,14 @@ def constrain_main(args):
     check_input_file(args)
     if (args.backbone=='ncbi'):
         if args.taxid_tsv is not None:
-            taxid_df = pd.read_csv(args.taxid_tsv, sep='\t')
-            lineages = get_lineages_from_taxid(taxid_df, rank=args.rank)
+            taxid_df = read_taxid_tsv(args.taxid_tsv)
+            lineages = get_lineages_from_taxid(taxid_df, rank=args.rank, args=args)
         else:
             labels = read_item_per_line_file(args.species_list)
-            lineages = get_lineages(labels=labels, rank=args.rank)
+            lineages = get_lineages(labels=labels, rank=args.rank, args=args)
         taxid_counts = get_taxid_counts(lineages)
         #taxid_counts = limit_rank(taxid_counts=taxid_counts, rank=args.rank)
-        tree = taxid2tree(lineages, taxid_counts)
+        tree = taxid2tree(lineages, taxid_counts, args=args)
     else:
         labels = read_item_per_line_file(args.species_list)
         if (args.backbone.endswith('user')):
@@ -377,7 +383,7 @@ def constrain_main(args):
             nwk_string = resources.files(package_name).joinpath(file_path).read_text(encoding='utf-8')
             tree = ete4.Tree(nwk_string, parser=0)
         tree = initialize_tree(tree)
-        tree = match_taxa(tree, labels, args.backbone)
+        tree = match_taxa(tree, labels, args.backbone, args=args)
         if not any(leaf.props.get('has_taxon') for leaf in tree.leaves()):
             raise ValueError('No taxa from --species_list matched the backbone tree labels.')
         tree = delete_nomatch_leaves(tree)

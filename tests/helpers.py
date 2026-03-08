@@ -49,6 +49,7 @@ def make_args(**kwargs):
         'format': 'auto',
         'outformat': 'auto',
         'quoted_node_names': True,
+        'download_dir': 'inferred',
     }
     defaults.update(kwargs)
     return Namespace(**defaults)

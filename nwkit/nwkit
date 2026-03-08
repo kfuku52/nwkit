@@ -29,10 +29,16 @@ p_parent.add_argument('-of', '--outformat', metavar='INT', default='auto', type=
 p_parent.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                         help='default=%(default)s: Whether node names are quoted in the input file.')
 
+p_download = argparse.ArgumentParser(add_help=False)
+p_download.add_argument('--download_dir', metavar='PATH', default='inferred', type=str, required=False, action='store',
+                        help='default=%(default)s: Shared download/cache directory for external resources such as the ETE4 '
+                             'NCBI taxonomy database. "inferred" stores downloads under <outfile_dir>/downloads, or '
+                             './downloads when writing to STDOUT.')
+
 def command_constrain(args):
     from nwkit.constrain import constrain_main
     constrain_main(args)
-pconstrain = subparsers.add_parser('constrain', help='Generate a species-tree-like Newick file for topological constraint', parents=[p_parent])
+pconstrain = subparsers.add_parser('constrain', help='Generate a species-tree-like Newick file for topological constraint', parents=[p_parent, p_download])
 pconstrain.add_argument('--species_list', metavar='PATH', default=None, type=str, required=False, action='store',
                         help='default=%(default)s: Text file containing species names, one per line. '
                              'Expected formats are "GENUS SPECIES", "GENUS_SPECIES", or "GENUS_SPECIES_OTHERINFO". '
@@ -153,7 +159,7 @@ pmark.set_defaults(handler=command_mark)
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
     mcmctree_main(args)
-pmcmctree = subparsers.add_parser('mcmctree', help=' Introduce divergence time constraints for PAML\'s mcmctree', parents=[p_parent])
+pmcmctree = subparsers.add_parser('mcmctree', help=' Introduce divergence time constraints for PAML\'s mcmctree', parents=[p_parent, p_download])
 pmcmctree.add_argument('--left_species', metavar='STR', default=None, type=str, required=False,
                        help='default=%(default)s: Any species in the left clade. '
                             'If you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, '
@@ -237,25 +243,37 @@ prescale.set_defaults(handler=command_rescale)
 def command_root(args):
     from nwkit.root import root_main
     root_main(args)
-proot = subparsers.add_parser('root', help='Place or transfer the tree root', parents=[p_parent])
+proot = subparsers.add_parser('root', help='Place or transfer the tree root', parents=[p_parent, p_download])
 proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
                    help='default=%(default)s: Input newick file 2. Used when --method "transfer". '
                         'Leaf labels should be matched to those in --infile.')
 proot.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
                    help='default=%(default)s: ETE tree format for --infile2.')
 proot.add_argument('--method', metavar='STR', default='midpoint', type=str, required=False, action='store',
-                   choices=['midpoint','outgroup','transfer','mad','mv',],
+                   choices=['midpoint','outgroup','transfer','mad','mv','taxonomy',],
                    help='default=%(default)s: '
                         'midpoint: Midpoint rooting. '
                         'outgroup: Outgroup rooting with --outgroup. '
                         'transfer: Transfer the root position from --infile2 to --infile. '
                         'The two trees should have the same bipartitions at the root node. '
                         'mad: Minimal Ancestor Deviation rooting (Tria et al. 2017). '
-                        'mv: Minimum Variance rooting (Mai et al. 2017).')
+                        'mv: Minimum Variance rooting (Mai et al. 2017). '
+                        'taxonomy: Root by transferring a taxonomy-derived root split onto --infile.')
 proot.add_argument('--outgroup', metavar='STR', default='', type=str, required=False, action='store',
                    help='default=%(default)s: An outgroup label or a comma-separated list of outgroup labels. '
                         'For the latter, the clade containing all specified labels are used as an outgroup, '
                         'so all labels do not have to be specified for a large clade.')
+proot.add_argument('--taxonomy_source', metavar='ncbi[,opentree,timetree,...]', default='ncbi,opentree,timetree', type=str, required=False, action='store',
+                   help='default=%(default)s: Comma-separated taxonomy/tree sources used when --method "taxonomy" is selected. '
+                        'Each source is tried in order until rooting succeeds. Supported sources: ncbi, timetree, opentree.')
+proot.add_argument('--taxid_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
+                   help='default=%(default)s: TSV file containing tree leaf labels in the "leaf_name" column and '
+                        'their taxonomy IDs in the "taxid" column. Used when --method "taxonomy". '
+                        'If omitted, taxonomy IDs are inferred from leaf labels. This option is used by the NCBI source.')
+proot.add_argument('--rank', metavar='no|species|genus|family|order|...', default='no', type=str, required=False,
+                   action='store',
+                   help='default=%(default)s: Highest taxonomic rank retained when deriving the taxonomy tree for '
+                        '--method "taxonomy".')
 proot.set_defaults(handler=command_root)
 
 def command_sanitize(args):

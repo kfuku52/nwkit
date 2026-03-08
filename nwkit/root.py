@@ -1,9 +1,21 @@
 import sys
+import re
 
+import requests
 from ete4 import Tree
 from ete4.parser.newick import make_parser
 
+from nwkit.constrain import (
+    get_lineages,
+    get_lineages_from_taxid,
+    get_taxid_counts,
+    read_taxid_tsv,
+    taxid2tree,
+)
 from nwkit.util import *
+
+SUPPORTED_TAXONOMY_SOURCES = ('ncbi', 'timetree', 'opentree')
+DEFAULT_TAXONOMY_SOURCE_CHAIN = 'ncbi,opentree,timetree'
 
 def _normalize_root_distance_for_reroot(tree):
     if tree.dist is not None:
@@ -282,6 +294,302 @@ def outgroup_rooting(tree, outgroup_str):
     tree.set_outgroup(outgroup_node)
     return tree
 
+def _order_taxid_tsv_to_match_tree(tree, taxid_df):
+    tree_leaf_names = list(tree.leaf_names())
+    tree_leaf_set = set(tree_leaf_names)
+    taxid_leaf_set = set(taxid_df['leaf_name'])
+    missing_leaf_names = sorted(tree_leaf_set - taxid_leaf_set)
+    extra_leaf_names = sorted(taxid_leaf_set - tree_leaf_set)
+    if missing_leaf_names or extra_leaf_names:
+        messages = list()
+        if missing_leaf_names:
+            messages.append('missing leaf_name entries for: {}'.format(', '.join(missing_leaf_names)))
+        if extra_leaf_names:
+            messages.append('unexpected leaf_name entries: {}'.format(', '.join(extra_leaf_names)))
+        raise ValueError('--taxid_tsv must match the leaf labels in --infile exactly ({})'.format('; '.join(messages)))
+    return taxid_df.set_index('leaf_name').loc[tree_leaf_names].reset_index()
+
+def _parse_taxonomy_sources(taxonomy_source):
+    if isinstance(taxonomy_source, (list, tuple)):
+        raw_sources = taxonomy_source
+    else:
+        raw_sources = str(taxonomy_source or DEFAULT_TAXONOMY_SOURCE_CHAIN).split(',')
+    sources = list()
+    seen = set()
+    for raw_source in raw_sources:
+        source = str(raw_source).strip().lower()
+        if source == '':
+            continue
+        if source not in SUPPORTED_TAXONOMY_SOURCES:
+            raise ValueError(
+                "Unknown taxonomy source: {}. Supported sources are: {}.".format(
+                    source,
+                    ', '.join(SUPPORTED_TAXONOMY_SOURCES),
+                )
+            )
+        if source in seen:
+            continue
+        seen.add(source)
+        sources.append(source)
+    if len(sources) == 0:
+        raise ValueError('Specify at least one taxonomy source.')
+    return sources
+
+def _build_ncbi_reference_tree(tree, taxid_tsv=None, rank='no', args=None):
+    leaf_names = list(tree.leaf_names())
+    if taxid_tsv not in ['', None]:
+        taxid_df = read_taxid_tsv(taxid_tsv)
+        taxid_df = _order_taxid_tsv_to_match_tree(tree, taxid_df)
+        lineages = get_lineages_from_taxid(taxid_df, rank=rank, args=args)
+    else:
+        lineages = get_lineages(labels=leaf_names, rank=rank, args=args)
+    unresolved_labels = [label for label, lineage in lineages.items() if len(lineage) == 0]
+    if unresolved_labels:
+        raise ValueError(
+            'Failed to resolve NCBI lineage for leaf label(s): {}'.format(
+                ', '.join(sorted(unresolved_labels)),
+            )
+        )
+    taxonomy_tree = taxid2tree(lineages, get_taxid_counts(lineages), args=args)
+    if not is_all_leaf_names_identical(tree, taxonomy_tree, verbose=True):
+        raise ValueError('Leaf labels in the NCBI-derived tree should match those in --infile.')
+    taxonomy_tree = _collapse_singleton_root(taxonomy_tree)
+    if (len(list(taxonomy_tree.leaves())) > 1) and (len(taxonomy_tree.get_children()) != 2):
+        raise ValueError(
+            'NCBI-derived root is ambiguous: expected exactly 2 root children, found {}.'.format(
+                len(taxonomy_tree.get_children())
+            )
+        )
+    return taxonomy_tree
+
+def _get_timetree_name_mapping(tree):
+    query_names = list()
+    timetree_name_to_leaf_label = dict()
+    for leaf_label in tree.leaf_names():
+        sci_name = label2sciname(leaf_label, in_delim='_', out_delim=' ')
+        if sci_name is None:
+            sci_name = leaf_label.replace('_', ' ')
+        timetree_leaf_name = sci_name.replace(' ', '_')
+        if timetree_leaf_name in timetree_name_to_leaf_label:
+            raise ValueError(
+                'TimeTree source requires unique species-level names after normalizing leaf labels: {}'.format(
+                    leaf_label
+                )
+            )
+        timetree_name_to_leaf_label[timetree_leaf_name] = leaf_label
+        query_names.append(sci_name)
+    return query_names, timetree_name_to_leaf_label
+
+def _extract_timetree_unresolved_names(upload_response_text):
+    unresolved_count_match = re.search(r'Unresolved Names \((\d+)\)', upload_response_text)
+    if unresolved_count_match is None:
+        return list()
+    unresolved_count = int(unresolved_count_match.group(1))
+    unresolved_lines = re.findall(r'<div id="unresolved-names">(.*?)</div>', upload_response_text, flags=re.S)
+    unresolved_names = list()
+    for unresolved_line in unresolved_lines:
+        unresolved_names.extend([
+            re.sub(r'<[^>]+>', '', name).strip()
+            for name in unresolved_line.split('<br/>')
+            if re.sub(r'<[^>]+>', '', name).strip() != ''
+        ])
+    if unresolved_count > 0 and len(unresolved_names) == 0:
+        unresolved_names = ['{} unresolved name(s) reported by TimeTree'.format(unresolved_count)]
+    return unresolved_names
+
+def _build_timetree_reference_tree(tree):
+    query_names, timetree_name_to_leaf_label = _get_timetree_name_mapping(tree)
+    session = requests.Session()
+    try:
+        try:
+            upload_response = session.post(
+                'https://timetree.org/ajax/prune/load_names/',
+                files={'file': ('species.txt', '\n'.join(query_names) + '\n')},
+                timeout=60,
+            )
+            if upload_response.status_code != 200:
+                raise ValueError('Failed to retrieve a pruned guide tree from TimeTree.')
+            unresolved_names = _extract_timetree_unresolved_names(upload_response.text)
+            if unresolved_names:
+                raise ValueError(
+                    'TimeTree reported unresolved names: {}'.format('; '.join(unresolved_names))
+                )
+            newick_response = session.post(
+                'https://timetree.org/ajax/newick/prunetree/download',
+                data={'export': 'newick', 'rank': ''},
+                timeout=60,
+            )
+        except requests.RequestException as exc:
+            raise ValueError('Failed to contact TimeTree.') from exc
+        if newick_response.status_code != 200:
+            raise ValueError('Failed to download a guide tree from TimeTree.')
+        timetree_newick = newick_response.text.strip()
+        if not timetree_newick.endswith(';'):
+            raise ValueError('Unexpected response format from TimeTree when downloading the guide tree.')
+        timetree_tree = Tree(timetree_newick, parser=1)
+        for leaf in timetree_tree.leaves():
+            if leaf.name not in timetree_name_to_leaf_label:
+                raise ValueError('Unexpected leaf label returned by TimeTree: {}'.format(leaf.name))
+            leaf.name = timetree_name_to_leaf_label[leaf.name]
+        if not is_all_leaf_names_identical(tree, timetree_tree, verbose=True):
+            raise ValueError('Leaf labels in the TimeTree-derived tree should match those in --infile.')
+        timetree_tree = _collapse_singleton_root(timetree_tree)
+        if (len(list(timetree_tree.leaves())) > 1) and (len(timetree_tree.get_children()) != 2):
+            raise ValueError(
+                'TimeTree-derived root is ambiguous: expected exactly 2 root children, found {}.'.format(
+                    len(timetree_tree.get_children())
+                )
+            )
+        return timetree_tree
+    finally:
+        close = getattr(session, 'close', None)
+        if callable(close):
+            close()
+
+def _get_opentree_name_mapping(tree):
+    query_names = list()
+    opentree_name_to_leaf_label = dict()
+    for leaf_label in tree.leaf_names():
+        sci_name = label2sciname(leaf_label, in_delim='_', out_delim=' ')
+        if sci_name is None:
+            sci_name = leaf_label.replace('_', ' ')
+        opentree_leaf_name = sci_name.replace(' ', '_')
+        if opentree_leaf_name in opentree_name_to_leaf_label:
+            raise ValueError(
+                'OpenTree source requires unique species-level names after normalizing leaf labels: {}'.format(
+                    leaf_label
+                )
+            )
+        opentree_name_to_leaf_label[opentree_leaf_name] = leaf_label
+        query_names.append(sci_name)
+    return query_names, opentree_name_to_leaf_label
+
+def _extract_opentree_ott_ids(tree):
+    query_names, opentree_name_to_leaf_label = _get_opentree_name_mapping(tree)
+    session = requests.Session()
+    try:
+        try:
+            response = session.post(
+                'https://api.opentreeoflife.org/v3/tnrs/match_names',
+                json={
+                    'names': query_names,
+                    'do_approximate_matching': False,
+                },
+                timeout=60,
+            )
+        except requests.RequestException as exc:
+            raise ValueError('Failed to contact Open Tree of Life TNRS.') from exc
+        if response.status_code != 200:
+            raise ValueError('Open Tree of Life TNRS lookup failed.')
+        data = response.json()
+        results = data.get('results', [])
+        if len(results) != len(query_names):
+            raise ValueError('Unexpected response format from Open Tree of Life TNRS.')
+        ott_ids = list()
+        for query_name, result in zip(query_names, results):
+            matches = result.get('matches', [])
+            valid_matches = list()
+            for match in matches:
+                taxon = match.get('taxon', {})
+                if match.get('is_approximate_match'):
+                    continue
+                if taxon.get('is_suppressed_from_synth'):
+                    continue
+                if taxon.get('ott_id') is None:
+                    continue
+                valid_matches.append(match)
+            if len(valid_matches) == 0:
+                raise ValueError('Failed to resolve an OpenTree taxon for leaf label: {}'.format(
+                    opentree_name_to_leaf_label[query_name.replace(' ', '_')]
+                ))
+            if len(valid_matches) != 1:
+                raise ValueError('OpenTree TNRS returned multiple exact matches for leaf label: {}'.format(
+                    opentree_name_to_leaf_label[query_name.replace(' ', '_')]
+                ))
+            ott_ids.append(int(valid_matches[0]['taxon']['ott_id']))
+        return ott_ids, opentree_name_to_leaf_label
+    finally:
+        close = getattr(session, 'close', None)
+        if callable(close):
+            close()
+
+def _build_opentree_reference_tree(tree):
+    ott_ids, opentree_name_to_leaf_label = _extract_opentree_ott_ids(tree)
+    session = requests.Session()
+    try:
+        try:
+            response = session.post(
+                'https://api.opentreeoflife.org/v3/tree_of_life/induced_subtree',
+                json={
+                    'ott_ids': ott_ids,
+                    'label_format': 'name',
+                },
+                timeout=60,
+            )
+        except requests.RequestException as exc:
+            raise ValueError('Failed to contact Open Tree of Life synthetic tree API.') from exc
+        if response.status_code != 200:
+            raise ValueError('Open Tree of Life induced subtree lookup failed.')
+        data = response.json()
+        newick = data.get('newick', '').strip()
+        if not newick.endswith(';'):
+            raise ValueError('Unexpected response format from Open Tree of Life induced subtree.')
+        opentree_tree = Tree(newick, parser=1)
+        opentree_tree = remove_singleton(opentree_tree, verbose=False, preserve_branch_length=True)
+        for leaf in opentree_tree.leaves():
+            if leaf.name not in opentree_name_to_leaf_label:
+                raise ValueError('Unexpected leaf label returned by Open Tree of Life: {}'.format(leaf.name))
+            leaf.name = opentree_name_to_leaf_label[leaf.name]
+        if not is_all_leaf_names_identical(tree, opentree_tree, verbose=True):
+            raise ValueError('Leaf labels in the OpenTree-derived tree should match those in --infile.')
+        opentree_tree = _collapse_singleton_root(opentree_tree)
+        if (len(list(opentree_tree.leaves())) > 1) and (len(opentree_tree.get_children()) != 2):
+            raise ValueError(
+                'OpenTree-derived root is ambiguous: expected exactly 2 root children, found {}.'.format(
+                    len(opentree_tree.get_children())
+                )
+            )
+        return opentree_tree
+    finally:
+        close = getattr(session, 'close', None)
+        if callable(close):
+            close()
+
+def _build_taxonomy_reference_tree(tree, taxonomy_source, taxid_tsv=None, rank='no', args=None):
+    validate_unique_named_leaves(tree, option_name='--infile', context=' for taxonomy rooting')
+    if taxonomy_source == 'ncbi':
+        return _build_ncbi_reference_tree(tree=tree, taxid_tsv=taxid_tsv, rank=rank, args=args)
+    if taxonomy_source == 'timetree':
+        return _build_timetree_reference_tree(tree=tree)
+    if taxonomy_source == 'opentree':
+        return _build_opentree_reference_tree(tree=tree)
+    raise ValueError("Unknown taxonomy source: {}".format(taxonomy_source))
+
+def taxonomy_rooting(tree, taxonomy_source=DEFAULT_TAXONOMY_SOURCE_CHAIN, taxid_tsv=None, rank='no', verbose=False, args=None):
+    if len(list(tree.leaves())) <= 1:
+        return tree
+    errors = list()
+    taxonomy_sources = _parse_taxonomy_sources(taxonomy_source)
+    for source in taxonomy_sources:
+        if verbose:
+            sys.stderr.write('Attempting taxonomy rooting with source: {}\n'.format(source))
+        try:
+            taxonomy_tree = _build_taxonomy_reference_tree(
+                tree=tree,
+                taxonomy_source=source,
+                taxid_tsv=taxid_tsv,
+                rank=rank,
+                args=args,
+            )
+            return transfer_root(tree_to=tree, tree_from=taxonomy_tree, verbose=verbose)
+        except ValueError as exc:
+            if str(exc) == 'No root bipartition found in --infile.':
+                exc = ValueError('The {}-derived root bipartition was not found in --infile.'.format(source))
+            errors.append('{}: {}'.format(source, exc))
+            if verbose:
+                sys.stderr.write('Taxonomy rooting with source {} failed: {}\n'.format(source, exc))
+    raise ValueError('All taxonomy sources failed: {}'.format(' | '.join(errors)))
+
 def root_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if (args.method=='transfer'):
@@ -306,6 +614,15 @@ def root_main(args):
         tree = mad_rooting(tree=tree)
     elif (args.method=='mv'):
         tree = mv_rooting(tree=tree)
+    elif (args.method=='taxonomy'):
+        tree = taxonomy_rooting(
+            tree=tree,
+            taxonomy_source=getattr(args, 'taxonomy_source', DEFAULT_TAXONOMY_SOURCE_CHAIN),
+            taxid_tsv=getattr(args, 'taxid_tsv', None),
+            rank=getattr(args, 'rank', 'no'),
+            verbose=True,
+            args=args,
+        )
     else:
         raise ValueError("Unknown rooting method: {}".format(args.method))
     write_tree(tree, args, format=args.outformat)

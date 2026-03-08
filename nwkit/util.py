@@ -1,12 +1,173 @@
+import errno
 import os
 import re
 import sys
+import time
 from collections import Counter
+from contextlib import contextmanager
 import Bio.SeqIO as SeqIO
+import ete4
 from ete4 import Tree
 
 NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
 TREE_FORMAT_PROP = '_nwkit_parser_format'
+DOWNLOAD_LOCK_POLL_SECONDS = 1
+DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
+
+def resolve_download_dir(args=None):
+    outfile = getattr(args, 'outfile', '-') if args is not None else '-'
+    if outfile not in ['', None, '-']:
+        inferred_base = os.path.dirname(os.path.realpath(outfile))
+    else:
+        raw_out_dir = getattr(args, 'out_dir', None) if args is not None else None
+        inferred_base = os.path.realpath(raw_out_dir if raw_out_dir not in ['', None] else os.getcwd())
+    inferred = os.path.join(inferred_base, 'downloads')
+    raw_dir = getattr(args, 'download_dir', 'inferred') if args is not None else 'inferred'
+    if raw_dir is None:
+        return inferred
+    normalized = str(raw_dir).strip()
+    if normalized.lower() in ['', 'inferred']:
+        return inferred
+    return os.path.realpath(normalized)
+
+def resolve_ete_data_dir(args=None):
+    return os.path.join(resolve_download_dir(args), 'ete4')
+
+def _assert_lock_path_is_regular_file(lock_path, lock_label='Lock'):
+    if not os.path.lexists(lock_path):
+        return
+    if os.path.islink(lock_path) or (not os.path.isfile(lock_path)):
+        raise IsADirectoryError('{} path exists but is not a file: {}'.format(lock_label, lock_path))
+
+def _try_create_lock_file(lock_path):
+    _assert_lock_path_is_regular_file(lock_path)
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        return False
+    with os.fdopen(fd, 'w') as lock_handle:
+        lock_handle.write('{}\n'.format(os.getpid()))
+    return True
+
+def _read_lock_owner_pid(lock_path):
+    try:
+        with open(lock_path) as lock_handle:
+            first_line = lock_handle.readline().strip()
+    except OSError:
+        return None
+    if first_line == '':
+        return None
+    try:
+        pid = int(first_line)
+    except ValueError:
+        return None
+    if pid <= 0:
+        return None
+    return pid
+
+def _is_process_alive(pid):
+    try:
+        os.kill(int(pid), 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    except OSError as exc:
+        if getattr(exc, 'errno', None) == errno.ESRCH:
+            return False
+        return True
+    return True
+
+def _break_stale_lock_if_needed(lock_path, lock_label='Lock'):
+    if not os.path.lexists(lock_path):
+        return False
+    _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
+    try:
+        stat_before = os.stat(lock_path)
+    except FileNotFoundError:
+        return False
+    owner_pid = _read_lock_owner_pid(lock_path)
+    if owner_pid is None:
+        stale_reason = 'missing/invalid owner PID'
+    elif _is_process_alive(owner_pid):
+        return False
+    else:
+        stale_reason = 'owner PID {} is not running'.format(owner_pid)
+    try:
+        stat_now = os.stat(lock_path)
+    except FileNotFoundError:
+        return False
+    if (
+        (stat_before.st_ino != stat_now.st_ino)
+        or (stat_before.st_size != stat_now.st_size)
+        or (stat_before.st_mtime_ns != stat_now.st_mtime_ns)
+    ):
+        return False
+    try:
+        os.remove(lock_path)
+    except FileNotFoundError:
+        return False
+    sys.stderr.write('Removed stale {} lock: {} ({})\n'.format(lock_label, lock_path, stale_reason))
+    return True
+
+@contextmanager
+def acquire_exclusive_lock(
+    lock_path,
+    lock_label='Lock',
+    poll_seconds=DOWNLOAD_LOCK_POLL_SECONDS,
+    timeout_seconds=DOWNLOAD_LOCK_TIMEOUT_SECONDS,
+):
+    poll_seconds = int(poll_seconds)
+    timeout_seconds = int(timeout_seconds)
+    if poll_seconds <= 0:
+        raise ValueError('poll_seconds must be > 0.')
+    if timeout_seconds <= 0:
+        raise ValueError('timeout_seconds must be > 0.')
+    lock_path = os.path.realpath(lock_path)
+    lock_dir = os.path.dirname(lock_path)
+    if lock_dir != '':
+        if os.path.exists(lock_dir) and (not os.path.isdir(lock_dir)):
+            raise NotADirectoryError('Lock parent path exists but is not a directory: {}'.format(lock_dir))
+        os.makedirs(lock_dir, exist_ok=True)
+    wait_start = time.time()
+    has_reported_wait = False
+    while True:
+        if _try_create_lock_file(lock_path):
+            try:
+                yield
+            finally:
+                if os.path.lexists(lock_path):
+                    _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
+                    os.remove(lock_path)
+            return
+        _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
+        if _break_stale_lock_if_needed(lock_path=lock_path, lock_label=lock_label):
+            continue
+        elapsed = time.time() - wait_start
+        if not has_reported_wait:
+            sys.stderr.write('Another process holds {}. Waiting for lock release: {}\n'.format(lock_label, lock_path))
+            has_reported_wait = True
+        if elapsed > timeout_seconds:
+            raise TimeoutError(
+                'Timed out after {:,} sec waiting for {} lock: {}'.format(
+                    timeout_seconds,
+                    lock_label,
+                    lock_path,
+                )
+            )
+        time.sleep(poll_seconds)
+
+def get_ete_ncbitaxa(args=None):
+    if args is None:
+        return ete4.NCBITaxa()
+    ete_data_dir = resolve_ete_data_dir(args)
+    os.makedirs(ete_data_dir, exist_ok=True)
+    lock_path = os.path.join(ete_data_dir, '.ete4_taxonomy.lock')
+    with acquire_exclusive_lock(lock_path=lock_path, lock_label='ETE4 taxonomy DB'):
+        return ete4.NCBITaxa(
+            dbfile=os.path.join(ete_data_dir, 'taxa.sqlite'),
+            taxdump_file=os.path.join(ete_data_dir, 'taxdump.tar.gz'),
+        )
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
     global INFILE_FORMAT

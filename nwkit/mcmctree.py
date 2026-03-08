@@ -3,8 +3,6 @@ import requests
 import sys
 import time
 
-from ete4 import NCBITaxa
-
 from nwkit.util import *
 
 SEARCH_RANKS = [
@@ -131,7 +129,10 @@ def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names, subtree_lea
 def add_timetree_constraint(tree, args):
     endpoint_url = 'http://timetree.org/api'
     search_ranks = SEARCH_RANKS if args.higher_rank_search else SEARCH_RANKS[:1]
-    ncbi = NCBITaxa()
+    unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]
+    if unnamed_leaves:
+        raise ValueError('All leaves must have non-empty names when using "--timetree point/ci".')
+    ncbi = get_ete_ncbitaxa(args=args)
     try:
         check_leaf_taxid_availability(tree, ncbi)
         subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)

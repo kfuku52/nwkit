@@ -1,5 +1,6 @@
 import pandas as pd
 import pytest
+import numpy as np
 from argparse import Namespace
 from ete4 import Tree
 
@@ -8,6 +9,9 @@ from nwkit.constrain import (
     check_input_file,
     constrain_main,
     collapse_genes,
+    get_lineages,
+    get_lineages_from_taxid,
+    get_mrca_taxid,
     get_taxid_counts,
     initialize_tree,
     match_taxa,
@@ -122,6 +126,128 @@ class TestMatchTaxa:
         assert homo.props.get('has_taxon') is True
         assert homo.props.get('taxon_names') == ['Homo_sapiens_gene1']
         assert mus.props.get('has_taxon') is False
+
+
+class TestNcbiDownloadDirRouting:
+    def test_get_lineages_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                return {'Homo sapiens': [9606]}
+
+            def get_lineage(self, taxid):
+                return [1, 9606]
+
+        def fake_get_ete_ncbitaxa(args=None):
+            observed['download_dir'] = getattr(args, 'download_dir', None)
+            return FakeNCBI()
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
+        args = make_args(download_dir=str(tmp_path / 'cache'))
+        lineages = get_lineages(['Homo_sapiens_gene1'], rank='no', args=args)
+        assert observed['download_dir'] == str(tmp_path / 'cache')
+        assert lineages == {'Homo_sapiens_gene1': [1, 9606]}
+
+    def test_get_lineages_from_taxid_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+            def get_rank(self, lineage):
+                return {taxid: 'no_rank' for taxid in lineage}
+
+        def fake_get_ete_ncbitaxa(args=None):
+            observed['download_dir'] = getattr(args, 'download_dir', None)
+            return FakeNCBI()
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
+        taxid_df = pd.DataFrame({'leaf_name': ['A'], 'taxid': [9606]})
+        args = make_args(download_dir=str(tmp_path / 'cache'))
+        lineages = get_lineages_from_taxid(taxid_df, rank='no', args=args)
+        assert observed['download_dir'] == str(tmp_path / 'cache')
+        assert lineages == {'A': [1, 9606]}
+
+    def test_match_taxa_ncbi_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                return {'Homo sapiens': [9606]}
+
+            def get_lineage(self, taxid):
+                return [1, 10, 9606]
+
+            def get_taxid_translator(self, taxids):
+                return {1: 'root', 10: 'Primates', 9606: 'Homo sapiens'}
+
+        def fake_get_ete_ncbitaxa(args=None):
+            observed['download_dir'] = getattr(args, 'download_dir', None)
+            return FakeNCBI()
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
+        tree = initialize_tree(Tree('(Primates:1,Plants:1);', parser=1))
+        args = make_args(download_dir=str(tmp_path / 'cache'))
+        out = match_taxa(tree=tree, labels=['Homo_sapiens'], backbone_method='ncbi_user', args=args)
+        assert observed['download_dir'] == str(tmp_path / 'cache')
+        primates = [leaf for leaf in out.leaves() if leaf.name == 'Primates'][0]
+        assert primates.props.get('has_taxon') is True
+        assert primates.props.get('taxon_names') == ['Homo_sapiens']
+
+    def test_taxid2tree_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+        def fake_get_ete_ncbitaxa(args=None):
+            observed['download_dir'] = getattr(args, 'download_dir', None)
+            return FakeNCBI()
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
+        args = make_args(download_dir=str(tmp_path / 'cache'))
+        lineages = {'A': [1, 10], 'B': [1, 10], 'C': [1, 20], 'D': [1, 20]}
+        tree = taxid2tree(lineages, get_taxid_counts(lineages), args=args)
+        assert observed['download_dir'] == str(tmp_path / 'cache')
+        assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_get_mrca_taxid_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_lineage(self, taxid):
+                taxid = int(taxid)
+                if taxid == 10:
+                    return [1, 10]
+                return [1, 10, taxid]
+
+        def fake_get_ete_ncbitaxa(args=None):
+            observed['download_dir'] = getattr(args, 'download_dir', None)
+            return FakeNCBI()
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
+        args = make_args(download_dir=str(tmp_path / 'cache'))
+        multi_counts = np.array([[10, 2], [9606, 2]])
+        assert get_mrca_taxid(multi_counts, args=args) == 9606
+        assert observed['download_dir'] == str(tmp_path / 'cache')
 
 
 class TestConstrainMain:

@@ -1,10 +1,78 @@
 import os
+import pandas as pd
 import pytest
 from ete4 import Tree
 
-from nwkit.root import midpoint_rooting, outgroup_rooting, transfer_root, mad_rooting, mv_rooting, root_main
+import nwkit.constrain as constrain_mod
+import nwkit.root as root_mod
+from nwkit.root import (
+    DEFAULT_TAXONOMY_SOURCE_CHAIN,
+    midpoint_rooting,
+    outgroup_rooting,
+    transfer_root,
+    mad_rooting,
+    mv_rooting,
+    taxonomy_rooting,
+    root_main,
+)
 from nwkit.util import read_tree, is_rooted
 from tests.helpers import make_args, DATA_DIR, safe_get_distance
+
+
+def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid):
+    class FakeNCBI:
+        def __init__(self, *args, **kwargs):
+            self.db = None
+
+        def get_name_translator(self, names):
+            translated = dict()
+            for name in names:
+                if name in name_to_taxid:
+                    translated[name] = [name_to_taxid[name]]
+            return translated
+
+        def get_lineage(self, taxid):
+            return list(lineage_by_taxid[int(taxid)])
+
+    monkeypatch.setattr(constrain_mod.ete4, 'NCBITaxa', FakeNCBI)
+
+def install_fake_timetree(monkeypatch, upload_html, newick_text, upload_status=200, newick_status=200):
+    class FakeResponse:
+        def __init__(self, text, status_code):
+            self.text = text
+            self.status_code = status_code
+
+    class FakeSession:
+        def post(self, url, files=None, data=None, timeout=None):
+            if url.endswith('/ajax/prune/load_names/'):
+                return FakeResponse(upload_html, upload_status)
+            if url.endswith('/ajax/newick/prunetree/download'):
+                return FakeResponse(newick_text, newick_status)
+            raise AssertionError('Unexpected TimeTree URL: {}'.format(url))
+
+    monkeypatch.setattr(root_mod.requests, 'Session', FakeSession)
+
+def install_fake_opentree(monkeypatch, tnrs_json, induced_subtree_json, tnrs_status=200, induced_subtree_status=200):
+    class FakeResponse:
+        def __init__(self, text, status_code, json_data=None):
+            self.text = text
+            self.status_code = status_code
+            self._json_data = json_data
+
+        def json(self):
+            if self._json_data is None:
+                raise AssertionError('JSON payload was not configured')
+            return self._json_data
+
+    class FakeSession:
+        def post(self, url, json=None, timeout=None):
+            if url.endswith('/v3/tnrs/match_names'):
+                return FakeResponse('', tnrs_status, json_data=tnrs_json)
+            if url.endswith('/v3/tree_of_life/induced_subtree'):
+                return FakeResponse('', induced_subtree_status, json_data=induced_subtree_json)
+            raise AssertionError('Unexpected OpenTree URL: {}'.format(url))
+
+    monkeypatch.setattr(root_mod.requests, 'Session', FakeSession)
 
 
 class TestMidpointRooting:
@@ -309,6 +377,279 @@ class TestTransferRoot:
         assert None not in leaf_names
 
 
+class TestTaxonomyRooting:
+    def test_default_source_chain_constant(self):
+        assert DEFAULT_TAXONOMY_SOURCE_CHAIN == 'ncbi,opentree,timetree'
+
+    def test_ncbi_source_passes_args_to_ncbi_helpers(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        def fake_get_lineages(labels, rank, args=None):
+            observed['lineages_download_dir'] = getattr(args, 'download_dir', None)
+            return {
+                'A': [1, 10],
+                'B': [1, 10],
+                'C': [1, 20],
+                'D': [1, 20],
+            }
+
+        def fake_taxid2tree(lineages, taxid_counts, args=None):
+            observed['tree_download_dir'] = getattr(args, 'download_dir', None)
+            return Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+
+        monkeypatch.setattr(root_mod, 'get_lineages', fake_get_lineages)
+        monkeypatch.setattr(root_mod, 'taxid2tree', fake_taxid2tree)
+
+        tree = Tree('(A:1,B:1,(C:1,D:1):1);', parser=1)
+        args = make_args(download_dir=str(tmp_path / 'cache'))
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', rank='no', args=args)
+        assert observed['lineages_download_dir'] == str(tmp_path / 'cache')
+        assert observed['tree_download_dir'] == str(tmp_path / 'cache')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'A', 'B'} in child_leaf_sets
+        assert {'C', 'D'} in child_leaf_sets
+
+    def test_infers_ncbi_lineages_from_leaf_labels(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={
+                'Homo sapiens': 9606,
+                'Pan troglodytes': 9598,
+                'Arabidopsis thaliana': 3702,
+                'Oryza sativa': 4530,
+            },
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                9606: [1, 10, 9606],
+                9598: [1, 10, 9598],
+                3702: [1, 20, 3702],
+                4530: [1, 20, 4530],
+            },
+        )
+        original = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+        for l1 in rooted.leaves():
+            for l2 in rooted.leaves():
+                if l1.name != l2.name:
+                    assert abs(original.get_distance(l1.name, l2.name) - rooted.get_distance(l1, l2)) < 1e-6
+
+    def test_taxid_tsv_requires_exact_leaf_label_match(self, monkeypatch, tmp_path):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                100: [1, 10, 100],
+                101: [1, 10, 101],
+                200: [1, 20, 200],
+                201: [1, 20, 201],
+            },
+        )
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['A', 'B', 'C', 'X'], 'taxid': [100, 101, 200, 201]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        tree = Tree('(A:1,B:1,(C:1,D:1):1);', parser=1)
+        with pytest.raises(ValueError, match='match the leaf labels'):
+            taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
+
+    def test_ambiguous_taxonomy_root_raises(self, monkeypatch, tmp_path):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={
+                1: [1],
+                100: [1, 100],
+                200: [1, 200],
+                300: [1, 300],
+            },
+        )
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['A', 'B', 'C'], 'taxid': [100, 200, 300]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        tree = Tree('(A:1,B:1,C:1);', parser=1)
+        with pytest.raises(ValueError, match='ambiguous'):
+            taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
+
+    def test_incompatible_taxonomy_bipartition_raises(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={
+                'Homo sapiens': 9606,
+                'Pan troglodytes': 9598,
+                'Arabidopsis thaliana': 3702,
+                'Oryza sativa': 4530,
+            },
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                9606: [1, 10, 9606],
+                9598: [1, 10, 9598],
+                3702: [1, 20, 3702],
+                4530: [1, 20, 4530],
+            },
+        )
+        tree = Tree('((Homo_sapiens:1,Arabidopsis_thaliana:1):1,(Pan_troglodytes:1,Oryza_sativa:1):1);', parser=1)
+        with pytest.raises(ValueError, match='ncbi-derived root bipartition'):
+            taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no')
+
+    def test_timetree_maps_species_names_back_to_original_labels(self, monkeypatch):
+        install_fake_timetree(
+            monkeypatch,
+            upload_html='<div id="prunetree-msg-box"></div>',
+            newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,(Arabidopsis_thaliana:1,Oryza_sativa:1):20);',
+        )
+        tree = Tree(
+            '(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1,(Arabidopsis_thaliana_gene1:1,Oryza_sativa_gene1:1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='timetree', rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens_gene1', 'Pan_troglodytes_gene1'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1'} in child_leaf_sets
+
+    def test_timetree_unresolved_names_raise(self, monkeypatch):
+        install_fake_timetree(
+            monkeypatch,
+            upload_html=(
+                '<button id="prunetree-msg-btn" class="error-btn-enabled">Unresolved Names (1)</button>'
+                '<div id="unresolved-names">Oryza sativa (replaced with Oryza longistaminata)<br/></div>'
+            ),
+            newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,(Arabidopsis_thaliana:1,Oryza_sativa:1):20);',
+        )
+        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        with pytest.raises(ValueError, match='unresolved names'):
+            taxonomy_rooting(tree, taxonomy_source='timetree', rank='no')
+
+    def test_source_chain_falls_back_to_timetree(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={},
+        )
+        install_fake_timetree(
+            monkeypatch,
+            upload_html='<div id="prunetree-msg-box"></div>',
+            newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,(Arabidopsis_thaliana:1,Oryza_sativa:1):20);',
+        )
+        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi,timetree', taxid_tsv=None, rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_opentree_maps_species_names_back_to_original_labels(self, monkeypatch):
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((((Homo_sapiens,Pan_troglodytes)Homininae)Primates,(((Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Embryophyta)Viridiplantae)Eukaryota);',
+            },
+        )
+        tree = Tree(
+            '(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1,(Arabidopsis_thaliana_gene1:1,Oryza_sativa_gene1:1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='opentree', rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens_gene1', 'Pan_troglodytes_gene1'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1'} in child_leaf_sets
+
+    def test_opentree_unresolved_name_raises(self, monkeypatch):
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': []},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={'broken': {}, 'newick': '();'},
+        )
+        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        with pytest.raises(ValueError, match='OpenTree taxon'):
+            taxonomy_rooting(tree, taxonomy_source='opentree', rank='no')
+
+    def test_source_chain_falls_back_to_opentree(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={},
+        )
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,(Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Eukaryota;',
+            },
+        )
+        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi,opentree', taxid_tsv=None, rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_default_source_chain_falls_back_to_opentree(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={},
+        )
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,(Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Eukaryota;',
+            },
+        )
+        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
+        rooted = taxonomy_rooting(tree, rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_unknown_taxonomy_source_raises(self):
+        tree = Tree('(A:1,B:1,(C:1,D:1):1);', parser=1)
+        with pytest.raises(ValueError, match='Unknown taxonomy source'):
+            taxonomy_rooting(tree, taxonomy_source='ncbi,unknown', rank='no')
+
+
 class TestRootMain:
     def test_midpoint(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('(A:1,B:5,(C:2,D:4):2);')
@@ -479,6 +820,117 @@ class TestRootMain:
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert is_rooted(tree)
         assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
+
+    def test_taxonomy(self, monkeypatch, tmp_nwk, tmp_outfile):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={
+                'Homo sapiens': 9606,
+                'Pan troglodytes': 9598,
+                'Arabidopsis thaliana': 3702,
+                'Oryza sativa': 4530,
+            },
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                9606: [1, 10, 9606],
+                9598: [1, 10, 9598],
+                3702: [1, 20, 3702],
+                4530: [1, 20, 4530],
+            },
+        )
+        path = tmp_nwk('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            method='taxonomy', taxonomy_source='ncbi', taxid_tsv=None, rank='no',
+        )
+        root_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        child_leaf_sets = [set(child.leaf_names()) for child in tree.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_taxonomy_source_chain(self, monkeypatch, tmp_nwk, tmp_outfile):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={},
+        )
+        install_fake_timetree(
+            monkeypatch,
+            upload_html='<div id="prunetree-msg-box"></div>',
+            newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,(Arabidopsis_thaliana:1,Oryza_sativa:1):20);',
+        )
+        path = tmp_nwk('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            method='taxonomy', taxonomy_source='ncbi,timetree', taxid_tsv=None, rank='no',
+        )
+        root_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        child_leaf_sets = [set(child.leaf_names()) for child in tree.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_taxonomy_opentree(self, monkeypatch, tmp_nwk, tmp_outfile):
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,(Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Eukaryota;',
+            },
+        )
+        path = tmp_nwk('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            method='taxonomy', taxonomy_source='opentree', taxid_tsv=None, rank='no',
+        )
+        root_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        child_leaf_sets = [set(child.leaf_names()) for child in tree.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_taxonomy_defaults(self, monkeypatch, tmp_nwk, tmp_outfile):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={},
+        )
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,(Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Eukaryota;',
+            },
+        )
+        path = tmp_nwk('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            method='taxonomy',
+        )
+        root_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        child_leaf_sets = [set(child.leaf_names()) for child in tree.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
 
     def test_wiki_outgroup_single(self, tmp_nwk, tmp_outfile):
         """Wiki example: nwkit root --method outgroup --outgroup a

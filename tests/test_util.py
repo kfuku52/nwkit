@@ -2,9 +2,14 @@ import os
 import sys
 import pytest
 import io
+from contextlib import contextmanager
 from ete4 import Tree
 
 from nwkit.util import (
+    acquire_exclusive_lock,
+    get_ete_ncbitaxa,
+    resolve_download_dir,
+    resolve_ete_data_dir,
     read_tree,
     write_tree,
     remove_singleton,
@@ -128,6 +133,73 @@ class TestWriteTree:
             out = f.read()
         assert 'AB' in out
         assert 'CD' in out
+
+
+class TestDownloadDirHelpers:
+    def test_resolve_download_dir_uses_outfile_parent_by_default(self, tmp_path):
+        outfile = tmp_path / 'out' / 'tree.nwk'
+        args = make_args(outfile=str(outfile), download_dir='inferred')
+        resolved = resolve_download_dir(args)
+        assert resolved == os.path.join(os.path.realpath(outfile.parent), 'downloads')
+
+    def test_resolve_download_dir_uses_cwd_for_stdout(self, monkeypatch, tmp_path):
+        monkeypatch.chdir(tmp_path)
+        args = make_args(outfile='-', download_dir='inferred')
+        resolved = resolve_download_dir(args)
+        assert resolved == os.path.join(os.path.realpath(tmp_path), 'downloads')
+
+    def test_resolve_download_dir_respects_explicit_path(self, tmp_path):
+        explicit_dir = tmp_path / 'shared-cache'
+        args = make_args(outfile='-', download_dir=str(explicit_dir))
+        resolved = resolve_download_dir(args)
+        assert resolved == os.path.realpath(explicit_dir)
+
+    def test_resolve_ete_data_dir_appends_ete4(self, tmp_path):
+        explicit_dir = tmp_path / 'shared-cache'
+        args = make_args(download_dir=str(explicit_dir))
+        assert resolve_ete_data_dir(args) == os.path.join(os.path.realpath(explicit_dir), 'ete4')
+
+    def test_acquire_exclusive_lock_creates_and_removes_file(self, tmp_path):
+        lock_path = tmp_path / '.lock'
+        with acquire_exclusive_lock(str(lock_path), timeout_seconds=1):
+            assert lock_path.exists()
+        assert not lock_path.exists()
+
+    def test_acquire_exclusive_lock_breaks_stale_lock(self, tmp_path):
+        lock_path = tmp_path / '.lock'
+        lock_path.write_text('999999999\n')
+        with acquire_exclusive_lock(str(lock_path), timeout_seconds=1):
+            assert lock_path.exists()
+        assert not lock_path.exists()
+
+    def test_get_ete_ncbitaxa_uses_download_dir_and_lock(self, monkeypatch, tmp_path):
+        explicit_dir = tmp_path / 'shared-cache'
+        args = make_args(download_dir=str(explicit_dir))
+        calls = dict()
+
+        @contextmanager
+        def fake_lock(lock_path, lock_label='Lock', poll_seconds=1, timeout_seconds=3600):
+            calls['lock_path'] = lock_path
+            calls['lock_label'] = lock_label
+            yield
+
+        class FakeNCBI:
+            def __init__(self, dbfile=None, taxdump_file=None, memory=False, update=True):
+                calls['dbfile'] = dbfile
+                calls['taxdump_file'] = taxdump_file
+                calls['memory'] = memory
+                calls['update'] = update
+                self.db = None
+
+        monkeypatch.setattr('nwkit.util.acquire_exclusive_lock', fake_lock)
+        monkeypatch.setattr('nwkit.util.ete4.NCBITaxa', FakeNCBI)
+        ncbi = get_ete_ncbitaxa(args=args)
+        assert isinstance(ncbi, FakeNCBI)
+        expected_ete_dir = os.path.join(os.path.realpath(explicit_dir), 'ete4')
+        assert calls['lock_path'] == os.path.join(expected_ete_dir, '.ete4_taxonomy.lock')
+        assert calls['lock_label'] == 'ETE4 taxonomy DB'
+        assert calls['dbfile'] == os.path.join(expected_ete_dir, 'taxa.sqlite')
+        assert calls['taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
 
 
 class TestRemoveSingleton:

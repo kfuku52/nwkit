@@ -26,6 +26,7 @@ def make_mcmctree_args(**kwargs):
         'format': 'auto',
         'outformat': 'auto',
         'quoted_node_names': True,
+        'download_dir': 'inferred',
         'timetree': 'no',
         'left_species': None,
         'right_species': None,
@@ -206,6 +207,53 @@ class TestMcmctreeMain:
         lines = content.strip().split('\n')
         # First line should be "4 1" (4 leaves, 1 tree)
         assert lines[0].strip() == '4 1'
+
+    def test_timetree_uses_download_dir_for_ncbi_cache(self, monkeypatch, tmp_path):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                return {name.replace('_', ' '): [i + 1] for i, name in enumerate(names)}
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+            def get_rank(self, lineages):
+                out = {}
+                for t in lineages:
+                    t = int(t)
+                    out[t] = 'species' if t != 1 else 'superkingdom'
+                return out
+
+            def get_taxid_translator(self, taxids):
+                return {int(t): 'sp{}'.format(int(t)) for t in taxids}
+
+        class FakeResponse:
+            status_code = 500
+            text = '<html>server error</html>'
+
+        def fake_get_ete_ncbitaxa(args=None):
+            observed['download_dir'] = getattr(args, 'download_dir', None)
+            return FakeNCBI()
+
+        def fake_get(*args, **kwargs):
+            return FakeResponse()
+
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
+        monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+
+        tree = Tree('((a:1,b:1):1);', parser=1)
+        args = make_mcmctree_args(
+            timetree='point',
+            higher_rank_search=True,
+            download_dir=str(tmp_path / 'cache'),
+        )
+        out = add_timetree_constraint(tree, args)
+        assert observed['download_dir'] == str(tmp_path / 'cache')
+        assert out.name == 'NoName'
 
     def test_issue7_quoted_node_names_in_output(self, tmp_nwk, tmp_outfile):
         """Regression test for GitHub issue #7.
@@ -414,7 +462,7 @@ class TestIssue12EndpointUrl:
         def raise_network_error(*args, **kwargs):
             raise requests.RequestException('network down')
 
-        monkeypatch.setattr(mcmctree_mod, 'NCBITaxa', FakeNCBI)
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
         monkeypatch.setattr(mcmctree_mod.requests, 'get', raise_network_error)
 
         tree = Tree('((a:1,b:1):1);', parser=1)
@@ -447,7 +495,7 @@ class TestIssue12EndpointUrl:
         def fake_get(*args, **kwargs):
             return FakeResponse()
 
-        monkeypatch.setattr(mcmctree_mod, 'NCBITaxa', FakeNCBI)
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
         monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
 
         tree = Tree('((a:1,b:1):1);', parser=1)
