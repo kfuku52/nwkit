@@ -157,16 +157,25 @@ def acquire_exclusive_lock(
             )
         time.sleep(poll_seconds)
 
+def _download_ete_taxdump(taxdump_file):
+    from ete4.ncbi_taxonomy.ncbiquery import update_local_taxdump
+
+    update_local_taxdump(taxdump_file)
+
 def get_ete_ncbitaxa(args=None):
     if args is None:
         return ete4.NCBITaxa()
     ete_data_dir = resolve_ete_data_dir(args)
     os.makedirs(ete_data_dir, exist_ok=True)
+    taxdump_file = os.path.join(ete_data_dir, 'taxdump.tar.gz')
     lock_path = os.path.join(ete_data_dir, '.ete4_taxonomy.lock')
     with acquire_exclusive_lock(lock_path=lock_path, lock_label='ETE4 taxonomy DB'):
+        os.makedirs(ete_data_dir, exist_ok=True)
+        if not os.path.exists(taxdump_file):
+            _download_ete_taxdump(taxdump_file)
         return ete4.NCBITaxa(
             dbfile=os.path.join(ete_data_dir, 'taxa.sqlite'),
-            taxdump_file=os.path.join(ete_data_dir, 'taxdump.tar.gz'),
+            taxdump_file=taxdump_file,
         )
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
