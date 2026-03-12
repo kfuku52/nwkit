@@ -511,6 +511,15 @@ def _transfer_root_from_reference_with_unresolved(tree_to, tree_from, resolved_l
     )
     return _root_by_outgroup_set(tree=tree_to, outgroup_set=full_outgroup_set, verbose=verbose)
 
+def _root_by_partial_outgroup_set(tree, resolved_outgroup_set, resolved_leaf_set, verbose=False, source_name='taxonomy'):
+    full_outgroup_set = _resolve_full_outgroup_set_from_resolved_split(
+        tree=tree,
+        resolved_outgroup_set=resolved_outgroup_set,
+        resolved_leaf_set=resolved_leaf_set,
+        source_name=source_name,
+    )
+    return _root_by_outgroup_set(tree=tree, outgroup_set=full_outgroup_set, verbose=verbose)
+
 def _get_reference_root_outgroup_set(reference_tree, source_name):
     reference_tree = _collapse_singleton_root(reference_tree)
     if (len(list(reference_tree.leaves())) > 1) and (len(reference_tree.get_children()) != 2):
@@ -528,13 +537,35 @@ def _get_reference_root_outgroup_set(reference_tree, source_name):
     outgroup_child = root_children[1] if is_n0_bigger_than_n1 else root_children[0]
     return set(child_leaf_sets[outgroup_child])
 
-def _expand_species_outgroup_set(species_outgroup_set, species_to_leaf_labels):
-    outgroup_leaf_set = set()
-    for species_name in species_outgroup_set:
+def _expand_species_label_set(species_name_set, species_to_leaf_labels):
+    leaf_label_set = set()
+    for species_name in species_name_set:
         if species_name not in species_to_leaf_labels:
             raise ValueError('Unexpected species label returned by the reference tree: {}'.format(species_name))
-        outgroup_leaf_set.update(species_to_leaf_labels[species_name])
-    return outgroup_leaf_set
+        leaf_label_set.update(species_to_leaf_labels[species_name])
+    return leaf_label_set
+
+def _resolve_reference_species_sets(reference_tree, species_to_leaf_labels, source_name):
+    reference_species_names = set(reference_tree.leaf_names())
+    expected_species_names = set(species_to_leaf_labels.keys())
+    if not reference_species_names <= expected_species_names:
+        raise ValueError(
+            'Leaf labels in the {}-derived tree should match the species names derived from --infile.'.format(
+                source_name
+            )
+        )
+    if len(reference_species_names) == 0:
+        raise ValueError('Failed to resolve usable {} taxon for any species derived from --infile.'.format(source_name))
+    if (len(expected_species_names) > 1) and (len(reference_species_names) < 2):
+        raise ValueError(
+            'At least two usable {}-resolved species are required after excluding unresolved species.'.format(
+                source_name
+            )
+        )
+    resolved_leaf_set = _expand_species_label_set(reference_species_names, species_to_leaf_labels)
+    unresolved_species_names = expected_species_names - reference_species_names
+    unresolved_leaf_set = _expand_species_label_set(unresolved_species_names, species_to_leaf_labels)
+    return resolved_leaf_set, unresolved_leaf_set
 
 def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
     validate_unique_named_leaves(tree, option_name='--infile', context=' for taxonomy rooting')
@@ -600,23 +631,6 @@ def _get_timetree_name_mapping(tree):
     query_names = [species_name.replace('_', ' ') for species_name in species_to_leaf_labels.keys()]
     return query_names, species_to_leaf_labels
 
-def _extract_timetree_unresolved_names(upload_response_text):
-    unresolved_count_match = re.search(r'Unresolved Names \((\d+)\)', upload_response_text)
-    if unresolved_count_match is None:
-        return list()
-    unresolved_count = int(unresolved_count_match.group(1))
-    unresolved_lines = re.findall(r'<div id="unresolved-names">(.*?)</div>', upload_response_text, flags=re.S)
-    unresolved_names = list()
-    for unresolved_line in unresolved_lines:
-        unresolved_names.extend([
-            re.sub(r'<[^>]+>', '', name).strip()
-            for name in unresolved_line.split('<br/>')
-            if re.sub(r'<[^>]+>', '', name).strip() != ''
-        ])
-    if unresolved_count > 0 and len(unresolved_names) == 0:
-        unresolved_names = ['{} unresolved name(s) reported by TimeTree'.format(unresolved_count)]
-    return unresolved_names
-
 def _build_timetree_reference_tree(tree):
     query_names, species_to_leaf_labels = _get_timetree_name_mapping(tree)
     session = requests.Session()
@@ -629,11 +643,6 @@ def _build_timetree_reference_tree(tree):
             )
             if upload_response.status_code != 200:
                 raise ValueError('Failed to retrieve a pruned guide tree from TimeTree.')
-            unresolved_names = _extract_timetree_unresolved_names(upload_response.text)
-            if unresolved_names:
-                raise ValueError(
-                    'TimeTree reported unresolved names: {}'.format('; '.join(unresolved_names))
-                )
             newick_response = session.post(
                 'https://timetree.org/ajax/newick/prunetree/download',
                 data={'export': 'newick', 'rank': ''},
@@ -647,15 +656,17 @@ def _build_timetree_reference_tree(tree):
         if not timetree_newick.endswith(';'):
             raise ValueError('Unexpected response format from TimeTree when downloading the guide tree.')
         timetree_tree = Tree(timetree_newick, parser=1)
-        expected_species_names = set(species_to_leaf_labels.keys())
-        if set(timetree_tree.leaf_names()) != expected_species_names:
-            raise ValueError('Leaf labels in the TimeTree-derived tree should match the species names derived from --infile.')
+        resolved_leaf_set, unresolved_leaf_set = _resolve_reference_species_sets(
+            timetree_tree,
+            species_to_leaf_labels,
+            source_name='TimeTree',
+        )
         species_outgroup_set = _get_reference_root_outgroup_set(timetree_tree, source_name='TimeTree')
         if len(species_outgroup_set) == 0:
             raise ValueError(
                 'TimeTree-derived root is ambiguous: failed to identify a root bipartition.'
             )
-        return _expand_species_outgroup_set(species_outgroup_set, species_to_leaf_labels)
+        return _expand_species_label_set(species_outgroup_set, species_to_leaf_labels), resolved_leaf_set, unresolved_leaf_set
     finally:
         close = getattr(session, 'close', None)
         if callable(close):
@@ -692,6 +703,7 @@ def _extract_opentree_ott_ids(tree):
         if len(results) != len(query_names):
             raise ValueError('Unexpected response format from Open Tree of Life TNRS.')
         ott_ids = list()
+        unresolved_labels = list()
         for query_name, result in zip(query_names, results):
             matches = result.get('matches', [])
             valid_matches = list()
@@ -705,14 +717,18 @@ def _extract_opentree_ott_ids(tree):
                     continue
                 valid_matches.append(match)
             if len(valid_matches) == 0:
-                raise ValueError('Failed to resolve an OpenTree taxon for leaf label: {}'.format(
-                    query_name.replace(' ', '_')
-                ))
+                unresolved_labels.append(query_name.replace(' ', '_'))
+                continue
             if len(valid_matches) != 1:
-                raise ValueError('OpenTree TNRS returned multiple exact matches for leaf label: {}'.format(
-                    query_name.replace(' ', '_')
-                ))
+                unresolved_labels.append(query_name.replace(' ', '_'))
+                continue
             ott_ids.append(int(valid_matches[0]['taxon']['ott_id']))
+        if len(ott_ids) == 0:
+            raise ValueError(
+                'Failed to resolve a usable OpenTree taxon for any leaf label: {}'.format(
+                    '; '.join(unresolved_labels)
+                )
+            )
         return ott_ids, species_to_leaf_labels
     finally:
         close = getattr(session, 'close', None)
@@ -742,30 +758,21 @@ def _build_opentree_reference_tree(tree):
             raise ValueError('Unexpected response format from Open Tree of Life induced subtree.')
         opentree_tree = Tree(newick, parser=1)
         opentree_tree = remove_singleton(opentree_tree, verbose=False, preserve_branch_length=True)
-        expected_species_names = set(species_to_leaf_labels.keys())
-        if set(opentree_tree.leaf_names()) != expected_species_names:
-            raise ValueError('Leaf labels in the OpenTree-derived tree should match the species names derived from --infile.')
+        resolved_leaf_set, unresolved_leaf_set = _resolve_reference_species_sets(
+            opentree_tree,
+            species_to_leaf_labels,
+            source_name='OpenTree',
+        )
         species_outgroup_set = _get_reference_root_outgroup_set(opentree_tree, source_name='OpenTree')
         if len(species_outgroup_set) == 0:
             raise ValueError(
                 'OpenTree-derived root is ambiguous: failed to identify a root bipartition.'
             )
-        return _expand_species_outgroup_set(species_outgroup_set, species_to_leaf_labels)
+        return _expand_species_label_set(species_outgroup_set, species_to_leaf_labels), resolved_leaf_set, unresolved_leaf_set
     finally:
         close = getattr(session, 'close', None)
         if callable(close):
             close()
-
-def _build_taxonomy_reference_tree(tree, taxonomy_source, taxid_tsv=None, rank='no', args=None):
-    validate_unique_named_leaves(tree, option_name='--infile', context=' for taxonomy rooting')
-    if taxonomy_source == 'ncbi':
-        taxonomy_tree, _, _ = _build_ncbi_reference_tree(tree=tree, taxid_tsv=taxid_tsv, rank=rank, args=args)
-        return taxonomy_tree, None
-    if taxonomy_source == 'timetree':
-        return None, _build_timetree_reference_tree(tree=tree)
-    if taxonomy_source == 'opentree':
-        return None, _build_opentree_reference_tree(tree=tree)
-    raise ValueError("Unknown taxonomy source: {}".format(taxonomy_source))
 
 def taxonomy_rooting(tree, taxonomy_source=DEFAULT_TAXONOMY_SOURCE_CHAIN, taxid_tsv=None, rank='no', verbose=False, args=None):
     if len(list(tree.leaves())) <= 1:
@@ -793,16 +800,28 @@ def taxonomy_rooting(tree, taxonomy_source=DEFAULT_TAXONOMY_SOURCE_CHAIN, taxid_
                     verbose=verbose,
                     source_name=source,
                 )
-            taxonomy_tree, outgroup_set = _build_taxonomy_reference_tree(
+            if source == 'timetree':
+                outgroup_set, resolved_leaf_set, unresolved_leaf_set = _build_timetree_reference_tree(tree=tree)
+            elif source == 'opentree':
+                outgroup_set, resolved_leaf_set, unresolved_leaf_set = _build_opentree_reference_tree(tree=tree)
+            else:
+                raise ValueError("Unknown taxonomy source: {}".format(source))
+            if verbose and unresolved_leaf_set:
+                sys.stderr.write(
+                    'Excluding {}-unresolved leaf label(s) from taxonomy rooting: {}\n'.format(
+                        source,
+                        '; '.join(sorted(unresolved_leaf_set)),
+                    )
+                )
+            if len(unresolved_leaf_set) == 0:
+                return _root_by_outgroup_set(tree=tree, outgroup_set=outgroup_set, verbose=verbose)
+            return _root_by_partial_outgroup_set(
                 tree=tree,
-                taxonomy_source=source,
-                taxid_tsv=taxid_tsv,
-                rank=rank,
-                args=args,
+                resolved_outgroup_set=outgroup_set,
+                resolved_leaf_set=resolved_leaf_set,
+                verbose=verbose,
+                source_name=source,
             )
-            if taxonomy_tree is not None:
-                return transfer_root(tree_to=tree, tree_from=taxonomy_tree, verbose=verbose)
-            return _root_by_outgroup_set(tree=tree, outgroup_set=outgroup_set, verbose=verbose)
         except ValueError as exc:
             if str(exc) == 'No root bipartition found in --infile.':
                 exc = ValueError('The {}-derived root bipartition was not found in --infile.'.format(source))

@@ -639,18 +639,23 @@ class TestTaxonomyRooting:
         assert {'Homo_sapiens_gene1', 'Homo_sapiens_gene2', 'Pan_troglodytes_gene1'} in child_leaf_sets
         assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1', 'Saccharomyces_cerevisiae_gene1'} in child_leaf_sets
 
-    def test_timetree_unresolved_names_raise(self, monkeypatch):
+    def test_timetree_unresolved_names_are_excluded_when_not_interfering(self, monkeypatch):
         install_fake_timetree(
             monkeypatch,
             upload_html=(
                 '<button id="prunetree-msg-btn" class="error-btn-enabled">Unresolved Names (1)</button>'
-                '<div id="unresolved-names">Oryza sativa (replaced with Oryza longistaminata)<br/></div>'
+                '<div id="unresolved-names">Unknown amoeba (not found in NCBI taxonomy)<br/></div>'
             ),
             newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,(Arabidopsis_thaliana:1,Oryza_sativa:1):20);',
         )
-        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
-        with pytest.raises(ValueError, match='unresolved names'):
-            taxonomy_rooting(tree, taxonomy_source='timetree', rank='no')
+        tree = Tree(
+            '((Homo_sapiens:1,(Pan_troglodytes:1,Unknown_amoeba:1):1):1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='timetree', rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes', 'Unknown_amoeba'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
 
     def test_source_chain_falls_back_to_timetree(self, monkeypatch):
         install_fake_ncbi(
@@ -720,21 +725,54 @@ class TestTaxonomyRooting:
         assert {'Homo_sapiens_gene1', 'Homo_sapiens_gene2', 'Pan_troglodytes_gene1'} in child_leaf_sets
         assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1', 'Saccharomyces_cerevisiae_gene1'} in child_leaf_sets
 
-    def test_opentree_unresolved_name_raises(self, monkeypatch):
+    def test_opentree_unresolved_name_is_excluded_when_not_interfering(self, monkeypatch):
         install_fake_opentree(
             monkeypatch,
             tnrs_json={
                 'results': [
                     {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
                     {'matches': []},
                     {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
                     {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
                 ],
             },
-            induced_subtree_json={'broken': {}, 'newick': '();'},
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,(Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Eukaryota;',
+            },
         )
-        tree = Tree('(Homo_sapiens:1,Pan_troglodytes:1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);', parser=1)
-        with pytest.raises(ValueError, match='OpenTree taxon'):
+        tree = Tree(
+            '((Homo_sapiens:1,(Pan_troglodytes:1,Batrachochytrium_dendrobatidis:1):1):1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='opentree', rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Homo_sapiens', 'Pan_troglodytes', 'Batrachochytrium_dendrobatidis'} in child_leaf_sets
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+
+    def test_opentree_unresolved_name_on_root_path_raises(self, monkeypatch):
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json={
+                'results': [
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 1, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 2, 'is_suppressed_from_synth': False}}]},
+                    {'matches': []},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 3, 'is_suppressed_from_synth': False}}]},
+                    {'matches': [{'is_approximate_match': False, 'taxon': {'ott_id': 4, 'is_suppressed_from_synth': False}}]},
+                ],
+            },
+            induced_subtree_json={
+                'broken': {},
+                'newick': '((Homo_sapiens,Pan_troglodytes)Primates,(Arabidopsis_thaliana,Oryza_sativa)Mesangiospermae)Eukaryota;',
+            },
+        )
+        tree = Tree(
+            '(((Homo_sapiens:1,Pan_troglodytes:1):1,Batrachochytrium_dendrobatidis:1):1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);',
+            parser=1,
+        )
+        with pytest.raises(ValueError, match='interfere'):
             taxonomy_rooting(tree, taxonomy_source='opentree', rank='no')
 
     def test_source_chain_falls_back_to_opentree(self, monkeypatch):
