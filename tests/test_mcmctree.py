@@ -26,7 +26,7 @@ def make_mcmctree_args(**kwargs):
         'format': 'auto',
         'outformat': 'auto',
         'quoted_node_names': True,
-        'download_dir': 'inferred',
+        'download_dir': 'auto',
         'timetree': 'no',
         'left_species': None,
         'right_species': None,

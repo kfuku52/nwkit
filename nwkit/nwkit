@@ -30,10 +30,10 @@ p_parent.add_argument('--quoted_node_names', metavar='yes|no', default='yes', ty
                         help='default=%(default)s: Whether node names are quoted in the input file.')
 
 p_download = argparse.ArgumentParser(add_help=False)
-p_download.add_argument('--download_dir', metavar='PATH', default='inferred', type=str, required=False, action='store',
+p_download.add_argument('--download_dir', metavar='PATH', default='auto', type=str, required=False, action='store',
                         help='default=%(default)s: Shared download/cache directory for external resources such as the ETE4 '
-                             'NCBI taxonomy database. "inferred" stores downloads under <outfile_dir>/downloads, or '
-                             './downloads when writing to STDOUT.')
+                             'NCBI taxonomy database. "auto" uses the ETE4 default cache location. '
+                             '"inferred" stores downloads under <outfile_dir>/downloads, or ./downloads when writing to STDOUT.')
 
 def command_constrain(args):
     from nwkit.constrain import constrain_main

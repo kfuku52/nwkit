@@ -19,7 +19,12 @@ from nwkit.util import read_tree, is_rooted
 from tests.helpers import make_args, DATA_DIR, safe_get_distance
 
 
-def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid):
+def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid, taxid_to_name=None, rank_by_taxid=None):
+    if taxid_to_name is None:
+        taxid_to_name = {int(taxid): str(taxid) for taxid in lineage_by_taxid.keys()}
+    if rank_by_taxid is None:
+        rank_by_taxid = dict()
+
     class FakeNCBI:
         def __init__(self, *args, **kwargs):
             self.db = None
@@ -33,6 +38,19 @@ def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid):
 
         def get_lineage(self, taxid):
             return list(lineage_by_taxid[int(taxid)])
+
+        def get_taxid_translator(self, taxids):
+            return {
+                int(taxid): taxid_to_name[int(taxid)]
+                for taxid in taxids
+                if int(taxid) in taxid_to_name
+            }
+
+        def get_rank(self, taxids):
+            return {
+                int(taxid): rank_by_taxid.get(int(taxid), 'no rank')
+                for taxid in taxids
+            }
 
     monkeypatch.setattr(constrain_mod.ete4, 'NCBITaxa', FakeNCBI)
 
@@ -384,20 +402,20 @@ class TestTaxonomyRooting:
     def test_ncbi_source_passes_args_to_ncbi_helpers(self, monkeypatch, tmp_path):
         observed = dict()
 
-        def fake_get_lineages(labels, rank, args=None):
+        def fake_resolve_ncbi_lineages(tree, taxid_tsv=None, rank='no', args=None, verbose=False):
             observed['lineages_download_dir'] = getattr(args, 'download_dir', None)
-            return {
+            return ({
                 'A': [1, 10],
                 'B': [1, 10],
                 'C': [1, 20],
                 'D': [1, 20],
-            }
+            }, {})
 
         def fake_taxid2tree(lineages, taxid_counts, args=None):
             observed['tree_download_dir'] = getattr(args, 'download_dir', None)
             return Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
 
-        monkeypatch.setattr(root_mod, 'get_lineages', fake_get_lineages)
+        monkeypatch.setattr(root_mod, '_resolve_ncbi_lineages', fake_resolve_ncbi_lineages)
         monkeypatch.setattr(root_mod, 'taxid2tree', fake_taxid2tree)
 
         tree = Tree('(A:1,B:1,(C:1,D:1):1);', parser=1)
@@ -501,6 +519,94 @@ class TestTaxonomyRooting:
         )
         tree = Tree('((Homo_sapiens:1,Arabidopsis_thaliana:1):1,(Pan_troglodytes:1,Oryza_sativa:1):1);', parser=1)
         with pytest.raises(ValueError, match='ncbi-derived root bipartition'):
+            taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no')
+
+    def test_ncbi_placeholder_taxa_are_excluded_when_not_interfering(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={
+                'Homo sapiens': 9606,
+                'Pan troglodytes': 9598,
+                'Arabidopsis thaliana': 3702,
+                'Oryza sativa': 4530,
+                'Unknown': 32644,
+            },
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                2787823: [1, 2787823],
+                12908: [1, 2787823, 12908],
+                9606: [1, 10, 9606],
+                9598: [1, 10, 9598],
+                3702: [1, 20, 3702],
+                4530: [1, 20, 4530],
+                32644: [1, 2787823, 12908, 32644],
+            },
+            taxid_to_name={
+                1: 'root',
+                10: 'Primates',
+                20: 'Plants',
+                2787823: 'unclassified entries',
+                12908: 'unclassified sequences',
+                9606: 'Homo sapiens',
+                9598: 'Pan troglodytes',
+                3702: 'Arabidopsis thaliana',
+                4530: 'Oryza sativa',
+                32644: 'unidentified',
+            },
+            rank_by_taxid={32644: 'species'},
+        )
+        tree = Tree(
+            '((Homo_sapiens:1,(Pan_troglodytes:1,(Unknown_amoeba:1,Unknown_amoeboid:1):1):1):1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);',
+            parser=1,
+        )
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
+        assert {'Homo_sapiens', 'Pan_troglodytes', 'Unknown_amoeba', 'Unknown_amoeboid'} in child_leaf_sets
+
+    def test_ncbi_placeholder_taxa_on_root_path_raise(self, monkeypatch):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={
+                'Homo sapiens': 9606,
+                'Pan troglodytes': 9598,
+                'Arabidopsis thaliana': 3702,
+                'Oryza sativa': 4530,
+                'Unknown': 32644,
+            },
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                2787823: [1, 2787823],
+                12908: [1, 2787823, 12908],
+                9606: [1, 10, 9606],
+                9598: [1, 10, 9598],
+                3702: [1, 20, 3702],
+                4530: [1, 20, 4530],
+                32644: [1, 2787823, 12908, 32644],
+            },
+            taxid_to_name={
+                1: 'root',
+                10: 'Primates',
+                20: 'Plants',
+                2787823: 'unclassified entries',
+                12908: 'unclassified sequences',
+                9606: 'Homo sapiens',
+                9598: 'Pan troglodytes',
+                3702: 'Arabidopsis thaliana',
+                4530: 'Oryza sativa',
+                32644: 'unidentified',
+            },
+            rank_by_taxid={32644: 'species'},
+        )
+        tree = Tree(
+            '(((Homo_sapiens:1,Pan_troglodytes:1):1,(Unknown_amoeba:1,Unknown_amoeboid:1):1):1,(Arabidopsis_thaliana:1,Oryza_sativa:1):1);',
+            parser=1,
+        )
+        with pytest.raises(ValueError, match='interfere'):
             taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no')
 
     def test_timetree_maps_species_names_back_to_original_labels(self, monkeypatch):

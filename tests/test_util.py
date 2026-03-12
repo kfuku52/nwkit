@@ -137,13 +137,19 @@ class TestWriteTree:
 
 
 class TestDownloadDirHelpers:
-    def test_resolve_download_dir_uses_outfile_parent_by_default(self, tmp_path):
+    def test_resolve_download_dir_returns_none_for_auto(self, tmp_path):
+        outfile = tmp_path / 'out' / 'tree.nwk'
+        args = make_args(outfile=str(outfile), download_dir='auto')
+        resolved = resolve_download_dir(args)
+        assert resolved is None
+
+    def test_resolve_download_dir_uses_outfile_parent_for_inferred(self, tmp_path):
         outfile = tmp_path / 'out' / 'tree.nwk'
         args = make_args(outfile=str(outfile), download_dir='inferred')
         resolved = resolve_download_dir(args)
         assert resolved == os.path.join(os.path.realpath(outfile.parent), 'downloads')
 
-    def test_resolve_download_dir_uses_cwd_for_stdout(self, monkeypatch, tmp_path):
+    def test_resolve_download_dir_uses_cwd_for_stdout_when_inferred(self, monkeypatch, tmp_path):
         monkeypatch.chdir(tmp_path)
         args = make_args(outfile='-', download_dir='inferred')
         resolved = resolve_download_dir(args)
@@ -159,6 +165,10 @@ class TestDownloadDirHelpers:
         explicit_dir = tmp_path / 'shared-cache'
         args = make_args(download_dir=str(explicit_dir))
         assert resolve_ete_data_dir(args) == os.path.join(os.path.realpath(explicit_dir), 'ete4')
+
+    def test_resolve_ete_data_dir_returns_none_for_auto(self):
+        args = make_args(download_dir='auto')
+        assert resolve_ete_data_dir(args) is None
 
     def test_acquire_exclusive_lock_creates_and_removes_file(self, tmp_path):
         lock_path = tmp_path / '.lock'
@@ -210,6 +220,29 @@ class TestDownloadDirHelpers:
         assert calls['taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
         assert calls['downloaded_taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
         assert calls['taxdump_exists_at_init'] is True
+
+    def test_get_ete_ncbitaxa_auto_uses_ete_default_location(self, monkeypatch):
+        calls = dict()
+
+        def fail_lock(*args, **kwargs):
+            raise AssertionError('lock should not be used when download_dir=auto')
+
+        def fail_download(*args, **kwargs):
+            raise AssertionError('taxdump should not be downloaded by nwkit when download_dir=auto')
+
+        class FakeNCBI:
+            def __init__(self, *args, **kwargs):
+                calls['args'] = args
+                calls['kwargs'] = kwargs
+                self.db = None
+
+        monkeypatch.setattr('nwkit.util.acquire_exclusive_lock', fail_lock)
+        monkeypatch.setattr('nwkit.util._download_ete_taxdump', fail_download)
+        monkeypatch.setattr('nwkit.util.ete4.NCBITaxa', FakeNCBI)
+        ncbi = get_ete_ncbitaxa(args=make_args(download_dir='auto'))
+        assert isinstance(ncbi, FakeNCBI)
+        assert calls['args'] == ()
+        assert calls['kwargs'] == {}
 
     def test_get_ete_ncbitaxa_reuses_existing_taxdump(self, monkeypatch, tmp_path):
         explicit_dir = tmp_path / 'shared-cache'

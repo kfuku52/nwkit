@@ -15,23 +15,27 @@ DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
 
 def resolve_download_dir(args=None):
-    outfile = getattr(args, 'outfile', '-') if args is not None else '-'
-    if outfile not in ['', None, '-']:
-        inferred_base = os.path.dirname(os.path.realpath(outfile))
-    else:
-        raw_out_dir = getattr(args, 'out_dir', None) if args is not None else None
-        inferred_base = os.path.realpath(raw_out_dir if raw_out_dir not in ['', None] else os.getcwd())
-    inferred = os.path.join(inferred_base, 'downloads')
-    raw_dir = getattr(args, 'download_dir', 'inferred') if args is not None else 'inferred'
+    raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
     if raw_dir is None:
-        return inferred
+        return None
     normalized = str(raw_dir).strip()
-    if normalized.lower() in ['', 'inferred']:
-        return inferred
+    if normalized.lower() in ['', 'auto']:
+        return None
+    if normalized.lower() == 'inferred':
+        outfile = getattr(args, 'outfile', '-') if args is not None else '-'
+        if outfile not in ['', None, '-']:
+            inferred_base = os.path.dirname(os.path.realpath(outfile))
+        else:
+            raw_out_dir = getattr(args, 'out_dir', None) if args is not None else None
+            inferred_base = os.path.realpath(raw_out_dir if raw_out_dir not in ['', None] else os.getcwd())
+        return os.path.join(inferred_base, 'downloads')
     return os.path.realpath(normalized)
 
 def resolve_ete_data_dir(args=None):
-    return os.path.join(resolve_download_dir(args), 'ete4')
+    download_dir = resolve_download_dir(args)
+    if download_dir is None:
+        return None
+    return os.path.join(download_dir, 'ete4')
 
 def _assert_lock_path_is_regular_file(lock_path, lock_label='Lock'):
     if not os.path.lexists(lock_path):
@@ -163,9 +167,9 @@ def _download_ete_taxdump(taxdump_file):
     update_local_taxdump(taxdump_file)
 
 def get_ete_ncbitaxa(args=None):
-    if args is None:
-        return ete4.NCBITaxa()
     ete_data_dir = resolve_ete_data_dir(args)
+    if ete_data_dir is None:
+        return ete4.NCBITaxa()
     os.makedirs(ete_data_dir, exist_ok=True)
     taxdump_file = os.path.join(ete_data_dir, 'taxdump.tar.gz')
     lock_path = os.path.join(ete_data_dir, '.ete4_taxonomy.lock')

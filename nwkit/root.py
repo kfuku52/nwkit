@@ -9,6 +9,8 @@ from nwkit.constrain import (
     get_lineages,
     get_lineages_from_taxid,
     get_taxid_counts,
+    limit_lineage_to_rank,
+    name_to_taxid,
     read_taxid_tsv,
     taxid2tree,
 )
@@ -16,6 +18,98 @@ from nwkit.util import *
 
 SUPPORTED_TAXONOMY_SOURCES = ('ncbi', 'timetree', 'opentree')
 DEFAULT_TAXONOMY_SOURCE_CHAIN = 'ncbi,opentree,timetree'
+NCBI_PLACEHOLDER_NAME_PATTERNS = (
+    re.compile(r'\bunknown\b', flags=re.I),
+    re.compile(r'\bunidentified\b', flags=re.I),
+    re.compile(r'\bunclassified\b', flags=re.I),
+    re.compile(r'\buncultured\b', flags=re.I),
+    re.compile(r'\benvironmental\b', flags=re.I),
+    re.compile(r'\bmetagenom(?:e|es|ic)\b', flags=re.I),
+    re.compile(r'\bartificial sequences?\b', flags=re.I),
+    re.compile(r'\bother sequences?\b', flags=re.I),
+)
+
+def _close_ncbi_handle(ncbi):
+    if ncbi is None:
+        return
+    db = getattr(ncbi, 'db', None)
+    if db is not None:
+        try:
+            db.close()
+        except Exception:
+            pass
+
+def _is_placeholder_ncbi_name(name):
+    normalized = re.sub(r'[_\s]+', ' ', str(name or '').strip()).lower()
+    if normalized == '':
+        return False
+    return any(pattern.search(normalized) for pattern in NCBI_PLACEHOLDER_NAME_PATTERNS)
+
+def _is_placeholder_ncbi_resolution(matched_name, lineage_names):
+    names_to_check = list()
+    if matched_name not in ['', None]:
+        names_to_check.append(matched_name)
+    names_to_check.extend([name for name in lineage_names if name not in ['', None]])
+    return any(_is_placeholder_ncbi_name(name) for name in names_to_check)
+
+def _get_ncbi_lineage_record(label, ncbi, rank, taxid=None):
+    if taxid is None:
+        query_name = label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in str(label) else str(label)
+        name2taxid = name_to_taxid(query_name, ncbi)
+        if len(name2taxid) == 0:
+            return None, 'Genus-level match was not found in the NCBI database'
+        matched_query_name = query_name if query_name in name2taxid.keys() else re.sub(' .*', '', query_name)
+        taxid = int(name2taxid[matched_query_name][0])
+    else:
+        matched_query_name = None
+        taxid = int(taxid)
+    lineage = [int(t) for t in ncbi.get_lineage(taxid)]
+    lineage_name_map = ncbi.get_taxid_translator(lineage + [taxid])
+    lineage_names = [lineage_name_map.get(t) for t in lineage]
+    matched_name = lineage_name_map.get(taxid, matched_query_name or str(taxid))
+    if _is_placeholder_ncbi_resolution(matched_name, lineage_names):
+        return None, 'matched placeholder NCBI taxon: {}'.format(matched_name)
+    return {
+        'lineage': limit_lineage_to_rank(lineage, ncbi, rank),
+        'matched_taxid': taxid,
+        'matched_name': matched_name,
+    }, None
+
+def _resolve_ncbi_lineages(tree, taxid_tsv=None, rank='no', args=None, verbose=False):
+    ncbi = get_ete_ncbitaxa(args=args)
+    try:
+        lineages = dict()
+        unresolved_details = dict()
+        if taxid_tsv not in ['', None]:
+            taxid_df = read_taxid_tsv(taxid_tsv)
+            taxid_df = _order_taxid_tsv_to_match_tree(tree, taxid_df)
+            records = zip(taxid_df['leaf_name'], taxid_df['taxid'])
+            for label, taxid in records:
+                record, reason = _get_ncbi_lineage_record(label=label, taxid=taxid, ncbi=ncbi, rank=rank)
+                if record is None:
+                    unresolved_details[label] = reason
+                    continue
+                lineages[label] = record['lineage']
+        else:
+            for label in tree.leaf_names():
+                record, reason = _get_ncbi_lineage_record(label=label, ncbi=ncbi, rank=rank)
+                if record is None:
+                    unresolved_details[label] = reason
+                    continue
+                lineages[label] = record['lineage']
+        if verbose and unresolved_details:
+            details = [
+                '{} ({})'.format(label, unresolved_details[label])
+                for label in sorted(unresolved_details.keys())
+            ]
+            sys.stderr.write(
+                'Excluding NCBI-unresolved leaf label(s) from taxonomy rooting: {}\n'.format(
+                    '; '.join(details)
+                )
+            )
+        return lineages, unresolved_details
+    finally:
+        _close_ncbi_handle(ncbi)
 
 def _normalize_root_distance_for_reroot(tree):
     if tree.dist is not None:
@@ -335,24 +429,24 @@ def _parse_taxonomy_sources(taxonomy_source):
         raise ValueError('Specify at least one taxonomy source.')
     return sources
 
-def _build_ncbi_reference_tree(tree, taxid_tsv=None, rank='no', args=None):
-    leaf_names = list(tree.leaf_names())
-    if taxid_tsv not in ['', None]:
-        taxid_df = read_taxid_tsv(taxid_tsv)
-        taxid_df = _order_taxid_tsv_to_match_tree(tree, taxid_df)
-        lineages = get_lineages_from_taxid(taxid_df, rank=rank, args=args)
-    else:
-        lineages = get_lineages(labels=leaf_names, rank=rank, args=args)
-    unresolved_labels = [label for label, lineage in lineages.items() if len(lineage) == 0]
-    if unresolved_labels:
+def _build_ncbi_reference_tree(tree, taxid_tsv=None, rank='no', args=None, verbose=False):
+    lineages, unresolved_details = _resolve_ncbi_lineages(
+        tree=tree,
+        taxid_tsv=taxid_tsv,
+        rank=rank,
+        args=args,
+        verbose=verbose,
+    )
+    unresolved_labels = set(unresolved_details.keys())
+    if len(lineages) == 0:
+        raise ValueError('Failed to resolve usable NCBI lineage for any leaf label.')
+    if (len(list(tree.leaves())) > 1) and (len(lineages) < 2):
         raise ValueError(
-            'Failed to resolve NCBI lineage for leaf label(s): {}'.format(
-                ', '.join(sorted(unresolved_labels)),
-            )
+            'At least two usable NCBI-resolved leaf labels are required after excluding unresolved labels.'
         )
     taxonomy_tree = taxid2tree(lineages, get_taxid_counts(lineages), args=args)
-    if not is_all_leaf_names_identical(tree, taxonomy_tree, verbose=True):
-        raise ValueError('Leaf labels in the NCBI-derived tree should match those in --infile.')
+    if set(taxonomy_tree.leaf_names()) != set(lineages.keys()):
+        raise ValueError('Leaf labels in the NCBI-derived tree should match the resolved leaf labels in --infile.')
     taxonomy_tree = _collapse_singleton_root(taxonomy_tree)
     if (len(list(taxonomy_tree.leaves())) > 1) and (len(taxonomy_tree.get_children()) != 2):
         raise ValueError(
@@ -360,7 +454,62 @@ def _build_ncbi_reference_tree(tree, taxid_tsv=None, rank='no', args=None):
                 len(taxonomy_tree.get_children())
             )
         )
-    return taxonomy_tree
+    return taxonomy_tree, set(lineages.keys()), unresolved_labels
+
+def _resolve_full_outgroup_set_from_resolved_split(tree, resolved_outgroup_set, resolved_leaf_set, source_name):
+    analysis_tree = _collapse_singleton_root(tree.copy())
+    validate_unique_named_leaves(analysis_tree, option_name='--infile', context=' for taxonomy rooting')
+    resolved_leaf_set = set(resolved_leaf_set)
+    resolved_outgroup_set = set(resolved_outgroup_set)
+    leaf_name_set = set(analysis_tree.leaf_names())
+    if len(resolved_outgroup_set) == 0:
+        raise ValueError('No root bipartition found in --infile.')
+    if not resolved_outgroup_set < resolved_leaf_set:
+        raise ValueError('No root bipartition found in --infile.')
+    if not resolved_leaf_set <= leaf_name_set:
+        raise ValueError('No root bipartition found in --infile.')
+    root_children = analysis_tree.get_children()
+    subtree_leaf_sets = analysis_tree.get_cached_content(prop='name')
+    matching_edges = dict()
+    resolved_ingroup_set = resolved_leaf_set - resolved_outgroup_set
+    for node in analysis_tree.traverse():
+        if node.is_root:
+            continue
+        node_leaf_set = set(subtree_leaf_sets[node])
+        node_resolved_set = node_leaf_set.intersection(resolved_leaf_set)
+        if (len(node_resolved_set) == 0) or (node_resolved_set == resolved_leaf_set):
+            continue
+        if node_resolved_set == resolved_outgroup_set:
+            full_outgroup_set = node_leaf_set
+        elif node_resolved_set == resolved_ingroup_set:
+            full_outgroup_set = leaf_name_set - node_leaf_set
+        else:
+            continue
+        edge_key = ('root_edge',) if ((node.up is analysis_tree) and (len(root_children) == 2)) else node
+        previous = matching_edges.get(edge_key)
+        if previous is None:
+            matching_edges[edge_key] = set(full_outgroup_set)
+        elif previous != set(full_outgroup_set):
+            raise ValueError('Internal error while deduplicating candidate root edges.')
+    if len(matching_edges) == 0:
+        raise ValueError('No root bipartition found in --infile.')
+    if len(matching_edges) > 1:
+        raise ValueError(
+            'Unresolved leaf clade(s) interfere with the {}-derived root position in --infile.'.format(
+                source_name
+            )
+        )
+    return next(iter(matching_edges.values()))
+
+def _transfer_root_from_reference_with_unresolved(tree_to, tree_from, resolved_leaf_set, verbose=False, source_name='ncbi'):
+    resolved_outgroup_set = _get_reference_root_outgroup_set(tree_from, source_name=source_name.upper())
+    full_outgroup_set = _resolve_full_outgroup_set_from_resolved_split(
+        tree=tree_to,
+        resolved_outgroup_set=resolved_outgroup_set,
+        resolved_leaf_set=resolved_leaf_set,
+        source_name=source_name,
+    )
+    return _root_by_outgroup_set(tree=tree_to, outgroup_set=full_outgroup_set, verbose=verbose)
 
 def _get_reference_root_outgroup_set(reference_tree, source_name):
     reference_tree = _collapse_singleton_root(reference_tree)
@@ -610,7 +759,8 @@ def _build_opentree_reference_tree(tree):
 def _build_taxonomy_reference_tree(tree, taxonomy_source, taxid_tsv=None, rank='no', args=None):
     validate_unique_named_leaves(tree, option_name='--infile', context=' for taxonomy rooting')
     if taxonomy_source == 'ncbi':
-        return _build_ncbi_reference_tree(tree=tree, taxid_tsv=taxid_tsv, rank=rank, args=args), None
+        taxonomy_tree, _, _ = _build_ncbi_reference_tree(tree=tree, taxid_tsv=taxid_tsv, rank=rank, args=args)
+        return taxonomy_tree, None
     if taxonomy_source == 'timetree':
         return None, _build_timetree_reference_tree(tree=tree)
     if taxonomy_source == 'opentree':
@@ -626,6 +776,23 @@ def taxonomy_rooting(tree, taxonomy_source=DEFAULT_TAXONOMY_SOURCE_CHAIN, taxid_
         if verbose:
             sys.stderr.write('Attempting taxonomy rooting with source: {}\n'.format(source))
         try:
+            if source == 'ncbi':
+                taxonomy_tree, resolved_leaf_set, unresolved_leaf_set = _build_ncbi_reference_tree(
+                    tree=tree,
+                    taxid_tsv=taxid_tsv,
+                    rank=rank,
+                    args=args,
+                    verbose=verbose,
+                )
+                if len(unresolved_leaf_set) == 0:
+                    return transfer_root(tree_to=tree, tree_from=taxonomy_tree, verbose=verbose)
+                return _transfer_root_from_reference_with_unresolved(
+                    tree_to=tree,
+                    tree_from=taxonomy_tree,
+                    resolved_leaf_set=resolved_leaf_set,
+                    verbose=verbose,
+                    source_name=source,
+                )
             taxonomy_tree, outgroup_set = _build_taxonomy_reference_tree(
                 tree=tree,
                 taxonomy_source=source,
