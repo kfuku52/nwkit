@@ -50,7 +50,7 @@ SEMANTIC_ALPHA_THRESHOLD = 16
 SEMANTIC_DIFF_THRESHOLD_FLOOR = 12
 HTTP_HEADERS = {
     'Accept': 'application/json',
-    'User-Agent': 'nwkit-image/0.22.8 (+https://github.com/kfuku52/nwkit)',
+    'User-Agent': 'nwkit-image/0.22.9 (+https://github.com/kfuku52/nwkit)',
 }
 SUPPORTED_SOURCES = ('phylopic', 'bioicons', 'inaturalist', 'wikimedia', 'gbif', 'eol', 'idigbio', 'openverse', 'ncbi')
 DEFAULT_SOURCES = {
