@@ -1645,6 +1645,7 @@ class TestImagePostprocessing:
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
         monkeypatch.setattr('nwkit.image.download_media', fake_download_media)
+        monkeypatch.setattr('nwkit.image.rasterize_svg_to_image', lambda source_path: object())
         monkeypatch.setattr(
             'nwkit.image.load_pillow_modules',
             lambda: (_ for _ in ()).throw(RuntimeError('Image post-processing requires the optional Pillow dependency. Install optional image-processing dependencies with: pip install "nwkit[image]"')),
