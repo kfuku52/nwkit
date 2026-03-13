@@ -33,12 +33,21 @@ nwkit -h
 pip install git+https://github.com/kfuku52/nwkit
 ```
 
+#### Optional dependencies for image post-processing
+
+`nwkit image` can normalize image format, trim margins, and resize/pad output files when the optional image-processing dependencies are installed:
+
+```
+pip install "nwkit[image]"
+```
+
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
+- [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment
 - [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
@@ -54,6 +63,77 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 - [`skim`](https://github.com/kfuku52/nwkit/wiki/nwkit-skim): Sampling leaves from clades with shared traits
 - [`subtree`](https://github.com/kfuku52/nwkit/wiki/nwkit-subtree): Generating a subtree Newick file
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
+
+## Example: species image retrieval
+
+Retrieve one representative asset per species from a tree whose leaf labels follow the `GENUS_SPECIES[_...]` convention:
+
+```bash
+nwkit image -i tree.nwk --out_dir species_images
+```
+
+Prefer silhouettes:
+
+```bash
+nwkit image -i tree.nwk --out_dir species_images --style silhouette
+```
+
+Restrict the provider order and relax the license ceiling:
+
+```bash
+nwkit image -i tree.nwk --out_dir species_images \
+  --source phylopic,bioicons,inaturalist,wikimedia,gbif,eol,idigbio,openverse,ncbi \
+  --license_max any
+```
+
+The command writes:
+
+- `manifest.tsv`: machine-readable asset metadata per input leaf
+- `unmatched.tsv`: unresolved or filtered taxa with reasons
+- `ATTRIBUTION.md`: human-readable attribution summary
+- `images/`: downloaded media files
+
+Optional image post-processing controls:
+
+- `--output_format original|png|jpg`: normalize the final file format
+- `--max_edge INT`: downscale the longest edge to this maximum size
+- `--canvas none|square`: pad images to a square canvas
+- `--background white|transparent`: background for square padding
+- `--trim off|white|transparent|semantic`: trim white margins, transparent margins, or a best-effort foreground subject
+- `--trim_shape bbox|square`: keep the trimmed bounding box as-is or center-crop the trimmed result to a square
+
+For example, to normalize a mixed set of downloaded images into padded 1024 px PNG files:
+
+```bash
+nwkit image -i tree.nwk --out_dir species_images \
+  --output_format png \
+  --max_edge 1024 \
+  --canvas square \
+  --background white \
+  --trim white
+```
+
+If you want the trimmed content itself to become square before resizing, add `--trim_shape square`. This uses a centered square crop, so elongated subjects may be clipped.
+
+`--trim semantic` is a Pillow-only best-effort heuristic. It uses alpha when available, otherwise it estimates the main subject from the largest foreground-like region against the border background. It works well for simple backgrounds, but it is not a full segmentation model.
+
+When `--download_dir` is provided, NWKIT reuses that shared cache directory for both the ETE4 taxonomy database and downloaded image assets.
+
+For larger trees, concurrency can be tuned with environment variables:
+
+- `NWKIT_IMAGE_LOOKUP_WORKERS`: override the number of parallel species lookups
+- `NWKIT_IMAGE_DOWNLOAD_WORKERS`: override the number of parallel download/materialization workers
+
+Bioicons vector illustrations are supported via `--source bioicons` and work best as a silhouette-style fallback for model organisms and other taxa with curated icons.
+
+EOL media aggregation is supported via `--source eol`.
+
+iDigBio specimen-linked media are supported via `--source idigbio`.
+
+Openverse search aggregation is supported via `--source openverse` and works best as a late fallback because it is broader keyword search rather than taxonomy-native indexing.
+
+NCBI taxonomy images are supported via `--source ncbi`.
+By default, `ncbi` is appended to the `auto` and `photo` source lists as a lazy fallback, so the heavy NCBI image-table download is triggered only when earlier providers did not yield an acceptable candidate.
 
 ## Citation
 There is no published paper on NWKIT itself, but we used and cited NWKIT in several papers including [Fukushima & Pollock (2023, Nat Ecol Evol 7: 155-170)](https://www.nature.com/articles/s41559-022-01932-7).

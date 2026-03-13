@@ -1,6 +1,7 @@
 import errno
 import os
 import re
+import shutil
 import sys
 import time
 from collections import Counter, defaultdict
@@ -13,6 +14,10 @@ NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
 TREE_FORMAT_PROP = '_nwkit_parser_format'
 DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
+COMMON_ETE_CACHE_DIRS = (
+    os.path.join(os.path.expanduser('~'), '.local', 'share', 'ete'),
+    os.path.join(os.path.expanduser('~'), '.etetoolkit'),
+)
 
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
@@ -36,6 +41,37 @@ def resolve_ete_data_dir(args=None):
     if download_dir is None:
         return None
     return os.path.join(download_dir, 'ete4')
+
+def _find_existing_ete_taxonomy_assets(exclude_dbfile=None):
+    excluded_realpath = os.path.realpath(exclude_dbfile) if exclude_dbfile else None
+    for cache_dir in COMMON_ETE_CACHE_DIRS:
+        dbfile = os.path.join(cache_dir, 'taxa.sqlite')
+        if not os.path.isfile(dbfile):
+            continue
+        if os.path.getsize(dbfile) <= 0:
+            continue
+        if excluded_realpath is not None and os.path.realpath(dbfile) == excluded_realpath:
+            continue
+        assets = {'dbfile': dbfile}
+        traverse_file = dbfile + '.traverse.pkl'
+        taxdump_file = os.path.join(cache_dir, 'taxdump.tar.gz')
+        if os.path.isfile(traverse_file):
+            assets['traverse_file'] = traverse_file
+        if os.path.isfile(taxdump_file):
+            assets['taxdump_file'] = taxdump_file
+        return assets
+    return None
+
+def _seed_ete_taxonomy_assets(target_dbfile, source_assets):
+    target_dir = os.path.dirname(target_dbfile)
+    os.makedirs(target_dir, exist_ok=True)
+    shutil.copy2(source_assets['dbfile'], target_dbfile)
+    source_traverse_file = source_assets.get('traverse_file')
+    if source_traverse_file is not None:
+        shutil.copy2(source_traverse_file, target_dbfile + '.traverse.pkl')
+    source_taxdump_file = source_assets.get('taxdump_file')
+    if source_taxdump_file is not None:
+        shutil.copy2(source_taxdump_file, os.path.join(target_dir, 'taxdump.tar.gz'))
 
 def _assert_lock_path_is_regular_file(lock_path, lock_label='Lock'):
     if not os.path.lexists(lock_path):
@@ -171,14 +207,21 @@ def get_ete_ncbitaxa(args=None):
     if ete_data_dir is None:
         return ete4.NCBITaxa()
     os.makedirs(ete_data_dir, exist_ok=True)
+    dbfile = os.path.join(ete_data_dir, 'taxa.sqlite')
     taxdump_file = os.path.join(ete_data_dir, 'taxdump.tar.gz')
     lock_path = os.path.join(ete_data_dir, '.ete4_taxonomy.lock')
     with acquire_exclusive_lock(lock_path=lock_path, lock_label='ETE4 taxonomy DB'):
         os.makedirs(ete_data_dir, exist_ok=True)
+        if os.path.isfile(dbfile) and os.path.getsize(dbfile) > 0:
+            return ete4.NCBITaxa(dbfile=dbfile, update=False)
+        existing_assets = _find_existing_ete_taxonomy_assets(exclude_dbfile=dbfile)
+        if existing_assets is not None:
+            _seed_ete_taxonomy_assets(target_dbfile=dbfile, source_assets=existing_assets)
+            return ete4.NCBITaxa(dbfile=dbfile, update=False)
         if not os.path.exists(taxdump_file):
             _download_ete_taxdump(taxdump_file)
         return ete4.NCBITaxa(
-            dbfile=os.path.join(ete_data_dir, 'taxa.sqlite'),
+            dbfile=dbfile,
             taxdump_file=taxdump_file,
         )
 

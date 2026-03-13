@@ -35,6 +35,15 @@ p_download.add_argument('--download_dir', metavar='PATH', default='auto', type=s
                              'NCBI taxonomy database. "auto" uses the ETE4 default cache location. '
                              '"inferred" stores downloads under <outfile_dir>/downloads, or ./downloads when writing to STDOUT.')
 
+p_tree_input = argparse.ArgumentParser(add_help=False)
+p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
+                          help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+p_tree_input.add_argument('-f', '--format', metavar='INT', default='auto', type=str, required=False, action='store',
+                          help='default=%(default)s: ETE tree format. '
+                               'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
+p_tree_input.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                          help='default=%(default)s: Whether node names are quoted in the input file.')
+
 def command_constrain(args):
     from nwkit.constrain import constrain_main
     constrain_main(args)
@@ -102,6 +111,57 @@ def command_info(args):
     info_main(args)
 pinfo = subparsers.add_parser('info', help='Printing tree information', parents=[p_parent])
 pinfo.set_defaults(handler=command_info)
+
+def command_image(args):
+    from nwkit.image import image_main
+    image_main(args)
+pimage = subparsers.add_parser('image', help='Retrieve representative species images with license-aware filtering', parents=[p_tree_input, p_download])
+pimage.add_argument('--out_dir', metavar='PATH', default=None, type=str, required=True, action='store',
+                    help='Output directory for images and metadata.')
+pimage.add_argument('--style', metavar='auto|photo|silhouette', default='auto', type=str, required=False, action='store',
+                    choices=['auto', 'photo', 'silhouette'],
+                    help='default=%(default)s: Image preference mode.')
+pimage.add_argument('--source', metavar='phylopic,bioicons,inaturalist,wikimedia,gbif,eol,idigbio,openverse,ncbi', default=None, type=str, required=False, action='store',
+                    help='default=style-dependent: Comma-separated provider priority list. '
+                         'Supported sources are phylopic, bioicons, inaturalist, wikimedia, gbif, eol, idigbio, openverse, and ncbi. '
+                         'When ncbi appears after other providers, it is used as a lazy fallback because it may download the NCBI taxonomy image dump.')
+pimage.add_argument('--license_max', metavar='public-domain|cc-by|cc-by-sa|cc-by-nc|cc-by-nc-sa|any', default='cc-by-nc-sa', type=str, required=False, action='store',
+                    choices=['public-domain', 'cc-by', 'cc-by-sa', 'cc-by-nc', 'cc-by-nc-sa', 'any'],
+                    help='default=%(default)s: Strongest restriction level allowed for candidate images.')
+pimage.add_argument('--allow_nd', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                    help='default=%(default)s: Whether ND licenses are acceptable.')
+pimage.add_argument('--fallback_rank', metavar='none|genus|family', default='none', type=str, required=False, action='store',
+                    choices=['none', 'genus', 'family'],
+                    help='default=%(default)s: Allow fallback matching above the species rank.')
+pimage.add_argument('--max_per_species', metavar='INT', default=1, type=int, required=False, action='store',
+                    help='default=%(default)s: Number of images to keep per species.')
+pimage.add_argument('--name_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
+                    help='default=%(default)s: Optional TSV with "leaf_name" and "species_name" columns.')
+pimage.add_argument('--manifest', metavar='PATH', default=None, type=str, required=False, action='store',
+                    help='default=%(default)s: Optional custom path for manifest.tsv.')
+pimage.add_argument('--attribution', metavar='PATH', default=None, type=str, required=False, action='store',
+                    help='default=%(default)s: Optional custom path for ATTRIBUTION.md.')
+pimage.add_argument('--fail_on_missing', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                    help='default=%(default)s: Whether unresolved species should trigger a non-zero exit code.')
+pimage.add_argument('--output_format', metavar='original|png|jpg', default='original', type=str, required=False, action='store',
+                    choices=['original', 'png', 'jpg'],
+                    help='default=%(default)s: Optional normalized output format. '
+                         'Image post-processing options require the optional "nwkit[image]" dependencies.')
+pimage.add_argument('--max_edge', metavar='INT', default=None, type=int, required=False, action='store',
+                    help='default=%(default)s: Downscale rasterized output so the longest edge is at most this value.')
+pimage.add_argument('--canvas', metavar='none|square', default='none', type=str, required=False, action='store',
+                    choices=['none', 'square'],
+                    help='default=%(default)s: Add padding to a square canvas after trimming and resizing.')
+pimage.add_argument('--background', metavar='white|transparent', default='white', type=str, required=False, action='store',
+                    choices=['white', 'transparent'],
+                    help='default=%(default)s: Background color used when --canvas square is requested.')
+pimage.add_argument('--trim', metavar='off|white|transparent|semantic', default='off', type=str, required=False, action='store',
+                    choices=['off', 'white', 'transparent', 'semantic'],
+                    help='default=%(default)s: Trim uniform white margins, transparent margins, or an estimated main foreground region before resizing.')
+pimage.add_argument('--trim_shape', metavar='bbox|square', default='bbox', type=str, required=False, action='store',
+                    choices=['bbox', 'square'],
+                    help='default=%(default)s: Shape of the trimmed result. "square" center-crops the trimmed content to a square and may clip it.')
+pimage.set_defaults(handler=command_image)
 
 def command_intersection(args):
     from nwkit.intersection import intersection_main

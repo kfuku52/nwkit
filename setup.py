@@ -29,7 +29,10 @@ setup(
     packages=find_packages(),
     python_requires=">=3.9",
     install_requires=["ete4>=4.4.0", "biopython", "pandas", "requests", "numpy"],
-    extras_require={"test": ["pytest>=7"]},
+    extras_require={
+        "test": ["pytest>=7"],
+        "image": ["Pillow", "CairoSVG"],
+    },
     scripts=["nwkit/nwkit"],
     include_package_data=True,
     package_data={"": ["data_tree/*.nwk"]},
