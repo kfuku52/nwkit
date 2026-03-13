@@ -59,7 +59,7 @@ REQUEST_RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
 HTTP_SESSION_POOL_SIZE = 16
 HTTP_HEADERS = {
     'Accept': 'application/json',
-    'User-Agent': 'nwkit-image/0.22.9 (+https://github.com/kfuku52/nwkit)',
+    'User-Agent': 'nwkit-image/0.22.10 (+https://github.com/kfuku52/nwkit)',
 }
 SUPPORTED_SOURCES = ('phylopic', 'bioicons', 'inaturalist', 'wikimedia', 'gbif', 'eol', 'idigbio', 'openverse', 'ncbi')
 DEFAULT_SOURCES = {
