@@ -50,6 +50,32 @@ class TestReadTree:
         path = tmp_nwk('((A:1,B:1)90:1,(C:1,D:1)85:1);')
         tree = read_tree(path, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert abs(tree.children[0].support - 90.0) < 1e-9
+        assert str(tree.children[0].name or '') == ''
+
+    def test_read_tree_auto_prefers_quoted_numeric_internal_names(self, tmp_nwk):
+        path = tmp_nwk("((A:1,B:1)'42':1,C:1)'99':1;")
+        tree = read_tree(path, format='auto', quoted_node_names=True, quiet=True)
+        assert tree.name == '99'
+        child_names = {str(child.name or '') for child in tree.children}
+        assert '42' in child_names
+
+    def test_read_tree_auto_warns_on_ambiguous_numeric_internal_labels(self, tmp_nwk, capsys):
+        path = tmp_nwk('((A:1,B:1)42:1,C:1)99:1;')
+        tree = read_tree(path, format='auto', quoted_node_names=True, quiet=False)
+        captured = capsys.readouterr()
+        assert 'Ambiguous tree format' in captured.err
+        assert tree.name in ('', None)
+
+    def test_read_tree_auto_strict_raises_on_ambiguous_numeric_internal_labels(self, tmp_nwk):
+        path = tmp_nwk('((A:1,B:1)42:1,C:1)99:1;')
+        with pytest.raises(ValueError, match='Ambiguous tree format'):
+            read_tree(path, format='auto-strict', quoted_node_names=True, quiet=True)
+
+    def test_read_tree_rejects_quoted_names_when_flag_disabled(self, tmp_nwk):
+        path = tmp_nwk("('A,B':1,C:2);")
+        with pytest.raises(ValueError, match='--quoted_node_names yes'):
+            read_tree(path, format='auto', quoted_node_names=False, quiet=True)
 
     def test_read_tree_invalid_raises(self, tmp_nwk):
         path = tmp_nwk('not_a_tree')

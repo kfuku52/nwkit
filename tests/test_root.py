@@ -223,6 +223,16 @@ class TestMadRooting:
         assert is_rooted(rooted)
         assert set(rooted.leaf_names()) == {'A', 'B', 'C', 'D'}
 
+    def test_preserves_quoted_leaf_names_with_punctuation(self):
+        tree = Tree()
+        ingroup = tree.add_child(dist=1.0)
+        ingroup.add_child(name='A,B', dist=1.0)
+        ingroup.add_child(name='C:D', dist=2.0)
+        tree.add_child(name="E(1)'", dist=3.0)
+        rooted = mad_rooting(tree)
+        assert is_rooted(rooted)
+        assert set(rooted.leaf_names()) == {'A,B', 'C:D', "E(1)'"}
+
     def test_requires_at_least_three_leaves(self):
         tree = Tree('(A:1,B:1);', parser=1)
         with pytest.raises(ValueError, match='at least 3 leaves'):

@@ -21,8 +21,9 @@ p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, r
                       help='default=%(default)s: Input newick file. Use "-" for STDIN.')
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
-p_parent.add_argument('-f', '--format', metavar='INT', default='auto', type=str, required=False, action='store',
+p_parent.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
                       help='default=%(default)s: ETE tree format. '
+                           '"auto-strict" fails on ambiguous unquoted numeric internal labels. '
                            'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
 p_parent.add_argument('-of', '--outformat', metavar='INT', default='auto', type=str, required=False, action='store',
                       help='ETE tree format for --outfile. "auto" indicates the same format as --format.')
@@ -38,8 +39,9 @@ p_download.add_argument('--download_dir', metavar='PATH', default='auto', type=s
 p_tree_input = argparse.ArgumentParser(add_help=False)
 p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                           help='default=%(default)s: Input newick file. Use "-" for STDIN.')
-p_tree_input.add_argument('-f', '--format', metavar='INT', default='auto', type=str, required=False, action='store',
+p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
                           help='default=%(default)s: ETE tree format. '
+                               '"auto-strict" fails on ambiguous unquoted numeric internal labels. '
                                'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
 p_tree_input.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                           help='default=%(default)s: Whether node names are quoted in the input file.')

@@ -18,6 +18,11 @@ from collections import defaultdict
 from urllib.parse import urlparse
 
 import requests
+from requests.adapters import HTTPAdapter
+try:
+    from urllib3.util.retry import Retry
+except ImportError:  # pragma: no cover - fallback for older requests vendoring layouts
+    from requests.packages.urllib3.util.retry import Retry
 
 from nwkit.util import (
     acquire_exclusive_lock,
@@ -48,6 +53,10 @@ BIOICONS_CATALOG_CACHE_VERSION = 1
 SEMANTIC_MASK_MAX_DIM = 256
 SEMANTIC_ALPHA_THRESHOLD = 16
 SEMANTIC_DIFF_THRESHOLD_FLOOR = 12
+REQUEST_RETRY_TOTAL = 4
+REQUEST_RETRY_BACKOFF_FACTOR = 1.0
+REQUEST_RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
+HTTP_SESSION_POOL_SIZE = 16
 HTTP_HEADERS = {
     'Accept': 'application/json',
     'User-Agent': 'nwkit-image/0.22.9 (+https://github.com/kfuku52/nwkit)',
@@ -126,6 +135,36 @@ BIOICONS_CATALOG_MEMORY_CACHE_LOCK = threading.Lock()
 
 def _stderr(message):
     sys.stderr.write(str(message).rstrip() + '\n')
+
+
+def build_retry_config():
+    retry_kwargs = dict(
+        total=REQUEST_RETRY_TOTAL,
+        connect=REQUEST_RETRY_TOTAL,
+        read=REQUEST_RETRY_TOTAL,
+        status=REQUEST_RETRY_TOTAL,
+        backoff_factor=REQUEST_RETRY_BACKOFF_FACTOR,
+        status_forcelist=REQUEST_RETRY_STATUS_CODES,
+        respect_retry_after_header=True,
+        raise_on_status=False,
+    )
+    try:
+        return Retry(allowed_methods=frozenset(['GET']), **retry_kwargs)
+    except TypeError:
+        return Retry(method_whitelist=frozenset(['GET']), **retry_kwargs)
+
+
+def build_http_session():
+    session = requests.Session()
+    retry = build_retry_config()
+    adapter = HTTPAdapter(
+        max_retries=retry,
+        pool_connections=HTTP_SESSION_POOL_SIZE,
+        pool_maxsize=HTTP_SESSION_POOL_SIZE,
+    )
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
+    return session
 
 
 def _close_ncbi_db(ncbi):
@@ -2071,7 +2110,7 @@ class NCBIProvider:
 
 
 def build_providers(args, sources, session=None):
-    session = session or requests.Session()
+    session = session or build_http_session()
     ncbi = None
     if ('phylopic' in sources) or ('ncbi' in sources) or (args.fallback_rank == 'family'):
         ncbi = LazyNCBITaxa(args=args)
@@ -2103,7 +2142,7 @@ def build_providers(args, sources, session=None):
 
 
 def build_download_session():
-    return requests.Session()
+    return build_http_session()
 
 
 def collect_candidates_for_species(species_name, args, sources, providers):
@@ -2340,7 +2379,7 @@ def resolve_lookup_worker_count(args, sources, species_count):
                 worker_count = DEFAULT_LOOKUP_WORKERS
         return min(worker_count, species_count)
     uses_taxonomy_db = ('phylopic' in sources) or ('ncbi' in sources) or (getattr(args, 'fallback_rank', 'none') == 'family')
-    default_workers = 2 if uses_taxonomy_db else max(DEFAULT_LOOKUP_WORKERS, 8)
+    default_workers = 2 if uses_taxonomy_db else DEFAULT_LOOKUP_WORKERS
     return min(default_workers, species_count)
 
 
@@ -2355,7 +2394,7 @@ def resolve_download_worker_count(species_count):
             if worker_count <= 0:
                 worker_count = DEFAULT_DOWNLOAD_WORKERS
         return min(worker_count, species_count)
-    return min(max(DEFAULT_DOWNLOAD_WORKERS, 8), species_count)
+    return min(DEFAULT_DOWNLOAD_WORKERS, species_count)
 
 
 def collect_candidates_for_species_map(species_names, args, sources):

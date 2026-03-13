@@ -11,6 +11,8 @@ import ete4
 from ete4 import Tree
 
 NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
+QUOTED_NODE_NAME_PATTERN = re.compile(r"'(?:[^']|'')*'")
+NUMERIC_NODE_NAME_PATTERN = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?')
 TREE_FORMAT_PROP = '_nwkit_parser_format'
 DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
@@ -72,6 +74,65 @@ def _seed_ete_taxonomy_assets(target_dbfile, source_assets):
     source_taxdump_file = source_assets.get('taxdump_file')
     if source_taxdump_file is not None:
         shutil.copy2(source_taxdump_file, os.path.join(target_dir, 'taxdump.tar.gz'))
+
+def _contains_quoted_node_names(newick_text):
+    return QUOTED_NODE_NAME_PATTERN.search(str(newick_text)) is not None
+
+def _contains_quoted_internal_node_names(newick_text):
+    return re.search(r"\)\s*'(?:[^']|'')*'", str(newick_text)) is not None
+
+def _is_numeric_node_name(name):
+    if name in (None, ''):
+        return False
+    return NUMERIC_NODE_NAME_PATTERN.fullmatch(str(name).strip()) is not None
+
+def _named_internal_nodes(tree):
+    return [
+        node for node in tree.traverse()
+        if (not node.is_leaf) and (str(node.name or '').strip() != '')
+    ]
+
+def _auto_format_ambiguity_message():
+    return (
+        'Ambiguous tree format: unquoted numeric internal labels can be interpreted as '
+        'support values (format 0) or internal node names (format 1). '
+        'Use --format 0, --format 1, or quote internal node names to disambiguate.'
+    )
+
+def _read_tree_auto(infile):
+    quoted_internal_names = _contains_quoted_internal_node_names(infile)
+    parsed = dict()
+    for candidate_format in [1, 0]:
+        try:
+            parsed[candidate_format] = Tree(infile, parser=candidate_format)
+        except Exception:
+            parsed[candidate_format] = None
+    parser1_tree = parsed[1]
+    parser0_tree = parsed[0]
+    ambiguity_message = None
+    if parser1_tree is not None:
+        parser1_named_internal_nodes = _named_internal_nodes(parser1_tree)
+        if parser1_named_internal_nodes and (
+            quoted_internal_names or
+            any(not _is_numeric_node_name(node.name) for node in parser1_named_internal_nodes)
+        ):
+            return 1, parser1_tree, None
+        if (
+            parser0_tree is not None and
+            parser1_named_internal_nodes and
+            all(_is_numeric_node_name(node.name) for node in parser1_named_internal_nodes)
+        ):
+            ambiguity_message = _auto_format_ambiguity_message()
+    if parser0_tree is not None:
+        return 0, parser0_tree, ambiguity_message
+    if parser1_tree is not None:
+        return 1, parser1_tree, None
+    for candidate_format in [2, 3, 4, 5, 6, 7, 8, 9, 100]:
+        try:
+            return candidate_format, Tree(infile, parser=candidate_format), None
+        except Exception:
+            pass
+    raise Exception('Failed to parse the input tree.')
 
 def _assert_lock_path_is_regular_file(lock_path, lock_label='Lock'):
     if not os.path.lexists(lock_path):
@@ -234,17 +295,17 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
     elif os.path.isfile(infile):
         with open(infile) as f:
             infile = f.read().strip()
-    if format=='auto':
+    if (not quoted_node_names) and _contains_quoted_node_names(infile):
+        raise ValueError('Quoted node names were found in the input tree. Re-run with --quoted_node_names yes.')
+    if format in ('auto', 'auto-strict'):
         format_original = format
-        for format in [0,1,2,3,4,5,6,7,8,9,100,'exception']:
-            if format == 'exception':
-                raise Exception('Failed to parse the input tree.')
-            try:
-                tree = Tree(infile, parser=format)
-                INFILE_FORMAT = format
-                break
-            except:
-                pass
+        format, tree, ambiguity_message = _read_tree_auto(infile)
+        if ambiguity_message is not None:
+            if format_original == 'auto-strict':
+                raise ValueError(ambiguity_message)
+            if not quiet:
+                sys.stderr.write('Warning: {}\n'.format(ambiguity_message))
+        INFILE_FORMAT = format
     else:
         format_original = format
         format = int(format)

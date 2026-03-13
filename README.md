@@ -44,6 +44,8 @@ pip install "nwkit[image]"
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
+Most tree-reading subcommands default to `--format auto`. If your input uses unquoted numeric internal node names, `--format auto-strict` will fail instead of guessing between support values (`0`) and internal node names (`1`).
+
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information

@@ -11,6 +11,8 @@ from nwkit.image import (
     IDigBioProvider,
     NCBIProvider,
     OpenverseProvider,
+    build_download_session,
+    build_retry_config,
     build_providers,
     candidate_score,
     collect_candidates_for_species,
@@ -24,7 +26,9 @@ from nwkit.image import (
     normalize_license_code,
     parse_ncbi_images_dmp_line,
     parse_sources,
+    resolve_download_worker_count,
     resolve_image_cache_dir,
+    resolve_lookup_worker_count,
     resolve_ncbi_taxonomy_image_cache_dir,
     resolve_provider_fetch_limit,
     wikimedia_page_mentions_query,
@@ -238,6 +242,39 @@ class TestNCBIHelpers:
         line = '64698\t|\timage:Abudefduf saxatilis\t|\thttp://www.ncbi.nlm.nih.gov/Taxonomy/taxi/images/31217\t|\tCC BY-SA 3.0 (https://creativecommons.org/licenses/by-sa/3.0/)\t|\tCralize\t|\tWikimedia Commons\t|\t\t|\t50731 1567454\t|\n'
         record = parse_ncbi_images_dmp_line(line)
         assert record['taxids'] == [50731, 1567454]
+
+    def test_build_download_session_configures_retries_for_rate_limits(self):
+        session = build_download_session()
+        adapter = session.get_adapter('https://example.org/')
+        retries = adapter.max_retries
+        assert retries.total == 4
+        assert 429 in retries.status_forcelist
+
+    def test_build_retry_config_limits_retries_to_get_requests(self):
+        retries = build_retry_config()
+        allowed_methods = getattr(retries, 'allowed_methods', None)
+        if allowed_methods is None:
+            allowed_methods = getattr(retries, 'method_whitelist', None)
+        assert allowed_methods == frozenset(['GET'])
+
+    def test_resolve_lookup_worker_count_defaults_to_four_without_taxonomy(self):
+        workers = resolve_lookup_worker_count(
+            args=make_image_args(),
+            sources=['wikimedia', 'openverse'],
+            species_count=20,
+        )
+        assert workers == 4
+
+    def test_resolve_lookup_worker_count_defaults_to_two_with_taxonomy(self):
+        workers = resolve_lookup_worker_count(
+            args=make_image_args(),
+            sources=['phylopic', 'wikimedia'],
+            species_count=20,
+        )
+        assert workers == 2
+
+    def test_resolve_download_worker_count_defaults_to_four(self):
+        assert resolve_download_worker_count(species_count=20) == 4
 
     def test_resolve_ncbi_taxonomy_image_cache_dir(self, tmp_path):
         shared_args = make_image_args(download_dir=str(tmp_path / 'shared'), out_dir=str(tmp_path / 'out'))

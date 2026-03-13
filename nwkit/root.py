@@ -206,6 +206,25 @@ def midpoint_rooting(tree):
     tree.set_outgroup(outgroup_node)
     return tree
 
+def _rename_mad_leaf_names(tree):
+    placeholder_to_name = dict()
+    for index, leaf in enumerate(tree.leaves()):
+        if leaf.name in (None, ''):
+            continue
+        placeholder = 'NWKITMADLEAF{:010d}'.format(index)
+        placeholder_to_name[placeholder] = leaf.name
+        leaf.name = placeholder
+    return placeholder_to_name
+
+def _restore_mad_leaf_names(tree, placeholder_to_name):
+    if not placeholder_to_name:
+        return tree
+    for leaf in tree.leaves():
+        restored_name = placeholder_to_name.get(leaf.name)
+        if restored_name is not None:
+            leaf.name = restored_name
+    return tree
+
 def mad_rooting(tree):
     """MAD (Minimal Ancestor Deviation) rooting. Tria et al. 2017, DOI:10.1038/s41559-017-0193"""
     if len(list(tree.leaves())) < 3:
@@ -213,8 +232,10 @@ def mad_rooting(tree):
     import os, subprocess, tempfile
     mad_script = os.path.join(os.path.dirname(__file__), '_mad.py')
     parser = make_parser(5, dist='%0.8f')
+    working_tree = tree.copy(method='deepcopy')
+    placeholder_to_name = _rename_mad_leaf_names(working_tree)
     with tempfile.NamedTemporaryFile(suffix='.nwk', mode='w', delete=False) as f:
-        f.write(tree.write(parser=parser))
+        f.write(working_tree.write(parser=parser))
         tmpfile = f.name
     try:
         result = subprocess.run(
@@ -224,8 +245,11 @@ def mad_rooting(tree):
         sys.stderr.write(result.stdout)
         with open(tmpfile + '.rooted') as fh:
             lines = [l.strip() for l in fh if l.strip() and l.strip().endswith(';')]
+        if not lines:
+            raise RuntimeError('MAD did not produce a rooted tree.')
         rooted_nwk = lines[0]
         rooted_tree = Tree(rooted_nwk, parser=1)
+        rooted_tree = _restore_mad_leaf_names(rooted_tree, placeholder_to_name)
     finally:
         for p in [tmpfile, tmpfile + '.rooted']:
             if os.path.exists(p):
