@@ -1,6 +1,12 @@
 #!/usr/bin/env python
 
 import argparse
+import os
+import sys
+
+PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
+if os.path.isfile(os.path.join(PACKAGE_DIR, '__init__.py')):
+    sys.path.insert(0, os.path.dirname(PACKAGE_DIR))
 
 def strtobool(val):
     val = val.lower()
@@ -45,6 +51,13 @@ p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', defa
                                'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
 p_tree_input.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                           help='default=%(default)s: Whether node names are quoted in the input file.')
+
+p_species = argparse.ArgumentParser(add_help=False)
+p_species.add_argument('--species_regex', metavar='REGEX', default=r'^([^_]+_[^_]+)(?:_|$)', required=False, type=str,
+                       help='default=%(default)s: Regular expression for extracting species IDs from leaf labels. '
+                            'If the regex contains capture groups, non-empty captured groups are joined with underscores; '
+                            'otherwise, the full regex match is used. '
+                            'For GENUS_SPECIES and GENUS_SPECIES_GENEID labels, the default works as-is.')
 
 def command_constrain(args):
     from nwkit.constrain import constrain_main
@@ -91,6 +104,24 @@ pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, requir
                    help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
 pdist.set_defaults(handler=command_dist)
 
+def command_draw(args):
+    from nwkit.draw import draw_main
+    draw_main(args)
+pdraw = subparsers.add_parser('draw', help='Draw a phylogenetic tree with optional speciation/duplication node markers', parents=[p_tree_input, p_species])
+pdraw.add_argument('-o', '--outfile', metavar='PATH', default='nwkit_draw.pdf', type=str, required=False, action='store',
+                   help='default=%(default)s: Output image file.')
+pdraw.add_argument('--image_format', metavar='auto|pdf|png|svg', default='auto', type=str, required=False, action='store',
+                   choices=['auto', 'pdf', 'png', 'svg'],
+                   help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.')
+pdraw.add_argument('--species_overlap_node_plot', metavar='yes|no|auto', default='auto', required=False, type=str,
+                   choices=['yes', 'no', 'auto'],
+                   help='default=%(default)s: Show speciation/duplication node markers. '
+                        '"yes" always tries to plot, "no" disables them, and "auto" enables them only when '
+                        'all tip labels are parseable by --species_regex.')
+pdraw.add_argument('--ladderize', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Ladderize the input tree before drawing.')
+pdraw.set_defaults(handler=command_draw)
+
 def command_drop(args):
     from nwkit.drop import drop_main
     drop_main(args)
@@ -111,13 +142,13 @@ pdrop.set_defaults(handler=command_drop)
 def command_info(args):
     from nwkit.info import info_main
     info_main(args)
-pinfo = subparsers.add_parser('info', help='Printing tree information', parents=[p_parent])
+pinfo = subparsers.add_parser('info', help='Printing tree information', parents=[p_parent, p_species])
 pinfo.set_defaults(handler=command_info)
 
 def command_image(args):
     from nwkit.image import image_main
     image_main(args)
-pimage = subparsers.add_parser('image', help='Retrieve representative species images with license-aware filtering', parents=[p_tree_input, p_download])
+pimage = subparsers.add_parser('image', help='Retrieve representative species images with license-aware filtering', parents=[p_tree_input, p_download, p_species])
 pimage.add_argument('--out_dir', metavar='PATH', default=None, type=str, required=True, action='store',
                     help='Output directory for images and metadata.')
 pimage.add_argument('--style', metavar='auto|photo|silhouette', default='auto', type=str, required=False, action='store',
@@ -307,7 +338,7 @@ prescale.set_defaults(handler=command_rescale)
 def command_root(args):
     from nwkit.root import root_main
     root_main(args)
-proot = subparsers.add_parser('root', help='Place or transfer the tree root', parents=[p_parent, p_download])
+proot = subparsers.add_parser('root', help='Place or transfer the tree root', parents=[p_parent, p_download, p_species])
 proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
                    help='default=%(default)s: Input newick file 2. Used when --method "transfer". '
                         'Leaf labels should be matched to those in --infile.')
@@ -401,7 +432,7 @@ pskim.set_defaults(handler=command_skim)
 def command_subtree(args):
     from nwkit.subtree import subtree_main
     subtree_main(args)
-psubtree = subparsers.add_parser('subtree', help='Generate a subtree Newick file', parents=[p_parent])
+psubtree = subparsers.add_parser('subtree', help='Generate a subtree Newick file', parents=[p_parent, p_species])
 psubtree.add_argument('--left_leaf', metavar='STR', default=None, type=str, required=False,
                       help='default=%(default)s: Any leaf names in the left clade. For example, '
                            'to extract the subtree with the root node splitting Homo_sapiens and Mus_musculus, '

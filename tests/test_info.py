@@ -106,3 +106,11 @@ class TestInfoMain:
         captured = capsys.readouterr()
         assert 'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: 1' in captured.out
         assert 'Species names: B' in captured.out
+
+    def test_custom_species_regex(self, tmp_nwk, capsys):
+        path = tmp_nwk('((Homo.sapiens|A:1,Mus.musculus|A:1):1,Homo.sapiens|B:1);')
+        args = make_args(infile=path, species_regex=r'^([A-Za-z]+)\.([A-Za-z]+)\|')
+        info_main(args)
+        captured = capsys.readouterr()
+        assert 'Number of species parsed by --species_regex: 2' in captured.out
+        assert 'Species names: Homo_sapiens, Mus_musculus' in captured.out

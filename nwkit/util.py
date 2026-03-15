@@ -14,6 +14,7 @@ NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
 QUOTED_NODE_NAME_PATTERN = re.compile(r"'(?:[^']|'')*'")
 NUMERIC_NODE_NAME_PATTERN = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?')
 TREE_FORMAT_PROP = '_nwkit_parser_format'
+DEFAULT_SPECIES_REGEX = r'^([^_]+_[^_]+)(?:_|$)'
 DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
 COMMON_ETE_CACHE_DIRS = (
@@ -445,6 +446,46 @@ def label2sciname(labels, in_delim='_', out_delim='_'):
         scinames = scinames[0]
     return scinames
 
+def compile_species_regex(species_regex=None):
+    regex_text = DEFAULT_SPECIES_REGEX if (species_regex is None) else str(species_regex).strip()
+    if regex_text == '':
+        return None
+    try:
+        return re.compile(regex_text)
+    except re.error as exc:
+        raise ValueError('--species_regex is not a valid regular expression: {}'.format(exc))
+
+def extract_species_label(label, species_regex=None, out_delim='_'):
+    if label is None:
+        return None
+    species_pattern = compile_species_regex(species_regex=species_regex)
+    if species_pattern is None:
+        return None
+    label_text = str(label)
+    match = species_pattern.search(label_text)
+    if match is None:
+        return None
+    token = None
+    if match.lastindex is not None:
+        captured_tokens = list()
+        for i in range(1, int(match.lastindex) + 1):
+            candidate = match.group(i)
+            if candidate is None:
+                continue
+            candidate = str(candidate).strip()
+            if candidate != '':
+                captured_tokens.append(candidate)
+        if len(captured_tokens) > 0:
+            token = '_'.join(captured_tokens)
+    if token is None:
+        token = str(match.group(0)).strip()
+    if token == '':
+        return None
+    token = re.sub(r'[_\s]+$', '', token)
+    if out_delim != '_':
+        token = token.replace('_', out_delim)
+    return token
+
 def get_monophyletic_species_groups(tree, option_name='--infile', context=''):
     leaf_name_to_sci_name = dict()
     sci_name_to_leaf_names = defaultdict(list)
@@ -518,9 +559,9 @@ def read_item_per_line_file(file):
     out = [o.strip() for o in out if o.strip() != '']
     return out
 
-def annotate_scientific_names(tree):
+def annotate_scientific_names(tree, species_regex=None):
     for node in tree.leaves():
-        node.add_props(sci_name=label2sciname(node.name))
+        node.add_props(sci_name=extract_species_label(node.name, species_regex=species_regex))
     return tree
 
 def get_subtree_sci_name_sets(tree):

@@ -50,6 +50,7 @@ def make_args(**kwargs):
         'outformat': 'auto',
         'quoted_node_names': True,
         'download_dir': 'auto',
+        'species_regex': r'^([^_]+_[^_]+)(?:_|$)',
     }
     defaults.update(kwargs)
     return Namespace(**defaults)

@@ -24,7 +24,7 @@ def subtree_main(args):
     else:
         mrca = tree.common_ancestor(seed_leaf_nodes)
     if args.orthogroup:
-        tree = annotate_scientific_names(tree)
+        tree = annotate_scientific_names(tree, species_regex=args.species_regex)
         subtree_sci_name_sets = get_subtree_sci_name_sets(tree)
         tree = annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=subtree_sci_name_sets)
         num_all_species = len(subtree_sci_name_sets[tree])

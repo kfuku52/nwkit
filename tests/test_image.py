@@ -58,6 +58,7 @@ def make_image_args(**kwargs):
         'background': 'white',
         'trim': 'off',
         'trim_shape': 'bbox',
+        'species_regex': r'^([^_]+_[^_]+)(?:_|$)',
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -741,6 +742,24 @@ class TestImageMain:
             'reason': 'unparsable leaf label',
             'details': "Expected the 'GENUS_SPECIES[_...]' convention or a matching --name_tsv entry.",
         }]
+
+    def test_extract_species_mapping_accepts_custom_species_regex(self, tmp_path):
+        tree_path = tmp_path / 'tree.nwk'
+        tree_path.write_text('(Homo.sapiens|A,Mus.musculus|B);')
+
+        from nwkit.util import read_tree
+
+        tree = read_tree(str(tree_path), format='auto', quoted_node_names=True, quiet=True)
+        leaf_to_species, unmatched_rows = extract_species_mapping(
+            tree,
+            species_regex=r'^([A-Za-z]+)\.([A-Za-z]+)\|',
+        )
+
+        assert leaf_to_species == {
+            'Homo.sapiens|A': 'Homo sapiens',
+            'Mus.musculus|B': 'Mus musculus',
+        }
+        assert unmatched_rows == []
 
     def test_image_main_writes_manifest_attribution_and_unmatched(self, monkeypatch, tmp_path):
         tree_path = tmp_path / 'tree.nwk'

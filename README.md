@@ -46,8 +46,25 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
 Most tree-reading subcommands default to `--format auto`. If your input uses unquoted numeric internal node names, `--format auto-strict` will fail instead of guessing between support values (`0`) and internal node names (`1`).
 
+`--species_regex` is available in species-aware subcommands including `draw`, `info`, `image`, `root`, and `subtree`. The default regex works for both `GENUS_SPECIES` and `GENUS_SPECIES_GENEID` labels. If the regex contains capture groups, non-empty captured groups are joined with underscores.
+
+For example, labels such as `Homo.sapiens|GENE1` can be parsed with:
+
+```bash
+--species_regex '^([A-Za-z]+)\.([A-Za-z]+)\|'
+```
+
+This affects:
+
+- `nwkit info`: species counting
+- `nwkit image`: leaf-to-species mapping
+- `nwkit draw`: speciation/duplication node annotation
+- `nwkit root --method taxonomy`: taxonomy-based species lookup
+- `nwkit subtree --orthogroup yes`: species-aware orthogroup delimitation
+
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
+- [`draw`](#example-tree-drawing): Drawing a phylogenetic tree with optional speciation/duplication node markers
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
@@ -66,12 +83,69 @@ Most tree-reading subcommands default to `--format auto`. If your input uses unq
 - [`subtree`](https://github.com/kfuku52/nwkit/wiki/nwkit-subtree): Generating a subtree Newick file
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 
+## Example: tree drawing
+
+Draw a tree to `pdf`, `png`, or `svg`:
+
+```bash
+nwkit draw -i tree.nwk -o tree.svg
+```
+
+When leaf labels follow the `GENUS_SPECIES[_...]` convention, `nwkit draw` marks speciation nodes in blue and duplication nodes in red by default:
+
+```bash
+nwkit draw -i tree.nwk -o tree.svg \
+  --species_regex '^([^_]+_[^_]+)(?:_|$)'
+```
+
+If support values are attached to internal branches, they are printed on the corresponding horizontal branches.
+
+If some tip labels do not match `--species_regex`, node markers are skipped in the default `--species_overlap_node_plot auto` mode. To disable node markers explicitly:
+
+```bash
+nwkit draw -i tree.nwk -o tree.svg --species_overlap_node_plot no
+```
+
+Example output:
+
+![](img/nwkit_draw_00.svg)
+
 ## Example: species image retrieval
 
 Retrieve one representative asset per species from a tree whose leaf labels follow the `GENUS_SPECIES[_...]` convention:
 
 ```bash
 nwkit image -i tree.nwk --out_dir species_images
+```
+
+For alternative leaf-label conventions, override species parsing with `--species_regex`:
+
+```bash
+nwkit image -i tree.nwk --out_dir species_images \
+  --species_regex '^([A-Za-z]+)\.([A-Za-z]+)\|'
+```
+
+## Example: species-aware parsing in other commands
+
+Count species from non-standard leaf labels:
+
+```bash
+nwkit info -i tree.nwk \
+  --species_regex '^([A-Za-z]+)\.([A-Za-z]+)\|'
+```
+
+Use taxonomy rooting on non-standard leaf labels:
+
+```bash
+nwkit root -i tree.nwk --method taxonomy \
+  --species_regex '^([A-Za-z]+)\.([A-Za-z]+)\|'
+```
+
+Use orthogroup delimitation on non-standard leaf labels:
+
+```bash
+nwkit subtree -i tree.nwk --leaves GENE1,GENE2 --orthogroup yes \
+  --species_regex '^([A-Za-z]+)\.([A-Za-z]+)\|'
 ```
 
 Prefer silhouettes:

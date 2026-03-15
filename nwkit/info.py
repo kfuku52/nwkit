@@ -15,8 +15,10 @@ def info_main(args):
         num_nodes += 1
         if node.is_leaf:
             num_leaves += 1
-            species_name = '_'.join((node.name or '').split('_')[:2])
-            if species_name != '':
+            species_name = extract_species_label(node.name, species_regex=args.species_regex)
+            if species_name is None:
+                species_name = str(node.name or '').strip()
+            if species_name not in ['', None]:
                 species_name_set.add(species_name)
         else:
             num_children = len(node.get_children())
@@ -40,5 +42,8 @@ def info_main(args):
     print(f'Number of multifurcation nodes: {num_multifurcation_node}')
     print(f'Number of nodes with zero branch length: {num_zero_branch_nodes}')
     print(f'Number of nodes with negative branch length: {num_negative_branch_nodes}')
-    print(f'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: {num_species}')
+    if args.species_regex == DEFAULT_SPECIES_REGEX:
+        print(f'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: {num_species}')
+    else:
+        print(f'Number of species parsed by --species_regex: {num_species}')
     print(f'Species names: {", ".join(species_names)}')

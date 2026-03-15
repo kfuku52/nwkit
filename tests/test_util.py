@@ -7,6 +7,7 @@ from ete4 import Tree
 
 from nwkit.util import (
     acquire_exclusive_lock,
+    extract_species_label,
     get_ete_ncbitaxa,
     get_monophyletic_species_groups,
     resolve_download_dir,
@@ -477,6 +478,27 @@ class TestLabel2Sciname:
     def test_list_with_none(self):
         result = label2sciname(['Homo_sapiens_GENE1', None, 'Mus_musculus_GENE2'])
         assert result == ['Homo_sapiens', None, 'Mus_musculus']
+
+
+class TestExtractSpeciesLabel:
+    def test_default_regex_parses_with_suffix(self):
+        assert extract_species_label('Homo_sapiens_GENE1') == 'Homo_sapiens'
+
+    def test_default_regex_parses_exact_binomial(self):
+        assert extract_species_label('Homo_sapiens') == 'Homo_sapiens'
+
+    def test_custom_regex_uses_capture_groups(self):
+        assert extract_species_label(
+            'Homo.sapiens|GENE1',
+            species_regex=r'^([A-Za-z]+)\.([A-Za-z]+)\|',
+        ) == 'Homo_sapiens'
+
+    def test_custom_regex_allows_space_output(self):
+        assert extract_species_label(
+            'Homo.sapiens|GENE1',
+            species_regex=r'^([A-Za-z]+)\.([A-Za-z]+)\|',
+            out_delim=' ',
+        ) == 'Homo sapiens'
 
 
 class TestReadItemPerLineFile:

@@ -52,9 +52,11 @@ def _is_placeholder_ncbi_resolution(matched_name, lineage_names):
     names_to_check.extend([name for name in lineage_names if name not in ['', None]])
     return any(_is_placeholder_ncbi_name(name) for name in names_to_check)
 
-def _get_ncbi_lineage_record(label, ncbi, rank, taxid=None):
+def _get_ncbi_lineage_record(label, ncbi, rank, species_regex=None, taxid=None):
     if taxid is None:
-        query_name = label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in str(label) else str(label)
+        query_name = extract_species_label(label, species_regex=species_regex, out_delim=' ')
+        if query_name is None:
+            query_name = str(label)
         name2taxid = name_to_taxid(query_name, ncbi)
         if len(name2taxid) == 0:
             return None, 'Genus-level match was not found in the NCBI database'
@@ -85,14 +87,25 @@ def _resolve_ncbi_lineages(tree, taxid_tsv=None, rank='no', args=None, verbose=F
             taxid_df = _order_taxid_tsv_to_match_tree(tree, taxid_df)
             records = zip(taxid_df['leaf_name'], taxid_df['taxid'])
             for label, taxid in records:
-                record, reason = _get_ncbi_lineage_record(label=label, taxid=taxid, ncbi=ncbi, rank=rank)
+                record, reason = _get_ncbi_lineage_record(
+                    label=label,
+                    taxid=taxid,
+                    ncbi=ncbi,
+                    rank=rank,
+                    species_regex=getattr(args, 'species_regex', None),
+                )
                 if record is None:
                     unresolved_details[label] = reason
                     continue
                 lineages[label] = record['lineage']
         else:
             for label in tree.leaf_names():
-                record, reason = _get_ncbi_lineage_record(label=label, ncbi=ncbi, rank=rank)
+                record, reason = _get_ncbi_lineage_record(
+                    label=label,
+                    ncbi=ncbi,
+                    rank=rank,
+                    species_regex=getattr(args, 'species_regex', None),
+                )
                 if record is None:
                     unresolved_details[label] = reason
                     continue

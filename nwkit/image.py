@@ -25,7 +25,9 @@ except ImportError:  # pragma: no cover - fallback for older requests vendoring 
     from requests.packages.urllib3.util.retry import Retry
 
 from nwkit.util import (
+    DEFAULT_SPECIES_REGEX,
     acquire_exclusive_lock,
+    extract_species_label,
     get_ete_ncbitaxa,
     label2sciname,
     read_tree,
@@ -344,7 +346,7 @@ def read_name_tsv(path):
     return mapping
 
 
-def extract_species_mapping(tree, name_mapping=None):
+def extract_species_mapping(tree, name_mapping=None, species_regex=DEFAULT_SPECIES_REGEX):
     validate_unique_named_leaves(tree, '--infile', context=' for nwkit image')
     name_mapping = name_mapping or dict()
     leaf_names = set(tree.leaf_names())
@@ -361,7 +363,9 @@ def extract_species_mapping(tree, name_mapping=None):
     for leaf in tree.leaves():
         species_name = name_mapping.get(leaf.name)
         if species_name is None:
-            species_name = normalize_species_name(label2sciname(leaf.name, out_delim=' '))
+            species_name = normalize_species_name(
+                extract_species_label(leaf.name, species_regex=species_regex, out_delim=' ')
+            )
         if species_name is None:
             unmatched_rows.append({
                 'leaf_name': leaf.name,
@@ -2652,7 +2656,11 @@ def image_main(args):
 
     name_mapping = read_name_tsv(args.name_tsv) if args.name_tsv else None
     tree = read_tree(args.infile, args.format, args.quoted_node_names, quiet=True)
-    leaf_to_species, unmatched_rows = extract_species_mapping(tree, name_mapping=name_mapping)
+    leaf_to_species, unmatched_rows = extract_species_mapping(
+        tree,
+        name_mapping=name_mapping,
+        species_regex=args.species_regex,
+    )
     leaf_names_by_species = defaultdict(list)
     for leaf_name, species_name in leaf_to_species.items():
         leaf_names_by_species[species_name].append(leaf_name)
