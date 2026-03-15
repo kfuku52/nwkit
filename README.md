@@ -44,24 +44,6 @@ pip install "nwkit[image]"
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
-Most tree-reading subcommands default to `--format auto`. If your input uses unquoted numeric internal node names, `--format auto-strict` will fail instead of guessing between support values (`0`) and internal node names (`1`).
-
-`--species_regex` is available in species-aware subcommands including `draw`, `info`, `image`, `root`, and `subtree`. The default regex works for both `GENUS_SPECIES` and `GENUS_SPECIES_GENEID` labels. If the regex contains capture groups, non-empty captured groups are joined with underscores.
-
-For example, labels such as `Homo.sapiens|GENE1` can be parsed with:
-
-```bash
---species_regex '^([A-Za-z]+)\.([A-Za-z]+)\|'
-```
-
-This affects:
-
-- `nwkit info`: species counting
-- `nwkit image`: leaf-to-species mapping
-- `nwkit draw`: speciation/duplication node annotation
-- `nwkit root --method taxonomy`: taxonomy-based species lookup
-- `nwkit subtree --orthogroup yes`: species-aware orthogroup delimitation
-
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
 - [`draw`](#example-tree-drawing): Drawing a phylogenetic tree with optional speciation/duplication node markers
