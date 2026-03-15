@@ -46,7 +46,7 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
-- [`draw`](#example-tree-drawing): Drawing a phylogenetic tree with optional speciation/duplication node markers
+- [`draw`]([#example-tree-drawing](https://github.com/kfuku52/nwkit/wiki/nwkit-draw)): Drawing a phylogenetic tree with optional speciation/duplication node markers
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
