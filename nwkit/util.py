@@ -9,12 +9,18 @@ from contextlib import contextmanager
 import Bio.SeqIO as SeqIO
 import ete4
 from ete4 import Tree
+from nwkit.species_parser import (
+    DEFAULT_SPECIES_PARSER,
+    DEFAULT_SPECIES_REGEX,
+    compile_species_regex,
+    extract_parsed_species,
+    get_species_parser,
+)
 
 NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
 QUOTED_NODE_NAME_PATTERN = re.compile(r"'(?:[^']|'')*'")
 NUMERIC_NODE_NAME_PATTERN = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?')
 TREE_FORMAT_PROP = '_nwkit_parser_format'
-DEFAULT_SPECIES_REGEX = r'^([^_]+_[^_]+)(?:_|$)'
 DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
 COMMON_ETE_CACHE_DIRS = (
@@ -424,16 +430,34 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
         tree.props.update(child_props)
     return tree
 
-def label2sciname(labels, in_delim='_', out_delim='_'):
+def label2sciname(labels, in_delim='_', out_delim='_', args=None, species_parser=None, species_regex=None, species_map_tsv=None):
     if labels is None:
         return None
     is_str_input = isinstance(labels, str)
     if is_str_input:
         labels = [labels,]
     scinames = list()
+    use_species_parser = any([
+        args is not None,
+        species_parser is not None,
+        species_regex is not None,
+        species_map_tsv is not None,
+        in_delim == '_',
+    ])
     for label in labels:
         if label is None:
             sciname = None
+        elif use_species_parser:
+            parsed_species = extract_parsed_species(
+                label,
+                args=args,
+                species_parser=species_parser,
+                species_regex=species_regex,
+                species_map_tsv=species_map_tsv,
+            )
+            sciname = parsed_species.species_label
+            if (sciname is not None) and (out_delim != '_'):
+                sciname = sciname.replace('_', out_delim)
         else:
             label_str = str(label)
             splitted = label_str.split(in_delim)
@@ -446,66 +470,74 @@ def label2sciname(labels, in_delim='_', out_delim='_'):
         scinames = scinames[0]
     return scinames
 
-def compile_species_regex(species_regex=None):
-    regex_text = DEFAULT_SPECIES_REGEX if (species_regex is None) else str(species_regex).strip()
-    if regex_text == '':
-        return None
-    try:
-        return re.compile(regex_text)
-    except re.error as exc:
-        raise ValueError('--species_regex is not a valid regular expression: {}'.format(exc))
+def extract_species_label(label, species_regex=None, out_delim='_', args=None, species_parser=None, species_map_tsv=None):
+    parsed_species = extract_parsed_species(
+        label,
+        args=args,
+        species_parser=species_parser,
+        species_regex=species_regex,
+        species_map_tsv=species_map_tsv,
+    )
+    species_label = parsed_species.species_label
+    if (species_label is None) or (out_delim == '_'):
+        return species_label
+    return species_label.replace('_', out_delim)
 
-def extract_species_label(label, species_regex=None, out_delim='_'):
-    if label is None:
+def extract_taxonomy_query(label, out_delim=' ', args=None, species_parser=None, species_regex=None, species_map_tsv=None):
+    parsed_species = extract_parsed_species(
+        label,
+        args=args,
+        species_parser=species_parser,
+        species_regex=species_regex,
+        species_map_tsv=species_map_tsv,
+    )
+    taxonomy_query = parsed_species.taxonomy_query
+    if taxonomy_query is None:
         return None
-    species_pattern = compile_species_regex(species_regex=species_regex)
-    if species_pattern is None:
-        return None
-    label_text = str(label)
-    match = species_pattern.search(label_text)
-    if match is None:
-        return None
-    token = None
-    if match.lastindex is not None:
-        captured_tokens = list()
-        for i in range(1, int(match.lastindex) + 1):
-            candidate = match.group(i)
-            if candidate is None:
-                continue
-            candidate = str(candidate).strip()
-            if candidate != '':
-                captured_tokens.append(candidate)
-        if len(captured_tokens) > 0:
-            token = '_'.join(captured_tokens)
-    if token is None:
-        token = str(match.group(0)).strip()
-    if token == '':
-        return None
-    token = re.sub(r'[_\s]+$', '', token)
-    if out_delim != '_':
-        token = token.replace('_', out_delim)
-    return token
+    if out_delim == ' ':
+        return taxonomy_query
+    return taxonomy_query.replace(' ', out_delim)
 
-def get_monophyletic_species_groups(tree, option_name='--infile', context=''):
-    leaf_name_to_sci_name = dict()
-    sci_name_to_leaf_names = defaultdict(list)
+def get_species_group_records(tree, option_name='--infile', context='', args=None, species_parser=None, species_regex=None, species_map_tsv=None):
+    leaf_name_to_species_label = dict()
+    species_label_to_leaf_names = defaultdict(list)
+    species_label_to_taxonomy_query = dict()
     unresolved_leaf_names = list()
+    parser = get_species_parser(
+        args=args,
+        species_parser=species_parser,
+        species_regex=species_regex,
+        species_map_tsv=species_map_tsv,
+    )
     for leaf in tree.leaves():
-        sci_name = label2sciname(leaf.name)
-        if sci_name is None:
+        parsed_species = parser.parse(leaf.name)
+        species_label = parsed_species.species_label
+        if species_label is None:
             unresolved_leaf_names.append(str(leaf.name))
             continue
-        leaf_name_to_sci_name[leaf.name] = sci_name
-        sci_name_to_leaf_names[sci_name].append(leaf.name)
+        leaf_name_to_species_label[leaf.name] = species_label
+        species_label_to_leaf_names[species_label].append(leaf.name)
+        taxonomy_query = parsed_species.taxonomy_query
+        previous_query = species_label_to_taxonomy_query.get(species_label)
+        if previous_query is None:
+            species_label_to_taxonomy_query[species_label] = taxonomy_query
+        elif (taxonomy_query is not None) and (previous_query != taxonomy_query):
+            raise ValueError(
+                "Parsed species label maps to multiple taxonomy queries in '{}'{}: {}".format(
+                    option_name,
+                    context,
+                    species_label,
+                )
+            )
     if unresolved_leaf_names:
         raise ValueError(
-            "Leaf labels must follow the 'GENUS_SPECIES[_...]' convention in '{}'{}: {}".format(
+            "Leaf labels could not be parsed as species labels in '{}'{}: {}".format(
                 option_name,
                 context,
                 ', '.join(sorted(unresolved_leaf_names)),
             )
         )
-    for sci_name, leaf_names in sci_name_to_leaf_names.items():
+    for species_label, leaf_names in species_label_to_leaf_names.items():
         if len(leaf_names) <= 1:
             continue
         mrca = tree.common_ancestor(leaf_names)
@@ -514,10 +546,29 @@ def get_monophyletic_species_groups(tree, option_name='--infile', context=''):
                 "Leaf labels for the same species are not monophyletic in '{}'{}: {}".format(
                     option_name,
                     context,
-                    sci_name,
+                    species_label,
                 )
             )
-    return leaf_name_to_sci_name, dict(sci_name_to_leaf_names)
+    for species_label in species_label_to_leaf_names.keys():
+        if species_label_to_taxonomy_query.get(species_label) is None:
+            species_label_to_taxonomy_query[species_label] = species_label.replace('_', ' ')
+    return (
+        leaf_name_to_species_label,
+        dict(species_label_to_leaf_names),
+        species_label_to_taxonomy_query,
+    )
+
+def get_monophyletic_species_groups(tree, option_name='--infile', context='', args=None, species_parser=None, species_regex=None, species_map_tsv=None):
+    leaf_name_to_species_label, species_label_to_leaf_names, _ = get_species_group_records(
+        tree,
+        option_name=option_name,
+        context=context,
+        args=args,
+        species_parser=species_parser,
+        species_regex=species_regex,
+        species_map_tsv=species_map_tsv,
+    )
+    return leaf_name_to_species_label, species_label_to_leaf_names
 
 def get_subtree_leaf_name_sets(tree):
     subtree_leaf_name_sets = dict()
@@ -559,16 +610,28 @@ def read_item_per_line_file(file):
     out = [o.strip() for o in out if o.strip() != '']
     return out
 
-def annotate_scientific_names(tree, species_regex=None):
+def annotate_scientific_names(tree, species_regex=None, args=None, species_parser=None, species_map_tsv=None):
     for node in tree.leaves():
-        node.add_props(sci_name=extract_species_label(node.name, species_regex=species_regex))
+        parsed_species = extract_parsed_species(
+            node.name,
+            args=args,
+            species_parser=species_parser,
+            species_regex=species_regex,
+            species_map_tsv=species_map_tsv,
+        )
+        node.add_props(
+            species_label=parsed_species.species_label,
+            taxonomy_query=parsed_species.taxonomy_query,
+            sci_name=parsed_species.species_label,
+        )
     return tree
 
 def get_subtree_sci_name_sets(tree):
     subtree_sci_name_sets = dict()
     for node in tree.traverse(strategy='postorder'):
         if node.is_leaf:
-            subtree_sci_name_sets[node] = {node.props.get('sci_name')}
+            species_label = node.props.get('species_label', node.props.get('sci_name'))
+            subtree_sci_name_sets[node] = {species_label}
             continue
         sci_names = set()
         for child in node.get_children():

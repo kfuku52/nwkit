@@ -43,11 +43,18 @@ def add_common_anc_constraint(tree, args):
     return tree
 
 def check_leaf_taxid_availability(species_names, ncbi):
-    query_names = [species_name.replace('_', ' ') for species_name in species_names]
+    if isinstance(species_names, dict):
+        species_label_to_taxonomy_query = species_names
+    else:
+        species_label_to_taxonomy_query = {
+            species_name: str(species_name).replace('_', ' ')
+            for species_name in species_names
+        }
+    query_names = sorted(set(species_label_to_taxonomy_query.values()))
     name2taxid = ncbi.get_name_translator(query_names)
     taxid_keys = set(name2taxid.keys())
     for ln in query_names:
-        if not ln in taxid_keys:
+        if ln not in taxid_keys:
             txt = 'NCBI Taxonomy ID was not found and thus not used as query to timetree.org: {}\n'
             sys.stderr.write(txt.format(ln))
 
@@ -67,7 +74,7 @@ def are_both_lineage_included(node, leaf_names, subtree_leaf_name_sets=None):
             return False
     return True
 
-def is_mrca_clade_root(node, timetree_result, ncbi, subtree_leaf_name_sets=None):
+def is_mrca_clade_root(node, timetree_result, ncbi, subtree_leaf_name_sets=None, taxid_to_species_labels=None):
     if 'missing_ids' not in timetree_result:
         return True
     missing_ids = timetree_result.replace('"', '').replace('\'', '').replace('\n', '')
@@ -89,9 +96,14 @@ def is_mrca_clade_root(node, timetree_result, ncbi, subtree_leaf_name_sets=None)
     if len(parsed_missing_ids) == 0:
         return True
     missing_ids = parsed_missing_ids
-    taxid2name = ncbi.get_taxid_translator(missing_ids)
-    missing_sci_names = list(taxid2name.values())
-    missing_leaf_names = [ sn.replace(' ', '_') for sn in missing_sci_names ]
+    missing_leaf_names = list()
+    if taxid_to_species_labels is not None:
+        for missing_id in missing_ids:
+            missing_leaf_names.extend(sorted(taxid_to_species_labels.get(int(missing_id), [])))
+    else:
+        taxid2name = ncbi.get_taxid_translator(missing_ids)
+        missing_sci_names = list(taxid2name.values())
+        missing_leaf_names = [ sn.replace(' ', '_') for sn in missing_sci_names ]
     return are_both_lineage_included(
         node=node,
         leaf_names=missing_leaf_names,
@@ -128,40 +140,58 @@ def add_timetree_constraint(tree, args):
     unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]
     if unnamed_leaves:
         raise ValueError('All leaves must have non-empty names when using "--timetree point/ci".')
-    leaf_name_to_sci_name, species_to_leaf_names = get_monophyletic_species_groups(
+    leaf_name_to_species_label, species_to_leaf_names, species_label_to_taxonomy_query = get_species_group_records(
         tree,
         option_name='--infile',
         context=' for "--timetree point/ci"',
+        args=args,
     )
     ncbi = get_ete_ncbitaxa(args=args)
     try:
-        check_leaf_taxid_availability(sorted(species_to_leaf_names.keys()), ncbi)
+        check_leaf_taxid_availability(species_label_to_taxonomy_query, ncbi)
         for leaf in tree.leaves():
-            leaf.add_props(sci_name=leaf_name_to_sci_name[leaf.name])
+            species_label = leaf_name_to_species_label[leaf.name]
+            leaf.add_props(
+                species_label=species_label,
+                taxonomy_query=species_label_to_taxonomy_query[species_label],
+                sci_name=species_label,
+            )
         subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
-        subtree_sci_name_sets = get_subtree_sci_name_sets(tree)
+        subtree_species_label_sets = get_subtree_sci_name_sets(tree)
         taxid_lineage_rank_dict_cache = dict()
         for node in tree.traverse():
             if node.is_leaf:
                 continue
             node.name = 'NoName'
             leaf_names = sorted(subtree_leaf_name_sets[node])
-            sci_names = sorted(subtree_sci_name_sets[node])
-            query_sci_names = [sci_name.replace('_', ' ') for sci_name in sci_names]
-            name2taxid = ncbi.get_name_translator(query_sci_names)
-            taxid_assigned_sci_names = list(name2taxid.keys())
-            taxid_assigned_leaf_names = [ sci_name.replace(' ', '_') for sci_name in taxid_assigned_sci_names ]
+            species_labels = sorted(subtree_species_label_sets[node])
+            query_name_to_species_labels = defaultdict(list)
+            for species_label in species_labels:
+                taxonomy_query = species_label_to_taxonomy_query.get(species_label)
+                if taxonomy_query in ['', None]:
+                    continue
+                query_name_to_species_labels[taxonomy_query].append(species_label)
+            name2taxid = ncbi.get_name_translator(sorted(query_name_to_species_labels.keys()))
+            taxid_assigned_species_labels = list()
+            for query_name, query_species_labels in query_name_to_species_labels.items():
+                if query_name not in name2taxid:
+                    continue
+                taxid_assigned_species_labels.extend(query_species_labels)
             if not are_both_lineage_included(
                 node=node,
-                leaf_names=taxid_assigned_leaf_names,
-                subtree_leaf_name_sets=subtree_sci_name_sets,
+                leaf_names=set(taxid_assigned_species_labels),
+                subtree_leaf_name_sets=subtree_species_label_sets,
             ):
                 txt = "Skipping. Lack of NCBI Taxonomy information for the MRCA of {}\n"
                 sys.stderr.write(txt.format(','.join(leaf_names)))
                 continue
-            species_taxids = [ t for ts in name2taxid.values() for t in ts ]
+            species_taxid_pairs = list()
+            for query_name, taxids in name2taxid.items():
+                for species_label in query_name_to_species_labels.get(query_name, []):
+                    for taxid in taxids:
+                        species_taxid_pairs.append((species_label, int(taxid)))
             lineage_taxids = list()
-            for sp_taxid in species_taxids:
+            for _, sp_taxid in species_taxid_pairs:
                 if sp_taxid not in taxid_lineage_rank_dict_cache:
                     lineages = ncbi.get_lineage(sp_taxid)
                     ranks = ncbi.get_rank(lineages)
@@ -170,7 +200,7 @@ def add_timetree_constraint(tree, args):
                         lin_dict[ranks[taxid]] = taxid
                     taxid_lineage_rank_dict_cache[sp_taxid] = lin_dict
                 lineage_taxids.append(taxid_lineage_rank_dict_cache[sp_taxid])
-            leaf_rank_pairs = list(zip(taxid_assigned_leaf_names, lineage_taxids))
+            leaf_rank_pairs = list(zip([species_label for species_label, _ in species_taxid_pairs], lineage_taxids))
             for search_rank in search_ranks:
                 taxids = [d[search_rank] for d in lineage_taxids if search_rank in d]
                 ta_leaf_names = [l for l, d in leaf_rank_pairs if search_rank in d]
@@ -178,7 +208,7 @@ def add_timetree_constraint(tree, args):
                 if not are_both_lineage_included(
                     node=node,
                     leaf_names=ta_leaf_name_set,
-                    subtree_leaf_name_sets=subtree_sci_name_sets,
+                    subtree_leaf_name_sets=subtree_species_label_sets,
                 ):
                     #txt = 'Rank annotation was not enough at {} for the node containing: {}\n'
                     #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
@@ -187,7 +217,7 @@ def add_timetree_constraint(tree, args):
                     node=node,
                     taxids=taxids,
                     ta_leaf_names=ta_leaf_names,
-                    subtree_leaf_name_sets=subtree_sci_name_sets,
+                    subtree_leaf_name_sets=subtree_species_label_sets,
                 ):
                     #txt = 'Taxonomic resolution was not enough at {} for the node containing: {}\n'
                     #sys.stderr.write(txt.format(search_rank, ','.join(leaf_names)))
@@ -221,11 +251,15 @@ def add_timetree_constraint(tree, args):
                     txt = "Skipping. No TimeTree study info available for this MRCA for the node containing: {}\n"
                     sys.stderr.write(txt.format(','.join(leaf_names)))
                     continue
+                taxid_to_species_labels = defaultdict(set)
+                for taxid, species_label in zip(taxids, ta_leaf_names):
+                    taxid_to_species_labels[int(taxid)].add(species_label)
                 if not is_mrca_clade_root(
                     node,
                     timetree_result,
                     ncbi,
-                    subtree_leaf_name_sets=subtree_sci_name_sets,
+                    subtree_leaf_name_sets=subtree_species_label_sets,
+                    taxid_to_species_labels=taxid_to_species_labels,
                 ):
                     txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
                     sys.stderr.write(txt.format(','.join(leaf_names)))

@@ -15,7 +15,7 @@ def info_main(args):
         num_nodes += 1
         if node.is_leaf:
             num_leaves += 1
-            species_name = extract_species_label(node.name, species_regex=args.species_regex)
+            species_name = extract_species_label(node.name, args=args)
             if species_name is None:
                 species_name = str(node.name or '').strip()
             if species_name not in ['', None]:
@@ -42,8 +42,16 @@ def info_main(args):
     print(f'Number of multifurcation nodes: {num_multifurcation_node}')
     print(f'Number of nodes with zero branch length: {num_zero_branch_nodes}')
     print(f'Number of nodes with negative branch length: {num_negative_branch_nodes}')
-    if args.species_regex == DEFAULT_SPECIES_REGEX:
+    if (
+        getattr(args, 'species_parser', DEFAULT_SPECIES_PARSER) == DEFAULT_SPECIES_PARSER
+        and getattr(args, 'species_map_tsv', None) in ['', None]
+        and args.species_regex == DEFAULT_SPECIES_REGEX
+    ):
         print(f'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: {num_species}')
+    elif getattr(args, 'species_map_tsv', None) not in ['', None]:
+        print(f'Number of species parsed by --species_map_tsv: {num_species}')
+    elif getattr(args, 'species_parser', DEFAULT_SPECIES_PARSER) != DEFAULT_SPECIES_PARSER:
+        print(f'Number of species parsed by --species_parser: {num_species}')
     else:
         print(f'Number of species parsed by --species_regex: {num_species}')
     print(f'Species names: {", ".join(species_names)}')

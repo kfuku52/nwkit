@@ -90,7 +90,7 @@ def get_lineage(sp, ncbi, rank):
 
 def get_lineages(labels, rank, args=None):
     splist = [
-        label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
+        extract_taxonomy_query(label, args=args) or str(label)
         for label in labels
     ]
     ncbi = get_ete_ncbitaxa(args=args)
@@ -123,7 +123,7 @@ def get_lineages_from_taxid(taxid_df, rank, args=None):
 
 def match_taxa(tree, labels, backbone_method, args=None):
     splist = [
-        label2sciname(labels=label, in_delim='_', out_delim=' ') if '_' in label else label
+        extract_taxonomy_query(label, args=args) or str(label)
         for label in labels
     ]
     ncbi = get_ete_ncbitaxa(args=args) if backbone_method.startswith('ncbi') else None
@@ -328,12 +328,12 @@ def taxid2tree(lineages, taxid_counts, args=None):
     finally:
         _close_ncbi_db(ncbi)
 
-def tree_sciname2label(tree, labels):
+def tree_sciname2label(tree, labels, args=None):
     leaf_name_to_nodes = defaultdict(list)
     for leaf in tree.leaves():
         leaf_name_to_nodes[leaf.name].append(leaf)
     for label in labels:
-        label_sciname = label2sciname(labels=label)
+        label_sciname = label2sciname(labels=label, args=args)
         candidate_nodes = leaf_name_to_nodes.get(label_sciname, [])
         if len(candidate_nodes) > 0:
             candidate_nodes.pop(0).name = label

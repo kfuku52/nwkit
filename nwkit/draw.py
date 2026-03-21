@@ -8,7 +8,7 @@ matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 
-from nwkit.util import compile_species_regex, extract_species_label, is_rooted, read_tree
+from nwkit.util import extract_species_label, is_rooted, read_tree
 
 
 TREE_LINE_CAPSTYLE = 'round'
@@ -82,25 +82,21 @@ def _get_tree_plot_coordinates(tree, use_topology_depth=False):
     return xcoord, ycoord, leaf_order
 
 
-def _get_species_by_leaf(tree, species_pattern):
+def _get_species_by_leaf(tree, args):
     species_by_leaf = dict()
     is_all_parsed = True
     num_leaf = 0
     for leaf in tree.leaves():
         num_leaf += 1
-        species_label = extract_species_label(leaf.name or '', species_regex=species_pattern.pattern)
+        species_label = extract_species_label(leaf.name or '', args=args)
         if species_label is None:
             is_all_parsed = False
             continue
         species_by_leaf[leaf] = species_label
     return species_by_leaf, (is_all_parsed and (num_leaf > 0))
 
-
-def _get_species_overlap_node_types(tree, species_regex, require_all_tip_labels=False):
-    species_pattern = compile_species_regex(species_regex=species_regex)
-    if species_pattern is None:
-        return dict(), False
-    species_by_leaf, all_tip_labels_parsed = _get_species_by_leaf(tree=tree, species_pattern=species_pattern)
+def _get_species_overlap_node_types(tree, args, require_all_tip_labels=False):
+    species_by_leaf, all_tip_labels_parsed = _get_species_by_leaf(tree=tree, args=args)
     if bool(require_all_tip_labels) and (not all_tip_labels_parsed):
         return dict(), all_tip_labels_parsed
     node_type_by_node = dict()
@@ -352,12 +348,12 @@ def draw_main(args):
         else:
             node_type_by_node, all_tip_labels_parsed = _get_species_overlap_node_types(
                 tree=tree,
-                species_regex=args.species_regex,
+                args=args,
                 require_all_tip_labels=(node_plot_mode == 'auto'),
             )
             if (node_plot_mode == 'auto') and (not all_tip_labels_parsed):
                 sys.stderr.write(
-                    'Skipping speciation/duplication node markers because some leaf labels did not match --species_regex.\n'
+                    'Skipping speciation/duplication node markers because some leaf labels did not match the configured species parser.\n'
                 )
     outdir = os.path.dirname(os.path.realpath(args.outfile))
     os.makedirs(outdir, exist_ok=True)

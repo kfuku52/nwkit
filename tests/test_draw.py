@@ -13,7 +13,9 @@ def make_draw_args(**kwargs):
         'quoted_node_names': True,
         'outfile': None,
         'image_format': 'auto',
+        'species_parser': 'legacy',
         'species_regex': r'^([^_]+_[^_]+)(?:_|$)',
+        'species_map_tsv': None,
         'species_overlap_node_plot': 'auto',
         'ladderize': False,
     }
