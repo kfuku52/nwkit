@@ -150,3 +150,13 @@ class TestPruneMain:
         prune_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {None}
+
+    def test_taxonomic_species_like_labels_remain_exact(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk('((Dictyostelium_discoideum:1,Dictyostelium_discoideum_cf:1):1,Amoeba_sp_JDSRuffled:1);')
+        args = make_args(
+            infile=path, outfile=tmp_outfile,
+            pattern='^Dictyostelium_discoideum$', invert_match=False,
+        )
+        prune_main(args)
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'Dictyostelium_discoideum_cf', 'Amoeba_sp_JDSRuffled'}

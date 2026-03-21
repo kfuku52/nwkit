@@ -467,6 +467,79 @@ class TestTaxonomyRooting:
                 if l1.name != l2.name:
                     assert abs(original.get_distance(l1.name, l2.name) - rooted.get_distance(l1, l2)) < 1e-6
 
+    def test_ncbi_taxonomic_uses_taxonomy_query_fallbacks(self, monkeypatch):
+        observed = dict(queries=[])
+
+        class FakeNCBI:
+            def __init__(self, *args, **kwargs):
+                self.db = None
+
+            def get_name_translator(self, names):
+                observed['queries'].extend(list(names))
+                mapping = dict()
+                for name in names:
+                    if name == 'Dictyostelium discoideum':
+                        mapping[name] = [101]
+                    elif name == 'Amoeba':
+                        mapping[name] = [102]
+                    elif name == 'Homo sapiens':
+                        mapping[name] = [201]
+                    elif name == 'Pan troglodytes':
+                        mapping[name] = [202]
+                return mapping
+
+            def get_lineage(self, taxid):
+                lineage_by_taxid = {
+                    1: [1],
+                    10: [1, 10],
+                    20: [1, 20],
+                    101: [1, 10, 101],
+                    102: [1, 10, 102],
+                    201: [1, 20, 201],
+                    202: [1, 20, 202],
+                }
+                return lineage_by_taxid[int(taxid)]
+
+            def get_taxid_translator(self, taxids):
+                names = {
+                    1: 'root',
+                    10: 'Amoebozoa',
+                    20: 'Primates',
+                    101: 'Dictyostelium discoideum',
+                    102: 'Amoeba',
+                    201: 'Homo sapiens',
+                    202: 'Pan troglodytes',
+                }
+                return {int(taxid): names[int(taxid)] for taxid in taxids if int(taxid) in names}
+
+            def get_rank(self, taxids):
+                ranks = {
+                    1: 'no rank',
+                    10: 'phylum',
+                    20: 'order',
+                    101: 'species',
+                    102: 'genus',
+                    201: 'species',
+                    202: 'species',
+                }
+                return {int(taxid): ranks.get(int(taxid), 'no rank') for taxid in taxids}
+
+        monkeypatch.setattr(constrain_mod.ete4, 'NCBITaxa', FakeNCBI)
+
+        tree = Tree(
+            '(Dictyostelium_discoideum_cf:1,Amoeba_sp_JDSRuffled:1,(Homo_sapiens:1,Pan_troglodytes:1):1);',
+            parser=1,
+        )
+        args = make_args(species_parser='taxonomic')
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no', args=args)
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'Dictyostelium_discoideum_cf', 'Amoeba_sp_JDSRuffled'} in child_leaf_sets
+        assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
+        assert 'Dictyostelium discoideum' in observed['queries']
+        assert 'Amoeba' in observed['queries']
+        assert 'Dictyostelium discoideum cf' not in observed['queries']
+        assert 'Amoeba sp JDSRuffled' not in observed['queries']
+
     def test_taxid_tsv_requires_exact_leaf_label_match(self, monkeypatch, tmp_path):
         install_fake_ncbi(
             monkeypatch,

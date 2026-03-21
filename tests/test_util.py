@@ -8,6 +8,7 @@ from ete4 import Tree
 from nwkit.util import (
     acquire_exclusive_lock,
     extract_species_label,
+    extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_monophyletic_species_groups,
     resolve_download_dir,
@@ -499,6 +500,26 @@ class TestExtractSpeciesLabel:
             species_regex=r'^([A-Za-z]+)\.([A-Za-z]+)\|',
             out_delim=' ',
         ) == 'Homo sapiens'
+
+    def test_taxonomic_keeps_species_label_qualifier(self):
+        args = make_args(species_parser='taxonomic')
+        assert extract_species_label('Dictyostelium_discoideum_cf', args=args) == 'Dictyostelium_discoideum_cf'
+        assert extract_species_label('Amoeba_sp_JDSRuffled', args=args) == 'Amoeba_sp_JDSRuffled'
+
+    def test_taxonomic_taxonomy_query_falls_back(self):
+        args = make_args(species_parser='taxonomic')
+        assert extract_taxonomy_query('Dictyostelium_discoideum_cf', args=args) == 'Dictyostelium discoideum'
+        assert extract_taxonomy_query('Amoeba_sp_JDSRuffled', args=args) == 'Amoeba'
+
+    def test_species_map_tsv_overrides_species_label_and_taxonomy_query(self, tmp_path):
+        map_path = tmp_path / 'species_map.tsv'
+        map_path.write_text(
+            'leaf_name\tspecies_label\ttaxonomy_query\n'
+            'Sample42\tMapped_species\tMapped species\n'
+        )
+        args = make_args(species_map_tsv=str(map_path))
+        assert extract_species_label('Sample42', args=args) == 'Mapped_species'
+        assert extract_taxonomy_query('Sample42', args=args) == 'Mapped species'
 
 
 class TestReadItemPerLineFile:

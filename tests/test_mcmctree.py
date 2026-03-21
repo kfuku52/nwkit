@@ -27,6 +27,9 @@ def make_mcmctree_args(**kwargs):
         'outformat': 'auto',
         'quoted_node_names': True,
         'download_dir': 'auto',
+        'species_parser': 'legacy',
+        'species_regex': r'^([^_]+_[^_]+)(?:_|$)',
+        'species_map_tsv': None,
         'timetree': 'no',
         'left_species': None,
         'right_species': None,
@@ -297,6 +300,67 @@ class TestMcmctreeMain:
         assert 'Homo sapiens' in flattened_queries
         assert 'Pan troglodytes' in flattened_queries
         assert all('gene' not in name.lower() for name in flattened_queries)
+
+    def test_timetree_taxonomic_uses_taxonomy_query_fallbacks(self, monkeypatch):
+        observed = dict()
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                observed.setdefault('queries', []).append(tuple(names))
+                mapping = dict()
+                for name in names:
+                    if name == 'Dictyostelium discoideum':
+                        mapping[name] = [101]
+                    elif name == 'Amoeba':
+                        mapping[name] = [102]
+                    elif name == 'Homo sapiens':
+                        mapping[name] = [201]
+                    elif name == 'Pan troglodytes':
+                        mapping[name] = [202]
+                return mapping
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+            def get_rank(self, lineages):
+                out = {}
+                for taxid in lineages:
+                    taxid = int(taxid)
+                    if taxid == 1:
+                        out[taxid] = 'superkingdom'
+                    elif taxid == 102:
+                        out[taxid] = 'genus'
+                    else:
+                        out[taxid] = 'species'
+                return out
+
+            def get_taxid_translator(self, taxids):
+                return {int(taxid): 'sp{}'.format(int(taxid)) for taxid in taxids}
+
+        class FakeResponse:
+            status_code = 500
+            text = '<html>server error</html>'
+
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
+        monkeypatch.setattr(mcmctree_mod.requests, 'get', lambda *args, **kwargs: FakeResponse())
+
+        tree = Tree(
+            '((Dictyostelium_discoideum_cf:1,Amoeba_sp_JDSRuffled:1):1,(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);',
+            parser=1,
+        )
+        args = make_mcmctree_args(timetree='point', higher_rank_search=True, species_parser='taxonomic')
+        out = add_timetree_constraint(tree, args)
+        assert out.name == 'NoName'
+        flattened_queries = {name for query in observed['queries'] for name in query}
+        assert 'Dictyostelium discoideum' in flattened_queries
+        assert 'Amoeba' in flattened_queries
+        assert 'Homo sapiens' in flattened_queries
+        assert 'Pan troglodytes' in flattened_queries
+        assert 'Dictyostelium discoideum cf' not in flattened_queries
+        assert 'Amoeba sp JDSRuffled' not in flattened_queries
 
     def test_timetree_split_duplicate_species_raise(self, monkeypatch):
         class FakeNCBI:

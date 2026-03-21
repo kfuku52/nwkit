@@ -249,6 +249,35 @@ class TestNcbiDownloadDirRouting:
         assert get_mrca_taxid(multi_counts, args=args) == 9606
         assert observed['download_dir'] == str(tmp_path / 'cache')
 
+    def test_get_lineages_supports_taxonomic_taxonomy_queries(self, monkeypatch):
+        observed = dict(queries=[])
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                observed['queries'].extend(list(names))
+                mapping = dict()
+                for name in names:
+                    if name == 'Dictyostelium discoideum':
+                        mapping[name] = [101]
+                    elif name == 'Amoeba':
+                        mapping[name] = [102]
+                return mapping
+
+            def get_lineage(self, taxid):
+                return [1, int(taxid)]
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', lambda args=None: FakeNCBI())
+        args = make_args(species_parser='taxonomic')
+        lineages = get_lineages(['Dictyostelium_discoideum_cf', 'Amoeba_sp_JDSRuffled'], rank='no', args=args)
+        assert lineages == {
+            'Dictyostelium_discoideum_cf': [1, 101],
+            'Amoeba_sp_JDSRuffled': [1, 102],
+        }
+        assert observed['queries'] == ['Dictyostelium discoideum', 'Amoeba']
+
 
 class TestConstrainMain:
     def test_user_backbone_no_match_raises_clear_error(self, tmp_path):
