@@ -271,9 +271,9 @@ class TestNcbiDownloadDirRouting:
 
         monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', lambda args=None: FakeNCBI())
         args = make_args(species_parser='taxonomic')
-        lineages = get_lineages(['Dictyostelium_discoideum_cf', 'Amoeba_sp_JDSRuffled'], rank='no', args=args)
+        lineages = get_lineages(['Dictyostelium_cf_discoideum', 'Amoeba_sp_JDSRuffled'], rank='no', args=args)
         assert lineages == {
-            'Dictyostelium_discoideum_cf': [1, 101],
+            'Dictyostelium_cf_discoideum': [1, 101],
             'Amoeba_sp_JDSRuffled': [1, 102],
         }
         assert observed['queries'] == ['Dictyostelium discoideum', 'Amoeba']

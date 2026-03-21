@@ -348,7 +348,7 @@ class TestMcmctreeMain:
         monkeypatch.setattr(mcmctree_mod.requests, 'get', lambda *args, **kwargs: FakeResponse())
 
         tree = Tree(
-            '((Dictyostelium_discoideum_cf:1,Amoeba_sp_JDSRuffled:1):1,(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);',
+            '((Dictyostelium_cf_discoideum:1,Amoeba_sp_JDSRuffled:1):1,(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);',
             parser=1,
         )
         args = make_mcmctree_args(timetree='point', higher_rank_search=True, species_parser='taxonomic')
@@ -359,7 +359,7 @@ class TestMcmctreeMain:
         assert 'Amoeba' in flattened_queries
         assert 'Homo sapiens' in flattened_queries
         assert 'Pan troglodytes' in flattened_queries
-        assert 'Dictyostelium discoideum cf' not in flattened_queries
+        assert 'Dictyostelium cf discoideum' not in flattened_queries
         assert 'Amoeba sp JDSRuffled' not in flattened_queries
 
     def test_timetree_split_duplicate_species_raise(self, monkeypatch):

@@ -527,17 +527,17 @@ class TestTaxonomyRooting:
         monkeypatch.setattr(constrain_mod.ete4, 'NCBITaxa', FakeNCBI)
 
         tree = Tree(
-            '(Dictyostelium_discoideum_cf:1,Amoeba_sp_JDSRuffled:1,(Homo_sapiens:1,Pan_troglodytes:1):1);',
+            '(Dictyostelium_cf_discoideum:1,Amoeba_sp_JDSRuffled:1,(Homo_sapiens:1,Pan_troglodytes:1):1);',
             parser=1,
         )
         args = make_args(species_parser='taxonomic')
         rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no', args=args)
         child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
-        assert {'Dictyostelium_discoideum_cf', 'Amoeba_sp_JDSRuffled'} in child_leaf_sets
+        assert {'Dictyostelium_cf_discoideum', 'Amoeba_sp_JDSRuffled'} in child_leaf_sets
         assert {'Homo_sapiens', 'Pan_troglodytes'} in child_leaf_sets
         assert 'Dictyostelium discoideum' in observed['queries']
         assert 'Amoeba' in observed['queries']
-        assert 'Dictyostelium discoideum cf' not in observed['queries']
+        assert 'Dictyostelium cf discoideum' not in observed['queries']
         assert 'Amoeba sp JDSRuffled' not in observed['queries']
 
     def test_taxid_tsv_requires_exact_leaf_label_match(self, monkeypatch, tmp_path):

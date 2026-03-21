@@ -503,13 +503,17 @@ class TestExtractSpeciesLabel:
 
     def test_taxonomic_keeps_species_label_qualifier(self):
         args = make_args(species_parser='taxonomic')
-        assert extract_species_label('Dictyostelium_discoideum_cf', args=args) == 'Dictyostelium_discoideum_cf'
+        assert extract_species_label('Dictyostelium_cf_discoideum', args=args) == 'Dictyostelium_cf_discoideum'
         assert extract_species_label('Amoeba_sp_JDSRuffled', args=args) == 'Amoeba_sp_JDSRuffled'
+        assert extract_species_label('Solanum_lycopersicum_cultivar_Heinz1706_gene1', args=args) == 'Solanum_lycopersicum_cultivar_Heinz1706'
+        assert extract_species_label('Escherichia_coli_serovar_O157_gene1', args=args) == 'Escherichia_coli_serovar_O157'
 
     def test_taxonomic_taxonomy_query_falls_back(self):
         args = make_args(species_parser='taxonomic')
-        assert extract_taxonomy_query('Dictyostelium_discoideum_cf', args=args) == 'Dictyostelium discoideum'
+        assert extract_taxonomy_query('Dictyostelium_cf_discoideum', args=args) == 'Dictyostelium discoideum'
         assert extract_taxonomy_query('Amoeba_sp_JDSRuffled', args=args) == 'Amoeba'
+        assert extract_taxonomy_query('Solanum_lycopersicum_cultivar_Heinz1706_gene1', args=args) == 'Solanum lycopersicum'
+        assert extract_taxonomy_query('Escherichia_coli_serovar_O157_gene1', args=args) == 'Escherichia coli'
 
     def test_species_map_tsv_overrides_species_label_and_taxonomy_query(self, tmp_path):
         map_path = tmp_path / 'species_map.tsv'

@@ -6,8 +6,41 @@ from dataclasses import dataclass
 DEFAULT_SPECIES_REGEX = r'^([^_]+_[^_]+)(?:_|$)'
 DEFAULT_SPECIES_PARSER = 'legacy'
 SUPPORTED_SPECIES_PARSERS = ('legacy', 'taxonomic')
-TAXONOMIC_SPECIES_SUFFIX_TOKENS = {'cf', 'cf.', 'aff', 'aff.', 'nr', 'nr.'}
+TAXONOMIC_SPECIES_SUFFIX_TOKENS = {'cf', 'aff', 'nr'}
 GENUS_ONLY_PLACEHOLDER_TOKENS = {'sp', 'sp.', 'spp', 'spp.'}
+TAXONOMIC_RANK_ALIASES = {
+    'subsp': 'subsp',
+    'ssp': 'subsp',
+    'subspecies': 'subsp',
+    'var': 'var',
+    'variety': 'var',
+    'forma': 'forma',
+    'form': 'forma',
+    'f': 'forma',
+    'strain': 'strain',
+    'substrain': 'substrain',
+    'serovar': 'serovar',
+    'serotype': 'serotype',
+    'serogroup': 'serogroup',
+    'pathovar': 'pathovar',
+    'pv': 'pathovar',
+    'biovar': 'biovar',
+    'biotype': 'biotype',
+    'chemovar': 'chemovar',
+    'morphovar': 'morphovar',
+    'cultivar': 'cultivar',
+    'cv': 'cultivar',
+    'isolate': 'isolate',
+    'group': 'group',
+    'subgroup': 'subgroup',
+    'complex': 'complex',
+    'clade': 'clade',
+    'lineage': 'lineage',
+    'section': 'section',
+    'series': 'series',
+    'ecotype': 'ecotype',
+    'breed': 'breed',
+}
 
 
 @dataclass(frozen=True)
@@ -40,6 +73,18 @@ def _normalize_taxonomy_query(text):
     normalized = str(text).strip().replace('_', ' ')
     normalized = re.sub(r'\s+', ' ', normalized)
     return normalized or None
+
+
+def _canonical_taxonomic_token(token):
+    cleaned = str(token or '').strip()
+    lowered = cleaned.lower()
+    if lowered in GENUS_ONLY_PLACEHOLDER_TOKENS:
+        return 'sp'
+    if lowered in TAXONOMIC_SPECIES_SUFFIX_TOKENS:
+        return re.sub(r'\.$', '', lowered)
+    if lowered in TAXONOMIC_RANK_ALIASES:
+        return TAXONOMIC_RANK_ALIASES[lowered]
+    return cleaned
 
 
 def _extract_species_label_with_regex(label, species_pattern):
@@ -125,7 +170,7 @@ class SpeciesParser:
         normalized_label = _normalize_species_label(label)
         if normalized_label is None:
             return ParsedSpecies()
-        tokens = [token for token in normalized_label.split('_') if token != '']
+        tokens = [_canonical_taxonomic_token(token) for token in normalized_label.split('_') if token != '']
         if len(tokens) < 2:
             return ParsedSpecies()
         genus_token = tokens[0]
@@ -137,9 +182,19 @@ class SpeciesParser:
                 species_label='_'.join(species_tokens),
                 taxonomy_query=genus_token,
             )
+        if (len(tokens) >= 3) and (second_lower in TAXONOMIC_SPECIES_SUFFIX_TOKENS):
+            return ParsedSpecies(
+                species_label='_'.join(tokens[:3]),
+                taxonomy_query='{} {}'.format(genus_token, tokens[2]),
+            )
         if (len(tokens) >= 3) and (tokens[2].lower() in TAXONOMIC_SPECIES_SUFFIX_TOKENS):
             return ParsedSpecies(
                 species_label='_'.join(tokens[:3]),
+                taxonomy_query='{} {}'.format(genus_token, second_token),
+            )
+        if (len(tokens) >= 4) and (tokens[2].lower() in set(TAXONOMIC_RANK_ALIASES.values())):
+            return ParsedSpecies(
+                species_label='_'.join(tokens[:4]),
                 taxonomy_query='{} {}'.format(genus_token, second_token),
             )
         return ParsedSpecies(
