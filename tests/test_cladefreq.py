@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from nwkit.cladefreq import cladefreq_main
 from tests.helpers import make_args
@@ -90,3 +91,26 @@ class TestCladefreqMain:
         ab_row = table.loc[table['leaf_set'] == 'A,B'].iloc[0]
         assert abs(ab_row['frequency'] - 0.75) < 1e-6
         assert abs(ab_row['weight_sum'] - 3.0) < 1e-6
+
+    def test_rejects_nan_weights(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            [
+                '((A:1,B:1):1,(C:1,D:1):1);',
+                '((A:1,C:1):1,(B:1,D:1):1);',
+            ],
+            name='weighted_nan.nwk',
+        )
+        weight_tsv = tmp_path / 'weights.tsv'
+        pd.DataFrame({'weight': [float('nan'), 1.0]}).to_csv(weight_tsv, sep='\t', index=False)
+        outfile = tmp_path / 'cladefreq.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            reference=None,
+            reference_format='auto',
+            weight_tsv=str(weight_tsv),
+            support_scale='percent',
+        )
+        with pytest.raises(ValueError, match='weight'):
+            cladefreq_main(args)

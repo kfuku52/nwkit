@@ -10,12 +10,17 @@ def read_trait(args, tree):
     trait_df = pd.read_csv(args.trait, sep='\t')
     if 'leaf_name' not in trait_df.columns:
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
+    trait_df = trait_df.copy()
+    trait_df['leaf_name'] = [
+        leaf_name if pd.isna(leaf_name) else str(leaf_name)
+        for leaf_name in trait_df['leaf_name'].tolist()
+    ]
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
     unknown_leaf_names = sorted(
-        str(leaf_name)
+        leaf_name
         for leaf_name in set(trait_df['leaf_name'].tolist())
-        if (not pd.isna(leaf_name)) and (str(leaf_name) not in leaf_name_set)
+        if (not pd.isna(leaf_name)) and (leaf_name not in leaf_name_set)
     )
     if unknown_leaf_names:
         raise ValueError(

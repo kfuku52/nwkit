@@ -1,3 +1,4 @@
+import math
 from collections import defaultdict
 
 import pandas as pd
@@ -51,6 +52,8 @@ def _read_tree_weights(weight_tsv, num_trees):
     weight_df = pd.read_csv(weight_tsv, sep='\t')
     if 'weight' not in weight_df.columns:
         raise ValueError("--weight_tsv must contain a 'weight' column.")
+    if weight_df['weight'].isna().any():
+        raise ValueError("--weight_tsv contains missing values in 'weight'.")
     weights = [None] * num_trees
     if 'tree_id' in weight_df.columns:
         if weight_df['tree_id'].isna().any():
@@ -67,11 +70,25 @@ def _read_tree_weights(weight_tsv, num_trees):
                 raise ValueError("--weight_tsv tree_id is out of range: {}".format(tree_id))
             if weights[tree_id - 1] is not None:
                 raise ValueError("Duplicated 'tree_id' values are not supported in --weight_tsv.")
-            weights[tree_id - 1] = float(row['weight'])
+            try:
+                weight = float(row['weight'])
+            except (TypeError, ValueError) as exc:
+                raise ValueError("--weight_tsv 'weight' values must be numeric.") from exc
+            if not math.isfinite(weight):
+                raise ValueError("Tree weights must be finite.")
+            weights[tree_id - 1] = weight
     else:
         if len(weight_df.index) != num_trees:
             raise ValueError("--weight_tsv must contain exactly one row per input tree.")
-        weights = [float(weight) for weight in weight_df['weight'].tolist()]
+        weights = list()
+        for weight_value in weight_df['weight'].tolist():
+            try:
+                weight = float(weight_value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("--weight_tsv 'weight' values must be numeric.") from exc
+            if not math.isfinite(weight):
+                raise ValueError("Tree weights must be finite.")
+            weights.append(weight)
     if any(weight is None for weight in weights):
         raise ValueError("--weight_tsv must define weights for every input tree.")
     for weight in weights:

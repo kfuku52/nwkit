@@ -176,3 +176,24 @@ class TestDrawMain:
 
         with pytest.raises(ValueError, match='were not found in the input tree'):
             draw_main(args)
+
+    def test_draw_accepts_numeric_leaf_names_in_trait_table(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((1:1,2:1):1,3:1);')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame({'leaf_name': [1, 2], 'group': ['x', 'y']}).to_csv(trait_path, sep='\t', index=False)
+        outfile = tmp_path / 'trait_numeric.svg'
+        args = make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            trait=str(trait_path),
+            group_by='group',
+        )
+
+        draw_main(args)
+
+        text = outfile.read_text(encoding='utf-8')
+        assert '1</text>' in text
+        assert '2</text>' in text
+        assert 'x' in text
+        assert 'y' in text

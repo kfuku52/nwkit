@@ -85,6 +85,18 @@ class TestReadTrait:
         with pytest.raises(ValueError, match="Column 'leaf_name'"):
             read_trait(args, tree)
 
+    def test_read_trait_accepts_numeric_leaf_names(self, tmp_path):
+        tree = Tree('((1:1,2:1):1,3:1);', parser=1)
+        trait_path = tmp_path / 'trait.tsv'
+        pd.DataFrame(
+            {'leaf_name': [1, 2], 'trait': ['x', 'y']}
+        ).to_csv(trait_path, sep='\t', index=False)
+        args = make_skim_args(trait=str(trait_path))
+        out = read_trait(args, tree)
+        assert set(out['leaf_name']) == {'1', '2', '3'}
+        assert int((out['leaf_name'] == '1').sum()) == 1
+        assert int((out['leaf_name'] == '2').sum()) == 1
+
 
 class TestGrouping:
     def test_add_group_ids_for_two_homogeneous_clades(self):

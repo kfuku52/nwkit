@@ -169,6 +169,31 @@ class TestWriteTree:
         assert 'AB' in out
         assert 'CD' in out
 
+    def test_write_preserves_quoted_leaf_names(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk("('A,B':1,C:1);")
+        tree = read_tree(path, format='1', quoted_node_names=True, quiet=True)
+        args = make_args(outfile=tmp_outfile)
+        write_tree(tree, args, format='1', quiet=True)
+        with open(tmp_outfile) as f:
+            out = f.read()
+        assert "'A,B'" in out
+        tree2 = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        assert set(tree2.leaf_names()) == {'A,B', 'C'}
+
+    def test_write_preserves_numeric_internal_names_with_quotes(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk("((A:1,B:1)'42':1,C:1)'99':1;")
+        tree = read_tree(path, format='auto', quoted_node_names=True, quiet=True)
+        args = make_args(outfile=tmp_outfile)
+        write_tree(tree, args, format='1', quiet=True)
+        with open(tmp_outfile) as f:
+            out = f.read()
+        assert "'42'" in out
+        assert "'99'" in out
+        tree2 = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert tree2.name == '99'
+        child_names = {str(child.name or '') for child in tree2.children}
+        assert '42' in child_names
+
 
 class TestDownloadDirHelpers:
     def test_resolve_download_dir_returns_none_for_auto(self, tmp_path):

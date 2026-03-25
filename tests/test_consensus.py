@@ -201,3 +201,28 @@ class TestConsensusMain:
         )
         with pytest.raises(ValueError, match='tree_id'):
             consensus_main(args)
+
+    def test_weight_tsv_rejects_nan_weights(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            [
+                '((A:1,B:1):1,(C:1,D:1):1);',
+                '((A:1,C:1):1,(B:1,D:1):1);',
+            ],
+            name='weighted_nan.nwk',
+        )
+        weight_tsv = tmp_path / 'weights.tsv'
+        pd.DataFrame({'weight': [float('nan'), 1.0]}).to_csv(weight_tsv, sep='\t', index=False)
+        args = make_args(
+            infile=infile,
+            outfile='-',
+            min_freq=0.5,
+            reference=None,
+            reference_format='auto',
+            support_scale='percent',
+            method='greedy',
+            branch_length='none',
+            weight_tsv=str(weight_tsv),
+        )
+        with pytest.raises(ValueError, match='weight'):
+            consensus_main(args)

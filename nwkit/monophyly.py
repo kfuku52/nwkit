@@ -93,7 +93,7 @@ def monophyly_main(args):
         print(out.to_csv(sep='\t', index=False), end='')
     else:
         out.to_csv(args.outfile, sep='\t', index=False)
-    if args.fail_on_non_monophyly and non_monophyletic_groups:
+    if getattr(args, 'fail_on_non_monophyly', False) and non_monophyletic_groups:
         raise ValueError(
             'Non-monophyletic group(s): {}'.format(', '.join(sorted(non_monophyletic_groups)))
         )

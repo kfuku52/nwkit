@@ -21,6 +21,7 @@ from nwkit.species_parser import (
 NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
 QUOTED_NODE_NAME_PATTERN = re.compile(r"'(?:[^']|'')*'")
 NUMERIC_NODE_NAME_PATTERN = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?')
+UNQUOTED_NODE_NAME_PATTERN = re.compile(r"^[^\s\(\)\[\]':;,]+$")
 TREE_FORMAT_PROP = '_nwkit_parser_format'
 MISSING_SUPPORT_VALUE = -999999.0
 DOWNLOAD_LOCK_POLL_SECONDS = 1
@@ -112,6 +113,30 @@ def _is_numeric_node_name(name):
     if name in (None, ''):
         return False
     return NUMERIC_NODE_NAME_PATTERN.fullmatch(str(name).strip()) is not None
+
+def _should_quote_node_name(name, is_internal=False):
+    if name in (None, ''):
+        return False
+    name_text = str(name)
+    if UNQUOTED_NODE_NAME_PATTERN.fullmatch(name_text) is None:
+        return True
+    if is_internal and _is_numeric_node_name(name_text):
+        return True
+    return False
+
+def _serialize_newick_node_name(name, is_internal=False):
+    name_text = str(name)
+    if _should_quote_node_name(name_text, is_internal=is_internal):
+        return "'{}'".format(name_text.replace("'", "''"))
+    return name_text
+
+def _is_missing_support_value(support):
+    if support is None:
+        return False
+    try:
+        return abs(float(support) - MISSING_SUPPORT_VALUE) < 10 ** -9
+    except (TypeError, ValueError):
+        return False
 
 def _named_internal_nodes(tree):
     return [
@@ -379,15 +404,29 @@ def write_tree(tree, args, format, quiet=False):
         txt = 'Number of leaves in output tree = {:,}, Output tree format = {}\n'
         sys.stderr.write(txt.format(num_leaves, format))
     node_name_dict = dict()
+    original_node_names = list()
+    original_support_values = list()
     i = 0
     for node in tree.traverse():
-        if node.name and str(node.name) != '-999999':
+        original_node_names.append((node, node.name))
+        if (node.name is not None) and (str(node.name) != ''):
             placeholder_name = 'NODENAME_PLACEHOLDER'+str(i).zfill(10)
-            node_name_dict[placeholder_name] = node.name
+            node_name_dict[placeholder_name] = _serialize_newick_node_name(
+                node.name,
+                is_internal=(not node.is_leaf),
+            )
             node.name = placeholder_name
             i += 1
-    tree_str = tree.write(parser=format, format_root_node=True)
-    tree_str = tree_str.replace('-999999.0', '').replace('-999999','')
+        if _is_missing_support_value(node.support):
+            original_support_values.append((node, node.support))
+            node.support = None
+    try:
+        tree_str = tree.write(parser=format, format_root_node=True)
+    finally:
+        for node, node_name in original_node_names:
+            node.name = node_name
+        for node, support in original_support_values:
+            node.support = support
     if tree_str.endswith(':;'):
         tree_str = tree_str[:-2]+';'
     if node_name_dict:
