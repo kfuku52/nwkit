@@ -1,3 +1,4 @@
+import csv
 import errno
 import math
 import os
@@ -7,8 +8,10 @@ import sys
 import time
 from collections import Counter, defaultdict
 from contextlib import contextmanager
+from io import StringIO
 import Bio.SeqIO as SeqIO
 import ete4
+import pandas as pd
 from ete4 import Tree
 from nwkit.species_parser import (
     DEFAULT_SPECIES_PARSER,
@@ -39,6 +42,40 @@ def read_input_text(infile):
         with open(infile) as handle:
             return handle.read()
     return str(infile)
+
+
+def _read_raw_tsv_column_values(text, column_name):
+    reader = csv.reader(StringIO(text), delimiter='\t')
+    try:
+        header = next(reader)
+    except StopIteration:
+        return None
+    if column_name not in header:
+        return None
+    column_index = header.index(column_name)
+    values = list()
+    for row in reader:
+        if (len(row) == 0) or all(cell == '' for cell in row):
+            continue
+        values.append(row[column_index] if column_index < len(row) else '')
+    return values
+
+
+def read_tsv_preserving_leaf_name(path):
+    text = read_input_text(path)
+    dataframe = pd.read_csv(StringIO(text), sep='\t')
+    if 'leaf_name' not in dataframe.columns:
+        return dataframe
+    raw_leaf_names = _read_raw_tsv_column_values(text, 'leaf_name')
+    if raw_leaf_names is None:
+        return dataframe
+    if len(raw_leaf_names) != len(dataframe.index):
+        raise ValueError(
+            "Failed to preserve the 'leaf_name' column while parsing: {}".format(path)
+        )
+    dataframe = dataframe.copy()
+    dataframe['leaf_name'] = raw_leaf_names
+    return dataframe
 
 
 def count_set_bits(value):

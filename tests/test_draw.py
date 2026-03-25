@@ -197,3 +197,45 @@ class TestDrawMain:
         assert '2</text>' in text
         assert 'x' in text
         assert 'y' in text
+
+    def test_draw_accepts_leading_zero_leaf_names_in_trait_table(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((001:1,002:1):1,003:1);')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame({'leaf_name': ['001', '002'], 'group': ['x', 'y']}).to_csv(trait_path, sep='\t', index=False)
+        outfile = tmp_path / 'trait_leading_zero.svg'
+        args = make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            trait=str(trait_path),
+            group_by='group',
+        )
+
+        draw_main(args)
+
+        text = outfile.read_text(encoding='utf-8')
+        assert '001</text>' in text
+        assert '002</text>' in text
+        assert 'x' in text
+        assert 'y' in text
+
+    def test_draw_accepts_na_literal_leaf_names_in_trait_table(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((NA:1,B:1):1,C:1);')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame({'leaf_name': ['NA', 'B'], 'group': ['x', 'y']}).to_csv(trait_path, sep='\t', index=False)
+        outfile = tmp_path / 'trait_na_literal.svg'
+        args = make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            trait=str(trait_path),
+            group_by='group',
+        )
+
+        draw_main(args)
+
+        text = outfile.read_text(encoding='utf-8')
+        assert 'NA</text>' in text
+        assert 'B</text>' in text
+        assert 'x' in text
+        assert 'y' in text

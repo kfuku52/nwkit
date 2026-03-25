@@ -113,6 +113,7 @@ def _build_parse_error_row(tree_id, inspection, issues):
         'num_duplicate_leaf_names': '',
         'num_empty_leaf_names': '',
         'leaf_set_matches_first': '',
+        'rooting_matches_first': '',
         'species_parseable': '',
         'species_groups_monophyletic': '',
         'issues': ','.join(issues),
@@ -138,6 +139,7 @@ def validate_main(args):
     invalid_tree_ids = list()
     reference_leaf_set = None
     reference_rooted_state = None
+    first_tree_parsed = None
     for tree_id, tree_string in enumerate(tree_strings, start=1):
         inspection = inspect_tree_text(
             newick_text=tree_string,
@@ -151,6 +153,8 @@ def validate_main(args):
             issues.append('quoted_node_names')
         if not inspection['parse_ok']:
             issues.append('parse_error')
+            if tree_id == 1:
+                first_tree_parsed = False
             row = _build_parse_error_row(tree_id, inspection, issues)
             rows.append(row)
             invalid_tree_ids.append(tree_id)
@@ -176,20 +180,25 @@ def validate_main(args):
         if require_all_support and (metrics['num_missing_support_internal_nodes'] > 0):
             issues.append('missing_support')
         leaf_name_set = set(tree.leaf_names())
-        if reference_leaf_set is None:
+        if tree_id == 1:
             leaf_set_matches_first = True
             reference_leaf_set = leaf_name_set
-        else:
+            first_tree_parsed = True
+        elif first_tree_parsed:
             leaf_set_matches_first = (leaf_name_set == reference_leaf_set)
             if require_same_leaf_set and (not leaf_set_matches_first):
                 issues.append('leaf_set_mismatch')
-        if reference_rooted_state is None:
+        else:
+            leaf_set_matches_first = ''
+        if tree_id == 1:
             rooting_matches_first = True
             reference_rooted_state = metrics['is_rooted']
-        else:
+        elif first_tree_parsed:
             rooting_matches_first = (metrics['is_rooted'] == reference_rooted_state)
             if require_same_rooting and (not rooting_matches_first):
                 issues.append('rooting_mismatch')
+        else:
+            rooting_matches_first = ''
         species_parseable = ''
         species_groups_monophyletic = ''
         if check_species:

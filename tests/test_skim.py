@@ -73,7 +73,10 @@ class TestReadTrait:
             out = read_trait(args, tree)
             assert int((out['leaf_name'] == 'A').sum()) == 1
         except ValueError as exc:
-            assert "Duplicated 'leaf_name'" in str(exc)
+            assert (
+                ("Duplicated 'leaf_name'" in str(exc))
+                or ("must not contain empty values" in str(exc))
+            )
 
     def test_missing_leaf_name_column_raises(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)
@@ -96,6 +99,30 @@ class TestReadTrait:
         assert set(out['leaf_name']) == {'1', '2', '3'}
         assert int((out['leaf_name'] == '1').sum()) == 1
         assert int((out['leaf_name'] == '2').sum()) == 1
+
+    def test_read_trait_preserves_leading_zero_leaf_names(self, tmp_path):
+        tree = Tree('((001:1,002:1):1,003:1);', parser=1)
+        trait_path = tmp_path / 'trait.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['001', '002'], 'trait': ['x', 'y']}
+        ).to_csv(trait_path, sep='\t', index=False)
+        args = make_skim_args(trait=str(trait_path))
+        out = read_trait(args, tree)
+        assert set(out['leaf_name']) == {'001', '002', '003'}
+        assert int((out['leaf_name'] == '001').sum()) == 1
+        assert int((out['leaf_name'] == '002').sum()) == 1
+
+    def test_read_trait_preserves_na_literal_leaf_names(self, tmp_path):
+        tree = Tree('((NA:1,B:1):1,C:1);', parser=1)
+        trait_path = tmp_path / 'trait.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['NA', 'B'], 'trait': ['x', 'y']}
+        ).to_csv(trait_path, sep='\t', index=False)
+        args = make_skim_args(trait=str(trait_path))
+        out = read_trait(args, tree)
+        assert set(out['leaf_name']) == {'NA', 'B', 'C'}
+        assert int((out['leaf_name'] == 'NA').sum()) == 1
+        assert int((out['leaf_name'] == 'B').sum()) == 1
 
 
 class TestGrouping:

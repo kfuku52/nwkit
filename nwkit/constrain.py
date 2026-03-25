@@ -20,13 +20,11 @@ def _close_ncbi_db(ncbi):
             pass
 
 def read_taxid_tsv(taxid_tsv):
-    taxid_df = pd.read_csv(taxid_tsv, sep='\t')
+    taxid_df = read_tsv_preserving_leaf_name(taxid_tsv)
     if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
         raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
     if taxid_df.empty:
         raise ValueError('--taxid_tsv is empty.')
-    if taxid_df['leaf_name'].isna().any():
-        raise ValueError('--taxid_tsv contains missing values in the "leaf_name" column.')
     taxid_df = taxid_df.copy()
     taxid_df['leaf_name'] = [str(leaf_name) for leaf_name in taxid_df['leaf_name'].tolist()]
     if any(leaf_name.strip() == '' for leaf_name in taxid_df['leaf_name'].tolist()):

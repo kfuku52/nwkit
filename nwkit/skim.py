@@ -7,20 +7,19 @@ def read_trait(args, tree):
         sys.stderr.write(f"'--trait' not specified. Sampling leaves at random.\n")
         trait_df = pd.DataFrame({'leaf_name': list(tree.leaf_names())})
         return trait_df
-    trait_df = pd.read_csv(args.trait, sep='\t')
+    trait_df = read_tsv_preserving_leaf_name(args.trait)
     if 'leaf_name' not in trait_df.columns:
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [
-        leaf_name if pd.isna(leaf_name) else str(leaf_name)
-        for leaf_name in trait_df['leaf_name'].tolist()
-    ]
+    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
+    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
+        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
     unknown_leaf_names = sorted(
         leaf_name
         for leaf_name in set(trait_df['leaf_name'].tolist())
-        if (not pd.isna(leaf_name)) and (leaf_name not in leaf_name_set)
+        if leaf_name not in leaf_name_set
     )
     if unknown_leaf_names:
         raise ValueError(

@@ -1,18 +1,23 @@
 import pandas as pd
 
-from nwkit.util import get_species_group_records, read_tree, validate_unique_named_leaves
+from nwkit.util import (
+    get_species_group_records,
+    read_tree,
+    read_tsv_preserving_leaf_name,
+    validate_unique_named_leaves,
+)
 
 
 def _read_trait_groups(path, tree_leaf_name_set, group_by):
-    trait_df = pd.read_csv(path, sep='\t')
+    trait_df = read_tsv_preserving_leaf_name(path)
     if 'leaf_name' not in trait_df.columns:
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     if group_by not in trait_df.columns:
         raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
-    if trait_df['leaf_name'].isna().any():
-        raise ValueError("Column 'leaf_name' in '--trait' must not contain missing values.")
     trait_df = trait_df.copy()
-    trait_df['leaf_name'] = trait_df['leaf_name'].astype(str)
+    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
+    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
+        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
     duplicated_leaf_names = trait_df.loc[
         trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
     ].unique().tolist()

@@ -605,6 +605,52 @@ class TestTaxonomyRooting:
         assert {'1', '2'} in child_leaf_sets
         assert {'3'} in child_leaf_sets
 
+    def test_taxid_tsv_leading_zero_leaf_labels_are_accepted(self, monkeypatch, tmp_path):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                100: [1, 10, 100],
+                101: [1, 10, 101],
+                200: [1, 20, 200],
+            },
+        )
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['001', '002', '003'], 'taxid': [100, 101, 200]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        tree = Tree('(001:1,002:1,003:1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'001', '002'} in child_leaf_sets
+        assert {'003'} in child_leaf_sets
+
+    def test_taxid_tsv_na_literal_leaf_labels_are_accepted(self, monkeypatch, tmp_path):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                100: [1, 10, 100],
+                101: [1, 10, 101],
+                200: [1, 20, 200],
+            },
+        )
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['NA', 'B', 'C'], 'taxid': [100, 101, 200]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        tree = Tree('(NA:1,B:1,C:1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'NA', 'B'} in child_leaf_sets
+        assert {'C'} in child_leaf_sets
+
     def test_ambiguous_taxonomy_root_raises(self, monkeypatch, tmp_path):
         install_fake_ncbi(
             monkeypatch,

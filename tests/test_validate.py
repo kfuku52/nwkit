@@ -127,3 +127,37 @@ class TestValidateMain:
         assert table.loc[1, 'status'] == 'invalid'
         assert bool(table.loc[1, 'parse_ok']) is False
         assert 'parse_error' in table.loc[1, 'issues']
+
+    def test_malformed_first_tree_leaves_first_tree_comparisons_blank(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            [
+                '((A:1,B:1):1,(C:1,D:1):1));',
+                '((A:1,B:1):1,(C:1,D:1):1);',
+            ],
+            name='first_invalid_collection.nwk',
+        )
+        outfile = tmp_path / 'validate.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            check_species=False,
+            require_rooted=False,
+            require_ultrametric=False,
+            require_same_leaf_set=True,
+            require_same_rooting=True,
+            require_binary=False,
+            require_all_support=False,
+            require_unambiguous_format=False,
+            require_unquoted_names=False,
+            fail_on_issue=False,
+        )
+        validate_main(args)
+        table = pd.read_csv(outfile, sep='\t')
+        assert table.loc[0, 'status'] == 'invalid'
+        assert table.loc[1, 'status'] == 'ok'
+        assert pd.isna(table.loc[1, 'leaf_set_matches_first'])
+        assert pd.isna(table.loc[1, 'rooting_matches_first'])
+        issues = '' if pd.isna(table.loc[1, 'issues']) else str(table.loc[1, 'issues'])
+        assert 'leaf_set_mismatch' not in issues
+        assert 'rooting_mismatch' not in issues

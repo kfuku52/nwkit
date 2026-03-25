@@ -11,7 +11,7 @@ from matplotlib import colors as mcolors
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-from nwkit.util import extract_species_label, is_rooted, read_tree
+from nwkit.util import extract_species_label, is_rooted, read_tree, read_tsv_preserving_leaf_name
 
 
 TREE_LINE_CAPSTYLE = 'round'
@@ -166,21 +166,20 @@ def _format_support_value(support):
 
 
 def _read_trait_table(path, group_by, tree):
-    trait_df = pd.read_csv(path, sep='\t')
+    trait_df = read_tsv_preserving_leaf_name(path)
     if 'leaf_name' not in trait_df.columns:
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     if group_by not in trait_df.columns:
         raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
     trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [
-        leaf_name if pd.isna(leaf_name) else str(leaf_name)
-        for leaf_name in trait_df['leaf_name'].tolist()
-    ]
+    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
+    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
+        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
     tree_leaf_name_set = set(tree.leaf_names())
     unknown_leaf_names = sorted(
         leaf_name
         for leaf_name in set(trait_df['leaf_name'].tolist())
-        if (not pd.isna(leaf_name)) and (leaf_name not in tree_leaf_name_set)
+        if leaf_name not in tree_leaf_name_set
     )
     if unknown_leaf_names:
         raise ValueError(

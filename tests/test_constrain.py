@@ -121,6 +121,24 @@ class TestCheckInputFile:
         assert taxid_df['leaf_name'].tolist() == ['1', '2']
         assert taxid_df['taxid'].tolist() == [9606, 10090]
 
+    def test_read_taxid_tsv_preserves_leading_zero_leaf_names(self, tmp_path):
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['001', '002'], 'taxid': [9606, 10090]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        taxid_df = read_taxid_tsv(str(tsv_path))
+        assert taxid_df['leaf_name'].tolist() == ['001', '002']
+        assert taxid_df['taxid'].tolist() == [9606, 10090]
+
+    def test_read_taxid_tsv_preserves_na_literal_leaf_names(self, tmp_path):
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['NA', 'B'], 'taxid': [9606, 10090]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        taxid_df = read_taxid_tsv(str(tsv_path))
+        assert taxid_df['leaf_name'].tolist() == ['NA', 'B']
+        assert taxid_df['taxid'].tolist() == [9606, 10090]
+
 
 class TestCollapseGenes:
     def test_invalid_leaf_name_format_raises(self):
