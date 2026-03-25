@@ -3,10 +3,13 @@ import re
 import sys
 
 import matplotlib
+import pandas as pd
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
+from matplotlib import colors as mcolors
 from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 from nwkit.util import extract_species_label, is_rooted, read_tree
 
@@ -162,7 +165,47 @@ def _format_support_value(support):
     return '{:g}'.format(support_value)
 
 
-def _draw_tree(tree, outfile, image_format, node_type_by_node):
+def _read_trait_table(path, group_by, tree):
+    trait_df = pd.read_csv(path, sep='\t')
+    if 'leaf_name' not in trait_df.columns:
+        raise ValueError("Column 'leaf_name' is required in '--trait'.")
+    if group_by not in trait_df.columns:
+        raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
+    trait_df = trait_df[trait_df['leaf_name'].isin(set(tree.leaf_names()))].copy()
+    duplicated_leaf_names = trait_df.loc[
+        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
+    ].unique().tolist()
+    if duplicated_leaf_names:
+        duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
+        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
+    leaf_to_group = dict()
+    for _, row in trait_df.iterrows():
+        if pd.isna(row[group_by]):
+            continue
+        leaf_to_group[str(row['leaf_name'])] = str(row[group_by])
+    return leaf_to_group
+
+
+def _assign_group_colors(group_names, palette='tab10'):
+    if len(group_names) == 0:
+        return dict()
+    cmap = plt.get_cmap(palette)
+    colors = dict()
+    for index, group_name in enumerate(sorted(group_names)):
+        colors[group_name] = mcolors.to_hex(cmap(index % max(getattr(cmap, 'N', len(group_names)), 1)))
+    return colors
+
+
+def _draw_tree(
+    tree,
+    outfile,
+    image_format,
+    node_type_by_node,
+    leaf_label_color_by_leaf,
+    group_color_by_name,
+    support_labels=True,
+    support_min=None,
+):
     _apply_font_style()
     use_topology_depth = (not _has_positive_branch_length(tree))
     if use_topology_depth:
@@ -227,6 +270,7 @@ def _draw_tree(tree, outfile, image_format, node_type_by_node):
 
     marker_area = 18.0 * (0.5 ** 2)
     marker_size_pt = 4.8 * 0.5
+    legend_handles = list()
     if len(node_type_by_node) > 0:
         for node, node_type in node_type_by_node.items():
             marker_color = DUPLICATION_COLOR if (node_type == 'duplication') else SPECIATION_COLOR
@@ -240,7 +284,7 @@ def _draw_tree(tree, outfile, image_format, node_type_by_node):
                 linewidth=0.4,
                 zorder=5,
             )
-        legend_handles = [
+        legend_handles.extend([
             Line2D(
                 [0],
                 [0],
@@ -263,7 +307,13 @@ def _draw_tree(tree, outfile, image_format, node_type_by_node):
                 markersize=marker_size_pt,
                 label='Duplication node',
             ),
-        ]
+        ])
+    if len(group_color_by_name) > 0:
+        legend_handles.extend(
+            Patch(facecolor=color, edgecolor='none', label=group_name)
+            for group_name, color in sorted(group_color_by_name.items())
+        )
+    if len(legend_handles) > 0:
         ax.legend(
             handles=legend_handles,
             loc='lower left',
@@ -277,7 +327,12 @@ def _draw_tree(tree, outfile, image_format, node_type_by_node):
         )
 
     for node in tree.traverse():
+        if not support_labels:
+            continue
         if not _has_meaningful_support(node):
+            continue
+        support_value = float(node.support)
+        if (support_min is not None) and (support_value < support_min):
             continue
         parent_x = xcoord[node.up]
         node_x = xcoord[node]
@@ -304,7 +359,7 @@ def _draw_tree(tree, outfile, image_format, node_type_by_node):
             ha='left',
             fontsize=FONT_SIZE_PT,
             fontfamily=FONT_FAMILY,
-            color=LABEL_COLOR,
+            color=leaf_label_color_by_leaf.get(leaf, LABEL_COLOR),
         )
 
     label_panel_span = x_span * (label_panel_width_in / tree_panel_width_in)
@@ -330,6 +385,13 @@ def draw_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if bool(args.ladderize):
         tree.ladderize()
+    trait_path = getattr(args, 'trait', None)
+    group_by = getattr(args, 'group_by', None)
+    trait_palette = getattr(args, 'trait_palette', 'tab10')
+    support_labels = getattr(args, 'support_labels', True)
+    support_min = getattr(args, 'support_min', None)
+    if (trait_path not in ['', None]) and (group_by in ['', None]):
+        raise ValueError("'--group_by' is required when '--trait' is specified.")
     image_format = _resolve_image_format(outfile=args.outfile, image_format=str(args.image_format).lower())
     node_plot_mode = str(args.species_overlap_node_plot).strip().lower()
     if node_plot_mode == 'no':
@@ -355,6 +417,19 @@ def draw_main(args):
                 sys.stderr.write(
                     'Skipping speciation/duplication node markers because some leaf labels did not match the configured species parser.\n'
                 )
+    leaf_label_color_by_leaf = dict()
+    group_color_by_name = dict()
+    if trait_path not in ['', None]:
+        leaf_to_group = _read_trait_table(path=trait_path, group_by=group_by, tree=tree)
+        group_color_by_name = _assign_group_colors(
+            group_names=set(leaf_to_group.values()),
+            palette=trait_palette,
+        )
+        for leaf in tree.leaves():
+            group_name = leaf_to_group.get(str(leaf.name))
+            if group_name is None:
+                continue
+            leaf_label_color_by_leaf[leaf] = group_color_by_name[group_name]
     outdir = os.path.dirname(os.path.realpath(args.outfile))
     os.makedirs(outdir, exist_ok=True)
     _draw_tree(
@@ -362,5 +437,9 @@ def draw_main(args):
         outfile=args.outfile,
         image_format=image_format,
         node_type_by_node=node_type_by_node,
+        leaf_label_color_by_leaf=leaf_label_color_by_leaf,
+        group_color_by_name=group_color_by_name,
+        support_labels=support_labels,
+        support_min=support_min,
     )
     sys.stderr.write('Wrote tree image: {}\n'.format(os.path.realpath(args.outfile)))

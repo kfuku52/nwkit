@@ -1,0 +1,117 @@
+import csv
+import re
+import sys
+
+from nwkit.util import get_target_nodes, read_tree, validate_unique_named_leaves, write_tree
+
+
+def read_name_tsv(path):
+    with open(path, newline='') as handle:
+        reader = csv.DictReader(handle, delimiter='\t')
+        fieldnames = reader.fieldnames or list()
+        required = {'old_name', 'new_name'}
+        if not required.issubset(fieldnames):
+            raise ValueError("--name_tsv must contain 'old_name' and 'new_name' columns.")
+        mapping = dict()
+        for row in reader:
+            old_name = str(row.get('old_name', '')).strip()
+            new_name = str(row.get('new_name', '')).strip()
+            if old_name == '':
+                raise ValueError("--name_tsv contains an empty 'old_name' value.")
+            if new_name == '':
+                raise ValueError("--name_tsv contains an empty 'new_name' value.")
+            if old_name in mapping:
+                raise ValueError("Duplicated 'old_name' entries are not supported in --name_tsv: {}".format(old_name))
+            mapping[old_name] = new_name
+    if len(mapping) == 0:
+        raise ValueError('--name_tsv is empty.')
+    return mapping
+
+
+def _rename_by_mapping(tree, args):
+    mapping = read_name_tsv(args.name_tsv)
+    target_nodes = get_target_nodes(tree=tree, target=args.target)
+    target_name_to_nodes = dict()
+    for node in target_nodes:
+        node_name = str(node.name or '').strip()
+        if node_name == '':
+            continue
+        if node_name not in target_name_to_nodes:
+            target_name_to_nodes[node_name] = list()
+        target_name_to_nodes[node_name].append(node)
+    for old_name, matching_nodes in target_name_to_nodes.items():
+        if (old_name in mapping) and (len(matching_nodes) > 1):
+            raise ValueError(
+                "Matched multiple target nodes for old_name '{}' in '--target {}'.".format(
+                    old_name,
+                    args.target,
+                )
+            )
+    renamed_count = 0
+    used_old_names = set()
+    for old_name, new_name in mapping.items():
+        matching_nodes = target_name_to_nodes.get(old_name, list())
+        if len(matching_nodes) == 0:
+            continue
+        matching_nodes[0].name = new_name
+        renamed_count += 1
+        used_old_names.add(old_name)
+    unused_old_names = sorted(set(mapping.keys()) - used_old_names)
+    if args.require_all_old_names and unused_old_names:
+        raise ValueError(
+            "The following old_name values in '--name_tsv' were not found among target nodes: {}".format(
+                ', '.join(unused_old_names)
+            )
+        )
+    return tree, renamed_count, len(mapping)
+
+
+def _rename_by_regex(tree, args):
+    target_nodes = get_target_nodes(tree=tree, target=args.target)
+    renamed_count = 0
+    matched_count = 0
+    pattern = re.compile(args.pattern)
+    for node in target_nodes:
+        node_name = str(node.name or '')
+        if node_name == '':
+            continue
+        new_name, num_subs = pattern.subn(args.replacement, node_name)
+        if num_subs == 0:
+            continue
+        matched_count += 1
+        if new_name != node_name:
+            node.name = new_name
+            renamed_count += 1
+    if args.require_match and matched_count == 0:
+        raise ValueError("No target node names matched '--pattern'.")
+    return tree, renamed_count, matched_count
+
+
+def rename_main(args):
+    name_tsv = getattr(args, 'name_tsv', None)
+    pattern = getattr(args, 'pattern', None)
+    replacement = getattr(args, 'replacement', None)
+    require_match = getattr(args, 'require_match', True)
+    has_name_tsv = name_tsv not in ['', None]
+    has_pattern = pattern not in ['', None]
+    if has_name_tsv == has_pattern:
+        raise ValueError("Specify exactly one of '--name_tsv' or '--pattern/--replacement'.")
+    if has_pattern and (replacement is None):
+        raise ValueError("'--replacement' is required when '--pattern' is specified.")
+    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    if has_name_tsv:
+        tree, renamed_count, matched_count = _rename_by_mapping(tree=tree, args=args)
+        mapping_label = '{} mapping row(s)'.format(matched_count)
+    else:
+        args.pattern = pattern
+        args.replacement = replacement
+        args.require_match = require_match
+        tree, renamed_count, matched_count = _rename_by_regex(tree=tree, args=args)
+        mapping_label = '{} matched target node(s)'.format(matched_count)
+    if args.check_leaf_uniqueness:
+        validate_unique_named_leaves(tree, option_name='--infile', context=" after 'rename'")
+    sys.stderr.write('Renamed {} target node(s) using {}.\n'.format(renamed_count, mapping_label))
+    outformat = args.outformat
+    if outformat == 'auto':
+        outformat = 1
+    write_tree(tree, args, format=outformat)

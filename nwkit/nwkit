@@ -58,6 +58,18 @@ p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', defa
 p_tree_input.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                           help='default=%(default)s: Whether node names are quoted in the input file.')
 
+p_table_output = argparse.ArgumentParser(add_help=False)
+p_table_output.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
+                            help='default=%(default)s: Output table file. Use "-" for STDOUT.')
+
+p_table_input = argparse.ArgumentParser(add_help=False)
+p_table_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
+                           help='default=%(default)s: Input table file. Use "-" for STDIN.')
+p_table_input.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
+                           help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
+p_table_input.add_argument('-of', '--outformat', metavar='INT', default='auto', type=str, required=False, action='store',
+                           help='ETE tree format for --outfile. "auto" infers a suitable format from the input table.')
+
 p_species = argparse.ArgumentParser(add_help=False)
 p_species.add_argument('--species-parser', '--species_parser', dest='species_parser', metavar='PRESET',
                        default=DEFAULT_SPECIES_PARSER, required=False, type=str,
@@ -111,6 +123,59 @@ pconstrain.add_argument('--collapse', metavar='yes|no', default='no', type=strto
                              'The output file may be used as a species tree for phylogeny reconciliation. ')
 pconstrain.set_defaults(handler=command_constrain)
 
+def command_collapse(args):
+    from nwkit.collapse import collapse_main
+    collapse_main(args)
+pcollapse = subparsers.add_parser('collapse', help='Collapse internal branches by support and/or branch length', parents=[p_parent])
+pcollapse.add_argument('--min_support', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                       help='default=%(default)s: Collapse internal branches whose support is smaller than this threshold.')
+pcollapse.add_argument('--max_dist', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                       help='default=%(default)s: Collapse internal branches whose branch length is at most this threshold.')
+pcollapse.add_argument('--preserve_branch_length', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Add the deleted branch length to descendant branches when collapsing.')
+pcollapse.set_defaults(handler=command_collapse)
+
+def command_cladefreq(args):
+    from nwkit.cladefreq import cladefreq_main
+    cladefreq_main(args)
+pcladefreq = subparsers.add_parser('cladefreq', help='Summarize clade frequencies across a tree collection', parents=[p_tree_input, p_table_output])
+pcladefreq.add_argument('-r', '--reference', metavar='PATH', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: Optional reference tree used to flag clades present in a named topology.')
+pcladefreq.add_argument('-rf', '--reference-format', '--reference_format', dest='reference_format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
+                        help='default=%(default)s: ETE tree format for --reference.')
+pcladefreq.add_argument('--weight-tsv', '--weight_tsv', dest='weight_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: Optional TSV assigning a positive weight to each input tree. '
+                             'The file must contain a "weight" column and may contain a 1-based "tree_id" column.')
+pcladefreq.add_argument('--support-scale', '--support_scale', dest='support_scale', metavar='percent|proportion', default='percent', type=str, required=False, action='store',
+                        choices=['percent', 'proportion'],
+                        help='default=%(default)s: Scale used for the reported clade frequencies.')
+pcladefreq.set_defaults(handler=command_cladefreq)
+
+def command_consensus(args):
+    from nwkit.consensus import consensus_main
+    consensus_main(args)
+pconsensus = subparsers.add_parser('consensus', help='Generate a consensus tree or transfer consensus support to a reference tree', parents=[p_parent])
+pconsensus.add_argument('-r', '--reference', metavar='PATH', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: Optional reference tree that receives consensus support values instead of building a de novo consensus tree.')
+pconsensus.add_argument('-rf', '--reference-format', '--reference_format', dest='reference_format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
+                        help='default=%(default)s: ETE tree format for --reference.')
+pconsensus.add_argument('--method', metavar='greedy|majority|strict', default='greedy', type=str, required=False, action='store',
+                        choices=['greedy', 'majority', 'strict'],
+                        help='default=%(default)s: Consensus-clade selection rule. '
+                             'greedy uses --min_freq, majority keeps clades with frequency > 0.5, and strict keeps only clades present in all trees.')
+pconsensus.add_argument('--min-freq', '--min_freq', dest='min_freq', metavar='0.0<=FLOAT<=1.0', default=0.5, type=float, required=False, action='store',
+                        help='default=%(default)s: Minimum clade frequency retained when --method greedy is used.')
+pconsensus.add_argument('--branch-length', '--branch_length', dest='branch_length', metavar='none|mean|median', default='none', type=str, required=False, action='store',
+                        choices=['none', 'mean', 'median'],
+                        help='default=%(default)s: How branch lengths are assigned in the de novo consensus tree.')
+pconsensus.add_argument('--weight-tsv', '--weight_tsv', dest='weight_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: Optional TSV assigning a positive weight to each input tree. '
+                             'The file must contain a "weight" column and may contain a 1-based "tree_id" column.')
+pconsensus.add_argument('--support-scale', '--support_scale', dest='support_scale', metavar='percent|proportion', default='percent', type=str, required=False, action='store',
+                        choices=['percent', 'proportion'],
+                        help='default=%(default)s: Scale used for consensus support values.')
+pconsensus.set_defaults(handler=command_consensus)
+
 def command_dist(args):
     from nwkit.dist import dist_main
     dist_main(args)
@@ -132,13 +197,23 @@ pdraw.add_argument('-o', '--outfile', metavar='PATH', default='nwkit_draw.pdf', 
 pdraw.add_argument('--image_format', metavar='auto|pdf|png|svg', default='auto', type=str, required=False, action='store',
                    choices=['auto', 'pdf', 'png', 'svg'],
                    help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.')
-pdraw.add_argument('--species_overlap_node_plot', metavar='yes|no|auto', default='auto', required=False, type=str,
+pdraw.add_argument('--species-overlap-node-plot', '--species_overlap_node_plot', dest='species_overlap_node_plot', metavar='yes|no|auto', default='auto', required=False, type=str,
                    choices=['yes', 'no', 'auto'],
                    help='default=%(default)s: Show speciation/duplication node markers. '
                         '"yes" always tries to plot, "no" disables them, and "auto" enables them only when '
                         'all tip labels are parseable by the configured species parser.')
 pdraw.add_argument('--ladderize', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Ladderize the input tree before drawing.')
+pdraw.add_argument('--trait', metavar='PATH', default=None, type=str, required=False, action='store',
+                   help='default=%(default)s: Optional TSV containing "leaf_name" and one or more grouping columns for tip-label coloring.')
+pdraw.add_argument('--group-by', '--group_by', dest='group_by', metavar='STR', default=None, type=str, required=False, action='store',
+                   help='default=%(default)s: Column name in --trait used to color tip labels.')
+pdraw.add_argument('--trait-palette', '--trait_palette', dest='trait_palette', metavar='STR', default='tab10', type=str, required=False, action='store',
+                   help='default=%(default)s: Matplotlib colormap name used for trait-group colors.')
+pdraw.add_argument('--support-labels', '--support_labels', dest='support_labels', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Whether to draw support labels on branches.')
+pdraw.add_argument('--support-min', '--support_min', dest='support_min', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                   help='default=%(default)s: Show only support labels greater than or equal to this value.')
 pdraw.set_defaults(handler=command_draw)
 
 def command_drop(args):
@@ -248,6 +323,27 @@ plabel.add_argument('--force', metavar='yes|no', default='no', type=strtobool, r
                    help='default=%(default)s: Whether to overwrite existing node names.')
 plabel.set_defaults(handler=command_label)
 
+def command_rename(args):
+    from nwkit.rename import rename_main
+    rename_main(args)
+prename = subparsers.add_parser('rename', help='Rename nodes using a TSV mapping or regular expression', parents=[p_parent])
+prename.add_argument('--name-tsv', '--name_tsv', dest='name_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
+                     help='default=%(default)s: TSV containing "old_name" and "new_name" columns.')
+prename.add_argument('--pattern', metavar='REGEX', default=None, type=str, required=False, action='store',
+                     help='default=%(default)s: Optional regular expression used to rename target nodes.')
+prename.add_argument('--replacement', metavar='STR', default=None, type=str, required=False, action='store',
+                     help='default=%(default)s: Replacement string used with --pattern.')
+prename.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='leaf', type=str, required=False,
+                     action='store', choices=['all', 'root', 'leaf', 'intnode'],
+                     help='default=%(default)s: Nodes to be renamed.')
+prename.add_argument('--require-all-old-names', '--require_all_old_names', dest='require_all_old_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                     help='default=%(default)s: Whether every old_name in --name_tsv must match a target node.')
+prename.add_argument('--require-match', '--require_match', dest='require_match', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                     help='default=%(default)s: Whether regex mode requires at least one target node name to match.')
+prename.add_argument('--check-leaf-uniqueness', '--check_leaf_uniqueness', dest='check_leaf_uniqueness', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                     help='default=%(default)s: Whether to fail if the renamed tree has duplicated or empty leaf labels.')
+prename.set_defaults(handler=command_rename)
+
 def command_mark(args):
     from nwkit.mark import mark_main
     mark_main(args)
@@ -310,6 +406,21 @@ pmcmctree.add_argument('--higher_rank_search', metavar='yes|no', default='yes', 
                             'if the species-level search failed.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
+def command_monophyly(args):
+    from nwkit.monophyly import monophyly_main
+    monophyly_main(args)
+pmonophyly = subparsers.add_parser('monophyly', help='Assess whether species or trait-defined groups are monophyletic', parents=[p_tree_input, p_table_output, p_species])
+pmonophyly.add_argument('--trait', metavar='PATH', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: Optional TSV containing a "leaf_name" column and one or more grouping columns.')
+pmonophyly.add_argument('--group-by', '--group_by', dest='group_by', metavar='STR', default=None, type=str, required=False, action='store',
+                        help='default=%(default)s: Column name in --trait used to define groups. '
+                             'When omitted, groups are inferred from species labels parsed from the leaf names.')
+pmonophyly.add_argument('--unrooted', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                        help='default=%(default)s: Evaluate monophyly in unrooted mode.')
+pmonophyly.add_argument('--fail-on-non-monophyly', '--fail_on_non_monophyly', dest='fail_on_non_monophyly', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                        help='default=%(default)s: Exit with a non-zero status if any group is not monophyletic.')
+pmonophyly.set_defaults(handler=command_monophyly)
+
 def command_nhx2nwk(args):
     from nwkit.nhx2nwk import nhx2nwk_main
     nhx2nwk_main(args)
@@ -317,6 +428,16 @@ pnhx2nwk = subparsers.add_parser('nhx2nwk', help='Generate Newick from NHX', par
 pnhx2nwk.add_argument('-p', '--node_label', metavar='B|D|H|S|...', default='', type=str, required=False, action='store',
                          help='default=%(default)s: NHX attribute to use as internal node labels.')
 pnhx2nwk.set_defaults(handler=command_nhx2nwk)
+
+def command_nwk2table(args):
+    from nwkit.nwk2table import nwk2table_main
+    nwk2table_main(args)
+pnwk2table = subparsers.add_parser('nwk2table', help='Convert a Newick tree into a parent-child table', parents=[p_tree_input, p_table_output])
+pnwk2table.add_argument('--age', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                        help='default=%(default)s: Add node ages for ultrametric trees.')
+pnwk2table.add_argument('--sister', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                        help='default=%(default)s: Add the branch_id of one sister node when available.')
+pnwk2table.set_defaults(handler=command_nwk2table)
 
 def command_printlabel(args):
     from nwkit.printlabel import printlabel_main
@@ -427,24 +548,24 @@ pskim = subparsers.add_parser('skim', help='Sample leaves from clades with share
 pskim.add_argument('--trait', metavar='PATH', default=None, type=str, required=False, action='store',
                        help='default=%(default)s: Path to a trait table (TSV) containing leaf names in the "leaf_name" column and one or more trait columns. '
                             'If not specified, all leaves are treated as a single group and randomly sampled.')
-pskim.add_argument('--group_by', metavar='STR', default=None, type=str, required=False, action='store',
+pskim.add_argument('--group-by', '--group_by', dest='group_by', metavar='STR', default=None, type=str, required=False, action='store',
                        help='default=%(default)s: Column name in the trait table used to group leaves before sampling. '
                             'Leaves in a clade are treated as a group if all non-missing values in the specified column are identical. '
                             'If not specified, all leaves are treated as a single group.')
-pskim.add_argument('--retain_per_clade', metavar='INT', default=1, type=int, required=False, action='store',
+pskim.add_argument('--retain-per-clade', '--retain_per_clade', dest='retain_per_clade', metavar='INT', default=1, type=int, required=False, action='store',
                        help='default=%(default)s: Number of leaves to retain per clade (group). '
                             'If a clade (group) contains fewer leaves than this value, all of its leaves are retained.')
-pskim.add_argument('--prioritize_non_missing', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+pskim.add_argument('--prioritize-non-missing', '--prioritize_non_missing', dest='prioritize_non_missing', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Whether to prioritize leaves with non-missing trait values when sampling.')
-pskim.add_argument('--filter_by', metavar='STR', default=None, type=str, required=False, action='store',
+pskim.add_argument('--filter-by', '--filter_by', dest='filter_by', metavar='STR', default=None, type=str, required=False, action='store',
                        help='default=%(default)s: Column name in the trait table used to rank leaves within each group before sampling. '
                             'If not specified, leaves are randomly sampled within each group.')
-pskim.add_argument('--filter_mode', metavar='ascending|descending', default='ascending', type=str, required=False, action='store',
+pskim.add_argument('--filter-mode', '--filter_mode', dest='filter_mode', metavar='ascending|descending', default='ascending', type=str, required=False, action='store',
                        help='default=%(default)s: Sorting order for --filter_by values. '
                             'If multiple leaves within a group have the same value, they are randomly sampled.')
-pskim.add_argument('--only_contrastive_clades', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+pskim.add_argument('--only-contrastive-clades', '--only_contrastive_clades', dest='only_contrastive_clades', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Whether to output a pruned tree retaining only minimal clades with multiple non-missing trait values.')
-pskim.add_argument('--output_groupfile', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+pskim.add_argument('--output-groupfile', '--output_groupfile', dest='output_groupfile', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Whether to output group assignment files. '
                             'The output filenames are <output>.all.tsv and <output>.sampled.tsv, where <output> is the value of --outfile without the .nwk extension.')
 pskim.set_defaults(handler=command_skim)
@@ -497,6 +618,38 @@ ptransfer.add_argument('--length', metavar='yes|no', default='no', type=strtoboo
 ptransfer.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
                        help='default=%(default)s: Fill values instead of leaving as is, if no corresponding node is found.')
 ptransfer.set_defaults(handler=command_transfer)
+
+def command_validate(args):
+    from nwkit.validate import validate_main
+    validate_main(args)
+pvalidate = subparsers.add_parser('validate', help='Validate one or more Newick trees and report structural issues', parents=[p_tree_input, p_table_output, p_species])
+pvalidate.add_argument('--check-species', '--check_species', dest='check_species', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Check whether leaf labels are parseable as species labels and species groups are monophyletic.')
+pvalidate.add_argument('--require-rooted', '--require_rooted', dest='require_rooted', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Mark unrooted trees as invalid.')
+pvalidate.add_argument('--require-ultrametric', '--require_ultrametric', dest='require_ultrametric', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Mark non-ultrametric trees as invalid.')
+pvalidate.add_argument('--require-same-leaf-set', '--require_same_leaf_set', dest='require_same_leaf_set', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: For multiple input trees, mark trees whose leaf set differs from the first tree as invalid.')
+pvalidate.add_argument('--require-same-rooting', '--require_same_rooting', dest='require_same_rooting', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: For multiple input trees, mark trees whose rooted/unrooted status differs from the first parsed tree as invalid.')
+pvalidate.add_argument('--require-binary', '--require_binary', dest='require_binary', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Mark trees with singleton or multifurcating internal nodes as invalid.')
+pvalidate.add_argument('--require-all-support', '--require_all_support', dest='require_all_support', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Mark trees with missing internal support values as invalid.')
+pvalidate.add_argument('--require-unambiguous-format', '--require_unambiguous_format', dest='require_unambiguous_format', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Mark trees with auto-format ambiguity as invalid.')
+pvalidate.add_argument('--require-unquoted-names', '--require_unquoted_names', dest='require_unquoted_names', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Mark trees containing quoted node names as invalid.')
+pvalidate.add_argument('--fail-on-issue', '--fail_on_issue', dest='fail_on_issue', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Exit with a non-zero status if any reported issue is found.')
+pvalidate.set_defaults(handler=command_validate)
+
+def command_table2nwk(args):
+    from nwkit.table2nwk import table2nwk_main
+    table2nwk_main(args)
+ptable2nwk = subparsers.add_parser('table2nwk', help='Convert a parent-child table into a Newick tree', parents=[p_table_input])
+ptable2nwk.set_defaults(handler=command_table2nwk)
 
 def command_help(args):
     print(parser.parse_args([args.command, '--help']))

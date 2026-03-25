@@ -1,6 +1,7 @@
 import re
 from argparse import Namespace
 
+import pandas as pd
 import pytest
 
 from nwkit.draw import draw_main
@@ -18,6 +19,11 @@ def make_draw_args(**kwargs):
         'species_map_tsv': None,
         'species_overlap_node_plot': 'auto',
         'ladderize': False,
+        'trait': None,
+        'group_by': None,
+        'trait_palette': 'tab10',
+        'support_labels': True,
+        'support_min': None,
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -117,3 +123,40 @@ class TestDrawMain:
         assert abs(positions['B'] - positions['A'] - 8.5) < 0.2
         assert abs(positions['C'] - positions['B'] - 8.5) < 0.2
         assert abs(positions['D'] - positions['C'] - 8.5) < 0.2
+
+    def test_draw_colors_tip_labels_from_trait_table(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame({'leaf_name': ['A', 'B', 'C'], 'group': ['x', 'x', 'y']}).to_csv(trait_path, sep='\t', index=False)
+        outfile = tmp_path / 'trait.svg'
+        args = make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            trait=str(trait_path),
+            group_by='group',
+        )
+
+        draw_main(args)
+
+        text = outfile.read_text(encoding='utf-8')
+        assert 'x' in text
+        assert 'y' in text
+        assert '#1f77b4' in text
+
+    def test_draw_can_filter_support_labels(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1)0.95:1,(C:1,D:1)0.88:1);')
+        outfile = tmp_path / 'support_filter.svg'
+        args = make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            format='0',
+            species_overlap_node_plot='no',
+            support_min=0.9,
+        )
+
+        draw_main(args)
+
+        text = outfile.read_text(encoding='utf-8')
+        assert '0.95' in text
+        assert '0.88' not in text

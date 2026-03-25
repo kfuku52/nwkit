@@ -1,4 +1,5 @@
 import errno
+import math
 import os
 import re
 import shutil
@@ -21,12 +22,22 @@ NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
 QUOTED_NODE_NAME_PATTERN = re.compile(r"'(?:[^']|'')*'")
 NUMERIC_NODE_NAME_PATTERN = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?')
 TREE_FORMAT_PROP = '_nwkit_parser_format'
+MISSING_SUPPORT_VALUE = -999999.0
 DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
 COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser('~'), '.local', 'share', 'ete'),
     os.path.join(os.path.expanduser('~'), '.etetoolkit'),
 )
+
+
+def read_input_text(infile):
+    if infile == '-':
+        return sys.stdin.read()
+    if os.path.isfile(infile):
+        with open(infile) as handle:
+            return handle.read()
+    return str(infile)
 
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
@@ -295,13 +306,9 @@ def get_ete_ncbitaxa(args=None):
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
     global INFILE_FORMAT
-    if infile=='-':
-        infile = ''.join(sys.stdin.readlines()).strip()
-        if infile == '':
-            raise Exception('Failed to parse the input tree.')
-    elif os.path.isfile(infile):
-        with open(infile) as f:
-            infile = f.read().strip()
+    infile = read_input_text(infile).strip()
+    if infile == '':
+        raise Exception('Failed to parse the input tree.')
     if (not quoted_node_names) and _contains_quoted_node_names(infile):
         raise ValueError('Quoted node names were found in the input tree. Re-run with --quoted_node_names yes.')
     if format in ('auto', 'auto-strict'):
@@ -381,6 +388,135 @@ def write_tree(tree, args, format, quiet=False):
     else:
         with open(args.outfile, mode='w') as f:
             f.write(tree_str)
+
+def split_newick_stream(newick_text):
+    trees = list()
+    buffer = list()
+    in_quote = False
+    text = str(newick_text)
+    i = 0
+    while i < len(text):
+        char = text[i]
+        buffer.append(char)
+        if char == "'":
+            if in_quote and (i + 1 < len(text)) and (text[i + 1] == "'"):
+                buffer.append(text[i + 1])
+                i += 1
+            else:
+                in_quote = not in_quote
+        elif (char == ';') and (not in_quote):
+            tree_text = ''.join(buffer).strip()
+            if tree_text != '':
+                trees.append(tree_text)
+            buffer = list()
+        i += 1
+    if ''.join(buffer).strip() != '':
+        raise ValueError('Input tree collection ended before a terminal semicolon.')
+    return trees
+
+def read_trees(infile, format, quoted_node_names, quiet=False):
+    tree_text = read_input_text(infile)
+    tree_strings = split_newick_stream(tree_text)
+    if len(tree_strings) == 0:
+        raise Exception('Failed to parse the input trees.')
+    trees = [read_tree(tree_string, format, quoted_node_names, quiet=True) for tree_string in tree_strings]
+    if not quiet:
+        sys.stderr.write('Number of input trees = {:,}\n'.format(len(trees)))
+    return trees
+
+def inspect_tree_text(newick_text, format='auto', quoted_node_names=True):
+    text = str(newick_text).strip()
+    if text == '':
+        return {
+            'parse_ok': False,
+            'parse_error': 'Failed to parse the input tree.',
+            'input_format': '',
+            'format_ambiguous': False,
+            'has_quoted_node_names': False,
+            'has_quoted_internal_node_names': False,
+        }
+    has_quoted_node_names = _contains_quoted_node_names(text)
+    has_quoted_internal_node_names = _contains_quoted_internal_node_names(text)
+    if (not quoted_node_names) and has_quoted_node_names:
+        return {
+            'parse_ok': False,
+            'parse_error': 'Quoted node names were found in the input tree. Re-run with --quoted_node_names yes.',
+            'input_format': '',
+            'format_ambiguous': False,
+            'has_quoted_node_names': has_quoted_node_names,
+            'has_quoted_internal_node_names': has_quoted_internal_node_names,
+        }
+    try:
+        if format in ('auto', 'auto-strict'):
+            inferred_format, _, ambiguity_message = _read_tree_auto(text)
+            input_format = inferred_format
+            format_ambiguous = ambiguity_message is not None
+            if format == 'auto-strict' and format_ambiguous:
+                return {
+                    'parse_ok': False,
+                    'parse_error': ambiguity_message,
+                    'input_format': '',
+                    'format_ambiguous': True,
+                    'has_quoted_node_names': has_quoted_node_names,
+                    'has_quoted_internal_node_names': has_quoted_internal_node_names,
+                }
+        else:
+            Tree(text, parser=int(format))
+            input_format = int(format)
+            format_ambiguous = False
+    except Exception as exc:
+        return {
+            'parse_ok': False,
+            'parse_error': str(exc),
+            'input_format': '',
+            'format_ambiguous': False,
+            'has_quoted_node_names': has_quoted_node_names,
+            'has_quoted_internal_node_names': has_quoted_internal_node_names,
+        }
+    return {
+        'parse_ok': True,
+        'parse_error': '',
+        'input_format': input_format,
+        'format_ambiguous': format_ambiguous,
+        'has_quoted_node_names': has_quoted_node_names,
+        'has_quoted_internal_node_names': has_quoted_internal_node_names,
+    }
+
+def assign_branch_ids(tree, strategy='levelorder'):
+    node_to_branch_id = dict()
+    for branch_id, node in enumerate(tree.traverse(strategy=strategy)):
+        node.props['branch_id'] = branch_id
+        node_to_branch_id[node] = branch_id
+    return node_to_branch_id
+
+def support_is_missing(support):
+    if support is None:
+        return True
+    try:
+        support_value = float(support)
+    except (TypeError, ValueError):
+        return False
+    if math.isnan(support_value):
+        return True
+    return abs(support_value - MISSING_SUPPORT_VALUE) < 10 ** -9
+
+def compute_node_ages(tree, tolerance=10 ** -9):
+    age_by_node = dict()
+    for node in tree.traverse(strategy='postorder'):
+        if node.is_leaf:
+            age_by_node[node] = 0.0
+            continue
+        child_ages = list()
+        for child in node.get_children():
+            child_dist = 0.0 if (child.dist is None) else float(child.dist)
+            child_ages.append(age_by_node[child] + child_dist)
+        if len(child_ages) == 0:
+            age_by_node[node] = 0.0
+            continue
+        if max(child_ages) - min(child_ages) > tolerance:
+            raise ValueError('Tree must be ultrametric.')
+        age_by_node[node] = child_ages[0]
+    return age_by_node
 
 def read_seqs(seqfile, seqformat, quiet):
     if seqfile=='-':
