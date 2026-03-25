@@ -1,6 +1,6 @@
 import pandas as pd
 
-from nwkit.util import get_species_group_records, read_tree
+from nwkit.util import get_species_group_records, read_tree, validate_unique_named_leaves
 
 
 def _read_trait_groups(path, tree_leaf_name_set, group_by):
@@ -9,13 +9,23 @@ def _read_trait_groups(path, tree_leaf_name_set, group_by):
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     if group_by not in trait_df.columns:
         raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
-    trait_df = trait_df[trait_df['leaf_name'].isin(tree_leaf_name_set)].copy()
+    if trait_df['leaf_name'].isna().any():
+        raise ValueError("Column 'leaf_name' in '--trait' must not contain missing values.")
+    trait_df = trait_df.copy()
+    trait_df['leaf_name'] = trait_df['leaf_name'].astype(str)
     duplicated_leaf_names = trait_df.loc[
         trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
     ].unique().tolist()
     if duplicated_leaf_names:
         duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
         raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
+    missing_leaf_names = sorted(set(trait_df['leaf_name']) - set(tree_leaf_name_set))
+    if missing_leaf_names:
+        raise ValueError(
+            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
+                ', '.join(missing_leaf_names)
+            )
+        )
     trait_df = trait_df[~trait_df[group_by].isna()].copy()
     trait_df[group_by] = trait_df[group_by].astype(str)
     group_to_leaf_names = dict()
@@ -46,6 +56,7 @@ def _get_groups(tree, args):
 
 def monophyly_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    validate_unique_named_leaves(tree, option_name='--infile', context=" for 'monophyly'")
     group_to_leaf_names = _get_groups(tree, args)
     rows = list()
     non_monophyletic_groups = list()

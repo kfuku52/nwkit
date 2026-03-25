@@ -69,6 +69,12 @@ class TestReadTree:
         assert 'Ambiguous tree format' in captured.err
         assert tree.name in ('', None)
 
+    def test_read_tree_preserves_subunit_support_values_when_mixed_with_percent_support(self, tmp_nwk):
+        path = tmp_nwk('((A:1,B:1)0.95:1,(C:1,D:1)80:1);')
+        tree = read_tree(path, format='0', quoted_node_names=True, quiet=True)
+        assert abs(tree.common_ancestor(['A', 'B']).support - 0.95) < 1e-9
+        assert abs(tree.common_ancestor(['C', 'D']).support - 80.0) < 1e-9
+
     def test_read_tree_auto_strict_raises_on_ambiguous_numeric_internal_labels(self, tmp_nwk):
         path = tmp_nwk('((A:1,B:1)42:1,C:1)99:1;')
         with pytest.raises(ValueError, match='Ambiguous tree format'):

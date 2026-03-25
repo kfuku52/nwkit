@@ -39,6 +39,15 @@ def read_input_text(infile):
             return handle.read()
     return str(infile)
 
+
+def count_set_bits(value):
+    remaining = int(value)
+    count = 0
+    while remaining:
+        remaining &= (remaining - 1)
+        count += 1
+    return count
+
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
     if raw_dir is None:
@@ -339,7 +348,7 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
                 if (max_support is None) or (support > max_support):
                     max_support = support
             if not node.is_root:
-                if support is None or (support - 1.0) < 10**-9: # 1.0 is default for missing support values
+                if support is None or (abs(float(support) - 1.0) < 10**-9): # 1.0 is default for missing support values
                     missing_support_candidates.append(node)
         if (max_support is not None) and (max_support > 1.0):
             for node in missing_support_candidates:

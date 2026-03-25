@@ -118,3 +118,23 @@ class TestRenameMain:
         )
         with pytest.raises(ValueError, match='No target node names matched'):
             rename_main(args)
+
+    def test_leaf_rename_preserves_support_values_in_auto_mode(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1)0.95:1,(C:1,D:1)80:1);', 'tree.nwk')
+        outfile = tmp_path / 'renamed_with_support.nwk'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            name_tsv=None,
+            pattern=r'^A$',
+            replacement='A1',
+            target='leaf',
+            require_match=True,
+            check_leaf_uniqueness=True,
+            outformat='auto',
+            format='0',
+        )
+        rename_main(args)
+        tree = read_tree(str(outfile), format='0', quoted_node_names=True, quiet=True)
+        assert abs(tree.common_ancestor(['A1', 'B']).support - 0.95) < 1e-9
+        assert abs(tree.common_ancestor(['C', 'D']).support - 80.0) < 1e-9

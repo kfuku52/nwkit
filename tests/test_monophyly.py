@@ -71,3 +71,43 @@ class TestMonophylyMain:
         )
         with pytest.raises(ValueError, match='Non-monophyletic group'):
             monophyly_main(args)
+
+    def test_trait_mode_rejects_missing_leaf_names(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1):1,C:1);', 'tree.nwk')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame(
+            {
+                'leaf_name': ['A', 'Z'],
+                'group': ['x', 'x'],
+            }
+        ).to_csv(trait_path, sep='\t', index=False)
+        args = make_args(
+            infile=infile,
+            outfile='-',
+            trait=str(trait_path),
+            group_by='group',
+            unrooted=False,
+            fail_on_non_monophyly=False,
+        )
+        with pytest.raises(ValueError, match='were not found in the input tree'):
+            monophyly_main(args)
+
+    def test_trait_mode_rejects_duplicate_tree_leaf_names(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,A:1):1,B:1);', 'tree.nwk')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame(
+            {
+                'leaf_name': ['A', 'B'],
+                'group': ['x', 'y'],
+            }
+        ).to_csv(trait_path, sep='\t', index=False)
+        args = make_args(
+            infile=infile,
+            outfile='-',
+            trait=str(trait_path),
+            group_by='group',
+            unrooted=False,
+            fail_on_non_monophyly=False,
+        )
+        with pytest.raises(ValueError, match='Duplicated leaf labels'):
+            monophyly_main(args)

@@ -6,6 +6,7 @@ from ete4 import Tree
 from nwkit.util import (
     MISSING_SUPPORT_VALUE,
     TREE_FORMAT_PROP,
+    count_set_bits,
     get_subtree_leaf_bitmasks,
     is_rooted,
     read_tree,
@@ -121,7 +122,7 @@ def _collect_clade_stats(trees, tree_weights):
             raise ValueError('Leaf labels must be identical across all input trees for consensus.')
         subtree_masks = get_subtree_leaf_bitmasks(tree, leaf_name_to_bit)
         for node, mask in subtree_masks.items():
-            num_tips = int(mask).bit_count()
+            num_tips = count_set_bits(mask)
             if not node.is_root:
                 dist_value = None if (node.dist is None) else float(node.dist)
                 branch_length_observations[mask].append((dist_value, tree_weight))
@@ -148,7 +149,7 @@ def _select_consensus_masks(clade_weights, total_weight, min_freq):
         freq = weight / total_weight
         if freq >= min_freq:
             candidates.append((mask, weight, freq))
-    candidates.sort(key=lambda item: (-item[1], -int(item[0]).bit_count(), int(item[0])))
+    candidates.sort(key=lambda item: (-item[1], -count_set_bits(item[0]), int(item[0])))
     for mask, weight, freq in candidates:
         if all(_masks_are_compatible(mask, selected_mask) for selected_mask, _, _ in selected_masks):
             selected_masks.append((mask, weight, freq))
@@ -160,7 +161,7 @@ def _get_direct_child_masks(parent_mask, selected_masks, bit_to_order):
         mask for mask in selected_masks
         if (mask != parent_mask) and ((mask & ~parent_mask) == 0)
     ]
-    candidates.sort(key=lambda mask: (-int(mask).bit_count(), _mask_min_order(mask, bit_to_order)))
+    candidates.sort(key=lambda mask: (-count_set_bits(mask), _mask_min_order(mask, bit_to_order)))
     direct_masks = list()
     for mask in candidates:
         if any((mask & ~direct_mask) == 0 for direct_mask in direct_masks):
@@ -230,7 +231,7 @@ def _annotate_reference_tree(reference_tree, leaf_name_to_bit, num_leaves, clade
         raise ValueError("Consensus currently requires rooted reference trees. Root '--reference' first.")
     subtree_masks = get_subtree_leaf_bitmasks(reference_tree, leaf_name_to_bit)
     for node, mask in subtree_masks.items():
-        if node.is_root or node.is_leaf or (int(mask).bit_count() >= num_leaves):
+        if node.is_root or node.is_leaf or (count_set_bits(mask) >= num_leaves):
             continue
         freq = clade_weights.get(mask, 0.0) / total_weight
         node.support = _scale_support(freq, support_scale)

@@ -2,7 +2,7 @@ import csv
 import re
 import sys
 
-from nwkit.util import get_target_nodes, read_tree, validate_unique_named_leaves, write_tree
+from nwkit.util import get_target_nodes, read_tree, support_is_missing, validate_unique_named_leaves, write_tree
 
 
 def read_name_tsv(path):
@@ -87,6 +87,42 @@ def _rename_by_regex(tree, args):
     return tree, renamed_count, matched_count
 
 
+def _has_named_internal_nodes(tree):
+    for node in tree.traverse():
+        if node.is_leaf:
+            continue
+        if str(node.name or '').strip() != '':
+            return True
+    return False
+
+
+def _has_meaningful_internal_support(tree):
+    for node in tree.traverse():
+        if node.is_root or node.is_leaf:
+            continue
+        if not support_is_missing(node.support):
+            return True
+    return False
+
+
+def _resolve_output_format(tree, args):
+    if args.outformat != 'auto':
+        return args.outformat
+    if args.target == 'leaf':
+        return 'auto'
+    has_internal_names = _has_named_internal_nodes(tree)
+    has_internal_support = _has_meaningful_internal_support(tree)
+    if has_internal_names and has_internal_support:
+        sys.stderr.write(
+            "Warning: Preserving the input/output format because standard Newick cannot retain "
+            "both internal node names and support values in auto mode.\n"
+        )
+        return 'auto'
+    if has_internal_names:
+        return 1
+    return 'auto'
+
+
 def rename_main(args):
     name_tsv = getattr(args, 'name_tsv', None)
     pattern = getattr(args, 'pattern', None)
@@ -111,7 +147,5 @@ def rename_main(args):
     if args.check_leaf_uniqueness:
         validate_unique_named_leaves(tree, option_name='--infile', context=" after 'rename'")
     sys.stderr.write('Renamed {} target node(s) using {}.\n'.format(renamed_count, mapping_label))
-    outformat = args.outformat
-    if outformat == 'auto':
-        outformat = 1
+    outformat = _resolve_output_format(tree=tree, args=args)
     write_tree(tree, args, format=outformat)

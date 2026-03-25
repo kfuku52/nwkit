@@ -1,7 +1,7 @@
 import pandas as pd
 
 from nwkit.consensus import _collect_clade_stats, _read_tree_weights, _scale_support
-from nwkit.util import get_subtree_leaf_bitmasks, read_tree, read_trees, support_is_missing
+from nwkit.util import count_set_bits, get_subtree_leaf_bitmasks, read_tree, read_trees, support_is_missing
 
 
 def _mask_to_leaf_set(mask, leaf_names):
@@ -34,14 +34,14 @@ def cladefreq_main(args):
             raise ValueError("Leaf labels in '--reference' must match the input tree collection.")
         subtree_masks = get_subtree_leaf_bitmasks(reference_tree, leaf_name_to_bit)
         for node, mask in subtree_masks.items():
-            num_leaves = int(mask).bit_count()
+            num_leaves = count_set_bits(mask)
             if node.is_root or node.is_leaf or (num_leaves >= len(leaf_names)):
                 continue
             reference_mask_to_node[mask] = node
     rows = list()
     for mask, weight_sum in sorted(
         clade_weights.items(),
-        key=lambda item: (-item[1], -int(item[0]).bit_count(), int(item[0])),
+        key=lambda item: (-item[1], -count_set_bits(item[0]), int(item[0])),
     ):
         leaf_set = _mask_to_leaf_set(mask, leaf_names)
         row = {
