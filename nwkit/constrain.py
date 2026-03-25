@@ -25,6 +25,12 @@ def read_taxid_tsv(taxid_tsv):
         raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
     if taxid_df.empty:
         raise ValueError('--taxid_tsv is empty.')
+    if taxid_df['leaf_name'].isna().any():
+        raise ValueError('--taxid_tsv contains missing values in the "leaf_name" column.')
+    taxid_df = taxid_df.copy()
+    taxid_df['leaf_name'] = [str(leaf_name) for leaf_name in taxid_df['leaf_name'].tolist()]
+    if any(leaf_name.strip() == '' for leaf_name in taxid_df['leaf_name'].tolist()):
+        raise ValueError('--taxid_tsv contains empty values in the "leaf_name" column.')
     if taxid_df['leaf_name'].duplicated().any():
         raise ValueError('Duplicate values in the "leaf_name" column of --taxid_tsv are not supported.')
     if taxid_df['taxid'].isna().any():
@@ -34,7 +40,6 @@ def read_taxid_tsv(taxid_tsv):
         raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
     if (taxid_numeric % 1 != 0).any():
         raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
-    taxid_df = taxid_df.copy()
     taxid_df['taxid'] = taxid_numeric.astype(int)
     return taxid_df
 

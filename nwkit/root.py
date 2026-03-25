@@ -429,8 +429,8 @@ def _order_taxid_tsv_to_match_tree(tree, taxid_df):
     tree_leaf_names = list(tree.leaf_names())
     tree_leaf_set = set(tree_leaf_names)
     taxid_leaf_set = set(taxid_df['leaf_name'])
-    missing_leaf_names = sorted(tree_leaf_set - taxid_leaf_set)
-    extra_leaf_names = sorted(taxid_leaf_set - tree_leaf_set)
+    missing_leaf_names = sorted((str(name) for name in (tree_leaf_set - taxid_leaf_set)))
+    extra_leaf_names = sorted((str(name) for name in (taxid_leaf_set - tree_leaf_set)))
     if missing_leaf_names or extra_leaf_names:
         messages = list()
         if missing_leaf_names:

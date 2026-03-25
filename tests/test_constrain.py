@@ -15,6 +15,7 @@ from nwkit.constrain import (
     get_taxid_counts,
     initialize_tree,
     match_taxa,
+    read_taxid_tsv,
     taxid2tree,
 )
 from tests.helpers import make_args
@@ -101,6 +102,24 @@ class TestCheckInputFile:
         args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')
         with pytest.raises(ValueError, match='non-integer'):
             check_input_file(args)
+
+    def test_taxid_tsv_missing_leaf_name_raises(self, tmp_path):
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['A', None], 'taxid': [9606, 10090]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')
+        with pytest.raises(ValueError, match='leaf_name'):
+            check_input_file(args)
+
+    def test_read_taxid_tsv_stringifies_numeric_leaf_names(self, tmp_path):
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': [1, 2], 'taxid': [9606, 10090]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        taxid_df = read_taxid_tsv(str(tsv_path))
+        assert taxid_df['leaf_name'].tolist() == ['1', '2']
+        assert taxid_df['taxid'].tolist() == [9606, 10090]
 
 
 class TestCollapseGenes:

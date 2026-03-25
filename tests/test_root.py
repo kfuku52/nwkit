@@ -562,6 +562,49 @@ class TestTaxonomyRooting:
         with pytest.raises(ValueError, match='match the leaf labels'):
             taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
 
+    def test_taxid_tsv_numeric_leaf_label_mismatch_raises_valueerror(self, monkeypatch, tmp_path):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                100: [1, 10, 100],
+                200: [1, 20, 200],
+            },
+        )
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': [1, 3], 'taxid': [100, 200]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        tree = Tree('(1:1,2:1);', parser=1)
+        with pytest.raises(ValueError, match='match the leaf labels'):
+            taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
+
+    def test_taxid_tsv_numeric_leaf_labels_are_accepted(self, monkeypatch, tmp_path):
+        install_fake_ncbi(
+            monkeypatch,
+            name_to_taxid={},
+            lineage_by_taxid={
+                1: [1],
+                10: [1, 10],
+                20: [1, 20],
+                100: [1, 10, 100],
+                101: [1, 10, 101],
+                200: [1, 20, 200],
+            },
+        )
+        tsv_path = tmp_path / 'taxid.tsv'
+        pd.DataFrame(
+            {'leaf_name': [1, 2, 3], 'taxid': [100, 101, 200]}
+        ).to_csv(tsv_path, sep='\t', index=False)
+        tree = Tree('(1:1,2:1,3:1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=str(tsv_path), rank='no')
+        child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
+        assert {'1', '2'} in child_leaf_sets
+        assert {'3'} in child_leaf_sets
+
     def test_ambiguous_taxonomy_root_raises(self, monkeypatch, tmp_path):
         install_fake_ncbi(
             monkeypatch,
