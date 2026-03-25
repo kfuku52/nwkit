@@ -171,7 +171,19 @@ def _read_trait_table(path, group_by, tree):
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     if group_by not in trait_df.columns:
         raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
-    trait_df = trait_df[trait_df['leaf_name'].isin(set(tree.leaf_names()))].copy()
+    tree_leaf_name_set = set(tree.leaf_names())
+    unknown_leaf_names = sorted(
+        str(leaf_name)
+        for leaf_name in set(trait_df['leaf_name'].tolist())
+        if (not pd.isna(leaf_name)) and (str(leaf_name) not in tree_leaf_name_set)
+    )
+    if unknown_leaf_names:
+        raise ValueError(
+            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
+                ', '.join(unknown_leaf_names)
+            )
+        )
+    trait_df = trait_df[trait_df['leaf_name'].isin(tree_leaf_name_set)].copy()
     duplicated_leaf_names = trait_df.loc[
         trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
     ].unique().tolist()

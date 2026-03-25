@@ -428,7 +428,7 @@ class TestConstrainRefactorValidation:
 
 
 class TestSkimRefactorValidation:
-    def test_read_trait_matches_old_logic(self, tmp_path):
+    def test_read_trait_rejects_unknown_leaf_names(self, tmp_path):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         trait_path = tmp_path / 'trait.tsv'
         pd.DataFrame(
@@ -439,9 +439,8 @@ class TestSkimRefactorValidation:
             }
         ).to_csv(trait_path, sep='\t', index=False)
         args = Namespace(trait=str(trait_path))
-        old_df = old_read_trait(args, tree).sort_values('leaf_name').reset_index(drop=True)
-        new_df = skim.read_trait(args, tree).sort_values('leaf_name').reset_index(drop=True)
-        pd.testing.assert_frame_equal(new_df, old_df, check_dtype=False)
+        with pytest.raises(ValueError, match='were not found in the input tree'):
+            skim.read_trait(args, tree)
 
     @pytest.mark.parametrize(
         'prioritize_non_missing,filter_by,filter_mode',

@@ -160,3 +160,19 @@ class TestDrawMain:
         text = outfile.read_text(encoding='utf-8')
         assert '0.95' in text
         assert '0.88' not in text
+
+    def test_draw_rejects_unknown_trait_leaf_names(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1):1,C:1);')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame({'leaf_name': ['A', 'Z'], 'group': ['x', 'y']}).to_csv(trait_path, sep='\t', index=False)
+        outfile = tmp_path / 'trait.svg'
+        args = make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            trait=str(trait_path),
+            group_by='group',
+        )
+
+        with pytest.raises(ValueError, match='were not found in the input tree'):
+            draw_main(args)

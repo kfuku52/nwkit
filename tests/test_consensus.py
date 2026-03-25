@@ -176,3 +176,28 @@ class TestConsensusMain:
         tree = read_tree(outfile, format='auto', quoted_node_names=True, quiet=True)
         assert abs(tree.common_ancestor(['A', 'B']).dist - 2.0) < 1e-6
         assert abs(next(tree.search_nodes(name='A')).dist - 3.0) < 1e-6
+
+    def test_weight_tsv_rejects_non_integer_tree_ids(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            [
+                '((A:1,B:1):1,(C:1,D:1):1);',
+                '((A:1,C:1):1,(B:1,D:1):1);',
+            ],
+            name='weighted_invalid.nwk',
+        )
+        weight_tsv = tmp_path / 'weights.tsv'
+        pd.DataFrame({'tree_id': [1.5, 2.0], 'weight': [3.0, 1.0]}).to_csv(weight_tsv, sep='\t', index=False)
+        args = make_args(
+            infile=infile,
+            outfile='-',
+            min_freq=0.5,
+            reference=None,
+            reference_format='auto',
+            support_scale='percent',
+            method='greedy',
+            branch_length='none',
+            weight_tsv=str(weight_tsv),
+        )
+        with pytest.raises(ValueError, match='tree_id'):
+            consensus_main(args)

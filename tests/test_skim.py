@@ -31,16 +31,26 @@ def make_skim_args(**kwargs):
 
 
 class TestReadTrait:
-    def test_read_trait_fills_missing_and_drops_unknown(self, tmp_path):
+    def test_read_trait_fills_missing_tree_leaves(self, tmp_path):
+        tree = Tree('((A:1,B:1):1,C:1);', parser=1)
+        trait_path = tmp_path / 'trait.tsv'
+        pd.DataFrame(
+            {'leaf_name': ['A', 'B'], 'trait': ['x', 'x']}
+        ).to_csv(trait_path, sep='\t', index=False)
+        args = make_skim_args(trait=str(trait_path))
+        out = read_trait(args, tree)
+        assert set(out['leaf_name']) == {'A', 'B', 'C'}
+        assert int((out['leaf_name'] == 'C').sum()) == 1
+
+    def test_read_trait_rejects_unknown_leaf_names(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)
         trait_path = tmp_path / 'trait.tsv'
         pd.DataFrame(
             {'leaf_name': ['A', 'B', 'D'], 'trait': ['x', 'x', 'z']}
         ).to_csv(trait_path, sep='\t', index=False)
         args = make_skim_args(trait=str(trait_path))
-        out = read_trait(args, tree)
-        assert set(out['leaf_name']) == {'A', 'B', 'C'}
-        assert int((out['leaf_name'] == 'C').sum()) == 1
+        with pytest.raises(ValueError, match='were not found in the input tree'):
+            read_trait(args, tree)
 
     def test_duplicate_leaf_names_raise(self, tmp_path):
         tree = Tree('((A:1,B:1):1,C:1);', parser=1)

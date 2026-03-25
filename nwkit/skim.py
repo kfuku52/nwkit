@@ -12,6 +12,17 @@ def read_trait(args, tree):
         raise ValueError("Column 'leaf_name' is required in '--trait'.")
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
+    unknown_leaf_names = sorted(
+        str(leaf_name)
+        for leaf_name in set(trait_df['leaf_name'].tolist())
+        if (not pd.isna(leaf_name)) and (str(leaf_name) not in leaf_name_set)
+    )
+    if unknown_leaf_names:
+        raise ValueError(
+            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
+                ', '.join(unknown_leaf_names)
+            )
+        )
     trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)]
     duplicated_leaf_names = trait_df.loc[
         trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
