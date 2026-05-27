@@ -570,6 +570,33 @@ pskim.add_argument('--output-groupfile', '--output_groupfile', dest='output_grou
                             'The output filenames are <output>.all.tsv and <output>.sampled.tsv, where <output> is the value of --outfile without the .nwk extension.')
 pskim.set_defaults(handler=command_skim)
 
+def command_sample(args):
+    from nwkit.sample import sample_main
+    sample_main(args)
+psample = subparsers.add_parser('sample', help='Select a representative leaf subset by filters, ranks, and sampling method', parents=[p_parent])
+psample.add_argument('-n', '--n', metavar='INT', default=1, type=int, required=False, action='store',
+                     help='default=%(default)s: Number of leaves to select.')
+psample.add_argument('--method', metavar='max-pd|ranked', default='max-pd', type=str, required=False, action='store',
+                     choices=['max-pd', 'ranked'],
+                     help='default=%(default)s: Leaf selection method. '
+                          'max-pd greedily maximizes phylogenetic diversity; ranked selects the first N leaves after filters and ranking.')
+psample.add_argument('--trait', metavar='PATH', default=None, type=str, required=False, action='store',
+                     help='default=%(default)s: Optional TSV containing leaf names in the "leaf_name" column and metadata columns used by --filter/--rank. '
+                          'If not specified, all leaves are sampled from the input tree.')
+psample.add_argument('--filter', metavar='COLUMN:OP:VALUE', default=[], type=str, required=False, action='append',
+                     help='default=%(default)s: Keep leaves whose metadata column satisfies a condition. '
+                          'Can be specified multiple times. Supported operators: ge, gt, le, lt, eq, ne. '
+                          'Example: --filter busco_complete_pct:ge:80 --filter num_seq:le:200000')
+psample.add_argument('--rank', metavar='COLUMN:asc|desc', default=[], type=str, required=False, action='append',
+                     help='default=%(default)s: Rank retained leaves before sampling. Can be specified multiple times. '
+                          'For max-pd, rank order is used as a deterministic tie-breaker. '
+                          'Example: --rank num_seq:asc --rank busco_complete_pct:desc')
+psample.add_argument('--allow-fewer', '--allow_fewer', dest='allow_fewer', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                     help='default=%(default)s: Allow fewer than --n leaves when filters leave too few candidates.')
+psample.add_argument('--output-table', '--output_table', dest='output_table', metavar='PATH', default=None, type=str, required=False, action='store',
+                     help='default=%(default)s: Optional TSV report for selected leaves, including selection order and metadata columns.')
+psample.set_defaults(handler=command_sample)
+
 def command_subtree(args):
     from nwkit.subtree import subtree_main
     subtree_main(args)
