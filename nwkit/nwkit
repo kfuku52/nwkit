@@ -114,8 +114,9 @@ pasr.add_argument('--root-prior', '--root_prior', dest='root_prior', metavar='eq
                   help='default=%(default)s: Prior state frequencies at the root.')
 pasr.add_argument('--ambiguous-separator', '--ambiguous_separator', dest='ambiguous_separator', metavar='STR', default='|', type=str, required=False, action='store',
                   help='default=%(default)s: Separator for ambiguous or polymorphic states such as "A|B".')
-pasr.add_argument('--target', metavar='intnode,missing_tip|all|tip', default='intnode,missing_tip', type=str, required=False, action='store',
-                  help='default=%(default)s: Comma-separated node classes to report. "leaf" is accepted as an alias for "tip".')
+pasr.add_argument('--target', metavar='all|intnode,missing_tip|tip', default='all', type=str, required=False, action='store',
+                  help='default=%(default)s: Comma-separated node classes to report. '
+                       'Use "missing_tip" to report only imputed tips. "leaf" is accepted as an alias for "tip".')
 pasr.add_argument('--output', metavar='probabilities|map', default='probabilities', type=str, required=False, action='store',
                   choices=['probabilities', 'map'],
                   help='default=%(default)s: Report posterior probabilities or only the maximum a posteriori state.')

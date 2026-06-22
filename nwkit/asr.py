@@ -21,6 +21,7 @@ from nwkit.util import (
 DEFAULT_MISSING_VALUES = ('', 'NA', 'NaN', 'nan', '?', 'missing', 'unknown')
 DEFAULT_RATE_BOUNDS = (10 ** -9, 10 ** 3)
 DEFAULT_AMBIGUOUS_SEPARATOR = '|'
+DEFAULT_TARGET = 'all'
 SUPPORTED_MODELS = ('ER', 'SYM', 'ARD')
 
 
@@ -66,7 +67,7 @@ def _parse_rate_bounds(value):
 
 def _parse_targets(value):
     if value in ['', None]:
-        value = 'intnode,missing_tip'
+        value = DEFAULT_TARGET
     targets = set()
     aliases = {'leaf': 'tip', 'leaves': 'tip', 'tips': 'tip'}
     valid_targets = {'all', 'intnode', 'tip', 'missing_tip'}
@@ -852,7 +853,7 @@ def asr_main(args):
         root_prior_mode=getattr(args, 'root_prior', 'equal'),
         rate_bounds=rate_bounds,
     )
-    targets = _parse_targets(getattr(args, 'target', 'intnode,missing_tip'))
+    targets = _parse_targets(getattr(args, 'target', DEFAULT_TARGET))
     table = _build_output_table(
         tree=tree,
         states=states,

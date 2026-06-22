@@ -95,6 +95,41 @@ class TestAsrMain:
         assert a_row['state'] == 'red'
         assert abs(a_row['probability'] - 1.0) < 1e-9
 
+    def test_default_output_includes_observed_tips(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1):1,C:2);', 'tree.nwk')
+        trait = _write_trait(
+            tmp_path,
+            [
+                {'leaf_name': 'A', 'state': 'red'},
+                {'leaf_name': 'B', 'state': 'red'},
+                {'leaf_name': 'C', 'state': 'blue'},
+            ],
+        )
+        outfile = tmp_path / 'asr_default.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            trait=trait,
+            state_column='state',
+            states='red,blue',
+            missing_values=None,
+            model='ER',
+            rate=0.2,
+            rate_bounds=None,
+            root_prior='equal',
+            output='probabilities',
+        )
+        asr_main(args)
+        table = pd.read_csv(outfile, sep='\t')
+        assert len(table.index) == 5
+        tip_rows = table.loc[table['node_type'] == 'tip'].set_index('name')
+        assert set(tip_rows.index) == {'A', 'B', 'C'}
+        assert tip_rows.loc['A', 'observed_state'] == 'red'
+        assert bool(tip_rows.loc['A', 'is_imputed']) is False
+        assert tip_rows.loc['A', 'p_red'] == pytest.approx(1.0)
+        assert tip_rows.loc['C', 'observed_state'] == 'blue'
+        assert tip_rows.loc['C', 'p_blue'] == pytest.approx(1.0)
+
     def test_omitted_trait_leaf_is_imputed(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('((A:1,B:1):1,C:2);', 'tree.nwk')
         trait = _write_trait(
