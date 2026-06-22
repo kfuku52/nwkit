@@ -1,5 +1,6 @@
 import pandas as pd
 
+from nwkit.asr import asr_main
 from nwkit.cladefreq import cladefreq_main
 from nwkit.collapse import collapse_main
 from nwkit.consensus import consensus_main
@@ -18,6 +19,37 @@ def _write_tree_collection(tmp_path, trees, name='trees.nwk'):
 
 
 class TestWikiExamples:
+    def test_asr_example(self, tmp_path):
+        infile = tmp_path / 'tree.nwk'
+        infile.write_text('((A:1,B:1):1,(C:1,D:1):1);')
+        trait = tmp_path / 'traits.tsv'
+        pd.DataFrame(
+            {
+                'leaf_name': ['A', 'B', 'C', 'D'],
+                'state': ['x', 'x', 'y', ''],
+            }
+        ).to_csv(trait, sep='\t', index=False)
+        outfile = tmp_path / 'asr.tsv'
+        args = make_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            trait=str(trait),
+            state_column='state',
+            states='x,y',
+            missing_values=None,
+            model='ER',
+            rate=0.1,
+            rate_bounds=None,
+            root_prior='equal',
+            target='intnode,missing_tip',
+            output='map',
+        )
+        asr_main(args)
+        table = pd.read_csv(outfile, sep='\t')
+        assert {'branch_id', 'node_type', 'name', 'state', 'probability'}.issubset(table.columns)
+        assert len(table.index) == 4
+        assert table.loc[table['name'] == 'D', 'state'].iloc[0] == 'y'
+
     def test_collapse_example(self, tmp_path):
         infile = tmp_path / 'tree.nwk'
         infile.write_text('((A:1,B:1)40:1,(C:1,D:1)90:1);')

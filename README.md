@@ -44,6 +44,7 @@ pip install "nwkit[image]"
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
+- [`asr`](https://github.com/kfuku52/nwkit/wiki/nwkit-asr): Inferring categorical ancestral states and imputing missing tip states under an Mk model
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`collapse`](https://github.com/kfuku52/nwkit/wiki/nwkit-collapse): Collapsing internal branches by support and/or branch length
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection

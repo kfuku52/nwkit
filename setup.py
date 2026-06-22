@@ -28,7 +28,7 @@ setup(
     keywords=["phylogenetics", "newick", "tree"],
     packages=find_packages(),
     python_requires=">=3.9",
-    install_requires=["ete4>=4.4.0", "biopython", "pandas", "requests", "numpy", "matplotlib"],
+    install_requires=["ete4>=4.4.0", "biopython", "pandas", "requests", "numpy", "scipy", "matplotlib"],
     extras_require={
         "test": ["pytest>=7"],
         "image": ["Pillow", "CairoSVG"],

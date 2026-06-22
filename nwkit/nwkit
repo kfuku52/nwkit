@@ -90,6 +90,53 @@ p_species.add_argument('--species-map-tsv', '--species_map_tsv', dest='species_m
                             'The file must contain a "leaf_name" column and at least one of "species_label" or "taxonomy_query". '
                             'Mapped rows override the selected parser preset and regex.')
 
+def command_asr(args):
+    from nwkit.asr import asr_main
+    asr_main(args)
+pasr = subparsers.add_parser('asr', help='Infer categorical ancestral states and impute missing tip states under an Mk model', parents=[p_tree_input, p_table_output])
+pasr.add_argument('--trait', metavar='PATH', default=None, type=str, required=True, action='store',
+                  help='TSV file containing a "leaf_name" column and a categorical state column.')
+pasr.add_argument('--state-column', '--state_column', dest='state_column', metavar='STR', default=None, type=str, required=True, action='store',
+                  help='Column name in --trait containing categorical states.')
+pasr.add_argument('--states', metavar='STATE1,STATE2,...', default=None, type=str, required=False, action='store',
+                  help='default=%(default)s: Optional comma-separated state order. Unlisted observed states are rejected.')
+pasr.add_argument('--missing-values', '--missing_values', dest='missing_values', metavar='STR', default=None, type=str, required=False, action='store',
+                  help='default=,NA,NaN,nan,?,missing,unknown: Comma-separated trait values treated as missing and imputed.')
+pasr.add_argument('--model', metavar='ER|SYM|ARD', default='ER', type=str, required=False, action='store', choices=['ER', 'SYM', 'ARD'],
+                  help='default=%(default)s: Mk rate model. ER uses one shared off-diagonal rate, '
+                       'SYM uses symmetric pairwise rates, and ARD uses all rates different.')
+pasr.add_argument('--rate', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                  help='default=%(default)s: Fixed ER off-diagonal transition rate. For SYM/ARD, this value is used as the initial rate for ML optimization.')
+pasr.add_argument('--rate-bounds', '--rate_bounds', dest='rate_bounds', metavar='MIN,MAX', default=None, type=str, required=False, action='store',
+                  help='default=1e-9,1e3: Positive bounds used when estimating Mk rates.')
+pasr.add_argument('--root-prior', '--root_prior', dest='root_prior', metavar='equal|empirical', default='equal', type=str, required=False, action='store',
+                  choices=['equal', 'empirical'],
+                  help='default=%(default)s: Prior state frequencies at the root.')
+pasr.add_argument('--ambiguous-separator', '--ambiguous_separator', dest='ambiguous_separator', metavar='STR', default='|', type=str, required=False, action='store',
+                  help='default=%(default)s: Separator for ambiguous or polymorphic states such as "A|B".')
+pasr.add_argument('--target', metavar='intnode,missing_tip|all|tip', default='intnode,missing_tip', type=str, required=False, action='store',
+                  help='default=%(default)s: Comma-separated node classes to report. "leaf" is accepted as an alias for "tip".')
+pasr.add_argument('--output', metavar='probabilities|map', default='probabilities', type=str, required=False, action='store',
+                  choices=['probabilities', 'map'],
+                  help='default=%(default)s: Report posterior probabilities or only the maximum a posteriori state.')
+pasr.add_argument('--model-out', '--model_out', dest='model_out', metavar='PATH', default=None, type=str, required=False, action='store',
+                  help='default=%(default)s: Optional TSV reporting fitted Mk model metadata, rates, and log-likelihood.')
+pasr.add_argument('--tree-out', '--tree_out', dest='tree_out', metavar='PATH', default=None, type=str, required=False, action='store',
+                  help='default=%(default)s: Optional Newick/NHX tree annotated with ASR state and probability properties.')
+pasr.add_argument('--tree-outformat', '--tree_outformat', dest='tree_outformat', metavar='INT|auto', default='auto', type=str, required=False, action='store',
+                  help='default=%(default)s: ETE tree format for --tree_out.')
+pasr.add_argument('--tree-annotation', '--tree_annotation', dest='tree_annotation', metavar='state|probability|map|all', default='map', type=str, required=False, action='store',
+                  choices=['state', 'probability', 'map', 'all'],
+                  help='default=%(default)s: NHX properties written to --tree_out. '
+                       'map writes ASR state and MAP probability; "all" also writes per-state posterior probabilities.')
+pasr.add_argument('--stochastic-map-out', '--stochastic_map_out', dest='stochastic_map_out', metavar='PATH', default=None, type=str, required=False, action='store',
+                  help='default=%(default)s: Optional TSV summarizing sampled stochastic-map transition counts per branch.')
+pasr.add_argument('--n-sim', '--n_sim', dest='n_sim', metavar='INT', default=100, type=int, required=False, action='store',
+                  help='default=%(default)s: Number of stochastic maps sampled when --stochastic_map_out is specified.')
+pasr.add_argument('--seed', metavar='INT', default=None, type=int, required=False, action='store',
+                  help='default=%(default)s: Random seed for stochastic mapping.')
+pasr.set_defaults(handler=command_asr)
+
 def command_constrain(args):
     from nwkit.constrain import constrain_main
     constrain_main(args)
