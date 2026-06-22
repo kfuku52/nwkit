@@ -459,7 +459,7 @@ pmcmctree.add_argument('--higher_rank_search', metavar='yes|no', default='yes', 
                        help='default=%(default)s: Attempt to obtain timetree data using the taxids for higher taxonomic ranks '                            
                             'if the species-level search failed.')
 pmcmctree.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
-                       help='default=%(default)s: Number of parallel workers used for TimeTree HTTP requests within each node.')
+                       help='default=%(default)s: Number of parallel workers used for TimeTree HTTP requests at the same taxonomic rank.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
 def command_monophyly(args):

@@ -16,8 +16,8 @@ def _close_ncbi_db(ncbi):
     if db is not None:
         try:
             db.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            warn_cleanup_failure('NCBI taxonomy database handle', exc)
 
 def read_taxid_tsv(taxid_tsv):
     taxid_df = read_tsv_preserving_leaf_name(taxid_tsv)

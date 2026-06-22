@@ -81,6 +81,9 @@ def read_tsv_preserving_leaf_name(path):
 def count_set_bits(value):
     return int(value).bit_count()
 
+def warn_cleanup_failure(resource_label, exc):
+    sys.stderr.write('Warning: failed to clean up {}: {}\n'.format(resource_label, exc))
+
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
     if raw_dir is None:

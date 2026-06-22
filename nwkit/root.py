@@ -36,8 +36,8 @@ def _close_ncbi_handle(ncbi):
     if db is not None:
         try:
             db.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            warn_cleanup_failure('NCBI taxonomy database handle', exc)
 
 def _is_placeholder_ncbi_name(name):
     normalized = re.sub(r'[_\s]+', ' ', str(name or '').strip()).lower()

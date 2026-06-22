@@ -33,6 +33,7 @@ from nwkit.util import (
     read_tree,
     resolve_download_dir,
     validate_unique_named_leaves,
+    warn_cleanup_failure,
 )
 
 
@@ -173,14 +174,17 @@ def _close_ncbi_db(ncbi):
     if ncbi is None:
         return
     if hasattr(ncbi, 'close') and callable(ncbi.close):
-        ncbi.close()
+        try:
+            ncbi.close()
+        except Exception as exc:
+            warn_cleanup_failure('NCBI taxonomy database handle', exc)
         return
     db = getattr(ncbi, 'db', None)
     if db is not None:
         try:
             db.close()
-        except Exception:
-            pass
+        except Exception as exc:
+            warn_cleanup_failure('NCBI taxonomy database handle', exc)
 
 
 def normalize_species_name(name):
@@ -2264,11 +2268,17 @@ def download_media(session, media_url, destination_path, cache_path=None):
         }
     except Exception:
         if os.path.exists(tmp_path):
-            os.remove(tmp_path)
+            try:
+                os.remove(tmp_path)
+            except Exception as exc:
+                warn_cleanup_failure('temporary media download file {}'.format(tmp_path), exc)
         raise
     finally:
         if response is not None and hasattr(response, 'close'):
-            response.close()
+            try:
+                response.close()
+            except Exception as exc:
+                warn_cleanup_failure('HTTP response', exc)
 
 
 def default_output_paths(args):
@@ -2472,13 +2482,13 @@ class SharedMediaMaterializer:
         for session in sessions:
             try:
                 session.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                warn_cleanup_failure('HTTP session', exc)
         if self.session is not None:
             try:
                 self.session.close()
-            except Exception:
-                pass
+            except Exception as exc:
+                warn_cleanup_failure('HTTP session', exc)
 
     def _download_candidate(self, media_url):
         plan_entry = self.media_plan.get(media_url)

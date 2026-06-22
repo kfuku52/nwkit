@@ -362,7 +362,7 @@ class TestMcmctreeMain:
         assert 'Dictyostelium cf discoideum' not in flattened_queries
         assert 'Amoeba sp JDSRuffled' not in flattened_queries
 
-    def test_timetree_threads_prefetch_rank_requests(self, monkeypatch):
+    def test_timetree_threads_do_not_prefetch_higher_rank_after_species_success(self, monkeypatch):
         called_urls = []
 
         class FakeNCBI:
@@ -417,7 +417,7 @@ class TestMcmctreeMain:
 
         assert any(node.name == "'@87.2'" for node in out.traverse())
         assert any(url.endswith('/101+102') for url in called_urls)
-        assert any(url.endswith('/11+12') for url in called_urls)
+        assert not any(url.endswith('/11+12') for url in called_urls)
 
     def test_timetree_split_duplicate_species_raise(self, monkeypatch):
         class FakeNCBI:
