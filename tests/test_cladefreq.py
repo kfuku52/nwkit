@@ -12,6 +12,35 @@ def _write_tree_collection(tmp_path, trees, name='trees.nwk'):
 
 
 class TestCladefreqMain:
+    def test_threaded_cladefreq_matches_single_thread(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            [
+                '((A:1,B:1):1,(C:1,D:1):1);',
+                '((A:1,B:1):1,(C:1,D:1):1);',
+                '((A:1,C:1):1,(B:1,D:1):1);',
+                '((A:1,D:1):1,(B:1,C:1):1);',
+            ],
+            name='threaded.nwk',
+        )
+        single_out = tmp_path / 'single.tsv'
+        threaded_out = tmp_path / 'threaded.tsv'
+        common = dict(
+            infile=infile,
+            reference=None,
+            reference_format='auto',
+            weight_tsv=None,
+            support_scale='percent',
+        )
+
+        cladefreq_main(make_args(outfile=str(single_out), threads=1, **common))
+        cladefreq_main(make_args(outfile=str(threaded_out), threads=2, **common))
+
+        pd.testing.assert_frame_equal(
+            pd.read_csv(single_out, sep='\t'),
+            pd.read_csv(threaded_out, sep='\t'),
+        )
+
     def test_reports_internal_clade_frequencies(self, tmp_path):
         infile = _write_tree_collection(
             tmp_path,

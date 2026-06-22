@@ -2,6 +2,7 @@ import re
 import requests
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from nwkit.util import *
 
@@ -9,6 +10,80 @@ SEARCH_RANKS = [
     'species', 'genus', 'tribe', 'family', 'order',
     'class', 'subphylum', 'phylum', 'kingdom', 'superkingdom',
 ]
+
+
+def _validate_threads(threads):
+    try:
+        threads = int(threads)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("'--threads' must be an integer.") from exc
+    if threads <= 0:
+        raise ValueError("'--threads' must be positive.")
+    return threads
+
+
+def _fetch_timetree_url(request_url):
+    start = time.time()
+    try:
+        response = requests.get(url=request_url, timeout=30)
+    except requests.RequestException as exc:
+        return {
+            'url': request_url,
+            'status_code': None,
+            'text': '',
+            'error': exc,
+            'elapsed': int(time.time() - start),
+        }
+    return {
+        'url': request_url,
+        'status_code': response.status_code,
+        'text': response.text,
+        'error': None,
+        'elapsed': int(time.time() - start),
+    }
+
+
+def _fetch_timetree_url_cached(request_url, response_cache):
+    if request_url not in response_cache:
+        sys.stderr.write('Waiting for the REST API at timetree.org. ')
+        response_cache[request_url] = _fetch_timetree_url(request_url)
+        sys.stderr.write('Elapsed {:,} sec\n'.format(response_cache[request_url]['elapsed']))
+    return response_cache[request_url]
+
+
+def _fetch_timetree_urls_parallel(request_urls, threads, response_cache):
+    missing_urls = [
+        request_url
+        for request_url in dict.fromkeys(request_urls)
+        if request_url not in response_cache
+    ]
+    if len(missing_urls) == 0:
+        return {request_url: response_cache[request_url] for request_url in request_urls}
+    max_workers = min(threads, len(missing_urls))
+    if max_workers <= 1:
+        for request_url in missing_urls:
+            _fetch_timetree_url_cached(request_url, response_cache=response_cache)
+        return {request_url: response_cache[request_url] for request_url in request_urls}
+    sys.stderr.write(
+        'Waiting for the REST API at timetree.org with {:,} parallel request(s).\n'.format(
+            len(missing_urls)
+        )
+    )
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        future_to_url = {
+            executor.submit(_fetch_timetree_url, request_url): request_url
+            for request_url in missing_urls
+        }
+        for future in as_completed(future_to_url):
+            request_url = future_to_url[future]
+            response_cache[request_url] = future.result()
+            sys.stderr.write(
+                'Elapsed {:,} sec for TimeTree request: {}\n'.format(
+                    response_cache[request_url]['elapsed'],
+                    request_url,
+                )
+            )
+    return {request_url: response_cache[request_url] for request_url in request_urls}
 
 def add_common_anc_constraint(tree, args):
     if (args.left_species is None) or (args.right_species is None):
@@ -137,6 +212,7 @@ def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names, subtree_lea
 def add_timetree_constraint(tree, args):
     endpoint_url = 'http://timetree.org/api'
     search_ranks = SEARCH_RANKS if args.higher_rank_search else SEARCH_RANKS[:1]
+    threads = _validate_threads(getattr(args, 'threads', 1))
     unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]
     if unnamed_leaves:
         raise ValueError('All leaves must have non-empty names when using "--timetree point/ci".')
@@ -158,6 +234,8 @@ def add_timetree_constraint(tree, args):
             )
         subtree_leaf_name_sets = get_subtree_leaf_name_sets(tree)
         subtree_species_label_sets = get_subtree_sci_name_sets(tree)
+        name_to_taxid_cache = dict()
+        timetree_response_cache = dict()
         taxid_lineage_rank_dict_cache = dict()
         for node in tree.traverse():
             if node.is_leaf:
@@ -171,7 +249,10 @@ def add_timetree_constraint(tree, args):
                 if taxonomy_query in ['', None]:
                     continue
                 query_name_to_species_labels[taxonomy_query].append(species_label)
-            name2taxid = ncbi.get_name_translator(sorted(query_name_to_species_labels.keys()))
+            query_names_key = tuple(sorted(query_name_to_species_labels.keys()))
+            if query_names_key not in name_to_taxid_cache:
+                name_to_taxid_cache[query_names_key] = ncbi.get_name_translator(list(query_names_key))
+            name2taxid = name_to_taxid_cache[query_names_key]
             taxid_assigned_species_labels = list()
             for query_name, query_species_labels in query_name_to_species_labels.items():
                 if query_name not in name2taxid:
@@ -201,6 +282,7 @@ def add_timetree_constraint(tree, args):
                     taxid_lineage_rank_dict_cache[sp_taxid] = lin_dict
                 lineage_taxids.append(taxid_lineage_rank_dict_cache[sp_taxid])
             leaf_rank_pairs = list(zip([species_label for species_label, _ in species_taxid_pairs], lineage_taxids))
+            rank_attempts = list()
             for search_rank in search_ranks:
                 taxids = [d[search_rank] for d in lineage_taxids if search_rank in d]
                 ta_leaf_names = [l for l, d in leaf_rank_pairs if search_rank in d]
@@ -225,20 +307,43 @@ def add_timetree_constraint(tree, args):
                 if search_rank!='species':
                     sys.stderr.write('Searching higher taxonomic ranks to find MRCA at timetree.org: {}\n'.format(search_rank))
                 request_url = '{}/mrca/id/{}'.format(endpoint_url, '+'.join([ str(t) for t in taxids ]))
-                sys.stderr.write('Waiting for the REST API at timetree.org. ')
-                start = time.time()
-                try:
-                    response = requests.get(url=request_url, timeout=30)
-                except requests.RequestException:
+                taxid_to_species_labels = defaultdict(set)
+                for taxid, species_label in zip(taxids, ta_leaf_names):
+                    taxid_to_species_labels[int(taxid)].add(species_label)
+                rank_attempts.append(
+                    {
+                        'request_url': request_url,
+                        'taxids': taxids,
+                        'ta_leaf_names': ta_leaf_names,
+                        'taxid_to_species_labels': taxid_to_species_labels,
+                    }
+                )
+            if (threads > 1) and (len(rank_attempts) > 1):
+                response_by_url = _fetch_timetree_urls_parallel(
+                    request_urls=[attempt['request_url'] for attempt in rank_attempts],
+                    threads=threads,
+                    response_cache=timetree_response_cache,
+                )
+            else:
+                response_by_url = dict()
+            for attempt in rank_attempts:
+                request_url = attempt['request_url']
+                if request_url in response_by_url:
+                    response_record = response_by_url[request_url]
+                else:
+                    response_record = _fetch_timetree_url_cached(
+                        request_url=request_url,
+                        response_cache=timetree_response_cache,
+                    )
+                if response_record['error'] is not None:
                     txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
                     sys.stderr.write(txt.format(','.join(leaf_names)))
                     continue
-                sys.stderr.write('Elapsed {:,} sec\n'.format(int(time.time() - start)))
-                if response.status_code!=200:
+                if response_record['status_code']!=200:
                     txt = 'Skipping. Failed to retrieve data from timetree.org for the MRCA of {}\n'
                     sys.stderr.write(txt.format(','.join(leaf_names)))
                     continue
-                timetree_result = re.sub('.*;</script>', '', response.text)
+                timetree_result = re.sub('.*;</script>', '', response_record['text'])
                 if "MRCA node not found" in timetree_result:
                     txt = "Skipping. No MRCA found at timetree.org for the node containing: {}\n"
                     sys.stderr.write(txt.format(','.join(leaf_names)))
@@ -251,15 +356,12 @@ def add_timetree_constraint(tree, args):
                     txt = "Skipping. No TimeTree study info available for this MRCA for the node containing: {}\n"
                     sys.stderr.write(txt.format(','.join(leaf_names)))
                     continue
-                taxid_to_species_labels = defaultdict(set)
-                for taxid, species_label in zip(taxids, ta_leaf_names):
-                    taxid_to_species_labels[int(taxid)].add(species_label)
                 if not is_mrca_clade_root(
                     node,
                     timetree_result,
                     ncbi,
                     subtree_leaf_name_sets=subtree_species_label_sets,
-                    taxid_to_species_labels=taxid_to_species_labels,
+                    taxid_to_species_labels=attempt['taxid_to_species_labels'],
                 ):
                     txt = "Skipping. Lack of timetree.org information for the MRCA of {}\n"
                     sys.stderr.write(txt.format(','.join(leaf_names)))

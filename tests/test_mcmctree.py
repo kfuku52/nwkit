@@ -362,6 +362,63 @@ class TestMcmctreeMain:
         assert 'Dictyostelium cf discoideum' not in flattened_queries
         assert 'Amoeba sp JDSRuffled' not in flattened_queries
 
+    def test_timetree_threads_prefetch_rank_requests(self, monkeypatch):
+        called_urls = []
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = None
+
+            def get_name_translator(self, names):
+                mapping = dict()
+                for name in names:
+                    if name == 'Homo sapiens':
+                        mapping[name] = [101]
+                    elif name == 'Pan troglodytes':
+                        mapping[name] = [102]
+                return mapping
+
+            def get_lineage(self, taxid):
+                if int(taxid) == 101:
+                    return [1, 11, 101]
+                if int(taxid) == 102:
+                    return [1, 12, 102]
+                return [1, int(taxid)]
+
+            def get_rank(self, lineages):
+                out = {}
+                for taxid in lineages:
+                    taxid = int(taxid)
+                    if taxid in (101, 102):
+                        out[taxid] = 'species'
+                    elif taxid in (11, 12):
+                        out[taxid] = 'genus'
+                    else:
+                        out[taxid] = 'superkingdom'
+                return out
+
+            def get_taxid_translator(self, taxids):
+                return {int(taxid): 'taxon{}'.format(int(taxid)) for taxid in taxids}
+
+        class FakeResponse:
+            status_code = 200
+            text = 'precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\r\n87.2,87.2,81.3,91'
+
+        def fake_get(url, timeout):
+            called_urls.append(url)
+            return FakeResponse()
+
+        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
+        monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+
+        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
+        args = make_mcmctree_args(timetree='point', higher_rank_search=True, threads=2)
+        out = add_timetree_constraint(tree, args)
+
+        assert any(node.name == "'@87.2'" for node in out.traverse())
+        assert any(url.endswith('/101+102') for url in called_urls)
+        assert any(url.endswith('/11+12') for url in called_urls)
+
     def test_timetree_split_duplicate_species_raise(self, monkeypatch):
         class FakeNCBI:
             def __init__(self):

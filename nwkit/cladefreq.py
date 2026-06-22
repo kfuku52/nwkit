@@ -1,7 +1,9 @@
+import sys
+
 import pandas as pd
 
-from nwkit.consensus import _collect_clade_stats, _read_tree_weights, _scale_support
-from nwkit.util import count_set_bits, get_subtree_leaf_bitmasks, read_tree, read_trees, support_is_missing
+from nwkit.consensus import _collect_clade_stats_from_tree_strings, _read_tree_weights, _scale_support
+from nwkit.util import count_set_bits, get_subtree_leaf_bitmasks, read_tree, read_tree_strings, support_is_missing
 
 
 def _mask_to_leaf_set(mask, leaf_names):
@@ -18,14 +20,19 @@ def _mask_to_leaf_set(mask, leaf_names):
 
 
 def cladefreq_main(args):
-    trees = read_trees(args.infile, args.format, args.quoted_node_names)
-    if len(trees) == 0:
+    tree_strings = read_tree_strings(args.infile)
+    if len(tree_strings) == 0:
         raise ValueError('No input trees were found for cladefreq.')
-    tree_weights = _read_tree_weights(args.weight_tsv, len(trees))
+    sys.stderr.write('Number of input trees = {:,}\n'.format(len(tree_strings)))
+    tree_weights = _read_tree_weights(args.weight_tsv, len(tree_strings))
     total_weight = sum(tree_weights)
-    leaf_names, leaf_name_to_bit, _, clade_weights, _ = _collect_clade_stats(
-        trees=trees,
+    leaf_names, leaf_name_to_bit, _, clade_weights, _ = _collect_clade_stats_from_tree_strings(
+        tree_strings=tree_strings,
         tree_weights=tree_weights,
+        format=args.format,
+        quoted_node_names=args.quoted_node_names,
+        collect_branch_lengths=False,
+        threads=getattr(args, 'threads', 1),
     )
     reference_mask_to_node = dict()
     if args.reference not in ['', None]:

@@ -13,6 +13,39 @@ def _write_tree_collection(tmp_path, trees, name='trees.nwk'):
 
 
 class TestConsensusMain:
+    def test_threaded_consensus_matches_single_thread(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            [
+                '((A:1,B:2):1,(C:3,D:4):5);',
+                '((A:5,B:6):3,(C:7,D:8):9);',
+                '((A:1,C:1):1,(B:1,D:1):1);',
+            ],
+            name='threaded.nwk',
+        )
+        single_out = str(tmp_path / 'single.nwk')
+        threaded_out = str(tmp_path / 'threaded.nwk')
+        common = dict(
+            infile=infile,
+            min_freq=0.5,
+            reference=None,
+            reference_format='auto',
+            support_scale='percent',
+            method='greedy',
+            branch_length='mean',
+            weight_tsv=None,
+        )
+
+        consensus_main(make_args(outfile=single_out, threads=1, **common))
+        consensus_main(make_args(outfile=threaded_out, threads=2, **common))
+
+        assert read_tree(single_out, format='auto', quoted_node_names=True, quiet=True).write() == read_tree(
+            threaded_out,
+            format='auto',
+            quoted_node_names=True,
+            quiet=True,
+        ).write()
+
     def test_strict_consensus_removes_conflicting_clades(self, tmp_path):
         infile = _write_tree_collection(
             tmp_path,

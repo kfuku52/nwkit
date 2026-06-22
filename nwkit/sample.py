@@ -1,4 +1,4 @@
-import math
+import heapq
 import os
 import sys
 
@@ -229,32 +229,55 @@ def select_ranked(candidate_order, path_edges_by_leaf, n):
 
 
 def select_max_pd(candidate_order, path_edges_by_leaf, n):
-    remaining = set(candidate_order)
+    leaf_names = list(candidate_order)
+    if n <= 0 or len(leaf_names) == 0:
+        return []
+    leaf_to_index = {leaf_name: index for index, leaf_name in enumerate(leaf_names)}
     rank_index = {leaf_name: index for index, leaf_name in enumerate(candidate_order)}
+    path_edges_by_index = [
+        list(path_edges_by_leaf[leaf_name])
+        for leaf_name in leaf_names
+    ]
+    edge_to_leaf_indices = dict()
+    gains = list()
+    versions = [0] * len(leaf_names)
+    remaining = [True] * len(leaf_names)
+    for leaf_index, path_edges in enumerate(path_edges_by_index):
+        gains.append(sum(length for _edge, length in path_edges))
+        for edge, _length in path_edges:
+            edge_to_leaf_indices.setdefault(edge, []).append(leaf_index)
+    heap = [
+        (-gain, rank_index[leaf_name], leaf_to_index[leaf_name], 0)
+        for leaf_name, gain in zip(leaf_names, gains)
+    ]
+    heapq.heapify(heap)
     covered_edges = set()
     selected = []
     pd_total = 0.0
     for _index in range(n):
-        best_leaf = None
-        best_gain = None
-        for leaf_name in candidate_order:
-            if leaf_name not in remaining:
+        best_leaf_index = None
+        best_gain = 0.0
+        while heap:
+            negative_gain, _rank, leaf_index, version = heapq.heappop(heap)
+            if (not remaining[leaf_index]) or (version != versions[leaf_index]):
                 continue
-            gain = _path_gain(path_edges_by_leaf[leaf_name], covered_edges)
-            if (
-                best_leaf is None
-                or gain > best_gain
-                or (math.isclose(gain, best_gain) and rank_index[leaf_name] < rank_index[best_leaf])
-            ):
-                best_leaf = leaf_name
-                best_gain = gain
-        if best_leaf is None:
+            best_leaf_index = leaf_index
+            best_gain = -negative_gain
+            if abs(best_gain) < 10 ** -12:
+                best_gain = 0.0
             break
-        path_edges = path_edges_by_leaf[best_leaf]
-        for edge, _length in path_edges:
+        if best_leaf_index is None:
+            break
+        remaining[best_leaf_index] = False
+        best_leaf = leaf_names[best_leaf_index]
+        path_edges = path_edges_by_index[best_leaf_index]
+        newly_covered_edges = list()
+        for edge, length in path_edges:
+            if edge in covered_edges:
+                continue
             covered_edges.add(edge)
+            newly_covered_edges.append((edge, length))
         pd_total += best_gain
-        remaining.remove(best_leaf)
         selected.append(
             {
                 'leaf_name': best_leaf,
@@ -262,6 +285,25 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
                 'pd_total': pd_total,
             }
         )
+        for edge, length in newly_covered_edges:
+            if length == 0:
+                continue
+            for affected_leaf_index in edge_to_leaf_indices.get(edge, []):
+                if not remaining[affected_leaf_index]:
+                    continue
+                gains[affected_leaf_index] -= length
+                if abs(gains[affected_leaf_index]) < 10 ** -12:
+                    gains[affected_leaf_index] = 0.0
+                versions[affected_leaf_index] += 1
+                heapq.heappush(
+                    heap,
+                    (
+                        -gains[affected_leaf_index],
+                        rank_index[leaf_names[affected_leaf_index]],
+                        affected_leaf_index,
+                        versions[affected_leaf_index],
+                    ),
+                )
     return selected
 
 

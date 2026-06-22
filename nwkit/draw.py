@@ -102,36 +102,41 @@ def _get_species_overlap_node_types(tree, args, require_all_tip_labels=False):
     species_by_leaf, all_tip_labels_parsed = _get_species_by_leaf(tree=tree, args=args)
     if bool(require_all_tip_labels) and (not all_tip_labels_parsed):
         return dict(), all_tip_labels_parsed
+    species_to_bit = dict()
+    species_mask_by_node = dict()
+    has_missing_species_by_node = dict()
     node_type_by_node = dict()
-    for node in tree.traverse():
+    for node in tree.traverse(strategy='postorder'):
         if node.is_leaf:
+            species_label = species_by_leaf.get(node)
+            if species_label is None:
+                species_mask_by_node[node] = 0
+                has_missing_species_by_node[node] = True
+                continue
+            bit = species_to_bit.get(species_label)
+            if bit is None:
+                bit = 1 << len(species_to_bit)
+                species_to_bit[species_label] = bit
+            species_mask_by_node[node] = bit
+            has_missing_species_by_node[node] = False
             continue
         children = node.get_children()
-        if len(children) < 2:
-            continue
-        child_species_sets = list()
         missing_species = False
+        union_mask = 0
+        child_species_count_sum = 0
         for child in children:
-            species_set = set()
-            for leaf in child.leaves():
-                species_label = species_by_leaf.get(leaf, None)
-                if species_label is None:
-                    missing_species = True
-                    break
-                species_set.add(species_label)
-            if missing_species:
-                break
-            child_species_sets.append(species_set)
+            child_mask = species_mask_by_node[child]
+            union_mask |= child_mask
+            child_species_count_sum += child_mask.bit_count()
+            if has_missing_species_by_node[child]:
+                missing_species = True
+        species_mask_by_node[node] = union_mask
+        has_missing_species_by_node[node] = missing_species
         if missing_species:
             continue
-        is_duplication = False
-        for i in range(len(child_species_sets)):
-            for j in range(i + 1, len(child_species_sets)):
-                if len(child_species_sets[i].intersection(child_species_sets[j])) > 0:
-                    is_duplication = True
-                    break
-            if is_duplication:
-                break
+        if len(children) < 2:
+            continue
+        is_duplication = child_species_count_sum > union_mask.bit_count()
         node_type_by_node[node] = 'duplication' if is_duplication else 'speciation'
     return node_type_by_node, all_tip_labels_parsed
 

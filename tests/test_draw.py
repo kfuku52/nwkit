@@ -3,8 +3,9 @@ from argparse import Namespace
 
 import pandas as pd
 import pytest
+from ete4 import Tree
 
-from nwkit.draw import draw_main
+from nwkit.draw import _get_species_overlap_node_types, draw_main
 
 
 def make_draw_args(**kwargs):
@@ -35,6 +36,21 @@ def extract_svg_text_positions(svg_text):
 
 
 class TestDrawMain:
+    def test_species_overlap_node_types_use_descendant_species_once(self):
+        tree = Tree('(((Homo_sapiens_G1:1,Homo_sapiens_G2:1):1,Mus_musculus_G1:1):1,Danio_rerio_G1:1);', parser=1)
+        args = make_draw_args()
+
+        node_type_by_node, parsed = _get_species_overlap_node_types(
+            tree=tree,
+            args=args,
+            require_all_tip_labels=True,
+        )
+
+        assert parsed is True
+        assert node_type_by_node[tree.common_ancestor(['Homo_sapiens_G1', 'Homo_sapiens_G2'])] == 'duplication'
+        assert node_type_by_node[tree.common_ancestor(['Homo_sapiens_G1', 'Mus_musculus_G1'])] == 'speciation'
+        assert node_type_by_node[tree] == 'speciation'
+
     def test_draw_writes_svg_with_species_overlap_legend(self, tmp_nwk, tmp_path):
         nwk = '((Homo_sapiens_G1:1,Mus_musculus_G1:1):1,(Homo_sapiens_G2:1,Danio_rerio_G1:1):1);'
         infile = tmp_nwk(nwk)

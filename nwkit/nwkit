@@ -199,6 +199,8 @@ pcladefreq.add_argument('--weight-tsv', '--weight_tsv', dest='weight_tsv', metav
 pcladefreq.add_argument('--support-scale', '--support_scale', dest='support_scale', metavar='percent|proportion', default='percent', type=str, required=False, action='store',
                         choices=['percent', 'proportion'],
                         help='default=%(default)s: Scale used for the reported clade frequencies.')
+pcladefreq.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
+                        help='default=%(default)s: Number of parallel workers used to parse and summarize input trees.')
 pcladefreq.set_defaults(handler=command_cladefreq)
 
 def command_consensus(args):
@@ -224,6 +226,8 @@ pconsensus.add_argument('--weight-tsv', '--weight_tsv', dest='weight_tsv', metav
 pconsensus.add_argument('--support-scale', '--support_scale', dest='support_scale', metavar='percent|proportion', default='percent', type=str, required=False, action='store',
                         choices=['percent', 'proportion'],
                         help='default=%(default)s: Scale used for consensus support values.')
+pconsensus.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
+                        help='default=%(default)s: Number of parallel workers used to parse and summarize input trees.')
 pconsensus.set_defaults(handler=command_consensus)
 
 def command_dist(args):
@@ -454,6 +458,8 @@ pmcmctree.add_argument('--min_clade_prop', metavar='0.0<FLOAT<1.0', default=0, t
 pmcmctree.add_argument('--higher_rank_search', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Attempt to obtain timetree data using the taxids for higher taxonomic ranks '                            
                             'if the species-level search failed.')
+pmcmctree.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
+                       help='default=%(default)s: Number of parallel workers used for TimeTree HTTP requests within each node.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
 def command_monophyly(args):

@@ -1,10 +1,14 @@
 import pandas as pd
 import pytest
+from ete4 import Tree
 
 from nwkit.sample import (
+    _leaf_path_edges,
+    _path_gain,
     apply_filters,
     parse_filter_spec,
     sample_main,
+    select_max_pd,
     sort_candidates,
 )
 from tests.helpers import make_args
@@ -66,6 +70,35 @@ class TestFilterAndRankParsing:
 
 
 class TestSampleMain:
+    def test_select_max_pd_matches_reference_greedy_order(self):
+        tree = Tree('(((A:1.5,B:0.5):2,C:1):1,(D:3,(E:1,F:1):2):1);', parser=1)
+        candidate_order = ['C', 'E', 'A', 'F', 'D', 'B']
+        leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        path_edges_by_leaf = {
+            leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
+            for leaf_name in candidate_order
+        }
+
+        covered_edges = set()
+        expected = []
+        pd_total = 0.0
+        for _ in range(4):
+            best_leaf = None
+            best_gain = None
+            for leaf_name in candidate_order:
+                if any(row['leaf_name'] == leaf_name for row in expected):
+                    continue
+                gain = _path_gain(path_edges_by_leaf[leaf_name], covered_edges)
+                if best_leaf is None or gain > best_gain:
+                    best_leaf = leaf_name
+                    best_gain = gain
+            for edge, _length in path_edges_by_leaf[best_leaf]:
+                covered_edges.add(edge)
+            pd_total += best_gain
+            expected.append({'leaf_name': best_leaf, 'pd_gain': best_gain, 'pd_total': pd_total})
+
+        assert select_max_pd(candidate_order, path_edges_by_leaf, 4) == expected
+
     def test_sample_without_trait_uses_tree_only_max_pd(self, tmp_path):
         tree_path = tmp_path / 'tree.nwk'
         tree_path.write_text('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', encoding='utf-8')

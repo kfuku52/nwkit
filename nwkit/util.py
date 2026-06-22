@@ -79,12 +79,7 @@ def read_tsv_preserving_leaf_name(path):
 
 
 def count_set_bits(value):
-    remaining = int(value)
-    count = 0
-    while remaining:
-        remaining &= (remaining - 1)
-        count += 1
-    return count
+    return int(value).bit_count()
 
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
@@ -500,14 +495,17 @@ def split_newick_stream(newick_text):
     return trees
 
 def read_trees(infile, format, quoted_node_names, quiet=False):
-    tree_text = read_input_text(infile)
-    tree_strings = split_newick_stream(tree_text)
+    tree_strings = read_tree_strings(infile)
     if len(tree_strings) == 0:
         raise Exception('Failed to parse the input trees.')
     trees = [read_tree(tree_string, format, quoted_node_names, quiet=True) for tree_string in tree_strings]
     if not quiet:
         sys.stderr.write('Number of input trees = {:,}\n'.format(len(trees)))
     return trees
+
+def read_tree_strings(infile):
+    tree_text = read_input_text(infile)
+    return split_newick_stream(tree_text)
 
 def inspect_tree_text(newick_text, format='auto', quoted_node_names=True):
     text = str(newick_text).strip()
