@@ -1,5 +1,7 @@
 import math
+import multiprocessing
 from collections import defaultdict
+from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
 import pandas as pd
@@ -302,6 +304,9 @@ def _build_rate_matrix(model, states, rates):
 def _transition_matrix(rate_matrix, branch_length):
     if float(branch_length) == 0.0:
         return np.eye(rate_matrix.shape[0], dtype=float)
+    er_rate = _get_er_rate_from_matrix(rate_matrix)
+    if er_rate is not None:
+        return _er_transition_matrix(branch_length, er_rate, rate_matrix.shape[0])
     matrix = expm(rate_matrix * float(branch_length))
     matrix[matrix < 0.0] = np.maximum(matrix[matrix < 0.0], -10 ** -12)
     matrix = np.maximum(matrix, 0.0)
@@ -312,12 +317,32 @@ def _transition_matrix(rate_matrix, branch_length):
     return matrix
 
 
+def _get_er_rate_from_matrix(rate_matrix):
+    num_states = rate_matrix.shape[0]
+    if num_states <= 1:
+        return 0.0
+    off_diagonal_mask = ~np.eye(num_states, dtype=bool)
+    off_diagonal_rates = rate_matrix[off_diagonal_mask]
+    if len(off_diagonal_rates) == 0:
+        return 0.0
+    rate = float(off_diagonal_rates[0])
+    if rate < 0.0:
+        return None
+    if not np.allclose(off_diagonal_rates, rate, rtol=10 ** -12, atol=10 ** -15):
+        return None
+    expected_diagonal = np.full(num_states, -rate * float(num_states - 1), dtype=float)
+    if not np.allclose(np.diag(rate_matrix), expected_diagonal, rtol=10 ** -12, atol=10 ** -15):
+        return None
+    return rate
+
+
 def _compute_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix):
     num_states = rate_matrix.shape[0]
     inside = dict()
     log_scales = dict()
     child_terms = dict()
     transition_matrices = dict()
+    transition_matrix_cache = dict()
     for node in tree.traverse(strategy='postorder'):
         if node.is_leaf:
             inside[node] = likelihood_by_leaf[node.name].astype(float)
@@ -328,7 +353,10 @@ def _compute_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix):
         log_scale = 0.0
         child_terms[node] = dict()
         for child in node.get_children():
-            matrix = _transition_matrix(rate_matrix, child.dist)
+            branch_length = float(child.dist)
+            if branch_length not in transition_matrix_cache:
+                transition_matrix_cache[branch_length] = _transition_matrix(rate_matrix, branch_length)
+            matrix = transition_matrix_cache[branch_length]
             transition_matrices[child] = matrix
             term = matrix.dot(inside[child])
             child_terms[node][child] = term
@@ -683,54 +711,101 @@ def _normalize_probability_vector(weights):
     return weights / total
 
 
-def _sample_bridge_event_count(start_state, end_state, branch_length, rate_matrix, rng):
-    if float(branch_length) == 0.0 or np.allclose(rate_matrix, 0.0):
-        return 0
+def _build_uniformization_context(rate_matrix, branch_length):
+    branch_length = float(branch_length)
+    num_states = rate_matrix.shape[0]
+    if branch_length == 0.0 or np.allclose(rate_matrix, 0.0):
+        return {'no_events': True}
     omega = float(np.max(-np.diag(rate_matrix)))
     if omega <= 0.0:
-        return 0
+        return {'no_events': True}
     transition_matrix = _transition_matrix(rate_matrix, branch_length)
-    endpoint_probability = transition_matrix[start_state, end_state]
-    if endpoint_probability <= 0.0:
-        return 0
-    lam = omega * float(branch_length)
+    lam = omega * branch_length
     max_n = int(max(10, poisson.ppf(1.0 - 10 ** -12, lam)))
-    if start_state != end_state:
+    if num_states > 1:
         max_n = max(max_n, 1)
-    r_matrix = np.eye(rate_matrix.shape[0], dtype=float) + (rate_matrix / omega)
-    r_matrix = np.maximum(r_matrix, 0.0)
-    r_matrix = r_matrix / r_matrix.sum(axis=1, keepdims=True)
-    powers = [np.eye(rate_matrix.shape[0], dtype=float)]
-    for _ in range(max_n):
-        powers.append(powers[-1].dot(r_matrix))
-    log_weights = list()
-    for event_count in range(max_n + 1):
-        bridge_probability = powers[event_count][start_state, end_state]
-        if bridge_probability <= 0.0:
-            log_weights.append(-math.inf)
-            continue
-        log_weights.append(poisson.logpmf(event_count, lam) + math.log(bridge_probability))
-    normalizer = logsumexp(log_weights)
-    if not math.isfinite(normalizer):
-        return 0
-    probabilities = np.exp(np.asarray(log_weights) - normalizer)
-    probabilities = _normalize_probability_vector(probabilities)
-    return int(rng.choice(np.arange(max_n + 1), p=probabilities))
-
-
-def _sample_bridge_transition_counts(start_state, end_state, branch_length, rate_matrix, rng):
-    event_count = _sample_bridge_event_count(start_state, end_state, branch_length, rate_matrix, rng)
-    num_states = rate_matrix.shape[0]
-    counts = defaultdict(int)
-    if event_count == 0:
-        return counts
-    omega = float(np.max(-np.diag(rate_matrix)))
     r_matrix = np.eye(num_states, dtype=float) + (rate_matrix / omega)
     r_matrix = np.maximum(r_matrix, 0.0)
     r_matrix = r_matrix / r_matrix.sum(axis=1, keepdims=True)
     powers = [np.eye(num_states, dtype=float)]
-    for _ in range(event_count):
+    for _ in range(max_n):
         powers.append(powers[-1].dot(r_matrix))
+    event_counts = np.arange(max_n + 1)
+    log_poisson = poisson.logpmf(event_counts, lam)
+    event_count_probabilities = dict()
+    for start_state in range(num_states):
+        for end_state in range(num_states):
+            bridge_probabilities = np.asarray(
+                [powers[event_count][start_state, end_state] for event_count in event_counts],
+                dtype=float,
+            )
+            valid = bridge_probabilities > 0.0
+            if not np.any(valid):
+                continue
+            log_weights = np.full(max_n + 1, -math.inf, dtype=float)
+            log_weights[valid] = log_poisson[valid] + np.log(bridge_probabilities[valid])
+            normalizer = logsumexp(log_weights)
+            if not math.isfinite(normalizer):
+                continue
+            probabilities = np.exp(log_weights - normalizer)
+            event_count_probabilities[(start_state, end_state)] = _normalize_probability_vector(probabilities)
+    return {
+        'no_events': False,
+        'r_matrix': r_matrix,
+        'powers': powers,
+        'event_counts': event_counts,
+        'event_count_probabilities': event_count_probabilities,
+    }
+
+
+def _build_uniformization_contexts(rate_matrix, branch_lengths):
+    contexts = dict()
+    for branch_length in sorted(set(float(length) for length in branch_lengths)):
+        contexts[branch_length] = _build_uniformization_context(rate_matrix, branch_length)
+    return contexts
+
+
+def _sample_bridge_event_count(start_state, end_state, branch_length, rate_matrix, rng, uniformization_contexts=None):
+    branch_length = float(branch_length)
+    if uniformization_contexts is None:
+        context = _build_uniformization_context(rate_matrix, branch_length)
+    else:
+        context = uniformization_contexts[branch_length]
+    if context.get('no_events'):
+        return 0
+    probabilities = context['event_count_probabilities'].get((start_state, end_state))
+    if probabilities is None:
+        return 0
+    return int(rng.choice(context['event_counts'], p=probabilities))
+
+
+def _sample_bridge_transition_counts(
+    start_state,
+    end_state,
+    branch_length,
+    rate_matrix,
+    rng,
+    uniformization_contexts=None,
+):
+    branch_length = float(branch_length)
+    event_count = _sample_bridge_event_count(
+        start_state,
+        end_state,
+        branch_length,
+        rate_matrix,
+        rng,
+        uniformization_contexts=uniformization_contexts,
+    )
+    num_states = rate_matrix.shape[0]
+    counts = defaultdict(int)
+    if event_count == 0:
+        return counts
+    if uniformization_contexts is None:
+        context = _build_uniformization_context(rate_matrix, branch_length)
+    else:
+        context = uniformization_contexts[branch_length]
+    r_matrix = context['r_matrix']
+    powers = context['powers']
     current_state = start_state
     for step_index in range(event_count):
         remaining = event_count - step_index - 1
@@ -756,33 +831,156 @@ def _sample_node_states(tree, states, fit, rng):
     return sampled_states
 
 
-def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None):
-    if num_simulations <= 0:
-        raise ValueError("'--n_sim' must be positive when '--stochastic_map_out' is specified.")
-    rng = np.random.default_rng(seed)
-    node_to_branch_id = assign_branch_ids(tree)
+def _simulation_seed_sequence(seed, num_simulations):
+    if seed is None:
+        seed_sequence = np.random.SeedSequence()
+    else:
+        seed_sequence = np.random.SeedSequence(int(seed))
+    return seed_sequence.spawn(num_simulations)
+
+
+def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts):
+    nodes = list(tree.traverse(strategy='preorder'))
+    node_to_index = {node: index for index, node in enumerate(nodes)}
+    children_by_index = [[] for _ in nodes]
+    parent_indices = [-1] * len(nodes)
+    branch_ids = [-1] * len(nodes)
+    branch_lengths = [0.0] * len(nodes)
+    transition_matrices = np.zeros(
+        (len(nodes), fit['rate_matrix'].shape[0], fit['rate_matrix'].shape[1]),
+        dtype=float,
+    )
+    inside = np.zeros((len(nodes), fit['rate_matrix'].shape[0]), dtype=float)
+    for node, node_index in node_to_index.items():
+        inside[node_index, :] = fit['inside'][node]
+        if node.is_root:
+            continue
+        parent_index = node_to_index[node.up]
+        parent_indices[node_index] = parent_index
+        children_by_index[parent_index].append(node_index)
+        branch_ids[node_index] = node_to_branch_id[node]
+        branch_lengths[node_index] = float(node.dist)
+        transition_matrices[node_index, :, :] = fit['transition_matrices'][node]
+    return {
+        'children_by_index': children_by_index,
+        'parent_indices': parent_indices,
+        'branch_ids': branch_ids,
+        'branch_lengths': branch_lengths,
+        'inside': inside,
+        'transition_matrices': transition_matrices,
+        'rate_matrix': fit['rate_matrix'],
+        'root_posterior': fit['posterior_by_node'][tree],
+        'uniformization_contexts': uniformization_contexts,
+        'num_states': len(fit['root_prior']),
+    }
+
+
+def _sample_node_states_from_spec(spec, rng):
+    sampled_states = np.zeros(len(spec['parent_indices']), dtype=int)
+    state_indices = np.arange(spec['num_states'])
+    sampled_states[0] = int(rng.choice(state_indices, p=spec['root_posterior']))
+    for parent_index, child_indices in enumerate(spec['children_by_index']):
+        parent_state = sampled_states[parent_index]
+        for child_index in child_indices:
+            transition_matrix = spec['transition_matrices'][child_index]
+            weights = transition_matrix[parent_state, :] * spec['inside'][child_index]
+            probabilities = _normalize_probability_vector(weights)
+            sampled_states[child_index] = int(rng.choice(state_indices, p=probabilities))
+    return sampled_states
+
+
+def _simulate_stochastic_map_once(spec, seed_sequence):
+    rng = np.random.default_rng(seed_sequence)
+    sampled_states = _sample_node_states_from_spec(spec, rng)
+    simulation_counts = defaultdict(int)
+    for node_index, parent_index in enumerate(spec['parent_indices']):
+        if parent_index < 0:
+            continue
+        branch_counts = _sample_bridge_transition_counts(
+            int(sampled_states[parent_index]),
+            int(sampled_states[node_index]),
+            spec['branch_lengths'][node_index],
+            spec['rate_matrix'],
+            rng,
+            uniformization_contexts=spec['uniformization_contexts'],
+        )
+        for pair, count in branch_counts.items():
+            simulation_counts[(spec['branch_ids'][node_index], pair[0], pair[1])] += count
+    return simulation_counts
+
+
+def _simulate_stochastic_map_chunk(spec, seed_sequences):
+    return [
+        _simulate_stochastic_map_once(spec, seed_sequence)
+        for seed_sequence in seed_sequences
+    ]
+
+
+def _simulate_stochastic_map_chunk_worker(payload):
+    spec, seed_sequences = payload
+    return _simulate_stochastic_map_chunk(spec, seed_sequences)
+
+
+def _merge_simulation_counts(simulation_counts_list):
     total_counts = defaultdict(int)
     any_counts = defaultdict(int)
-    for _ in range(num_simulations):
-        sampled_states = _sample_node_states(tree, states, fit, rng)
-        simulation_counts = defaultdict(int)
-        for node in tree.traverse():
-            if node.is_root:
-                continue
-            branch_id = node_to_branch_id[node]
-            branch_counts = _sample_bridge_transition_counts(
-                sampled_states[node.up],
-                sampled_states[node],
-                node.dist,
-                fit['rate_matrix'],
-                rng,
-            )
-            for pair, count in branch_counts.items():
-                key = (branch_id, pair[0], pair[1])
-                total_counts[key] += count
-                simulation_counts[key] += count
-        for key in simulation_counts:
+    for simulation_counts in simulation_counts_list:
+        for key, count in simulation_counts.items():
+            total_counts[key] += count
             any_counts[key] += 1
+    return total_counts, any_counts
+
+
+def _get_process_pool_context():
+    try:
+        return multiprocessing.get_context('fork')
+    except ValueError:
+        return None
+
+
+def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, threads=1):
+    if num_simulations <= 0:
+        raise ValueError("'--n_sim' must be positive when '--stochastic_map_out' is specified.")
+    try:
+        threads = int(threads)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("'--threads' must be an integer.") from exc
+    if threads <= 0:
+        raise ValueError("'--threads' must be positive.")
+    node_to_branch_id = assign_branch_ids(tree)
+    branch_lengths = [
+        float(node.dist)
+        for node in tree.traverse()
+        if not node.is_root
+    ]
+    uniformization_contexts = _build_uniformization_contexts(fit['rate_matrix'], branch_lengths)
+    spec = _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts)
+    seed_sequences = _simulation_seed_sequence(seed, num_simulations)
+    if threads == 1 or num_simulations == 1:
+        simulation_counts_list = _simulate_stochastic_map_chunk(spec, seed_sequences)
+    else:
+        max_workers = min(threads, num_simulations)
+        seed_sequence_chunks = [
+            seed_sequences[worker_index::max_workers]
+            for worker_index in range(max_workers)
+        ]
+        process_pool_context = _get_process_pool_context()
+        executor_kwargs = {'max_workers': max_workers}
+        if process_pool_context is not None:
+            executor_kwargs['mp_context'] = process_pool_context
+        with ProcessPoolExecutor(**executor_kwargs) as executor:
+            simulation_count_chunks = list(
+                executor.map(
+                    _simulate_stochastic_map_chunk_worker,
+                    [(spec, seed_sequence_chunk) for seed_sequence_chunk in seed_sequence_chunks],
+                )
+            )
+        simulation_counts_list = [
+            simulation_counts
+            for simulation_count_chunk in simulation_count_chunks
+            for simulation_counts in simulation_count_chunk
+        ]
+    total_counts, any_counts = _merge_simulation_counts(simulation_counts_list)
     rows = list()
     for node in tree.traverse():
         if node.is_root:
@@ -820,6 +1018,7 @@ def _write_stochastic_map(tree, states, fit, args):
         fit=fit,
         num_simulations=getattr(args, 'n_sim', 100),
         seed=getattr(args, 'seed', None),
+        threads=getattr(args, 'threads', 1),
     )
     _write_table(table, stochastic_map_out)
 

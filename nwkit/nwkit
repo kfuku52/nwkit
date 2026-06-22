@@ -134,6 +134,8 @@ pasr.add_argument('--stochastic-map-out', '--stochastic_map_out', dest='stochast
                   help='default=%(default)s: Optional TSV summarizing sampled stochastic-map transition counts per branch.')
 pasr.add_argument('--n-sim', '--n_sim', dest='n_sim', metavar='INT', default=100, type=int, required=False, action='store',
                   help='default=%(default)s: Number of stochastic maps sampled when --stochastic_map_out is specified.')
+pasr.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
+                  help='default=%(default)s: Number of parallel workers used for stochastic mapping simulations.')
 pasr.add_argument('--seed', metavar='INT', default=None, type=int, required=False, action='store',
                   help='default=%(default)s: Random seed for stochastic mapping.')
 pasr.set_defaults(handler=command_asr)
