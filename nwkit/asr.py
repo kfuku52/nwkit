@@ -719,7 +719,6 @@ def _build_uniformization_context(rate_matrix, branch_length):
     omega = float(np.max(-np.diag(rate_matrix)))
     if omega <= 0.0:
         return {'no_events': True}
-    transition_matrix = _transition_matrix(rate_matrix, branch_length)
     lam = omega * branch_length
     max_n = int(max(10, poisson.ppf(1.0 - 10 ** -12, lam)))
     if num_states > 1:

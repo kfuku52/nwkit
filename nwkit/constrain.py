@@ -7,7 +7,18 @@ from importlib import resources
 import re
 import sys
 
-from nwkit.util import *
+from nwkit.util import (
+    extract_taxonomy_query,
+    get_ete_ncbitaxa,
+    label2sciname,
+    read_item_per_line_file,
+    read_tree,
+    read_tsv_preserving_leaf_name,
+    remove_singleton,
+    validate_unique_named_leaves,
+    warn_cleanup_failure,
+    write_tree,
+)
 
 def _close_ncbi_db(ncbi):
     if ncbi is None:
@@ -73,7 +84,7 @@ def limit_lineage_to_rank(lineage, ncbi, rank):
     if rank=='no':
         return lineage
     ranks = ncbi.get_rank(lineage)
-    sorted_ranks = [ ranks[l] for l in lineage ]
+    sorted_ranks = [ranks[taxid] for taxid in lineage]
     lineage_ge_rank = list()
     for taxid,my_rank in zip(lineage, sorted_ranks):
         lineage_ge_rank.append(int(taxid))

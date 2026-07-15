@@ -1,4 +1,6 @@
-from nwkit.util import *
+import sys
+
+from nwkit.util import get_target_nodes, read_tree, write_tree
 
 def label_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)

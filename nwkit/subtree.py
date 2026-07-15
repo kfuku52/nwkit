@@ -1,4 +1,12 @@
-from nwkit.util import *
+import sys
+
+from nwkit.util import (
+    annotate_duplication_confidence_scores,
+    annotate_scientific_names,
+    get_subtree_sci_name_sets,
+    read_tree,
+    write_tree,
+)
 
 def subtree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
@@ -9,16 +17,16 @@ def subtree_main(args):
     leaf_name_set = set(leaf.name for leaf in leaf_nodes)
     leaf_by_name = {leaf.name: leaf for leaf in leaf_nodes}
     if args.leaves is not None:
-        seed_leaf_names = [l.strip() for l in args.leaves.split(',') if l.strip() != '']
+        seed_leaf_names = [name.strip() for name in args.leaves.split(',') if name.strip() != '']
     else:
         seed_leaf_names = [args.left_leaf, args.right_leaf]
-        seed_leaf_names = [l.strip() for l in seed_leaf_names if l is not None and l.strip() != '']
+        seed_leaf_names = [name.strip() for name in seed_leaf_names if name is not None and name.strip() != '']
     if len(seed_leaf_names) == 0:
         raise ValueError("Specify either '--leaves' or '--left_leaf/--right_leaf'.")
-    for l in seed_leaf_names:
-        if l not in leaf_name_set:
-            raise Exception('Specified leaf not found in the tree: {}'.format(l))
-    seed_leaf_nodes = [leaf_by_name[l] for l in seed_leaf_names]
+    for leaf_name in seed_leaf_names:
+        if leaf_name not in leaf_name_set:
+            raise Exception('Specified leaf not found in the tree: {}'.format(leaf_name))
+    seed_leaf_nodes = [leaf_by_name[leaf_name] for leaf_name in seed_leaf_names]
     if len(seed_leaf_nodes)==1:
         mrca = seed_leaf_nodes[0]
     else:

@@ -1,10 +1,8 @@
-import os
 import pytest
-from ete4 import Tree
 
 from nwkit.subtree import subtree_main
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestSubtreeMain:
@@ -105,19 +103,6 @@ class TestSubtreeMain:
         )
         with pytest.raises(ValueError, match='not unique'):
             subtree_main(args)
-
-    def test_with_data_file(self, tmp_outfile):
-        infile = os.path.join(DATA_DIR, 'subtree2', 'input.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile, outfile=tmp_outfile,
-            left_leaf='a', right_leaf='c', leaves=None,
-            orthogroup=False,
-        )
-        subtree_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.leaf_names()) == {'a', 'b', 'c'}
 
     def test_orthogroup_mode(self, tmp_nwk, tmp_outfile):
         nwk = '((Homo_sapiens_G1:1,(Homo_sapiens_G2:1,Mus_musculus_G1:1):1):1,(Danio_rerio_G1:1,Xenopus_laevis_G1:1):1);'

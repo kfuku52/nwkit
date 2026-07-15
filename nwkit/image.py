@@ -24,12 +24,12 @@ try:
 except ImportError:  # pragma: no cover - fallback for older requests vendoring layouts
     from requests.packages.urllib3.util.retry import Retry
 
+from nwkit import __version__
+from nwkit.species_parser import DEFAULT_SPECIES_REGEX
 from nwkit.util import (
-    DEFAULT_SPECIES_REGEX,
     acquire_exclusive_lock,
     extract_species_label,
     get_ete_ncbitaxa,
-    label2sciname,
     read_tree,
     resolve_download_dir,
     validate_unique_named_leaves,
@@ -62,7 +62,7 @@ REQUEST_RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
 HTTP_SESSION_POOL_SIZE = 16
 HTTP_HEADERS = {
     'Accept': 'application/json',
-    'User-Agent': 'nwkit-image/0.22.10 (+https://github.com/kfuku52/nwkit)',
+    'User-Agent': 'nwkit-image/{} (+https://github.com/kfuku52/nwkit)'.format(__version__),
 }
 SUPPORTED_SOURCES = ('phylopic', 'bioicons', 'inaturalist', 'wikimedia', 'gbif', 'eol', 'idigbio', 'openverse', 'ncbi')
 DEFAULT_SOURCES = {

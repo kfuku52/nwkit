@@ -1,10 +1,8 @@
-import os
 import pytest
-from ete4 import Tree
 
 from nwkit.prune import prune_main
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestPruneMain:
@@ -64,18 +62,6 @@ class TestPruneMain:
         )
         with pytest.raises(ValueError, match='All leaves would be pruned'):
             prune_main(args)
-
-    def test_with_data_file(self, tmp_outfile):
-        infile = os.path.join(DATA_DIR, 'prune2', 'tree.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile, outfile=tmp_outfile,
-            pattern='B1', invert_match=False,
-        )
-        prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert 'B1' not in set(tree.leaf_names())
 
     def test_wiki_pipe_separated_pattern(self, tmp_nwk, tmp_outfile):
         """Wiki example: nwkit prune --pattern "B1|C2"

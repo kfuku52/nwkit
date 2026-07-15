@@ -1,13 +1,6 @@
-#!/usr/bin/env python
-
 import argparse
-import os
-import sys
 
-PACKAGE_DIR = os.path.dirname(os.path.abspath(__file__))
-if os.path.isfile(os.path.join(PACKAGE_DIR, '__init__.py')):
-    sys.path.insert(0, os.path.dirname(PACKAGE_DIR))
-
+from nwkit import __version__
 from nwkit.species_parser import (
     DEFAULT_SPECIES_PARSER,
     DEFAULT_SPECIES_REGEX,
@@ -24,7 +17,11 @@ def strtobool(val):
         raise ValueError(f"Invalid truth value: {val}")
 
 # Main parser
-parser = argparse.ArgumentParser(description='A toolkit for Newick trees. See `nwkit SUBCOMMAND -h` for usage (e.g., nwkit constrain -h)')
+parser = argparse.ArgumentParser(
+    prog='nwkit',
+    description='A toolkit for Newick trees. See `nwkit SUBCOMMAND -h` for usage (e.g., nwkit constrain -h)',
+)
+parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__))
 subparsers = parser.add_subparsers()
 
 # Parent parser for shared options
@@ -36,7 +33,7 @@ p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, 
 p_parent.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
                       help='default=%(default)s: ETE tree format. '
                            '"auto-strict" fails on ambiguous unquoted numeric internal labels. '
-                           'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
+                           'See https://etetoolkit.github.io/ete/tutorial/tutorial_trees.html')
 p_parent.add_argument('-of', '--outformat', metavar='INT', default='auto', type=str, required=False, action='store',
                       help='ETE tree format for --outfile. "auto" indicates the same format as --format.')
 p_parent.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
@@ -54,7 +51,7 @@ p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=st
 p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
                           help='default=%(default)s: ETE tree format. '
                                '"auto-strict" fails on ambiguous unquoted numeric internal labels. '
-                               'See here http://etetoolkit.org/docs/latest/tutorial/tutorial_trees.html')
+                               'See https://etetoolkit.github.io/ete/tutorial/tutorial_trees.html')
 p_tree_input.add_argument('--quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                           help='default=%(default)s: Whether node names are quoted in the input file.')
 
@@ -595,6 +592,8 @@ pshuffle.add_argument('--branch_length', metavar='yes|no', default='no', type=st
                        help='default=%(default)s: Shuffle branch length. Automatically activated when --topology yes.')
 pshuffle.add_argument('--label', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Shuffle leaf labels.')
+pshuffle.add_argument('--seed', metavar='INT', default=None, type=int, required=False, action='store',
+                      help='default=%(default)s: Random seed for reproducible topology, branch-length, and label shuffling.')
 pshuffle.set_defaults(handler=command_shuffle)
 
 def command_skim(args):
@@ -624,6 +623,8 @@ pskim.add_argument('--only-contrastive-clades', '--only_contrastive_clades', des
 pskim.add_argument('--output-groupfile', '--output_groupfile', dest='output_groupfile', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Whether to output group assignment files. '
                             'The output filenames are <output>.all.tsv and <output>.sampled.tsv, where <output> is the value of --outfile without the .nwk extension.')
+pskim.add_argument('--seed', metavar='INT', default=None, type=int, required=False, action='store',
+                   help='default=%(default)s: Random seed for reproducible sampling and tie-breaking.')
 pskim.set_defaults(handler=command_skim)
 
 def command_sample(args):
@@ -742,9 +743,13 @@ parser_help.add_argument('command', help='command name which help is shown')
 parser_help.set_defaults(handler=command_help)
 
 
-# Handler
-args = parser.parse_args()
-if hasattr(args, 'handler'):
-    args.handler(args)
-else:
+def main(argv=None):
+    args = parser.parse_args(argv)
+    if hasattr(args, 'handler'):
+        return args.handler(args)
     parser.print_help()
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

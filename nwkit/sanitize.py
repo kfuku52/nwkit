@@ -1,4 +1,4 @@
-from nwkit.util import *
+from nwkit.util import read_tree, remove_singleton, write_tree
 
 def add_quote(tree, quote_char):
     for node in tree.traverse():

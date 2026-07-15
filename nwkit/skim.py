@@ -1,10 +1,17 @@
 import pandas as pd
 import sys
-from nwkit.util import *
+
+from nwkit.util import (
+    get_subtree_leaf_name_sets,
+    read_tree,
+    read_tsv_preserving_leaf_name,
+    validate_unique_named_leaves,
+    write_tree,
+)
 
 def read_trait(args, tree):
     if args.trait is None:
-        sys.stderr.write(f"'--trait' not specified. Sampling leaves at random.\n")
+        sys.stderr.write("'--trait' not specified. Sampling leaves at random.\n")
         trait_df = pd.DataFrame({'leaf_name': list(tree.leaf_names())})
         return trait_df
     trait_df = read_tsv_preserving_leaf_name(args.trait)
@@ -107,7 +114,7 @@ def sample_from_groups(trait_df, args):
         raise ValueError("Column 'group' not found. Run group assignment before sampling.")
     if (args.filter_by is not None) and (args.filter_by not in trait_df.columns):
         raise ValueError("Column '{}' specified by '--filter_by' was not found in '--trait'.".format(args.filter_by))
-    shuffled_df = trait_df.sample(frac=1)
+    shuffled_df = trait_df.sample(frac=1, random_state=getattr(args, 'seed', None))
     if args.prioritize_non_missing and args.group_by is not None:
         if args.filter_by is None:
             sorted_df = shuffled_df.sort_values(by=[args.group_by], ascending=True, kind='mergesort')

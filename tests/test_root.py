@@ -1,4 +1,3 @@
-import os
 import pandas as pd
 import pytest
 from ete4 import Tree
@@ -16,7 +15,7 @@ from nwkit.root import (
     root_main,
 )
 from nwkit.util import read_tree, is_rooted
-from tests.helpers import make_args, DATA_DIR, safe_get_distance
+from tests.helpers import make_args, safe_get_distance
 
 
 def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid, taxid_to_name=None, rank_by_taxid=None):

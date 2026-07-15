@@ -2,9 +2,17 @@ import re
 import requests
 import sys
 import time
+from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from nwkit.util import *
+from nwkit.util import (
+    get_ete_ncbitaxa,
+    get_species_group_records,
+    get_subtree_leaf_name_sets,
+    get_subtree_sci_name_sets,
+    read_tree,
+    warn_cleanup_failure,
+)
 
 SEARCH_RANKS = [
     'species', 'genus', 'tribe', 'family', 'order',
@@ -90,7 +98,7 @@ def _build_timetree_rank_attempt(context, search_rank, endpoint_url, subtree_spe
     lineage_taxids = context['lineage_taxids']
     leaf_rank_pairs = context['leaf_rank_pairs']
     taxids = [d[search_rank] for d in lineage_taxids if search_rank in d]
-    ta_leaf_names = [l for l, d in leaf_rank_pairs if search_rank in d]
+    ta_leaf_names = [leaf_name for leaf_name, rank_by_name in leaf_rank_pairs if search_rank in rank_by_name]
     ta_leaf_name_set = set(ta_leaf_names)
     if not are_both_lineage_included(
         node=context['node'],
@@ -311,7 +319,7 @@ def are_two_lineage_rank_differentiated(node, taxids, ta_leaf_names, subtree_lea
         return True
 
 def add_timetree_constraint(tree, args):
-    endpoint_url = 'http://timetree.org/api'
+    endpoint_url = 'https://timetree.org/api'
     search_ranks = SEARCH_RANKS if args.higher_rank_search else SEARCH_RANKS[:1]
     threads = _validate_threads(getattr(args, 'threads', 1))
     unnamed_leaves = [leaf for leaf in tree.leaves() if not leaf.name]

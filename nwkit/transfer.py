@@ -1,5 +1,14 @@
-from nwkit.util import *
+import sys
+
 from nwkit.root import transfer_root
+from nwkit.util import (
+    get_subtree_leaf_bitmasks,
+    get_target_nodes,
+    is_all_leaf_names_identical,
+    read_tree,
+    validate_unique_named_leaves,
+    write_tree,
+)
 
 def transfer_main(args):
     if args.infile2 in ['', None]:

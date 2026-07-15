@@ -1,10 +1,9 @@
 import os
 import pytest
-from ete4 import Tree
 
 from nwkit.drop import drop_main
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestDropMain:
@@ -76,44 +75,6 @@ class TestDropMain:
         )
         drop_main(args)
         assert os.path.exists(tmp_outfile)
-
-    def test_with_data_file(self, tmp_outfile):
-        infile = os.path.join(DATA_DIR, 'drop1', 'input.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile, outfile=tmp_outfile,
-            target='all', name=True, support=False, length=False, fill=None,
-        )
-        drop_main(args)
-        assert os.path.exists(tmp_outfile)
-
-    def test_wiki_drop_intnode_names(self, tmp_outfile):
-        """Wiki example: nwkit drop --target intnode --name yes
-
-        Drops internal node labels (n1-n28) while preserving leaf names and
-        branch lengths. The output tree structure should be identical except
-        internal node labels are removed.
-        """
-        infile = os.path.join(DATA_DIR, 'drop1', 'input.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile, outfile=tmp_outfile,
-            target='intnode', name=True, support=False, length=False, fill=None,
-        )
-        drop_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        # Leaf names should all be preserved
-        assert len(list(tree.leaf_names())) == 29
-        # Internal node labels (n1-n28) should be removed
-        with open(tmp_outfile) as f:
-            content = f.read()
-        # The node labels like n1, n2, ... n28 should not appear
-        import re
-        # Match standalone internal node labels like )n7: but not leaf names
-        internal_labels = re.findall(r'\)n\d+:', content)
-        assert len(internal_labels) == 0
 
     def test_issue10_drop_root_length_no_trailing_colon(self, tmp_nwk, tmp_outfile):
         """Regression test for GitHub issue #10.

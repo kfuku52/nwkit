@@ -25,6 +25,7 @@ def make_skim_args(**kwargs):
         'filter_mode': 'ascending',
         'only_contrastive_clades': False,
         'output_groupfile': False,
+        'seed': None,
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -167,6 +168,20 @@ class TestGrouping:
 
 
 class TestSampling:
+    def test_seed_makes_sampling_reproducible(self):
+        trait_df = pd.DataFrame(
+            {
+                'leaf_name': list('ABCDEFGH'),
+                'group': [1, 1, 1, 1, 2, 2, 2, 2],
+            }
+        )
+        args = make_skim_args(retain_per_clade=2, seed=42)
+
+        first = sample_from_groups(trait_df, args)
+        second = sample_from_groups(trait_df, args)
+
+        assert first['leaf_name'].tolist() == second['leaf_name'].tolist()
+
     def test_sample_from_groups_prioritizes_non_missing(self):
         trait_df = pd.DataFrame(
             {

@@ -1,5 +1,7 @@
 import re
-from nwkit.util import *
+import sys
+
+from nwkit.util import read_tree, remove_singleton, write_tree
 
 def prune_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)

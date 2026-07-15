@@ -1,4 +1,3 @@
-import pandas as pd
 import pytest
 
 from nwkit.rename import rename_main

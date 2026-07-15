@@ -1,5 +1,3 @@
-import pytest
-from ete4 import Tree
 
 from nwkit.label import label_main
 from nwkit.util import read_tree

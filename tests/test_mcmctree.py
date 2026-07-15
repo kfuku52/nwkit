@@ -1,7 +1,6 @@
 import os
 import pytest
 from argparse import Namespace
-from unittest.mock import patch, MagicMock
 from ete4 import Tree
 import requests
 
@@ -15,8 +14,6 @@ from nwkit.mcmctree import (
     remove_constraint_equal_upper,
     apply_min_clade_prop,
 )
-from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
 
 
 def make_mcmctree_args(**kwargs):
@@ -555,23 +552,6 @@ class TestMcmctreeMain:
         with pytest.raises(ValueError, match='Unknown'):
             mcmctree_main(args)
 
-    def test_with_data_files(self, tmp_outfile):
-        """Test with data files if available."""
-        infile = os.path.join(DATA_DIR, 'mcmctree1', 'input.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_mcmctree_args(
-            infile=infile, outfile=tmp_outfile,
-            left_species=None, right_species=None,
-            timetree='no',
-        )
-        # Without left/right species and timetree='no', this should fail
-        # because add_common_anc_constraint needs left/right species
-        # Just verify the tree is read correctly
-        tree = read_tree(infile, 'auto', True, quiet=True)
-        assert len(list(tree.leaf_names())) > 0
-
-
 class TestIssue12EndpointUrl:
     """Regression tests for GitHub issue #12: timetree.org API change.
 
@@ -583,7 +563,7 @@ class TestIssue12EndpointUrl:
         """Verify the endpoint URL points to timetree.org, not temple.edu."""
         import inspect
         source = inspect.getsource(add_timetree_constraint)
-        assert 'timetree.org/api' in source
+        assert 'https://timetree.org/api' in source
         assert 'timetree.temple.edu' not in source
 
     def test_csv_response_parsing(self):

@@ -98,7 +98,6 @@ class TestReadTree:
 
 class TestWriteTree:
     def test_write_to_file(self, tmp_nwk, tmp_outfile):
-        import nwkit.util as util_mod
         path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
         tree = read_tree(path, format='1', quoted_node_names=True, quiet=True)
         args = make_args(outfile=tmp_outfile)

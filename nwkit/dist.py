@@ -1,4 +1,4 @@
-from nwkit.util import *
+from nwkit.util import is_rooted, read_tree, validate_unique_named_leaves
 
 def dist_main(args):
     if args.dist not in ['RF']:

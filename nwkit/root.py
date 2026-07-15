@@ -1,20 +1,30 @@
 import sys
 import re
+from collections import defaultdict
 
 import requests
 from ete4 import Tree
 from ete4.parser.newick import make_parser
 
 from nwkit.constrain import (
-    get_lineages,
-    get_lineages_from_taxid,
     get_taxid_counts,
     limit_lineage_to_rank,
     name_to_taxid,
     read_taxid_tsv,
     taxid2tree,
 )
-from nwkit.util import *
+from nwkit.util import (
+    extract_taxonomy_query,
+    get_ete_ncbitaxa,
+    get_species_group_records,
+    is_all_leaf_names_identical,
+    is_rooted,
+    read_tree,
+    remove_singleton,
+    validate_unique_named_leaves,
+    warn_cleanup_failure,
+    write_tree,
+)
 
 SUPPORTED_TAXONOMY_SOURCES = ('ncbi', 'timetree', 'opentree')
 DEFAULT_TAXONOMY_SOURCE_CHAIN = 'ncbi,opentree,timetree'
@@ -242,7 +252,9 @@ def mad_rooting(tree):
     """MAD (Minimal Ancestor Deviation) rooting. Tria et al. 2017, DOI:10.1038/s41559-017-0193"""
     if len(list(tree.leaves())) < 3:
         raise ValueError('MAD rooting requires at least 3 leaves.')
-    import os, subprocess, tempfile
+    import os
+    import subprocess
+    import tempfile
     mad_script = os.path.join(os.path.dirname(__file__), '_mad.py')
     parser = make_parser(5, dist='%0.8f')
     working_tree = tree.copy(method='deepcopy')
@@ -257,7 +269,7 @@ def mad_rooting(tree):
         )
         sys.stderr.write(result.stdout)
         with open(tmpfile + '.rooted') as fh:
-            lines = [l.strip() for l in fh if l.strip() and l.strip().endswith(';')]
+            lines = [line.strip() for line in fh if line.strip() and line.strip().endswith(';')]
         if not lines:
             raise RuntimeError('MAD did not produce a rooted tree.')
         rooted_nwk = lines[0]
