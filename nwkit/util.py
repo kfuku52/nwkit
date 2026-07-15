@@ -14,9 +14,6 @@ import ete4
 import pandas as pd
 from ete4 import Tree
 from nwkit.species_parser import (
-    DEFAULT_SPECIES_PARSER,
-    DEFAULT_SPECIES_REGEX,
-    compile_species_regex,
     extract_parsed_species,
     get_species_parser,
 )
@@ -425,14 +422,9 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
 
 def write_tree(tree, args, format, quiet=False):
     if format=='auto':
-        format_original = format
-        if len(sys.argv) > 1 and sys.argv[1] == 'mark':
-            format = 1
-        else:
-            format = tree.props.get(TREE_FORMAT_PROP, globals().get('INFILE_FORMAT', 0))
+        format = tree.props.get(TREE_FORMAT_PROP, globals().get('INFILE_FORMAT', 0))
         format = int(format)
     else:
-        format_original = format
         format = int(format)
     if not quiet:
         num_leaves = len(list(tree.leaves()))

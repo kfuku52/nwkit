@@ -1,6 +1,5 @@
 import pytest
 from ete4 import Tree
-from tests.helpers import DATA_DIR
 
 
 @pytest.fixture
@@ -32,13 +31,6 @@ def species_tree():
     """Tree with GENUS_SPECIES_GENEID leaf names."""
     nwk = '((Homo_sapiens_GENE1:1,Homo_sapiens_GENE2:1):1,(Mus_musculus_GENE1:1,Danio_rerio_GENE1:1):1);'
     return Tree(nwk, parser=1)
-
-
-@pytest.fixture
-def data_dir():
-    """Path to the test data directory."""
-    return DATA_DIR
-
 
 @pytest.fixture
 def tmp_nwk(tmp_path):

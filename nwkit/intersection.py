@@ -1,4 +1,4 @@
-from nwkit.util import *
+from nwkit.util import read_seqs, read_tree, write_seqs, write_tree
 
 TRIE_TERM = '__TERM__'
 

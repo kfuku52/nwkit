@@ -1,5 +1,6 @@
-from nwkit.util import *
 import math
+
+from nwkit.util import get_target_nodes, read_tree, write_tree
 
 def rescale_main(args):
     if not math.isfinite(args.factor):

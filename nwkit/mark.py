@@ -1,5 +1,7 @@
 import re
-from nwkit.util import *
+import sys
+
+from nwkit.util import read_tree, write_tree
 
 def annotate_tree_attr(tree, args):
     pattern = re.compile(args.pattern)
@@ -90,4 +92,5 @@ def mark_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     tree = annotate_tree_attr(tree, args)
     tree = label_insert_nodes(tree, args)
-    write_tree(tree, args, format=args.outformat)
+    outformat = 1 if args.outformat == 'auto' else args.outformat
+    write_tree(tree, args, format=outformat)

@@ -1,5 +1,7 @@
 import os
-from nwkit.util import *
+
+from nwkit.species_parser import DEFAULT_SPECIES_PARSER, DEFAULT_SPECIES_REGEX
+from nwkit.util import extract_species_label, read_tree
 
 def info_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)

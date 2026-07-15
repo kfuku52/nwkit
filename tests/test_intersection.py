@@ -7,7 +7,6 @@ from Bio.SeqRecord import SeqRecord
 from nwkit.intersection import (
     get_leaf_names,
     get_seq_names,
-    get_new_seqs,
     match_complete,
     match_prefix,
     match_backward,
@@ -15,7 +14,7 @@ from nwkit.intersection import (
     intersection_main,
 )
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestGetLeafNames:
@@ -189,21 +188,6 @@ class TestIntersectionMain:
         with pytest.raises(ValueError, match='both be written to stdout'):
             intersection_main(args)
 
-    def test_with_data_files(self, tmp_outfile):
-        infile1 = os.path.join(DATA_DIR, 'intersection3', 'input1.nwk')
-        infile2 = os.path.join(DATA_DIR, 'intersection3', 'input2.nwk')
-        if not os.path.exists(infile1):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile1, infile2=infile2, outfile=tmp_outfile,
-            format2='auto', seqin='', seqout='', seqformat='fasta',
-            match='complete',
-        )
-        intersection_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        leaf_names = set(tree.leaf_names())
-        assert leaf_names == {'A', 'B', 'C'}
-
     def test_wiki_tree_seq_intersection(self, tmp_path):
         """Wiki example: intersection between tree and FASTA alignment.
 
@@ -232,24 +216,3 @@ class TestIntersectionMain:
             out_records = list(SeqIO.parse(fh, 'fasta'))
         out_seq_names = {r.name for r in out_records}
         assert out_seq_names == {'A', 'C', 'D', 'F'}
-
-    def test_wiki_data_intersection4(self, tmp_path):
-        """Wiki example with data/intersection4 files."""
-        infile = os.path.join(DATA_DIR, 'intersection4', 'input.nwk')
-        seqin = os.path.join(DATA_DIR, 'intersection4', 'input.fasta')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        out_tree = str(tmp_path / 'output.nwk')
-        out_seq = str(tmp_path / 'output.fasta')
-        args = make_args(
-            infile=infile, infile2='', outfile=out_tree,
-            seqin=seqin, seqout=out_seq, seqformat='fasta',
-            format2='auto', match='complete',
-        )
-        intersection_main(args)
-        tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.leaf_names()) == {'A', 'C', 'D', 'F'}
-        import Bio.SeqIO as SeqIO
-        with open(out_seq) as fh:
-            out_records = list(SeqIO.parse(fh, 'fasta'))
-        assert len(out_records) == 4

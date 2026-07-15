@@ -1,5 +1,4 @@
 import pytest
-from ete4 import Tree
 
 from nwkit.rescale import rescale_main
 from nwkit.util import read_tree

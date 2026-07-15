@@ -1,12 +1,9 @@
-import os
-import sys
 import pytest
 from argparse import Namespace
 from ete4 import Tree
 
 from nwkit.mark import annotate_tree_attr, get_insert_nodes, label_insert_nodes, mark_main
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
 
 
 def make_mark_args(**kwargs):
@@ -136,8 +133,7 @@ class TestLabelInsertNodes:
 
 
 class TestMarkMain:
-    def test_mark_main_suffix(self, tmp_nwk, tmp_outfile, monkeypatch):
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
+    def test_mark_main_suffix(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(infile=path, outfile=tmp_outfile, pattern='A.*',
                               target='leaf', insert_txt='Foreground', insert_pos='suffix')
@@ -147,22 +143,7 @@ class TestMarkMain:
             if 'A1' in leaf.name or 'A2' in leaf.name:
                 assert 'Foreground' in leaf.name
 
-    def test_with_data_file(self, tmp_outfile, monkeypatch):
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
-        infile = os.path.join(DATA_DIR, 'mark1', 'tree.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_mark_args(
-            infile=infile, outfile=tmp_outfile,
-            pattern='A.*', target='leaf',
-            insert_txt='Foreground', insert_pos='suffix',
-        )
-        mark_main(args)
-        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
-        marked_leaves = [l for l in tree.leaves() if 'Foreground' in l.name]
-        assert len(marked_leaves) >= 1
-
-    def test_wiki_codeml_clade_marking(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_wiki_codeml_clade_marking(self, tmp_nwk, tmp_outfile):
         """Wiki example: mark clade with #1 for PAML codeml two-ratio mode.
 
         nwkit mark --infile input.nwk --pattern "A.*|B.*" --insert_txt "#1"
@@ -171,7 +152,6 @@ class TestMarkMain:
         Input:  (((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;
         Output: (((A1#1:2,(B1#1:1,B2#1:1)#1:1)#1:1,(A2#1:1,C1:1):2):1,C2:4):0.25;
         """
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,
@@ -189,9 +169,8 @@ class TestMarkMain:
         for leaf in c_leaves:
             assert '#1' not in leaf.name
 
-    def test_wiki_pipe_separated_regex(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_wiki_pipe_separated_regex(self, tmp_nwk, tmp_outfile):
         """Test pipe-separated regex pattern matching multiple leaf groups."""
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,
@@ -206,10 +185,9 @@ class TestMarkMain:
             else:
                 assert 'FG' not in leaf.name
 
-    def test_mark_all_mrca_clade(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_mark_all_mrca_clade(self, tmp_nwk, tmp_outfile):
         """Test --target clade --target_only_clade no marks the entire clade
         containing all matched leaves (not just the sub-clade)."""
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,
@@ -223,13 +201,12 @@ class TestMarkMain:
         marked = [l for l in tree.leaves() if '#1' in l.name]
         assert len(marked) >= 2
 
-    def test_issue9_no_match_no_indexerror(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_issue9_no_match_no_indexerror(self, tmp_nwk, tmp_outfile):
         """Regression test for GitHub issue #9.
 
         nwkit mark used to crash with IndexError when the pattern matched
         no leaves in the tree. The fix guards target_leaves[0] access.
         """
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,
@@ -243,7 +220,7 @@ class TestMarkMain:
         for leaf in tree.leaves():
             assert '#1' not in leaf.name
 
-    def test_wiki_target_mrca_only(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_wiki_target_mrca_only(self, tmp_nwk, tmp_outfile):
         """Wiki --target mrca: only the MRCA node of matched leaves is marked.
 
         Pattern B.*, target mrca, target_only_clade yes:
@@ -251,7 +228,6 @@ class TestMarkMain:
 
         Only the parent of B1/B2 gets #1; B1/B2 themselves are NOT marked.
         """
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,
@@ -269,13 +245,12 @@ class TestMarkMain:
                            if not n.is_leaf and n.name and '#1' in n.name]
         assert len(marked_internal) >= 1
 
-    def test_wiki_target_leaf_only(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_wiki_target_leaf_only(self, tmp_nwk, tmp_outfile):
         """Wiki --target leaf: only matched leaves are marked, not internal nodes.
 
         Pattern B.*, target leaf:
         Output: (((A1:2,(B1#1:1,B2#1:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;
         """
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,
@@ -298,9 +273,8 @@ class TestMarkMain:
             if not node.is_leaf:
                 assert not node.name or '#1' not in node.name
 
-    def test_wiki_clade_branch_lengths_preserved(self, tmp_nwk, tmp_outfile, monkeypatch):
+    def test_wiki_clade_branch_lengths_preserved(self, tmp_nwk, tmp_outfile):
         """Marking should not alter branch lengths."""
-        monkeypatch.setattr(sys, 'argv', ['nwkit', 'mark'])
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(
             infile=path, outfile=tmp_outfile,

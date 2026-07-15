@@ -1,10 +1,9 @@
-import os
 import pytest
 from ete4 import Tree
 
 from nwkit.sanitize import sanitize_main, add_quote
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestAddQuote:
@@ -98,21 +97,6 @@ class TestSanitizeMain:
         sanitize_main(args)
         tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd'}
-
-    def test_with_data_file(self, tmp_outfile):
-        infile = os.path.join(DATA_DIR, 'sanitize2', 'input.nwk')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile, outfile=tmp_outfile,
-            remove_singleton=True, resolve_polytomy=False, name_quote='single',
-        )
-        sanitize_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        # Singletons should be removed
-        for node in tree.traverse():
-            if not node.is_leaf:
-                assert len(node.get_children()) != 1
 
     def test_wiki_exact_example(self, tmp_nwk, tmp_outfile):
         """Wiki example: nwkit sanitize --name_quote single

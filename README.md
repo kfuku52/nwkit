@@ -3,17 +3,17 @@
 [![Run Tests](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml/badge.svg)](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml)
 [![GitHub release](https://img.shields.io/github/v/tag/kfuku52/nwkit?label=release)](https://github.com/kfuku52/nwkit/releases)
 [![Bioconda](https://img.shields.io/conda/vn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
-[![Python](https://img.shields.io/badge/python-3.9%20%7C%203.10%20%7C%203.11%20%7C%203.12-blue)](https://github.com/kfuku52/nwkit)
+[![Python](https://img.shields.io/badge/python-3.10%20%7C%203.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue)](https://github.com/kfuku52/nwkit)
 [![Platforms](https://img.shields.io/conda/pn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
 [![Downloads](https://img.shields.io/conda/dn/bioconda/nwkit.svg)](https://anaconda.org/bioconda/nwkit)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
-**NWKIT** ([/njuːkit/](http://ipa-reader.xyz/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format). 
+**NWKIT** ([/njuːkit/](https://ipa-reader.com/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format).
 
 ## Installation
 
-The latest version of NWKIT is available from [Bioconda](https://anaconda.org/bioconda/nwkit). For users requiring a `conda` installation, please refer to [Miniforge](https://github.com/conda-forge/miniforge) for a lightweight conda environment.
+Packaged releases of NWKIT are available from [Bioconda](https://anaconda.org/bioconda/nwkit). The repository can be ahead of the current Bioconda package; compare the release and Bioconda badges above when selecting a version. For users requiring a `conda` installation, please refer to [Miniforge](https://github.com/conda-forge/miniforge) for a lightweight conda environment.
 
 #### Install from Bioconda
 
@@ -32,6 +32,8 @@ nwkit -h
 ```
 pip install git+https://github.com/kfuku52/nwkit
 ```
+
+NWKIT requires Python 3.10 or newer.
 
 #### Optional dependencies for image post-processing
 
@@ -77,6 +79,19 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
 ## Citation
 There is no published paper on NWKIT itself, but we used and cited NWKIT in several papers including [Fukushima & Pollock (2023, Nat Ecol Evol 7: 155-170)](https://www.nature.com/articles/s41559-022-01932-7).
+
+## Development
+
+Install the development and optional image dependencies, then run the same checks used by CI:
+
+```
+pip install -e ".[dev,image]"
+ruff check nwkit tests
+pytest tests/ -q
+python -m build
+```
+
+See [CHANGELOG.md](CHANGELOG.md) for changes and [RELEASING.md](RELEASING.md) for the release checklist.
 
 # Licensing
 This program is MIT-licensed. See [LICENSE](LICENSE) for details.

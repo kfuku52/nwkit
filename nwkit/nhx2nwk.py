@@ -1,4 +1,4 @@
-from nwkit.util import *
+from nwkit.util import read_tree, write_tree
 
 def nhx2nwk_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)

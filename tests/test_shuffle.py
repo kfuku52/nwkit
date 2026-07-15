@@ -1,11 +1,9 @@
-import os
 import random
-import pytest
 from ete4 import Tree
 
 from nwkit.shuffle import get_shuffled_branch_lengths, print_rf_dist, shuffle_main
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestGetShuffledBranchLengths:
@@ -41,6 +39,23 @@ class TestPrintRfDist:
 
 
 class TestShuffleMain:
+    def test_seed_makes_output_reproducible(self, tmp_nwk, tmp_path):
+        path = tmp_nwk('(((A:1,B:2):3,C:4):5,(D:6,E:7):8);')
+        outputs = [tmp_path / 'first.nwk', tmp_path / 'second.nwk']
+
+        for output in outputs:
+            args = make_args(
+                infile=path,
+                outfile=str(output),
+                topology=True,
+                branch_length=True,
+                label=True,
+                seed=42,
+            )
+            shuffle_main(args)
+
+        assert outputs[0].read_text() == outputs[1].read_text()
+
     def test_shuffle_branch_length(self, tmp_nwk, tmp_outfile):
         random.seed(42)
         path = tmp_nwk('((A:1,B:2):3,(C:4,D:5):6);')

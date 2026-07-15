@@ -150,7 +150,7 @@ def old_outgroup_rooting(tree, outgroup_str):
 def old_populate_leaves(new_clade, taxid, lineages):
     for sp in lineages.keys():
         lineage = lineages[sp]
-        if not taxid in lineage:
+        if taxid not in lineage:
             continue
         new_leaf = Tree({'name': sp})
         new_leaf.add_props(ancestors=lineage)

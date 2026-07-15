@@ -1,10 +1,4 @@
-import os
 from argparse import Namespace
-
-# Project root and data directory
-PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(PROJECT_ROOT, 'data')
-
 
 def safe_get_distance(tree, node1, node2):
     """Compute distance between nodes, treating None dist as 0.

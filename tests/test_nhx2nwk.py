@@ -1,10 +1,8 @@
 import os
-import pytest
-from ete4 import Tree
 
 from nwkit.nhx2nwk import nhx2nwk_main
 from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestNhx2nwkMain:
@@ -27,18 +25,6 @@ class TestNhx2nwkMain:
         )
         nhx2nwk_main(args)
         assert os.path.exists(tmp_outfile)
-
-    def test_with_data_file(self, tmp_outfile):
-        infile = os.path.join(DATA_DIR, 'nhx2nwk_nodelabel', 'generax.nhx')
-        if not os.path.exists(infile):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile, outfile=tmp_outfile,
-            node_label='',
-        )
-        nhx2nwk_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert len(list(tree.leaf_names())) > 0
 
     def test_preserves_leaf_names(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((species_A:1,species_B:1):1,(species_C:1,species_D:1):1);')

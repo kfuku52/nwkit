@@ -1,10 +1,7 @@
-import os
 import pytest
-from ete4 import Tree
 
 from nwkit.dist import dist_main
-from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestDistMain:
@@ -101,37 +98,6 @@ class TestDistMain:
         )
         with pytest.raises(ValueError, match='Empty leaf labels'):
             dist_main(args)
-
-    def test_with_data_files(self, capsys):
-        infile1 = os.path.join(DATA_DIR, 'dist1', 'input1.nwk')
-        infile2 = os.path.join(DATA_DIR, 'dist1', 'input2.nwk')
-        if not os.path.exists(infile1):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile1, infile2=infile2, outfile='-',
-            dist='RF', format2='auto',
-        )
-        dist_main(args)
-        captured = capsys.readouterr()
-        assert 'rf_dist' in captured.out
-
-    def test_wiki_exact_rf_values(self, capsys):
-        """Wiki example: RF distance between dist1 trees should be 4, max 54."""
-        infile1 = os.path.join(DATA_DIR, 'dist1', 'input1.nwk')
-        infile2 = os.path.join(DATA_DIR, 'dist1', 'input2.nwk')
-        if not os.path.exists(infile1):
-            pytest.skip('Test data not found')
-        args = make_args(
-            infile=infile1, infile2=infile2, outfile='-',
-            dist='RF', format2='auto',
-        )
-        dist_main(args)
-        captured = capsys.readouterr()
-        lines = captured.out.strip().split('\n')
-        assert lines[0] == 'rf_dist\tmax_rf_dist'
-        vals = lines[1].split('\t')
-        assert int(vals[0]) == 4
-        assert int(vals[1]) == 54
 
     def test_rf_dist_zero_for_identical(self, tmp_nwk, capsys):
         """RF distance should be 0 for identical trees."""

@@ -1,10 +1,6 @@
-import os
-import pytest
-from ete4 import Tree
 
 from nwkit.printlabel import printlabel_main
-from nwkit.util import read_tree
-from tests.helpers import make_args, DATA_DIR
+from tests.helpers import make_args
 
 
 class TestPrintlabelMain:
