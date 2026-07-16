@@ -1,0 +1,13 @@
+case	expected_issue	reported_issues	outcome_matched	num_trees
+valid_default	none	none	True	1
+duplicate_tip_label	duplicate_leaf_names	duplicate_leaf_names	True	1
+empty_tip_label	empty_leaf_names	empty_leaf_names	True	1
+negative_branch_length	negative_branch_length	negative_branch_length	True	1
+singleton_node	not_binary	not_binary	True	1
+multifurcation	not_binary	not_binary	True	1
+missing_support	missing_support	missing_support	True	1
+non_ultrametric	not_ultrametric	not_ultrametric	True	1
+unrooted	not_rooted	not_rooted	True	1
+ambiguous_numeric_internal_labels	format_ambiguous	format_ambiguous	True	1
+quoted_node_name	quoted_node_names	quoted_node_names	True	1
+leaf_set_mismatch	leaf_set_mismatch	leaf_set_mismatch	True	2

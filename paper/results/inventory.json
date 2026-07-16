@@ -1,0 +1,198 @@
+{
+  "functional_subcommand_count": 30,
+  "functional_subcommands": [
+    {
+      "has_seed_option": true,
+      "name": "asr",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "cladefreq",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "collapse",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "consensus",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "constrain",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "dist",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "draw",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": false
+    },
+    {
+      "has_seed_option": false,
+      "name": "drop",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "image",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": false
+    },
+    {
+      "has_seed_option": false,
+      "name": "info",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "intersection",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "label",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "mark",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "mcmctree",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "monophyly",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "nhx2nwk",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "nwk2table",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "printlabel",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "prune",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "rename",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "rescale",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "root",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "sample",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "sanitize",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": true,
+      "name": "shuffle",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": true,
+      "name": "skim",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "subtree",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "table2nwk",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "transfer",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "validate",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    }
+  ],
+  "git_commit": "f71dc345ac830a195992abadbf4b7a7394837991",
+  "git_commit_short": "f71dc345ac83",
+  "nwkit_version": "0.27.0",
+  "pytest_module_count": 34,
+  "pytest_test_count": 597,
+  "python_version": "3.12.13",
+  "reads_stdin_by_default_count": 30,
+  "seeded_subcommands": [
+    "asr",
+    "shuffle",
+    "skim"
+  ],
+  "writes_stdout_by_default_count": 28
+}

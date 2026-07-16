@@ -1,0 +1,2 @@
+model	num_states	states	root_prior	root_prior_values	rate_estimated	log_likelihood	rate_bounds	rate	rate_0_to_1	rate_1_to_0
+ER	2	0,1	equal	0.5,0.5	True	-45.32080478801622	1e-09,1000	3.6329015397940205	3.6329015397940205	3.6329015397940205

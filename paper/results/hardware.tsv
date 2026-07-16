@@ -1,0 +1,8 @@
+key	value
+platform	macOS-26.5.2-x86_64-i386-64bit
+machine	x86_64
+processor	i386
+python	3.12.13
+logical_cpus	12
+physical_cpus	12
+total_memory_gb	64.0

@@ -1,0 +1,58 @@
+benchmark	software	shape	num_tips	num_trees	replicate	elapsed_s	peak_rss_mb	returncode	error
+validation_tip_scaling	NWKIT	balanced	128	1	1	1.5377212500025053	144.9609375	0	
+validation_tip_scaling	NWKIT	balanced	128	1	2	1.4885535000066739	145.33984375	0	
+validation_tip_scaling	NWKIT	balanced	128	1	3	1.4932815419742838	144.19140625	0	
+validation_tip_scaling	NWKIT	caterpillar	128	1	1	1.513208290998591	145.18359375	0	
+validation_tip_scaling	NWKIT	caterpillar	128	1	2	1.4786202920076903	145.34375	0	
+validation_tip_scaling	NWKIT	caterpillar	128	1	3	1.491800832998706	144.125	0	
+validation_tip_scaling	NWKIT	balanced	512	1	1	1.536330041999463	145.125	0	
+validation_tip_scaling	NWKIT	balanced	512	1	2	1.503097542008618	145.65234375	0	
+validation_tip_scaling	NWKIT	balanced	512	1	3	1.4789660420210566	146.58203125	0	
+validation_tip_scaling	NWKIT	caterpillar	512	1	1	1.561812915984774	147.046875	0	
+validation_tip_scaling	NWKIT	caterpillar	512	1	2	1.4936326250026468	146.80859375	0	
+validation_tip_scaling	NWKIT	caterpillar	512	1	3	1.6704349170031492	146.2265625	0	
+validation_tip_scaling	NWKIT	balanced	2048	1	1	1.6695215000072494	151.12890625	0	
+validation_tip_scaling	NWKIT	balanced	2048	1	2	1.5693600829981733	150.4296875	0	
+validation_tip_scaling	NWKIT	balanced	2048	1	3	1.5419217919989023	150.78125	0	
+validation_tip_scaling	NWKIT	caterpillar	2048	1	1	1.5682052499905694	152.3828125	0	
+validation_tip_scaling	NWKIT	caterpillar	2048	1	2	1.5600654589943588	151.9453125	0	
+validation_tip_scaling	NWKIT	caterpillar	2048	1	3	1.5855521660123486	152.3984375	0	
+validation_tip_scaling	NWKIT	balanced	8192	1	1	1.7935360410192516	172.625	0	
+validation_tip_scaling	NWKIT	balanced	8192	1	2	1.7606607079796959	171.0546875	0	
+validation_tip_scaling	NWKIT	balanced	8192	1	3	1.793363416014472	171.44921875	0	
+validation_tip_scaling	NWKIT	caterpillar	8192	1	1	1.6997156249999534	174.66796875	0	
+validation_tip_scaling	NWKIT	caterpillar	8192	1	2	1.69186345799244	174.91796875	0	
+validation_tip_scaling	NWKIT	caterpillar	8192	1	3	1.7276027920015622	174.07421875	0	
+validation_tip_scaling	NWKIT	balanced	32768	1	1	2.5803080839978065	257.8359375	0	
+validation_tip_scaling	NWKIT	balanced	32768	1	2	2.777119375008624	260.9921875	0	
+validation_tip_scaling	NWKIT	balanced	32768	1	3	2.6944252920220606	260.81640625	0	
+validation_tip_scaling	NWKIT	caterpillar	32768	1	1	2.509974124986911	268.3046875	0	
+validation_tip_scaling	NWKIT	caterpillar	32768	1	2	2.383177625015378	266.4375	0	
+validation_tip_scaling	NWKIT	caterpillar	32768	1	3	2.332429832982598	266.77734375	0	
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	10	1	1.5802335829939693	147.59375	0	Number of input trees = 10 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	10	2	1.5026783749926835	147.25	0	Number of input trees = 10 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	10	3	1.5798670839867555	148.59375	0	Number of input trees = 10 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	10	1	0.6442799579817802	39.45703125	0	
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	10	2	0.6684900829859544	39.54296875	0	
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	10	3	0.6301396669878159	39.6640625	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	10	1	0.073250209010439	9.70703125	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	10	2	0.03863837500102818	0.1171875	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	10	3	0.05194920799112879	16.5078125	0	
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	50	1	1.7258576669846661	152.8984375	0	Number of input trees = 50 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	50	2	1.6783649999997579	150.66796875	0	Number of input trees = 50 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	50	3	1.696700916014379	150.515625	0	Number of input trees = 50 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	50	1	1.514075999992201	46.09765625	0	
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	50	2	1.4781111250049435	45.06640625	0	
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	50	3	1.46038075000979	45.82421875	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	50	1	0.05132204099209048	14.1171875	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	50	2	0.05124904101830907	15.4609375	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	50	3	0.05098374999943189	17.4921875	0	
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	250	1	2.588890958984848	158.16015625	0	Number of input trees = 250 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	250	2	2.6040050000010524	158.0625	0	Number of input trees = 250 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	NWKIT	mixed_binary	256	250	3	2.63287983299233	157.85546875	0	Number of input trees = 250 | Number of leaves in output tree = 256, Output tree format = 0
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	250	1	6.289577333984198	82.421875	0	
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	250	2	6.2444932499784045	80.8046875	0	
+consensus_tree_count_scaling	PhyKIT	mixed_binary	256	250	3	6.310393500025384	83.125	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	250	1	0.252022583008511	21.7265625	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	250	2	0.12989683297928423	21.34765625	0	
+consensus_tree_count_scaling	Gotree	mixed_binary	256	250	3	0.12420095800189301	21.20703125	0	

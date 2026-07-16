@@ -1,0 +1,10 @@
+software	version_or_commit	role	provenance	accessed
+NWKIT	0.27.0; f71dc345ac83	focal command-line toolkit	https://github.com/kfuku52/nwkit	2026-07-16
+ETE	4.4.0	NWKIT tree representation and comparison library	https://github.com/etetoolkit/ete	2026-07-16
+Biopython	1.87	NWKIT dependency and independent tree parser	https://biopython.org/	2026-07-16
+Gotree	0.5.2; 8ce3ce6eb5b14261b0be7ed2b1b02bcf22dfc305	command-line comparator	https://github.com/evolbioinfo/gotree	2026-07-16
+PhyKIT	2.3.0	command-line comparator	https://github.com/JLSteenwyk/PhyKIT	2026-07-16
+Newick Utilities	1.6; da121155a977197cab9fbb15953ca1b40b11eb87	command-line comparator	https://github.com/tjunier/newick_utils	2026-07-16
+DendroPy	5.0.10	programming-library comparator	https://github.com/jeetsukumaran/DendroPy	2026-07-16
+TreeSwift	1.1.45	programming-library comparator	https://github.com/niemasd/TreeSwift	2026-07-16
+ape	5.8-1	programming-library comparator	https://cran.r-project.org/package=ape	2026-07-16
