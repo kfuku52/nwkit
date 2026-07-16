@@ -22,11 +22,11 @@ Title running head: **COMPOSABLE TREE PROCESSING WITH NWKIT**
 
 ## Abstract
 
-Phylogenetic trees rarely reach biological interpretation in the form in which
-they are inferred. During a study, alternative analyses can produce Newick trees
-that differ in topology, rooting, branch lengths, support values, and
-annotations. Investigators must therefore decide not only which tree to
-analyze, but how evidence distributed among trees should be combined. Yet these
+Phylogenetic studies commonly generate multiple Newick trees through alternative
+analyses and downstream processing. These trees can differ in topology,
+rooting, branch lengths, support values, and annotations. Investigators must
+therefore decide not only which tree to analyze, but how evidence distributed
+among trees should be combined. Yet these
 decisions are often encoded in manual edits and study-specific scripts, leaving
 analytical provenance implicit. To make this post-inference layer reproducible,
 we developed NWKIT, a command-line environment that expresses tree curation and
