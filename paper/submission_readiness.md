@@ -5,7 +5,7 @@ and Evolution* instructions.
 
 ## Complete
 
-- The scientific draft contains 3,498 words before References and the rendered
+- The scientific draft contains 3,509 words before References and the rendered
   manuscript is 14 Letter pages, within the article-type targets.
 - The four-display limit is met by three figures and one table.
 - Figures and Table 1 occur after first mention; all figures have legend-level
