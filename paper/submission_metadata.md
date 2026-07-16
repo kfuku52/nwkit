@@ -8,7 +8,7 @@
   Curation and Analysis
 - Author running head: FUKUSHIMA
 - Title running head: COMPOSABLE TREE PROCESSING WITH NWKIT
-- Main-document word count before References: 3,489
+- Main-document word count before References: 3,498
 - Main-document pages: 14
 - Main displays: three figures and one table
 - Supplement pages: 12
