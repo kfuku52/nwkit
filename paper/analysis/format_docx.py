@@ -185,7 +185,13 @@ def format_main(document: Document) -> None:
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             paragraph.paragraph_format.keep_together = True
             paragraph.paragraph_format.first_line_indent = None
-        elif paragraph.text in {"Kenji Fukushima", "Corresponding author: kfuku52@gmail.com"}:
+        elif paragraph.text.startswith(
+            (
+                "Kenji Fukushima1,2 (ORCID:",
+                "1 Center for Frontier Research",
+                "Correspondence: Kenji Fukushima",
+            )
+        ):
             paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
             paragraph.paragraph_format.first_line_indent = None
         elif paragraph.text.startswith(("Author running head:", "Title running head:")):

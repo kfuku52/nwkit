@@ -7,6 +7,10 @@
   workflows
 - Version: 0.27.0
 - Creator: Fukushima, Kenji
+- Creator ORCID: <https://orcid.org/0000-0002-2353-9274>
+- Creator affiliation: Center for Frontier Research, National Institute of
+  Genetics; Genetics Program, Graduate Institute for Advanced Studies,
+  SOKENDAI
 - License: MIT License
 - Access: Open
 - Related source: <https://github.com/kfuku52/nwkit>
@@ -28,6 +32,10 @@ Suggested description:
 
 - Title: Data and results for NWKIT composable phylogenetic-tree workflows
 - Creator: Fukushima, Kenji
+- Creator ORCID: <https://orcid.org/0000-0002-2353-9274>
+- Creator affiliation: Center for Frontier Research, National Institute of
+  Genetics; Genetics Program, Graduate Institute for Advanced Studies,
+  SOKENDAI
 - Related manuscript title: NWKIT: Composable Command-Line Workflows for
   Phylogenetic Tree Curation and Analysis
 - Keywords: phylogenetics; phylogenetic trees; Newick; software evaluation;
@@ -46,6 +54,6 @@ Suggested abstract:
 
 ## Metadata still needed
 
-The creator affiliation, postal address where requested, active Dryad reviewer
-URL, and Zenodo DOI cannot be finalized until the author supplies the
-affiliation and the deposits are created.
+The active Dryad reviewer URL and Zenodo DOI or reviewer link cannot be
+finalized until the deposits are created. The creator affiliations above should
+be confirmed during deposit.

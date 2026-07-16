@@ -29,6 +29,8 @@ document should become the canonical source at a clearly recorded handoff.
 - `submission_readiness.md`: completed checks and author-supplied items still
   required before ScholarOne submission.
 - `submission_metadata.md`: fields and file assignments for ScholarOne.
+- `author_metadata_sources.md`: provenance and confirmation status for author,
+  affiliation, funding, contribution, and conflict-of-interest metadata.
 - `cover_letter.md`: journal-specific cover-letter draft.
 - `deposit_metadata.md`: ready-to-copy Zenodo and Dryad descriptions.
 

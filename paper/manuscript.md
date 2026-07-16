@@ -4,9 +4,17 @@ bibliography: references.bib
 link-citations: true
 ---
 
-**Kenji Fukushima**
+**Kenji Fukushima**^1,2^ (ORCID:
+<https://orcid.org/0000-0002-2353-9274>)
 
-Corresponding author: **kfuku52@gmail.com**
+^1^ Center for Frontier Research, National Institute of Genetics, Mishima,
+Japan\
+^2^ Genetics Program, Graduate Institute for Advanced Studies, SOKENDAI,
+Mishima, Japan
+
+Correspondence: **Kenji Fukushima**, National Institute of Genetics, 1111 Yata,
+Mishima, Shizuoka 411-8540, Japan;
+telephone: +81-55-981-6751; email: **kenji.fukushima@nig.ac.jp**
 
 Author running head: **FUKUSHIMA**
 
@@ -361,36 +369,28 @@ and differing consensus-time curves for NWKIT, Gotree, and PhyKIT.
 
 ## Discussion
 
-NWKIT's contribution is the integration of several kinds of downstream tree
-work behind common, pipe-compatible conventions. The strongest evidence is not
-that the toolkit has 30 commands, but that the same explicit input rules connect
-preflight reporting, transformations, taxonomic references, tree collections,
-trait analysis, sampling, and preparation for another program. This arrangement
-is useful when an analysis can be expressed as a sequence of defined operations
-whose commands and intermediate meanings should remain visible.
+NWKIT integrates several kinds of downstream tree work behind common,
+pipe-compatible conventions. Its contribution is not its command count, but
+the way explicit input rules connect preflight reporting, transformations,
+taxonomic references, tree collections, trait analysis, sampling, and
+preparation for downstream programs. This arrangement keeps commands and
+intermediate meanings visible in a sequence of defined operations.
 
-The comparison also clarifies when other software is preferable. Gotree offers
-an efficient compiled implementation of many fundamental tree operations and
-was substantially faster in the present consensus runs. PhyKIT combines tree
-processing with numerous alignment, comparative, network, and phylogenomic
-analyses; many of these have no NWKIT counterpart. General libraries such as
-ETE, DendroPy, Bio.Phylo, TreeSwift, and ape remain the appropriate substrate
-for new algorithms, custom data models, and analyses that require programmatic
-control. NWKIT itself depends on ETE and scientific Python rather than replacing
-them.
+The comparison also identifies preferable alternatives. Gotree was
+substantially faster in the present consensus runs. PhyKIT includes many
+alignment, comparative, network, and phylogenomic analyses without NWKIT
+counterparts. ETE, DendroPy, Bio.Phylo, TreeSwift, and ape remain appropriate
+for new algorithms, custom data models, and programmatic control; NWKIT depends
+on ETE and scientific Python rather than replacing them.
 
-Several limitations follow. First, NWKIT is Newick-centered and is not a general
-container for characters, alignments, and trees in multiple phylogenetic
-formats. Second, automatic format detection cannot remove ambiguity inherent in
-unannotated text; strict mode can reject an ambiguity but cannot infer the
-author's intention. Rootedness inferred from tree structure likewise requires
-biological confirmation. Third, taxonomy, divergence-time, and image commands
-depend on external databases or services whose coverage and availability can
-change. Image retrieval additionally requires attention to license and
-attribution, despite the manifest and filtering controls. Fourth, the Mk
-implementation covers categorical ER, symmetric, and all-rates-different models
-and stochastic maps, but it is not a substitute for the broader comparative
-modeling available elsewhere.
+Several limitations follow. NWKIT is Newick-centered rather than a general
+container for characters, alignments, and trees. Automatic detection cannot
+remove ambiguity from unannotated text; strict mode can reject ambiguity but
+cannot infer authorial intent, and structural rootedness still requires
+biological confirmation. Taxonomy, divergence-time, and image commands depend
+on external services, while image retrieval requires license and attribution
+checks. Finally, its categorical ER, symmetric, and all-rates-different Mk
+models and stochastic maps do not replace broader comparative modeling.
 
 The evaluation is deliberately bounded. The capability table was constructed
 from selected NWKIT workflows, so it should not be read as an exhaustive census
@@ -414,17 +414,30 @@ the libraries and toolkits on which phylogenetic workflows depend.
 
 OpenAI Codex was used to assist with manuscript drafting, analysis-code
 development, document formatting, and consistency checks. The author reviewed
-the generated material, verified the reported analyses, and accepts
-responsibility for the work.
+and verified the material and accepts responsibility for the work.
+
+## Funding
+
+This work was supported by the Sofja Kovalevskaja Programme of the Alexander
+von Humboldt Foundation, Human Frontier Science Program grant RGY0082/2021,
+and JSPS KAKENHI JP23K20050.
+
+## Author Contributions
+
+Kenji Fukushima conceptualized the study, developed NWKIT, performed the
+analyses, and wrote and revised the manuscript.
+
+## Conflict of Interest
+
+The author declares no conflict of interest.
 
 ## Data Availability
 
-NWKIT source code is available at <https://github.com/kfuku52/nwkit>. The
-versioned source and manuscript analysis scripts will be archived in Zenodo.
-The comparison records, generated
-result tables, raw benchmark outputs, worked-example inputs, and reproduction
-instructions will be deposited in Dryad. Archival identifiers will be added
-before submission. The PEPC inputs are also available in the CSUBST repository
-at the commit and checksums reported above.
+NWKIT source code is available at <https://github.com/kfuku52/nwkit>. A
+versioned source and analysis snapshot will be archived in Zenodo. Comparison
+records, results, benchmarks, worked-example inputs, and reproduction
+instructions will be deposited in Dryad; identifiers will be added before
+submission. The PEPC inputs are also available in the CSUBST repository at the
+commit and checksums reported above.
 
 ## References

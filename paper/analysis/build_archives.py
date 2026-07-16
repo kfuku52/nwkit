@@ -219,6 +219,7 @@ def zenodo_members(manuscript_commit: str) -> list[ArchiveMember]:
         "supplement.md",
         "submission_readiness.md",
         "submission_metadata.md",
+        "author_metadata_sources.md",
         "cover_letter.md",
         "deposit_metadata.md",
     ):

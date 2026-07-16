@@ -42,13 +42,18 @@ Thank you for considering this manuscript.
 Sincerely,
 
 Kenji Fukushima\
-Corresponding author\
-<kfuku52@gmail.com>
+Center for Frontier Research, National Institute of Genetics\
+Genetics Program, Graduate Institute for Advanced Studies, SOKENDAI\
+1111 Yata, Mishima, Shizuoka 411-8540, Japan\
+Telephone: +81-55-981-6751\
+<kenji.fukushima@nig.ac.jp>\
+ORCID: <https://orcid.org/0000-0002-2353-9274>
 
 ## Author confirmation before sending
 
 The signed letter should additionally confirm that the work is not under
 consideration elsewhere, that all authors approve the submission, that any
 conflicts have been disclosed, and that NWKIT will be supported for at least
-two years after publication. The affiliation and postal correspondence address
-must be added to the signature block.
+two years after publication. The affiliation and contact details above were
+compiled from current institutional and published sources and should be checked
+before sending.
