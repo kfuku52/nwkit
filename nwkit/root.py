@@ -14,6 +14,7 @@ from nwkit.constrain import (
     taxid2tree,
 )
 from nwkit.util import (
+    TREE_FORMAT_PROP,
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_species_group_records,
@@ -21,11 +22,13 @@ from nwkit.util import (
     is_rooted,
     read_tree,
     remove_singleton,
+    support_is_missing,
     validate_unique_named_leaves,
     warn_cleanup_failure,
     write_tree,
 )
 from nwkit.clade_mapping import (
+    canonical_split,
     find_root_split_candidates,
     projected_root_split,
 )
@@ -149,7 +152,130 @@ def _collapse_singleton_root(tree):
         tree = Tree(child.write(parser=0, format_root_node=True), parser=0)
     return tree
 
+
+_RESERVED_NODE_PROPERTIES = frozenset((
+    'name',
+    'dist',
+    'support',
+    TREE_FORMAT_PROP,
+))
+
+
+def _internal_branch_key(node, all_taxa):
+    side = frozenset(str(name) for name in node.leaf_names())
+    return canonical_split(side, all_taxa - side)
+
+
+def _merge_branch_annotation_values(values):
+    if not values:
+        return None, False
+    first = values[0]
+    if all(value == first for value in values[1:]):
+        return first, True
+    return None, False
+
+
+def _snapshot_internal_branch_annotations(tree):
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    grouped = defaultdict(list)
+    for node in tree.traverse():
+        if node.is_root or node.is_leaf:
+            continue
+        custom_properties = {
+            str(prop): value
+            for prop, value in node.props.items()
+            if str(prop) not in _RESERVED_NODE_PROPERTIES and value is not None
+        }
+        grouped[_internal_branch_key(node, all_taxa)].append({
+            'name': node.name if node.name not in (None, '') else None,
+            'support': None if support_is_missing(node.support) else node.support,
+            'properties': custom_properties,
+        })
+
+    resolved = dict()
+    conflicts = set()
+    for split, records in grouped.items():
+        annotation = {'properties': {}}
+        for field in ('name', 'support'):
+            values = [record[field] for record in records if record[field] is not None]
+            value, usable = _merge_branch_annotation_values(values)
+            if usable:
+                annotation[field] = value
+            elif values:
+                conflicts.add((split, field))
+        property_names = {
+            prop
+            for record in records
+            for prop in record['properties']
+        }
+        for prop in property_names:
+            values = [
+                record['properties'][prop]
+                for record in records
+                if prop in record['properties']
+            ]
+            value, usable = _merge_branch_annotation_values(values)
+            if usable:
+                annotation['properties'][prop] = value
+            elif values:
+                conflicts.add((split, prop))
+        resolved[split] = annotation
+    return {
+        'all_taxa': all_taxa,
+        'by_split': resolved,
+        'conflicts': conflicts,
+    }
+
+
+def _restore_internal_branch_annotations(tree, snapshot):
+    all_taxa = snapshot['all_taxa']
+    for node in tree.traverse():
+        if node.is_root or node.is_leaf:
+            continue
+        node.name = None
+        node.support = None
+        for prop in list(node.props):
+            if str(prop) not in _RESERVED_NODE_PROPERTIES:
+                node.props.pop(prop, None)
+        annotation = snapshot['by_split'].get(_internal_branch_key(node, all_taxa))
+        if annotation is None:
+            continue
+        if 'name' in annotation:
+            node.name = annotation['name']
+        if 'support' in annotation:
+            node.support = annotation['support']
+        for prop, value in annotation['properties'].items():
+            node.props[prop] = value
+
+
+def _prepare_annotations_for_reroot(tree):
+    snapshot = _snapshot_internal_branch_annotations(tree)
+    root_support = tree.support
+    leaf_support = {
+        str(leaf.name): leaf.support
+        for leaf in tree.leaves()
+    }
+    for node in tree.traverse():
+        node.support = None
+    return snapshot, root_support, leaf_support
+
+
+def _finish_annotations_after_reroot(tree, snapshot, root_support, leaf_support,
+                                     verbose=False):
+    _restore_internal_branch_annotations(tree, snapshot)
+    tree.support = root_support
+    for leaf in tree.leaves():
+        leaf.support = leaf_support[str(leaf.name)]
+    if verbose and snapshot['conflicts']:
+        sys.stderr.write(
+            'Dropped {} conflicting root-edge annotation(s) while rerooting.\n'.format(
+                len(snapshot['conflicts'])
+            )
+        )
+
+
 def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=True):
+    tree_to = tree_to.copy(method='deepcopy')
     tree_to = _collapse_singleton_root(tree_to)
     tree_from = _collapse_singleton_root(tree_from)
     validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
@@ -173,15 +299,13 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
         (len(root_children) == 2) and
         any(outgroup_set == tree_to_leaf_sets[child] for child in root_children)
     )
-    support_backup = None
+    annotation_backup = None
     if not is_root_bipartition_already_matching:
-        support_backup = list()
         # Ensure all None dists are 0 and clear support before rerooting.
         for node in tree_to.traverse():
             if node.dist is None:
                 node.dist = 0.0
-            support_backup.append((node, node.support))
-            node.support = None
+        annotation_backup = _prepare_annotations_for_reroot(tree_to)
         _normalize_root_distance_for_reroot(tree_to)
         tree_to.set_outgroup(next(iter(ingroup_set)))
         if len(outgroup_set) == 1:
@@ -215,9 +339,12 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
         tree_to.name = original_root_name
     else:
         tree_to.name = 'Root'
-    if support_backup is not None:
-        for node, support in support_backup:
-            node.support = support
+    if annotation_backup is not None:
+        _finish_annotations_after_reroot(
+            tree_to,
+            *annotation_backup,
+            verbose=verbose,
+        )
     return tree_to
 
 
@@ -232,6 +359,7 @@ def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbos
         )
     if taxon_mode != 'intersection':
         raise ValueError("Unsupported taxon mode for root transfer: {}".format(taxon_mode))
+    tree_to = tree_to.copy(method='deepcopy')
     tree_to = _collapse_singleton_root(tree_to)
     tree_from = _collapse_singleton_root(tree_from)
     validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
@@ -262,17 +390,19 @@ def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbos
         )
     candidate = unique_candidates[0]
     original_root_name = tree_to.name
-    support_backup = [(node, node.support) for node in tree_to.traverse()]
+    annotation_backup = _prepare_annotations_for_reroot(tree_to)
     for node in tree_to.traverse():
         if node.dist is None:
             node.dist = 0.0
-        node.support = None
     _normalize_root_distance_for_reroot(tree_to)
     tree_to.set_outgroup(candidate)
     _normalize_root_distance_for_reroot(tree_to)
     tree_to.name = original_root_name if original_root_name else 'Root'
-    for node, support in support_backup:
-        node.support = support
+    _finish_annotations_after_reroot(
+        tree_to,
+        *annotation_backup,
+        verbose=verbose,
+    )
     if projected_root_split(tree_to, shared_taxa) != source_split:
         raise ValueError('Root transfer failed to reproduce the source split on shared tips.')
     return tree_to

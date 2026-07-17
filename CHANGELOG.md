@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Root transfer and the root alignment used by `compose` and `transfer` now
+  preserve internal-node support, names, and NHX properties on their canonical
+  unrooted branch splits instead of leaving them attached to nodes whose
+  descendant taxa change during rerooting.
+- `compose` annotation and value sources no longer change the target rooting
+  when `--root-source` is absent.
+- Failed root transfers no longer leave the target tree partially rerooted.
+- Split-based transfer now treats equal support, names, and NHX values on the
+  two children of a bifurcating root as one root-edge value. Conflicting values
+  remain ambiguous and are not transferred.
+
 ## [0.29.0] - 2026-07-17
 
 ### Added

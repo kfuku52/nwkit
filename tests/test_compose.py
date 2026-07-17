@@ -124,3 +124,280 @@ def test_compose_blocks_projected_lengths_without_opt_in(tmp_nwk, tmp_path):
     compose_main(args)
     allowed = read_tree(args.outfile, format='1', quoted_node_names=True, quiet=True)
     assert allowed.common_ancestor(['A', 'B', 'X']).dist == pytest.approx(7.0)
+
+
+def test_compose_preserves_support_and_lengths_across_different_rootings(
+    tmp_nwk,
+    tmp_path,
+):
+    topology = tmp_nwk(
+        '((E:1,F:1):0.5,(D:1,(C:1,(A:1,B:1):1):1):0.5);',
+        'topology.nwk',
+    )
+    root_source = tmp_nwk(
+        '((A:1,B:1):0.2,(C:1,(D:1,(E:1,F:1):1):1):0.8);',
+        'root.nwk',
+    )
+    support_source = tmp_nwk(
+        '((E:1,F:1)40:0.5,'
+        '(D:1,(C:1,(A:1,B:1)20:1)30:1)40:0.5);',
+        'support.nwk',
+    )
+    length_source = tmp_nwk(
+        '((E:6,F:7):4,'
+        '(D:5,(C:4,(A:2,B:3):2):3):4);',
+        'lengths.nwk',
+    )
+    report = tmp_path / 'composition.tsv'
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='0',
+        manifest=None,
+        root_source=root_source,
+        name_source=None,
+        support_source=support_source,
+        length_source=length_source,
+        property_source=[],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='strict',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=str(report),
+    )
+
+    compose_main(args)
+
+    output = read_tree(args.outfile, format='0', quoted_node_names=True, quiet=True)
+    assert output.common_ancestor(['A', 'B']).support == pytest.approx(20.0)
+    assert output.common_ancestor(['D', 'E', 'F']).support == pytest.approx(30.0)
+    assert output.common_ancestor(['E', 'F']).support == pytest.approx(40.0)
+    assert output.common_ancestor(['D', 'E', 'F']).dist == pytest.approx(3.0)
+    assert output.common_ancestor(['E', 'F']).dist == pytest.approx(8.0)
+    assert output['A'].dist == pytest.approx(2.0)
+    complement = next(
+        child for child in output.get_children()
+        if set(child.leaf_names()) == {'C', 'D', 'E', 'F'}
+    )
+    assert complement.support == pytest.approx(20.0)
+    rows = pd.read_csv(report, sep='\t')
+    abc_split = rows[
+        (rows['source_property'] == 'support')
+        & (rows['target_taxa'] == 'D,E,F')
+    ].iloc[0]
+    assert abc_split['source_value'] == pytest.approx(30.0)
+    assert abc_split['status'] == 'transferred'
+
+
+def test_compose_preserves_names_and_nhx_properties_across_rootings(tmp_nwk, tmp_path):
+    topology = tmp_nwk(
+        '((E:1,F:1):0.5,(D:1,(C:1,(A:1,B:1):1):1):0.5);',
+        'topology.nwk',
+    )
+    root_source = tmp_nwk(
+        '((A:1,B:1):0.2,(C:1,(D:1,(E:1,F:1):1):1):0.8);',
+        'root.nwk',
+    )
+    annotation_source = tmp_nwk(
+        '((E:1,F:1)EDGE_EF:0.5[&&NHX:edge_id=EF],'
+        '(D:1,(C:1,(A:1,B:1)EDGE_AB:1[&&NHX:edge_id=AB])'
+        'EDGE_ABC:1[&&NHX:edge_id=ABC])EDGE_EF:0.5[&&NHX:edge_id=EF])ROOT;',
+        'annotations.nwk',
+    )
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='1',
+        manifest=None,
+        root_source=root_source,
+        name_source=annotation_source,
+        support_source=None,
+        length_source=None,
+        property_source=['edge_id@{}'.format(annotation_source)],
+        source_format='1',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=None,
+    )
+
+    compose_main(args)
+
+    output = read_tree(args.outfile, format='1', quoted_node_names=True, quiet=True)
+    abc_edge = output.common_ancestor(['D', 'E', 'F'])
+    assert abc_edge.name == 'EDGE_ABC'
+    assert abc_edge.props['edge_id'] == 'ABC'
+    assert output.common_ancestor(['E', 'F']).name == 'EDGE_EF'
+    assert output.common_ancestor(['A', 'B']).props['edge_id'] == 'AB'
+
+
+def test_compose_without_root_source_does_not_adopt_annotation_source_root(
+    tmp_nwk,
+    tmp_path,
+):
+    topology = tmp_nwk('(A:1,B:1,(C:1,D:1):1);', 'topology.nwk')
+    support_source = tmp_nwk(
+        '(A:1,(B:1,(C:1,D:1)80:1)70:1);',
+        'support.nwk',
+    )
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='0',
+        manifest=None,
+        root_source=None,
+        name_source=None,
+        support_source=support_source,
+        length_source=None,
+        property_source=[],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=None,
+    )
+
+    compose_main(args)
+
+    output = read_tree(args.outfile, format='0', quoted_node_names=True, quiet=True)
+    assert len(output.get_children()) == 3
+    assert output.common_ancestor(['C', 'D']).support == pytest.approx(80.0)
+
+
+def test_compose_split_resolves_equal_support_on_root_edges(tmp_nwk, tmp_path):
+    topology = tmp_nwk(
+        '((E:1,F:1):0.5,(D:1,(C:1,(A:1,B:1):1):1):0.5);',
+        'topology.nwk',
+    )
+    root_source = tmp_nwk(
+        '((A:1,B:1):0.2,(C:1,(D:1,(E:1,F:1):1):1):0.8);',
+        'root.nwk',
+    )
+    support_source = tmp_nwk(
+        '((E:1,F:1)40:0.5,'
+        '(D:1,(C:1,(A:1,B:1)20:1)30:1)40:0.5);',
+        'support.nwk',
+    )
+    report = tmp_path / 'composition.tsv'
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='0',
+        manifest=None,
+        root_source=root_source,
+        name_source=None,
+        support_source=support_source,
+        length_source=None,
+        property_source=[],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='strict',
+        match_basis='split',
+        allow_projected_values=False,
+        report=str(report),
+    )
+
+    compose_main(args)
+
+    output = read_tree(args.outfile, format='0', quoted_node_names=True, quiet=True)
+    assert output.common_ancestor(['A', 'B']).support == pytest.approx(20.0)
+    assert output.common_ancestor(['D', 'E', 'F']).support == pytest.approx(30.0)
+    assert output.common_ancestor(['E', 'F']).support == pytest.approx(40.0)
+    rows = pd.read_csv(report, sep='\t')
+    root_edge_rows = rows[
+        (rows['source_property'] == 'support')
+        & (rows['reason'] == 'matching_canonical_root_edge')
+    ]
+    assert len(root_edge_rows) == 3
+    assert set(root_edge_rows['status']) == {'transferred'}
+
+
+def test_compose_split_rejects_conflicting_support_on_source_root_edge(
+    tmp_nwk,
+    tmp_path,
+):
+    topology = tmp_nwk(
+        '((A:1,B:1):1,(C:1,(D:1,(E:1,F:1):1):1):1);',
+        'topology.nwk',
+    )
+    support_source = tmp_nwk(
+        '((E:1,F:1)40:0.5,'
+        '(D:1,(C:1,(A:1,B:1)20:1)30:1)50:0.5);',
+        'support.nwk',
+    )
+    report = tmp_path / 'composition.tsv'
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='0',
+        manifest=None,
+        root_source=None,
+        name_source=None,
+        support_source=support_source,
+        length_source=None,
+        property_source=[],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='split',
+        allow_projected_values=False,
+        report=str(report),
+    )
+
+    compose_main(args)
+
+    rows = pd.read_csv(report, sep='\t')
+    ef_edge = rows[
+        (rows['source_property'] == 'support')
+        & (rows['target_taxa'] == 'E,F')
+    ].iloc[0]
+    assert ef_edge['status'] == 'ambiguous'
+    assert ef_edge['reason'] == 'conflicting_root_edge_values'
+
+
+def test_compose_failed_root_transfer_leaves_target_root_unchanged(tmp_nwk, tmp_path):
+    topology = tmp_nwk('(((A:1,B:1):1,C:1):1,D:1);', 'topology.nwk')
+    incompatible_root = tmp_nwk(
+        '((A:1,C:1):1,(B:1,D:1):1);',
+        'incompatible-root.nwk',
+    )
+    report = tmp_path / 'composition.tsv'
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='1',
+        manifest=None,
+        root_source=incompatible_root,
+        name_source=None,
+        support_source=None,
+        length_source=None,
+        property_source=[],
+        source_format='1',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=str(report),
+    )
+
+    compose_main(args)
+
+    output = read_tree(args.outfile, format='1', quoted_node_names=True, quiet=True)
+    assert {
+        frozenset(child.leaf_names())
+        for child in output.get_children()
+    } == {
+        frozenset({'A', 'B', 'C'}),
+        frozenset({'D'}),
+    }
+    rows = pd.read_csv(report, sep='\t')
+    assert rows.loc[rows['source_property'] == 'root', 'status'].tolist() == ['unmatched']

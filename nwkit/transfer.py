@@ -151,7 +151,66 @@ def _set_property(node, prop, value):
         node.props[prop] = value
 
 
-def _try_align_roots(target, source, taxon_mode):
+def _is_bifurcating_root_pair(nodes):
+    if len(nodes) != 2:
+        return False
+    parent = nodes[0].up
+    if parent is None or not parent.is_root or len(parent.get_children()) != 2:
+        return False
+    return {id(node) for node in nodes} == {
+        id(node) for node in parent.get_children()
+    }
+
+
+def _resolve_split_root_edge_property(match, mapping, source_prop, target_prop):
+    if match.match_basis != 'split' or match.status != 'ambiguous':
+        return None
+    if source_prop == 'length' or target_prop == 'length':
+        return None
+    target_candidates = match.target_candidates
+    source_candidates = match.source_candidates
+    if not target_candidates or not source_candidates:
+        return None
+    if len(target_candidates) > 1 and not _is_bifurcating_root_pair(target_candidates):
+        return None
+    if len(source_candidates) > 1 and not _is_bifurcating_root_pair(source_candidates):
+        return None
+    if len(target_candidates) == 1 and len(source_candidates) == 1:
+        return None
+
+    values = list()
+    for source_node in source_candidates:
+        value, has_value = _get_property(source_node, source_prop)
+        if has_value:
+            values.append(value)
+    if values and any(value != values[0] for value in values[1:]):
+        return {
+            'resolved': False,
+            'reason': 'conflicting_root_edge_values',
+        }
+    preferred_source = next(
+        (
+            node for node in source_candidates
+            if frozenset(str(name) for name in node.leaf_names()) == match.target_taxa
+        ),
+        source_candidates[0],
+    )
+    return {
+        'resolved': True,
+        'status': (
+            'projected_match'
+            if mapping.target_only_taxa or mapping.source_only_taxa
+            else 'exact_match'
+        ),
+        'reason': 'matching_canonical_root_edge',
+        'source': preferred_source,
+        'source_taxa': frozenset(str(name) for name in preferred_source.leaf_names()),
+        'source_value': values[0] if values else None,
+        'source_has_value': bool(values),
+    }
+
+
+def _try_align_roots(target, source, taxon_mode, allow_target_reroot=True):
     if (len(list(target.leaves())) <= 1) or (len(list(source.leaves())) <= 1):
         return target, source
     target_bifurcating = len(target.get_children()) == 2
@@ -165,13 +224,17 @@ def _try_align_roots(target, source, taxon_mode):
                 verbose=False,
                 redistribute_root_length=False,
             )
-        elif source_bifurcating:
+        elif source_bifurcating and allow_target_reroot:
             target = transfer_root_with_taxon_mode(
                 tree_to=target,
                 tree_from=source,
                 taxon_mode=taxon_mode,
                 verbose=False,
                 redistribute_root_length=False,
+            )
+        elif source_bifurcating:
+            sys.stderr.write(
+                'Skipping root alignment because changing the target root is disabled.\n'
             )
         else:
             sys.stderr.write(
@@ -193,7 +256,8 @@ def _write_report(rows, report_path):
 def transfer_properties(target, source, property_specs, target_class='all',
                         taxon_mode='exact', fill=None, policy='compatible-only',
                         align_roots=True, source_label='', exclude_root=False,
-                        match_basis='clade', allow_projected_values=False):
+                        match_basis='clade', allow_projected_values=False,
+                        allow_target_reroot=True):
     if policy not in ('compatible-only', 'strict'):
         raise ValueError("Unsupported transfer policy: {}".format(policy))
     validate_unique_named_leaves(target, option_name='--infile', context=" for 'transfer'")
@@ -201,7 +265,12 @@ def transfer_properties(target, source, property_specs, target_class='all',
     if taxon_mode == 'exact' and not is_all_leaf_names_identical(target, source, verbose=True):
         raise ValueError('Leaf labels must match exactly when --taxon-mode exact.')
     if align_roots and target_class != 'leaf' and match_basis == 'clade':
-        target, source = _try_align_roots(target=target, source=source, taxon_mode=taxon_mode)
+        target, source = _try_align_roots(
+            target=target,
+            source=source,
+            taxon_mode=taxon_mode,
+            allow_target_reroot=allow_target_reroot,
+        )
     mapping = build_clade_mapping(
         target=target,
         source=source,
@@ -228,13 +297,35 @@ def transfer_properties(target, source, property_specs, target_class='all',
             previous_value, _ = _get_property(target_node, target_prop)
             source_value = None
             output_value = previous_value
-            status = match.status
-            reason = match.reason
-            projection_only = match.status == 'projected_match'
+            effective_match_status = match.status
+            effective_reason = match.reason
+            effective_source = match.source
+            effective_source_taxa = match.source_taxa
             source_has_value = False
             projected_value_allowed = ''
-            if match.status in ('exact_match', 'projected_match'):
-                source_value, source_has_value = _get_property(match.source, source_prop)
+            root_edge_resolution = _resolve_split_root_edge_property(
+                match=match,
+                mapping=mapping,
+                source_prop=source_prop,
+                target_prop=target_prop,
+            )
+            if root_edge_resolution is not None:
+                effective_reason = root_edge_resolution['reason']
+                if root_edge_resolution['resolved']:
+                    effective_match_status = root_edge_resolution['status']
+                    effective_source = root_edge_resolution['source']
+                    effective_source_taxa = root_edge_resolution['source_taxa']
+                    source_value = root_edge_resolution['source_value']
+                    source_has_value = root_edge_resolution['source_has_value']
+            status = effective_match_status
+            reason = effective_reason
+            projection_only = effective_match_status == 'projected_match'
+            if (
+                effective_match_status in ('exact_match', 'projected_match')
+                and root_edge_resolution is None
+            ):
+                source_value, source_has_value = _get_property(effective_source, source_prop)
+            if effective_match_status in ('exact_match', 'projected_match'):
                 projected_value_allowed = (
                     not projection_only
                     or (
@@ -251,12 +342,12 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 status = 'projected_value_rejected'
                 reason = 'projected_support_or_length_requires_opt_in'
                 failed = True
-            elif match.status in ('exact_match', 'projected_match'):
+            elif effective_match_status in ('exact_match', 'projected_match'):
                 if source_has_value:
                     _set_property(target_node, target_prop, source_value)
                     output_value = source_value
                     status = 'transferred'
-                    reason = match.reason
+                    reason = effective_reason
                     changed_node_ids.add(id(target_node))
                 elif fill is not None:
                     output_value = _coerce_fill(fill, target_prop)
@@ -284,8 +375,8 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 'target_taxa': _format_taxa(match.target_taxa),
                 'shared_descendant_taxa': _format_taxa(match.projected_taxa),
                 'shared_split': _format_split(match.projected_split),
-                'source_taxa': _format_taxa(match.source_taxa),
-                'match_status': match.status,
+                'source_taxa': _format_taxa(effective_source_taxa),
+                'match_status': effective_match_status,
                 'match_basis': match.match_basis,
                 'projection_only': projection_only,
                 'source_property': source_prop,

@@ -116,6 +116,13 @@ nwkit transfer -i target.nwk -i2 rerooted-source.nwk \
   -o supported.nwk
 ```
 
+Root alignment preserves support values, internal names, and NHX properties on
+their original unrooted branch splits. In split matching, equal values on the
+two children of a bifurcating root are treated as one root-edge value;
+conflicting values and root-edge branch lengths are reported as ambiguous and
+left unchanged. `compose` changes the target rooting only when `--root-source`
+is supplied.
+
 Arbitrary NHX properties can be transferred or renamed directly:
 
 ```sh

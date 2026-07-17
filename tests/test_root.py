@@ -14,6 +14,7 @@ from nwkit.root import (
     taxonomy_rooting,
     root_main,
 )
+from nwkit.clade_mapping import canonical_split
 from nwkit.util import read_tree, is_rooted
 from tests.helpers import make_args, safe_get_distance
 
@@ -366,6 +367,37 @@ class TestTransferRoot:
                     new_d = result.get_distance(l1, l2)
                     assert abs(orig_d - new_d) < 1e-6, \
                         f'{l1.name}-{l2.name}: {orig_d} vs {new_d}'
+
+    def test_preserves_internal_support_on_unrooted_splits(self):
+        tree_from = Tree(
+            '((A:1,B:1):1,(C:1,(D:1,(E:1,F:1):1):1):1);',
+            parser=1,
+        )
+        tree_to = Tree(
+            '((E:1,F:1)40:0.5,'
+            '(D:1,(C:1,(A:1,B:1)20:1)30:1)40:0.5);',
+            parser=0,
+        )
+
+        result = transfer_root(tree_to, tree_from)
+        all_taxa = frozenset(result.leaf_names())
+        support_by_split = dict()
+        for node in result.traverse():
+            if node.is_root or node.is_leaf:
+                continue
+            side = frozenset(node.leaf_names())
+            split = canonical_split(side, all_taxa - side)
+            support_by_split.setdefault(split, set()).add(float(node.support))
+
+        assert support_by_split[
+            canonical_split(frozenset({'A', 'B'}), frozenset({'C', 'D', 'E', 'F'}))
+        ] == {20.0}
+        assert support_by_split[
+            canonical_split(frozenset({'A', 'B', 'C'}), frozenset({'D', 'E', 'F'}))
+        ] == {30.0}
+        assert support_by_split[
+            canonical_split(frozenset({'E', 'F'}), frozenset({'A', 'B', 'C', 'D'}))
+        ] == {40.0}
 
     def test_zero_subroot_length_in_source_does_not_crash(self):
         tree_from = Tree('((A:0,B:0):0,(C:0,D:0):0);', parser=1)

@@ -11,6 +11,8 @@ SUPPORTED_MATCH_BASES = ('clade', 'split')
 class CladeMatch:
     target: object
     source: object | None
+    target_candidates: tuple
+    source_candidates: tuple
     status: str
     reason: str
     match_basis: str
@@ -183,6 +185,8 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
             CladeMatch(
                 target=target_node,
                 source=source_node,
+                target_candidates=tuple(target_candidates),
+                source_candidates=tuple(source_candidates),
                 status=status,
                 reason=reason,
                 match_basis=match_basis,

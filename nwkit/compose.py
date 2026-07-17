@@ -205,6 +205,7 @@ def compose_main(args):
             exclude_root=exclude_root,
             match_basis=match_basis,
             allow_projected_values=allow_projected_values,
+            allow_target_reroot=False,
         )
         target = result['tree']
         report_rows.extend(result['rows'])
@@ -233,6 +234,7 @@ def compose_main(args):
             source_label=source_path,
             match_basis=match_basis,
             allow_projected_values=allow_projected_values,
+            allow_target_reroot=False,
         )
         target = result['tree']
         report_rows.extend(result['rows'])
