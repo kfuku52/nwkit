@@ -98,9 +98,23 @@ nwkit compose -i topology.nwk \
 ```
 
 `transfer`, `compose`, `diff`, and transferred roots accept
-`--taxon-mode intersection`. Internal clades are matched only when their
-projections onto the shared tips are informative and unique; ambiguous
-projections are reported and left unchanged.
+`--taxon-mode intersection`. Reports distinguish `exact_match` from
+`projected_match`: the latter is unique only in the trees induced by their
+shared tips and does not establish that the original branches are identical.
+Ambiguous projections are reported and left unchanged. Projected node names
+and NHX properties can be transferred under the default `compatible-only`
+policy, whereas projected support values and branch lengths require an explicit
+`--allow-projected-values yes`. Strict policy accepts exact matches only.
+
+Matching defaults to rooted descendant clades. For edge-associated values in
+trees with different rootings, `--match-basis split` instead uses canonical,
+root-independent splits:
+
+```sh
+nwkit transfer -i target.nwk -i2 rerooted-source.nwk \
+  --support yes --match-basis split --report transfer.tsv \
+  -o supported.nwk
+```
 
 Arbitrary NHX properties can be transferred or renamed directly:
 

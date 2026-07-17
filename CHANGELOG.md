@@ -4,6 +4,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Rooted-clade or root-independent canonical-split matching for `transfer` and
+  `compose`, selected with `--match-basis` and recorded in TSV reports.
+
+### Changed
+
+- Partial-taxon correspondences are now reported as projected rather than
+  exact matches. Projected support and branch-length transfer is blocked by
+  default and requires `--allow-projected-values yes`; strict policy rejects
+  all projected matches.
+
 ## [0.28.0] - 2026-07-17
 
 ### Added
@@ -18,7 +30,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - A shared `--audit` option that appends command arguments, input and output
   hashes, detected input semantics, random seeds, warnings, and runtime status
   as JSON Lines.
-- Conservative clade mapping across partially overlapping tip sets through
+- Auditable clade mapping across partially overlapping tip sets through
   `--taxon-mode intersection` for `transfer`, `compose`, `diff`, and transferred
   roots.
 - Arbitrary NHX-property transfer and renaming with `--property` and

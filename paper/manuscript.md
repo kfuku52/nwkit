@@ -32,10 +32,12 @@ inferred trees become the objects ultimately interpreted. We developed
 NWKIT, a command-line toolkit that organizes post-inference tree processing as
 composable, pipe-compatible commands. NWKIT reports clade-level differences and
 composes a target tree from roots, node labels, support values, branch lengths,
-and arbitrary annotations supplied by related trees. It uses exact
-descendant-taxon matches when tip sets agree and unique clade projections for
-conservative transfer when sampling overlaps only partly. The same interface
-supports Newick inspection and normalization, topology-aware transformation,
+and arbitrary annotations supplied by related trees. Mappings can use rooted
+clades or root-independent edge splits. Matches are reported as exact only when
+tip sets agree; unique correspondences under partial overlap are identified as
+shared-tip projections, and transferring support or branch lengths through them
+requires explicit authorization. The same interface supports Newick inspection
+and normalization, topology-aware transformation,
 attachment and aggregation of taxonomic or trait data, synthesis of tree
 collections, phylogenetic-diversity sampling, and categorical ancestral-state
 reconstruction. Every command can append a machine-readable audit record of
@@ -99,7 +101,7 @@ command count.
 
 ### Software Design and Implementation
 
-Analyses used NWKIT 0.28.0 at commit `9d7353df9c43`. NWKIT requires Python 3.10
+Analyses used NWKIT 0.28.0 at commit `c65563b53f5b`. NWKIT requires Python 3.10
 or later and uses ETE 4.4.0, Biopython, NumPy, SciPy, pandas, and Matplotlib. It
 is MIT-licensed, distributed through Bioconda [@Gruning2018], and documented in
 the project wiki.
@@ -136,10 +138,15 @@ inputs, and create visual outputs.
 
 `diff` reports rooted clades or root-independent splits. `compose` takes a
 target topology and separate sources for root, names, support, branch lengths,
-or NHX properties; `transfer` maps one source. Matching uses descendant-taxon
-sets, or informative projections unique in both trees when tip sets overlap
-partly. Ambiguous requests remain unchanged or fail under a strict policy;
-per-clade TSV reports retain values and reasons.
+or NHX properties; `transfer` maps one source. Users select rooted
+descendant-clade or canonical, root-independent split matching. A correspondence
+is exact only when the full tip sets agree. With partial overlap, informative
+matches unique in both induced trees are labeled as projected; uniqueness on
+shared tips does not establish identity of the original branches. Compatible
+mode can transfer node names and NHX properties through such projections, but
+support and branch lengths require explicit opt-in. Strict mode requires exact
+matches. Per-node TSV reports retain the basis, projected taxa or split, source
+and target taxa, values, outcomes, and reasons.
 
 `annotate` joins table rows to unique tip names and can propagate a column to
 internal nodes by uniqueness, mode, count, mean, sum, extrema, or list
@@ -149,7 +156,7 @@ without a study-specific join script.
 
 ### Software Tests and Release Checks
 
-With ETE 4.4.0 and Biopython 1.87, 612 tests passed. They covered outputs,
+With ETE 4.4.0 and Biopython 1.87, 619 tests passed. They covered outputs,
 errors, regressions, round trips, seeds, threading, partial-taxon ambiguity,
 composition, aggregation, provenance hashes, and documentation. Continuous
 integration spans Python 3.10--3.14 and checks distributions. An inventory
@@ -220,8 +227,10 @@ rules to Newick, tables, provenance records, and figures.
 `diff` separates root, clade, value, and annotation differences; `compose` can
 take topology, root, names, support, lengths, and properties from separate
 trees. With different tip sets, it uses informative, unique shared-tip
-projections. Reports distinguish transferred, unmatched, and ambiguous
-requests instead of assigning by node position.
+projections but labels them separately from exact branch matches. By default,
+node names and annotations remain eligible for projected transfer, whereas
+support and lengths do not. Reports distinguish transferred, projected,
+unmatched, and ambiguous requests instead of assigning by node position.
 
 This supports a common multi-tree decision sequence. `diff` first establishes
 whether candidates disagree in clades or only in rooting and values. `compose`
@@ -347,9 +356,10 @@ reusable than manual edits or disposable scripts.
 
 Tree differencing and composition make this layer more than independent
 filters. A selected topology can receive a root, support, lengths, and
-annotations from related analyses. Reported exact or projected clade matches
-replace positional copying; ambiguous projections are withheld. Composition
-reports and audits retain both mapping decisions and the computational path.
+annotations from related analyses. Reported exact or projected clade and split
+matches replace positional copying; ambiguous projections are withheld.
+Composition reports and audits retain both mapping decisions and the
+computational path.
 
 This distinction matters biologically. Rooting, support estimation,
 time-scaling, and annotation answer different questions and may use related but
@@ -365,12 +375,16 @@ rather than replaces, scientific Python.
 
 NWKIT remains Newick-centered. Strict parsing cannot infer authorial intent,
 and structural rootedness requires biological confirmation. Projected matching
-rejects fewer than two shared descendants and nonunique projections; it cannot
-recover information absent from shared sampling. NHX is representationally
-limited, some commands use external services, and the Mk models do not replace
-broader comparative modeling.
+rejects fewer than two shared descendants and nonunique projections. Even a
+unique projection identifies correspondence only after nonshared tips are
+removed, not identity of the original branches. NWKIT therefore withholds
+projected support and branch lengths unless the user explicitly accepts that
+assumption; strict composition rejects every projected match. NHX is
+representationally limited, some commands use external services, and the Mk
+models do not replace broader comparative modeling.
 
-Projected matching is conservative, not an ancestral reconciliation method. It
+Projected matching is a shared-tip comparison, not an ancestral reconciliation
+method. It
 does not infer where a missing taxon attaches, reconcile gene and species trees,
 or adjudicate between roots. Those decisions must be made upstream or expressed
 through the selected target.

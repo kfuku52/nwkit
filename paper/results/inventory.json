@@ -200,11 +200,11 @@
       "writes_stdout_by_default": true
     }
   ],
-  "git_commit": "9d7353df9c4328c68c51a896c1ffa60b41339338",
-  "git_commit_short": "9d7353df9c43",
+  "git_commit": "c65563b53f5bda9f1c810e1d0a0fe747eb2f5c51",
+  "git_commit_short": "c65563b53f5b",
   "nwkit_version": "0.28.0",
   "pytest_module_count": 40,
-  "pytest_test_count": 612,
+  "pytest_test_count": 619,
   "python_version": "3.10.14",
   "reads_stdin_by_default_count": 33,
   "seeded_subcommands": [

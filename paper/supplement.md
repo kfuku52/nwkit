@@ -10,7 +10,7 @@ The files in `paper/analysis` generate the inventory, independent-output checks,
 
 | software | version_or_commit | role | provenance | accessed |
 | --- | --- | --- | --- | --- |
-| NWKIT | 0.28.0; 9d7353df9c43 | focal command-line toolkit | https://github.com/kfuku52/nwkit | 2026-07-17 |
+| NWKIT | 0.28.0; c65563b53f5b | focal command-line toolkit | https://github.com/kfuku52/nwkit | 2026-07-17 |
 | ETE | 4.4.0 | NWKIT tree representation and comparison library | https://github.com/etetoolkit/ete | 2026-07-16 |
 | Biopython | 1.87 | NWKIT dependency and independent tree parser | https://biopython.org/ | 2026-07-16 |
 | Gotree | 0.5.2; 8ce3ce6eb5b14261b0be7ed2b1b02bcf22dfc305 | command-line comparator | https://github.com/evolbioinfo/gotree | 2026-07-16 |
@@ -63,7 +63,7 @@ Native denotes a directly documented CLI workflow; Partial denotes a narrower or
 | Rooting strategies | Gotree 0.5.2 | Partial: outgroup and midpoint rooting | Modes count only when exposed in the reviewed command-line interface |
 | Rooting strategies | PhyKIT 2.3.0 | Partial: user-specified outgroup rooting; no documented midpoint, MAD, or taxonomy-based mode was identified | Modes count only when exposed in the reviewed command-line interface |
 | Rooting strategies | Newick Utilities 1.6 | Partial: explicit outgroup and longest-edge fallback | Modes count only when exposed in the reviewed command-line interface |
-| Topology-aware annotation transfer | NWKIT 0.28.0 | Native: diff reports clade-level compatibility; compose and transfer map roots, names, support, lengths, and arbitrary NHX properties, with conservative projection onto partially overlapping tip sets | Simple tip renaming or positional copying does not qualify |
+| Topology-aware annotation transfer | NWKIT 0.28.0 | Native: diff distinguishes exact and projected matches; compose and transfer map roots, names, support, lengths, and arbitrary NHX properties by rooted clades or root-independent splits, while projected support and length transfer requires explicit opt-in | Simple tip renaming or positional copying does not qualify |
 | Topology-aware annotation transfer | Gotree 0.5.2 | Partial: annotation from a comparison tree and node-name/comment transfer are supported | Simple tip renaming or positional copying does not qualify |
 | Topology-aware annotation transfer | PhyKIT 2.3.0 | Native: internal annotations are matched by descendant-taxon bipartitions | Simple tip renaming or positional copying does not qualify |
 | Topology-aware annotation transfer | Newick Utilities 1.6 | Not identified in the v1.6 manual | Simple tip renaming or positional copying does not qualify |
@@ -165,7 +165,7 @@ Values are medians, minima, and maxima across three process-level runs. Peak RSS
 
 ## Table S9. NWKIT command and stream inventory
 
-Inventory for NWKIT 0.28.0 at commit `9d7353df9c43`; 612 tests were collected.
+Inventory for NWKIT 0.28.0 at commit `c65563b53f5b`; 619 tests were collected.
 
 | command | stdin default | stdout default | seed option |
 | --- | --- | --- | --- |

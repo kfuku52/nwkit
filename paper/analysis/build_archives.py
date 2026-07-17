@@ -16,7 +16,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PAPER_ROOT = PROJECT_ROOT / "paper"
 FIXED_TIMESTAMP = (2026, 7, 16, 0, 0, 0)
 VERSION = "0.28.0"
-NWKIT_SOURCE_COMMIT = "9d7353df9c4328c68c51a896c1ffa60b41339338"
+NWKIT_SOURCE_COMMIT = "c65563b53f5bda9f1c810e1d0a0fe747eb2f5c51"
 
 
 ZENODO_README = """# NWKIT manuscript code package

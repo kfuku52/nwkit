@@ -14,7 +14,7 @@ Software for Systematics and Evolution
 The earlier wording, "a validated ... environment," is deliberately not used.
 NWKIT has a substantial automated test suite and a `validate` command, but that
 does not constitute independent or comprehensive validation of every algorithm.
-The manuscript will use concrete formulations such as "612 automated tests
+The manuscript will use concrete formulations such as "619 automated tests
 passed for version 0.28.0" and will reserve "accurate," "robust," or
 "validated" for properties established by external-reference comparisons.
 

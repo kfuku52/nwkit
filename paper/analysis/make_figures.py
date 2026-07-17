@@ -72,7 +72,7 @@ def figure1_architecture(figures_dir: Path) -> None:
     axis.text(
         0.5,
         0.91,
-        "33 stdin defaults  ·  31 stdout defaults  ·  612 tests",
+        "33 stdin defaults  ·  31 stdout defaults  ·  619 tests",
         ha="center",
         va="center",
         fontsize=7.5,

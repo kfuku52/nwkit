@@ -81,7 +81,7 @@ Exact category membership belongs in Figure 1 or supplementary material.
 
 ### Software testing and release process: 130 words
 
-- Report 612 tests for the manuscript commit, not a timeless claim.
+- Report 619 tests for the manuscript commit, not a timeless claim.
 - Separate unit, regression, CLI, exact-output, round-trip, and documentation
   example tests where possible.
 - CI versions, lint, source distribution, wheel build, and installed-wheel smoke
