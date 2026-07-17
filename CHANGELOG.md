@@ -4,6 +4,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.30.0] - 2026-07-17
+
 ### Added
 
 - `transfer` and `compose` now accept repeatable
@@ -126,7 +128,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `mark` output format selection no longer depends on process-wide `sys.argv` state.
 - The image-provider User-Agent now follows the package version.
 
-[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.29.0...HEAD
+[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.30.0...HEAD
+[0.30.0]: https://github.com/kfuku52/nwkit/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/kfuku52/nwkit/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/kfuku52/nwkit/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/kfuku52/nwkit/compare/v0.21.1...v0.27.0
