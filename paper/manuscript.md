@@ -22,17 +22,17 @@ Title running head: **COMPOSABLE TREE PROCESSING WITH NWKIT**
 
 ## Abstract
 
-Phylogenetic inference seldom yields a single tree ready for biological
-interpretation. Studies instead produce related trees that differ in topology,
-rooting, branch lengths, support values, or annotations. Researchers must also
-inspect and transform tree files, connect tips to taxonomic or trait data,
-summarize tree collections, and perform downstream analyses. These operations
-are often dispersed among manual edits and study-specific scripts, obscuring
-how inferred trees become the objects ultimately interpreted. We developed
+Modern systematic research combines diverse phylogenetic methods to arrive at
+biological interpretations, often generating multiple related trees along the
+way. These trees may differ in topology, rooting, branch lengths, support
+values, or annotations. Researchers must also inspect and transform trees,
+connect tips to taxonomic or trait data, summarize collections, and perform
+downstream analyses. Manual edits and study-specific scripts often obscure how
+inferred trees become the objects ultimately interpreted. We developed
 NWKIT, a command-line toolkit that organizes post-inference tree processing as
 composable, pipe-compatible commands. NWKIT can transfer roots and map node
-labels, support values, and branch lengths between trees according to clades
-defined by shared taxa, allowing compatible information from nonidentical
+labels, support values, and branch lengths between trees by matching
+descendant-taxon sets, allowing compatible information from nonidentical
 phylogenetic hypotheses to be combined explicitly. The same interface supports
 Newick inspection and normalization, topology-aware transformation, taxonomy-
 and trait-informed operations, synthesis of tree collections,
