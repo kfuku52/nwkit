@@ -4,6 +4,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.29.0] - 2026-07-17
+
 ### Added
 
 - Rooted-clade or root-independent canonical-split matching for `transfer` and
@@ -15,6 +17,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   exact matches. Projected support and branch-length transfer is blocked by
   default and requires `--allow-projected-values yes`; strict policy rejects
   all projected matches.
+- `intersection` now uses a built-in FASTA reader and writer that preserves
+  retained records verbatim; non-FASTA sequence formats are no longer accepted,
+  and Biopython is no longer a runtime dependency.
 
 ## [0.28.0] - 2026-07-17
 
@@ -39,9 +44,6 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Changed
 
-- `intersection` now uses a built-in FASTA reader and writer that preserves
-  retained records verbatim; non-FASTA sequence formats are no longer accepted,
-  and Biopython is no longer a runtime dependency.
 - Root alignment used internally for annotation and branch-value mapping now
   preserves source branch lengths instead of redistributing an already matching
   root edge.
@@ -71,6 +73,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `mark` output format selection no longer depends on process-wide `sys.argv` state.
 - The image-provider User-Agent now follows the package version.
 
-[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.28.0...HEAD
+[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.29.0...HEAD
+[0.29.0]: https://github.com/kfuku52/nwkit/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/kfuku52/nwkit/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/kfuku52/nwkit/compare/v0.21.1...v0.27.0
