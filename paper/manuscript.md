@@ -22,31 +22,29 @@ Title running head: **COMPOSABLE TREE PROCESSING WITH NWKIT**
 
 ## Abstract
 
-Phylogenetic studies commonly generate multiple Newick trees through alternative
-analyses and downstream processing. These trees can differ in topology,
+Phylogenetic studies generate alternative Newick trees differing in topology,
 rooting, branch lengths, support values, and annotations. Investigators must
-therefore decide not only which tree to analyze, but how evidence distributed
-among trees should be combined. Yet these decisions are often encoded in manual
-edits and study-specific scripts, leaving
-analytical provenance implicit. To make this post-inference layer reproducible,
-we developed NWKIT, a command-line environment that expresses tree curation and
-selected downstream analyses as pipe-compatible commands. Shared conventions
-for input, output, and tree interpretation allow operations to be inspected,
-substituted, and rerun as a workflow. NWKIT transfers roots and maps node labels,
-support values, and branch lengths between Newick trees by their shared
+compare and combine compatible evidence across these trees while also
+inspecting, normalizing, and transforming inputs, connecting tips to taxonomic
+or trait data, and summarizing tree collections. Manual edits and study-specific
+scripts leave the provenance of these operations implicit. We developed NWKIT
+to express this post-inference layer as pipe-compatible commands for tree
+curation and analysis. Shared input, output, and tree-interpretation conventions
+make operations inspectable, replaceable, and rerunnable as workflows. NWKIT
+transfers roots and maps node labels, support values, and branch lengths between
+Newick trees by their shared
 taxon-defined clades, allowing compatible components of alternative
 phylogenetic hypotheses to be combined without requiring identical topologies.
-The same interface connects defensive Newick handling and topology-aware
-transformation with taxonomic and trait-informed operations, tree-set synthesis,
+It also connects defensive Newick handling and topology-aware transformation
+with taxonomic and trait-informed operations, tree-set synthesis,
 phylogenetic-diversity sampling, and categorical ancestral-state reconstruction.
 NWKIT agreed with independent calculations of topological summaries and Mk
-marginal probabilities. In a 71-tip angiosperm
-phosphoenolpyruvate carboxylase example, a versioned command sequence diagnosed
+marginal probabilities. In a 71-tip angiosperm phosphoenolpyruvate carboxylase
+example, a versioned command sequence diagnosed
 C4 polyphyly, reconstructed ancestral states, and selected a phylogenetically
 diverse subset without manual tree editing. NWKIT thus treats post-inference
-tree processing as an analytical layer in its own right and turns the otherwise
-implicit history of a phylogenetic tree into an explicit, executable, and
-reproducible part of the analysis.
+tree processing as an explicit, executable, and reproducible layer of
+phylogenetic analysis.
 
 **Keywords:** ancestral-state reconstruction; command line; Newick;
 phylogenetics; reproducibility; tree processing
