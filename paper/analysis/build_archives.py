@@ -15,13 +15,13 @@ import zipfile
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 PAPER_ROOT = PROJECT_ROOT / "paper"
 FIXED_TIMESTAMP = (2026, 7, 16, 0, 0, 0)
-VERSION = "0.28.0"
-NWKIT_SOURCE_COMMIT = "c65563b53f5bda9f1c810e1d0a0fe747eb2f5c51"
+VERSION = "0.29.0"
+NWKIT_SOURCE_COMMIT = "1bcd1ca7be22f8f9a54bd60031bc8f47b0f35743"
 
 
 ZENODO_README = """# NWKIT manuscript code package
 
-This archive contains the NWKIT 0.28.0 source snapshot and the scripts used to
+This archive contains the NWKIT 0.29.0 source snapshot and the scripts used to
 generate the Systematic Biology manuscript analyses, result tables, figures,
 supplement, and submission documents.
 

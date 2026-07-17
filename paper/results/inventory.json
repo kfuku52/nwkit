@@ -200,11 +200,11 @@
       "writes_stdout_by_default": true
     }
   ],
-  "git_commit": "c65563b53f5bda9f1c810e1d0a0fe747eb2f5c51",
-  "git_commit_short": "c65563b53f5b",
-  "nwkit_version": "0.28.0",
-  "pytest_module_count": 40,
-  "pytest_test_count": 619,
+  "git_commit": "1bcd1ca7be22f8f9a54bd60031bc8f47b0f35743",
+  "git_commit_short": "1bcd1ca7be22",
+  "nwkit_version": "0.29.0",
+  "pytest_module_count": 41,
+  "pytest_test_count": 628,
   "python_version": "3.10.14",
   "reads_stdin_by_default_count": 33,
   "seeded_subcommands": [

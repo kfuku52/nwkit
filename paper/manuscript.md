@@ -88,7 +88,7 @@ taxonomy-aware operations, and selected downstream analyses remain distributed
 across interfaces with different assumptions.
 
 NWKIT began in 2019 as reusable shell commands for tree transformation. Version
-0.28.0 adds preflight reporting, tree differencing, multi-source composition,
+0.29.0 adds preflight reporting, tree differencing, multi-source composition,
 provenance, tree-set summaries, taxonomy- and trait-aware operations,
 visualization, and categorical ancestral-state reconstruction. We describe its
 design, compare task-level capabilities with three command-line toolkits,
@@ -101,8 +101,8 @@ command count.
 
 ### Software Design and Implementation
 
-Analyses used NWKIT 0.28.0 at commit `c65563b53f5b`. NWKIT requires Python 3.10
-or later and uses ETE 4.4.0, Biopython, NumPy, SciPy, pandas, and Matplotlib. It
+Analyses used NWKIT 0.29.0 at commit `1bcd1ca7be22`. NWKIT requires Python 3.10
+or later and uses ETE 4.4.0, NumPy, SciPy, pandas, and Matplotlib. It
 is MIT-licensed, distributed through Bioconda [@Gruning2018], and documented in
 the project wiki.
 
@@ -156,7 +156,7 @@ without a study-specific join script.
 
 ### Software Tests and Release Checks
 
-With ETE 4.4.0 and Biopython 1.87, 619 tests passed. They covered outputs,
+With ETE 4.4.0, 628 tests passed. They covered outputs,
 errors, regressions, round trips, seeds, threading, partial-taxon ambiguity,
 composition, aggregation, provenance hashes, and documentation. Continuous
 integration spans Python 3.10--3.14 and checks distributions. An inventory
@@ -165,7 +165,7 @@ and `rescale` while requiring three ordered audit records with stdin hashes.
 
 ### Task-Level Software Comparison
 
-We compared NWKIT 0.28.0 with Gotree 0.5.2, PhyKIT 2.3.0, and Newick Utilities
+We compared NWKIT 0.29.0 with Gotree 0.5.2, PhyKIT 2.3.0, and Newick Utilities
 1.6 as available on 16 July 2026. Rows represent tasks, not similarly named
 functions. “Native” required a documented CLI workflow, “Partial” a narrower or
 distributed implementation, and an em dash no identified equivalent. General
@@ -214,7 +214,7 @@ three ordered audit records without an intermediate tree file.
 
 ![Figure 1](figures/figure1_architecture.png){width=90%}
 
-**Figure 1. Functional organization and shared interfaces in NWKIT 0.28.0.**
+**Figure 1. Functional organization and shared interfaces in NWKIT 0.29.0.**
 Command families describe user tasks and are not claims of algorithmic novelty.
 All 33 functional commands read their primary input from standard input
 (stdin) by default; 31 emit their primary result to standard output (stdout).
@@ -264,7 +264,7 @@ reviewed version. The rows describe operations used in the NWKIT workflows and
 are not a general ranking; see Tables S2 and S3 for the complete matrix and
 decision rules.
 
-| User task | NWKIT 0.28.0 | Gotree 0.5.2 | PhyKIT 2.3.0 | Newick Utilities 1.6 |
+| User task | NWKIT 0.29.0 | Gotree 0.5.2 | PhyKIT 2.3.0 | Newick Utilities 1.6 |
 |---|:---:|:---:|:---:|:---:|
 | Standard-stream composition | Native | Native | Partial | Native |
 | Explicit Newick interpretation and ambiguity rejection | Native | — | — | — |

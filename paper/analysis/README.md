@@ -1,9 +1,9 @@
 # Reproducing the NWKIT manuscript analyses
 
 Run all commands from the repository root. The manuscript environment was
-created with Python 3.12, ETE 4.4.0, and Biopython 1.87. On macOS, the
-conda-forge builds of ETE and Biopython avoid incorrect dynamic-library paths
-that can be retained by locally built wheels.
+created with Python 3.12 and ETE 4.4.0. On macOS, the conda-forge build of ETE
+avoids incorrect dynamic-library paths that can be retained by locally built
+wheels.
 
 ```bash
 conda env create -f paper/analysis/environment.yml
