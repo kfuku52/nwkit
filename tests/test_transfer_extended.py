@@ -154,6 +154,52 @@ def test_projected_branch_length_requires_explicit_opt_in(tmp_nwk, tmp_path):
     assert allowed.common_ancestor(['A', 'B', 'X']).dist == pytest.approx(7.0)
 
 
+def test_length_transfer_from_different_root_preserves_target_root_ratio(tmp_nwk, tmp_path):
+    target_path = tmp_nwk(
+        '((A:1,B:1):2,(C:1,(D:1,(E:1,F:1):1):1):8);',
+        'target.nwk',
+    )
+    source_path = tmp_nwk(
+        '((E:6,F:7):4,(D:5,(C:4,(A:2,B:3):6):3):4);',
+        'source.nwk',
+    )
+    outfile = tmp_path / 'output.nwk'
+    report = tmp_path / 'transfer.tsv'
+    args = make_args(
+        infile=target_path,
+        infile2=source_path,
+        outfile=str(outfile),
+        format='1',
+        format2='1',
+        outformat='1',
+        target='all',
+        name=False,
+        support=False,
+        length=True,
+        property=[],
+        property_map=[],
+        fill=None,
+        taxon_mode='exact',
+        policy='strict',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=str(report),
+    )
+
+    transfer_main(args)
+
+    output = read_tree(str(outfile), format='1', quoted_node_names=True, quiet=True)
+    root_length_by_side = {
+        frozenset(child.leaf_names()): child.dist
+        for child in output.get_children()
+    }
+    assert root_length_by_side[frozenset({'A', 'B'})] == pytest.approx(1.2)
+    assert root_length_by_side[frozenset({'C', 'D', 'E', 'F'})] == pytest.approx(4.8)
+    rows = pd.read_csv(report, sep='\t')
+    root_edge_rows = rows[rows['reason'] == 'matching_aligned_root_edge_total']
+    assert len(root_edge_rows) == 2
+
+
 def test_partial_tip_identity_does_not_imply_exact_terminal_branch(tmp_nwk, tmp_path):
     target_path = tmp_nwk(
         '((A:5,X:1):1,(B:1,C:1):1);',

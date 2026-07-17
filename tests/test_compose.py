@@ -177,6 +177,12 @@ def test_compose_preserves_support_and_lengths_across_different_rootings(
     assert output.common_ancestor(['D', 'E', 'F']).dist == pytest.approx(3.0)
     assert output.common_ancestor(['E', 'F']).dist == pytest.approx(8.0)
     assert output['A'].dist == pytest.approx(2.0)
+    root_length_by_side = {
+        frozenset(child.leaf_names()): child.dist
+        for child in output.get_children()
+    }
+    assert root_length_by_side[frozenset({'A', 'B'})] == pytest.approx(0.4)
+    assert root_length_by_side[frozenset({'C', 'D', 'E', 'F'})] == pytest.approx(1.6)
     complement = next(
         child for child in output.get_children()
         if set(child.leaf_names()) == {'C', 'D', 'E', 'F'}
@@ -233,6 +239,98 @@ def test_compose_preserves_names_and_nhx_properties_across_rootings(tmp_nwk, tmp
     assert abc_edge.props['edge_id'] == 'ABC'
     assert output.common_ancestor(['E', 'F']).name == 'EDGE_EF'
     assert output.common_ancestor(['A', 'B']).props['edge_id'] == 'AB'
+
+
+def test_compose_all_component_sources_with_distinct_root_positions(tmp_nwk, tmp_path):
+    topology = tmp_nwk(
+        '((E:1,F:1):1,(D:1,(C:1,(A:1,B:1):1):1):1);',
+        'topology.nwk',
+    )
+    root_source = tmp_nwk(
+        '((A:1,B:1):0.5,(C:1,(D:1,(E:1,F:1):1):1):1.5);',
+        'root.nwk',
+    )
+    name_source = tmp_nwk(
+        '(C:1,((A:1,B:1)NAME_AB:1,'
+        '(D:1,(E:1,F:1)NAME_EF:1)NAME_ABC:1):1)NAME_ROOT;',
+        'names.nwk',
+    )
+    support_source = tmp_nwk(
+        '(D:1,(((A:1,B:1)21:1,C:1)31:1,(E:1,F:1)41:1):1);',
+        'supports.nwk',
+    )
+    length_source = tmp_nwk(
+        '(F:3,(E:4,(D:5,(C:6,(A:7,B:8):10):20):30):7);',
+        'lengths.nwk',
+    )
+    property_source = tmp_nwk(
+        '(A:1,(B:1,(C:1,(D:1,'
+        '(E:1,F:1):1[&&NHX:edge_tag=EF])'
+        ':1[&&NHX:edge_tag=ABC])'
+        ':1[&&NHX:edge_tag=AB]):1[&&NHX:edge_tag=PENDANT_A])'
+        '[&&NHX:edge_tag=ROOT_PROP];',
+        'properties.nwk',
+    )
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'output.nwk'),
+        format='1',
+        outformat='1',
+        manifest=None,
+        root_source=root_source,
+        name_source=name_source,
+        support_source=support_source,
+        length_source=length_source,
+        property_source=['edge_tag@{}'.format(property_source)],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=str(tmp_path / 'composition.tsv'),
+    )
+
+    compose_main(args)
+
+    output = read_tree(args.outfile, format='1', quoted_node_names=True, quiet=True)
+    all_taxa = frozenset(output.leaf_names())
+    annotations_by_split = dict()
+    for node in output.traverse():
+        if node.is_root or node.is_leaf:
+            continue
+        side = frozenset(node.leaf_names())
+        split = tuple(sorted(
+            (side, all_taxa - side),
+            key=lambda taxa: (len(taxa), tuple(sorted(taxa))),
+        ))
+        annotations_by_split.setdefault(split, set()).add(
+            (node.name, node.support, node.props.get('edge_tag'))
+        )
+    expected = {
+        tuple(sorted(
+            (frozenset({'A', 'B'}), frozenset({'C', 'D', 'E', 'F'})),
+            key=lambda taxa: (len(taxa), tuple(sorted(taxa))),
+        )): ('NAME_AB', 21.0, 'AB'),
+        tuple(sorted(
+            (frozenset({'A', 'B', 'C'}), frozenset({'D', 'E', 'F'})),
+            key=lambda taxa: (len(taxa), tuple(sorted(taxa))),
+        )): ('NAME_ABC', 31.0, 'ABC'),
+        tuple(sorted(
+            (frozenset({'E', 'F'}), frozenset({'A', 'B', 'C', 'D'})),
+            key=lambda taxa: (len(taxa), tuple(sorted(taxa))),
+        )): ('NAME_EF', 41.0, 'EF'),
+    }
+    for split, annotation in expected.items():
+        assert annotations_by_split[split] == {annotation}
+    assert output.name == 'NAME_ROOT'
+    root_length_by_side = {
+        frozenset(child.leaf_names()): child.dist
+        for child in output.get_children()
+    }
+    assert root_length_by_side[frozenset({'A', 'B'})] == pytest.approx(2.5)
+    assert root_length_by_side[frozenset({'C', 'D', 'E', 'F'})] == pytest.approx(7.5)
+    assert output.common_ancestor(['D', 'E', 'F']).dist == pytest.approx(20.0)
+    assert output.common_ancestor(['E', 'F']).dist == pytest.approx(30.0)
 
 
 def test_compose_without_root_source_does_not_adopt_annotation_source_root(

@@ -817,7 +817,7 @@ pvalidate.add_argument('--require-ultrametric', '--require_ultrametric', dest='r
 pvalidate.add_argument('--require-same-leaf-set', '--require_same_leaf_set', dest='require_same_leaf_set', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                        help='default=%(default)s: For multiple input trees, mark trees whose leaf set differs from the first tree as invalid.')
 pvalidate.add_argument('--require-same-rooting', '--require_same_rooting', dest='require_same_rooting', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
-                       help='default=%(default)s: For multiple input trees, mark trees whose rooted/unrooted status differs from the first parsed tree as invalid.')
+                       help='default=%(default)s: For multiple input trees with the same leaf set, mark trees whose rooted/unrooted status or root bipartition differs from the first parsed tree as invalid.')
 pvalidate.add_argument('--require-binary', '--require_binary', dest='require_binary', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Mark trees with singleton or multifurcating internal nodes as invalid.')
 pvalidate.add_argument('--require-all-support', '--require_all_support', dest='require_all_support', metavar='yes|no', default='no', type=strtobool, required=False, action='store',

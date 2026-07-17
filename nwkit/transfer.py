@@ -3,7 +3,7 @@ import sys
 
 import pandas as pd
 
-from nwkit.clade_mapping import build_clade_mapping
+from nwkit.clade_mapping import build_clade_mapping, projected_root_split
 from nwkit.root import transfer_root_with_taxon_mode
 from nwkit.util import (
     TREE_FORMAT_PROP,
@@ -264,6 +264,18 @@ def transfer_properties(target, source, property_specs, target_class='all',
     validate_unique_named_leaves(source, option_name='--infile2', context=" for 'transfer'")
     if taxon_mode == 'exact' and not is_all_leaf_names_identical(target, source, verbose=True):
         raise ValueError('Leaf labels must match exactly when --taxon-mode exact.')
+    shared_taxa_before_alignment = frozenset(
+        str(name) for name in target.leaf_names()
+    ).intersection(str(name) for name in source.leaf_names())
+    target_root_split_before_alignment = projected_root_split(
+        target,
+        shared_taxa_before_alignment,
+    )
+    source_root_split_before_alignment = projected_root_split(
+        source,
+        shared_taxa_before_alignment,
+    )
+    target_was_bifurcating = len(target.get_children()) == 2
     if align_roots and target_class != 'leaf' and match_basis == 'clade':
         target, source = _try_align_roots(
             target=target,
@@ -271,6 +283,27 @@ def transfer_properties(target, source, property_specs, target_class='all',
             taxon_mode=taxon_mode,
             allow_target_reroot=allow_target_reroot,
         )
+    source_was_aligned_to_target_root = (
+        align_roots
+        and target_class != 'leaf'
+        and match_basis == 'clade'
+        and target_was_bifurcating
+        and source_root_split_before_alignment != target_root_split_before_alignment
+        and projected_root_split(source, shared_taxa_before_alignment)
+        == projected_root_split(target, shared_taxa_before_alignment)
+    )
+    aligned_root_length_overrides = dict()
+    if source_was_aligned_to_target_root:
+        target_root_children = target.get_children()
+        source_root_children = source.get_children()
+        if len(target_root_children) == 2 and len(source_root_children) == 2:
+            target_root_total = sum(float(child.dist or 0.0) for child in target_root_children)
+            source_root_total = sum(float(child.dist or 0.0) for child in source_root_children)
+            if abs(target_root_total) > 10 ** -15:
+                for child in target_root_children:
+                    aligned_root_length_overrides[id(child)] = (
+                        source_root_total * float(child.dist or 0.0) / target_root_total
+                    )
     mapping = build_clade_mapping(
         target=target,
         source=source,
@@ -325,6 +358,16 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 and root_edge_resolution is None
             ):
                 source_value, source_has_value = _get_property(effective_source, source_prop)
+            if (
+                source_prop == 'length'
+                and target_prop == 'length'
+                and id(target_node) in aligned_root_length_overrides
+                and effective_match_status in ('exact_match', 'projected_match')
+            ):
+                source_value = aligned_root_length_overrides[id(target_node)]
+                source_has_value = True
+                effective_reason = 'matching_aligned_root_edge_total'
+                reason = effective_reason
             if effective_match_status in ('exact_match', 'projected_match'):
                 projected_value_allowed = (
                     not projection_only

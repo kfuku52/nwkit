@@ -37,3 +37,31 @@ def test_unrooted_diff_with_partial_taxon_overlap(tmp_nwk, tmp_path):
     assert leaf_summary['status'] == 'different'
     assert 'E' in leaf_summary['target_taxa']
     assert set(rows['comparison']) >= {'leaf_set', 'root_split', 'unrooted_split'}
+
+
+def test_unrooted_diff_does_not_report_topology_change_for_rerooted_tree():
+    target = read_tree(
+        '((A:1,B:1):1,(C:1,(D:1,E:1):1):1);',
+        '1',
+        True,
+        quiet=True,
+    )
+    source = read_tree(
+        '(A:0.5,(B:1,(C:1,(D:1,E:1):1):2):0.5);',
+        '1',
+        True,
+        quiet=True,
+    )
+
+    rows = compare_trees(
+        target,
+        source,
+        comparison='unrooted',
+        target_class='intnode',
+    )
+
+    root_row = next(row for row in rows if row['comparison'] == 'root_split')
+    assert root_row['status'] == 'different'
+    split_rows = [row for row in rows if row['comparison'] == 'unrooted_split']
+    assert len(split_rows) == 2
+    assert {row['status'] for row in split_rows} == {'exact_match'}

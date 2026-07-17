@@ -13,6 +13,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `compose` annotation and value sources no longer change the target rooting
   when `--root-source` is absent.
 - Failed root transfers no longer leave the target tree partially rerooted.
+- All `root` methods now preserve internal support, names, and NHX properties
+  on canonical branch splits, preserve root and tip metadata, and leave their
+  input tree unchanged. `root` output also retains custom NHX properties.
+- Collapsing a singleton root no longer loses names or custom properties.
+- `validate --require-same-rooting yes` now compares the actual root
+  bipartition for trees with identical leaf sets, rather than only comparing
+  rooted/unrooted status.
+- When branch lengths are transferred from a differently rooted tree, the
+  source now supplies the total length of the aligned root edge while the
+  target/root source retains its root-position ratio. This avoids replacing an
+  intentional root position with the rerooting library's temporary 1:1 split.
+- `diff --comparison unrooted` now counts each canonical root edge once and
+  selects terminal/internal splits independently of the displayed root, so a
+  pure reroot no longer appears as an unrooted topology difference.
 - Split-based transfer now treats equal support, names, and NHX values on the
   two children of a bifurcating root as one root-edge value. Conflicting values
   remain ambiguous and are not transferred.

@@ -18,6 +18,7 @@ from nwkit.util import (
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_species_group_records,
+    get_tree_property_names,
     is_all_leaf_names_identical,
     is_rooted,
     read_tree,
@@ -149,7 +150,7 @@ def _normalize_root_distance_for_reroot(tree):
 def _collapse_singleton_root(tree):
     while (len(tree.get_children()) == 1) and (len(list(tree.leaves())) > 1):
         child = tree.get_children()[0]
-        tree = Tree(child.write(parser=0, format_root_node=True), parser=0)
+        tree = child.copy(method='deepcopy')
     return tree
 
 
@@ -164,6 +165,35 @@ _RESERVED_NODE_PROPERTIES = frozenset((
 def _internal_branch_key(node, all_taxa):
     side = frozenset(str(name) for name in node.leaf_names())
     return canonical_split(side, all_taxa - side)
+
+
+def _custom_node_properties(node):
+    return {
+        str(prop): value
+        for prop, value in node.props.items()
+        if str(prop) not in _RESERVED_NODE_PROPERTIES and value is not None
+    }
+
+
+def _snapshot_node_annotation(node, include_name=True):
+    annotation = {
+        'support': node.support,
+        'properties': _custom_node_properties(node),
+    }
+    if include_name:
+        annotation['name'] = node.name
+    return annotation
+
+
+def _restore_node_annotation(node, annotation, include_name=True):
+    if include_name:
+        node.name = annotation['name']
+    node.support = annotation['support']
+    for prop in list(node.props):
+        if str(prop) not in _RESERVED_NODE_PROPERTIES:
+            node.props.pop(prop, None)
+    for prop, value in annotation['properties'].items():
+        node.props[prop] = value
 
 
 def _merge_branch_annotation_values(values):
@@ -181,11 +211,7 @@ def _snapshot_internal_branch_annotations(tree):
     for node in tree.traverse():
         if node.is_root or node.is_leaf:
             continue
-        custom_properties = {
-            str(prop): value
-            for prop, value in node.props.items()
-            if str(prop) not in _RESERVED_NODE_PROPERTIES and value is not None
-        }
+        custom_properties = _custom_node_properties(node)
         grouped[_internal_branch_key(node, all_taxa)].append({
             'name': node.name if node.name not in (None, '') else None,
             'support': None if support_is_missing(node.support) else node.support,
@@ -249,27 +275,43 @@ def _restore_internal_branch_annotations(tree, snapshot):
 
 
 def _prepare_annotations_for_reroot(tree):
-    snapshot = _snapshot_internal_branch_annotations(tree)
-    root_support = tree.support
-    leaf_support = {
-        str(leaf.name): leaf.support
-        for leaf in tree.leaves()
+    snapshot = {
+        'internal': _snapshot_internal_branch_annotations(tree),
+        'root': _snapshot_node_annotation(tree),
+        'leaves_by_identity': {
+            id(leaf): _snapshot_node_annotation(leaf, include_name=False)
+            for leaf in tree.leaves()
+        },
+        'leaves_by_name': defaultdict(list),
     }
+    for leaf in tree.leaves():
+        snapshot['leaves_by_name'][str(leaf.name)].append(
+            _snapshot_node_annotation(leaf, include_name=False)
+        )
     for node in tree.traverse():
         node.support = None
-    return snapshot, root_support, leaf_support
+    return snapshot
 
 
-def _finish_annotations_after_reroot(tree, snapshot, root_support, leaf_support,
-                                     verbose=False):
-    _restore_internal_branch_annotations(tree, snapshot)
-    tree.support = root_support
+def _finish_annotations_after_reroot(tree, snapshot, verbose=False):
+    _restore_internal_branch_annotations(tree, snapshot['internal'])
+    _restore_node_annotation(tree, snapshot['root'])
+    leaf_name_offsets = defaultdict(int)
     for leaf in tree.leaves():
-        leaf.support = leaf_support[str(leaf.name)]
-    if verbose and snapshot['conflicts']:
+        annotation = snapshot['leaves_by_identity'].get(id(leaf))
+        if annotation is None:
+            leaf_name = str(leaf.name)
+            offset = leaf_name_offsets[leaf_name]
+            candidates = snapshot['leaves_by_name'].get(leaf_name, ())
+            if offset >= len(candidates):
+                continue
+            annotation = candidates[offset]
+            leaf_name_offsets[leaf_name] += 1
+        _restore_node_annotation(leaf, annotation, include_name=False)
+    if verbose and snapshot['internal']['conflicts']:
         sys.stderr.write(
             'Dropped {} conflicting root-edge annotation(s) while rerooting.\n'.format(
-                len(snapshot['conflicts'])
+                len(snapshot['internal']['conflicts'])
             )
         )
 
@@ -342,9 +384,11 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
     if annotation_backup is not None:
         _finish_annotations_after_reroot(
             tree_to,
-            *annotation_backup,
+            annotation_backup,
             verbose=verbose,
         )
+        if not original_root_name:
+            tree_to.name = 'Root'
     return tree_to
 
 
@@ -400,14 +444,17 @@ def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbos
     tree_to.name = original_root_name if original_root_name else 'Root'
     _finish_annotations_after_reroot(
         tree_to,
-        *annotation_backup,
+        annotation_backup,
         verbose=verbose,
     )
+    if not original_root_name:
+        tree_to.name = 'Root'
     if projected_root_split(tree_to, shared_taxa) != source_split:
         raise ValueError('Root transfer failed to reproduce the source split on shared tips.')
     return tree_to
 
 def midpoint_rooting(tree):
+    tree = tree.copy(method='deepcopy')
     # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
     for node in tree.traverse():
         if node.dist is None:
@@ -417,7 +464,9 @@ def midpoint_rooting(tree):
     # If the outgroup is the root itself, tree is already optimally rooted
     if outgroup_node.is_root:
         return tree
+    annotation_backup = _prepare_annotations_for_reroot(tree)
     tree.set_outgroup(outgroup_node)
+    _finish_annotations_after_reroot(tree, annotation_backup)
     return tree
 
 def _rename_mad_leaf_names(tree):
@@ -450,6 +499,7 @@ def mad_rooting(tree):
     parser = make_parser(5, dist='%0.8f')
     working_tree = tree.copy(method='deepcopy')
     placeholder_to_name = _rename_mad_leaf_names(working_tree)
+    annotation_backup = _prepare_annotations_for_reroot(working_tree)
     with tempfile.NamedTemporaryFile(suffix='.nwk', mode='w', delete=False) as f:
         f.write(working_tree.write(parser=parser))
         tmpfile = f.name
@@ -465,6 +515,7 @@ def mad_rooting(tree):
             raise RuntimeError('MAD did not produce a rooted tree.')
         rooted_nwk = lines[0]
         rooted_tree = Tree(rooted_nwk, parser=1)
+        _finish_annotations_after_reroot(rooted_tree, annotation_backup)
         rooted_tree = _restore_mad_leaf_names(rooted_tree, placeholder_to_name)
     finally:
         for p in [tmpfile, tmpfile + '.rooted']:
@@ -515,6 +566,8 @@ def _collect_leaf_distance_stats(tree):
 
 def mv_rooting(tree):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
+    tree = tree.copy(method='deepcopy')
+    annotation_backup = _prepare_annotations_for_reroot(tree)
     # ete4.set_outgroup requires root.dist to be 0/None.
     if tree.dist is not None:
         tree.dist = 0.0
@@ -572,6 +625,7 @@ def mv_rooting(tree):
             best_x = x
             best_L = L
     if best_node is None:
+        _finish_annotations_after_reroot(tree, annotation_backup)
         return tree
     sys.stderr.write('MV rooting variance: {:.6g}\n'.format(best_var))
     tree.set_outgroup(best_node)
@@ -583,11 +637,13 @@ def mv_rooting(tree):
             child.dist = best_x
         else:
             child.dist = best_L - best_x
+    _finish_annotations_after_reroot(tree, annotation_backup)
     return tree
 
 def outgroup_rooting(tree, outgroup_str):
     if outgroup_str is None:
         raise ValueError("Specify at least one outgroup label with '--outgroup'.")
+    tree = tree.copy(method='deepcopy')
     # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
     for node in tree.traverse():
         if node.dist is None:
@@ -608,6 +664,7 @@ def outgroup_rooting(tree, outgroup_str):
         outgroup_node = outgroup_nodes[0]
     else:
         outgroup_node = tree.common_ancestor(outgroup_nodes)
+    annotation_backup = _prepare_annotations_for_reroot(tree)
     if outgroup_node is tree: # Reroot if the outgroup clade represents the whole tree
         outgroup_node_set = set(outgroup_nodes)
         non_outgroup_leaf = None
@@ -626,6 +683,7 @@ def outgroup_rooting(tree, outgroup_str):
     sys.stderr.write('All leaf labels in the outgroup clade: {}\n'.format(' '.join(outgroup_leaf_names)))
     _normalize_root_distance_for_reroot(tree)
     tree.set_outgroup(outgroup_node)
+    _finish_annotations_after_reroot(tree, annotation_backup)
     return tree
 
 def _order_taxid_tsv_to_match_tree(tree, taxid_df):
@@ -833,6 +891,7 @@ def _resolve_reference_query_sets(reference_tree, query_label_to_species_labels,
     return resolved_leaf_set, unresolved_leaf_set
 
 def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
+    tree = tree.copy(method='deepcopy')
     validate_unique_named_leaves(tree, option_name='--infile', context=' for taxonomy rooting')
     outgroup_set = set(outgroup_set)
     if len(outgroup_set) == 0:
@@ -851,15 +910,13 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
         (len(root_children) == 2) and
         any(outgroup_set == tree_leaf_sets[child] for child in root_children)
     )
-    support_backup = None
+    annotation_backup = None
     if not is_root_bipartition_already_matching:
         ingroup_set = leaf_name_set - outgroup_set
-        support_backup = list()
+        annotation_backup = _prepare_annotations_for_reroot(tree)
         for node in tree.traverse():
             if node.dist is None:
                 node.dist = 0.0
-            support_backup.append((node, node.support))
-            node.support = None
         _normalize_root_distance_for_reroot(tree)
         tree.set_outgroup(next(iter(ingroup_set)))
         if len(outgroup_set) == 1:
@@ -882,9 +939,14 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
         tree.name = original_root_name
     else:
         tree.name = 'Root'
-    if support_backup is not None:
-        for node, support in support_backup:
-            node.support = support
+    if annotation_backup is not None:
+        _finish_annotations_after_reroot(
+            tree,
+            annotation_backup,
+            verbose=verbose,
+        )
+        if not original_root_name:
+            tree.name = 'Root'
     return tree
 
 def _get_timetree_name_mapping(tree, args=None):
@@ -1109,6 +1171,7 @@ def taxonomy_rooting(tree, taxonomy_source=DEFAULT_TAXONOMY_SOURCE_CHAIN, taxid_
 
 def root_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    output_properties = set(get_tree_property_names(tree))
     if (args.method=='transfer'):
         if args.infile2 in ['', None]:
             raise ValueError("'--infile2' is required when '--method transfer' is used.")
@@ -1148,4 +1211,5 @@ def root_main(args):
         )
     else:
         raise ValueError("Unknown rooting method: {}".format(args.method))
-    write_tree(tree, args, format=args.outformat)
+    output_properties.update(get_tree_property_names(tree))
+    write_tree(tree, args, format=args.outformat, props=output_properties)

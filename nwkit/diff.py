@@ -180,19 +180,47 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
     target_taxa_by_node = _taxon_sets(target)
     source_taxa_by_node = _taxon_sets(source)
 
+    def split_selected(split):
+        if target_class == 'all':
+            return True
+        if target_class == 'root':
+            return False
+        is_terminal = min(len(split[0]), len(split[1])) == 1
+        if target_class == 'leaf':
+            return is_terminal
+        if target_class == 'intnode':
+            return not is_terminal
+        return False
+
     def eligible_nodes(tree, taxa_by_node):
         result = list()
         for node in tree.traverse():
-            if node.is_root or not _selected(node, target_class):
-                continue
-            # The two root-child branches describe the same unrooted edge and
-            # are represented once by the explicit root-split summary.
-            if node.up is not None and node.up.is_root:
+            if node.is_root:
                 continue
             split = node_projected_split(node, shared_taxa, taxon_sets=taxa_by_node)
-            if split is not None:
+            if split is not None and split_selected(split):
                 result.append((node, split))
         return result
+
+    def is_root_pair(candidates):
+        if len(candidates) != 2:
+            return False
+        parent = candidates[0].up
+        return (
+            parent is not None
+            and parent.is_root
+            and candidates[1].up is parent
+            and len(parent.get_children()) == 2
+            and {id(node) for node in candidates}
+            == {id(node) for node in parent.get_children()}
+        )
+
+    def resolved_candidate(candidates):
+        if len(candidates) == 1:
+            return candidates[0], True
+        if is_root_pair(candidates):
+            return None, True
+        return None, False
 
     target_nodes = eligible_nodes(target, target_taxa_by_node)
     source_nodes = eligible_nodes(source, source_taxa_by_node)
@@ -210,26 +238,20 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
     for split in all_splits:
         target_candidates = target_groups.get(split, [])
         source_candidates = source_groups.get(split, [])
-        if len(target_candidates) == 1 and len(source_candidates) == 1:
+        target_node, target_resolved = resolved_candidate(target_candidates)
+        source_node, source_resolved = resolved_candidate(source_candidates)
+        if target_candidates and source_candidates and target_resolved and source_resolved:
             status = 'exact_match' if same_leaf_set else 'projected_match'
             reason = 'matching_unrooted_split'
-            target_node = target_candidates[0]
-            source_node = source_candidates[0]
         elif not target_candidates:
             status = 'source_only'
             reason = 'split_absent_from_target'
-            target_node = None
-            source_node = source_candidates[0] if len(source_candidates) == 1 else None
         elif not source_candidates:
             status = 'target_only'
             reason = 'split_absent_from_source'
-            target_node = target_candidates[0] if len(target_candidates) == 1 else None
-            source_node = None
         else:
             status = 'ambiguous'
             reason = 'projected_split_not_unique'
-            target_node = target_candidates[0] if len(target_candidates) == 1 else None
-            source_node = source_candidates[0] if len(source_candidates) == 1 else None
         rows.append(_row_for_nodes(
             status=status,
             reason=reason,
@@ -237,8 +259,14 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
             target_node=target_node,
             source_node=source_node,
             shared_key=_format_split(split),
-            target_taxa=target_taxa_by_node.get(target_node),
-            source_taxa=source_taxa_by_node.get(source_node),
+            target_taxa=(
+                target_taxa_by_node[target_candidates[0]]
+                if target_candidates else None
+            ),
+            source_taxa=(
+                source_taxa_by_node[source_candidates[0]]
+                if source_candidates else None
+            ),
             target_ids=target_ids,
             source_ids=source_ids,
             properties=properties,

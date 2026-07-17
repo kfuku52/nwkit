@@ -1,5 +1,6 @@
 import pandas as pd
 
+from nwkit.clade_mapping import projected_root_split
 from nwkit.util import (
     compute_node_ages,
     get_species_group_records,
@@ -139,6 +140,7 @@ def validate_main(args):
     invalid_tree_ids = list()
     reference_leaf_set = None
     reference_rooted_state = None
+    reference_root_split = None
     first_tree_parsed = None
     for tree_id, tree_string in enumerate(tree_strings, start=1):
         inspection = inspect_tree_text(
@@ -193,9 +195,20 @@ def validate_main(args):
         if tree_id == 1:
             rooting_matches_first = True
             reference_rooted_state = metrics['is_rooted']
+            if reference_rooted_state:
+                reference_root_split = projected_root_split(tree, leaf_name_set)
         elif first_tree_parsed:
-            rooting_matches_first = (metrics['is_rooted'] == reference_rooted_state)
-            if require_same_rooting and (not rooting_matches_first):
+            if leaf_name_set != reference_leaf_set:
+                rooting_matches_first = ''
+            elif metrics['is_rooted'] != reference_rooted_state:
+                rooting_matches_first = False
+            elif not reference_rooted_state:
+                rooting_matches_first = True
+            else:
+                rooting_matches_first = (
+                    projected_root_split(tree, leaf_name_set) == reference_root_split
+                )
+            if require_same_rooting and (rooting_matches_first is False):
                 issues.append('rooting_mismatch')
         else:
             rooting_matches_first = ''

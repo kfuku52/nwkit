@@ -121,7 +121,12 @@ their original unrooted branch splits. In split matching, equal values on the
 two children of a bifurcating root are treated as one root-edge value;
 conflicting values and root-edge branch lengths are reported as ambiguous and
 left unchanged. `compose` changes the target rooting only when `--root-source`
-is supplied.
+is supplied. The `midpoint`, `outgroup`, `mad`, `mv`, `taxonomy`, and `transfer`
+rooting methods apply the same split-based annotation preservation. For tree
+collections, `validate --require-same-rooting yes` compares the root
+bipartition when leaf sets are identical. If branch lengths come from a tree
+rooted on another edge, the length source provides the aligned root edge's
+total length while the root source retains the position ratio along that edge.
 
 Arbitrary NHX properties can be transferred or renamed directly:
 

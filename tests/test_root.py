@@ -19,6 +19,56 @@ from nwkit.util import read_tree, is_rooted
 from tests.helpers import make_args, safe_get_distance
 
 
+def _annotated_reroot_tree():
+    tree = Tree(
+        '(((A:2,B:3):5,C:7):11,(D:13,(E:17,F:19):23):29);',
+        parser=1,
+    )
+    all_taxa = frozenset(tree.leaf_names())
+    expected_by_split = dict()
+    for node in tree.traverse():
+        if node.is_root:
+            node.name = 'ORIGINAL_ROOT'
+            node.support = 0.99
+            node.props['root_tag'] = 'root_value'
+        elif node.is_leaf:
+            node.support = 0.5
+            node.props['tip_tag'] = 'tip_{}'.format(node.name)
+        else:
+            side = frozenset(node.leaf_names())
+            split = canonical_split(side, all_taxa - side)
+            if split not in expected_by_split:
+                index = len(expected_by_split) + 1
+                expected_by_split[split] = (
+                    'EDGE_{}'.format(index),
+                    float(10 + index),
+                    'edge_value_{}'.format(index),
+                )
+            node.name, node.support, node.props['edge_tag'] = expected_by_split[split]
+    return tree, expected_by_split
+
+
+def _assert_reroot_annotations(tree, expected_by_split):
+    all_taxa = frozenset(tree.leaf_names())
+    observed_by_split = dict()
+    for node in tree.traverse():
+        if node.is_root or node.is_leaf:
+            continue
+        side = frozenset(node.leaf_names())
+        split = canonical_split(side, all_taxa - side)
+        observed_by_split.setdefault(split, set()).add(
+            (node.name, node.support, node.props.get('edge_tag'))
+        )
+    for split, expected in expected_by_split.items():
+        assert observed_by_split[split] == {expected}
+    assert tree.name == 'ORIGINAL_ROOT'
+    assert tree.support == 0.99
+    assert tree.props['root_tag'] == 'root_value'
+    for leaf in tree.leaves():
+        assert leaf.support == 0.5
+        assert leaf.props['tip_tag'] == 'tip_{}'.format(leaf.name)
+
+
 def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid, taxid_to_name=None, rank_by_taxid=None):
     if taxid_to_name is None:
         taxid_to_name = {int(taxid): str(taxid) for taxid in lineage_by_taxid.keys()}
@@ -342,6 +392,39 @@ class TestMvRooting:
         rooted = mv_rooting(tree)
         assert is_rooted(rooted)
         assert set(rooted.leaf_names()) == {'A', 'B', 'C'}
+
+
+class TestRerootAnnotationSafety:
+    @pytest.mark.parametrize(
+        ('method_name', 'rooter'),
+        [
+            ('midpoint', midpoint_rooting),
+            ('outgroup', lambda tree: outgroup_rooting(tree, 'A')),
+            ('mad', mad_rooting),
+            ('mv', mv_rooting),
+            ('taxonomy-edge', lambda tree: root_mod._root_by_outgroup_set(tree, {'E', 'F'})),
+        ],
+    )
+    def test_preserves_branch_root_and_tip_annotations(self, method_name, rooter):
+        tree, expected_by_split = _annotated_reroot_tree()
+        original_root_children = [set(child.leaf_names()) for child in tree.get_children()]
+
+        rooted = rooter(tree)
+
+        assert rooted is not tree
+        _assert_reroot_annotations(rooted, expected_by_split)
+        _assert_reroot_annotations(tree, expected_by_split)
+        assert [set(child.leaf_names()) for child in tree.get_children()] == original_root_children
+
+    def test_singleton_root_collapse_preserves_child_metadata(self):
+        tree = Tree('(((A:1,B:1):1,C:1)INNER:2);', parser=1)
+        tree.get_children()[0].props['root_tag'] = 'kept'
+        source = Tree('((A:1,B:1):1,C:1);', parser=1)
+
+        rooted = transfer_root(tree, source)
+
+        assert rooted.name == 'INNER'
+        assert rooted.props['root_tag'] == 'kept'
 
 
 class TestTransferRoot:
@@ -1039,6 +1122,44 @@ class TestTaxonomyRooting:
 
 
 class TestRootMain:
+    def test_writes_preserved_nhx_properties_after_rerooting(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk(
+            '(((A:2[&&NHX:tip_tag=tip_A],B:3)AB:5[&&NHX:edge_tag=ab],C:7)'
+            'ABC:11[&&NHX:root_edge_tag=same],'
+            '(D:13,(E:17,F:19)EF:23[&&NHX:edge_tag=ef])'
+            'DEF:29[&&NHX:root_edge_tag=same])ROOT:0[&&NHX:root_tag=root_value];'
+        )
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            format='1',
+            outformat='1',
+            method='outgroup',
+            outgroup='A',
+        )
+
+        root_main(args)
+
+        tree = read_tree(tmp_outfile, format='1', quoted_node_names=True, quiet=True)
+        assert tree.props['root_tag'] == 'root_value'
+        leaf_a = next(leaf for leaf in tree.leaves() if leaf.name == 'A')
+        assert leaf_a.props['tip_tag'] == 'tip_A'
+        all_taxa = frozenset(tree.leaf_names())
+        internal_properties = {
+            canonical_split(
+                frozenset(node.leaf_names()),
+                all_taxa - frozenset(node.leaf_names()),
+            ): node.props.get('edge_tag')
+            for node in tree.traverse()
+            if not node.is_leaf and not node.is_root
+        }
+        assert internal_properties[
+            canonical_split(frozenset({'A', 'B'}), frozenset({'C', 'D', 'E', 'F'}))
+        ] == 'ab'
+        assert internal_properties[
+            canonical_split(frozenset({'E', 'F'}), frozenset({'A', 'B', 'C', 'D'}))
+        ] == 'ef'
+
     def test_midpoint(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('(A:1,B:5,(C:2,D:4):2);')
         args = make_args(
