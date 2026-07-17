@@ -1,2 +1,2 @@
-commands	passed	leaf_names	singleton_nodes	nonroot_branch_lengths	output_newick
-sanitize|rename|rescale	True	Taxon_1,Taxon_2,Taxon_3,Taxon_4	0	2.0,2.0,2.0,2.0,2.0,4.0	((Taxon_2:2,Taxon_1:4):2,(Taxon_3:2,Taxon_4:2):2);
+commands	passed	leaf_names	singleton_nodes	nonroot_branch_lengths	audit_records	audit_commands	audit_statuses	stdin_hashes_recorded	output_newick
+sanitize|rename|rescale	True	Taxon_1,Taxon_2,Taxon_3,Taxon_4	0	2.0,2.0,2.0,2.0,2.0,4.0	3	sanitize,rename,rescale	ok,ok,ok	True	((Taxon_2:2,Taxon_1:4):2,(Taxon_3:2,Taxon_4:2):2);

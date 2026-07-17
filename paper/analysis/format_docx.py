@@ -20,7 +20,7 @@ from docx.shared import Inches, Pt, RGBColor
 MAIN_ALT_TEXT = [
     (
         "NWKIT architecture: Newick trees and metadata pass through shared input rules, "
-        "five shaded command families, and shared output rules to Newick, tables, and figures."
+        "five shaded command families, and shared output and audit rules to Newick, tables, provenance records, and figures."
     ),
     (
         "PEPC C4-state workflow: branches of a 71-tip tree vary along a marginal C4-probability "

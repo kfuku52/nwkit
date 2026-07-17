@@ -6,7 +6,7 @@ were chosen to describe operations used in the NWKIT workflows, and broad
 comparative-method capabilities unique to PhyKIT are outside its scope. The full
 matrix, decision rules, and evidence notes are provided in Tables S2 and S3.
 
-| User task | NWKIT 0.27.0 | Gotree 0.5.2 | PhyKIT 2.3.0 | Newick Utilities 1.6 |
+| User task | NWKIT 0.28.0 | Gotree 0.5.2 | PhyKIT 2.3.0 | Newick Utilities 1.6 |
 |---|:---:|:---:|:---:|:---:|
 | Standard-stream composition | Native | Native | Partial | Native |
 | Explicit Newick interpretation and ambiguity rejection | Native | — | — | — |

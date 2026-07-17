@@ -3,9 +3,9 @@
 ## Zenodo code deposit
 
 - Resource type: Software
-- Title: NWKIT 0.27.0 and analysis code for composable phylogenetic-tree
+- Title: NWKIT 0.28.0 and analysis code for composable phylogenetic-tree
   workflows
-- Version: 0.27.0
+- Version: 0.28.0
 - Creator: Fukushima, Kenji
 - Creator ORCID: <https://orcid.org/0000-0002-2353-9274>
 - Creator affiliation: Center for Frontier Research, National Institute of
@@ -18,11 +18,11 @@
   Phylogenetic Tree Curation and Analysis
 - Keywords: phylogenetics; Newick; command line; ancestral-state
   reconstruction; tree processing; reproducibility
-- Upload: `output/archive/NWKIT_Zenodo_code_0.27.0.zip`
+- Upload: `output/archive/NWKIT_Zenodo_code_0.28.0.zip`
 
 Suggested description:
 
-> Source snapshot for NWKIT 0.27.0 and the complete analysis code used for the
+> Source snapshot for NWKIT 0.28.0 and the complete analysis code used for the
 > associated Systematic Biology manuscript. The archive contains the NWKIT
 > command-line toolkit, its test suite, manuscript analysis scripts,
 > environment specification, software-comparison evidence, figure-generation
@@ -40,11 +40,11 @@ Suggested description:
   Phylogenetic Tree Curation and Analysis
 - Keywords: phylogenetics; phylogenetic trees; Newick; software evaluation;
   C4 photosynthesis; PEPC
-- Upload: `output/archive/NWKIT_Dryad_data_0.27.0.zip`
+- Upload: `output/archive/NWKIT_Dryad_data_0.28.0.zip`
 
 Suggested abstract:
 
-> This dataset supports the evaluation of NWKIT 0.27.0. It contains pinned
+> This dataset supports the evaluation of NWKIT 0.28.0. It contains pinned
 > public PEPC-tree inputs, derived trait data, validation and monophyly reports,
 > Mk ancestral-state results, phylogenetic-diversity samples, predefined
 > correctness and input-case results, raw benchmark measurements, generated

@@ -8,7 +8,7 @@
   Curation and Analysis
 - Author running head: FUKUSHIMA
 - Title running head: COMPOSABLE TREE PROCESSING WITH NWKIT
-- Main-document word count before References: 3,373
+- Main-document word count before References: 3,010
 - Main-document pages: 14
 - Main displays: three figures and one table
 - Supplement pages: 12
@@ -55,8 +55,8 @@ validated.
   `output/doc/NWKIT_Systematic_Biology_draft.pdf`
 - Supplementary material:
   `output/doc/NWKIT_Systematic_Biology_supplement.pdf`
-- Zenodo code package: `output/archive/NWKIT_Zenodo_code_0.27.0.zip`
-- Dryad data package: `output/archive/NWKIT_Dryad_data_0.27.0.zip`
+- Zenodo code package: `output/archive/NWKIT_Zenodo_code_0.28.0.zip`
+- Dryad data package: `output/archive/NWKIT_Dryad_data_0.28.0.zip`
 - Archive checksums: `output/archive/SHA256SUMS`
 
 ## Statements requiring author confirmation

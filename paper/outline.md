@@ -23,8 +23,9 @@ consistent command-line interface that can be tested, composed, and reproduced.
 2. Existing landscape: mature libraries and command-line toolkits exist, so the
    gap must be stated as a specific combination of operations rather than an
    absence of software.
-3. Implementation: NWKIT 0.27.0, 30 functional commands, standard stream/file
-   interfaces, open-source distribution, seeded stochastic operations.
+3. Implementation: NWKIT 0.28.0, 33 functional commands, standard stream/file
+   interfaces, multi-tree comparison and composition, machine-readable audit
+   records, open-source distribution, and seeded stochastic operations.
 4. Evidence: capability comparison, independent-output checks, biological
    workflows, and scaling/input-case results.
 5. Conclusion: exact benefit supported by those results.
@@ -52,7 +53,7 @@ the abstract until the relevant analyses support them.
 
 ### Paragraph 3: NWKIT and paper objectives
 
-- Development since 2019 and major functional expansion in version 0.27.0.
+- Development since 2019 and major functional expansion in version 0.28.0.
 - Objectives: describe design; compare coverage; demonstrate biological
   workflows; evaluate correctness, failure handling, and scale.
 
@@ -67,7 +68,7 @@ the abstract until the relevant analyses support them.
 
 ### Functional organization: 180 words
 
-Group commands by user task rather than list all 30 in prose:
+Group commands by user task rather than list all 33 in prose:
 
 1. inspect, validate, sanitize, and convert;
 2. rename, label, mark, prune, collapse, root, rescale, and transfer;
@@ -80,7 +81,7 @@ Exact category membership belongs in Figure 1 or supplementary material.
 
 ### Software testing and release process: 130 words
 
-- Report 597 tests for the manuscript commit, not a timeless claim.
+- Report 612 tests for the manuscript commit, not a timeless claim.
 - Separate unit, regression, CLI, exact-output, round-trip, and documentation
   example tests where possible.
 - CI versions, lint, source distribution, wheel build, and installed-wheel smoke

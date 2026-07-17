@@ -72,7 +72,7 @@ def figure1_architecture(figures_dir: Path) -> None:
     axis.text(
         0.5,
         0.91,
-        "30 stdin defaults  ·  28 stdout defaults  ·  597 tests",
+        "33 stdin defaults  ·  31 stdout defaults  ·  612 tests",
         ha="center",
         va="center",
         fontsize=7.5,
@@ -105,7 +105,7 @@ def figure1_architecture(figures_dir: Path) -> None:
             0.48,
             0.27,
             0.19,
-            "Transform  (12)\n\ncollapse · drop · intersection\nlabel · mark · prune · rename\nrescale · root · shuffle\nsubtree · transfer",
+            "Transform  (13)\n\ncollapse · compose · drop\nintersection · label · mark\nprune · rename · rescale\nroot · shuffle · subtree\ntransfer",
             "#FFF0DB",
         ),
         (
@@ -113,7 +113,7 @@ def figure1_architecture(figures_dir: Path) -> None:
             0.48,
             0.27,
             0.19,
-            "Summarize tree sets  (3)\n\ndist\ncladefreq\nconsensus",
+            "Compare & summarize  (4)\n\ndiff · dist\ncladefreq · consensus",
             "#E8E2F3",
         ),
         (
@@ -121,7 +121,7 @@ def figure1_architecture(figures_dir: Path) -> None:
             0.25,
             0.27,
             0.17,
-            "Use taxonomy & traits  (4)\n\nconstrain · monophyly\nsample · skim",
+            "Use taxonomy & traits  (5)\n\nannotate · constrain · monophyly\nsample · skim",
             "#F8E1E3",
         ),
         (
@@ -143,7 +143,7 @@ def figure1_architecture(figures_dir: Path) -> None:
         0.12,
         0.86,
         0.065,
-        "Shared outputs: stdout or path · documented table fields · explicit stochastic seeds",
+        "Shared outputs: stdout or path · documented tables · seeds · JSONL provenance audit",
         "#F2F2F2",
         fontsize=7.7,
         edgecolor="#C8C8C8",
@@ -151,13 +151,13 @@ def figure1_architecture(figures_dir: Path) -> None:
     axis.add_patch(FancyArrowPatch((0.5, 0.25), (0.5, 0.185), arrowstyle="-|>", mutation_scale=9, color="#999999", linewidth=0.7))
     rounded_box(
         axis,
-        0.22,
+        0.11,
         0.025,
-        0.56,
+        0.78,
         0.055,
-        "Newick · TSV · annotated trees · figures · image/attribution manifests",
+        "Newick · TSV · annotated trees · audit records · figures · image manifests",
         "#DCEAF3",
-        fontsize=8.5,
+        fontsize=8,
     )
     axis.add_patch(FancyArrowPatch((0.5, 0.12), (0.5, 0.08), arrowstyle="-|>", mutation_scale=10, color=GRAY))
 

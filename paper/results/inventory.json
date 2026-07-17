@@ -1,6 +1,12 @@
 {
-  "functional_subcommand_count": 30,
+  "functional_subcommand_count": 33,
   "functional_subcommands": [
+    {
+      "has_seed_option": false,
+      "name": "annotate",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
     {
       "has_seed_option": true,
       "name": "asr",
@@ -21,6 +27,12 @@
     },
     {
       "has_seed_option": false,
+      "name": "compose",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
       "name": "consensus",
       "reads_stdin_by_default": true,
       "writes_stdout_by_default": true
@@ -28,6 +40,12 @@
     {
       "has_seed_option": false,
       "name": "constrain",
+      "reads_stdin_by_default": true,
+      "writes_stdout_by_default": true
+    },
+    {
+      "has_seed_option": false,
+      "name": "diff",
       "reads_stdin_by_default": true,
       "writes_stdout_by_default": true
     },
@@ -182,17 +200,17 @@
       "writes_stdout_by_default": true
     }
   ],
-  "git_commit": "f71dc345ac830a195992abadbf4b7a7394837991",
-  "git_commit_short": "f71dc345ac83",
-  "nwkit_version": "0.27.0",
-  "pytest_module_count": 34,
-  "pytest_test_count": 597,
-  "python_version": "3.12.13",
-  "reads_stdin_by_default_count": 30,
+  "git_commit": "9d7353df9c4328c68c51a896c1ffa60b41339338",
+  "git_commit_short": "9d7353df9c43",
+  "nwkit_version": "0.28.0",
+  "pytest_module_count": 40,
+  "pytest_test_count": 612,
+  "python_version": "3.10.14",
+  "reads_stdin_by_default_count": 33,
   "seeded_subcommands": [
     "asr",
     "shuffle",
     "skim"
   ],
-  "writes_stdout_by_default_count": 28
+  "writes_stdout_by_default_count": 31
 }

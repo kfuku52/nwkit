@@ -3,8 +3,10 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import subprocess
+import tempfile
 
 from ete4 import Tree
 import pandas as pd
@@ -14,9 +16,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 RESULTS = PROJECT_ROOT / "paper" / "results" / "pipeline_smoke.tsv"
 
 
-def pipe_step(arguments: list[str], input_text: str) -> str:
+def pipe_step(arguments: list[str], input_text: str, audit_path: Path) -> str:
     result = subprocess.run(
-        ["nwkit", *arguments],
+        ["nwkit", *arguments, "--audit", str(audit_path)],
         cwd=PROJECT_ROOT,
         input=input_text,
         text=True,
@@ -27,13 +29,17 @@ def pipe_step(arguments: list[str], input_text: str) -> str:
 
 
 def main() -> None:
-    tree_text = "(((T1:1):1,T2:1):1,(T3:1,T4:1):1);"
-    tree_text = pipe_step(["sanitize", "--remove_singleton", "yes"], tree_text)
-    tree_text = pipe_step(
-        ["rename", "--pattern", "^T", "--replacement", "Taxon_", "-t", "leaf"],
-        tree_text,
-    )
-    tree_text = pipe_step(["rescale", "--factor", "2"], tree_text)
+    with tempfile.TemporaryDirectory(prefix="nwkit-pipeline-") as temporary_directory:
+        audit_path = Path(temporary_directory) / "pipeline.audit.jsonl"
+        tree_text = "(((T1:1):1,T2:1):1,(T3:1,T4:1):1);"
+        tree_text = pipe_step(["sanitize", "--remove_singleton", "yes"], tree_text, audit_path)
+        tree_text = pipe_step(
+            ["rename", "--pattern", "^T", "--replacement", "Taxon_", "-t", "leaf"],
+            tree_text,
+            audit_path,
+        )
+        tree_text = pipe_step(["rescale", "--factor", "2"], tree_text, audit_path)
+        audit_records = [json.loads(line) for line in audit_path.read_text().splitlines()]
     tree = Tree(tree_text, parser=1)
     leaf_names = set(tree.leaf_names())
     singleton_count = sum(
@@ -46,6 +52,9 @@ def main() -> None:
         leaf_names == {"Taxon_1", "Taxon_2", "Taxon_3", "Taxon_4"}
         and singleton_count == 0
         and distances == [2.0, 2.0, 2.0, 2.0, 2.0, 4.0]
+        and [record["command"] for record in audit_records] == ["sanitize", "rename", "rescale"]
+        and all(record["status"] == "ok" for record in audit_records)
+        and all(record["stdin"]["sha256"] for record in audit_records)
     )
     RESULTS.parent.mkdir(parents=True, exist_ok=True)
     pd.DataFrame([
@@ -55,6 +64,10 @@ def main() -> None:
             "leaf_names": ",".join(sorted(leaf_names)),
             "singleton_nodes": singleton_count,
             "nonroot_branch_lengths": ",".join(str(value) for value in distances),
+            "audit_records": len(audit_records),
+            "audit_commands": ",".join(record["command"] for record in audit_records),
+            "audit_statuses": ",".join(record["status"] for record in audit_records),
+            "stdin_hashes_recorded": all(record["stdin"]["sha256"] for record in audit_records),
             "output_newick": tree_text.strip(),
         }
     ]).to_csv(RESULTS, sep="\t", index=False)

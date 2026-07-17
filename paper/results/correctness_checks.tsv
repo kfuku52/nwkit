@@ -2,5 +2,5 @@ check	n	passed	agreement	max_abs_error	notes
 rooted_RF_vs_DendroPy	50	50	1.0	0.0	Rooted symmetric difference on random 16-tip binary trees
 clade_frequency_vs_direct_count	20	20	1.0	0.0	Exact descendant-tip-set counts in collections of 25 random 12-tip trees
 majority_consensus_vs_direct_count	20	20	1.0	0.0	Clades occurring in more than half of 31 rooted trees
-Mk_marginals_vs_exhaustive_enumeration	100	100	1.0	2.220446049250313e-16	Two-state ER model on random four-tip trees; all internal-state assignments enumerated
+Mk_marginals_vs_exhaustive_enumeration	100	100	1.0	3.3306690738754696e-16	Two-state ER model on random four-tip trees; all internal-state assignments enumerated
 shuffle_seed_reproducibility	1	1	1.0	0.0	Exact output equality for repeated seed and inequality for a second seed

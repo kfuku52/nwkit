@@ -30,155 +30,148 @@ connect tips to taxonomic or trait data, summarize collections, and perform
 downstream analyses. Manual edits and study-specific scripts often obscure how
 inferred trees become the objects ultimately interpreted. We developed
 NWKIT, a command-line toolkit that organizes post-inference tree processing as
-composable, pipe-compatible commands. NWKIT can transfer roots and map node
-labels, support values, and branch lengths between trees by matching
-descendant-taxon sets, allowing compatible information from nonidentical
-phylogenetic hypotheses to be combined explicitly. The same interface supports
-Newick inspection and normalization, topology-aware transformation, taxonomy-
-and trait-informed operations, synthesis of tree collections,
-phylogenetic-diversity sampling, and categorical ancestral-state
-reconstruction. Consistent input, output, and tree-interpretation conventions
-allow individual commands to be inspected, substituted, and rerun without
-intermediate custom scripts. By making both comparisons among trees and
-transformations applied to them executable and traceable, NWKIT turns
-post-inference processing from an implicit prelude into a reproducible
-analytical layer of systematic research.
+composable, pipe-compatible commands. NWKIT reports clade-level differences and
+composes a target tree from roots, node labels, support values, branch lengths,
+and arbitrary annotations supplied by related trees. It uses exact
+descendant-taxon matches when tip sets agree and unique clade projections for
+conservative transfer when sampling overlaps only partly. The same interface
+supports Newick inspection and normalization, topology-aware transformation,
+attachment and aggregation of taxonomic or trait data, synthesis of tree
+collections, phylogenetic-diversity sampling, and categorical ancestral-state
+reconstruction. Every command can append a machine-readable audit record of
+arguments, input and output hashes, interpretation settings, warnings, and
+execution status. These conventions make comparisons and transformations
+inspectable, executable, and traceable, turning post-inference processing from
+an implicit prelude into a reproducible analytical layer of systematic
+research.
 
 **Keywords:** ancestral-state reconstruction; command line; Newick;
 phylogenetics; reproducibility; tree processing
 
 Phylogenetic inference is rarely the final computational step in a systematic
-study. Although publications often emphasize inference methods or biological
-conclusions, substantial practical work occurs between them. Inferred trees
-pass to programs for reconciliation, divergence-time estimation, comparative
-analysis, visualization, and reporting. Alternative analyses may yield trees
-with different topologies or roots, whereas bootstrap, dating, and annotation
-steps add support, branch lengths, and metadata to related trees. Investigators
-must then reconcile taxon labels, retain or remove leaves, reinterpret support,
-reroot topologies, transfer annotations, and summarize bootstrap or posterior
-tree collections. Each operation can be simple in isolation, but together they
-determine which tree enters a downstream analysis. When these transformations
-are recorded only as manual edits, short scripts, and software-specific
-conversions, the final tree may remain available while the path that produced
-it does not.
+study. Inferred trees pass to programs for reconciliation, dating, comparative
+analysis, visualization, and reporting. Alternative analyses may yield
+different topologies or roots, while bootstrap, dating, and annotation add
+support, branch lengths, and metadata. Investigators must reconcile labels,
+edit taxon sets, reroot topologies, transfer annotations, and summarize tree
+collections. These operations determine which tree enters an analysis, yet
+manual edits, short scripts, and software-specific conversions can leave the
+final tree available without a reconstructable path to it.
 
-Newick is compact and broadly supported, but it leaves several conventions to
-implementations. A numeric token following a closing parenthesis, for example,
-may be interpreted as support or as an internal-node name, a distinction
-handled inconsistently among tree viewers and toolkits [@Czech2017]. Rooting may
-be represented only by the degree of the root, quoted labels may be accepted
-inconsistently, and extended annotations differ among programs. These
-differences are not merely cosmetic: a tree can remain syntactically readable
-while acquiring a different biological interpretation. Empty or duplicated tip
-labels, a negative branch length, or a mismatched taxon set can likewise pass
-unnoticed until a later program fails or, more seriously, produces an
+The relevant evidence is also rarely confined to one tree. A
+maximum-likelihood topology may be accompanied by bootstrap replicates, an
+alternative root, a time-calibrated version, or trees annotated by different
+programs. Choosing one topology need not imply discarding support, rooting,
+branch-length, or annotation evidence carried by the others. Combining these
+components, however, requires an explicit rule for deciding which nodes in
+nonidentical trees represent the same biological clade. The problem becomes
+harder when sampling differs because node positions provide no reliable
+correspondence.
+
+Newick is compact and broadly supported, but its conventions vary among
+implementations. A numeric internal token may represent support or a node name
+[@Czech2017]; rooting, quoted labels, and extended annotations also differ.
+Thus, a syntactically readable tree can acquire a different biological
+interpretation. Empty or duplicated tips, negative lengths, and mismatched
+taxon sets may likewise remain unnoticed until a later step fails or returns an
 unintended result.
 
-Several mature projects already provide phylogenetic tree representations and
-algorithms, including ape in R [@Paradis2004], DendroPy
-[@Sukumaran2010; @Moreno2024], and ETE [@HuertaCepas2016] in Python. Other
-projects expose tree operations directly in the shell. Newick Utilities introduced automatable
-filters for high-throughput Newick processing [@Junier2010]; Gotree provides
-chainable commands and a Go application programming interface [@Lemoine2021];
-and PhyKIT combines alignment, tree, and comparative functions for
-phylogenomics [@Steenwyk2021]. The problem is therefore not a lack of generic
-tree objects or shell utilities. It is that defensive Newick handling,
-topology-aware transfer, tree-set synthesis, taxonomy-aware operations, and
-selected downstream analyses remain distributed across interfaces with
-different assumptions.
+Mature libraries include ape [@Paradis2004], DendroPy
+[@Sukumaran2010; @Moreno2024], and ETE [@HuertaCepas2016]. Newick Utilities
+provides automatable filters [@Junier2010], Gotree chainable commands and a Go
+API [@Lemoine2021], and PhyKIT alignment, tree, and comparative functions
+[@Steenwyk2021]. The gap is therefore not generic tree software, but that
+defensive Newick handling, topology-aware transfer, tree-set synthesis,
+taxonomy-aware operations, and selected downstream analyses remain distributed
+across interfaces with different assumptions.
 
-NWKIT began in 2019 as a collection of commands for making routine tree
-transformations explicit and reusable in shell workflows. Version 0.27.0
-expands this scope with preflight reporting and conversion, consensus and
-clade-frequency calculation, taxonomy- and trait-aware selection,
-visualization, and likelihood-based categorical ancestral-state
-reconstruction. Here, we describe its design, audit task-level capabilities
-against three command-line toolkits, and demonstrate an end-to-end biological
-workflow. We further compare selected outputs with independent calculations,
-exercise a predefined corpus of problematic inputs, and measure wall time and
-peak memory across tree shapes and collection sizes. Together, these analyses
-evaluate NWKIT as a reproducible layer between tree inference and biological
-interpretation rather than treating command count as evidence of utility.
+NWKIT began in 2019 as reusable shell commands for tree transformation. Version
+0.28.0 adds preflight reporting, tree differencing, multi-source composition,
+provenance, tree-set summaries, taxonomy- and trait-aware operations,
+visualization, and categorical ancestral-state reconstruction. We describe its
+design, compare task-level capabilities with three command-line toolkits,
+demonstrate a biological workflow, check selected outputs independently, test a
+problematic-input corpus, and measure scaling. These analyses evaluate NWKIT as
+a reproducible layer between inference and interpretation rather than by
+command count.
 
 ## Materials and Methods
 
 ### Software Design and Implementation
 
-Analyses used NWKIT 0.27.0 at source commit `f71dc345ac83`. NWKIT is implemented
-in Python, requires Python 3.10 or later, and uses ETE 4.4.0 for its primary tree
-representation. Biopython, NumPy, SciPy, pandas, and Matplotlib support sequence
-input, numerical analysis, tabular output, and plotting. The source is
-distributed under the MIT License, packaged releases are available through
-Bioconda [@Gruning2018], and command-specific documentation is maintained in
+Analyses used NWKIT 0.28.0 at commit `9d7353df9c43`. NWKIT requires Python 3.10
+or later and uses ETE 4.4.0, Biopython, NumPy, SciPy, pandas, and Matplotlib. It
+is MIT-licensed, distributed through Bioconda [@Gruning2018], and documented in
 the project wiki.
 
-The command-line interface contains 30 functional commands plus a help
-pseudo-command. All 30 read their primary input from standard input by default
-and also accept an explicit path. Twenty-eight write their primary result to
-standard output by default; `draw` and `image` instead create graphical or image
-files.
-Commands can therefore be joined by shell pipes when one command's tree output
-is the next command's input. Stochastic operations in `asr`, `shuffle`, and
-`skim` expose an integer seed.
+Individual commands remain small, while tree I/O, label interpretation, clade
+mapping, and audit capture are centralized. Commands therefore share stream and
+format behavior, whereas biological choices remain explicit at the subcommand
+level.
 
-Input handling separates syntax from biological interpretation. Users may
-select an ETE Newick parser format, request automatic detection, or use a strict
-automatic mode that rejects ambiguous unquoted numeric internal labels. A
-separate option controls quoted node names. Shared species-label parsers support
-genus--species prefixes, qualifier-aware labels, regular expressions, and
-mapping tables. These choices are command options because silently guessing a
-species or support convention can alter a downstream analysis.
+The interface contains 33 functional commands. All read their primary input
+from standard input or a path; 31 write their primary result to standard output,
+while `draw` and `image` create files. Tree-producing commands can therefore be
+piped. Stochastic commands expose an integer seed. Every command accepts an
+`--audit` path and appends a JSON Lines record with version, arguments, input
+semantics, seeds, external-data settings, warnings, status, and input/output
+SHA-256 hashes.
+
+Input handling separates syntax from interpretation. Users may select an ETE
+format, request automatic detection, or reject ambiguous unquoted numeric
+internal labels. Quoted-name control and shared species-label parsers are also
+explicit because guessed label or support conventions can alter an analysis.
 
 ### Functional Organization
 
-Commands were grouped into five user-task families (Fig. 1; Table S9):
-inspection and normalization, transformation, tree-set summaries, taxonomy or
-trait operations, and downstream analysis or presentation. The tree-set
-commands calculate rooted Robinson--Foulds distance [@RobinsonFoulds1981], clade
-frequencies, and consensus trees. Taxonomy and trait commands generate
-constraints, diagnose monophyly, and select representatives by phylogenetic
-diversity [@Faith1992]. Rooting includes minimal ancestor deviation [@Tria2017]
-and NCBI, Open Tree of Life, or TimeTree references [@Schoch2020;
-@Hinchliff2015; @Kumar2022], while constraint generation can incorporate APG IV
-[@APG2016]. Selected downstream commands implement Mk-model ancestral-state
-reconstruction [@Lewis2001], prepare MCMCtree inputs, and create visual outputs.
+Commands were grouped into five task families (Fig. 1; Table S9). Comparison
+commands report clade differences and rooted Robinson--Foulds distance
+[@RobinsonFoulds1981]; tree-set commands calculate clade frequencies and
+consensus. Taxonomy and trait commands attach and aggregate data, generate
+constraints, diagnose monophyly, and sample phylogenetic diversity [@Faith1992].
+Rooting includes minimal ancestor deviation [@Tria2017] and taxonomic reference
+trees [@Schoch2020; @Hinchliff2015; @Kumar2022; @APG2016]. Downstream commands
+implement Mk ancestral-state reconstruction [@Lewis2001], prepare MCMCtree
+inputs, and create visual outputs.
 
-A root can be transferred from a reference tree, whereas node names, support
-values, and branch lengths are mapped by matching descendant-taxon sets.
-Unmatched clades remain unchanged or receive a user-specified fill value, so
-compatible information can be combined without assuming identical topologies.
+`diff` reports rooted clades or root-independent splits. `compose` takes a
+target topology and separate sources for root, names, support, branch lengths,
+or NHX properties; `transfer` maps one source. Matching uses descendant-taxon
+sets, or informative projections unique in both trees when tip sets overlap
+partly. Ambiguous requests remain unchanged or fail under a strict policy;
+per-clade TSV reports retain values and reasons.
+
+`annotate` joins table rows to unique tip names and can propagate a column to
+internal nodes by uniqueness, mode, count, mean, sum, extrema, or list
+aggregation. Explicit policies govern missing tips and unmatched rows, which
+can also be reported. Taxonomic or trait data can thus enter the tree stream
+without a study-specific join script.
 
 ### Software Tests and Release Checks
 
-The pytest suite was run in an isolated Python 3.12 environment with ETE 4.4.0
-and Biopython 1.87; 597 tests passed at the manuscript commit. Tests covered
-exact outputs, error cases, regression, round trips, seeded operations,
-threading agreement, and documentation examples. Continuous integration spans
-Python 3.10--3.14, performs static and distribution checks, and tests the
-installed wheel. An independent inventory script extracted command counts and
-defaults, and a process-level smoke test joined `sanitize`, `rename`, and
-`rescale` through standard streams.
+With ETE 4.4.0 and Biopython 1.87, 612 tests passed. They covered outputs,
+errors, regressions, round trips, seeds, threading, partial-taxon ambiguity,
+composition, aggregation, provenance hashes, and documentation. Continuous
+integration spans Python 3.10--3.14 and checks distributions. An inventory
+script extracted interface defaults; a smoke test piped `sanitize`, `rename`,
+and `rescale` while requiring three ordered audit records with stdin hashes.
 
 ### Task-Level Software Comparison
 
-We compared NWKIT 0.27.0 with Gotree 0.5.2, PhyKIT 2.3.0, and Newick Utilities
-1.6 as available on 16 July 2026, using current documentation and representative
-commands. Rows denote user tasks rather than similarly named functions.
-“Native” required a documented command-line workflow, “Partial” a narrower or
-distributed implementation, and an em dash means no equivalent was identified.
-General libraries were excluded because APIs and shell operations impose
-different workflow costs. Tables S2 and S3 retain the evidence and decision
-rules; absence is not evidence that a task cannot be programmed from lower-level
-components.
+We compared NWKIT 0.28.0 with Gotree 0.5.2, PhyKIT 2.3.0, and Newick Utilities
+1.6 as available on 16 July 2026. Rows represent tasks, not similarly named
+functions. “Native” required a documented CLI workflow, “Partial” a narrower or
+distributed implementation, and an em dash no identified equivalent. General
+libraries were excluded because API and shell workflows differ. Tables S2 and
+S3 retain evidence and decision rules; absence does not imply impossibility.
 
 ### Independent Output and Input-Case Checks
 
-All checks used random seed 20260716. We compared rooted RF distances with
-DendroPy for 50 tree pairs, clade frequencies and majority consensus with direct
-descendant-set calculations for 20 collections each, and Mk marginal
-probabilities with exhaustive internal-state enumeration for 100 four-tip
-trees. Seeded `shuffle` outputs were compared byte for byte. Table S4 records
-the full designs.
+With seed 20260716, rooted RF distances were compared with DendroPy for 50 tree
+pairs, clade frequencies and majority consensus with direct calculations for 20
+collections each, and Mk marginal probabilities with exhaustive enumeration
+for 100 four-tip trees. Seeded `shuffle` outputs were compared bytewise (Table
+S4).
 
 A predefined 12-case corpus tested whether `validate` reported declared
 representation, branch, topology, support, rooting, and taxon-set conditions.
@@ -186,81 +179,74 @@ It assessed reporting rather than recovery or repair (Table S6).
 
 ### Scaling and Cross-Tool Timing
 
-Preflight scaling used balanced and caterpillar trees from 128 to 32,768 tips.
-Majority-consensus timing used 10, 50, or 250 rooted 256-tip trees with NWKIT,
-Gotree, and PhyKIT. Three runs per condition measured startup-inclusive wall
-time and process-tree peak memory on a 12-core x86-64 Mac with 64 GB of memory.
-Because command semantics differ, timings characterize operating costs rather
-than algorithmic rank (Tables S7 and S8).
+Preflight scaling used balanced and caterpillar trees with 128--32,768 tips;
+consensus timing used 10, 50, or 250 rooted 256-tip trees with NWKIT, Gotree,
+and PhyKIT. Three runs measured startup-inclusive time and process-tree peak
+memory on a 12-core x86-64 Mac with 64 GB RAM. Differing semantics preclude
+algorithmic ranking (Tables S7 and S8).
 
 ### Worked Biological Example
 
-The worked example used the CSUBST PEPC tree and C4 photosynthesis foreground
-definitions from a published convergence analysis [@Fukushima2023], pinned by
-commit and SHA-256 checksum. The workflow expanded trait labels to all tips,
-checked monophyly, fitted a two-state equal-rates Mk model, and selected eight C4
-leaves maximizing rooted phylogenetic diversity. `worked_example.py` generates
-every command and derived value. The rooted-PD fraction divides the selected
-root-to-tip branch union by the corresponding union for all C4 candidates.
+The worked example used the checksum-pinned CSUBST PEPC tree and C4 definitions
+[@Fukushima2023]. It expanded tip traits, checked monophyly, fitted a two-state
+equal-rates Mk model, and selected eight C4 leaves maximizing rooted
+phylogenetic diversity. `worked_example.py` generates all commands and values;
+the PD fraction compares selected and all-candidate root-to-tip branch unions.
 
 ## Results
 
 ### One Interface Spans Five Tree-Processing Task Families
 
-The 30 commands formed five practical groups: seven for inspection and
-normalization, 12 for transformation, three for tree-set summaries, four for
-taxonomy or trait operations, and four for downstream analysis or presentation
-(Fig. 1). The categories share parser and label semantics, so a choice such as
-strict automatic Newick interpretation is available across operations rather
-than implemented separately in each workflow. Likewise, tree-producing commands
-return Newick unless another output is requested. A curation sequence can
-therefore be recorded as a shell pipeline rather than as intermediate files and
-manual edits. Commands with secondary inputs, such as a reference tree or trait
-table, still accept the primary tree through standard input. The three-command
-stream smoke test removed a singleton, renamed all four tips, and doubled every
-remaining branch length without an intermediate file.
+The 33 commands comprised seven inspection and normalization, 13
+transformation, four comparison or tree-set, five taxonomy or trait, and four
+downstream operations (Fig. 1). They share parser and label semantics and return
+Newick unless another output is requested. Primary trees remain pipeable when
+commands use secondary reference trees or tables. Accordingly, the smoke test
+removed a singleton, renamed four tips, doubled branch lengths, and appended
+three ordered audit records without an intermediate tree file.
 
-![Figure 1](figures/figure1_architecture.png){width=100%}
+![Figure 1](figures/figure1_architecture.png){width=90%}
 
-**Figure 1. Functional organization and shared interfaces in NWKIT 0.27.0.**
+**Figure 1. Functional organization and shared interfaces in NWKIT 0.28.0.**
 Command families describe user tasks and are not claims of algorithmic novelty.
-All 30 functional commands read their primary input from standard input
-(stdin) by default; 28 emit their primary result to standard output (stdout).
-TSV denotes tab-separated values.
+All 33 functional commands read their primary input from standard input
+(stdin) by default; 31 emit their primary result to standard output (stdout).
+JSONL denotes JSON Lines; TSV denotes tab-separated values.
 
 *Alt text:* A flow diagram passes Newick trees and metadata through shared input
-rules to five shaded command-family boxes, then through shared output rules to
-Newick, tables, and figures.
+rules to five shaded command-family boxes, then through shared output and audit
+rules to Newick, tables, provenance records, and figures.
 
-Tree-to-tree transfer extends this composition beyond a linear pipeline. NWKIT
-can take the root from one reference tree and map node labels, support values,
-or branch lengths from another Newick tree to clades shared with the target.
-The trees must contain the same uniquely named tips, but their topologies need
-not be identical; unmatched clades are reported rather than assigned by node
-position. Topology, rooting, support, and branch lengths can therefore originate
-from different analyses and be combined only where their phylogenetic
-hypotheses are compatible.
+`diff` separates root, clade, value, and annotation differences; `compose` can
+take topology, root, names, support, lengths, and properties from separate
+trees. With different tip sets, it uses informative, unique shared-tip
+projections. Reports distinguish transferred, unmatched, and ambiguous
+requests instead of assigning by node position.
+
+This supports a common multi-tree decision sequence. `diff` first establishes
+whether candidates disagree in clades or only in rooting and values. `compose`
+then applies each source independently to a selected target. Compatible
+requests may succeed when another source is unmatched, whereas strict mode
+requires complete transfer. A JSON manifest retains source roles, and the TSV
+report records the clade-level basis of the result.
 
 ### Comparison Revealed Extensive Overlap and a Distinct Combination
 
-All four reviewed toolkits provided routine transformation and visualization,
-and three supported standard-stream composition directly (Table 1). Gotree and
-PhyKIT both calculated consensus trees, and PhyKIT 2.3.0 provided a much broader
-set of comparative, trait, network, and phylogenomic analyses than represented
-by the selected rows. These overlaps argue against describing NWKIT as a
+All reviewed toolkits provided routine transformation and visualization, and
+three supported standard-stream composition (Table 1). Gotree and PhyKIT
+calculated consensus, while PhyKIT covered far more comparative, trait, network,
+and phylogenomic analyses than the selected rows. NWKIT is therefore not a
 comprehensive replacement.
 
-The audited differences instead concerned combinations and interface details.
-NWKIT alone among the reviewed CLIs exposed an explicit strict mode for
-ambiguous Newick interpretation and an integrated MCMCtree-calibration workflow.
-Its rooting command combined outgroup and midpoint methods with minimal ancestor
-deviation and taxonomy-derived roots. Gotree could download and prune NCBI
-taxonomy, whereas NWKIT additionally mapped species-labelled tips to NCBI/APG,
-OpenTree, or TimeTree workflows. NWKIT and PhyKIT both transferred annotations
-by topology and implemented categorical ancestral-state workflows. The table
-therefore positions NWKIT around preflight handling, shell composition, and the
-co-occurrence of taxonomy, selection, tree-set, and dating-preparation tasks,
-not around exclusive ownership of common algorithms.
+Differences concerned combinations and interfaces. Among the reviewed CLIs,
+NWKIT alone exposed strict ambiguous-Newick rejection and integrated MCMCtree
+calibration; it also combined multiple rooting methods, clade differencing,
+multi-source composition, and per-command audits. Gotree downloaded and pruned
+NCBI taxonomy, whereas NWKIT linked species-labelled tips to NCBI/APG,
+OpenTree, or TimeTree. NWKIT and PhyKIT both transferred annotations and
+reconstructed categorical states. Thus, NWKIT's position reflects preflight,
+shell composition, and co-occurring taxonomy, selection, tree-set, and dating
+tasks, not exclusive algorithms.
 
 **Table 1. Task-level capabilities in reviewed command-line toolkits.** Native
 denotes a directly documented command-line workflow, Partial a narrower or
@@ -269,7 +255,7 @@ reviewed version. The rows describe operations used in the NWKIT workflows and
 are not a general ranking; see Tables S2 and S3 for the complete matrix and
 decision rules.
 
-| User task | NWKIT 0.27.0 | Gotree 0.5.2 | PhyKIT 2.3.0 | Newick Utilities 1.6 |
+| User task | NWKIT 0.28.0 | Gotree 0.5.2 | PhyKIT 2.3.0 | Newick Utilities 1.6 |
 |---|:---:|:---:|:---:|:---:|
 | Standard-stream composition | Native | Native | Partial | Native |
 | Explicit Newick interpretation and ambiguity rejection | Native | — | — | — |
@@ -286,31 +272,22 @@ decision rules.
 
 ### A PEPC Workflow Connected Diagnosis, Inference, and Sampling
 
-Earlier NWKIT versions had already supported published phylogenetic workflows.
-Fukushima and Pollock [-@Fukushima2023] used `shuffle` in NWKIT 0.10.0 to
-generate randomized trees in 1,000 simulations and `constrain` to derive NCBI
-taxonomy-informed topological constraints for gene-tree inference. The present
-worked example revisited the PEPC data from that study with functions added in
-later releases.
+Fukushima and Pollock [-@Fukushima2023] used NWKIT 0.10.0 `shuffle` in 1,000
+simulations and `constrain` for NCBI-informed gene-tree constraints. We revisited
+their PEPC data with functions added subsequently.
 
-The pinned PEPC tree contained 71 unique tips and was rooted and binary.
-Twenty-one tips were labelled C4. Neither the C4 nor C3 set was monophyletic:
-the MRCA of C4-labelled tips contained 48 C3 intruders, consistent with repeated
-origins and losses represented in this gene tree (Fig. 2). The fitted equal-rates Mk
-model had an estimated transition rate of 3.633 per unit branch length. With an
-equal root prior, the marginal probability of C4 at the root was 0.108. Fifteen
-edges connected nodes with different maximum-a-posteriori states. This last
-count is a descriptive summary of a single marginal reconstruction, not an
-estimate of the number of evolutionary transitions.
+The rooted, binary PEPC tree contained 71 unique tips, including 21 labelled C4.
+Neither state was monophyletic; the C4 MRCA contained 48 C3 tips (Fig. 2). The
+equal-rates Mk rate was 3.633 per branch-length unit, root P(C4) was 0.108, and
+15 edges joined different maximum-a-posteriori states. The last value describes
+one marginal reconstruction, not the number of transitions.
 
-Greedy maximum-PD selection retained eight of the 21 C4 tips and 75.9% of the
-rooted PD represented by all C4 candidates. The selected accessions spanned C4
-lineages in grasses, sedges, and eudicots. Importantly, the example did not
-establish the accuracy of the PEPC tree or the C4 model. It showed that a
-versioned sequence of preflight, trait diagnosis, reconstruction, sampling, and
-plotting operations could be rerun without editing the tree between steps.
+Greedy maximum-PD selection retained eight C4 tips, spanning grasses, sedges,
+and eudicots, and 75.9% of all-candidate rooted PD. The example tests workflow
+reproduction, not PEPC-tree or C4-model accuracy; no tree was edited between
+preflight, diagnosis, reconstruction, sampling, and plotting.
 
-![Figure 2](figures/figure2_pepc_workflow.png){width=100%}
+![Figure 2](figures/figure2_pepc_workflow.png){width=90%}
 
 **Figure 2. Worked C4-state analysis of the CSUBST phosphoenolpyruvate
 carboxylase (PEPC) example.** a) Branch tone gives the NWKIT equal-rates Markov
@@ -328,30 +305,23 @@ retention of 75.9% of C4-tip rooted phylogenetic diversity.
 
 ### Output Checks and Scaling Delimited the Tested Range
 
-NWKIT matched the comparison result in all 191 predefined output checks (Fig.
-3a). Rooted RF distance agreed exactly for 50 tree pairs. Clade sets and
-frequencies agreed for all 20 tree collections, as did majority-consensus clades
-for another 20 collections. Across 100 Mk checks, the largest absolute
-difference from exhaustive enumeration was 2.22 × 10^-16^. Repeated seeded
-shuffling produced identical output, whereas the second seed changed the
-output. The preflight report identified the declared condition in all 11
-problem cases and reported no issue for the valid control (Fig. 3b).
+NWKIT matched all 191 predefined output checks (Fig. 3a): 50 rooted RF pairs,
+20 clade-frequency collections, 20 consensus collections, 100 Mk calculations
+(maximum error 3.33 × 10^-16^), and seeded shuffle reproduction. Preflight
+identified all 11 declared problems and passed the valid control (Fig. 3b).
 
-All 30 single-tree preflight runs and all 27 consensus runs completed
-successfully. Median preflight time rose
-from 1.49 s at 128 tips to 2.69 s for the 32,768-tip balanced tree and 2.38 s for
-the caterpillar tree; corresponding peak memory was 261 and 267 MB (Fig. 3c).
-The approximately 1.5-s lower bound largely reflected Python process and module
-startup on this machine.
+All 30 preflight and 27 consensus runs completed. Median preflight time rose
+from 1.49 s at 128 tips to 2.69 s (balanced) and 2.38 s (caterpillar) at 32,768
+tips; peak memory was 261 and 267 MB (Fig. 3c). Python startup contributed to
+the approximately 1.5-s lower bound.
 
-For 250 trees of 256 tips, median majority-consensus time was 2.60 s for NWKIT,
-0.130 s for Gotree, and 6.29 s for PhyKIT; peak resident memory was 158, 21, and
-82 MB, respectively (Fig. 3d). Gotree was also the fastest at 10 and 50 trees.
-These results show that NWKIT handled the tested collection sizes, but they do
-not support a general performance advantage. Process startup, language runtime,
-consensus details, and input structure all contribute to the observed values.
+For 250 256-tip trees, median consensus time was 2.60 s for NWKIT, 0.130 s for
+Gotree, and 6.29 s for PhyKIT; peak memory was 158, 21, and 82 MB (Fig. 3d).
+Gotree was also fastest at 10 and 50 trees. NWKIT handled the tested sizes, but
+startup, runtime, consensus semantics, and input structure preclude a general
+performance claim.
 
-![Figure 3](figures/figure3_evaluation.png){width=100%}
+![Figure 3](figures/figure3_evaluation.png){width=90%}
 
 **Figure 3. Independent output checks, predefined input cases, and scaling.**
 a) Agreement counts for rooted Robinson--Foulds (RF) distance, clade frequency,
@@ -368,45 +338,54 @@ and differing consensus-time curves for NWKIT, Gotree, and PhyKIT.
 
 ## Discussion
 
-The final tree of a phylogenetic study can be archived even when the decisions
-that produced it cannot be reconstructed. NWKIT addresses this gap by
-expressing tree curation and analysis as named operations with shared,
-pipe-compatible conventions. Its contribution is not its command count, but
-the way explicit input rules connect preflight reporting, transformations,
-taxonomic references, tree collections, trait analysis, sampling, and
-preparation for downstream programs. For recurring operations, such a command
-history is easier to inspect, test, and reuse than a succession of manual edits
-or disposable scripts.
+A final tree can be archived even when its derivation cannot be reconstructed.
+NWKIT expresses curation and analysis as named, pipe-compatible operations. Its
+contribution is not command count, but explicit connections among preflight,
+transformation, taxonomic references, tree collections, trait analysis,
+sampling, and downstream preparation. Such histories are more inspectable and
+reusable than manual edits or disposable scripts.
 
-Tree-to-tree transfer illustrates why this layer is more than a collection of
-independent filters. A topology selected under one criterion can receive a root
-from another tree and support values, branch lengths, or annotations from
-related analyses. Transfer is restricted to compatible clades and reports
-unmatched nodes rather than copying information by node position. This permits
-compatible components of phylogenetic hypotheses to be assembled reproducibly
-without treating different topologies as interchangeable.
+Tree differencing and composition make this layer more than independent
+filters. A selected topology can receive a root, support, lengths, and
+annotations from related analyses. Reported exact or projected clade matches
+replace positional copying; ambiguous projections are withheld. Composition
+reports and audits retain both mapping decisions and the computational path.
 
-The comparison also identifies preferable alternatives. Gotree was
-substantially faster in the present consensus runs. PhyKIT includes many
-alignment, comparative, network, and phylogenomic analyses without NWKIT
-counterparts. ETE, DendroPy, and ape remain appropriate for new algorithms,
-custom data models, and programmatic control; NWKIT depends on ETE and
-scientific Python rather than replacing them.
+This distinction matters biologically. Rooting, support estimation,
+time-scaling, and annotation answer different questions and may use related but
+nonidentical taxon samples. Composition preserves those origins rather than
+presenting the final Newick as if every property arose from one analysis. It
+also exposes disagreement: a value lacking a unique clade match remains an
+unresolved request rather than silently reassigned evidence.
 
-NWKIT remains Newick-centered rather than a general container for characters,
-alignments, and trees. Strict parsing can reject ambiguity but cannot infer
-authorial intent, and structural rootedness still requires biological
-confirmation. Some commands depend on external services, and the implemented
-Mk models do not replace broader comparative modeling.
+Gotree was faster in the consensus runs, and PhyKIT includes many analyses
+without NWKIT counterparts. ETE, DendroPy, and ape remain preferable for new
+algorithms, custom data models, and programmatic control; NWKIT depends on,
+rather than replaces, scientific Python.
 
-The evaluation is likewise bounded: the capability table is not an exhaustive
-software census, output checks used defined small-tree semantics, and scaling
-used synthetic inputs on one computer. These results do not justify describing
-NWKIT as universally validated or error-proof. Future releases should preserve
-the executable comparison and inventory, expand independent checks, and add
-cross-platform benchmarks. NWKIT can thereby remain a transparent layer
-between tree inference and specialized downstream analysis while complementing
-the libraries and toolkits on which phylogenetic workflows depend.
+NWKIT remains Newick-centered. Strict parsing cannot infer authorial intent,
+and structural rootedness requires biological confirmation. Projected matching
+rejects fewer than two shared descendants and nonunique projections; it cannot
+recover information absent from shared sampling. NHX is representationally
+limited, some commands use external services, and the Mk models do not replace
+broader comparative modeling.
+
+Projected matching is conservative, not an ancestral reconciliation method. It
+does not infer where a missing taxon attaches, reconcile gene and species trees,
+or adjudicate between roots. Those decisions must be made upstream or expressed
+through the selected target.
+
+The evaluation is bounded: the comparison is not exhaustive, checks used
+defined small-tree semantics, and scaling used synthetic inputs on one
+computer. NWKIT is not universally validated or error-proof. Executable
+comparisons, inventories, independent checks, and cross-platform benchmarks
+should expand with future releases, maintaining a transparent layer between
+inference and specialized analysis.
+
+Likewise, the audit establishes computational provenance, not the scientific
+validity of chosen operations. A trace can show exactly how a tree was produced
+while leaving its biological assumptions open to review; reproducibility
+requires both forms of scrutiny.
 
 ## Acknowledgments
 

@@ -10,7 +10,7 @@ The files in `paper/analysis` generate the inventory, independent-output checks,
 
 | software | version_or_commit | role | provenance | accessed |
 | --- | --- | --- | --- | --- |
-| NWKIT | 0.27.0; f71dc345ac83 | focal command-line toolkit | https://github.com/kfuku52/nwkit | 2026-07-16 |
+| NWKIT | 0.28.0; 9d7353df9c43 | focal command-line toolkit | https://github.com/kfuku52/nwkit | 2026-07-17 |
 | ETE | 4.4.0 | NWKIT tree representation and comparison library | https://github.com/etetoolkit/ete | 2026-07-16 |
 | Biopython | 1.87 | NWKIT dependency and independent tree parser | https://biopython.org/ | 2026-07-16 |
 | Gotree | 0.5.2; 8ce3ce6eb5b14261b0be7ed2b1b02bcf22dfc305 | command-line comparator | https://github.com/evolbioinfo/gotree | 2026-07-16 |
@@ -24,7 +24,7 @@ The files in `paper/analysis` generate the inventory, independent-output checks,
 
 Native denotes a directly documented CLI workflow; Partial denotes a narrower or distributed implementation; — means that an equivalent was not identified in the reviewed version.
 
-| task | NWKIT_0.27.0 | Gotree_0.5.2 | PhyKIT_2.3.0 | Newick_Utilities_1.6 |
+| task | NWKIT_0.28.0 | Gotree_0.5.2 | PhyKIT_2.3.0 | Newick_Utilities_1.6 |
 | --- | --- | --- | --- | --- |
 | Standard-stream composition | Native | Native | Partial | Native |
 | Explicit Newick interpretation and ambiguity rejection | Native | — | — | — |
@@ -43,51 +43,51 @@ Native denotes a directly documented CLI workflow; Partial denotes a narrower or
 
 | task | software | classification and evidence note | decision rule |
 | --- | --- | --- | --- |
-| Standard-stream composition | NWKIT 0.27.0 | Native: all 30 functional commands read the primary input from stdin by default; 28 write the primary result to stdout | Native requires a documented tree-producing command to accept stdin and emit its primary result to stdout without a temporary file |
+| Standard-stream composition | NWKIT 0.28.0 | Native: all 33 functional commands read the primary input from stdin by default; 31 write the primary result to stdout; every command can append a JSONL audit record | Native requires a documented tree-producing command to accept stdin and emit its primary result to stdout without a temporary file |
 | Standard-stream composition | Gotree 0.5.2 | Native: commands accept stdin and emit stdout | Native requires a documented tree-producing command to accept stdin and emit its primary result to stdout without a temporary file |
 | Standard-stream composition | PhyKIT 2.3.0 | Partial: most tree transformations require input file paths and may create derived files; selected reports use stdout | Native requires a documented tree-producing command to accept stdin and emit its primary result to stdout without a temporary file |
 | Standard-stream composition | Newick Utilities 1.6 | Native: programs accept stdin and emit stdout | Native requires a documented tree-producing command to accept stdin and emit its primary result to stdout without a temporary file |
-| Explicit Newick interpretation and ambiguity rejection | NWKIT 0.27.0 | Native: selectable ETE format, automatic detection, strict automatic mode, and quoted-name control | Count only controls that distinguish alternative interpretations of syntactically readable Newick, not generic parse errors |
+| Explicit Newick interpretation and ambiguity rejection | NWKIT 0.28.0 | Native: selectable ETE format, automatic detection, strict automatic mode, and quoted-name control | Count only controls that distinguish alternative interpretations of syntactically readable Newick, not generic parse errors |
 | Explicit Newick interpretation and ambiguity rejection | Gotree 0.5.2 | Not identified: Newick is accepted, but no documented equivalent of parser dialect selection or strict ambiguous-numeric-label rejection | Count only controls that distinguish alternative interpretations of syntactically readable Newick, not generic parse errors |
 | Explicit Newick interpretation and ambiguity rejection | PhyKIT 2.3.0 | Not identified in reviewed command help | Count only controls that distinguish alternative interpretations of syntactically readable Newick, not generic parse errors |
 | Explicit Newick interpretation and ambiguity rejection | Newick Utilities 1.6 | Not identified in the v1.6 manual | Count only controls that distinguish alternative interpretations of syntactically readable Newick, not generic parse errors |
-| Consolidated preflight report | NWKIT 0.27.0 | Native: one report covers parse status, duplicate or empty tips, branch-length and support problems, rooting, ultrametricity, binarity, and cross-tree consistency | Native requires one user-facing operation that reports representation, structural, and collection-level checks |
+| Consolidated preflight report | NWKIT 0.28.0 | Native: one report covers parse status, duplicate or empty tips, branch-length and support problems, rooting, ultrametricity, binarity, and cross-tree consistency | Native requires one user-facing operation that reports representation, structural, and collection-level checks |
 | Consolidated preflight report | Gotree 0.5.2 | Partial: parsing, rootedness statistics, monophyly, and tip-set comparison are separate operations | Native requires one user-facing operation that reports representation, structural, and collection-level checks |
 | Consolidated preflight report | PhyKIT 2.3.0 | Partial: task-specific checks and statistics are available, but no equivalent consolidated preflight command was identified | Native requires one user-facing operation that reports representation, structural, and collection-level checks |
 | Consolidated preflight report | Newick Utilities 1.6 | Partial: parsing and several consistency checks are distributed across utilities | Native requires one user-facing operation that reports representation, structural, and collection-level checks |
-| Routine tree transformations | NWKIT 0.27.0 | Native: prune, rename, collapse, remove or fill annotations, rescale, resolve polytomies, and remove singletons | Grouped row records established overlap and is not used as a novelty claim |
+| Routine tree transformations | NWKIT 0.28.0 | Native: prune, rename, collapse, remove or fill annotations, rescale, resolve polytomies, remove singletons, and join tabular properties to tips or clades | Grouped row records established overlap and is not used as a novelty claim |
 | Routine tree transformations | Gotree 0.5.2 | Native: corresponding commands are documented | Grouped row records established overlap and is not used as a novelty claim |
 | Routine tree transformations | PhyKIT 2.3.0 | Native: pruning, renaming, branch collapse, branch-length multiplication, and related operations are documented | Grouped row records established overlap and is not used as a novelty claim |
 | Routine tree transformations | Newick Utilities 1.6 | Native: pruning, renaming, rerooting, topology editing, support handling, and related filters are documented | Grouped row records established overlap and is not used as a novelty claim |
-| Rooting strategies | NWKIT 0.27.0 | Native: outgroup, transferred root, midpoint, minimal ancestor deviation, and taxonomy-based rooting | Modes count only when exposed in the reviewed command-line interface |
+| Rooting strategies | NWKIT 0.28.0 | Native: outgroup, transferred root, midpoint, minimal ancestor deviation, and taxonomy-based rooting | Modes count only when exposed in the reviewed command-line interface |
 | Rooting strategies | Gotree 0.5.2 | Partial: outgroup and midpoint rooting | Modes count only when exposed in the reviewed command-line interface |
 | Rooting strategies | PhyKIT 2.3.0 | Partial: user-specified outgroup rooting; no documented midpoint, MAD, or taxonomy-based mode was identified | Modes count only when exposed in the reviewed command-line interface |
 | Rooting strategies | Newick Utilities 1.6 | Partial: explicit outgroup and longest-edge fallback | Modes count only when exposed in the reviewed command-line interface |
-| Topology-aware annotation transfer | NWKIT 0.27.0 | Native: names, support, and lengths are mapped by matching clades; root transfer is also supported | Simple tip renaming or positional copying does not qualify |
+| Topology-aware annotation transfer | NWKIT 0.28.0 | Native: diff reports clade-level compatibility; compose and transfer map roots, names, support, lengths, and arbitrary NHX properties, with conservative projection onto partially overlapping tip sets | Simple tip renaming or positional copying does not qualify |
 | Topology-aware annotation transfer | Gotree 0.5.2 | Partial: annotation from a comparison tree and node-name/comment transfer are supported | Simple tip renaming or positional copying does not qualify |
 | Topology-aware annotation transfer | PhyKIT 2.3.0 | Native: internal annotations are matched by descendant-taxon bipartitions | Simple tip renaming or positional copying does not qualify |
 | Topology-aware annotation transfer | Newick Utilities 1.6 | Not identified in the v1.6 manual | Simple tip renaming or positional copying does not qualify |
-| Tree-collection summaries | NWKIT 0.27.0 | Native: clade frequencies, weighted strict/majority/greedy consensus, optional reference tree, and branch-length summaries | Native requires at least consensus or branch-frequency/support calculation across a tree collection |
+| Tree-collection summaries | NWKIT 0.28.0 | Native: clade frequencies, weighted strict/majority/greedy consensus, optional reference tree, and branch-length summaries | Native requires at least consensus or branch-frequency/support calculation across a tree collection |
 | Tree-collection summaries | Gotree 0.5.2 | Native: consensus plus classical and transfer bootstrap support | Native requires at least consensus or branch-frequency/support calculation across a tree collection |
 | Tree-collection summaries | PhyKIT 2.3.0 | Native: strict or majority consensus and several gene-tree discordance analyses | Native requires at least consensus or branch-frequency/support calculation across a tree collection |
 | Tree-collection summaries | Newick Utilities 1.6 | Partial: support calculations are available; no consensus-tree operation was identified | Native requires at least consensus or branch-frequency/support calculation across a tree collection |
-| Taxonomy-derived topology | NWKIT 0.27.0 | Native: NCBI, NCBI+APG IV, or user backbones can produce constraints; NCBI/OpenTree/TimeTree can inform rooting | External taxonomy must directly determine a returned topology or root |
+| Taxonomy-derived topology | NWKIT 0.28.0 | Native: NCBI, NCBI+APG IV, or user backbones can produce constraints; NCBI/OpenTree/TimeTree can inform rooting | External taxonomy must directly determine a returned topology or root |
 | Taxonomy-derived topology | Gotree 0.5.2 | Partial: NCBI taxonomy can be downloaded, pruned, and used to annotate trees, but no integrated species-label-aware constraint workflow was identified | External taxonomy must directly determine a returned topology or root |
 | Taxonomy-derived topology | PhyKIT 2.3.0 | Not identified in reviewed command help | External taxonomy must directly determine a returned topology or root |
 | Taxonomy-derived topology | Newick Utilities 1.6 | Not identified in the v1.6 manual | External taxonomy must directly determine a returned topology or root |
-| Trait-aware selection and monophyly | NWKIT 0.27.0 | Native: grouped monophyly tests, maximum-PD or ranked representative sampling, and clade skimming with trait filters | Selection must choose tips using tree structure plus supplied metadata; monophyly-only implementations are partial |
+| Trait-aware selection and monophyly | NWKIT 0.28.0 | Native: tip tables can be attached and aggregated onto clades; grouped monophyly tests, maximum-PD or ranked representative sampling, and clade skimming use trait filters | Selection must choose tips using tree structure plus supplied metadata; monophyly-only implementations are partial |
 | Trait-aware selection and monophyly | Gotree 0.5.2 | Partial: monophyly of a supplied tip set; tree sampling is over input trees rather than tips | Selection must choose tips using tree structure plus supplied metadata; monophyly-only implementations are partial |
 | Trait-aware selection and monophyly | PhyKIT 2.3.0 | Partial: monophyly tests and phylogenetic-diversity calculations; no equivalent trait-filtered representative-tip selection was identified | Selection must choose tips using tree structure plus supplied metadata; monophyly-only implementations are partial |
 | Trait-aware selection and monophyly | Newick Utilities 1.6 | Not identified in the v1.6 manual | Selection must choose tips using tree structure plus supplied metadata; monophyly-only implementations are partial |
-| Categorical ancestral-state analysis | NWKIT 0.27.0 | Native: Mk likelihood under ER/SYM/ARD, marginal probabilities, maximum-a-posteriori states, and stochastic maps | Likelihood reconstruction, stochastic mapping, and parsimony are recorded separately in the detailed audit; this grouped row denotes any native categorical-ASR workflow |
+| Categorical ancestral-state analysis | NWKIT 0.28.0 | Native: Mk likelihood under ER/SYM/ARD, marginal probabilities, maximum-a-posteriori states, and stochastic maps | Likelihood reconstruction, stochastic mapping, and parsimony are recorded separately in the detailed audit; this grouped row denotes any native categorical-ASR workflow |
 | Categorical ancestral-state analysis | Gotree 0.5.2 | Partial: most-parsimonious ancestral characters and sequences | Likelihood reconstruction, stochastic mapping, and parsimony are recorded separately in the detailed audit; this grouped row denotes any native categorical-ASR workflow |
 | Categorical ancestral-state analysis | PhyKIT 2.3.0 | Native: discrete model fitting, stochastic character mapping, and parsimony character mapping are documented | Likelihood reconstruction, stochastic mapping, and parsimony are recorded separately in the detailed audit; this grouped row denotes any native categorical-ASR workflow |
 | Categorical ancestral-state analysis | Newick Utilities 1.6 | Not identified in the v1.6 manual | Likelihood reconstruction, stochastic mapping, and parsimony are recorded separately in the detailed audit; this grouped row denotes any native categorical-ASR workflow |
-| MCMCtree calibration preparation | NWKIT 0.27.0 | Native: user calibrations or TimeTree point/interval estimates can be converted to MCMCtree-labelled Newick | Chronogram plotting or general node annotation does not qualify |
+| MCMCtree calibration preparation | NWKIT 0.28.0 | Native: user calibrations or TimeTree point/interval estimates can be converted to MCMCtree-labelled Newick | Chronogram plotting or general node annotation does not qualify |
 | MCMCtree calibration preparation | Gotree 0.5.2 | Not identified | Chronogram plotting or general node annotation does not qualify |
 | MCMCtree calibration preparation | PhyKIT 2.3.0 | Not identified | Chronogram plotting or general node annotation does not qualify |
 | MCMCtree calibration preparation | Newick Utilities 1.6 | Not identified | Chronogram plotting or general node annotation does not qualify |
-| Tree and trait visualization | NWKIT 0.27.0 | Native: rectangular/radial tree drawing with support and categorical-trait annotation; species-image retrieval is a separate command | Grouped row records overlap and is not used as a novelty claim |
+| Tree and trait visualization | NWKIT 0.28.0 | Native: rectangular/radial tree drawing with support and categorical-trait annotation; species-image retrieval is a separate command | Grouped row records overlap and is not used as a novelty claim |
 | Tree and trait visualization | Gotree 0.5.2 | Native: text, PNG, SVG, and Cytoscape outputs | Grouped row records overlap and is not used as a novelty claim |
 | Tree and trait visualization | PhyKIT 2.3.0 | Native: tree, chronogram, trait-map, network, and other plots | Grouped row records overlap and is not used as a novelty claim |
 | Tree and trait visualization | Newick Utilities 1.6 | Native: text, PostScript, and SVG tree displays | Grouped row records overlap and is not used as a novelty claim |
@@ -99,14 +99,14 @@ Native denotes a directly documented CLI workflow; Partial denotes a narrower or
 | rooted_RF_vs_DendroPy | 50 | 50 | 1.0 | 0.0 | Rooted symmetric difference on random 16-tip binary trees |
 | clade_frequency_vs_direct_count | 20 | 20 | 1.0 | 0.0 | Exact descendant-tip-set counts in collections of 25 random 12-tip trees |
 | majority_consensus_vs_direct_count | 20 | 20 | 1.0 | 0.0 | Clades occurring in more than half of 31 rooted trees |
-| Mk_marginals_vs_exhaustive_enumeration | 100 | 100 | 1.0 | 2.220446049250313e-16 | Two-state ER model on random four-tip trees; all internal-state assignments enumerated |
+| Mk_marginals_vs_exhaustive_enumeration | 100 | 100 | 1.0 | 3.3306690738754696e-16 | Two-state ER model on random four-tip trees; all internal-state assignments enumerated |
 | shuffle_seed_reproducibility | 1 | 1 | 1.0 | 0.0 | Exact output equality for repeated seed and inequality for a second seed |
 
 ## Table S5. Standard-stream pipeline smoke test
 
-| commands | passed | leaf_names | singleton_nodes | nonroot_branch_lengths | output_newick |
-| --- | --- | --- | --- | --- | --- |
-| sanitize\|rename\|rescale | True | Taxon_1,Taxon_2,Taxon_3,Taxon_4 | 0 | 2.0,2.0,2.0,2.0,2.0,4.0 | ((Taxon_2:2,Taxon_1:4):2,(Taxon_3:2,Taxon_4:2):2); |
+| commands | passed | leaf_names | singleton_nodes | nonroot_branch_lengths | audit_records | audit_commands | audit_statuses | stdin_hashes_recorded | output_newick |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| sanitize\|rename\|rescale | True | Taxon_1,Taxon_2,Taxon_3,Taxon_4 | 0 | 2.0,2.0,2.0,2.0,2.0,4.0 | 3 | sanitize,rename,rescale | ok,ok,ok | True | ((Taxon_2:2,Taxon_1:4):2,(Taxon_3:2,Taxon_4:2):2); |
 
 ## Table S6. Predefined input corpus
 
@@ -165,15 +165,18 @@ Values are medians, minima, and maxima across three process-level runs. Peak RSS
 
 ## Table S9. NWKIT command and stream inventory
 
-Inventory for NWKIT 0.27.0 at commit `f71dc345ac83`; 597 tests were collected.
+Inventory for NWKIT 0.28.0 at commit `9d7353df9c43`; 612 tests were collected.
 
 | command | stdin default | stdout default | seed option |
 | --- | --- | --- | --- |
+| annotate | True | True | False |
 | asr | True | True | True |
 | cladefreq | True | True | False |
 | collapse | True | True | False |
+| compose | True | True | False |
 | consensus | True | True | False |
 | constrain | True | True | False |
+| diff | True | True | False |
 | dist | True | True | False |
 | draw | True | False | False |
 | drop | True | True | False |

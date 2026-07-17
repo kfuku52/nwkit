@@ -1,6 +1,6 @@
 # Positioning for *Systematic Biology*
 
-Last updated: 2026-07-16
+Last updated: 2026-07-17
 
 ## Article type
 
@@ -14,8 +14,8 @@ Software for Systematics and Evolution
 The earlier wording, "a validated ... environment," is deliberately not used.
 NWKIT has a substantial automated test suite and a `validate` command, but that
 does not constitute independent or comprehensive validation of every algorithm.
-The manuscript will use concrete formulations such as "597 automated tests
-passed for version 0.27.0" and will reserve "accurate," "robust," or
+The manuscript will use concrete formulations such as "612 automated tests
+passed for version 0.28.0" and will reserve "accurate," "robust," or
 "validated" for properties established by external-reference comparisons.
 
 ## Reader problem
@@ -28,15 +28,18 @@ values, internal labels, taxon names, tree collections, or Newick dialects.
 
 ## Proposed contribution
 
-NWKIT exposes 30 functional subcommands through consistent command-line input
+NWKIT exposes 33 functional subcommands through consistent command-line input
 and output conventions. Its candidate distinguishing combination is:
 
 1. shell-composable Newick curation and transformation;
 2. explicit detection and normalization of structural and format problems;
-3. topology-aware transfer of information between trees;
-4. taxonomy- and trait-aware constraints, sampling, and monophyly assessment;
-5. tree-collection summaries and consensus support transfer; and
-6. categorical ancestral-state reconstruction and stochastic mapping under Mk
+3. clade-level tree differencing and explicit multi-source composition;
+4. topology-aware transfer across exact or partially overlapping tip sets;
+5. tabular annotation plus taxonomy- and trait-aware constraints, sampling,
+   and monophyly assessment;
+6. machine-readable provenance records for every command;
+7. tree-collection summaries and consensus support transfer; and
+8. categorical ancestral-state reconstruction and stochastic mapping under Mk
    models from the same interface.
 
 This is a hypothesis to test, not yet a novelty claim. The comparison must show
@@ -76,7 +79,7 @@ tree-processing commands.
 
 At least one demonstration should use a published biological dataset in which
 NWKIT already played a documented role. At least one should exercise major
-capabilities added in the 0.22--0.27 development cycle.
+capabilities added in the 0.22--0.28 development cycle.
 
 ## Main display-item plan
 

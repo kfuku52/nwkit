@@ -1,5 +1,5 @@
 software	version_or_commit	role	provenance	accessed
-NWKIT	0.27.0; f71dc345ac83	focal command-line toolkit	https://github.com/kfuku52/nwkit	2026-07-16
+NWKIT	0.28.0; 9d7353df9c43	focal command-line toolkit	https://github.com/kfuku52/nwkit	2026-07-17
 ETE	4.4.0	NWKIT tree representation and comparison library	https://github.com/etetoolkit/ete	2026-07-16
 Biopython	1.87	NWKIT dependency and independent tree parser	https://biopython.org/	2026-07-16
 Gotree	0.5.2; 8ce3ce6eb5b14261b0be7ed2b1b02bcf22dfc305	command-line comparator	https://github.com/evolbioinfo/gotree	2026-07-16

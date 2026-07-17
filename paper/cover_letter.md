@@ -9,11 +9,12 @@ Systematics and Evolution* article in *Systematic Biology*.
 Phylogenetic trees commonly pass through several programs between inference
 and biological interpretation. At these interfaces, small differences in taxon
 sets, Newick conventions, rooting, annotations, and metadata can make a
-workflow difficult to inspect or reproduce. NWKIT 0.27.0 provides 30
+workflow difficult to inspect or reproduce. NWKIT 0.28.0 provides 33
 pipe-compatible commands that combine explicit Newick interpretation and
-preflight reporting with topology-aware transformations, tree-collection
-summaries, taxonomy- and trait-informed operations, categorical
-ancestral-state reconstruction, and preparation for downstream programs.
+preflight reporting with clade-level comparison, multi-tree composition,
+topology-aware transformations, machine-readable provenance, tree-collection
+summaries, taxonomy- and trait-informed operations, categorical ancestral-state
+reconstruction, and preparation for downstream programs.
 
 The manuscript does not position NWKIT as a replacement for established
 libraries or command-line toolkits. Instead, it documents the particular
