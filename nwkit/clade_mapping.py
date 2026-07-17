@@ -4,6 +4,7 @@ from nwkit.util import validate_unique_named_leaves
 
 
 SUPPORTED_TAXON_MODES = ('exact', 'intersection')
+SUPPORTED_MATCH_BASES = ('clade', 'split')
 
 
 @dataclass(frozen=True)
@@ -12,7 +13,9 @@ class CladeMatch:
     source: object | None
     status: str
     reason: str
+    match_basis: str
     projected_taxa: frozenset
+    projected_split: tuple | None
     target_taxa: frozenset
     source_taxa: frozenset | None
 
@@ -24,6 +27,7 @@ class CladeMapping:
     target_only_taxa: frozenset
     source_only_taxa: frozenset
     unmatched_source_nodes: tuple
+    match_basis: str
 
 
 def _leaf_set(tree):
@@ -50,12 +54,34 @@ def _format_taxa(taxa):
     return ','.join(sorted(str(taxon) for taxon in taxa))
 
 
-def build_clade_mapping(target, source, taxon_mode='exact'):
+def _projected_split_from_taxa(taxa, shared_taxa):
+    side = frozenset(taxa & shared_taxa)
+    complement = frozenset(shared_taxa - side)
+    if (not side) or (not complement):
+        return None
+    return canonical_split(side, complement)
+
+
+def _mapping_key(node_class, taxa, shared_taxa, match_basis):
+    projected_taxa = frozenset(taxa & shared_taxa)
+    if node_class in ('root', 'leaf') or match_basis == 'clade':
+        return projected_taxa
+    return _projected_split_from_taxa(taxa, shared_taxa)
+
+
+def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade'):
     if taxon_mode not in SUPPORTED_TAXON_MODES:
         raise ValueError(
             "Unsupported taxon mode '{}'. Choose from: {}.".format(
                 taxon_mode,
                 ', '.join(SUPPORTED_TAXON_MODES),
+            )
+        )
+    if match_basis not in SUPPORTED_MATCH_BASES:
+        raise ValueError(
+            "Unsupported match basis '{}'. Choose from: {}.".format(
+                match_basis,
+                ', '.join(SUPPORTED_MATCH_BASES),
             )
         )
     validate_unique_named_leaves(target, option_name='--infile', context=' for clade mapping')
@@ -81,13 +107,16 @@ def build_clade_mapping(target, source, taxon_mode='exact'):
 
     target_taxa_by_node = _node_taxon_sets(target)
     source_taxa_by_node = _node_taxon_sets(source)
+    same_leaf_set = target_leaf_set == source_leaf_set
     target_groups = dict()
     source_groups = dict()
     for node, taxa in target_taxa_by_node.items():
-        key = (_node_class(node), frozenset(taxa & shared_taxa))
+        node_class = _node_class(node)
+        key = (node_class, _mapping_key(node_class, taxa, shared_taxa, match_basis))
         target_groups.setdefault(key, list()).append(node)
     for node, taxa in source_taxa_by_node.items():
-        key = (_node_class(node), frozenset(taxa & shared_taxa))
+        node_class = _node_class(node)
+        key = (node_class, _mapping_key(node_class, taxa, shared_taxa, match_basis))
         source_groups.setdefault(key, list()).append(node)
 
     matches = list()
@@ -96,13 +125,15 @@ def build_clade_mapping(target, source, taxon_mode='exact'):
         node_class = _node_class(target_node)
         target_taxa = target_taxa_by_node[target_node]
         projected_taxa = frozenset(target_taxa & shared_taxa)
-        key = (node_class, projected_taxa)
+        projected_split = _projected_split_from_taxa(target_taxa, shared_taxa)
+        match_key = _mapping_key(node_class, target_taxa, shared_taxa, match_basis)
+        key = (node_class, match_key)
         target_candidates = target_groups.get(key, [])
         source_candidates = source_groups.get(key, [])
         source_node = None
         if node_class == 'root':
             source_node = source
-            status = 'matched'
+            status = 'exact_match' if same_leaf_set else 'projected_match'
             reason = 'root_to_root'
         elif not projected_taxa:
             status = 'unmatched'
@@ -110,9 +141,19 @@ def build_clade_mapping(target, source, taxon_mode='exact'):
         elif taxon_mode == 'intersection' and node_class == 'intnode' and len(projected_taxa) < 2:
             status = 'ambiguous'
             reason = 'fewer_than_two_shared_descendant_taxa'
-        elif node_class == 'intnode' and projected_taxa == shared_taxa:
+        elif (
+            node_class == 'intnode'
+            and (
+                match_key is None
+                or (match_basis == 'clade' and projected_taxa == shared_taxa)
+            )
+        ):
             status = 'ambiguous'
-            reason = 'projection_contains_all_shared_taxa'
+            reason = (
+                'projection_contains_all_shared_taxa'
+                if match_basis == 'clade'
+                else 'projection_does_not_define_usable_split'
+            )
         elif len(target_candidates) > 1:
             status = 'ambiguous'
             reason = 'target_projection_not_unique'
@@ -124,8 +165,16 @@ def build_clade_mapping(target, source, taxon_mode='exact'):
             reason = 'source_projection_not_unique'
         else:
             source_node = source_candidates[0]
-            status = 'matched'
-            reason = 'matching_descendant_taxa'
+            status = (
+                'exact_match'
+                if same_leaf_set
+                else 'projected_match'
+            )
+            reason = (
+                'matching_descendant_taxa'
+                if match_basis == 'clade'
+                else 'matching_canonical_split'
+            )
         source_taxa = None
         if source_node is not None:
             source_taxa = source_taxa_by_node[source_node]
@@ -136,7 +185,9 @@ def build_clade_mapping(target, source, taxon_mode='exact'):
                 source=source_node,
                 status=status,
                 reason=reason,
+                match_basis=match_basis,
                 projected_taxa=projected_taxa,
+                projected_split=projected_split,
                 target_taxa=target_taxa,
                 source_taxa=source_taxa,
             )
@@ -151,6 +202,7 @@ def build_clade_mapping(target, source, taxon_mode='exact'):
         target_only_taxa=target_leaf_set - source_leaf_set,
         source_only_taxa=source_leaf_set - target_leaf_set,
         unmatched_source_nodes=unmatched_source_nodes,
+        match_basis=match_basis,
     )
 
 

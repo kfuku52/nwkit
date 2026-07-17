@@ -228,10 +228,15 @@ pcompose.add_argument('--source-format', '--source_format', dest='source_format'
                       help='Default ETE parser format for all source trees.')
 pcompose.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar='exact|intersection', default='exact', type=str, required=False, action='store',
                       choices=['exact', 'intersection'],
-                      help='Require identical tip sets or conservatively map unique clades projected onto shared tips.')
+                      help='Require identical tip sets or map unique clades projected onto shared tips.')
+pcompose.add_argument('--match-basis', '--match_basis', dest='match_basis', metavar='clade|split', default='clade', type=str, required=False, action='store',
+                      choices=['clade', 'split'],
+                      help='Match rooted descendant clades or root-independent canonical edge splits.')
+pcompose.add_argument('--allow-projected-values', '--allow_projected_values', dest='allow_projected_values', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                      help='default=%(default)s: Permit support and branch-length transfer through projected matches. Use only when shared-tip equivalence is sufficient.')
 pcompose.add_argument('--policy', metavar='compatible-only|strict', default='compatible-only', type=str, required=False, action='store',
                       choices=['compatible-only', 'strict'],
-                      help='Skip incompatible values or fail if any requested value cannot be transferred.')
+                      help='Skip incompatible values, or require exact (not projected) matches for every requested value.')
 pcompose.add_argument('--report', metavar='PATH', default=None, type=str, required=False, action='store',
                       help='Optional per-clade TSV recording sources, matches, transferred values, and conflicts.')
 pcompose.set_defaults(handler=command_compose)
@@ -786,10 +791,15 @@ ptransfer.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, 
                        help='default=%(default)s: Fill values instead of leaving as is, if no corresponding node is found.')
 ptransfer.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar='exact|intersection', default='exact', type=str, required=False, action='store',
                        choices=['exact', 'intersection'],
-                       help='Require identical tips or map only clades with unique projections onto shared tips.')
+                       help='Require identical tips or map only unique projections onto shared tips.')
+ptransfer.add_argument('--match-basis', '--match_basis', dest='match_basis', metavar='clade|split', default='clade', type=str, required=False, action='store',
+                       choices=['clade', 'split'],
+                       help='Match rooted descendant clades or root-independent canonical edge splits.')
+ptransfer.add_argument('--allow-projected-values', '--allow_projected_values', dest='allow_projected_values', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                       help='default=%(default)s: Permit support and branch-length transfer through projected matches. Use only when shared-tip equivalence is sufficient.')
 ptransfer.add_argument('--policy', metavar='compatible-only|strict', default='compatible-only', type=str, required=False, action='store',
                        choices=['compatible-only', 'strict'],
-                       help='Skip incompatible requests or fail if any requested value cannot be transferred.')
+                       help='Skip incompatible requests, or require exact (not projected) matches for every requested value.')
 ptransfer.add_argument('--report', metavar='PATH', default=None, type=str, required=False, action='store',
                        help='Optional per-node TSV with matches, values, skipped requests, and ambiguity reasons.')
 ptransfer.set_defaults(handler=command_transfer)

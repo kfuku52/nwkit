@@ -32,6 +32,8 @@ def test_compose_combines_root_names_support_lengths_and_property(tmp_nwk, tmp_p
         source_format='auto',
         taxon_mode='exact',
         policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
         report=str(report),
     )
     compose_main(args)
@@ -71,8 +73,54 @@ def test_compose_json_manifest_resolves_relative_paths(tmp_path):
         source_format='auto',
         taxon_mode='exact',
         policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
         report=None,
     )
     compose_main(args)
     output = read_tree(str(outfile), format='1', quoted_node_names=True, quiet=True)
     assert output.common_ancestor(['A', 'B']).name == 'AB'
+
+
+def test_compose_blocks_projected_lengths_without_opt_in(tmp_nwk, tmp_path):
+    topology = tmp_nwk(
+        '((A:1,(B:1,X:1):1):5,(C:1,D:1):1);',
+        'topology.nwk',
+    )
+    lengths = tmp_nwk(
+        '((A:1,(B:1,Y:1):1):7,(C:1,D:1):1);',
+        'lengths.nwk',
+    )
+    report = tmp_path / 'composition.tsv'
+    args = make_args(
+        infile=topology,
+        outfile=str(tmp_path / 'blocked.nwk'),
+        format='1',
+        outformat='1',
+        manifest=None,
+        root_source=None,
+        name_source=None,
+        support_source=None,
+        length_source=lengths,
+        property_source=[],
+        source_format='1',
+        taxon_mode='intersection',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=str(report),
+    )
+    compose_main(args)
+    blocked = read_tree(args.outfile, format='1', quoted_node_names=True, quiet=True)
+    assert blocked.common_ancestor(['A', 'B', 'X']).dist == pytest.approx(5.0)
+    rows = pd.read_csv(report, sep='\t')
+    rejected = rows[rows['target_taxa'] == 'A,B,X'].iloc[0]
+    assert rejected['status'] == 'projected_value_rejected'
+    assert rejected['match_status'] == 'projected_match'
+
+    args.outfile = str(tmp_path / 'allowed.nwk')
+    args.report = str(tmp_path / 'allowed.tsv')
+    args.allow_projected_values = True
+    compose_main(args)
+    allowed = read_tree(args.outfile, format='1', quoted_node_names=True, quiet=True)
+    assert allowed.common_ancestor(['A', 'B', 'X']).dist == pytest.approx(7.0)

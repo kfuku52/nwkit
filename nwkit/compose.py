@@ -4,7 +4,7 @@ import sys
 
 import pandas as pd
 
-from nwkit.clade_mapping import build_clade_mapping
+from nwkit.clade_mapping import build_clade_mapping, projected_root_split
 from nwkit.root import transfer_root_with_taxon_mode
 from nwkit.transfer import (
     REPORT_COLUMNS,
@@ -67,6 +67,14 @@ def _parse_property_source(raw):
 
 
 def _root_report_row(source_path, target, source, mapping, status, reason, taxon_mode):
+    root_match = next(match for match in mapping.matches if match.target.is_root)
+    split = projected_root_split(source, mapping.shared_taxa)
+    split_text = ''
+    if split is not None:
+        split_text = '{}|{}'.format(
+            ','.join(sorted(split[0])),
+            ','.join(sorted(split[1])),
+        )
     row = {column: '' for column in REPORT_COLUMNS}
     row.update({
         'source_file': source_path,
@@ -74,11 +82,16 @@ def _root_report_row(source_path, target, source, mapping, status, reason, taxon
         'target_node_class': 'root',
         'target_taxa': ','.join(sorted(str(name) for name in target.leaf_names())),
         'shared_descendant_taxa': ','.join(sorted(mapping.shared_taxa)),
+        'shared_split': split_text,
         'source_taxa': ','.join(sorted(str(name) for name in source.leaf_names())),
+        'match_status': root_match.status,
+        'match_basis': 'split',
+        'projection_only': root_match.status == 'projected_match',
         'source_property': 'root',
         'target_property': 'root',
         'status': status,
         'reason': reason,
+        'projected_value_allowed': '',
         'taxon_mode': taxon_mode,
         'shared_taxon_count': len(mapping.shared_taxa),
         'target_only_taxon_count': len(mapping.target_only_taxa),
@@ -117,6 +130,8 @@ def compose_main(args):
         raise ValueError('At least one composition source must be specified.')
     taxon_mode = getattr(args, 'taxon_mode', 'exact')
     policy = getattr(args, 'policy', 'compatible-only')
+    match_basis = getattr(args, 'match_basis', 'clade')
+    allow_projected_values = bool(getattr(args, 'allow_projected_values', False))
     source_format = getattr(args, 'source_format', 'auto')
     target = read_tree(args.infile, args.format, args.quoted_node_names)
     report_rows = list()
@@ -127,33 +142,47 @@ def compose_main(args):
     if root_source_path:
         root_source = read_tree(root_source_path, source_format, args.quoted_node_names)
         mapping = build_clade_mapping(target=target, source=root_source, taxon_mode=taxon_mode)
-        try:
-            target = transfer_root_with_taxon_mode(
-                tree_to=target,
-                tree_from=root_source,
-                taxon_mode=taxon_mode,
-                verbose=True,
-            )
+        root_match = next(match for match in mapping.matches if match.target.is_root)
+        if policy == 'strict' and root_match.status == 'projected_match':
+            reason = 'strict_policy_requires_exact_root_match'
             report_rows.append(_root_report_row(
                 source_path=root_source_path,
                 target=target,
                 source=root_source,
                 mapping=mapping,
-                status='transferred',
-                reason='matching_root_split',
+                status='projected_match_rejected',
+                reason=reason,
                 taxon_mode=taxon_mode,
             ))
-        except ValueError as exc:
-            report_rows.append(_root_report_row(
-                source_path=root_source_path,
-                target=target,
-                source=root_source,
-                mapping=mapping,
-                status='unmatched',
-                reason=str(exc),
-                taxon_mode=taxon_mode,
-            ))
-            failures.append(str(exc))
+            failures.append(reason)
+        else:
+            try:
+                target = transfer_root_with_taxon_mode(
+                    tree_to=target,
+                    tree_from=root_source,
+                    taxon_mode=taxon_mode,
+                    verbose=True,
+                )
+                report_rows.append(_root_report_row(
+                    source_path=root_source_path,
+                    target=target,
+                    source=root_source,
+                    mapping=mapping,
+                    status='transferred',
+                    reason='matching_root_split',
+                    taxon_mode=taxon_mode,
+                ))
+            except ValueError as exc:
+                report_rows.append(_root_report_row(
+                    source_path=root_source_path,
+                    target=target,
+                    source=root_source,
+                    mapping=mapping,
+                    status='unmatched',
+                    reason=str(exc),
+                    taxon_mode=taxon_mode,
+                ))
+                failures.append(str(exc))
 
     built_in_sources = (
         ('name', sources['name'], ('name', 'name'), 'all', False),
@@ -174,6 +203,8 @@ def compose_main(args):
             align_roots=True,
             source_label=source_path,
             exclude_root=exclude_root,
+            match_basis=match_basis,
+            allow_projected_values=allow_projected_values,
         )
         target = result['tree']
         report_rows.extend(result['rows'])
@@ -200,6 +231,8 @@ def compose_main(args):
             policy=policy,
             align_roots=True,
             source_label=source_path,
+            match_basis=match_basis,
+            allow_projected_values=allow_projected_values,
         )
         target = result['tree']
         report_rows.extend(result['rows'])

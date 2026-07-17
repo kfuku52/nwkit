@@ -10,7 +10,7 @@ def test_rooted_diff_reports_common_and_tree_specific_clades():
     source = read_tree('(((A:1,C:1):1,B:1):1,D:1);', '1', True, quiet=True)
     rows = compare_trees(target, source, comparison='rooted', target_class='intnode')
     statuses = {row['status'] for row in rows if row['record_type'] == 'node'}
-    assert 'common' in statuses
+    assert 'exact_match' in statuses
     assert 'unmatched' in statuses
     assert 'source_only' in statuses
 

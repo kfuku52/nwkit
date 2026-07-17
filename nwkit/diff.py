@@ -89,7 +89,7 @@ def _row_for_nodes(status, reason, comparison, target_node, source_node,
         'comparison': comparison,
         'status': status,
         'reason': reason,
-        'transferable': status == 'common',
+        'transferable': status == 'exact_match',
         'target_node_id': target_ids.get(id(target_node), '') if target_node is not None else '',
         'source_node_id': source_ids.get(id(source_node), '') if source_node is not None else '',
         'shared_taxa_or_split': shared_key,
@@ -138,7 +138,7 @@ def _rooted_rows(target, source, mapping, target_class, properties, target_ids, 
             continue
         if match.source is not None:
             matched_source_ids.add(id(match.source))
-        status = 'common' if match.status == 'matched' else match.status
+        status = match.status
         rows.append(_row_for_nodes(
             status=status,
             reason=match.reason,
@@ -176,7 +176,7 @@ def _rooted_rows(target, source, mapping, target_class, properties, target_ids, 
 
 
 def _unrooted_rows(target, source, shared_taxa, target_class, properties,
-                   target_ids, source_ids):
+                   target_ids, source_ids, same_leaf_set):
     target_taxa_by_node = _taxon_sets(target)
     source_taxa_by_node = _taxon_sets(source)
 
@@ -211,7 +211,7 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
         target_candidates = target_groups.get(split, [])
         source_candidates = source_groups.get(split, [])
         if len(target_candidates) == 1 and len(source_candidates) == 1:
-            status = 'common'
+            status = 'exact_match' if same_leaf_set else 'projected_match'
             reason = 'matching_unrooted_split'
             target_node = target_candidates[0]
             source_node = source_candidates[0]
@@ -300,6 +300,7 @@ def compare_trees(target, source, taxon_mode='exact', comparison='rooted',
             properties=properties or [],
             target_ids=target_ids,
             source_ids=source_ids,
+            same_leaf_set=not mapping.target_only_taxa and not mapping.source_only_taxa,
         ))
     else:
         raise ValueError("Unsupported comparison mode: {}".format(comparison))

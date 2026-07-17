@@ -22,10 +22,32 @@ def test_intersection_maps_unique_projected_clade():
     source = Tree('((A:1,B:1)AB:1,(C:1,D:1)CD:1)R;', parser=1)
     mapping = build_clade_mapping(target, source, taxon_mode='intersection')
     match = _find_match(mapping, {'C', 'D', 'E'})
-    assert match.status == 'matched'
+    assert match.status == 'projected_match'
     assert match.projected_taxa == frozenset({'C', 'D'})
     assert match.source.name == 'CD'
     assert mapping.target_only_taxa == frozenset({'E'})
+
+
+def test_unique_projection_is_not_reported_as_an_exact_branch_match():
+    target = Tree('((A:1,(B:1,X:1):1):1,(C:1,D:1):1);', parser=1)
+    source = Tree('((A:1,(B:1,Y:1):1):1,(C:1,D:1):1);', parser=1)
+    mapping = build_clade_mapping(target, source, taxon_mode='intersection')
+    match = _find_match(mapping, {'A', 'B', 'X'})
+    assert match.status == 'projected_match'
+    assert match.projected_taxa == frozenset({'A', 'B'})
+    assert match.source_taxa == frozenset({'A', 'B', 'Y'})
+
+
+def test_split_basis_matches_same_edge_across_different_rootings():
+    target = Tree('((((A:1,B:1)AB:1,C:1)ABC:1,D:1)ABCD:1,E:1)R;', parser=1)
+    source = Tree('(A:1,(B:1,(C:1,(D:1,E:1)DE:1)CDE:1)BCDE:1)R;', parser=1)
+    clade_mapping = build_clade_mapping(target, source, match_basis='clade')
+    split_mapping = build_clade_mapping(target, source, match_basis='split')
+    assert _find_match(clade_mapping, {'A', 'B'}).status == 'unmatched'
+    split_match = _find_match(split_mapping, {'A', 'B'})
+    assert split_match.status == 'exact_match'
+    assert split_match.source_taxa == frozenset({'C', 'D', 'E'})
+    assert split_match.reason == 'matching_canonical_split'
 
 
 def test_intersection_rejects_nonunique_projection():

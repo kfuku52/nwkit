@@ -25,7 +25,11 @@ REPORT_COLUMNS = (
     'target_node_class',
     'target_taxa',
     'shared_descendant_taxa',
+    'shared_split',
     'source_taxa',
+    'match_status',
+    'match_basis',
+    'projection_only',
     'source_property',
     'target_property',
     'source_value',
@@ -33,6 +37,7 @@ REPORT_COLUMNS = (
     'output_value',
     'status',
     'reason',
+    'projected_value_allowed',
     'taxon_mode',
     'shared_taxon_count',
     'target_only_taxon_count',
@@ -52,6 +57,12 @@ def _format_taxa(taxa):
     if taxa is None:
         return ''
     return ','.join(sorted(str(taxon) for taxon in taxa))
+
+
+def _format_split(split):
+    if split is None:
+        return ''
+    return '{}|{}'.format(_format_taxa(split[0]), _format_taxa(split[1]))
 
 
 def _validate_property_name(prop):
@@ -181,16 +192,22 @@ def _write_report(rows, report_path):
 
 def transfer_properties(target, source, property_specs, target_class='all',
                         taxon_mode='exact', fill=None, policy='compatible-only',
-                        align_roots=True, source_label='', exclude_root=False):
+                        align_roots=True, source_label='', exclude_root=False,
+                        match_basis='clade', allow_projected_values=False):
     if policy not in ('compatible-only', 'strict'):
         raise ValueError("Unsupported transfer policy: {}".format(policy))
     validate_unique_named_leaves(target, option_name='--infile', context=" for 'transfer'")
     validate_unique_named_leaves(source, option_name='--infile2', context=" for 'transfer'")
     if taxon_mode == 'exact' and not is_all_leaf_names_identical(target, source, verbose=True):
         raise ValueError('Leaf labels must match exactly when --taxon-mode exact.')
-    if align_roots and target_class != 'leaf':
+    if align_roots and target_class != 'leaf' and match_basis == 'clade':
         target, source = _try_align_roots(target=target, source=source, taxon_mode=taxon_mode)
-    mapping = build_clade_mapping(target=target, source=source, taxon_mode=taxon_mode)
+    mapping = build_clade_mapping(
+        target=target,
+        source=source,
+        taxon_mode=taxon_mode,
+        match_basis=match_basis,
+    )
     match_by_target_id = {id(match.target): match for match in mapping.matches}
     target_nodes = get_target_nodes(tree=target, target=target_class)
     if exclude_root:
@@ -213,13 +230,33 @@ def transfer_properties(target, source, property_specs, target_class='all',
             output_value = previous_value
             status = match.status
             reason = match.reason
-            if match.status == 'matched':
+            projection_only = match.status == 'projected_match'
+            source_has_value = False
+            projected_value_allowed = ''
+            if match.status in ('exact_match', 'projected_match'):
                 source_value, source_has_value = _get_property(match.source, source_prop)
+                projected_value_allowed = (
+                    not projection_only
+                    or (
+                        source_prop not in ('support', 'length')
+                        and target_prop not in ('support', 'length')
+                    )
+                    or bool(allow_projected_values)
+                )
+            if projection_only and policy == 'strict':
+                status = 'projected_match_rejected'
+                reason = 'strict_policy_requires_exact_match'
+                failed = True
+            elif projection_only and not projected_value_allowed:
+                status = 'projected_value_rejected'
+                reason = 'projected_support_or_length_requires_opt_in'
+                failed = True
+            elif match.status in ('exact_match', 'projected_match'):
                 if source_has_value:
                     _set_property(target_node, target_prop, source_value)
                     output_value = source_value
                     status = 'transferred'
-                    reason = 'matching_descendant_taxa'
+                    reason = match.reason
                     changed_node_ids.add(id(target_node))
                 elif fill is not None:
                     output_value = _coerce_fill(fill, target_prop)
@@ -246,7 +283,11 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 'target_node_class': _node_class(target_node),
                 'target_taxa': _format_taxa(match.target_taxa),
                 'shared_descendant_taxa': _format_taxa(match.projected_taxa),
+                'shared_split': _format_split(match.projected_split),
                 'source_taxa': _format_taxa(match.source_taxa),
+                'match_status': match.status,
+                'match_basis': match.match_basis,
+                'projection_only': projection_only,
                 'source_property': source_prop,
                 'target_property': target_prop,
                 'source_value': source_value,
@@ -254,6 +295,7 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 'output_value': output_value,
                 'status': status,
                 'reason': reason,
+                'projected_value_allowed': projected_value_allowed,
                 'taxon_mode': taxon_mode,
                 'shared_taxon_count': len(mapping.shared_taxa),
                 'target_only_taxon_count': len(mapping.target_only_taxa),
@@ -296,6 +338,8 @@ def transfer_main(args):
         policy=getattr(args, 'policy', 'compatible-only'),
         align_roots=True,
         source_label=str(args.infile2),
+        match_basis=getattr(args, 'match_basis', 'clade'),
+        allow_projected_values=bool(getattr(args, 'allow_projected_values', False)),
     )
     _write_report(result['rows'], getattr(args, 'report', None))
     sys.stderr.write(
