@@ -25,6 +25,10 @@ from nwkit.util import (
     warn_cleanup_failure,
     write_tree,
 )
+from nwkit.clade_mapping import (
+    find_root_split_candidates,
+    projected_root_split,
+)
 
 SUPPORTED_TAXONOMY_SOURCES = ('ncbi', 'timetree', 'opentree')
 DEFAULT_TAXONOMY_SOURCE_CHAIN = 'ncbi,opentree,timetree'
@@ -145,7 +149,7 @@ def _collapse_singleton_root(tree):
         tree = Tree(child.write(parser=0, format_root_node=True), parser=0)
     return tree
 
-def transfer_root(tree_to, tree_from, verbose=False):
+def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=True):
     tree_to = _collapse_singleton_root(tree_to)
     tree_from = _collapse_singleton_root(tree_from)
     validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
@@ -200,7 +204,7 @@ def transfer_root(tree_to, tree_from, verbose=False):
     subroot_to = tree_to.get_children()
     total_subroot_length_to = sum((n.dist or 0) for n in subroot_to)
     total_subroot_length_from = sum((n.dist or 0) for n in subroot_from)
-    if abs(total_subroot_length_from) > 10**-15:
+    if redistribute_root_length and abs(total_subroot_length_from) > 10**-15:
         for n_to in subroot_to:
             n_to_leaf_set = tree_to_leaf_sets[n_to]
             for n_from in subroot_from:
@@ -214,6 +218,63 @@ def transfer_root(tree_to, tree_from, verbose=False):
     if support_backup is not None:
         for node, support in support_backup:
             node.support = support
+    return tree_to
+
+
+def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbose=False,
+                                  redistribute_root_length=True):
+    if taxon_mode == 'exact':
+        return transfer_root(
+            tree_to=tree_to,
+            tree_from=tree_from,
+            verbose=verbose,
+            redistribute_root_length=redistribute_root_length,
+        )
+    if taxon_mode != 'intersection':
+        raise ValueError("Unsupported taxon mode for root transfer: {}".format(taxon_mode))
+    tree_to = _collapse_singleton_root(tree_to)
+    tree_from = _collapse_singleton_root(tree_from)
+    validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
+    validate_unique_named_leaves(tree_from, option_name='--infile2', context=' for root transfer')
+    shared_taxa, source_split, candidates = find_root_split_candidates(
+        target=tree_to,
+        source=tree_from,
+        taxon_mode=taxon_mode,
+    )
+    if verbose:
+        sys.stderr.write('Shared tips used for root transfer: {}\n'.format(len(shared_taxa)))
+    if projected_root_split(tree_to, shared_taxa) == source_split:
+        return tree_to
+    unique_candidates = list()
+    seen_candidate_ids = set()
+    for candidate in candidates:
+        if id(candidate) in seen_candidate_ids:
+            continue
+        seen_candidate_ids.add(id(candidate))
+        unique_candidates.append(candidate)
+    if len(unique_candidates) == 0:
+        raise ValueError('No root bipartition matching the shared tips was found in --infile.')
+    if len(unique_candidates) > 1:
+        raise ValueError(
+            'Root transfer is ambiguous after projecting onto shared tips ({} candidate edges).'.format(
+                len(unique_candidates)
+            )
+        )
+    candidate = unique_candidates[0]
+    original_root_name = tree_to.name
+    support_backup = [(node, node.support) for node in tree_to.traverse()]
+    for node in tree_to.traverse():
+        if node.dist is None:
+            node.dist = 0.0
+        node.support = None
+    _normalize_root_distance_for_reroot(tree_to)
+    tree_to.set_outgroup(candidate)
+    _normalize_root_distance_for_reroot(tree_to)
+    tree_to.name = original_root_name if original_root_name else 'Root'
+    for node, support in support_backup:
+        node.support = support
+    if projected_root_split(tree_to, shared_taxa) != source_split:
+        raise ValueError('Root transfer failed to reproduce the source split on shared tips.')
     return tree_to
 
 def midpoint_rooting(tree):
@@ -928,10 +989,16 @@ def root_main(args):
             raise ValueError("'--infile2' root must have exactly two children for '--method transfer'.")
         validate_unique_named_leaves(tree, option_name='--infile', context=' for root transfer')
         validate_unique_named_leaves(tree2, option_name='--infile2', context=' for root transfer')
-        if not is_all_leaf_names_identical(tree, tree2, verbose=True):
-            raise Exception('Leaf labels in the two trees should be completely matched.')
+        taxon_mode = getattr(args, 'taxon_mode', 'exact')
+        if taxon_mode == 'exact' and not is_all_leaf_names_identical(tree, tree2, verbose=True):
+            raise ValueError('Leaf labels must match exactly when --taxon-mode exact.')
         if (len(list(tree.leaves())) > 1) and (len(list(tree2.leaves())) > 1):
-            tree = transfer_root(tree_to=tree, tree_from=tree2, verbose=True)
+            tree = transfer_root_with_taxon_mode(
+                tree_to=tree,
+                tree_from=tree2,
+                taxon_mode=taxon_mode,
+                verbose=True,
+            )
     elif (args.method=='midpoint'):
         tree = midpoint_rooting(tree=tree)
     elif (args.method=='outgroup'):

@@ -4,6 +4,35 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.28.0] - 2026-07-17
+
+### Added
+
+- `compose` for assembling a topology, root, node names, support values, branch
+  lengths, and arbitrary NHX properties from compatible source trees, with an
+  optional per-clade provenance report and JSON manifest.
+- `diff` for rooted-clade or unrooted-split comparisons that report leaf-set,
+  root, topology, value, and arbitrary-property differences as TSV.
+- `annotate` for joining tip metadata to trees and aggregating categorical or
+  numeric values onto internal nodes.
+- A shared `--audit` option that appends command arguments, input and output
+  hashes, detected input semantics, random seeds, warnings, and runtime status
+  as JSON Lines.
+- Conservative clade mapping across partially overlapping tip sets through
+  `--taxon-mode intersection` for `transfer`, `compose`, `diff`, and transferred
+  roots.
+- Arbitrary NHX-property transfer and renaming with `--property` and
+  `--property-map`, plus strict or compatible-only transfer policies and TSV
+  reports.
+
+### Changed
+
+- Root alignment used internally for annotation and branch-value mapping now
+  preserves source branch lengths instead of redistributing an already matching
+  root edge.
+- Named-tree parsing preserves support values explicitly stored as NHX
+  properties, allowing names and support to coexist in composed output.
+
 ## [0.27.0] - 2026-07-15
 
 ### Added
@@ -27,5 +56,6 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `mark` output format selection no longer depends on process-wide `sys.argv` state.
 - The image-provider User-Agent now follows the package version.
 
-[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.27.0...HEAD
+[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.28.0...HEAD
+[0.28.0]: https://github.com/kfuku52/nwkit/compare/v0.27.0...v0.28.0
 [0.27.0]: https://github.com/kfuku52/nwkit/compare/v0.21.1...v0.27.0

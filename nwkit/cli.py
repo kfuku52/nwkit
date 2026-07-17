@@ -1,4 +1,5 @@
 import argparse
+import sys
 
 from nwkit import __version__
 from nwkit.species_parser import (
@@ -22,10 +23,14 @@ parser = argparse.ArgumentParser(
     description='A toolkit for Newick trees. See `nwkit SUBCOMMAND -h` for usage (e.g., nwkit constrain -h)',
 )
 parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__))
-subparsers = parser.add_subparsers()
+subparsers = parser.add_subparsers(dest='command')
 
 # Parent parser for shared options
-p_parent = argparse.ArgumentParser(add_help=False)
+p_audit = argparse.ArgumentParser(add_help=False)
+p_audit.add_argument('--audit', metavar='PATH', default=None, type=str, required=False, action='store',
+                     help='Append a JSONL provenance record containing arguments, hashes, warnings, and runtime metadata.')
+
+p_parent = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Input newick file. Use "-" for STDIN.')
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
@@ -45,7 +50,7 @@ p_download.add_argument('--download_dir', metavar='PATH', default='auto', type=s
                              'NCBI taxonomy database. "auto" uses the ETE4 default cache location. '
                              '"inferred" stores downloads under <outfile_dir>/downloads, or ./downloads when writing to STDOUT.')
 
-p_tree_input = argparse.ArgumentParser(add_help=False)
+p_tree_input = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                           help='default=%(default)s: Input newick file. Use "-" for STDIN.')
 p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
@@ -59,7 +64,7 @@ p_table_output = argparse.ArgumentParser(add_help=False)
 p_table_output.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                             help='default=%(default)s: Output table file. Use "-" for STDOUT.')
 
-p_table_input = argparse.ArgumentParser(add_help=False)
+p_table_input = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_table_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                            help='default=%(default)s: Input table file. Use "-" for STDIN.')
 p_table_input.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
@@ -86,6 +91,27 @@ p_species.add_argument('--species-map-tsv', '--species_map_tsv', dest='species_m
                        help='default=%(default)s: Optional TSV overriding parsed species labels and/or taxonomy queries. '
                             'The file must contain a "leaf_name" column and at least one of "species_label" or "taxonomy_query". '
                             'Mapped rows override the selected parser preset and regex.')
+
+def command_annotate(args):
+    from nwkit.annotate import annotate_main
+    annotate_main(args)
+pannotate = subparsers.add_parser('annotate', help='Attach tip-table values and aggregate them as Newick properties', parents=[p_parent])
+pannotate.add_argument('--table', metavar='PATH', default=None, type=str, required=True, action='store',
+                       help='TSV containing a leaf_name column and one or more annotation columns.')
+pannotate.add_argument('--columns', metavar='COL1,COL2,...', default=None, type=str, required=False, action='store',
+                       help='Columns attached to matching tips. By default all non-key columns are attached.')
+pannotate.add_argument('--property-map', '--property_map', dest='property_map', metavar='COLUMN=PROPERTY', default=[], type=str, required=False, action='append',
+                       help='Attach a table column under a different Newick property name. May be repeated.')
+pannotate.add_argument('--aggregate', metavar='COLUMN:METHOD[:PROPERTY]', default=[], type=str, required=False, action='append',
+                       help='Aggregate descendant-tip values onto internal nodes. Methods: unique, mode, count, mean, sum, min, max, list. May be repeated.')
+pannotate.add_argument('--missing-values', '--missing_values', dest='missing_values', metavar='CSV', default=',NA,NaN,nan,?,missing,unknown', type=str, required=False, action='store',
+                       help='Comma-separated table values treated as missing.')
+pannotate.add_argument('--unmatched', metavar='warn|error|ignore', default='warn', type=str, required=False, action='store',
+                       choices=['warn', 'error', 'ignore'],
+                       help='Policy for tips or table rows without a counterpart.')
+pannotate.add_argument('--report', metavar='PATH', default=None, type=str, required=False, action='store',
+                       help='Optional TSV audit of attached, aggregated, missing, and unmatched values.')
+pannotate.set_defaults(handler=command_annotate)
 
 def command_asr(args):
     from nwkit.asr import asr_main
@@ -182,6 +208,34 @@ pcollapse.add_argument('--preserve_branch_length', metavar='yes|no', default='ye
                        help='default=%(default)s: Add the deleted branch length to descendant branches when collapsing.')
 pcollapse.set_defaults(handler=command_collapse)
 
+def command_compose(args):
+    from nwkit.compose import compose_main
+    compose_main(args)
+pcompose = subparsers.add_parser('compose', help='Assemble compatible roots, values, and annotations from multiple trees', parents=[p_parent])
+pcompose.add_argument('--manifest', metavar='PATH', default=None, type=str, required=False, action='store',
+                      help='Optional JSON manifest defining root, name, support, length, and property sources.')
+pcompose.add_argument('--root-source', '--root_source', dest='root_source', metavar='PATH', default=None, type=str, required=False, action='store',
+                      help='Tree providing the root split.')
+pcompose.add_argument('--name-source', '--name_source', dest='name_source', metavar='PATH', default=None, type=str, required=False, action='store',
+                      help='Tree providing node names.')
+pcompose.add_argument('--support-source', '--support_source', dest='support_source', metavar='PATH', default=None, type=str, required=False, action='store',
+                      help='Tree providing internal-node support values.')
+pcompose.add_argument('--length-source', '--length_source', dest='length_source', metavar='PATH', default=None, type=str, required=False, action='store',
+                      help='Tree providing branch lengths.')
+pcompose.add_argument('--property-source', '--property_source', dest='property_source', metavar='SOURCE=TARGET@PATH', default=[], type=str, required=False, action='append',
+                      help='Tree providing an arbitrary NHX property. SOURCE@PATH preserves its name. May be repeated.')
+pcompose.add_argument('--source-format', '--source_format', dest='source_format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
+                      help='Default ETE parser format for all source trees.')
+pcompose.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar='exact|intersection', default='exact', type=str, required=False, action='store',
+                      choices=['exact', 'intersection'],
+                      help='Require identical tip sets or conservatively map unique clades projected onto shared tips.')
+pcompose.add_argument('--policy', metavar='compatible-only|strict', default='compatible-only', type=str, required=False, action='store',
+                      choices=['compatible-only', 'strict'],
+                      help='Skip incompatible values or fail if any requested value cannot be transferred.')
+pcompose.add_argument('--report', metavar='PATH', default=None, type=str, required=False, action='store',
+                      help='Optional per-clade TSV recording sources, matches, transferred values, and conflicts.')
+pcompose.set_defaults(handler=command_compose)
+
 def command_cladefreq(args):
     from nwkit.cladefreq import cladefreq_main
     cladefreq_main(args)
@@ -226,6 +280,29 @@ pconsensus.add_argument('--support-scale', '--support_scale', dest='support_scal
 pconsensus.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
                         help='default=%(default)s: Number of parallel workers used to parse and summarize input trees.')
 pconsensus.set_defaults(handler=command_consensus)
+
+def command_diff(args):
+    from nwkit.diff import diff_main
+    diff_main(args)
+pdiff = subparsers.add_parser('diff', help='Report interpretable clade, root, value, and annotation differences between trees', parents=[p_tree_input, p_table_output])
+pdiff.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=True, action='store',
+                   help='Second Newick tree.')
+pdiff.add_argument('-f2', '--format2', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
+                   help='ETE parser format for --infile2.')
+pdiff.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar='exact|intersection', default='exact', type=str, required=False, action='store',
+                   choices=['exact', 'intersection'],
+                   help='Require identical tip sets or compare unique projections onto shared tips.')
+pdiff.add_argument('--comparison', metavar='rooted|unrooted', default='rooted', type=str, required=False, action='store',
+                   choices=['rooted', 'unrooted'],
+                   help='Compare rooted descendant clades or root-independent edge splits.')
+pdiff.add_argument('--target', metavar='all|root|leaf|intnode', default='intnode', type=str, required=False, action='store',
+                   choices=['all', 'root', 'leaf', 'intnode'],
+                   help='Node class included in detailed rows.')
+pdiff.add_argument('--property', metavar='KEY', default=[], type=str, required=False, action='append',
+                   help='Additional NHX property compared and serialized as JSON. May be repeated.')
+pdiff.add_argument('--fail-on-difference', '--fail_on_difference', dest='fail_on_difference', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                   help='Exit nonzero after writing the report if any difference is detected.')
+pdiff.set_defaults(handler=command_diff)
 
 def command_dist(args):
     from nwkit.dist import dist_main
@@ -537,6 +614,9 @@ proot.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, req
                         'Leaf labels should be matched to those in --infile.')
 proot.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
                    help='default=%(default)s: ETE tree format for --infile2.')
+proot.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar='exact|intersection', default='exact', type=str, required=False, action='store',
+                   choices=['exact', 'intersection'],
+                   help='For root transfer, require identical tips or use an unambiguous root split projected onto shared tips.')
 proot.add_argument('--method', metavar='STR', default='midpoint', type=str, required=False, action='store',
                    choices=['midpoint','outgroup','transfer','mad','mv','taxonomy',],
                    help='default=%(default)s: '
@@ -684,10 +764,9 @@ psubtree.set_defaults(handler=command_subtree)
 def command_transfer(args):
     from nwkit.transfer import transfer_main
     transfer_main(args)
-ptransfer = subparsers.add_parser('transfer', help='Tranfer info between two trees with matching tip names', parents=[p_parent])
+ptransfer = subparsers.add_parser('transfer', help='Transfer values and arbitrary properties between compatible tree clades', parents=[p_parent])
 ptransfer.add_argument('-i2', '--infile2', metavar='PATH', default='', type=str, required=False, action='store',
-                       help='default=%(default)s: Input newick file 2. Specified infor will be transferred from this file '
-                        'to --infile. Topologies may deviate but leaf labels should be matched between the two trees.')
+                       help='Source Newick tree. Topologies may differ; taxon matching is controlled by --taxon-mode.')
 ptransfer.add_argument('-f2', '--format2', metavar='INT', default='auto', type=str, required=False, action='store',
                        help='default=%(default)s: ETE tree format for --infile2.')
 ptransfer.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default='all', type=str, required=False,
@@ -699,8 +778,20 @@ ptransfer.add_argument('--support', metavar='yes|no', default='no', type=strtobo
                        help='default=%(default)s: transfer support values.')
 ptransfer.add_argument('--length', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: transfer branch length.')
+ptransfer.add_argument('--property', metavar='KEY', default=[], type=str, required=False, action='append',
+                       help='Transfer an arbitrary NHX property without renaming it. May be repeated or comma-separated.')
+ptransfer.add_argument('--property-map', '--property_map', dest='property_map', metavar='SOURCE=TARGET', default=[], type=str, required=False, action='append',
+                       help='Transfer and rename an arbitrary NHX property. May be repeated.')
 ptransfer.add_argument('--fill', metavar='STR/NUMERIC', default=None, type=str, required=False, action='store',
                        help='default=%(default)s: Fill values instead of leaving as is, if no corresponding node is found.')
+ptransfer.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar='exact|intersection', default='exact', type=str, required=False, action='store',
+                       choices=['exact', 'intersection'],
+                       help='Require identical tips or map only clades with unique projections onto shared tips.')
+ptransfer.add_argument('--policy', metavar='compatible-only|strict', default='compatible-only', type=str, required=False, action='store',
+                       choices=['compatible-only', 'strict'],
+                       help='Skip incompatible requests or fail if any requested value cannot be transferred.')
+ptransfer.add_argument('--report', metavar='PATH', default=None, type=str, required=False, action='store',
+                       help='Optional per-node TSV with matches, values, skipped requests, and ambiguity reasons.')
 ptransfer.set_defaults(handler=command_transfer)
 
 def command_validate(args):
@@ -744,8 +835,12 @@ parser_help.set_defaults(handler=command_help)
 
 
 def main(argv=None):
-    args = parser.parse_args(argv)
+    raw_argv = list(sys.argv[1:] if argv is None else argv)
+    args = parser.parse_args(raw_argv)
     if hasattr(args, 'handler'):
+        if getattr(args, 'audit', None):
+            from nwkit.provenance import run_with_audit
+            return run_with_audit(args=args, argv=raw_argv, handler=args.handler)
         return args.handler(args)
     parser.print_help()
     return 0

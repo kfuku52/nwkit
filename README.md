@@ -46,11 +46,14 @@ pip install "nwkit[image]"
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
+- [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
 - [`asr`](https://github.com/kfuku52/nwkit/wiki/nwkit-asr): Inferring categorical ancestral states and imputing missing tip states under an Mk model
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`collapse`](https://github.com/kfuku52/nwkit/wiki/nwkit-collapse): Collapsing internal branches by support and/or branch length
+- [`compose`](https://github.com/kfuku52/nwkit/wiki/nwkit-compose): Assembling compatible roots, values, and annotations from multiple trees
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
+- [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing a phylogenetic tree with optional speciation/duplication node markers
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
@@ -76,6 +79,57 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+
+## Tree comparison, composition, and provenance
+
+`diff` reports how two trees differ before information is combined. `compose`
+then assembles compatible components from named sources and records every match
+or conflict in a TSV report:
+
+```sh
+nwkit diff -i topology.nwk -i2 bootstrap.nwk -o differences.tsv
+nwkit compose -i topology.nwk \
+  --root-source rooted.nwk \
+  --support-source bootstrap.nwk \
+  --length-source chronogram.nwk \
+  --property-source habitat=state@annotated.nhx \
+  --report composition.tsv \
+  -o combined.nwk
+```
+
+`transfer`, `compose`, `diff`, and transferred roots accept
+`--taxon-mode intersection`. Internal clades are matched only when their
+projections onto the shared tips are informative and unique; ambiguous
+projections are reported and left unchanged.
+
+Arbitrary NHX properties can be transferred or renamed directly:
+
+```sh
+nwkit transfer -i target.nwk -i2 source.nhx \
+  --property color --property-map posterior=source_posterior \
+  --report transfer.tsv -o annotated.nhx
+```
+
+`annotate` joins a TSV keyed by `leaf_name` to tree tips and can aggregate
+values onto ancestral clades:
+
+```sh
+nwkit annotate -i tree.nwk --table traits.tsv \
+  --columns habitat \
+  --aggregate habitat:unique:shared_habitat \
+  --aggregate body_mass:mean:mean_body_mass \
+  -o annotated.nhx
+```
+
+Every functional command accepts `--audit PATH`. Each invocation appends one
+JSON Lines record containing NWKIT version and arguments, input and output
+SHA-256 hashes, input interpretation, random seeds, external-data settings,
+warnings, runtime status, and captured command messages:
+
+```sh
+nwkit sanitize -i raw.nwk --audit workflow.audit.jsonl |
+  nwkit root --method midpoint --audit workflow.audit.jsonl > rooted.nwk
+```
 
 ## Citation
 There is no published paper on NWKIT itself, but we used and cited NWKIT in several papers including [Fukushima & Pollock (2023, Nat Ecol Evol 7: 155-170)](https://www.nature.com/articles/s41559-022-01932-7).

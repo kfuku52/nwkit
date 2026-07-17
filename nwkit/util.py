@@ -412,7 +412,10 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
                 node.support = -999999
     if format==1: # flexible with internal node names
         for node in tree.traverse():
-            if not node.is_root:  # Don't set support on root (breaks ete4 set_outgroup)
+            if (
+                (not node.is_root) and
+                ('support' not in node.props or node.support is None)
+            ):  # Don't set support on root (breaks ete4 set_outgroup)
                 node.support = -999999
     if not quiet:
         num_leaves = len(list(tree.leaves()))
@@ -420,7 +423,7 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
         sys.stderr.write(txt.format(num_leaves, format))
     return tree
 
-def write_tree(tree, args, format, quiet=False):
+def write_tree(tree, args, format, quiet=False, props=None):
     if format=='auto':
         format = tree.props.get(TREE_FORMAT_PROP, globals().get('INFILE_FORMAT', 0))
         format = int(format)
@@ -448,7 +451,17 @@ def write_tree(tree, args, format, quiet=False):
             original_support_values.append((node, node.support))
             node.support = None
     try:
-        tree_str = tree.write(parser=format, format_root_node=True)
+        if props is None:
+            props = getattr(args, 'output_properties', None)
+        if props is not None:
+            props = sorted(set(str(prop) for prop in props if prop != TREE_FORMAT_PROP))
+        write_kwargs = {
+            'parser': format,
+            'format_root_node': True,
+        }
+        if props:
+            write_kwargs['props'] = props
+        tree_str = tree.write(**write_kwargs)
     finally:
         for node, node_name in original_node_names:
             node.name = node_name
@@ -577,6 +590,16 @@ def support_is_missing(support):
     if math.isnan(support_value):
         return True
     return abs(support_value - MISSING_SUPPORT_VALUE) < 10 ** -9
+
+
+def get_tree_property_names(tree):
+    reserved = {TREE_FORMAT_PROP, 'name', 'dist', 'support'}
+    return {
+        str(prop)
+        for node in tree.traverse()
+        for prop in node.props
+        if str(prop) not in reserved
+    }
 
 def compute_node_ages(tree, tolerance=10 ** -9):
     age_by_node = dict()
