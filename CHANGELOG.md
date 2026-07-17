@@ -39,6 +39,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Changed
 
+- `intersection` now uses a built-in FASTA reader and writer that preserves
+  retained records verbatim; non-FASTA sequence formats are no longer accepted,
+  and Biopython is no longer a runtime dependency.
 - Root alignment used internally for annotation and branch-value mapping now
   preserves source branch lengths instead of redistributing an already matching
   root edge.

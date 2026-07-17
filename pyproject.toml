@@ -29,7 +29,6 @@ classifiers = [
 ]
 dependencies = [
   "ete4>=4.4.0",
-  "biopython",
   "pandas",
   "requests",
   "numpy",

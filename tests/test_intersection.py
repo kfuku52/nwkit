@@ -1,9 +1,8 @@
 import os
 import pytest
 from ete4 import Tree
-from Bio.Seq import Seq
-from Bio.SeqRecord import SeqRecord
 
+from nwkit.fasta import FastaRecord, parse_fasta
 from nwkit.intersection import (
     get_leaf_names,
     get_seq_names,
@@ -31,16 +30,16 @@ class TestGetLeafNames:
 class TestGetSeqNames:
     def test_unique_names(self):
         seqs = [
-            SeqRecord(Seq('ATG'), id='A', name='A'),
-            SeqRecord(Seq('ATG'), id='B', name='B'),
+            FastaRecord(name='A', raw='>A\nATG\n'),
+            FastaRecord(name='B', raw='>B\nATG\n'),
         ]
         names = get_seq_names(seqs)
         assert names == ['A', 'B']
 
     def test_duplicate_raises(self):
         seqs = [
-            SeqRecord(Seq('ATG'), id='A', name='A'),
-            SeqRecord(Seq('ATG'), id='A', name='A'),
+            FastaRecord(name='A', raw='>A\nATG\n'),
+            FastaRecord(name='A', raw='>A\nATG\n'),
         ]
         with pytest.raises(ValueError, match='unique'):
             get_seq_names(seqs)
@@ -159,6 +158,28 @@ class TestIntersectionMain:
         assert leaf_names == {'A', 'C', 'D', 'F'}
         assert os.path.exists(out_seq)
 
+    def test_tree_seq_intersection_preserves_selected_fasta_records(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
+        seq_path = tmp_path / 'seq.fasta'
+        seq_path.write_text(
+            '>A retained description\nAC\nGT\n'
+            '>X removed description\nNNNN\n'
+            '>C another retained description\nTGCA\n'
+        )
+        out_tree = str(tmp_path / 'out.nwk')
+        out_seq = str(tmp_path / 'out.fasta')
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=out_tree,
+            seqin=str(seq_path), seqout=out_seq, seqformat='fasta',
+            format2='auto', match='complete',
+        )
+        intersection_main(args)
+        assert (tmp_path / 'out.fasta').read_text() == (
+            '>A retained description\nAC\nGT\n'
+            '>C another retained description\nTGCA\n'
+        )
+
     def test_tree_seq_intersection_with_empty_seqout_writes_to_stdout(self, tmp_path, capsys):
         nwk_path = tmp_path / 'tree.nwk'
         nwk_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
@@ -210,9 +231,7 @@ class TestIntersectionMain:
         intersection_main(args)
         tree = read_tree(out_tree, format='auto', quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {'A', 'C', 'D', 'F'}
-        # Output FASTA should contain all 4 sequences (all are in the tree)
-        import Bio.SeqIO as SeqIO
-        with open(out_seq) as fh:
-            out_records = list(SeqIO.parse(fh, 'fasta'))
-        out_seq_names = {r.name for r in out_records}
+        # Output FASTA should contain all 4 sequences (all are in the tree).
+        with open(out_seq, newline='') as fh:
+            out_seq_names = {record.name for record in parse_fasta(fh)}
         assert out_seq_names == {'A', 'C', 'D', 'F'}

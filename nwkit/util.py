@@ -9,10 +9,10 @@ import time
 from collections import Counter, defaultdict
 from contextlib import contextmanager
 from io import StringIO
-import Bio.SeqIO as SeqIO
 import ete4
 import pandas as pd
 from ete4 import Tree
+from nwkit.fasta import parse_fasta, write_fasta
 from nwkit.species_parser import (
     extract_parsed_species,
     get_species_parser,
@@ -620,22 +620,27 @@ def compute_node_ages(tree, tolerance=10 ** -9):
     return age_by_node
 
 def read_seqs(seqfile, seqformat, quiet):
+    if str(seqformat).lower() != 'fasta':
+        raise ValueError("Unsupported sequence format '{}'. Only 'fasta' is supported.".format(seqformat))
     if seqfile=='-':
-        records = list(SeqIO.parse(sys.stdin, seqformat))
+        records = parse_fasta(sys.stdin)
     else:
-        with open(seqfile) as fh:
-            records = list(SeqIO.parse(fh, seqformat))
+        with open(seqfile, newline='') as fh:
+            records = parse_fasta(fh)
     if not quiet:
         sys.stderr.write('Number of input sequences: {:,}\n'.format(len(records)))
     return records
 
 def write_seqs(records, outfile, seqformat='fasta', quiet=False):
+    if str(seqformat).lower() != 'fasta':
+        raise ValueError("Unsupported sequence format '{}'. Only 'fasta' is supported.".format(seqformat))
     if not quiet:
         sys.stderr.write('Number of output sequences: {:,}\n'.format(len(records)))
     if outfile=='-':
-        SeqIO.write(records, sys.stdout, seqformat)
+        write_fasta(records, sys.stdout, normalize_newlines=True)
     else:
-        SeqIO.write(records, outfile, seqformat)
+        with open(outfile, 'w', newline='') as fh:
+            write_fasta(records, fh)
 
 def remove_singleton(tree, verbose=False, preserve_branch_length=True):
     for node in tree.traverse():

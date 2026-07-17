@@ -436,8 +436,8 @@ pintersection.add_argument('-si', '--seqin', metavar='PATH', default='', type=st
                            help='default=%(default)s: Input sequence file.')
 pintersection.add_argument('-so', '--seqout', metavar='PATH', default='', type=str, required=False, action='store',
                            help='default=%(default)s: Output sequence file.')
-pintersection.add_argument('-sf', '--seqformat', metavar='STR', default='fasta', type=str, required=False, action='store',
-                           help='default=%(default)s: Alignment format for --seqfile. See https://biopython.org/wiki/SeqIO')
+pintersection.add_argument('-sf', '--seqformat', metavar='fasta', default='fasta', type=str, required=False, action='store',
+                           choices=['fasta'], help='default=%(default)s: Sequence format for --seqin and --seqout.')
 pintersection.add_argument('--match', metavar='complete|prefix|backward', default='complete', type=str,
                            required=False, action='store', choices=['complete','prefix','backward'],
                            help='default=%(default)s: Method for ID matching.')
