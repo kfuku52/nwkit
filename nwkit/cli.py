@@ -232,6 +232,8 @@ pcompose.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metavar
 pcompose.add_argument('--match-basis', '--match_basis', dest='match_basis', metavar='clade|split', default='clade', type=str, required=False, action='store',
                       choices=['clade', 'split'],
                       help='Match rooted descendant clades or root-independent canonical edge splits.')
+pcompose.add_argument('--root-edge-policy', '--root_edge_policy', dest='root_edge_policy', metavar='TARGET_PROPERTY=POLICY', default=[], type=str, required=False, action='append',
+                      help='Resolve root-edge ambiguity per target property. Policies: auto, skip, equal-only, matching-side, mean, min, max, edge-total. May be repeated.')
 pcompose.add_argument('--allow-projected-values', '--allow_projected_values', dest='allow_projected_values', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                       help='default=%(default)s: Permit support and branch-length transfer through projected matches. Use only when shared-tip equivalence is sufficient.')
 pcompose.add_argument('--policy', metavar='compatible-only|strict', default='compatible-only', type=str, required=False, action='store',
@@ -795,6 +797,8 @@ ptransfer.add_argument('--taxon-mode', '--taxon_mode', dest='taxon_mode', metava
 ptransfer.add_argument('--match-basis', '--match_basis', dest='match_basis', metavar='clade|split', default='clade', type=str, required=False, action='store',
                        choices=['clade', 'split'],
                        help='Match rooted descendant clades or root-independent canonical edge splits.')
+ptransfer.add_argument('--root-edge-policy', '--root_edge_policy', dest='root_edge_policy', metavar='TARGET_PROPERTY=POLICY', default=[], type=str, required=False, action='append',
+                       help='Resolve root-edge ambiguity per target property. Policies: auto, skip, equal-only, matching-side, mean, min, max, edge-total. May be repeated.')
 ptransfer.add_argument('--allow-projected-values', '--allow_projected_values', dest='allow_projected_values', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Permit support and branch-length transfer through projected matches. Use only when shared-tip equivalence is sufficient.')
 ptransfer.add_argument('--policy', metavar='compatible-only|strict', default='compatible-only', type=str, required=False, action='store',

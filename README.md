@@ -117,16 +117,46 @@ nwkit transfer -i target.nwk -i2 rerooted-source.nwk \
 ```
 
 Root alignment preserves support values, internal names, and NHX properties on
-their original unrooted branch splits. In split matching, equal values on the
-two children of a bifurcating root are treated as one root-edge value;
-conflicting values and root-edge branch lengths are reported as ambiguous and
-left unchanged. `compose` changes the target rooting only when `--root-source`
-is supplied. The `midpoint`, `outgroup`, `mad`, `mv`, `taxonomy`, and `transfer`
-rooting methods apply the same split-based annotation preservation. For tree
+their original unrooted branch splits. A bifurcating root represents one
+unrooted edge as two child branches, so `transfer` and `compose` resolve that
+representation explicitly. By default, one source annotation is copied to
+both target halves, equal source annotations are treated as one value, and
+conflicting annotations follow the source half with the same projected
+descendant taxa. Branch lengths use the source edge total and preserve the
+target root-position ratio; a zero-length target root edge is split equally.
+No result depends on traversal order.
+
+Use repeatable `--root-edge-policy TARGET_PROPERTY=POLICY` options to override
+the default per target property. `skip` leaves the edge unchanged,
+`equal-only` accepts only a unique or equal annotation, `matching-side` follows
+projected descendant taxa, `mean`, `min`, and `max` reduce numeric annotations,
+and `edge-total` applies the branch-length rule. `auto` is the annotation
+default; `edge-total` is the length default. `*` can set a fallback policy.
+For example:
+
+```sh
+nwkit compose -i topology.nwk \
+  --support-source bootstrap.nwk \
+  --length-source chronogram.nwk \
+  --match-basis split \
+  --root-edge-policy support=mean \
+  --root-edge-policy length=edge-total \
+  --report composition.tsv \
+  -o combined.nwk
+```
+
+A composition manifest accepts a top-level `root_edge_policies` object, and a
+custom `properties` entry can contain `root_edge_policy`. Precedence is
+top-level manifest, property entry, then CLI. Reports record the policy,
+resolution, candidate counts, and all candidate values. Projected support and
+length values still require `--allow-projected-values yes`, and strict mode
+still rejects every projected match.
+
+`compose` changes the target rooting only when `--root-source` is supplied.
+The `midpoint`, `outgroup`, `mad`, `mv`, `taxonomy`, and `transfer` rooting
+methods apply the same split-based annotation preservation. For tree
 collections, `validate --require-same-rooting yes` compares the root
-bipartition when leaf sets are identical. If branch lengths come from a tree
-rooted on another edge, the length source provides the aligned root edge's
-total length while the root source retains the position ratio along that edge.
+bipartition when leaf sets are identical.
 
 Arbitrary NHX properties can be transferred or renamed directly:
 

@@ -9,6 +9,7 @@ from nwkit.root import transfer_root_with_taxon_mode
 from nwkit.transfer import (
     REPORT_COLUMNS,
     parse_property_specs,
+    parse_root_edge_policies,
     transfer_properties,
 )
 from nwkit.util import get_tree_property_names, read_tree, write_tree
@@ -44,6 +45,10 @@ def _load_manifest(path):
         normalized['target'] = entry.get('target', entry['source'])
         normalized_properties.append(normalized)
     manifest['properties'] = normalized_properties
+    if 'root_edge_policies' in manifest and not isinstance(
+        manifest['root_edge_policies'], dict
+    ):
+        raise ValueError("Manifest 'root_edge_policies' must contain a JSON object.")
     return manifest
 
 
@@ -110,12 +115,23 @@ def _write_report(rows, path):
 
 def _configured_sources(args):
     manifest = _load_manifest(getattr(args, 'manifest', None))
+    manifest_root_edge_policies = parse_root_edge_policies(
+        manifest.get('root_edge_policies', {})
+    )
+    cli_root_edge_policies = parse_root_edge_policies(
+        getattr(args, 'root_edge_policy', None)
+    )
+    root_edge_policies = dict(manifest_root_edge_policies)
+    root_edge_policies.update(cli_root_edge_policies)
     sources = {
         'root': getattr(args, 'root_source', None) or manifest.get('root'),
         'name': getattr(args, 'name_source', None) or manifest.get('name'),
         'support': getattr(args, 'support_source', None) or manifest.get('support'),
         'length': getattr(args, 'length_source', None) or manifest.get('length'),
         'properties': list(manifest.get('properties', [])),
+        'root_edge_policies': root_edge_policies,
+        'manifest_root_edge_policies': manifest_root_edge_policies,
+        'cli_root_edge_policies': cli_root_edge_policies,
     }
     sources['properties'].extend(
         _parse_property_source(raw)
@@ -206,6 +222,7 @@ def compose_main(args):
             match_basis=match_basis,
             allow_projected_values=allow_projected_values,
             allow_target_reroot=False,
+            root_edge_policies=sources['root_edge_policies'],
         )
         target = result['tree']
         report_rows.extend(result['rows'])
@@ -223,6 +240,12 @@ def compose_main(args):
         property_spec = parse_property_specs(property_maps=[
             '{}={}'.format(property_source['source'], property_source['target'])
         ])
+        property_root_edge_policies = dict(sources['manifest_root_edge_policies'])
+        if 'root_edge_policy' in property_source:
+            property_root_edge_policies.update(parse_root_edge_policies({
+                property_source['target']: property_source['root_edge_policy'],
+            }))
+        property_root_edge_policies.update(sources['cli_root_edge_policies'])
         result = transfer_properties(
             target=target,
             source=source_tree,
@@ -235,6 +258,7 @@ def compose_main(args):
             match_basis=match_basis,
             allow_projected_values=allow_projected_values,
             allow_target_reroot=False,
+            root_edge_policies=property_root_edge_policies,
         )
         target = result['tree']
         report_rows.extend(result['rows'])

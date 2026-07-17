@@ -4,6 +4,29 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- `transfer` and `compose` now accept repeatable
+  `--root-edge-policy TARGET_PROPERTY=POLICY` options for deterministic
+  bifurcating-root ambiguity handling. Available policies are `auto`, `skip`,
+  `equal-only`, `matching-side`, `mean`, `min`, `max`, and `edge-total`.
+  Composition manifests support both top-level policy mappings and per-property
+  overrides.
+- Transfer reports now include the selected root-edge policy, resolution,
+  target/source candidate counts, and a deterministic JSON record of every
+  source candidate value.
+
+### Changed
+
+- Conflicting support, names, and NHX values on the two halves of a source root
+  edge now follow the half with matching projected descendant taxa by default.
+  Unique and equal values retain their edge-wide behavior. Numeric reducers and
+  conservative rejection remain explicitly selectable.
+- Ambiguous root-edge branch lengths now use the source edge total while
+  retaining the target root-position ratio. If the target edge total is zero,
+  the length is divided equally. An explicit `matching-side` policy can instead
+  retain source-side lengths.
+
 ### Fixed
 
 - Root transfer and the root alignment used by `compose` and `transfer` now
@@ -24,12 +47,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   source now supplies the total length of the aligned root edge while the
   target/root source retains its root-position ratio. This avoids replacing an
   intentional root position with the rerooting library's temporary 1:1 split.
+- Split-based length transfer now recognizes the leaf and internal children of
+  a root placed on a pendant edge as two halves of one physical edge. This
+  prevents half-edge lengths from being lost when target and source rootings
+  differ.
 - `diff --comparison unrooted` now counts each canonical root edge once and
   selects terminal/internal splits independently of the displayed root, so a
   pure reroot no longer appears as an unrooted topology difference.
 - Split-based transfer now treats equal support, names, and NHX values on the
-  two children of a bifurcating root as one root-edge value. Conflicting values
-  remain ambiguous and are not transferred.
+  two children of a bifurcating root as one root-edge value.
 
 ## [0.29.0] - 2026-07-17
 
