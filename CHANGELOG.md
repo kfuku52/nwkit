@@ -4,6 +4,22 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.32.0] - 2026-07-21
+
+### Added
+
+- `dist` now calculates RF, normalized RF, weighted RF, branch-score,
+  topological path, and branch-length path distances. `--metric all` is the
+  default, and `--comparison rooted|unrooted` controls clade- or split-based
+  metrics.
+
+### Changed
+
+- `dist` uses repeatable or comma-separated `--metric` values and writes one
+  metric per row in a stable long-form TSV. The former `-d/--dist` spelling
+  remains accepted with a deprecation warning; `-d/--dist RF` retains its
+  historical two-column output for pipeline compatibility.
+
 ## [0.31.0] - 2026-07-21
 
 ### Added

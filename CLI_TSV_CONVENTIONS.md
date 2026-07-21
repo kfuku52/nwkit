@@ -81,6 +81,7 @@ canonical output and new examples use the replacements below.
 | Older interface | Canonical interface |
 |---|---|
 | snake_case long options such as `--species_map_tsv` | kebab-case, for example `--species-map-tsv` |
+| `dist -d RF` / `dist --dist RF` | `dist --metric rf` |
 | `image --name-tsv` | `image --species-name-tsv` |
 | `image --manifest` / `--attribution` | `--manifest-out` / `--attribution-out` |
 | `sample --output-table` | `sample --report` |

@@ -77,6 +77,12 @@ def test_help_hides_snake_case_compatibility_aliases(capsys):
     assert '--group-table-prefix' in skim_help
     assert '--output-groupfile' not in skim_help
 
+    dist_help = _command_parsers()['dist'].format_help()
+    assert '--metric' in dist_help
+    assert '--comparison' in dist_help
+    assert '--dist' not in dist_help
+    assert re.search(r'(^|[, ]\s)-d([, ]|$)', dist_help) is None
+
 
 def test_every_noncanonical_long_option_is_registered_as_deprecated():
     for command, command_parser in _command_parsers().items():
@@ -146,6 +152,39 @@ def test_compatibility_aliases_resolve_to_canonical_destinations():
 
     assert _parse_targets('leaf,missing-leaf') == {'leaf', 'missing-leaf'}
     assert _parse_targets('tip,missing_tip') == {'leaf', 'missing-leaf'}
+
+    dist_args = parser.parse_args([
+        'dist', '--infile2', 'tree2.nwk', '--metric', 'rf,path-topological',
+        '--metric', 'normalized-rf', '--comparison', 'unrooted',
+    ])
+    assert dist_args.metric == ['rf,path-topological', 'normalized-rf']
+    assert dist_args.dist is None
+    assert dist_args.comparison == 'unrooted'
+
+
+@pytest.mark.parametrize('legacy_option', ['-d', '--dist'])
+def test_dist_legacy_metric_option_warns_and_preserves_rf_output(
+    tmp_path,
+    capsys,
+    legacy_option,
+):
+    tree1_path = tmp_path / 'tree1.nwk'
+    tree2_path = tmp_path / 'tree2.nwk'
+    tree1_path.write_text('((A:1,B:1):1,(C:1,D:1):1);')
+    tree2_path.write_text('((A:1,C:1):1,(B:1,D:1):1);')
+
+    main([
+        'dist', '--infile', str(tree1_path), '--infile2', str(tree2_path),
+        legacy_option, 'RF',
+    ])
+
+    captured = capsys.readouterr()
+    assert captured.out == 'rf_dist\tmax_rf_dist\n4\t4\n'
+    assert (
+        "Warning: option '{}' is deprecated; use '--metric' instead.".format(
+            legacy_option,
+        )
+    ) in captured.err
 
 
 def test_deprecated_option_aliases_warn_with_canonical_replacements(tmp_path, capsys):

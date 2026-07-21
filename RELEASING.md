@@ -15,8 +15,8 @@
 4. Create and push a matching annotated tag, for example:
 
    ```sh
-   git tag -a v0.31.0 -m "NWKIT 0.31.0"
-   git push origin v0.31.0
+   git tag -a v0.32.0 -m "NWKIT 0.32.0"
+   git push origin v0.32.0
    ```
 
 5. The Release workflow verifies the tag, rebuilds and checks the distributions, and creates the GitHub Release.

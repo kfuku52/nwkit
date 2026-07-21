@@ -58,7 +58,7 @@ and output-column vocabulary are defined in
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
-- [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Calculating topological distance between two trees
+- [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing a phylogenetic tree with optional speciation/duplication node markers
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering

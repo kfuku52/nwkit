@@ -364,13 +364,21 @@ pdiff.set_defaults(handler=command_diff)
 def command_dist(args):
     from nwkit.dist import dist_main
     dist_main(args)
-pdist = subparsers.add_parser('dist', help='Calculate topological distance between two trees', parents=[p_tree_input, p_table_output])
+pdist = subparsers.add_parser('dist', help='Calculate topology and branch-length distances between two trees', parents=[p_tree_input, p_table_output])
 pdist.add_argument('-i2', '--infile2', metavar='PATH', default=None, type=str, required=True, action='store',
                    help='default=%(default)s: Input newick file 2.')
 pdist.add_argument('-f2', '--format2', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
                    help='default=%(default)s: ETE tree format for --infile2.')
-pdist.add_argument('-d', '--dist', metavar='STR', default='RF', type=str, required=False, action='store',
-                   help='default=%(default)s: Distance calculation method. RF=Robinson-Foulds')
+pdist.add_argument('--metric', metavar='METRIC[,METRIC...]', default=None, type=str, required=False, action='append',
+                   help='default=all: Distance metric. May be repeated or comma-separated. '
+                        'Choices: all, rf, normalized-rf, weighted-rf, branch-score, '
+                        'path-topological, path-length.')
+pdist.add_argument('--comparison', metavar='rooted|unrooted', default='rooted', type=str, required=False, action='store',
+                   choices=['rooted', 'unrooted'],
+                   help='default=%(default)s: Compare rooted descendant clades or root-independent edge splits. '
+                        'Leaf-to-leaf path metrics are root-independent.')
+pdist.add_argument('-d', '--dist', dest='dist', metavar='STR', default=None, type=str, required=False, action='store',
+                   help=argparse.SUPPRESS)
 pdist.set_defaults(handler=command_dist)
 
 def command_draw(args):
@@ -915,6 +923,10 @@ def _validate_stdin_ownership(args):
 
 
 LEGACY_OPTION_CANONICAL_OVERRIDES = {
+    'dist': {
+        '-d': '--metric',
+        '--dist': '--metric',
+    },
     'skim': {
         '--output-groupfile': '--group-table-prefix',
         '--output_groupfile': '--group-table-prefix',
@@ -923,7 +935,7 @@ LEGACY_OPTION_CANONICAL_OVERRIDES = {
 
 
 def _deprecated_option_aliases(command):
-    """Return deprecated long-option aliases and their canonical replacements."""
+    """Return deprecated option aliases and their canonical replacements."""
     command_parser = subparsers.choices.get(command)
     if command_parser is None:
         return dict()
