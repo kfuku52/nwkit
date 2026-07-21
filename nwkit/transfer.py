@@ -13,6 +13,8 @@ from nwkit.clade_mapping import (
 from nwkit.root import transfer_root_with_taxon_mode
 from nwkit.util import (
     TREE_FORMAT_PROP,
+    assign_branch_ids,
+    get_node_class,
     get_tree_property_names,
     get_target_nodes,
     is_all_leaf_names_identical,
@@ -37,7 +39,7 @@ ROOT_EDGE_POLICIES = frozenset((
 ))
 REPORT_COLUMNS = (
     'source_file',
-    'target_node_id',
+    'target_branch_id',
     'target_node_class',
     'target_taxa',
     'shared_descendant_taxa',
@@ -60,18 +62,10 @@ REPORT_COLUMNS = (
     'source_candidate_values',
     'projected_value_allowed',
     'taxon_mode',
-    'shared_taxon_count',
-    'target_only_taxon_count',
-    'source_only_taxon_count',
+    'num_shared_taxa',
+    'num_target_only_taxa',
+    'num_source_only_taxa',
 )
-
-
-def _node_class(node):
-    if node.is_root:
-        return 'root'
-    if node.is_leaf:
-        return 'leaf'
-    return 'intnode'
 
 
 def _format_taxa(taxa):
@@ -739,7 +733,7 @@ def _write_report(rows, report_path):
     if report_path in (None, ''):
         return
     if report_path == '-':
-        raise ValueError("'--report -' cannot be combined with Newick output on stdout.")
+        raise ValueError("'--report' requires a file path, not '-'.")
     pd.DataFrame(rows, columns=REPORT_COLUMNS).to_csv(report_path, sep='\t', index=False)
 
 
@@ -834,7 +828,7 @@ def transfer_properties(target, source, property_specs, target_class='all',
     target_nodes = get_target_nodes(tree=target, target=target_class)
     if exclude_root:
         target_nodes = [node for node in target_nodes if not node.is_root]
-    traversal_ids = {id(node): index for index, node in enumerate(target.traverse(), start=1)}
+    traversal_ids = assign_branch_ids(target)
     rows = list()
     failed = False
     changed_node_ids = set()
@@ -961,8 +955,8 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 failed = True
             rows.append({
                 'source_file': source_label,
-                'target_node_id': traversal_ids[id(target_node)],
-                'target_node_class': _node_class(target_node),
+                'target_branch_id': traversal_ids[target_node],
+                'target_node_class': get_node_class(target_node),
                 'target_taxa': _format_taxa(match.target_taxa),
                 'shared_descendant_taxa': _format_taxa(match.projected_taxa),
                 'shared_split': _format_split(match.projected_split),
@@ -984,9 +978,9 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 'source_candidate_values': source_candidate_values,
                 'projected_value_allowed': projected_value_allowed,
                 'taxon_mode': taxon_mode,
-                'shared_taxon_count': len(mapping.shared_taxa),
-                'target_only_taxon_count': len(mapping.target_only_taxa),
-                'source_only_taxon_count': len(mapping.source_only_taxa),
+                'num_shared_taxa': len(mapping.shared_taxa),
+                'num_target_only_taxa': len(mapping.target_only_taxa),
+                'num_source_only_taxa': len(mapping.source_only_taxa),
             })
     if policy == 'strict' and failed:
         error = ValueError('Strict transfer failed because at least one requested value was not transferable.')

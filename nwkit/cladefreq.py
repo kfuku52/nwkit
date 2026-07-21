@@ -6,6 +6,9 @@ from nwkit.consensus import _collect_clade_stats_from_tree_strings, _read_tree_w
 from nwkit.util import count_set_bits, get_subtree_leaf_bitmasks, read_tree, read_tree_strings, support_is_missing
 
 
+CLADEFREQ_COLUMNS = ('descendant_taxa', 'num_taxa', 'weight_sum', 'frequency')
+
+
 def _mask_to_leaf_set(mask, leaf_names):
     names = list()
     remaining = int(mask)
@@ -52,8 +55,8 @@ def cladefreq_main(args):
     ):
         leaf_set = _mask_to_leaf_set(mask, leaf_names)
         row = {
-            'leaf_set': ','.join(leaf_set),
-            'num_leaves': len(leaf_set),
+            'descendant_taxa': ','.join(leaf_set),
+            'num_taxa': len(leaf_set),
             'weight_sum': weight_sum,
             'frequency': _scale_support(weight_sum / total_weight, args.support_scale),
         }
@@ -65,7 +68,10 @@ def cladefreq_main(args):
             else:
                 row['reference_support'] = float(reference_node.support)
         rows.append(row)
-    out = pd.DataFrame(rows)
+    columns = list(CLADEFREQ_COLUMNS)
+    if args.reference not in ['', None]:
+        columns.extend(('in_reference', 'reference_support'))
+    out = pd.DataFrame(rows, columns=columns)
     if args.outfile == '-':
         print(out.to_csv(sep='\t', index=False), end='')
     else:

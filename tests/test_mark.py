@@ -146,8 +146,8 @@ class TestMarkMain:
     def test_wiki_codeml_clade_marking(self, tmp_nwk, tmp_outfile):
         """Wiki example: mark clade with #1 for PAML codeml two-ratio mode.
 
-        nwkit mark --infile input.nwk --pattern "A.*|B.*" --insert_txt "#1"
-            --target clade --target_only_clade yes --outfile output.nwk
+        nwkit mark --infile input.nwk --pattern "A.*|B.*" --insert-text "#1"
+            --target clade --target-only-clade yes --outfile output.nwk
 
         Input:  (((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;
         Output: (((A1#1:2,(B1#1:1,B2#1:1)#1:1)#1:1,(A2#1:1,C1:1):2):1,C2:4):0.25;
@@ -186,7 +186,7 @@ class TestMarkMain:
                 assert 'FG' not in leaf.name
 
     def test_mark_all_mrca_clade(self, tmp_nwk, tmp_outfile):
-        """Test --target clade --target_only_clade no marks the entire clade
+        """Test --target clade --target-only-clade no marks the entire clade
         containing all matched leaves (not just the sub-clade)."""
         path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
         args = make_mark_args(

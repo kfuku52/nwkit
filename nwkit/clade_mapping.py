@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 
-from nwkit.util import validate_unique_named_leaves
+from nwkit.util import get_node_class, validate_unique_named_leaves
 
 
 SUPPORTED_TAXON_MODES = ('exact', 'intersection')
@@ -42,14 +42,6 @@ def _node_taxon_sets(tree):
         node: frozenset(str(name) for name in cached[node])
         for node in tree.traverse()
     }
-
-
-def _node_class(node):
-    if node.is_root:
-        return 'root'
-    if node.is_leaf:
-        return 'leaf'
-    return 'intnode'
 
 
 def _format_taxa(taxa):
@@ -113,18 +105,18 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
     target_groups = dict()
     source_groups = dict()
     for node, taxa in target_taxa_by_node.items():
-        node_class = _node_class(node)
+        node_class = get_node_class(node)
         key = (node_class, _mapping_key(node_class, taxa, shared_taxa, match_basis))
         target_groups.setdefault(key, list()).append(node)
     for node, taxa in source_taxa_by_node.items():
-        node_class = _node_class(node)
+        node_class = get_node_class(node)
         key = (node_class, _mapping_key(node_class, taxa, shared_taxa, match_basis))
         source_groups.setdefault(key, list()).append(node)
 
     matches = list()
     matched_source_ids = set()
     for target_node in target.traverse():
-        node_class = _node_class(target_node)
+        node_class = get_node_class(target_node)
         target_taxa = target_taxa_by_node[target_node]
         projected_taxa = frozenset(target_taxa & shared_taxa)
         projected_split = _projected_split_from_taxa(target_taxa, shared_taxa)

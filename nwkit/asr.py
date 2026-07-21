@@ -13,14 +13,16 @@ from scipy.stats import poisson
 from nwkit.util import (
     TREE_FORMAT_PROP,
     assign_branch_ids,
+    get_node_class,
+    is_missing_table_value,
     is_rooted,
+    parse_table_missing_values,
     read_tree,
-    read_tsv_preserving_leaf_name,
+    read_tip_table,
     validate_unique_named_leaves,
 )
 
 
-DEFAULT_MISSING_VALUES = ('', 'NA', 'NaN', 'nan', '?', 'missing', 'unknown')
 DEFAULT_RATE_BOUNDS = (10 ** -9, 10 ** 3)
 DEFAULT_AMBIGUOUS_SEPARATOR = '|'
 DEFAULT_TARGET = 'all'
@@ -37,9 +39,7 @@ def _parse_comma_list(value, option_name):
 
 
 def _parse_missing_values(value):
-    if value in ['', None]:
-        return set(DEFAULT_MISSING_VALUES)
-    return set(_parse_comma_list(value, '--missing_values'))
+    return parse_table_missing_values(value)
 
 
 def _parse_states(value):
@@ -52,18 +52,18 @@ def _parse_states(value):
 def _parse_rate_bounds(value):
     if value in ['', None]:
         return DEFAULT_RATE_BOUNDS
-    items = _parse_comma_list(value, '--rate_bounds')
+    items = _parse_comma_list(value, '--rate-bounds')
     if len(items) != 2:
-        raise ValueError("'--rate_bounds' must contain exactly two comma-separated values.")
+        raise ValueError("'--rate-bounds' must contain exactly two comma-separated values.")
     try:
         lower = float(items[0])
         upper = float(items[1])
     except ValueError as exc:
-        raise ValueError("'--rate_bounds' values must be numeric.") from exc
+        raise ValueError("'--rate-bounds' values must be numeric.") from exc
     if (not math.isfinite(lower)) or (not math.isfinite(upper)) or lower <= 0.0 or upper <= 0.0:
-        raise ValueError("'--rate_bounds' values must be positive finite numbers.")
+        raise ValueError("'--rate-bounds' values must be positive finite numbers.")
     if lower >= upper:
-        raise ValueError("'--rate_bounds' lower bound must be smaller than the upper bound.")
+        raise ValueError("'--rate-bounds' lower bound must be smaller than the upper bound.")
     return lower, upper
 
 
@@ -71,8 +71,15 @@ def _parse_targets(value):
     if value in ['', None]:
         value = DEFAULT_TARGET
     targets = set()
-    aliases = {'leaf': 'tip', 'leaves': 'tip', 'tips': 'tip'}
-    valid_targets = {'all', 'intnode', 'tip', 'missing_tip'}
+    aliases = {
+        'tip': 'leaf',
+        'tips': 'leaf',
+        'leaves': 'leaf',
+        'missing_tip': 'missing-leaf',
+        'missing-tip': 'missing-leaf',
+        'missing_leaf': 'missing-leaf',
+    }
+    valid_targets = {'all', 'intnode', 'leaf', 'missing-leaf'}
     for raw_target in _parse_comma_list(value, '--target'):
         target = aliases.get(raw_target, raw_target)
         if target not in valid_targets:
@@ -84,10 +91,7 @@ def _parse_targets(value):
 
 
 def _is_missing_trait_value(value, missing_values):
-    if pd.isna(value):
-        return True
-    text = str(value).strip()
-    return text in missing_values
+    return is_missing_table_value(value, missing_values)
 
 
 def _split_state_value(value, ambiguous_separator):
@@ -109,36 +113,22 @@ def _read_tip_states(
     states_arg=None,
     missing_values_arg=None,
     ambiguous_separator=DEFAULT_AMBIGUOUS_SEPARATOR,
+    unmatched='warn',
 ):
     if trait_path in ['', None]:
         raise ValueError("'--trait' is required.")
     if state_column in ['', None]:
-        raise ValueError("'--state_column' is required.")
-    trait_df = read_tsv_preserving_leaf_name(trait_path)
-    if 'leaf_name' not in trait_df.columns:
-        raise ValueError("Column 'leaf_name' is required in '--trait'.")
-    if state_column not in trait_df.columns:
-        raise ValueError("Column '{}' specified by '--state_column' was not found in '--trait'.".format(state_column))
-
-    trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
-    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
-        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
-    duplicated_leaf_names = trait_df.loc[
-        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
-    ].unique().tolist()
-    if duplicated_leaf_names:
-        duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
-        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
-
+        raise ValueError("'--state-column' is required.")
+    trait_df, _, _ = read_tip_table(
+        trait_path,
+        option_name='--trait',
+        tree_leaf_names=tree_leaf_names,
+        required_columns=(state_column,),
+        unmatched=unmatched,
+        missing_values=missing_values_arg,
+    )
     tree_leaf_name_set = set(tree_leaf_names)
-    missing_leaf_names = sorted(set(trait_df['leaf_name']) - tree_leaf_name_set)
-    if missing_leaf_names:
-        raise ValueError(
-            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
-                ', '.join(missing_leaf_names)
-            )
-        )
+    trait_df = trait_df[trait_df['leaf_name'].isin(tree_leaf_name_set)].copy()
 
     missing_values = _parse_missing_values(missing_values_arg)
     raw_state_by_leaf = dict()
@@ -233,7 +223,7 @@ def _get_root_prior(root_prior, states, observed_state_by_leaf, likelihood_by_le
         if counts.sum() == 0.0:
             return np.full(num_states, 1.0 / float(num_states), dtype=float)
         return counts / counts.sum()
-    raise ValueError("Unsupported '--root_prior': {}".format(root_prior))
+    raise ValueError("Unsupported '--root-prior': {}".format(root_prior))
 
 
 def _num_rate_parameters(model, num_states):
@@ -541,14 +531,6 @@ def compute_mk_marginals(
     return posterior_by_node, fit
 
 
-def _node_type(node):
-    if node.is_root:
-        return 'root'
-    if node.is_leaf:
-        return 'tip'
-    return 'intnode'
-
-
 def _is_missing_tip(node, observed_state_by_leaf):
     return node.is_leaf and observed_state_by_leaf.get(node.name) is None
 
@@ -558,9 +540,9 @@ def _should_output_node(node, observed_state_by_leaf, targets):
         return True
     if (not node.is_leaf) and ('intnode' in targets):
         return True
-    if node.is_leaf and ('tip' in targets):
+    if node.is_leaf and ('leaf' in targets):
         return True
-    if _is_missing_tip(node, observed_state_by_leaf) and ('missing_tip' in targets):
+    if _is_missing_tip(node, observed_state_by_leaf) and ('missing-leaf' in targets):
         return True
     return False
 
@@ -577,7 +559,7 @@ def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node,
         row = {
             'branch_id': node_to_branch_id[node],
             'parent': -1 if node.is_root else node_to_branch_id[node.up],
-            'node_type': _node_type(node),
+            'node_class': get_node_class(node),
             'name': '' if node.name in [None, ''] else str(node.name),
             'observed_state': '' if observed_state is None else observed_state,
             'is_imputed': bool(_is_missing_tip(node, observed_state_by_leaf)),
@@ -597,7 +579,7 @@ def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node,
         columns = [
             'branch_id',
             'parent',
-            'node_type',
+            'node_class',
             'name',
             'observed_state',
             'is_imputed',
@@ -608,7 +590,7 @@ def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node,
         columns = [
             'branch_id',
             'parent',
-            'node_type',
+            'node_class',
             'name',
             'observed_state',
             'is_imputed',
@@ -690,7 +672,7 @@ def _write_annotated_tree(tree, states, posterior_by_node, observed_state_by_lea
         props = ['asr_state', 'asr_probability']
         props += ['asr_observed_state'] + ['asr_p_{}'.format(_safe_column_state(state)) for state in states]
     else:
-        raise ValueError("Unsupported '--tree_annotation': {}".format(tree_annotation))
+        raise ValueError("Unsupported '--tree-annotation': {}".format(tree_annotation))
     parser_format = tree.props.get(TREE_FORMAT_PROP, 0)
     if getattr(args, 'tree_outformat', 'auto') != 'auto':
         parser_format = int(getattr(args, 'tree_outformat'))
@@ -939,7 +921,7 @@ def _get_process_pool_context():
 
 def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, threads=1):
     if num_simulations <= 0:
-        raise ValueError("'--n_sim' must be positive when '--stochastic_map_out' is specified.")
+        raise ValueError("'--n-sim' must be positive when '--stochastic-map-out' is specified.")
     try:
         threads = int(threads)
     except (TypeError, ValueError) as exc:
@@ -995,7 +977,7 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
                 rows.append({
                     'branch_id': branch_id,
                     'parent': node_to_branch_id[node.up],
-                    'node_type': _node_type(node),
+                    'node_class': get_node_class(node),
                     'name': '' if node.name in [None, ''] else str(node.name),
                     'from_state': from_state,
                     'to_state': to_state,
@@ -1004,7 +986,11 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
                     'posterior_frequency': any_count / float(num_simulations),
                     'num_simulations': num_simulations,
                 })
-    return pd.DataFrame(rows)
+    columns = (
+        'branch_id', 'parent', 'node_class', 'name', 'from_state', 'to_state',
+        'total_count', 'mean_count', 'posterior_frequency', 'num_simulations',
+    )
+    return pd.DataFrame(rows, columns=columns)
 
 
 def _write_stochastic_map(tree, states, fit, args):
@@ -1023,6 +1009,20 @@ def _write_stochastic_map(tree, states, fit, args):
 
 
 def asr_main(args):
+    auxiliary_outputs = {
+        '--model-out': getattr(args, 'model_out', None),
+        '--tree-out': getattr(args, 'tree_out', None),
+        '--stochastic-map-out': getattr(args, 'stochastic_map_out', None),
+    }
+    stdout_auxiliary_outputs = [
+        option_name for option_name, path in auxiliary_outputs.items() if path == '-'
+    ]
+    if stdout_auxiliary_outputs:
+        raise ValueError(
+            'Auxiliary outputs require file paths, not STDOUT: {}'.format(
+                ', '.join(stdout_auxiliary_outputs)
+            )
+        )
     model = getattr(args, 'model', 'ER')
     if model not in SUPPORTED_MODELS:
         raise ValueError("Unsupported '--model': {}".format(model))
@@ -1039,6 +1039,7 @@ def asr_main(args):
         states_arg=getattr(args, 'states', None),
         missing_values_arg=getattr(args, 'missing_values', None),
         ambiguous_separator=getattr(args, 'ambiguous_separator', DEFAULT_AMBIGUOUS_SEPARATOR),
+        unmatched=getattr(args, 'unmatched', 'warn'),
     )
     rate_bounds = _parse_rate_bounds(getattr(args, 'rate_bounds', None))
     posterior_by_node, fit = compute_mk_marginals(

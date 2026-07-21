@@ -57,7 +57,7 @@ class TestCheckInputFile:
         species_path = tmp_path / 'species.txt'
         species_path.write_text('\n')
         args = Namespace(species_list=str(species_path), taxid_tsv=None, backbone='ncbi')
-        with pytest.raises(ValueError, match='species_list is empty'):
+        with pytest.raises(ValueError, match='species-list is empty'):
             check_input_file(args)
 
     def test_duplicate_species_list_entries_raise(self, tmp_path):
@@ -73,7 +73,7 @@ class TestCheckInputFile:
             {'leaf_name': ['A', 'A'], 'taxid': [9606, 9606]}
         ).to_csv(tsv_path, sep='\t', index=False)
         args = Namespace(species_list=None, taxid_tsv=str(tsv_path), backbone='ncbi')
-        with pytest.raises(ValueError, match='Duplicate values'):
+        with pytest.raises(ValueError, match="Duplicated 'leaf_name'"):
             check_input_file(args)
 
     def test_taxid_tsv_missing_taxid_raises(self, tmp_path):
@@ -331,7 +331,7 @@ class TestConstrainMain:
             rank='no',
             collapse=False,
         )
-        with pytest.raises(ValueError, match='No taxa from --species_list matched'):
+        with pytest.raises(ValueError, match='No taxa from --species-list matched'):
             constrain_main(args)
 
     def test_user_backbone_duplicate_leaf_labels_raise_clear_error(self, tmp_path):

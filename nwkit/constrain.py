@@ -13,7 +13,7 @@ from nwkit.util import (
     label2sciname,
     read_item_per_line_file,
     read_tree,
-    read_tsv_preserving_leaf_name,
+    read_tip_table,
     remove_singleton,
     validate_unique_named_leaves,
     warn_cleanup_failure,
@@ -31,42 +31,42 @@ def _close_ncbi_db(ncbi):
             warn_cleanup_failure('NCBI taxonomy database handle', exc)
 
 def read_taxid_tsv(taxid_tsv):
-    taxid_df = read_tsv_preserving_leaf_name(taxid_tsv)
-    if 'leaf_name' not in taxid_df.columns or 'taxid' not in taxid_df.columns:
-        raise ValueError('--taxid_tsv must contain "leaf_name" and "taxid" columns.')
+    taxid_df, _, _ = read_tip_table(
+        taxid_tsv,
+        option_name='--taxid-tsv',
+        required_columns=('taxid',),
+        unmatched='ignore',
+    )
     if taxid_df.empty:
-        raise ValueError('--taxid_tsv is empty.')
-    taxid_df = taxid_df.copy()
-    taxid_df['leaf_name'] = [str(leaf_name) for leaf_name in taxid_df['leaf_name'].tolist()]
-    if any(leaf_name.strip() == '' for leaf_name in taxid_df['leaf_name'].tolist()):
-        raise ValueError('--taxid_tsv contains empty values in the "leaf_name" column.')
-    if taxid_df['leaf_name'].duplicated().any():
-        raise ValueError('Duplicate values in the "leaf_name" column of --taxid_tsv are not supported.')
+        raise ValueError('--taxid-tsv is empty.')
     if taxid_df['taxid'].isna().any():
-        raise ValueError('--taxid_tsv contains missing values in the "taxid" column.')
+        raise ValueError('--taxid-tsv contains missing values in the "taxid" column.')
     taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
     if taxid_numeric.isna().any():
-        raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
+        raise ValueError('--taxid-tsv contains non-numeric values in the "taxid" column.')
     if (taxid_numeric % 1 != 0).any():
-        raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
+        raise ValueError('--taxid-tsv contains non-integer values in the "taxid" column.')
     taxid_df['taxid'] = taxid_numeric.astype(int)
     return taxid_df
 
 def check_input_file(args):
+    labels = None
+    taxid_df = None
     if (args.species_list is None) and (args.taxid_tsv is None):
-        raise ValueError('Either --species_list or --taxid_tsv must be specified.')
+        raise ValueError('Either --species-list or --taxid-tsv must be specified.')
     if (args.species_list is not None) and (args.taxid_tsv is not None):
-        raise ValueError('Only one of --species_list or --taxid_tsv can be specified.')
+        raise ValueError('Only one of --species-list or --taxid-tsv can be specified.')
     if (args.backbone != 'ncbi') and (args.taxid_tsv is not None):
-        raise ValueError('--taxid_tsv is currently compatible only with --backbone ncbi.')
+        raise ValueError('--taxid-tsv is currently compatible only with --backbone ncbi.')
     if args.species_list is not None:
         labels = read_item_per_line_file(args.species_list)
         if len(labels) == 0:
-            raise ValueError('--species_list is empty.')
+            raise ValueError('--species-list is empty.')
         if len(labels) != len(set(labels)):
-            raise ValueError('Duplicate entries in --species_list are not supported.')
+            raise ValueError('Duplicate entries in --species-list are not supported.')
     if args.taxid_tsv is not None:
-        read_taxid_tsv(args.taxid_tsv)
+        taxid_df = read_taxid_tsv(args.taxid_tsv)
+    return labels, taxid_df
 
 def initialize_tree(tree):
     for leaf in tree.leaves():
@@ -125,9 +125,9 @@ def get_lineages_from_taxid(taxid_df, rank, args=None):
     try:
         taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
         if taxid_numeric.isna().any():
-            raise ValueError('--taxid_tsv contains non-numeric values in the "taxid" column.')
+            raise ValueError('--taxid-tsv contains non-numeric values in the "taxid" column.')
         if (taxid_numeric % 1 != 0).any():
-            raise ValueError('--taxid_tsv contains non-integer values in the "taxid" column.')
+            raise ValueError('--taxid-tsv contains non-integer values in the "taxid" column.')
         lineages = dict()
         for label, taxid in zip(taxid_df['leaf_name'], taxid_numeric.astype(int)):
             lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
@@ -373,19 +373,16 @@ def collapse_genes(tree):
     return tree
 
 def constrain_main(args):
-    check_input_file(args)
+    labels, taxid_df = check_input_file(args)
     if (args.backbone=='ncbi'):
         if args.taxid_tsv is not None:
-            taxid_df = read_taxid_tsv(args.taxid_tsv)
             lineages = get_lineages_from_taxid(taxid_df, rank=args.rank, args=args)
         else:
-            labels = read_item_per_line_file(args.species_list)
             lineages = get_lineages(labels=labels, rank=args.rank, args=args)
         taxid_counts = get_taxid_counts(lineages)
         #taxid_counts = limit_rank(taxid_counts=taxid_counts, rank=args.rank)
         tree = taxid2tree(lineages, taxid_counts, args=args)
     else:
-        labels = read_item_per_line_file(args.species_list)
         if (args.backbone.endswith('user')):
             tree = read_tree(args.infile, args.format, args.quoted_node_names)
             for node in tree.traverse():
@@ -399,7 +396,7 @@ def constrain_main(args):
         tree = initialize_tree(tree)
         tree = match_taxa(tree, labels, args.backbone, args=args)
         if not any(leaf.props.get('has_taxon') for leaf in tree.leaves()):
-            raise ValueError('No taxa from --species_list matched the backbone tree labels.')
+            raise ValueError('No taxa from --species-list matched the backbone tree labels.')
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)

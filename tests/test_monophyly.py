@@ -30,7 +30,7 @@ class TestMonophylyMain:
         row_y = table.loc[table['group'] == 'y'].iloc[0]
         assert bool(row_x['is_monophyletic']) is True
         assert bool(row_y['is_monophyletic']) is False
-        assert row_y['num_intruder_leaves'] > 0
+        assert row_y['num_intruder_taxa'] > 0
 
     def test_species_mode_groups_duplicate_species(self, tmp_nwk, tmp_path):
         infile = tmp_nwk(
@@ -50,7 +50,7 @@ class TestMonophylyMain:
         table = pd.read_csv(outfile, sep='\t')
         homo_row = table.loc[table['group'] == 'Homo_sapiens'].iloc[0]
         assert bool(homo_row['is_monophyletic']) is True
-        assert homo_row['num_target_leaves'] == 2
+        assert homo_row['num_target_taxa'] == 2
 
     def test_fail_on_non_monophyly_raises(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', 'tree.nwk')
@@ -88,8 +88,9 @@ class TestMonophylyMain:
             group_by='group',
             unrooted=False,
             fail_on_non_monophyly=False,
+            unmatched='error',
         )
-        with pytest.raises(ValueError, match='were not found in the input tree'):
+        with pytest.raises(ValueError, match='--trait and tree tips differ'):
             monophyly_main(args)
 
     def test_trait_mode_rejects_duplicate_tree_leaf_names(self, tmp_nwk, tmp_path):
@@ -134,7 +135,7 @@ class TestMonophylyMain:
         table = pd.read_csv(outfile, sep='\t')
         row_x = table.loc[table['group'] == 'x'].iloc[0]
         assert bool(row_x['is_monophyletic']) is True
-        assert row_x['target_leaves'] == '001,002'
+        assert row_x['target_taxa'] == '001,002'
 
     def test_trait_mode_accepts_na_literal_leaf_names(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('((NA:1,B:1):1,C:1);', 'tree.nwk')
@@ -158,4 +159,4 @@ class TestMonophylyMain:
         table = pd.read_csv(outfile, sep='\t')
         row_x = table.loc[table['group'] == 'x'].iloc[0]
         assert bool(row_x['is_monophyletic']) is True
-        assert row_x['target_leaves'] == 'B,NA'
+        assert row_x['target_taxa'] == 'B,NA'

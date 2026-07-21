@@ -698,7 +698,7 @@ def _order_taxid_tsv_to_match_tree(tree, taxid_df):
             messages.append('missing leaf_name entries for: {}'.format(', '.join(missing_leaf_names)))
         if extra_leaf_names:
             messages.append('unexpected leaf_name entries: {}'.format(', '.join(extra_leaf_names)))
-        raise ValueError('--taxid_tsv must match the leaf labels in --infile exactly ({})'.format('; '.join(messages)))
+        raise ValueError('--taxid-tsv must match the leaf labels in --infile exactly ({})'.format('; '.join(messages)))
     return taxid_df.set_index('leaf_name').loc[tree_leaf_names].reset_index()
 
 def _parse_taxonomy_sources(taxonomy_source):

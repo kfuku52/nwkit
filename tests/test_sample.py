@@ -22,7 +22,7 @@ def make_sample_args(**kwargs):
         'filter': [],
         'rank': [],
         'allow_fewer': False,
-        'output_table': None,
+        'report': None,
     }
     defaults.update(kwargs)
     return make_args(**defaults)
@@ -109,7 +109,7 @@ class TestSampleMain:
             infile=str(tree_path),
             outfile=str(out_tree),
             n=2,
-            output_table=str(out_table),
+            report=str(out_table),
         )
         sample_main(args)
 
@@ -142,7 +142,7 @@ class TestSampleMain:
             n=2,
             filter=['busco_complete_pct:ge:80', 'num_seq:le:200000'],
             rank=['num_seq:asc', 'busco_complete_pct:desc'],
-            output_table=str(out_table),
+            report=str(out_table),
         )
         sample_main(args)
 
@@ -174,7 +174,7 @@ class TestSampleMain:
             method='ranked',
             filter=['busco_complete_pct:ge:80', 'num_seq:le:200000'],
             rank=['num_seq:asc'],
-            output_table=str(out_table),
+            report=str(out_table),
         )
         sample_main(args)
 

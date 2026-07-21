@@ -117,7 +117,7 @@ class TestSubtreeMain:
         assert len(list(tree.leaf_names())) >= 1
 
     def test_wiki_exact_example(self, tmp_nwk, tmp_outfile):
-        """Wiki example: nwkit subtree --left_leaf a --right_leaf c
+        """Wiki example: nwkit subtree --left-leaf a --right-leaf c
 
         Input:  (((a:1,b:1):1,c:1):1,((d:1,e:1),f:1):1):0;
         Output: ((a:1,b:1):1,c:1):1;

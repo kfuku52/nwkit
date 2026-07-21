@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 from ete4 import Tree
 
 from nwkit import __version__
+from nwkit.conventions import get_stdin_input_options
 from nwkit.util import inspect_tree_text, is_rooted, split_newick_stream
 
 
@@ -17,9 +18,13 @@ OUTPUT_ARGUMENTS = frozenset((
     'report',
     'tree_out',
     'model_out',
+    'stochastic_map_out',
     'output_table',
     'seqout',
     'out_dir',
+    'manifest_out',
+    'attribution_out',
+    'group_table_prefix',
     'audit',
 ))
 
@@ -130,7 +135,7 @@ def _input_file_records(args):
     for argument, value in vars(args).items():
         if argument in OUTPUT_ARGUMENTS or argument == 'handler':
             continue
-        if argument == 'manifest' and getattr(args, 'command', None) == 'image':
+        if argument in ('manifest', 'attribution') and getattr(args, 'command', None) == 'image':
             continue
         for candidate in _path_candidates_from_value(value):
             if candidate in ('', '-') or not os.path.isfile(candidate):
@@ -154,12 +159,28 @@ def _output_file_records(args):
     seen = set()
     output_arguments = set(OUTPUT_ARGUMENTS)
     if getattr(args, 'command', None) == 'image':
-        output_arguments.add('manifest')
+        output_arguments.update(('manifest', 'attribution'))
     for argument in output_arguments:
         if argument == 'audit':
             continue
         value = getattr(args, argument, None)
-        for candidate in _path_candidates_from_value(value):
+        if (
+            argument == 'group_table_prefix'
+            and value in (None, '')
+            and getattr(args, 'command', None) == 'skim'
+            and bool(getattr(args, 'output_groupfile', False))
+        ):
+            outfile = getattr(args, 'outfile', None)
+            if outfile not in (None, '', '-'):
+                value = outfile.removesuffix('.nwk')
+        candidates = _path_candidates_from_value(value)
+        if argument == 'group_table_prefix':
+            candidates = [
+                '{}.{}'.format(candidate, suffix)
+                for candidate in candidates
+                for suffix in ('all.tsv', 'sampled.tsv')
+            ]
+        for candidate in candidates:
             if candidate in ('', '-'):
                 continue
             realpath = os.path.realpath(candidate)
@@ -285,7 +306,9 @@ def run_with_audit(args, argv, handler):
     original_stdout = sys.stdout
     original_stderr = sys.stderr
     stdin_text = None
-    if getattr(args, 'infile', None) == '-':
+    stdin_options = get_stdin_input_options(args)
+    stdin_argument = stdin_options[0][0] if stdin_options else None
+    if stdin_argument is not None:
         stdin_text = original_stdin.read()
         sys.stdin = io.StringIO(stdin_text)
     stdout_tee = _TeeTextWriter(original_stdout, capture=False)
@@ -327,6 +350,7 @@ def run_with_audit(args, argv, handler):
             'inputs': _input_file_records(args),
             'primary_input': _input_summary(_primary_input_text(args, stdin_text), args),
             'stdin': None if stdin_text is None else {
+                'argument': stdin_argument,
                 'sha256': _sha256_bytes(stdin_text.encode('utf-8')),
                 'bytes': len(stdin_text.encode('utf-8')),
             },

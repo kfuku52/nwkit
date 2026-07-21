@@ -83,7 +83,7 @@ def _root_report_row(source_path, target, source, mapping, status, reason, taxon
     row = {column: '' for column in REPORT_COLUMNS}
     row.update({
         'source_file': source_path,
-        'target_node_id': 1,
+        'target_branch_id': 0,
         'target_node_class': 'root',
         'target_taxa': ','.join(sorted(str(name) for name in target.leaf_names())),
         'shared_descendant_taxa': ','.join(sorted(mapping.shared_taxa)),
@@ -98,9 +98,9 @@ def _root_report_row(source_path, target, source, mapping, status, reason, taxon
         'reason': reason,
         'projected_value_allowed': '',
         'taxon_mode': taxon_mode,
-        'shared_taxon_count': len(mapping.shared_taxa),
-        'target_only_taxon_count': len(mapping.target_only_taxa),
-        'source_only_taxon_count': len(mapping.source_only_taxa),
+        'num_shared_taxa': len(mapping.shared_taxa),
+        'num_target_only_taxa': len(mapping.target_only_taxa),
+        'num_source_only_taxa': len(mapping.source_only_taxa),
     })
     return row
 
@@ -109,7 +109,7 @@ def _write_report(rows, path):
     if path in (None, ''):
         return
     if path == '-':
-        raise ValueError("'--report -' cannot be combined with Newick output on stdout.")
+        raise ValueError("'--report' requires a file path, not '-'.")
     pd.DataFrame(rows, columns=REPORT_COLUMNS).to_csv(path, sep='\t', index=False)
 
 

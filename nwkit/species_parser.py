@@ -1,5 +1,6 @@
 import csv
 import re
+import sys
 from dataclasses import dataclass
 
 
@@ -56,7 +57,7 @@ def compile_species_regex(species_regex=None):
     try:
         return re.compile(regex_text)
     except re.error as exc:
-        raise ValueError('--species_regex is not a valid regular expression: {}'.format(exc))
+        raise ValueError('--species-regex is not a valid regular expression: {}'.format(exc))
 
 
 def _normalize_species_label(text):
@@ -117,25 +118,27 @@ def _extract_species_label_with_regex(label, species_pattern):
 def read_species_map_tsv(species_map_tsv):
     if species_map_tsv in ['', None]:
         return dict()
-    with open(species_map_tsv, newline='') as handle:
+    handle = sys.stdin if species_map_tsv == '-' else open(species_map_tsv, newline='')
+    try:
         reader = csv.DictReader(handle, delimiter='\t')
         fieldnames = reader.fieldnames or list()
         if 'leaf_name' not in fieldnames:
-            raise ValueError('--species_map_tsv must contain a "leaf_name" column.')
+            raise ValueError('--species-map-tsv must contain a "leaf_name" column.')
         if ('species_label' not in fieldnames) and ('taxonomy_query' not in fieldnames):
-            raise ValueError('--species_map_tsv must contain "species_label" and/or "taxonomy_query" columns.')
+            raise ValueError('--species-map-tsv must contain "species_label" and/or "taxonomy_query" columns.')
         overrides = dict()
         for row in reader:
-            leaf_name = str(row.get('leaf_name', '')).strip()
-            if leaf_name == '':
-                raise ValueError('--species_map_tsv contains an empty "leaf_name" value.')
+            raw_leaf_name = row.get('leaf_name')
+            leaf_name = '' if raw_leaf_name is None else str(raw_leaf_name)
+            if leaf_name.strip() == '':
+                raise ValueError('--species-map-tsv contains an empty "leaf_name" value.')
             if leaf_name in overrides:
-                raise ValueError('Duplicate "leaf_name" entries are not supported in --species_map_tsv: {}'.format(leaf_name))
+                raise ValueError('Duplicate "leaf_name" entries are not supported in --species-map-tsv: {}'.format(leaf_name))
             species_label = _normalize_species_label(row.get('species_label'))
             taxonomy_query = _normalize_taxonomy_query(row.get('taxonomy_query'))
             if (species_label is None) and (taxonomy_query is None):
                 raise ValueError(
-                    '--species_map_tsv row for "{}" must define "species_label" and/or "taxonomy_query".'.format(
+                    '--species-map-tsv row for "{}" must define "species_label" and/or "taxonomy_query".'.format(
                         leaf_name
                     )
                 )
@@ -143,6 +146,9 @@ def read_species_map_tsv(species_map_tsv):
                 species_label=species_label,
                 taxonomy_query=taxonomy_query,
             )
+    finally:
+        if handle is not sys.stdin:
+            handle.close()
     return overrides
 
 
@@ -151,7 +157,7 @@ class SpeciesParser:
         self.preset = str(preset or DEFAULT_SPECIES_PARSER).strip().lower()
         if self.preset not in SUPPORTED_SPECIES_PARSERS:
             raise ValueError(
-                '--species_parser must be one of: {}'.format(', '.join(SUPPORTED_SPECIES_PARSERS))
+                '--species-parser must be one of: {}'.format(', '.join(SUPPORTED_SPECIES_PARSERS))
             )
         self.species_regex = species_regex
         self.species_pattern = compile_species_regex(species_regex=species_regex)
@@ -221,7 +227,7 @@ class SpeciesParser:
             parsed_species = self._parse_taxonomic(label)
         else:
             raise ValueError(
-                '--species_parser must be one of: {}'.format(', '.join(SUPPORTED_SPECIES_PARSERS))
+                '--species-parser must be one of: {}'.format(', '.join(SUPPORTED_SPECIES_PARSERS))
             )
         return self._apply_overrides(label=label, parsed_species=parsed_species)
 

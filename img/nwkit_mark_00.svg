@@ -573,7 +573,7 @@
        sodipodi:role="line"
        x="13.24699"
        y="16.115761"
-       id="tspan8">nwkit mark --pattern &quot;A.*|B.*&quot; --insert_txt &quot;#1&quot;</tspan></text><text
+       id="tspan8">nwkit mark --pattern &quot;A.*|B.*&quot; --insert-text &quot;#1&quot;</tspan></text><text
      xml:space="preserve"
      style="font-size:10.6667px;line-height:1.25;font-family:Helvetica;-inkscape-font-specification:Helvetica"
      x="292.32114"
@@ -586,7 +586,7 @@
        sodipodi:role="line"
        x="292.32114"
        y="48.645844"
-       id="tspan8-5">--target_only_clade yes</tspan></text><text
+       id="tspan8-5">--target-only-clade yes</tspan></text><text
      xml:space="preserve"
      style="font-size:10.6667px;line-height:1.25;font-family:Helvetica;-inkscape-font-specification:Helvetica"
      x="434.24625"
@@ -599,7 +599,7 @@
        sodipodi:role="line"
        x="434.24625"
        y="48.645844"
-       id="tspan8-5-52">--target_only_clade no</tspan></text><text
+       id="tspan8-5-52">--target-only-clade no</tspan></text><text
      xml:space="preserve"
      style="font-size:10.6667px;line-height:1.25;font-family:Helvetica;-inkscape-font-specification:Helvetica"
      x="599.45789"
@@ -621,7 +621,7 @@
        sodipodi:role="line"
        x="13.24699"
        y="48.375008"
-       id="tspan8-5-5">--target_only_clade yes</tspan></text><text
+       id="tspan8-5-5">--target-only-clade yes</tspan></text><text
      xml:space="preserve"
      style="font-size:10.6667px;line-height:1.25;font-family:Helvetica;-inkscape-font-specification:Helvetica"
      x="155.17209"
@@ -634,7 +634,7 @@
        sodipodi:role="line"
        x="155.17209"
        y="48.375008"
-       id="tspan8-5-5-0">--target_only_clade no</tspan></text><text
+       id="tspan8-5-5-0">--target-only-clade no</tspan></text><text
      xml:space="preserve"
      id="text8"
      style="font-size:10.6667px;line-height:1.25;font-family:Helvetica;-inkscape-font-specification:Helvetica;white-space:pre;shape-inside:url(#rect8);display:inline" /></svg>

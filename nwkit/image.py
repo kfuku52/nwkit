@@ -28,7 +28,7 @@ from nwkit import __version__
 from nwkit.species_parser import DEFAULT_SPECIES_REGEX
 from nwkit.util import (
     acquire_exclusive_lock,
-    extract_species_label,
+    extract_taxonomy_query,
     get_ete_ncbitaxa,
     read_tree,
     resolve_download_dir,
@@ -326,38 +326,43 @@ def parse_sources(style, source_arg):
 
 
 def read_name_tsv(path):
-    with open(path, newline='') as handle:
+    handle = sys.stdin if path == '-' else open(path, newline='')
+    try:
         reader = csv.DictReader(handle, delimiter='\t')
         if reader.fieldnames is None:
-            raise ValueError('--name_tsv is empty.')
+            raise ValueError('--species-name-tsv is empty.')
         required = {'leaf_name', 'species_name'}
         missing = required.difference(reader.fieldnames)
         if missing:
-            raise ValueError('--name_tsv must contain "leaf_name" and "species_name" columns.')
+            raise ValueError('--species-name-tsv must contain "leaf_name" and "species_name" columns.')
         mapping = dict()
         for row in reader:
-            leaf_name = str(row.get('leaf_name', '')).strip()
+            raw_leaf_name = row.get('leaf_name')
+            leaf_name = '' if raw_leaf_name is None else str(raw_leaf_name)
             species_name = normalize_species_name(row.get('species_name'))
-            if leaf_name == '':
-                raise ValueError('--name_tsv contains an empty "leaf_name" value.')
+            if leaf_name.strip() == '':
+                raise ValueError('--species-name-tsv contains an empty "leaf_name" value.')
             if leaf_name in mapping:
-                raise ValueError('Duplicate values in the "leaf_name" column of --name_tsv are not supported.')
+                raise ValueError('Duplicate values in the "leaf_name" column of --species-name-tsv are not supported.')
             if species_name is None:
-                raise ValueError('--name_tsv contains an empty "species_name" value.')
+                raise ValueError('--species-name-tsv contains an empty "species_name" value.')
             mapping[leaf_name] = species_name
+    finally:
+        if handle is not sys.stdin:
+            handle.close()
     if len(mapping) == 0:
-        raise ValueError('--name_tsv is empty.')
+        raise ValueError('--species-name-tsv is empty.')
     return mapping
 
 
-def extract_species_mapping(tree, name_mapping=None, species_regex=DEFAULT_SPECIES_REGEX):
+def extract_species_mapping(tree, name_mapping=None, species_regex=DEFAULT_SPECIES_REGEX, args=None):
     validate_unique_named_leaves(tree, '--infile', context=' for nwkit image')
     name_mapping = name_mapping or dict()
     leaf_names = set(tree.leaf_names())
     unknown_names = set(name_mapping.keys()).difference(leaf_names)
     if unknown_names:
         raise ValueError(
-            '--name_tsv contains leaf names not found in --infile: {}'.format(
+            '--species-name-tsv contains leaf names not found in --infile: {}'.format(
                 ', '.join(sorted(unknown_names)),
             )
         )
@@ -367,15 +372,18 @@ def extract_species_mapping(tree, name_mapping=None, species_regex=DEFAULT_SPECI
     for leaf in tree.leaves():
         species_name = name_mapping.get(leaf.name)
         if species_name is None:
-            species_name = normalize_species_name(
-                extract_species_label(leaf.name, species_regex=species_regex, out_delim=' ')
-            )
+            species_name = normalize_species_name(extract_taxonomy_query(
+                leaf.name,
+                args=args,
+                species_regex=species_regex if args is None else None,
+                out_delim=' ',
+            ))
         if species_name is None:
             unmatched_rows.append({
                 'leaf_name': leaf.name,
                 'species_name': '',
                 'reason': 'unparsable leaf label',
-                'details': "Expected the 'GENUS_SPECIES[_...]' convention or a matching --name_tsv entry.",
+                'details': "Expected the configured species parser or a matching --species-name-tsv entry.",
             })
             continue
         leaf_to_species[leaf.name] = species_name
@@ -662,7 +670,7 @@ def output_extension_for_path(source_path, args, rasterized=False):
         return '.png'
     if output_format == 'jpg':
         return '.jpg'
-    raise ValueError('Unsupported --output_format: {}'.format(output_format))
+    raise ValueError('Unsupported --output-format: {}'.format(output_format))
 
 
 def estimate_background_color_from_border(rgb_image):
@@ -853,7 +861,7 @@ def trim_image(image, trim_mode, trim_shape, background_mode, Image, ImageChops)
         left = max(0, (width - side) // 2)
         top = max(0, (height - side) // 2)
         return trimmed.crop((left, top, left + side, top + side))
-    raise ValueError('Unsupported --trim_shape: {}'.format(trim_shape))
+    raise ValueError('Unsupported --trim-shape: {}'.format(trim_shape))
 
 
 def resize_image_max_edge(image, max_edge, Image):
@@ -2284,8 +2292,10 @@ def download_media(session, media_url, destination_path, cache_path=None):
 def default_output_paths(args):
     out_dir = os.path.realpath(args.out_dir)
     images_dir = os.path.join(out_dir, 'images')
-    manifest_path = os.path.realpath(args.manifest) if args.manifest else os.path.join(out_dir, 'manifest.tsv')
-    attribution_path = os.path.realpath(args.attribution) if args.attribution else os.path.join(out_dir, 'ATTRIBUTION.md')
+    manifest_out = getattr(args, 'manifest_out', None) or getattr(args, 'manifest', None)
+    attribution_out = getattr(args, 'attribution_out', None) or getattr(args, 'attribution', None)
+    manifest_path = os.path.realpath(manifest_out) if manifest_out else os.path.join(out_dir, 'manifest.tsv')
+    attribution_path = os.path.realpath(attribution_out) if attribution_out else os.path.join(out_dir, 'ATTRIBUTION.md')
     unmatched_path = os.path.join(out_dir, 'unmatched.tsv')
     return out_dir, images_dir, manifest_path, attribution_path, unmatched_path
 
@@ -2329,14 +2339,27 @@ def write_attribution_markdown(path, selected_assets):
 
 def validate_args(args):
     if args.out_dir in (None, ''):
-        raise ValueError('--out_dir must be specified.')
+        raise ValueError('--out-dir must be specified.')
+    auxiliary_outputs = {
+        '--manifest-out': getattr(args, 'manifest_out', None) or getattr(args, 'manifest', None),
+        '--attribution-out': getattr(args, 'attribution_out', None) or getattr(args, 'attribution', None),
+    }
+    stdout_auxiliary_outputs = [
+        option_name for option_name, path in auxiliary_outputs.items() if path == '-'
+    ]
+    if stdout_auxiliary_outputs:
+        raise ValueError(
+            'Auxiliary outputs require file paths, not STDOUT: {}'.format(
+                ', '.join(stdout_auxiliary_outputs)
+            )
+        )
     if int(args.max_per_species) <= 0:
-        raise ValueError('--max_per_species must be > 0.')
+        raise ValueError('--max-per-species must be > 0.')
     max_edge = getattr(args, 'max_edge', None)
     if max_edge not in (None, 0) and int(max_edge) <= 0:
-        raise ValueError('--max_edge must be > 0 when specified.')
+        raise ValueError('--max-edge must be > 0 when specified.')
     if (getattr(args, 'output_format', 'original') == 'jpg') and (getattr(args, 'background', 'white') == 'transparent'):
-        raise ValueError('--background transparent is incompatible with --output_format jpg.')
+        raise ValueError('--background transparent is incompatible with --output-format jpg.')
 
 
 def _close_provider_bundle(session, ncbi):
@@ -2664,12 +2687,13 @@ def image_main(args):
     ensure_directory(images_dir)
     ensure_directory(shared_cache_dir)
 
-    name_mapping = read_name_tsv(args.name_tsv) if args.name_tsv else None
+    species_name_tsv = getattr(args, 'species_name_tsv', None) or getattr(args, 'name_tsv', None)
+    name_mapping = read_name_tsv(species_name_tsv) if species_name_tsv else None
     tree = read_tree(args.infile, args.format, args.quoted_node_names, quiet=True)
     leaf_to_species, unmatched_rows = extract_species_mapping(
         tree,
         name_mapping=name_mapping,
-        species_regex=args.species_regex,
+        args=args,
     )
     leaf_names_by_species = defaultdict(list)
     for leaf_name, species_name in leaf_to_species.items():
@@ -2754,4 +2778,4 @@ def image_main(args):
     write_attribution_markdown(attribution_path, selected_assets)
 
     if unmatched_rows and args.fail_on_missing:
-        raise SystemExit(1)
+        raise ValueError('{} tree tip(s) could not be resolved to an image.'.format(len(unmatched_rows)))

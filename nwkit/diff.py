@@ -7,8 +7,8 @@ from nwkit.clade_mapping import (
     node_projected_split,
     projected_root_split,
 )
-from nwkit.transfer import _get_property, _node_class, parse_property_specs
-from nwkit.util import get_target_nodes, read_tree, validate_unique_named_leaves
+from nwkit.transfer import _get_property, parse_property_specs
+from nwkit.util import assign_branch_ids, get_node_class, get_target_nodes, read_tree, validate_unique_named_leaves
 
 
 DIFF_COLUMNS = (
@@ -17,8 +17,8 @@ DIFF_COLUMNS = (
     'status',
     'reason',
     'transferable',
-    'target_node_id',
-    'source_node_id',
+    'target_branch_id',
+    'source_branch_id',
     'shared_taxa_or_split',
     'target_taxa',
     'source_taxa',
@@ -90,8 +90,8 @@ def _row_for_nodes(status, reason, comparison, target_node, source_node,
         'status': status,
         'reason': reason,
         'transferable': status == 'exact_match',
-        'target_node_id': target_ids.get(id(target_node), '') if target_node is not None else '',
-        'source_node_id': source_ids.get(id(source_node), '') if source_node is not None else '',
+        'target_branch_id': target_ids.get(id(target_node), '') if target_node is not None else '',
+        'source_branch_id': source_ids.get(id(source_node), '') if source_node is not None else '',
         'shared_taxa_or_split': shared_key,
         'target_taxa': _format_taxa(target_taxa),
         'source_taxa': _format_taxa(source_taxa),
@@ -126,7 +126,7 @@ def _summary_row(comparison, status, reason, shared_key='', target_taxa='', sour
 def _selected(node, target_class):
     if target_class == 'all':
         return True
-    return _node_class(node) == target_class
+    return get_node_class(node) == target_class
 
 
 def _rooted_rows(target, source, mapping, target_class, properties, target_ids, source_ids):
@@ -279,8 +279,8 @@ def compare_trees(target, source, taxon_mode='exact', comparison='rooted',
     validate_unique_named_leaves(target, option_name='--infile', context=" for 'diff'")
     validate_unique_named_leaves(source, option_name='--infile2', context=" for 'diff'")
     mapping = build_clade_mapping(target=target, source=source, taxon_mode=taxon_mode)
-    target_ids = {id(node): index for index, node in enumerate(target.traverse(), start=1)}
-    source_ids = {id(node): index for index, node in enumerate(source.traverse(), start=1)}
+    target_ids = {id(node): branch_id for node, branch_id in assign_branch_ids(target).items()}
+    source_ids = {id(node): branch_id for node, branch_id in assign_branch_ids(source).items()}
     rows = [
         _summary_row(
             comparison='leaf_set',

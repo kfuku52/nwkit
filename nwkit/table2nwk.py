@@ -3,16 +3,16 @@ import sys
 import pandas as pd
 from ete4 import Tree
 
-from nwkit.util import MISSING_SUPPORT_VALUE, TREE_FORMAT_PROP, write_tree
+from nwkit.util import MISSING_SUPPORT_VALUE, TREE_FORMAT_PROP, is_missing_table_value, write_tree
 
 
 def _read_table(path):
     if path == '-':
-        return pd.read_csv(sys.stdin, sep='\t', dtype=object)
-    return pd.read_csv(path, sep='\t', dtype=object)
+        return pd.read_csv(sys.stdin, sep='\t', dtype=object, keep_default_na=False)
+    return pd.read_csv(path, sep='\t', dtype=object, keep_default_na=False)
 
 
-def _is_missing(value):
+def _is_empty(value):
     if pd.isna(value):
         return True
     return str(value).strip() == ''
@@ -26,7 +26,7 @@ def _parse_int(value, column_name):
 
 
 def _parse_optional_float(value, column_name):
-    if _is_missing(value):
+    if is_missing_table_value(value):
         return None
     try:
         return float(str(value).strip())
@@ -35,7 +35,7 @@ def _parse_optional_float(value, column_name):
 
 
 def _normalize_name(value):
-    if _is_missing(value):
+    if _is_empty(value):
         return ''
     return str(value)
 
@@ -87,13 +87,13 @@ def table2nwk_main(args):
     seen_branch_ids = set()
     root_ids = list()
     for row_idx, (_, row) in enumerate(table.iterrows()):
-        if _is_missing(row['branch_id']):
+        if _is_empty(row['branch_id']):
             raise ValueError("Column 'branch_id' must not contain missing values.")
         branch_id = _parse_int(row['branch_id'], 'branch_id')
         if branch_id in seen_branch_ids:
             raise ValueError("Duplicated 'branch_id' values are not supported.")
         seen_branch_ids.add(branch_id)
-        if _is_missing(row['parent']):
+        if _is_empty(row['parent']):
             parent_id = -1
         else:
             parent_id = _parse_int(row['parent'], 'parent')

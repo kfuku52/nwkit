@@ -63,3 +63,28 @@ def test_annotate_unmatched_error(tmp_nwk, tmp_path):
     )
     with pytest.raises(ValueError, match='tips differ'):
         annotate_main(args)
+
+
+def test_annotate_unmatched_report_keeps_node_class_vocabulary(tmp_nwk, tmp_path):
+    tree_path = tmp_nwk('(A:1,B:1);', 'tree.nwk')
+    table_path = tmp_path / 'traits.tsv'
+    table_path.write_text('leaf_name\tstate\nA\tx\nZ\ty\n')
+    report_path = tmp_path / 'report.tsv'
+    annotate_main(make_args(
+        infile=tree_path,
+        outfile=str(tmp_path / 'annotated.nwk'),
+        format='1',
+        outformat='1',
+        table=str(table_path),
+        columns='state',
+        property_map=[],
+        aggregate=[],
+        missing_values=',NA',
+        unmatched='ignore',
+        report=str(report_path),
+    ))
+
+    report = pd.read_csv(report_path, sep='\t', keep_default_na=False)
+    assert set(report['node_class']) <= {'', 'root', 'intnode', 'leaf'}
+    table_only = report.loc[report['reason'] == 'table_row_absent_from_tree'].iloc[0]
+    assert table_only['node_class'] == ''

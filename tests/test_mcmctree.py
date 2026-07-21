@@ -32,8 +32,8 @@ def make_mcmctree_args(**kwargs):
         'right_species': None,
         'lower_bound': None,
         'upper_bound': None,
-        'lower_tailProb': '0.025',
-        'upper_tailProb': '0.025',
+        'lower_tail_prob': '0.025',
+        'upper_tail_prob': '0.025',
         'lower_offset': '0.1',
         'lower_scale': '1',
         'add_header': False,
@@ -193,7 +193,7 @@ class TestMcmctreeMain:
         assert '@15.0' in content
 
     def test_add_header(self, tmp_nwk, tmp_outfile):
-        """Test mcmctree_main with --add_header."""
+        """Test mcmctree_main with --add-header."""
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
         args = make_mcmctree_args(
             infile=path, outfile=tmp_outfile,
@@ -439,7 +439,7 @@ class TestMcmctreeMain:
             infile=path, outfile=tmp_outfile,
             left_species='tca', right_species='sor',
             lower_bound='152.3', upper_bound='236.2',
-            lower_tailProb='1e-300', upper_tailProb='1e-300',
+            lower_tail_prob='1e-300', upper_tail_prob='1e-300',
         )
         mcmctree_main(args)
         with open(tmp_outfile) as f:
@@ -468,7 +468,7 @@ class TestMcmctreeMain:
                 infile=path, outfile=intermediate,
                 left_species='tca', right_species='sor',
                 lower_bound='152.3', upper_bound='236.2',
-                lower_tailProb='1e-300', upper_tailProb='1e-300',
+                lower_tail_prob='1e-300', upper_tail_prob='1e-300',
             )
             mcmctree_main(args1)
 
@@ -508,7 +508,7 @@ class TestMcmctreeMain:
             lower_bound='10.0', upper_bound='20.0',
             timetree='no',
         )
-        with pytest.raises(ValueError, match='left_species'):
+        with pytest.raises(ValueError, match='left-species'):
             mcmctree_main(args)
 
     def test_timetree_no_requires_at_least_one_bound(self, tmp_nwk, tmp_outfile):
@@ -519,7 +519,7 @@ class TestMcmctreeMain:
             lower_bound=None, upper_bound=None,
             timetree='no',
         )
-        with pytest.raises(ValueError, match='lower_bound'):
+        with pytest.raises(ValueError, match='lower-bound'):
             mcmctree_main(args)
 
     @pytest.mark.parametrize('min_clade_prop', [-0.1, 1.1])
@@ -531,7 +531,7 @@ class TestMcmctreeMain:
             lower_bound='10.0', upper_bound='20.0',
             min_clade_prop=min_clade_prop,
         )
-        with pytest.raises(ValueError, match='min_clade_prop'):
+        with pytest.raises(ValueError, match='min-clade-prop'):
             mcmctree_main(args)
 
     def test_timetree_requires_named_leaves(self, tmp_nwk, tmp_outfile):

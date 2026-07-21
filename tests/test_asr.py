@@ -44,9 +44,9 @@ class TestAsrMain:
         )
         asr_main(args)
         table = pd.read_csv(outfile, sep='\t')
-        assert {'branch_id', 'parent', 'node_type', 'name', 'map_state', 'map_probability', 'p_x', 'p_y'}.issubset(table.columns)
+        assert {'branch_id', 'parent', 'node_class', 'name', 'map_state', 'map_probability', 'p_x', 'p_y'}.issubset(table.columns)
         assert len(table.index) == 4
-        assert set(table['node_type']) == {'root', 'intnode', 'tip'}
+        assert set(table['node_class']) == {'root', 'intnode', 'leaf'}
         for _, row in table.iterrows():
             assert abs((row['p_x'] + row['p_y']) - 1.0) < 1e-9
             assert row['map_state'] in ['x', 'y']
@@ -85,7 +85,7 @@ class TestAsrMain:
         assert list(table.columns) == [
             'branch_id',
             'parent',
-            'node_type',
+            'node_class',
             'name',
             'observed_state',
             'is_imputed',
@@ -124,7 +124,7 @@ class TestAsrMain:
         asr_main(args)
         table = pd.read_csv(outfile, sep='\t')
         assert len(table.index) == 5
-        tip_rows = table.loc[table['node_type'] == 'tip'].set_index('name')
+        tip_rows = table.loc[table['node_class'] == 'leaf'].set_index('name')
         assert set(tip_rows.index) == {'A', 'B', 'C'}
         assert tip_rows.loc['A', 'observed_state'] == 'red'
         assert bool(tip_rows.loc['A', 'is_imputed']) is False

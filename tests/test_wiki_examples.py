@@ -46,7 +46,7 @@ class TestWikiExamples:
         )
         asr_main(args)
         table = pd.read_csv(outfile, sep='\t')
-        assert {'branch_id', 'node_type', 'name', 'state', 'probability'}.issubset(table.columns)
+        assert {'branch_id', 'node_class', 'name', 'state', 'probability'}.issubset(table.columns)
         assert len(table.index) == 4
         assert table.loc[table['name'] == 'D', 'state'].iloc[0] == 'y'
 
@@ -86,17 +86,17 @@ class TestWikiExamples:
         )
         cladefreq_main(args)
         table = pd.read_csv(outfile, sep='\t')
-        table = table[['leaf_set', 'num_leaves', 'weight_sum', 'frequency']]
+        table = table[['descendant_taxa', 'num_taxa', 'weight_sum', 'frequency']]
         expected = {
             'A,B': (2, 2.0, 200.0 / 3.0),
             'C,D': (2, 2.0, 200.0 / 3.0),
             'A,C': (2, 1.0, 100.0 / 3.0),
             'B,D': (2, 1.0, 100.0 / 3.0),
         }
-        assert set(table['leaf_set']) == set(expected.keys())
+        assert set(table['descendant_taxa']) == set(expected.keys())
         for _, row in table.iterrows():
-            num_leaves, weight_sum, frequency = expected[row['leaf_set']]
-            assert int(row['num_leaves']) == num_leaves
+            num_taxa, weight_sum, frequency = expected[row['descendant_taxa']]
+            assert int(row['num_taxa']) == num_taxa
             assert abs(float(row['weight_sum']) - weight_sum) < 1e-9
             assert abs(float(row['frequency']) - frequency) < 1e-9
 
@@ -147,11 +147,11 @@ class TestWikiExamples:
         by_group = table.set_index('group')
         assert by_group.loc['x', 'status'] == 'monophyletic'
         assert bool(by_group.loc['x', 'is_monophyletic']) is True
-        assert by_group.loc['x', 'target_leaves'] == 'A,B'
+        assert by_group.loc['x', 'target_taxa'] == 'A,B'
         assert by_group.loc['y', 'status'] == 'polyphyletic'
         assert bool(by_group.loc['y', 'is_monophyletic']) is False
-        assert by_group.loc['y', 'target_leaves'] == 'C,E'
-        assert by_group.loc['y', 'intruder_leaves'] == 'A,B,D'
+        assert by_group.loc['y', 'target_taxa'] == 'C,E'
+        assert by_group.loc['y', 'intruder_taxa'] == 'A,B,D'
         assert by_group.loc['z', 'status'] == 'monophyletic'
 
     def test_rename_example(self, tmp_path):

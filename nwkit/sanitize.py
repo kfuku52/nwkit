@@ -20,6 +20,6 @@ def sanitize_main(args):
     elif (args.name_quote=='double'):
         quote_char = '\"'
     else:
-        raise ValueError("Unsupported '--name_quote': {}. Choose from none/single/double.".format(args.name_quote))
+        raise ValueError("Unsupported '--name-quote': {}. Choose from none/single/double.".format(args.name_quote))
     tree = add_quote(tree, quote_char)
     write_tree(tree, args, format=args.outformat)

@@ -187,20 +187,27 @@ def _constraint_from_timetree_response(attempt, response_record, ncbi, subtree_s
         constraint = 'B(' + ', '.join([
             timetree_dict['precomputed_ci_low'],
             timetree_dict['precomputed_ci_high'],
-            args.lower_tailProb,
-            args.upper_tailProb,
+            _tail_probability(args, 'lower'),
+            _tail_probability(args, 'upper'),
         ]) + ')'
     else:
         return None
     return '\'' + constraint + '\''
 
+
+def _tail_probability(args, side):
+    value = getattr(args, '{}_tail_prob'.format(side), None)
+    if value is None:
+        value = getattr(args, '{}_tailProb'.format(side), None)
+    return '0.025' if value is None else value
+
 def add_common_anc_constraint(tree, args):
     if (args.left_species is None) or (args.right_species is None):
-        raise ValueError("'--left_species' and '--right_species' are required when '--timetree no'.")
+        raise ValueError("'--left-species' and '--right-species' are required when '--timetree no'.")
     if args.left_species == args.right_species:
-        raise ValueError("'--left_species' and '--right_species' must be different species.")
+        raise ValueError("'--left-species' and '--right-species' must be different species.")
     if (args.lower_bound is None) and (args.upper_bound is None):
-        raise ValueError("Specify at least one of '--lower_bound' or '--upper_bound' when '--timetree no'.")
+        raise ValueError("Specify at least one of '--lower-bound' or '--upper-bound' when '--timetree no'.")
     leaf_name_set = set(tree.leaf_names())
     missing_species = [sp for sp in [args.left_species, args.right_species] if sp not in leaf_name_set]
     if missing_species:
@@ -215,13 +222,24 @@ def add_common_anc_constraint(tree, args):
     if (args.lower_bound is not None) and (args.upper_bound is not None) and is_point_bound:
         constraint = '@' + args.lower_bound
     elif (args.lower_bound is not None) and (args.upper_bound is not None):
-        constraint = 'B(' + ', '.join(
-            [args.lower_bound, args.upper_bound, args.lower_tailProb, args.upper_tailProb]) + ')'
+        constraint = 'B(' + ', '.join([
+            args.lower_bound,
+            args.upper_bound,
+            _tail_probability(args, 'lower'),
+            _tail_probability(args, 'upper'),
+        ]) + ')'
     elif (args.lower_bound is not None):
-        constraint = 'L(' + ', '.join(
-            [args.lower_bound, args.lower_offset, args.lower_scale, args.lower_tailProb]) + ')'
+        constraint = 'L(' + ', '.join([
+            args.lower_bound,
+            args.lower_offset,
+            args.lower_scale,
+            _tail_probability(args, 'lower'),
+        ]) + ')'
     elif (args.upper_bound is not None):
-        constraint = 'U(' + ', '.join([args.upper_bound, args.upper_tailProb]) + ')'
+        constraint = 'U(' + ', '.join([
+            args.upper_bound,
+            _tail_probability(args, 'upper'),
+        ]) + ')'
     constraint = '\'' + constraint + '\''
     common_anc.name = constraint
     return tree
@@ -505,7 +523,7 @@ def mcmctree_main(args):
     if len(tree.get_children()) != 2:
         raise ValueError('The input tree should be rooted.')
     if (args.min_clade_prop < 0) or (args.min_clade_prop > 1):
-        raise ValueError("'--min_clade_prop' must be between 0 and 1.")
+        raise ValueError("'--min-clade-prop' must be between 0 and 1.")
     for node in tree.traverse():
         if not node.is_leaf:
             if any([kw in (node.name or '') for kw in ['@', 'B(', 'L(', 'U(']]):
@@ -514,9 +532,9 @@ def mcmctree_main(args):
                 node.name = 'NoName'
     if (args.timetree=='no'):
         if (args.left_species is None) or (args.right_species is None):
-            raise ValueError("'--left_species' and '--right_species' are required when '--timetree no'.")
+            raise ValueError("'--left-species' and '--right-species' are required when '--timetree no'.")
         if (args.lower_bound is None) and (args.upper_bound is None):
-            raise ValueError("Specify at least one of '--lower_bound' or '--upper_bound' when '--timetree no'.")
+            raise ValueError("Specify at least one of '--lower-bound' or '--upper-bound' when '--timetree no'.")
         tree = add_common_anc_constraint(tree, args)
     elif (args.timetree=='point'):
         tree = add_timetree_constraint(tree, args)

@@ -3,8 +3,8 @@ import sys
 
 from nwkit.util import (
     get_subtree_leaf_name_sets,
+    read_tip_table,
     read_tree,
-    read_tsv_preserving_leaf_name,
     validate_unique_named_leaves,
     write_tree,
 )
@@ -14,41 +14,17 @@ def read_trait(args, tree):
         sys.stderr.write("'--trait' not specified. Sampling leaves at random.\n")
         trait_df = pd.DataFrame({'leaf_name': list(tree.leaf_names())})
         return trait_df
-    trait_df = read_tsv_preserving_leaf_name(args.trait)
-    if 'leaf_name' not in trait_df.columns:
-        raise ValueError("Column 'leaf_name' is required in '--trait'.")
-    trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
-    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
-        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
-    unknown_leaf_names = sorted(
-        leaf_name
-        for leaf_name in set(trait_df['leaf_name'].tolist())
-        if leaf_name not in leaf_name_set
+    trait_df, _, missing_leaf_names = read_tip_table(
+        args.trait,
+        option_name='--trait',
+        tree_leaf_names=leaf_names_list,
+        unmatched=getattr(args, 'unmatched', 'warn'),
+        missing_values=getattr(args, 'missing_values', None),
     )
-    if unknown_leaf_names:
-        raise ValueError(
-            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
-                ', '.join(unknown_leaf_names)
-            )
-        )
-    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)]
-    duplicated_leaf_names = trait_df.loc[
-        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
-    ].unique().tolist()
-    duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
-    if duplicated_leaf_names:
-        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
-    observed_leaf_names = set(trait_df['leaf_name'].tolist())
-    missing_leaf_names = [leaf_name for leaf_name in leaf_names_list if leaf_name not in observed_leaf_names]
+    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)].copy()
     if len(missing_leaf_names) > 0:
-        log_txt = ''.join(
-            f"'{leaf_name}' not found in '{args.trait}'. Treating its trait information as missing.\n"
-            for leaf_name in missing_leaf_names
-        )
-        sys.stderr.write(log_txt)
         trait_df = pd.concat(
             [trait_df, pd.DataFrame({'leaf_name': missing_leaf_names})],
             ignore_index=True,
@@ -57,7 +33,7 @@ def read_trait(args, tree):
 
 def mark_traits_to_nodes(tree, trait_df, args):
     if (args.group_by is not None) and (args.group_by not in trait_df.columns):
-        raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(args.group_by))
+        raise ValueError("Column '{}' specified by '--group-by' was not found in '--trait'.".format(args.group_by))
     if args.group_by is None:
         leafname2trait = {leaf_name: None for leaf_name in trait_df['leaf_name']}
     else:
@@ -113,7 +89,7 @@ def sample_from_groups(trait_df, args):
     if 'group' not in trait_df.columns:
         raise ValueError("Column 'group' not found. Run group assignment before sampling.")
     if (args.filter_by is not None) and (args.filter_by not in trait_df.columns):
-        raise ValueError("Column '{}' specified by '--filter_by' was not found in '--trait'.".format(args.filter_by))
+        raise ValueError("Column '{}' specified by '--filter-by' was not found in '--trait'.".format(args.filter_by))
     shuffled_df = trait_df.sample(frac=1, random_state=getattr(args, 'seed', None))
     if args.prioritize_non_missing and args.group_by is not None:
         if args.filter_by is None:
@@ -132,7 +108,7 @@ def sample_from_groups(trait_df, args):
                     kind='mergesort',
                 )
             else:
-                raise ValueError(f"Invalid value for '--filter_mode': {args.filter_mode}")
+                raise ValueError(f"Invalid value for '--filter-mode': {args.filter_mode}")
     else:
         if args.filter_by is None:
             sorted_df = shuffled_df
@@ -150,7 +126,7 @@ def sample_from_groups(trait_df, args):
                     kind='mergesort',
                 )
             else:
-                raise ValueError(f"Invalid value for '--filter_mode': {args.filter_mode}")
+                raise ValueError(f"Invalid value for '--filter-mode': {args.filter_mode}")
     sampled_df = sorted_df.groupby('group', group_keys=False).head(args.retain_per_clade)
     if 'group' in sampled_df.columns:
         sampled_df = sampled_df.drop(columns=['group'])
@@ -185,9 +161,14 @@ def add_contrastive_clade_ids(trait_df, marked_tree):
 
 def skim_main(args):
     if args.retain_per_clade < 1:
-        raise ValueError("'--retain_per_clade' must be a positive integer.")
-    if args.output_groupfile and args.outfile == '-':
-        raise ValueError("'--output_groupfile yes' requires '--outfile' to be a file path, not '-'.")
+        raise ValueError("'--retain-per-clade' must be a positive integer.")
+    group_table_prefix = getattr(args, 'group_table_prefix', None)
+    if getattr(args, 'output_groupfile', False) and group_table_prefix in ['', None]:
+        if args.outfile == '-':
+            raise ValueError("Legacy '--output-groupfile yes' requires '--outfile' to be a file path, not '-'.")
+        group_table_prefix = args.outfile.removesuffix('.nwk')
+    if group_table_prefix == '-':
+        raise ValueError("'--group-table-prefix' must be a file path, not '-'.")
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'skim'")
     trait_df = read_trait(args, tree)
@@ -201,9 +182,8 @@ def skim_main(args):
         sampled_trait_df = sample_from_groups(trait_df, args)
     if sampled_trait_df.empty:
         raise ValueError('No leaves were selected for output. Adjust trait/grouping/sampling options.')
-    if args.output_groupfile:
-        filename = args.outfile.removesuffix('.nwk')
-        trait_df.sort_values('group').to_csv(f'{filename}.all.tsv', sep='\t', index=False)
-        sampled_trait_df.sort_values('group').to_csv(f'{filename}.sampled.tsv', sep='\t', index=False)
+    if group_table_prefix not in ['', None]:
+        trait_df.sort_values('group').to_csv(f'{group_table_prefix}.all.tsv', sep='\t', index=False)
+        sampled_trait_df.sort_values('group').to_csv(f'{group_table_prefix}.sampled.tsv', sep='\t', index=False)
     tree.prune(sampled_trait_df['leaf_name'].tolist(), preserve_branch_length=True)
     write_tree(tree, args, format=args.outformat)

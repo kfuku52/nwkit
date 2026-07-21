@@ -188,9 +188,10 @@ class TestDrawMain:
             species_overlap_node_plot='no',
             trait=str(trait_path),
             group_by='group',
+            unmatched='error',
         )
 
-        with pytest.raises(ValueError, match='were not found in the input tree'):
+        with pytest.raises(ValueError, match='--trait and tree tips differ'):
             draw_main(args)
 
     def test_draw_accepts_numeric_leaf_names_in_trait_table(self, tmp_nwk, tmp_path):

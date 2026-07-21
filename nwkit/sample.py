@@ -4,7 +4,7 @@ import sys
 
 import pandas as pd
 
-from nwkit.util import read_tree, read_tsv_preserving_leaf_name, validate_unique_named_leaves, write_tree
+from nwkit.util import read_tip_table, read_tree, validate_unique_named_leaves, write_tree
 
 
 NUMERIC_OPERATORS = {'ge', 'gt', 'le', 'lt'}
@@ -15,41 +15,17 @@ RANK_DIRECTIONS = {'asc', 'desc'}
 def read_sample_trait(args, tree):
     if args.trait is None:
         return pd.DataFrame({'leaf_name': list(tree.leaf_names())})
-    trait_df = read_tsv_preserving_leaf_name(args.trait)
-    if 'leaf_name' not in trait_df.columns:
-        raise ValueError("Column 'leaf_name' is required in '--trait'.")
-    trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
-    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
-        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
-    unknown_leaf_names = sorted(
-        leaf_name
-        for leaf_name in set(trait_df['leaf_name'].tolist())
-        if leaf_name not in leaf_name_set
+    trait_df, _, missing_leaf_names = read_tip_table(
+        args.trait,
+        option_name='--trait',
+        tree_leaf_names=leaf_names_list,
+        unmatched=getattr(args, 'unmatched', 'warn'),
+        missing_values=getattr(args, 'missing_values', None),
     )
-    if unknown_leaf_names:
-        raise ValueError(
-            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
-                ', '.join(unknown_leaf_names)
-            )
-        )
-    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)]
-    duplicated_leaf_names = trait_df.loc[
-        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
-    ].unique().tolist()
-    duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
-    if duplicated_leaf_names:
-        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
-    observed_leaf_names = set(trait_df['leaf_name'].tolist())
-    missing_leaf_names = [leaf_name for leaf_name in leaf_names_list if leaf_name not in observed_leaf_names]
+    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)].copy()
     if len(missing_leaf_names) > 0:
-        log_txt = ''.join(
-            f"'{leaf_name}' not found in '{args.trait}'. Treating its metadata as missing.\n"
-            for leaf_name in missing_leaf_names
-        )
-        sys.stderr.write(log_txt)
         trait_df = pd.concat(
             [trait_df, pd.DataFrame({'leaf_name': missing_leaf_names})],
             ignore_index=True,
@@ -324,8 +300,11 @@ def _build_output_table(selected_rows, candidate_df):
 def sample_main(args):
     if args.n < 1:
         raise ValueError("'--n' must be a positive integer.")
-    if args.output_table in ['', '-']:
-        raise ValueError("'--output-table' must be a file path, not '-' or an empty string.")
+    report_path = getattr(args, 'report', None)
+    if report_path is None:
+        report_path = getattr(args, 'output_table', None)
+    if report_path in ['', '-']:
+        raise ValueError("'--report' must be a file path, not '-' or an empty string.")
 
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'sample'")
@@ -361,12 +340,12 @@ def sample_main(args):
         raise ValueError('No leaves were selected for output.')
     sys.stderr.write(''.join('Selected leaf: {}\n'.format(name) for name in selected_names))
 
-    if args.output_table is not None:
+    if report_path is not None:
         output_df = _build_output_table(selected_rows, ranked_df)
-        output_table_dir = os.path.dirname(os.path.realpath(args.output_table))
+        output_table_dir = os.path.dirname(os.path.realpath(report_path))
         if output_table_dir:
             os.makedirs(output_table_dir, exist_ok=True)
-        output_df.to_csv(args.output_table, sep='\t', index=False)
+        output_df.to_csv(report_path, sep='\t', index=False)
 
     tree.prune(selected_names, preserve_branch_length=True)
     write_tree(tree, args, format=args.outformat)

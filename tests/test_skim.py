@@ -49,8 +49,8 @@ class TestReadTrait:
         pd.DataFrame(
             {'leaf_name': ['A', 'B', 'D'], 'trait': ['x', 'x', 'z']}
         ).to_csv(trait_path, sep='\t', index=False)
-        args = make_skim_args(trait=str(trait_path))
-        with pytest.raises(ValueError, match='were not found in the input tree'):
+        args = make_skim_args(trait=str(trait_path), unmatched='error')
+        with pytest.raises(ValueError, match='--trait and tree tips differ'):
             read_trait(args, tree)
 
     def test_duplicate_leaf_names_raise(self, tmp_path):
@@ -156,7 +156,7 @@ class TestGrouping:
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
         args = make_skim_args(group_by='trait')
         trait_df = pd.DataFrame({'leaf_name': ['A', 'B', 'C', 'D']})
-        with pytest.raises(ValueError, match='group_by'):
+        with pytest.raises(ValueError, match='group-by'):
             mark_traits_to_nodes(tree, trait_df, args)
 
     def test_mark_traits_to_nodes_handles_unnamed_leaves_without_keyerror(self):
@@ -208,7 +208,7 @@ class TestSampling:
             }
         )
         args = make_skim_args(filter_by='score')
-        with pytest.raises(ValueError, match='filter_by'):
+        with pytest.raises(ValueError, match='filter-by'):
             sample_from_groups(trait_df, args)
 
 
@@ -262,7 +262,7 @@ class TestSkimMainValidation:
             only_contrastive_clades=False,
             output_groupfile=False,
         )
-        with pytest.raises(ValueError, match='retain_per_clade'):
+        with pytest.raises(ValueError, match='retain-per-clade'):
             skim_main(args)
 
     def test_output_groupfile_requires_file_out(self, tmp_path):
@@ -287,7 +287,7 @@ class TestSkimMainValidation:
             only_contrastive_clades=False,
             output_groupfile=True,
         )
-        with pytest.raises(ValueError, match='output_groupfile'):
+        with pytest.raises(ValueError, match='output-groupfile'):
             skim_main(args)
 
     def test_empty_leaf_labels_raise_clear_error(self, tmp_path):

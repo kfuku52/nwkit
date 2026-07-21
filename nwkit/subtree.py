@@ -22,7 +22,7 @@ def subtree_main(args):
         seed_leaf_names = [args.left_leaf, args.right_leaf]
         seed_leaf_names = [name.strip() for name in seed_leaf_names if name is not None and name.strip() != '']
     if len(seed_leaf_names) == 0:
-        raise ValueError("Specify either '--leaves' or '--left_leaf/--right_leaf'.")
+        raise ValueError("Specify either '--leaves' or '--left-leaf/--right-leaf'.")
     for leaf_name in seed_leaf_names:
         if leaf_name not in leaf_name_set:
             raise Exception('Specified leaf not found in the tree: {}'.format(leaf_name))

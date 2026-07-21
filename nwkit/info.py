@@ -1,4 +1,5 @@
 import os
+from contextlib import nullcontext
 
 from nwkit.species_parser import DEFAULT_SPECIES_PARSER, DEFAULT_SPECIES_REGEX
 from nwkit.util import extract_species_label, read_tree
@@ -36,24 +37,34 @@ def info_main(args):
             num_negative_branch_nodes += 1
     species_names = sorted(species_name_set)
     num_species = len(species_names)
-    print(f'Tree file PATH: {os.path.realpath(args.infile)}')
-    print(f'Tree length: {tree_length}')
-    print(f'Number of leaves: {num_leaves}')
-    print(f'Number of nodes: {num_nodes}')
-    print(f'Number of singleton nodes: {num_singleton_node}')
-    print(f'Number of multifurcation nodes: {num_multifurcation_node}')
-    print(f'Number of nodes with zero branch length: {num_zero_branch_nodes}')
-    print(f'Number of nodes with negative branch length: {num_negative_branch_nodes}')
+    lines = [
+        f'Tree file PATH: {os.path.realpath(args.infile)}',
+        f'Tree length: {tree_length}',
+        f'Number of leaves: {num_leaves}',
+        f'Number of nodes: {num_nodes}',
+        f'Number of singleton nodes: {num_singleton_node}',
+        f'Number of multifurcation nodes: {num_multifurcation_node}',
+        f'Number of nodes with zero branch length: {num_zero_branch_nodes}',
+        f'Number of nodes with negative branch length: {num_negative_branch_nodes}',
+    ]
     if (
         getattr(args, 'species_parser', DEFAULT_SPECIES_PARSER) == DEFAULT_SPECIES_PARSER
         and getattr(args, 'species_map_tsv', None) in ['', None]
         and args.species_regex == DEFAULT_SPECIES_REGEX
     ):
-        print(f'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: {num_species}')
+        lines.append(f'Number of species in the leaf name convention of GENUS_SPECIES_GENEID: {num_species}')
     elif getattr(args, 'species_map_tsv', None) not in ['', None]:
-        print(f'Number of species parsed by --species_map_tsv: {num_species}')
+        lines.append(f'Number of species parsed by --species-map-tsv: {num_species}')
     elif getattr(args, 'species_parser', DEFAULT_SPECIES_PARSER) != DEFAULT_SPECIES_PARSER:
-        print(f'Number of species parsed by --species_parser: {num_species}')
+        lines.append(f'Number of species parsed by --species-parser: {num_species}')
     else:
-        print(f'Number of species parsed by --species_regex: {num_species}')
-    print(f'Species names: {", ".join(species_names)}')
+        lines.append(f'Number of species parsed by --species-regex: {num_species}')
+    lines.append(f'Species names: {", ".join(species_names)}')
+    outfile = getattr(args, 'outfile', '-')
+    output_context = nullcontext(None) if outfile == '-' else open(outfile, mode='w')
+    with output_context as handle:
+        text = '\n'.join(lines) + '\n'
+        if handle is None:
+            print(text, end='')
+        else:
+            handle.write(text)

@@ -6,25 +6,31 @@ from nwkit.util import get_target_nodes, read_tree, support_is_missing, validate
 
 
 def read_name_tsv(path):
-    with open(path, newline='') as handle:
+    handle = sys.stdin if path == '-' else open(path, newline='')
+    try:
         reader = csv.DictReader(handle, delimiter='\t')
         fieldnames = reader.fieldnames or list()
         required = {'old_name', 'new_name'}
         if not required.issubset(fieldnames):
-            raise ValueError("--name_tsv must contain 'old_name' and 'new_name' columns.")
+            raise ValueError("--name-tsv must contain 'old_name' and 'new_name' columns.")
         mapping = dict()
         for row in reader:
-            old_name = str(row.get('old_name', '')).strip()
-            new_name = str(row.get('new_name', '')).strip()
-            if old_name == '':
-                raise ValueError("--name_tsv contains an empty 'old_name' value.")
-            if new_name == '':
-                raise ValueError("--name_tsv contains an empty 'new_name' value.")
+            raw_old_name = row.get('old_name')
+            raw_new_name = row.get('new_name')
+            old_name = '' if raw_old_name is None else str(raw_old_name)
+            new_name = '' if raw_new_name is None else str(raw_new_name)
+            if old_name.strip() == '':
+                raise ValueError("--name-tsv contains an empty 'old_name' value.")
+            if new_name.strip() == '':
+                raise ValueError("--name-tsv contains an empty 'new_name' value.")
             if old_name in mapping:
-                raise ValueError("Duplicated 'old_name' entries are not supported in --name_tsv: {}".format(old_name))
+                raise ValueError("Duplicated 'old_name' entries are not supported in --name-tsv: {}".format(old_name))
             mapping[old_name] = new_name
+    finally:
+        if handle is not sys.stdin:
+            handle.close()
     if len(mapping) == 0:
-        raise ValueError('--name_tsv is empty.')
+        raise ValueError('--name-tsv is empty.')
     return mapping
 
 
@@ -33,8 +39,8 @@ def _rename_by_mapping(tree, args):
     target_nodes = get_target_nodes(tree=tree, target=args.target)
     target_name_to_nodes = dict()
     for node in target_nodes:
-        node_name = str(node.name or '').strip()
-        if node_name == '':
+        node_name = str(node.name or '')
+        if node_name.strip() == '':
             continue
         if node_name not in target_name_to_nodes:
             target_name_to_nodes[node_name] = list()
@@ -59,7 +65,7 @@ def _rename_by_mapping(tree, args):
     unused_old_names = sorted(set(mapping.keys()) - used_old_names)
     if args.require_all_old_names and unused_old_names:
         raise ValueError(
-            "The following old_name values in '--name_tsv' were not found among target nodes: {}".format(
+            "The following old_name values in '--name-tsv' were not found among target nodes: {}".format(
                 ', '.join(unused_old_names)
             )
         )
@@ -131,7 +137,7 @@ def rename_main(args):
     has_name_tsv = name_tsv not in ['', None]
     has_pattern = pattern not in ['', None]
     if has_name_tsv == has_pattern:
-        raise ValueError("Specify exactly one of '--name_tsv' or '--pattern/--replacement'.")
+        raise ValueError("Specify exactly one of '--name-tsv' or '--pattern/--replacement'.")
     if has_pattern and (replacement is None):
         raise ValueError("'--replacement' is required when '--pattern' is specified.")
     tree = read_tree(args.infile, args.format, args.quoted_node_names)

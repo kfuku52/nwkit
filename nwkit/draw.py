@@ -10,7 +10,7 @@ from matplotlib import colors as mcolors
 from matplotlib.lines import Line2D
 from matplotlib.patches import Patch
 
-from nwkit.util import extract_species_label, is_rooted, read_tree, read_tsv_preserving_leaf_name
+from nwkit.util import extract_species_label, is_rooted, read_tip_table, read_tree
 
 
 TREE_LINE_CAPSTYLE = 'round'
@@ -169,35 +169,17 @@ def _format_support_value(support):
     return '{:g}'.format(support_value)
 
 
-def _read_trait_table(path, group_by, tree):
-    trait_df = read_tsv_preserving_leaf_name(path)
-    if 'leaf_name' not in trait_df.columns:
-        raise ValueError("Column 'leaf_name' is required in '--trait'.")
-    if group_by not in trait_df.columns:
-        raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
-    trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
-    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
-        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
-    tree_leaf_name_set = set(tree.leaf_names())
-    unknown_leaf_names = sorted(
-        leaf_name
-        for leaf_name in set(trait_df['leaf_name'].tolist())
-        if leaf_name not in tree_leaf_name_set
+def _read_trait_table(path, group_by, tree, unmatched='warn', missing_values=None):
+    trait_df, _, _ = read_tip_table(
+        path,
+        option_name='--trait',
+        tree_leaf_names=tree.leaf_names(),
+        required_columns=(group_by,),
+        unmatched=unmatched,
+        missing_values=missing_values,
     )
-    if unknown_leaf_names:
-        raise ValueError(
-            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
-                ', '.join(unknown_leaf_names)
-            )
-        )
+    tree_leaf_name_set = set(tree.leaf_names())
     trait_df = trait_df[trait_df['leaf_name'].isin(tree_leaf_name_set)].copy()
-    duplicated_leaf_names = trait_df.loc[
-        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
-    ].unique().tolist()
-    if duplicated_leaf_names:
-        duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
-        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
     leaf_to_group = dict()
     for _, row in trait_df.iterrows():
         if pd.isna(row[group_by]):
@@ -411,7 +393,7 @@ def draw_main(args):
     support_labels = getattr(args, 'support_labels', True)
     support_min = getattr(args, 'support_min', None)
     if (trait_path not in ['', None]) and (group_by in ['', None]):
-        raise ValueError("'--group_by' is required when '--trait' is specified.")
+        raise ValueError("'--group-by' is required when '--trait' is specified.")
     image_format = _resolve_image_format(outfile=args.outfile, image_format=str(args.image_format).lower())
     node_plot_mode = str(args.species_overlap_node_plot).strip().lower()
     if node_plot_mode == 'no':
@@ -421,7 +403,7 @@ def draw_main(args):
             if node_plot_mode == 'yes':
                 raise ValueError(
                     "Speciation/duplication node plotting requires a rooted tree. "
-                    "Use '--species_overlap_node_plot no' for unrooted trees."
+                    "Use '--species-overlap-node-plot no' for unrooted trees."
                 )
             node_type_by_node = dict()
             sys.stderr.write(
@@ -440,7 +422,13 @@ def draw_main(args):
     leaf_label_color_by_leaf = dict()
     group_color_by_name = dict()
     if trait_path not in ['', None]:
-        leaf_to_group = _read_trait_table(path=trait_path, group_by=group_by, tree=tree)
+        leaf_to_group = _read_trait_table(
+            path=trait_path,
+            group_by=group_by,
+            tree=tree,
+            unmatched=getattr(args, 'unmatched', 'warn'),
+            missing_values=getattr(args, 'missing_values', None),
+        )
         group_color_by_name = _assign_group_colors(
             group_names=set(leaf_to_group.values()),
             palette=trait_palette,

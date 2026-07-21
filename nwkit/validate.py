@@ -13,6 +13,17 @@ from nwkit.util import (
 )
 
 
+VALIDATE_COLUMNS = (
+    'tree_id', 'status', 'parse_ok', 'parse_error', 'input_format', 'format_ambiguous',
+    'has_quoted_node_names', 'has_quoted_internal_node_names', 'num_leaves', 'num_nodes',
+    'num_singleton_nodes', 'num_multifurcation_nodes', 'num_zero_branch_nodes',
+    'num_negative_branch_nodes', 'num_missing_support_internal_nodes', 'is_rooted',
+    'is_ultrametric', 'leaf_names_unique', 'num_duplicate_leaf_names', 'num_empty_leaf_names',
+    'leaf_set_matches_first', 'rooting_matches_first', 'species_parseable',
+    'species_groups_monophyletic', 'issues',
+)
+
+
 def _get_duplicate_leaf_names(tree):
     leaf_names = list(tree.leaf_names())
     seen = set()
@@ -243,7 +254,7 @@ def validate_main(args):
             'issues': ','.join(issues),
         }
         rows.append(row)
-    out = pd.DataFrame(rows)
+    out = pd.DataFrame(rows, columns=VALIDATE_COLUMNS)
     if args.outfile == '-':
         print(out.to_csv(sep='\t', index=False), end='')
     else:

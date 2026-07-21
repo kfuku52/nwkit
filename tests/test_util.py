@@ -82,7 +82,7 @@ class TestReadTree:
 
     def test_read_tree_rejects_quoted_names_when_flag_disabled(self, tmp_nwk):
         path = tmp_nwk("('A,B':1,C:2);")
-        with pytest.raises(ValueError, match='--quoted_node_names yes'):
+        with pytest.raises(ValueError, match='--quoted-node-names yes'):
             read_tree(path, format='auto', quoted_node_names=False, quiet=True)
 
     def test_read_tree_invalid_raises(self, tmp_nwk):

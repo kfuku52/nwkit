@@ -52,7 +52,7 @@ def test_partial_taxon_property_transfer_and_report(tmp_nwk, tmp_path):
     projected = rows[rows['status'] == 'transferred']
     assert 'projected_match' in set(projected['match_status'])
     assert projected['projection_only'].any()
-    assert rows['shared_taxon_count'].unique().tolist() == [4]
+    assert rows['num_shared_taxa'].unique().tolist() == [4]
 
 
 def test_property_map_renames_nhx_property(tmp_nwk, tmp_outfile):

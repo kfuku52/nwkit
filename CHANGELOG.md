@@ -4,6 +4,39 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.31.0] - 2026-07-21
+
+### Added
+
+- A documented shared contract for CLI spelling, standard input, tip-keyed TSV
+  validation, missing values, unmatched rows, branch IDs, node classes, taxon
+  sets, and empty-result headers.
+
+### Changed
+
+- Canonical multiword long options now use kebab-case throughout. Historical
+  snake_case and other replaced spellings remain compatibility aliases and
+  emit a warning naming the canonical replacement when used.
+- Tip-keyed tables used by annotation, ASR, drawing, monophyly checks, and
+  sampling now share `leaf_name`, duplicate, missing-value, and unmatched-row
+  handling through `--missing-values` and `--unmatched`.
+- Node reports now use 0-based level-order `branch_id` values, `node_class`, and
+  the `*_taxa` / `num_*_taxa` vocabulary. ASR uses `leaf` rather than `tip`,
+  including for canonical `--target` values.
+- Image-specific mappings are named `--species-name-tsv`; image output paths
+  are `--manifest-out` and `--attribution-out`; sample tables use `--report`;
+  and skim group tables use `--group-table-prefix`.
+- Auxiliary outputs require file paths, and at most one input may read from
+  standard input in a command.
+
+### Fixed
+
+- `image` now honors `--species-parser` and `--species-map-tsv`.
+- `info` and `printlabel` now honor `--outfile`; non-Newick commands no longer
+  advertise an unused `--outformat`.
+- `table2nwk` preserves node names such as `NA`, `NaN`, and `null`.
+- Empty TSV results retain stable headers.
+
 ## [0.30.0] - 2026-07-17
 
 ### Added

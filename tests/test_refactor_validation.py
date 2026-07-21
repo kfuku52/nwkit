@@ -438,8 +438,8 @@ class TestSkimRefactorValidation:
                 'score': [10, 20, 30],
             }
         ).to_csv(trait_path, sep='\t', index=False)
-        args = Namespace(trait=str(trait_path))
-        with pytest.raises(ValueError, match='were not found in the input tree'):
+        args = Namespace(trait=str(trait_path), unmatched='error')
+        with pytest.raises(ValueError, match='--trait and tree tips differ'):
             skim.read_trait(args, tree)
 
     @pytest.mark.parametrize(

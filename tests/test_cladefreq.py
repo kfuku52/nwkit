@@ -61,8 +61,8 @@ class TestCladefreqMain:
         )
         cladefreq_main(args)
         table = pd.read_csv(outfile, sep='\t')
-        ab_row = table.loc[table['leaf_set'] == 'A,B'].iloc[0]
-        ac_row = table.loc[table['leaf_set'] == 'A,C'].iloc[0]
+        ab_row = table.loc[table['descendant_taxa'] == 'A,B'].iloc[0]
+        ac_row = table.loc[table['descendant_taxa'] == 'A,C'].iloc[0]
         assert abs(ab_row['frequency'] - (200.0 / 3.0)) < 1e-4
         assert abs(ac_row['frequency'] - (100.0 / 3.0)) < 1e-4
 
@@ -89,8 +89,8 @@ class TestCladefreqMain:
         )
         cladefreq_main(args)
         table = pd.read_csv(outfile, sep='\t')
-        ac_row = table.loc[table['leaf_set'] == 'A,C'].iloc[0]
-        ab_row = table.loc[table['leaf_set'] == 'A,B'].iloc[0]
+        ac_row = table.loc[table['descendant_taxa'] == 'A,C'].iloc[0]
+        ab_row = table.loc[table['descendant_taxa'] == 'A,B'].iloc[0]
         assert bool(ac_row['in_reference']) is True
         assert abs(ac_row['reference_support'] - 42.0) < 1e-6
         assert bool(ab_row['in_reference']) is False
@@ -117,7 +117,7 @@ class TestCladefreqMain:
         )
         cladefreq_main(args)
         table = pd.read_csv(outfile, sep='\t')
-        ab_row = table.loc[table['leaf_set'] == 'A,B'].iloc[0]
+        ab_row = table.loc[table['descendant_taxa'] == 'A,B'].iloc[0]
         assert abs(ab_row['frequency'] - 0.75) < 1e-6
         assert abs(ab_row['weight_sum'] - 3.0) < 1e-6
 

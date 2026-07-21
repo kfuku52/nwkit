@@ -48,9 +48,9 @@ def make_image_args(**kwargs):
         'allow_nd': False,
         'fallback_rank': 'none',
         'max_per_species': 1,
-        'name_tsv': None,
-        'manifest': None,
-        'attribution': None,
+        'species_name_tsv': None,
+        'manifest_out': None,
+        'attribution_out': None,
         'fail_on_missing': False,
         'output_format': 'original',
         'max_edge': None,
@@ -740,7 +740,7 @@ class TestImageMain:
             'leaf_name': 'BadLabel',
             'species_name': '',
             'reason': 'unparsable leaf label',
-            'details': "Expected the 'GENUS_SPECIES[_...]' convention or a matching --name_tsv entry.",
+            'details': 'Expected the configured species parser or a matching --species-name-tsv entry.',
         }]
 
     def test_extract_species_mapping_accepts_custom_species_regex(self, tmp_path):
@@ -836,7 +836,7 @@ class TestImageMain:
             'leaf_name': 'BadLabel',
             'species_name': '',
             'reason': 'unparsable leaf label',
-            'details': "Expected the 'GENUS_SPECIES[_...]' convention or a matching --name_tsv entry.",
+            'details': 'Expected the configured species parser or a matching --species-name-tsv entry.',
         }]
         assert 'Homo sapiens' in attribution_text
         assert 'Panthera leo' in attribution_text
@@ -882,11 +882,11 @@ class TestImageMain:
         args = make_image_args(
             infile=str(tree_path),
             out_dir=str(out_dir),
-            name_tsv=str(name_tsv),
+            species_name_tsv=str(name_tsv),
             source='phylopic',
             fail_on_missing=True,
         )
-        with pytest.raises(SystemExit, match='1'):
+        with pytest.raises(ValueError, match='could not be resolved'):
             image_main(args)
 
         manifest_rows = read_tsv(out_dir / 'manifest.tsv')
@@ -898,7 +898,7 @@ class TestImageMain:
             'leaf_name': 'Unknown',
             'species_name': '',
             'reason': 'unparsable leaf label',
-            'details': "Expected the 'GENUS_SPECIES[_...]' convention or a matching --name_tsv entry.",
+            'details': 'Expected the configured species parser or a matching --species-name-tsv entry.',
         }]
 
     def test_image_main_reports_filtered_by_license(self, monkeypatch, tmp_path):

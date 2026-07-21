@@ -25,7 +25,7 @@ def _scale_support(freq, support_scale):
         return freq * 100.0
     if support_scale == 'proportion':
         return freq
-    raise ValueError("Unsupported '--support_scale': {}".format(support_scale))
+    raise ValueError("Unsupported '--support-scale': {}".format(support_scale))
 
 
 def _bit_to_order_map(leaf_names):
@@ -52,48 +52,49 @@ def _mask_min_order(mask, bit_to_order):
 def _read_tree_weights(weight_tsv, num_trees):
     if weight_tsv in ['', None]:
         return [1.0] * num_trees
-    weight_df = pd.read_csv(weight_tsv, sep='\t')
+    weight_source = sys.stdin if weight_tsv == '-' else weight_tsv
+    weight_df = pd.read_csv(weight_source, sep='\t')
     if 'weight' not in weight_df.columns:
-        raise ValueError("--weight_tsv must contain a 'weight' column.")
+        raise ValueError("--weight-tsv must contain a 'weight' column.")
     if weight_df['weight'].isna().any():
-        raise ValueError("--weight_tsv contains missing values in 'weight'.")
+        raise ValueError("--weight-tsv contains missing values in 'weight'.")
     weights = [None] * num_trees
     if 'tree_id' in weight_df.columns:
         if weight_df['tree_id'].isna().any():
-            raise ValueError("--weight_tsv contains missing values in 'tree_id'.")
+            raise ValueError("--weight-tsv contains missing values in 'tree_id'.")
         for _, row in weight_df.iterrows():
             try:
                 tree_id_value = float(row['tree_id'])
             except ValueError as exc:
-                raise ValueError("--weight_tsv 'tree_id' values must be integers.") from exc
+                raise ValueError("--weight-tsv 'tree_id' values must be integers.") from exc
             if not tree_id_value.is_integer():
-                raise ValueError("--weight_tsv 'tree_id' values must be integers.")
+                raise ValueError("--weight-tsv 'tree_id' values must be integers.")
             tree_id = int(tree_id_value)
             if (tree_id < 1) or (tree_id > num_trees):
-                raise ValueError("--weight_tsv tree_id is out of range: {}".format(tree_id))
+                raise ValueError("--weight-tsv tree_id is out of range: {}".format(tree_id))
             if weights[tree_id - 1] is not None:
-                raise ValueError("Duplicated 'tree_id' values are not supported in --weight_tsv.")
+                raise ValueError("Duplicated 'tree_id' values are not supported in --weight-tsv.")
             try:
                 weight = float(row['weight'])
             except (TypeError, ValueError) as exc:
-                raise ValueError("--weight_tsv 'weight' values must be numeric.") from exc
+                raise ValueError("--weight-tsv 'weight' values must be numeric.") from exc
             if not math.isfinite(weight):
                 raise ValueError("Tree weights must be finite.")
             weights[tree_id - 1] = weight
     else:
         if len(weight_df.index) != num_trees:
-            raise ValueError("--weight_tsv must contain exactly one row per input tree.")
+            raise ValueError("--weight-tsv must contain exactly one row per input tree.")
         weights = list()
         for weight_value in weight_df['weight'].tolist():
             try:
                 weight = float(weight_value)
             except (TypeError, ValueError) as exc:
-                raise ValueError("--weight_tsv 'weight' values must be numeric.") from exc
+                raise ValueError("--weight-tsv 'weight' values must be numeric.") from exc
             if not math.isfinite(weight):
                 raise ValueError("Tree weights must be finite.")
             weights.append(weight)
     if any(weight is None for weight in weights):
-        raise ValueError("--weight_tsv must define weights for every input tree.")
+        raise ValueError("--weight-tsv must define weights for every input tree.")
     for weight in weights:
         if weight <= 0:
             raise ValueError("Tree weights must be positive.")
@@ -126,7 +127,7 @@ def _aggregate_branch_lengths(observations, method):
         elif method == 'median':
             out[mask] = _weighted_median(values, weights)
         else:
-            raise ValueError("Unsupported '--branch_length': {}".format(method))
+            raise ValueError("Unsupported '--branch-length': {}".format(method))
     return out
 
 
@@ -434,7 +435,7 @@ def consensus_main(args):
     branch_length = getattr(args, 'branch_length', 'none')
     weight_tsv = getattr(args, 'weight_tsv', None)
     if (args.min_freq < 0.0) or (args.min_freq > 1.0):
-        raise ValueError("'--min_freq' must be between 0 and 1.")
+        raise ValueError("'--min-freq' must be between 0 and 1.")
     tree_strings = read_tree_strings(args.infile)
     if len(tree_strings) == 0:
         raise ValueError('No input trees were found for consensus.')

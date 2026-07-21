@@ -99,7 +99,7 @@ class TestSanitizeMain:
         assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd'}
 
     def test_wiki_exact_example(self, tmp_nwk, tmp_outfile):
-        """Wiki example: nwkit sanitize --name_quote single
+        """Wiki example: nwkit sanitize --name-quote single
 
         Input:  ((((a:1,b:1):1):1,c:1):1,((d:1,e:1),f:1):1):0;
         Output: (('c':1,('a':1,'b':1):2):1,(('d':1,'e':1):1,'f':1):1):0;
@@ -262,5 +262,5 @@ class TestSanitizeMain:
             infile=path, outfile='-',
             remove_singleton=False, resolve_polytomy=False, name_quote='unsupported',
         )
-        with pytest.raises(ValueError, match='name_quote'):
+        with pytest.raises(ValueError, match='name-quote'):
             sanitize_main(args)

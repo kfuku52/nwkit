@@ -46,6 +46,10 @@ pip install "nwkit[image]"
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 
+Shared option naming, standard-input rules, TSV schemas, missing-value policy,
+and output-column vocabulary are defined in
+[CLI and TSV conventions](https://github.com/kfuku52/nwkit/blob/master/CLI_TSV_CONVENTIONS.md).
+
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
 - [`asr`](https://github.com/kfuku52/nwkit/wiki/nwkit-asr): Inferring categorical ancestral states and imputing missing tip states under an Mk model
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint

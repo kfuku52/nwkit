@@ -21,7 +21,7 @@ def prune_main(args):
     if pruned_leaf_names:
         sys.stderr.write(''.join(f'Pruning {name}\n' for name in pruned_leaf_names))
     if len(pruned_leaf_names) == len(leaf_nodes):
-        raise ValueError('All leaves would be pruned. Update --pattern/--invert_match to retain at least one leaf.')
+        raise ValueError('All leaves would be pruned. Update --pattern/--invert-match to retain at least one leaf.')
     if len(pruned_leaf_names) == 0:
         write_tree(tree, args, format=args.outformat)
         return

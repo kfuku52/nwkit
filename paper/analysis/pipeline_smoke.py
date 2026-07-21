@@ -32,7 +32,7 @@ def main() -> None:
     with tempfile.TemporaryDirectory(prefix="nwkit-pipeline-") as temporary_directory:
         audit_path = Path(temporary_directory) / "pipeline.audit.jsonl"
         tree_text = "(((T1:1):1,T2:1):1,(T3:1,T4:1):1);"
-        tree_text = pipe_step(["sanitize", "--remove_singleton", "yes"], tree_text, audit_path)
+        tree_text = pipe_step(["sanitize", "--remove-singleton", "yes"], tree_text, audit_path)
         tree_text = pipe_step(
             ["rename", "--pattern", "^T", "--replacement", "Taxon_", "-t", "leaf"],
             tree_text,

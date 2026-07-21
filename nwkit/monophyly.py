@@ -2,35 +2,28 @@ import pandas as pd
 
 from nwkit.util import (
     get_species_group_records,
+    read_tip_table,
     read_tree,
-    read_tsv_preserving_leaf_name,
     validate_unique_named_leaves,
 )
 
 
-def _read_trait_groups(path, tree_leaf_name_set, group_by):
-    trait_df = read_tsv_preserving_leaf_name(path)
-    if 'leaf_name' not in trait_df.columns:
-        raise ValueError("Column 'leaf_name' is required in '--trait'.")
-    if group_by not in trait_df.columns:
-        raise ValueError("Column '{}' specified by '--group_by' was not found in '--trait'.".format(group_by))
-    trait_df = trait_df.copy()
-    trait_df['leaf_name'] = [str(leaf_name) for leaf_name in trait_df['leaf_name'].tolist()]
-    if any(leaf_name.strip() == '' for leaf_name in trait_df['leaf_name'].tolist()):
-        raise ValueError("Column 'leaf_name' in '--trait' must not contain empty values.")
-    duplicated_leaf_names = trait_df.loc[
-        trait_df['leaf_name'].duplicated(keep=False), 'leaf_name'
-    ].unique().tolist()
-    if duplicated_leaf_names:
-        duplicated_leaf_names = sorted(str(name) for name in duplicated_leaf_names)
-        raise ValueError("Duplicated 'leaf_name' entries in '--trait': {}".format(', '.join(duplicated_leaf_names)))
-    missing_leaf_names = sorted(set(trait_df['leaf_name']) - set(tree_leaf_name_set))
-    if missing_leaf_names:
-        raise ValueError(
-            "The following 'leaf_name' values in '--trait' were not found in the input tree: {}".format(
-                ', '.join(missing_leaf_names)
-            )
-        )
+MONOPHYLY_COLUMNS = (
+    'group', 'status', 'is_monophyletic', 'num_target_taxa', 'num_mrca_taxa',
+    'num_intruder_taxa', 'target_taxa', 'intruder_taxa',
+)
+
+
+def _read_trait_groups(path, tree_leaf_name_set, group_by, unmatched='warn', missing_values=None):
+    trait_df, _, _ = read_tip_table(
+        path,
+        option_name='--trait',
+        tree_leaf_names=tree_leaf_name_set,
+        required_columns=(group_by,),
+        unmatched=unmatched,
+        missing_values=missing_values,
+    )
+    trait_df = trait_df[trait_df['leaf_name'].isin(set(tree_leaf_name_set))].copy()
     trait_df = trait_df[~trait_df[group_by].isna()].copy()
     trait_df[group_by] = trait_df[group_by].astype(str)
     group_to_leaf_names = dict()
@@ -44,11 +37,13 @@ def _read_trait_groups(path, tree_leaf_name_set, group_by):
 def _get_groups(tree, args):
     if args.trait not in ['', None]:
         if args.group_by in ['', None]:
-            raise ValueError("'--group_by' is required when '--trait' is specified.")
+            raise ValueError("'--group-by' is required when '--trait' is specified.")
         return _read_trait_groups(
             path=args.trait,
             tree_leaf_name_set=set(tree.leaf_names()),
             group_by=args.group_by,
+            unmatched=getattr(args, 'unmatched', 'warn'),
+            missing_values=getattr(args, 'missing_values', None),
         )
     _, species_to_leaf_names, _ = get_species_group_records(
         tree,
@@ -84,16 +79,16 @@ def monophyly_main(args):
             'group': group_name,
             'status': status,
             'is_monophyletic': bool(is_monophyletic),
-            'num_target_leaves': len(leaf_names),
-            'num_mrca_leaves': len(mrca_leaf_names),
-            'num_intruder_leaves': len(intruder_leaf_names),
-            'target_leaves': ','.join(leaf_names),
-            'intruder_leaves': ','.join(intruder_leaf_names),
+            'num_target_taxa': len(leaf_names),
+            'num_mrca_taxa': len(mrca_leaf_names),
+            'num_intruder_taxa': len(intruder_leaf_names),
+            'target_taxa': ','.join(leaf_names),
+            'intruder_taxa': ','.join(intruder_leaf_names),
         }
         rows.append(row)
         if not is_monophyletic:
             non_monophyletic_groups.append(group_name)
-    out = pd.DataFrame(rows)
+    out = pd.DataFrame(rows, columns=MONOPHYLY_COLUMNS)
     if args.outfile == '-':
         print(out.to_csv(sep='\t', index=False), end='')
     else:

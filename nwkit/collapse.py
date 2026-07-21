@@ -38,7 +38,7 @@ def _preserve_deleted_branch_length(node):
 
 def collapse_main(args):
     if (args.min_support is None) and (args.max_dist is None):
-        raise ValueError("Specify at least one of '--min_support' or '--max_dist'.")
+        raise ValueError("Specify at least one of '--min-support' or '--max-dist'.")
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if args.min_support is not None:
         support_values = [
@@ -48,7 +48,7 @@ def collapse_main(args):
         ]
         support_values = [support for support in support_values if support is not None]
         if len(support_values) == 0:
-            raise ValueError("No meaningful support values were found for '--min_support'.")
+            raise ValueError("No meaningful support values were found for '--min-support'.")
     collapsed_count = 0
     for node in list(tree.traverse(strategy='postorder')):
         if not _should_collapse(node, args):

@@ -13,6 +13,7 @@ import ete4
 import pandas as pd
 from ete4 import Tree
 from nwkit.fasta import parse_fasta, write_fasta
+from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES
 from nwkit.species_parser import (
     extract_parsed_species,
     get_species_parser,
@@ -30,8 +31,6 @@ COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser('~'), '.local', 'share', 'ete'),
     os.path.join(os.path.expanduser('~'), '.etetoolkit'),
 )
-
-
 def read_input_text(infile):
     if infile == '-':
         return sys.stdin.read()
@@ -60,7 +59,7 @@ def _read_raw_tsv_column_values(text, column_name):
 
 def read_tsv_preserving_leaf_name(path):
     text = read_input_text(path)
-    dataframe = pd.read_csv(StringIO(text), sep='\t')
+    dataframe = pd.read_csv(StringIO(text), sep='\t', keep_default_na=False)
     if 'leaf_name' not in dataframe.columns:
         return dataframe
     raw_leaf_names = _read_raw_tsv_column_values(text, 'leaf_name')
@@ -73,6 +72,77 @@ def read_tsv_preserving_leaf_name(path):
     dataframe = dataframe.copy()
     dataframe['leaf_name'] = raw_leaf_names
     return dataframe
+
+
+def parse_table_missing_values(value=None):
+    if value is None:
+        return set(DEFAULT_TABLE_MISSING_VALUES)
+    return {item.strip() for item in str(value).split(',')}
+
+
+def is_missing_table_value(value, missing_values=None):
+    if pd.isna(value):
+        return True
+    markers = parse_table_missing_values(missing_values) if not isinstance(missing_values, set) else missing_values
+    return str(value).strip() in markers
+
+
+def read_tip_table(path, option_name='--trait', tree_leaf_names=None, required_columns=(),
+                   unmatched='warn', missing_values=None):
+    dataframe = read_tsv_preserving_leaf_name(path)
+    if 'leaf_name' not in dataframe.columns:
+        raise ValueError("Column 'leaf_name' is required in '{}'.".format(option_name))
+    missing_columns = [column for column in required_columns if column not in dataframe.columns]
+    if missing_columns:
+        raise ValueError(
+            "Missing required column(s) in '{}': {}".format(option_name, ', '.join(missing_columns))
+        )
+    dataframe = dataframe.copy()
+    dataframe['leaf_name'] = [str(leaf_name) for leaf_name in dataframe['leaf_name'].tolist()]
+    if any(leaf_name.strip() == '' for leaf_name in dataframe['leaf_name'].tolist()):
+        raise ValueError("Column 'leaf_name' in '{}' must not contain empty values.".format(option_name))
+    duplicated = dataframe.loc[
+        dataframe['leaf_name'].duplicated(keep=False), 'leaf_name'
+    ].unique().tolist()
+    if duplicated:
+        raise ValueError(
+            "Duplicated 'leaf_name' entries in '{}': {}".format(
+                option_name,
+                ', '.join(sorted(str(name) for name in duplicated)),
+            )
+        )
+    table_only = list()
+    tree_only = list()
+    if tree_leaf_names is not None:
+        tree_leaf_names = [str(name) for name in tree_leaf_names]
+        tree_leaf_set = set(tree_leaf_names)
+        table_leaf_set = set(dataframe['leaf_name'])
+        table_only = sorted(table_leaf_set - tree_leaf_set)
+        tree_only = sorted(tree_leaf_set - table_leaf_set)
+        if unmatched not in ('warn', 'error', 'ignore'):
+            raise ValueError("Unsupported '--unmatched' policy: {}".format(unmatched))
+        if unmatched == 'error' and (table_only or tree_only):
+            raise ValueError(
+                "{} and tree tips differ (table-only={}; tree-only={}).".format(
+                    option_name,
+                    ','.join(table_only),
+                    ','.join(tree_only),
+                )
+            )
+        if unmatched == 'warn':
+            if table_only:
+                sys.stderr.write("Rows in {} not found in tree: {}\n".format(option_name, ' '.join(table_only)))
+            if tree_only:
+                sys.stderr.write("Tree tips not found in {}: {}\n".format(option_name, ' '.join(tree_only)))
+    markers = parse_table_missing_values(missing_values)
+    for column in dataframe.columns:
+        if column == 'leaf_name':
+            continue
+        dataframe[column] = [
+            pd.NA if is_missing_table_value(value, markers) else value
+            for value in dataframe[column].tolist()
+        ]
+    return dataframe, table_only, tree_only
 
 
 def count_set_bits(value):
@@ -376,7 +446,7 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
     if infile == '':
         raise Exception('Failed to parse the input tree.')
     if (not quoted_node_names) and _contains_quoted_node_names(infile):
-        raise ValueError('Quoted node names were found in the input tree. Re-run with --quoted_node_names yes.')
+        raise ValueError('Quoted node names were found in the input tree. Re-run with --quoted-node-names yes.')
     if format in ('auto', 'auto-strict'):
         format_original = format
         format, tree, ambiguity_message = _read_tree_auto(infile)
@@ -531,7 +601,7 @@ def inspect_tree_text(newick_text, format='auto', quoted_node_names=True):
     if (not quoted_node_names) and has_quoted_node_names:
         return {
             'parse_ok': False,
-            'parse_error': 'Quoted node names were found in the input tree. Re-run with --quoted_node_names yes.',
+            'parse_error': 'Quoted node names were found in the input tree. Re-run with --quoted-node-names yes.',
             'input_format': '',
             'format_ambiguous': False,
             'has_quoted_node_names': has_quoted_node_names,
@@ -576,9 +646,16 @@ def inspect_tree_text(newick_text, format='auto', quoted_node_names=True):
 def assign_branch_ids(tree, strategy='levelorder'):
     node_to_branch_id = dict()
     for branch_id, node in enumerate(tree.traverse(strategy=strategy)):
-        node.props['branch_id'] = branch_id
         node_to_branch_id[node] = branch_id
     return node_to_branch_id
+
+
+def get_node_class(node):
+    if node.is_root:
+        return 'root'
+    if node.is_leaf:
+        return 'leaf'
+    return 'intnode'
 
 def support_is_missing(support):
     if support is None:
@@ -847,8 +924,11 @@ def validate_unique_named_leaves(tree, option_name, context=''):
         raise ValueError("Empty leaf labels are not supported in '{}'{}.".format(option_name, context))
 
 def read_item_per_line_file(file):
-    with open(file, 'r') as f:
-        out = f.read().splitlines()
+    if file == '-':
+        out = sys.stdin.read().splitlines()
+    else:
+        with open(file, 'r') as f:
+            out = f.read().splitlines()
     out = [o.strip() for o in out if o.strip() != '']
     return out
 

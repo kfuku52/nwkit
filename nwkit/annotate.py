@@ -5,16 +5,20 @@ import pandas as pd
 
 from nwkit.transfer import _validate_property_name
 from nwkit.util import (
+    assign_branch_ids,
+    get_node_class,
     get_tree_property_names,
+    is_missing_table_value,
+    parse_table_missing_values,
     read_tree,
-    read_tsv_preserving_leaf_name,
+    read_tip_table,
     validate_unique_named_leaves,
     write_tree,
 )
 
 
 ANNOTATION_REPORT_COLUMNS = (
-    'node_id',
+    'branch_id',
     'node_class',
     'descendant_taxa',
     'input_column',
@@ -27,25 +31,15 @@ ANNOTATION_REPORT_COLUMNS = (
 SUPPORTED_AGGREGATIONS = ('unique', 'mode', 'count', 'mean', 'sum', 'min', 'max', 'list')
 
 
-def _node_class(node):
-    if node.is_root:
-        return 'root'
-    if node.is_leaf:
-        return 'leaf'
-    return 'intnode'
-
-
 def _format_taxa(node):
     return ','.join(sorted(str(name) for name in node.leaf_names()))
 
 
 def _python_value(value, missing_values):
-    if pd.isna(value):
+    if is_missing_table_value(value, missing_values):
         return None
     if hasattr(value, 'item'):
         value = value.item()
-    if str(value) in missing_values:
-        return None
     if isinstance(value, (str, int, float, bool)):
         return value
     return str(value)
@@ -138,7 +132,7 @@ def _write_report(rows, path):
     if path in (None, ''):
         return
     if path == '-':
-        raise ValueError("'--report -' cannot be combined with Newick output on stdout.")
+        raise ValueError("'--report' requires a file path, not '-'.")
     pd.DataFrame(rows, columns=ANNOTATION_REPORT_COLUMNS).to_csv(path, sep='\t', index=False)
 
 
@@ -147,13 +141,14 @@ def annotate_main(args):
         raise ValueError("'--table' is required for 'annotate'.")
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'annotate'")
-    table = read_tsv_preserving_leaf_name(args.table)
-    if 'leaf_name' not in table.columns:
-        raise ValueError("'--table' must contain a 'leaf_name' column.")
-    duplicated = table['leaf_name'][table['leaf_name'].duplicated()].astype(str).tolist()
-    if duplicated:
-        raise ValueError('Duplicated leaf_name rows in --table: {}'.format(', '.join(sorted(set(duplicated)))))
-    missing_values = set(str(getattr(args, 'missing_values', ',NA,NaN,nan,?,missing,unknown')).split(','))
+    table, table_only, tree_only = read_tip_table(
+        args.table,
+        option_name='--table',
+        tree_leaf_names=tree.leaf_names(),
+        unmatched=getattr(args, 'unmatched', 'warn'),
+        missing_values=getattr(args, 'missing_values', None),
+    )
+    missing_values = parse_table_missing_values(getattr(args, 'missing_values', None))
     column_specs = _parse_column_specs(
         columns=getattr(args, 'columns', None),
         property_maps=getattr(args, 'property_map', None),
@@ -170,25 +165,7 @@ def annotate_main(args):
         str(row['leaf_name']): row
         for _, row in table.iterrows()
     }
-    tree_leaf_names = set(str(name) for name in tree.leaf_names())
-    table_leaf_names = set(rows_by_leaf)
-    table_only = sorted(table_leaf_names - tree_leaf_names)
-    tree_only = sorted(tree_leaf_names - table_leaf_names)
-    unmatched_policy = getattr(args, 'unmatched', 'warn')
-    if unmatched_policy == 'error' and (table_only or tree_only):
-        raise ValueError(
-            'Trait-table and tree tips differ (table-only={}; tree-only={}).'.format(
-                ','.join(table_only),
-                ','.join(tree_only),
-            )
-        )
-    if unmatched_policy == 'warn':
-        if table_only:
-            sys.stderr.write('Table rows not found in tree: {}\n'.format(' '.join(table_only)))
-        if tree_only:
-            sys.stderr.write('Tree tips not found in table: {}\n'.format(' '.join(tree_only)))
-
-    node_ids = {id(node): index for index, node in enumerate(tree.traverse(), start=1)}
+    node_ids = assign_branch_ids(tree)
     report_rows = list()
     value_by_leaf_and_column = dict()
     for leaf in tree.leaves():
@@ -210,7 +187,7 @@ def annotate_main(args):
                     status = 'annotated'
                     reason = 'matching_leaf_name'
             report_rows.append({
-                'node_id': node_ids[id(leaf)],
+                'branch_id': node_ids[leaf],
                 'node_class': 'leaf',
                 'descendant_taxa': leaf_name,
                 'input_column': column,
@@ -244,8 +221,8 @@ def annotate_main(args):
             else:
                 status = 'not_aggregated'
             report_rows.append({
-                'node_id': node_ids[id(node)],
-                'node_class': _node_class(node),
+                'branch_id': node_ids[node],
+                'node_class': get_node_class(node),
                 'descendant_taxa': _format_taxa(node),
                 'input_column': column,
                 'property': prop,
@@ -257,8 +234,8 @@ def annotate_main(args):
     for leaf_name in table_only:
         for column, prop in column_specs:
             report_rows.append({
-                'node_id': '',
-                'node_class': 'table_only',
+                'branch_id': '',
+                'node_class': '',
                 'descendant_taxa': leaf_name,
                 'input_column': column,
                 'property': prop,

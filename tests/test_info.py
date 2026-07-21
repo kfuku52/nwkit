@@ -72,5 +72,5 @@ class TestInfoMain:
         args = make_args(infile=path, species_regex=r'^([A-Za-z]+)\.([A-Za-z]+)\|')
         info_main(args)
         captured = capsys.readouterr()
-        assert 'Number of species parsed by --species_regex: 2' in captured.out
+        assert 'Number of species parsed by --species-regex: 2' in captured.out
         assert 'Species names: Homo_sapiens, Mus_musculus' in captured.out

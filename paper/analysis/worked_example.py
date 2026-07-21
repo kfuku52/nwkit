@@ -169,7 +169,7 @@ def run_workflow(tree_path: Path, trait_path: Path, results_dir: Path) -> None:
         str(trait_path),
         "--group-by",
         "C4",
-        "--image_format",
+        "--image-format",
         "svg",
         "-o",
         str(results_dir / "pepc_c4_tree.svg"),
