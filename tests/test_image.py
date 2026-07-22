@@ -9,13 +9,17 @@ from nwkit.image import (
     BioiconsProvider,
     EOLProvider,
     IDigBioProvider,
+    MediaDownloadError,
     NCBIProvider,
     OpenverseProvider,
     build_download_session,
+    build_local_media_filename,
     build_retry_config,
     build_providers,
     candidate_score,
+    classify_wikimedia_asset,
     collect_candidates_for_species,
+    collect_candidates_for_species_map,
     download_media,
     extract_species_mapping,
     get_provider_quality_bonus,
@@ -48,6 +52,9 @@ def make_image_args(**kwargs):
         'allow_nd': False,
         'fallback_rank': 'none',
         'max_per_species': 1,
+        'max_download_bytes': 104857600,
+        'query_cache_max_age_hours': 168.0,
+        'refresh_cache': False,
         'species_name_tsv': None,
         'manifest_out': None,
         'attribution_out': None,
@@ -224,6 +231,28 @@ class TestWikimediaHelpers:
         assert wikimedia_page_mentions_query(relevant_page, 'Panthera leo') is True
         assert wikimedia_page_mentions_query(irrelevant_page, 'Panthera leo') is False
 
+    def test_classify_wikimedia_asset_rejects_research_figures_and_gifs(self):
+        page = {
+            'title': 'File:Arabidopsis thaliana expression figure.gif',
+            'imageinfo': [{
+                'url': 'https://upload.wikimedia.org/expression.gif',
+                'mime': 'image/gif',
+                'extmetadata': {
+                    'ImageDescription': {'value': 'Gene-expression graph for Arabidopsis thaliana'},
+                },
+            }],
+        }
+
+        assert classify_wikimedia_asset(page) == 'illustration'
+
+    def test_classify_wikimedia_asset_preserves_silhouettes(self):
+        page = {
+            'title': 'File:Panthera leo silhouette.svg',
+            'imageinfo': [{'url': 'https://upload.wikimedia.org/lion.svg', 'mime': 'image/svg+xml'}],
+        }
+
+        assert classify_wikimedia_asset(page) == 'silhouette'
+
 
 class TestNCBIHelpers:
     def test_parse_ncbi_images_dmp_line(self):
@@ -276,6 +305,45 @@ class TestNCBIHelpers:
 
     def test_resolve_download_worker_count_defaults_to_four(self):
         assert resolve_download_worker_count(species_count=20) == 4
+
+    def test_parallel_lookup_closes_taxonomy_handles_in_their_worker_threads(self, monkeypatch, tmp_path):
+        import threading
+
+        barrier = threading.Barrier(2)
+        close_threads = list()
+
+        class ThreadBoundNCBI:
+            def __init__(self):
+                self.created_thread = threading.get_ident()
+
+            def close(self):
+                close_threads.append((self.created_thread, threading.get_ident()))
+
+        class BarrierProvider:
+            def fetch_candidates(self, species_name, fallback_rank='none'):
+                barrier.wait(timeout=5)
+                return []
+
+        def fake_build_providers(args, sources, session=None):
+            return DummySession(), ThreadBoundNCBI(), {'phylopic': BarrierProvider()}
+
+        monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
+        args = make_image_args(
+            out_dir=str(tmp_path / 'out'),
+            download_dir=str(tmp_path / 'cache'),
+            source='phylopic',
+        )
+
+        results = collect_candidates_for_species_map(
+            species_names=['Species alpha', 'Species beta'],
+            args=args,
+            sources=['phylopic'],
+        )
+
+        assert set(results) == {'Species alpha', 'Species beta'}
+        assert len(close_threads) == 2
+        assert len({created_thread for created_thread, _ in close_threads}) == 2
+        assert all(created_thread == closed_thread for created_thread, closed_thread in close_threads)
 
     def test_resolve_ncbi_taxonomy_image_cache_dir(self, tmp_path):
         shared_args = make_image_args(download_dir=str(tmp_path / 'shared'), out_dir=str(tmp_path / 'out'))
@@ -519,6 +587,57 @@ class TestNCBIHelpers:
         assert call_counter['count'] == 1
         assert [candidate['provider_record_id'] for candidate in first_candidates] == ['eol-1']
         assert [candidate['provider_record_id'] for candidate in second_candidates] == ['eol-1']
+
+    def test_query_cache_refetches_when_requested_capacity_increases(self, tmp_path):
+        call_counter = {'count': 0}
+
+        class CapacityProvider(DummyProvider):
+            result_limit = 10
+
+            def fetch_candidates(self, species_name, fallback_rank='none'):
+                call_counter['count'] += 1
+                return []
+
+        provider = CapacityProvider({})
+        providers = {'eol': provider}
+        base_args = make_image_args(out_dir=str(tmp_path / 'out'), source='eol')
+        collect_candidates_for_species('Apis mellifera', base_args, ['eol'], providers)
+
+        provider.result_limit = 24
+        expanded_args = make_image_args(out_dir=str(tmp_path / 'out'), source='eol', max_per_species=20)
+        collect_candidates_for_species('Apis mellifera', expanded_args, ['eol'], providers)
+
+        assert call_counter['count'] == 2
+
+    def test_query_cache_honors_expiration_and_explicit_refresh(self, monkeypatch, tmp_path):
+        call_counter = {'count': 0}
+        current_time = {'value': 100.0}
+
+        class CountingProvider(DummyProvider):
+            result_limit = 10
+
+            def fetch_candidates(self, species_name, fallback_rank='none'):
+                call_counter['count'] += 1
+                return []
+
+        monkeypatch.setattr('nwkit.image.time.time', lambda: current_time['value'])
+        providers = {'eol': CountingProvider({})}
+        args = make_image_args(
+            out_dir=str(tmp_path / 'out'),
+            source='eol',
+            query_cache_max_age_hours=1.0,
+        )
+        collect_candidates_for_species('Apis mellifera', args, ['eol'], providers)
+        current_time['value'] = 3801.0
+        collect_candidates_for_species('Apis mellifera', args, ['eol'], providers)
+        collect_candidates_for_species(
+            'Apis mellifera',
+            make_image_args(out_dir=str(tmp_path / 'out'), source='eol', refresh_cache=True),
+            ['eol'],
+            providers,
+        )
+
+        assert call_counter['count'] == 3
 
 
 class TestBioiconsProvider:
@@ -806,7 +925,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'content')
             return 'downloaded'
@@ -841,6 +960,60 @@ class TestImageMain:
         assert 'Homo sapiens' in attribution_text
         assert 'Panthera leo' in attribution_text
 
+    def test_attribution_preserves_distinct_records_for_shared_media(self, tmp_path):
+        from nwkit.image import write_attribution_markdown
+
+        path = tmp_path / 'ATTRIBUTION.md'
+        shared_path = 'images/shared.jpg'
+        rows = [
+            {
+                'local_path': shared_path,
+                'species_name': 'Species alpha',
+                'provider': 'provider-a',
+                'matched_name': 'Species alpha',
+                'matched_rank': 'species',
+                'attribution': 'Alice',
+                'license_code': 'cc-by',
+                'license_url': 'https://example.org/license-a',
+                'source_page_url': 'https://example.org/source-a',
+            },
+            {
+                'local_path': shared_path,
+                'species_name': 'Species beta',
+                'provider': 'provider-b',
+                'matched_name': 'Species beta',
+                'matched_rank': 'species',
+                'attribution': 'Bob',
+                'license_code': 'cc-by-sa',
+                'license_url': 'https://example.org/license-b',
+                'source_page_url': 'https://example.org/source-b',
+            },
+        ]
+
+        write_attribution_markdown(str(path), rows)
+
+        text = path.read_text()
+        assert text.count('### Attribution record') == 2
+        assert 'Creator / attribution: Alice' in text
+        assert 'Creator / attribution: Bob' in text
+        assert 'License: cc-by\n' in text
+        assert 'License: cc-by-sa\n' in text
+
+
+class TestMediaFilenames:
+    def test_local_filename_distinguishes_urls_with_the_same_provider_record_id(self):
+        candidate = {
+            'provider': 'gbif',
+            'provider_record_id': '12345',
+        }
+
+        first = build_local_media_filename('Species alpha', candidate, 'https://example.org/front.jpg')
+        second = build_local_media_filename('Species alpha', candidate, 'https://example.org/back.jpg')
+
+        assert first != second
+        assert first.endswith('.jpg')
+        assert second.endswith('.jpg')
+
     def test_image_main_uses_name_tsv_override_and_strict_mode(self, monkeypatch, tmp_path):
         tree_path = tmp_path / 'tree.nwk'
         tree_path.write_text('(Sample_1,Unknown);')
@@ -871,7 +1044,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'content')
             return 'downloaded'
@@ -980,7 +1153,7 @@ class TestImageMain:
                 return None
 
             def iter_content(self, chunk_size=65536):
-                yield b'image-bytes'
+                yield b'<svg xmlns="http://www.w3.org/2000/svg"></svg>'
 
         class CountingSession:
             def get(self, media_url, stream=True, timeout=None, headers=None):
@@ -1053,7 +1226,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'content')
             return 'downloaded'
@@ -1114,7 +1287,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             call_counter['count'] += 1
             with open(destination_path, 'wb') as handle:
                 handle.write(b'content')
@@ -1168,7 +1341,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             resolved_path = destination_path[:-4] + '.jpg'
             with open(resolved_path, 'wb') as handle:
                 handle.write(b'jpeg-data')
@@ -1234,7 +1407,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             if media_url.endswith('/fail/original.jpg'):
                 raise requests.ConnectionError('transient failure')
             with open(destination_path, 'wb') as handle:
@@ -1287,7 +1460,7 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             raise requests.ConnectionError('transient failure')
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1314,7 +1487,7 @@ class TestDownloadMedia:
         destination = tmp_path / 'out' / 'image.svg'
         cache_path = tmp_path / 'cache' / 'image.svg'
         cache_path.parent.mkdir(parents=True)
-        cache_path.write_bytes(b'cached-bytes')
+        cache_path.write_bytes(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
 
         class FailingSession:
             def get(self, *args, **kwargs):
@@ -1323,7 +1496,7 @@ class TestDownloadMedia:
         result = download_media(FailingSession(), 'https://images.example.org/item.svg', str(destination), cache_path=str(cache_path))
 
         assert result['status'] == 'cached'
-        assert destination.read_bytes() == b'cached-bytes'
+        assert destination.read_bytes().startswith(b'<svg')
 
     def test_download_media_removes_partial_temp_file_on_error(self, tmp_path):
         destination = tmp_path / 'out' / 'image.svg'
@@ -1372,7 +1545,7 @@ class TestDownloadMedia:
         cache_path = tmp_path / 'cache' / 'image.bin'
         cache_variant = tmp_path / 'cache' / 'image.jpg'
         cache_variant.parent.mkdir(parents=True)
-        cache_variant.write_bytes(b'jpeg-data')
+        cache_variant.write_bytes(b'\xff\xd8\xff\xe0jpeg-data')
 
         class FailingSession:
             def get(self, *args, **kwargs):
@@ -1382,7 +1555,63 @@ class TestDownloadMedia:
 
         assert result['status'] == 'cached'
         assert result['destination_path'].endswith('.jpg')
-        assert (tmp_path / 'out' / 'image.jpg').read_bytes() == b'jpeg-data'
+        assert (tmp_path / 'out' / 'image.jpg').read_bytes().startswith(b'\xff\xd8\xff')
+
+    def test_download_media_rejects_html_returned_from_image_url(self, tmp_path):
+        destination = tmp_path / 'out' / 'error.jpg'
+
+        class HTMLResponse:
+            headers = {'Content-Type': 'text/html'}
+            url = 'https://example.org/error.jpg'
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=65536):
+                yield b'<html><body>rate limited</body></html>'
+
+            def close(self):
+                return None
+
+        class HTMLSession:
+            def get(self, *args, **kwargs):
+                return HTMLResponse()
+
+        with pytest.raises(MediaDownloadError, match='non-image Content-Type'):
+            download_media(HTMLSession(), 'https://example.org/error.jpg', str(destination))
+
+        assert not destination.exists()
+        assert list(destination.parent.glob('*.tmp')) == []
+
+    def test_download_media_enforces_content_length_limit(self, tmp_path):
+        destination = tmp_path / 'out' / 'large.jpg'
+
+        class LargeResponse:
+            headers = {'Content-Type': 'image/jpeg', 'Content-Length': '1000'}
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=65536):
+                raise AssertionError('oversized response should be rejected before streaming')
+
+            def close(self):
+                return None
+
+        class LargeSession:
+            def get(self, *args, **kwargs):
+                return LargeResponse()
+
+        with pytest.raises(MediaDownloadError, match='exceeding --max-download-bytes'):
+            download_media(
+                LargeSession(),
+                'https://example.org/large.jpg',
+                str(destination),
+                max_download_bytes=100,
+            )
+
+        assert not destination.exists()
+        assert list(destination.parent.glob('*.tmp')) == []
 
 
 class TestImagePostprocessing:
@@ -1593,7 +1822,7 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
             return {'status': 'downloaded', 'destination_path': destination_path}
@@ -1644,7 +1873,7 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'jpeg-data')
             return {'status': 'downloaded', 'destination_path': destination_path}
@@ -1694,7 +1923,7 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
             return {'status': 'downloaded', 'destination_path': destination_path}
@@ -1745,7 +1974,7 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'jpeg-data')
             return {'status': 'downloaded', 'destination_path': destination_path}

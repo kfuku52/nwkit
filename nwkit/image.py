@@ -1,6 +1,5 @@
 import csv
 import json
-import functools
 import glob
 import hashlib
 import html
@@ -9,10 +8,12 @@ import math
 import os
 import re
 import shutil
+import sqlite3
 import sys
 import tarfile
 import tempfile
 import threading
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from urllib.parse import urlparse
@@ -50,9 +51,11 @@ NCBI_NEWTAXDUMP_URL = 'https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/new_taxdump/new
 REQUEST_TIMEOUT = (10, 60)
 DEFAULT_LOOKUP_WORKERS = 4
 DEFAULT_DOWNLOAD_WORKERS = 4
-IMAGE_QUERY_CACHE_VERSION = 1
+IMAGE_QUERY_CACHE_VERSION = 2
 LOOKUP_FALLBACK_BUFFER = 2
-BIOICONS_CATALOG_CACHE_VERSION = 1
+BIOICONS_CATALOG_CACHE_VERSION = 2
+DEFAULT_QUERY_CACHE_MAX_AGE_HOURS = 168.0
+DEFAULT_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
 SEMANTIC_MASK_MAX_DIM = 256
 SEMANTIC_ALPHA_THRESHOLD = 16
 SEMANTIC_DIFF_THRESHOLD_FLOOR = 12
@@ -134,6 +137,10 @@ RASTER_OUTPUT_EXTENSIONS = {
 }
 BIOICONS_CATALOG_MEMORY_CACHE = dict()
 BIOICONS_CATALOG_MEMORY_CACHE_LOCK = threading.Lock()
+
+
+class MediaDownloadError(RuntimeError):
+    pass
 
 
 def _stderr(message):
@@ -529,6 +536,33 @@ def wikimedia_page_mentions_query(page, query_name):
     return normalize_species_name(query_name).lower() in combined_text
 
 
+def classify_wikimedia_asset(page):
+    image_info = (page.get('imageinfo') or [{}])[0]
+    metadata = image_info.get('extmetadata') or {}
+    descriptive_text = ' '.join([
+        str(page.get('title', '')),
+        strip_html_markup(metadata.get('ObjectName', {}).get('value', '')),
+        strip_html_markup(metadata.get('ImageDescription', {}).get('value', '')),
+        strip_html_markup(metadata.get('Categories', {}).get('value', '')),
+    ]).lower()
+    silhouette_terms = (
+        'silhouette', 'outline', 'pictogram', 'black shape', 'shadow profile',
+    )
+    illustration_terms = (
+        'anatomical plate', 'chart', 'cladogram', 'diagram', 'drawing', 'figure',
+        'graph', 'icon', 'illustration', 'infographic', 'logo', 'map', 'micrograph montage',
+        'poster', 'schematic', 'sequence alignment', 'taxonomic plate',
+    )
+    if any(term in descriptive_text for term in silhouette_terms):
+        return 'silhouette'
+    if any(term in descriptive_text for term in illustration_terms):
+        return 'illustration'
+    mime_type = str(image_info.get('mime') or '').lower()
+    if mime_type == 'image/gif' or infer_extension(image_info.get('url', ''), default_ext='') == '.gif':
+        return 'illustration'
+    return 'photo'
+
+
 def search_text_mentions_query(text_fragments, query_name):
     query_tokens = tokenize_search_terms(query_name)
     if not query_tokens:
@@ -567,7 +601,8 @@ def infer_extension_from_bytes_prefix(prefix, default_ext='.bin'):
         return '.tif'
     if len(prefix) >= 12 and prefix[:4] == b'RIFF' and prefix[8:12] == b'WEBP':
         return '.webp'
-    if prefix.lstrip().startswith(b'<svg') or prefix.lstrip().startswith(b'<?xml'):
+    normalized_prefix = prefix.lstrip(b'\xef\xbb\xbf\x00\t\r\n ')
+    if re.search(br'<svg(?:\s|>)', normalized_prefix[:4096], flags=re.IGNORECASE):
         return '.svg'
     return default_ext
 
@@ -575,13 +610,13 @@ def infer_extension_from_bytes_prefix(prefix, default_ext='.bin'):
 def infer_extension_from_response(response, media_url, first_chunk=b'', default_ext='.bin'):
     response_headers = getattr(response, 'headers', {}) or {}
     response_url = getattr(response, 'url', media_url)
+    inferred_ext = infer_extension_from_bytes_prefix(first_chunk, default_ext='')
+    if inferred_ext != '':
+        return inferred_ext
     inferred_ext = infer_extension_from_content_type(response_headers.get('Content-Type'), default_ext='')
     if inferred_ext != '':
         return inferred_ext
     inferred_ext = infer_extension(response_url, default_ext='')
-    if inferred_ext != '':
-        return inferred_ext
-    inferred_ext = infer_extension_from_bytes_prefix(first_chunk, default_ext='')
     if inferred_ext != '':
         return inferred_ext
     return infer_extension(media_url, default_ext=default_ext)
@@ -907,9 +942,13 @@ def save_processed_raster_image(image, destination_path):
     elif image_format == 'PNG':
         if image.mode not in ('RGB', 'RGBA', 'L', 'LA'):
             image_to_save = image.convert('RGBA')
-    tmp_path = destination_path + '.tmp'
-    image_to_save.save(tmp_path, format=image_format, **save_kwargs)
-    os.replace(tmp_path, destination_path)
+    tmp_path = make_temporary_sibling_path(destination_path)
+    try:
+        image_to_save.save(tmp_path, format=image_format, **save_kwargs)
+        os.replace(tmp_path, destination_path)
+    except Exception:
+        remove_temporary_path(tmp_path, 'temporary processed image')
+        raise
 
 
 def rasterize_svg_to_image(source_path):
@@ -1018,6 +1057,18 @@ def build_media_cache_path(cache_dir, media_url, provider, provider_record_id):
     return os.path.join(cache_dir, filename)
 
 
+def build_local_media_filename(species_name, candidate, media_url):
+    ext = infer_extension(media_url, default_ext='.bin')
+    digest = hashlib.sha256(str(media_url).encode('utf-8')).hexdigest()[:12]
+    return '{}__{}__{}__{}{}'.format(
+        sanitize_filename_component(str(species_name).replace(' ', '_')),
+        sanitize_filename_component(candidate['provider']),
+        sanitize_filename_component(candidate['provider_record_id']),
+        digest,
+        ext,
+    )
+
+
 def build_query_cache_path(cache_dir, provider, species_name, fallback_rank):
     digest = hashlib.sha256(
         '{}\0{}\0{}'.format(provider, fallback_rank, species_name).encode('utf-8')
@@ -1031,7 +1082,31 @@ def build_query_cache_path(cache_dir, provider, species_name, fallback_rank):
     return os.path.join(cache_dir, filename)
 
 
-def load_cached_provider_candidates(cache_path):
+def cache_max_age_seconds_from_args(args):
+    max_age_hours = getattr(args, 'query_cache_max_age_hours', DEFAULT_QUERY_CACHE_MAX_AGE_HOURS)
+    if max_age_hours in (None, 0, 0.0):
+        return None
+    return float(max_age_hours) * 60 * 60
+
+
+def cache_timestamp_is_fresh(cached_at, max_age_seconds):
+    if max_age_seconds is None:
+        return True
+    try:
+        age_seconds = max(0.0, time.time() - float(cached_at))
+    except (TypeError, ValueError):
+        return False
+    return age_seconds <= float(max_age_seconds)
+
+
+def load_cached_provider_candidates(
+    cache_path,
+    minimum_fetch_limit=None,
+    max_age_seconds=None,
+    refresh=False,
+):
+    if refresh:
+        return None
     try:
         with open(cache_path) as handle:
             payload = json.load(handle)
@@ -1039,31 +1114,71 @@ def load_cached_provider_candidates(cache_path):
         return None
     if payload.get('version') != IMAGE_QUERY_CACHE_VERSION:
         return None
+    if not cache_timestamp_is_fresh(payload.get('cached_at'), max_age_seconds):
+        return None
+    if minimum_fetch_limit is not None:
+        try:
+            if int(payload.get('fetch_limit', 0)) < int(minimum_fetch_limit):
+                return None
+        except (TypeError, ValueError):
+            return None
     candidates = payload.get('candidates')
     if not isinstance(candidates, list):
         return None
     return candidates
 
 
-def write_cached_provider_candidates(cache_path, candidates):
+def make_temporary_sibling_path(destination_path):
+    ensure_directory(os.path.dirname(destination_path))
+    file_descriptor, tmp_path = tempfile.mkstemp(
+        prefix=os.path.basename(destination_path) + '.',
+        suffix='.tmp',
+        dir=os.path.dirname(destination_path) or '.',
+    )
+    os.close(file_descriptor)
+    return tmp_path
+
+
+def remove_temporary_path(path, label):
+    if path in (None, ''):
+        return
+    try:
+        os.remove(path)
+    except FileNotFoundError:
+        pass
+    except Exception as exc:
+        warn_cleanup_failure('{} {}'.format(label, path), exc)
+
+
+def write_cached_provider_candidates(cache_path, candidates, fetch_limit=None):
     ensure_directory(os.path.dirname(cache_path))
     payload = {
         'version': IMAGE_QUERY_CACHE_VERSION,
+        'cached_at': time.time(),
+        'fetch_limit': int(fetch_limit or 0),
         'candidates': candidates,
     }
-    tmp_path = cache_path + '.tmp'
-    with open(tmp_path, 'w') as handle:
-        json.dump(payload, handle, sort_keys=True)
-    os.replace(tmp_path, cache_path)
+    tmp_path = make_temporary_sibling_path(cache_path)
+    try:
+        with open(tmp_path, 'w') as handle:
+            json.dump(payload, handle, sort_keys=True)
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        remove_temporary_path(tmp_path, 'temporary provider cache file')
+        raise
 
 
-def load_cached_bioicons_catalog(cache_path):
+def load_cached_bioicons_catalog(cache_path, max_age_seconds=None, refresh=False):
+    if refresh:
+        return None
     try:
         with open(cache_path) as handle:
             payload = json.load(handle)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
     if payload.get('version') != BIOICONS_CATALOG_CACHE_VERSION:
+        return None
+    if not cache_timestamp_is_fresh(payload.get('cached_at'), max_age_seconds):
         return None
     catalog = payload.get('catalog')
     return catalog if isinstance(catalog, list) else None
@@ -1073,12 +1188,17 @@ def write_cached_bioicons_catalog(cache_path, catalog):
     ensure_directory(os.path.dirname(cache_path))
     payload = {
         'version': BIOICONS_CATALOG_CACHE_VERSION,
+        'cached_at': time.time(),
         'catalog': catalog,
     }
-    tmp_path = cache_path + '.tmp'
-    with open(tmp_path, 'w') as handle:
-        json.dump(payload, handle, sort_keys=True)
-    os.replace(tmp_path, cache_path)
+    tmp_path = make_temporary_sibling_path(cache_path)
+    try:
+        with open(tmp_path, 'w') as handle:
+            json.dump(payload, handle, sort_keys=True)
+        os.replace(tmp_path, cache_path)
+    except Exception:
+        remove_temporary_path(tmp_path, 'temporary Bioicons catalog cache file')
+        raise
 
 
 def get_style_priority(candidate, style='auto'):
@@ -1147,27 +1267,45 @@ def resolve_ncbi_taxonomy_image_cache_dir(args=None):
 
 def _download_to_path(session, url, destination_path):
     ensure_directory(os.path.dirname(destination_path))
-    tmp_path = destination_path + '.tmp'
-    response = session.get(url, stream=True, timeout=REQUEST_TIMEOUT, headers=HTTP_HEADERS)
-    response.raise_for_status()
-    with open(tmp_path, 'wb') as handle:
-        for chunk in response.iter_content(chunk_size=1024 * 256):
-            if chunk:
-                handle.write(chunk)
-    os.replace(tmp_path, destination_path)
+    tmp_path = make_temporary_sibling_path(destination_path)
+    response = None
+    try:
+        response = session.get(url, stream=True, timeout=REQUEST_TIMEOUT, headers=HTTP_HEADERS)
+        response.raise_for_status()
+        with open(tmp_path, 'wb') as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 256):
+                if chunk:
+                    handle.write(chunk)
+        os.replace(tmp_path, destination_path)
+    except Exception:
+        remove_temporary_path(tmp_path, 'temporary NCBI archive download')
+        raise
+    finally:
+        if response is not None and hasattr(response, 'close'):
+            try:
+                response.close()
+            except Exception as exc:
+                warn_cleanup_failure('NCBI archive HTTP response', exc)
 
 
 def _extract_ncbi_images_table(tarball_path, destination_path):
     ensure_directory(os.path.dirname(destination_path))
-    tmp_path = destination_path + '.tmp'
-    with tarfile.open(tarball_path, 'r:gz') as handle:
-        member = handle.getmember('images.dmp')
-        extracted = handle.extractfile(member)
-        if extracted is None:
-            raise FileNotFoundError('images.dmp not found in {}'.format(tarball_path))
-        with open(tmp_path, 'wb') as out_handle:
-            shutil.copyfileobj(extracted, out_handle)
-    os.replace(tmp_path, destination_path)
+    tmp_path = make_temporary_sibling_path(destination_path)
+    try:
+        with tarfile.open(tarball_path, 'r:gz') as handle:
+            member = handle.getmember('images.dmp')
+            extracted = handle.extractfile(member)
+            if extracted is None:
+                raise FileNotFoundError('images.dmp not found in {}'.format(tarball_path))
+            try:
+                with open(tmp_path, 'wb') as out_handle:
+                    shutil.copyfileobj(extracted, out_handle)
+            finally:
+                extracted.close()
+        os.replace(tmp_path, destination_path)
+    except Exception:
+        remove_temporary_path(tmp_path, 'temporary extracted NCBI images table')
+        raise
 
 
 def ensure_ncbi_images_table(args, session):
@@ -1214,20 +1352,94 @@ def parse_ncbi_images_dmp_line(line):
     }
 
 
-@functools.lru_cache(maxsize=16)
-def load_ncbi_images_index(images_path):
-    index = defaultdict(list)
-    with open(images_path, 'r') as handle:
-        for raw_line in handle:
-            stripped = raw_line.strip()
-            if stripped == '':
-                continue
-            record = parse_ncbi_images_dmp_line(raw_line)
-            if len(record['taxids']) == 0:
-                continue
-            for taxid in record['taxids']:
-                index[taxid].append(record)
-    return {taxid: records for taxid, records in index.items()}
+def build_ncbi_images_database(images_path, database_path):
+    ensure_directory(os.path.dirname(database_path))
+    tmp_path = make_temporary_sibling_path(database_path)
+    connection = None
+    try:
+        connection = sqlite3.connect(tmp_path)
+        connection.execute('PRAGMA journal_mode=OFF')
+        connection.execute('PRAGMA synchronous=OFF')
+        connection.execute(
+            'CREATE TABLE images ('
+            'taxid INTEGER NOT NULL, record_id TEXT NOT NULL, title TEXT, image_url TEXT NOT NULL, '
+            'license_code_text TEXT, license_url TEXT, attribution TEXT, source_name TEXT)'
+        )
+        insert_sql = (
+            'INSERT INTO images '
+            '(taxid, record_id, title, image_url, license_code_text, license_url, attribution, source_name) '
+            'VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        )
+        pending_rows = list()
+        with open(images_path, 'r') as handle:
+            for raw_line in handle:
+                if raw_line.strip() == '':
+                    continue
+                record = parse_ncbi_images_dmp_line(raw_line)
+                for taxid in record['taxids']:
+                    pending_rows.append((
+                        taxid,
+                        record['record_id'],
+                        record['title'],
+                        record['image_url'],
+                        record['license_code_text'],
+                        record['license_url'],
+                        record['attribution'],
+                        record['source_name'],
+                    ))
+                if len(pending_rows) >= 1000:
+                    connection.executemany(insert_sql, pending_rows)
+                    pending_rows = list()
+        if pending_rows:
+            connection.executemany(insert_sql, pending_rows)
+        connection.execute('CREATE INDEX images_taxid_idx ON images (taxid)')
+        connection.commit()
+        connection.close()
+        connection = None
+        os.replace(tmp_path, database_path)
+    except Exception:
+        if connection is not None:
+            connection.close()
+        remove_temporary_path(tmp_path, 'temporary NCBI images database')
+        raise
+
+
+def ensure_ncbi_images_database(args, session):
+    cache_dir = resolve_ncbi_taxonomy_image_cache_dir(args)
+    database_path = os.path.join(cache_dir, 'images.sqlite3')
+    if os.path.exists(database_path) and os.path.getsize(database_path) > 0:
+        return database_path
+    images_path = ensure_ncbi_images_table(args=args, session=session)
+    lock_path = os.path.join(cache_dir, '.ncbi_images_database.lock')
+    with acquire_exclusive_lock(lock_path=lock_path, lock_label='NCBI taxonomy images database'):
+        if os.path.exists(database_path) and os.path.getsize(database_path) > 0:
+            return database_path
+        build_ncbi_images_database(images_path=images_path, database_path=database_path)
+    return database_path
+
+
+def load_ncbi_images_records(database_path, taxid):
+    connection = sqlite3.connect(database_path)
+    try:
+        rows = connection.execute(
+            'SELECT record_id, title, image_url, license_code_text, license_url, attribution, source_name '
+            'FROM images WHERE taxid = ? ORDER BY rowid',
+            (int(taxid),),
+        ).fetchall()
+    finally:
+        connection.close()
+    return [
+        {
+            'record_id': row[0],
+            'title': row[1],
+            'image_url': row[2],
+            'license_code_text': row[3],
+            'license_url': row[4],
+            'attribution': row[5],
+            'source_name': row[6],
+        }
+        for row in rows
+    ]
 
 
 def candidate_score(candidate, provider_index=0, style='auto'):
@@ -1393,17 +1605,31 @@ class BioiconsProvider:
         if self._catalog is not None:
             return self._catalog
         cache_path = resolve_bioicons_catalog_cache_path(args=self.args)
+        refresh_cache = bool(getattr(self.args, 'refresh_cache', False))
+        max_age_seconds = cache_max_age_seconds_from_args(self.args)
         with BIOICONS_CATALOG_MEMORY_CACHE_LOCK:
-            cached_catalog = BIOICONS_CATALOG_MEMORY_CACHE.get(cache_path)
-        if cached_catalog is not None:
-            self._catalog = cached_catalog
+            memory_entry = BIOICONS_CATALOG_MEMORY_CACHE.get(cache_path)
+        if (
+            (not refresh_cache)
+            and memory_entry is not None
+            and cache_timestamp_is_fresh(memory_entry.get('cached_at'), max_age_seconds)
+        ):
+            self._catalog = memory_entry['catalog']
             return self._catalog
 
-        catalog = load_cached_bioicons_catalog(cache_path)
+        catalog = load_cached_bioicons_catalog(
+            cache_path,
+            max_age_seconds=max_age_seconds,
+            refresh=refresh_cache,
+        )
         if catalog is None:
             lock_path = cache_path + '.lock'
             with acquire_exclusive_lock(lock_path=lock_path, lock_label='Bioicons catalog'):
-                catalog = load_cached_bioicons_catalog(cache_path)
+                catalog = load_cached_bioicons_catalog(
+                    cache_path,
+                    max_age_seconds=max_age_seconds,
+                    refresh=refresh_cache,
+                )
                 if catalog is None:
                     response = self.session.get(
                         BIOICONS_GITHUB_API_ROOT,
@@ -1433,7 +1659,10 @@ class BioiconsProvider:
                         })
                     write_cached_bioicons_catalog(cache_path, catalog)
         with BIOICONS_CATALOG_MEMORY_CACHE_LOCK:
-            BIOICONS_CATALOG_MEMORY_CACHE[cache_path] = catalog
+            BIOICONS_CATALOG_MEMORY_CACHE[cache_path] = {
+                'cached_at': time.time(),
+                'catalog': catalog,
+            }
         self._catalog = catalog
         return self._catalog
 
@@ -1903,7 +2132,7 @@ class WikimediaProvider:
                 'gsrnamespace': 6,
                 'gsrlimit': self.result_limit if limit == 10 else limit,
                 'prop': 'imageinfo',
-                'iiprop': 'url|size|extmetadata',
+                'iiprop': 'url|size|mime|mediatype|extmetadata',
                 'iiurlwidth': 1600,
                 'format': 'json',
             },
@@ -1930,6 +2159,9 @@ class WikimediaProvider:
         image_info = (page.get('imageinfo') or [{}])[0]
         media_url = image_info.get('url')
         if not media_url:
+            return None
+        asset_type = classify_wikimedia_asset(page)
+        if asset_type == 'illustration':
             return None
         metadata = image_info.get('extmetadata') or {}
         license_short_name = strip_html_markup(metadata.get('LicenseShortName', {}).get('value', ''))
@@ -1959,7 +2191,7 @@ class WikimediaProvider:
             'media_url': media_url,
             'width': width,
             'height': height,
-            'asset_type': 'photo',
+            'asset_type': asset_type,
             'provider_quality': provider_quality,
         }
 
@@ -2070,14 +2302,12 @@ class NCBIProvider:
         self.session = session
         self.ncbi = ncbi
         self.args = args
-        self.images_path = None
-        self.images_index = None
+        self.images_database_path = None
 
-    def _ensure_images_index(self):
-        if self.images_index is not None:
+    def _ensure_images_database(self):
+        if self.images_database_path is not None:
             return
-        self.images_path = ensure_ncbi_images_table(args=self.args, session=self.session)
-        self.images_index = load_ncbi_images_index(self.images_path)
+        self.images_database_path = ensure_ncbi_images_database(args=self.args, session=self.session)
 
     def _get_taxid(self, query_name):
         name_to_taxid = self.ncbi.get_name_translator([query_name])
@@ -2085,13 +2315,13 @@ class NCBIProvider:
         return int(taxids[0]) if taxids else None
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
-        self._ensure_images_index()
+        self._ensure_images_database()
         candidates = list()
         for matched_rank, query_name in get_taxonomic_queries(species_name, fallback_rank=fallback_rank, ncbi=self.ncbi):
             taxid = self._get_taxid(query_name)
             if taxid is None:
                 continue
-            for record in self.images_index.get(taxid, []):
+            for record in load_ncbi_images_records(self.images_database_path, taxid):
                 candidates.append(self._candidate_from_record(record=record, matched_name=query_name, matched_rank=matched_rank))
         return candidates
 
@@ -2179,6 +2409,7 @@ def collect_candidates_for_species(species_name, args, sources, providers):
             if has_allowed_before_ncbi:
                 continue
         provider = providers[source]
+        fetch_limit = int(getattr(provider, 'result_limit', resolve_provider_fetch_limit(args=args)))
         cache_path = build_query_cache_path(
             cache_dir=query_cache_dir,
             provider=source,
@@ -2186,10 +2417,15 @@ def collect_candidates_for_species(species_name, args, sources, providers):
             fallback_rank=args.fallback_rank,
         )
         try:
-            provider_candidates = load_cached_provider_candidates(cache_path)
+            provider_candidates = load_cached_provider_candidates(
+                cache_path,
+                minimum_fetch_limit=fetch_limit,
+                max_age_seconds=cache_max_age_seconds_from_args(args),
+                refresh=bool(getattr(args, 'refresh_cache', False)),
+            )
             if provider_candidates is None:
                 provider_candidates = provider.fetch_candidates(species_name, fallback_rank=args.fallback_rank)
-                write_cached_provider_candidates(cache_path, provider_candidates)
+                write_cached_provider_candidates(cache_path, provider_candidates, fetch_limit=fetch_limit)
         except requests.RequestException as exc:
             message = '{} lookup failed for {}: {}'.format(source, species_name, exc)
             _stderr(message)
@@ -2215,57 +2451,145 @@ def ensure_directory(path):
     os.makedirs(path, exist_ok=True)
 
 
-def download_media(session, media_url, destination_path, cache_path=None):
+def validate_media_file(path, max_download_bytes=DEFAULT_MAX_DOWNLOAD_BYTES):
+    try:
+        size = os.path.getsize(path)
+    except OSError as exc:
+        raise MediaDownloadError('Downloaded media is unavailable: {}'.format(exc)) from exc
+    if size <= 0:
+        raise MediaDownloadError('Downloaded media is empty.')
+    if size > int(max_download_bytes):
+        raise MediaDownloadError(
+            'Downloaded media is {} bytes, exceeding --max-download-bytes {}.'.format(
+                size,
+                int(max_download_bytes),
+            )
+        )
+    with open(path, 'rb') as handle:
+        prefix = handle.read(4096)
+    extension = infer_extension_from_bytes_prefix(prefix, default_ext='')
+    if extension == '':
+        raise MediaDownloadError('Downloaded response is not a recognized JPEG, PNG, GIF, TIFF, WebP, or SVG image.')
+    return extension
+
+
+def normalize_valid_media_path(path, max_download_bytes=DEFAULT_MAX_DOWNLOAD_BYTES):
+    extension = validate_media_file(path, max_download_bytes=max_download_bytes)
+    resolved_path = replace_extension(path, extension)
+    if resolved_path != path:
+        os.replace(path, resolved_path)
+    return resolved_path
+
+
+def response_content_length(response):
+    headers = getattr(response, 'headers', {}) or {}
+    raw_length = headers.get('Content-Length')
+    if raw_length in (None, ''):
+        return None
+    try:
+        return int(raw_length)
+    except (TypeError, ValueError):
+        return None
+
+
+def response_content_type_is_plausible_image(response):
+    headers = getattr(response, 'headers', {}) or {}
+    content_type = str(headers.get('Content-Type') or '').split(';', 1)[0].strip().lower()
+    return (
+        content_type == ''
+        or content_type.startswith('image/')
+        or content_type in ('application/octet-stream', 'binary/octet-stream')
+    )
+
+
+def atomic_copyfile(source_path, destination_path):
+    ensure_directory(os.path.dirname(destination_path))
+    tmp_path = make_temporary_sibling_path(destination_path)
+    try:
+        shutil.copyfile(source_path, tmp_path)
+        os.replace(tmp_path, destination_path)
+    except Exception:
+        remove_temporary_path(tmp_path, 'temporary copied media file')
+        raise
+
+
+def download_media(
+    session,
+    media_url,
+    destination_path,
+    cache_path=None,
+    max_download_bytes=DEFAULT_MAX_DOWNLOAD_BYTES,
+):
+    max_download_bytes = int(max_download_bytes)
     ensure_directory(os.path.dirname(destination_path))
     destination_path = normalize_existing_media_path(destination_path)
     if os.path.exists(destination_path) and os.path.getsize(destination_path) > 0:
-        return {
-            'status': 'cached',
-            'destination_path': destination_path,
-            'cache_path': normalize_existing_media_path(cache_path) if cache_path is not None else None,
-        }
+        try:
+            destination_path = normalize_valid_media_path(
+                destination_path,
+                max_download_bytes=max_download_bytes,
+            )
+        except MediaDownloadError:
+            remove_temporary_path(destination_path, 'invalid existing media file')
+        else:
+            return {
+                'status': 'cached',
+                'destination_path': destination_path,
+                'cache_path': normalize_existing_media_path(cache_path) if cache_path is not None else None,
+            }
     if cache_path is not None:
         ensure_directory(os.path.dirname(cache_path))
         cache_path = normalize_existing_media_path(cache_path)
         if os.path.exists(cache_path) and os.path.getsize(cache_path) > 0:
-            _, cache_ext = os.path.splitext(cache_path)
-            resolved_destination_path = replace_extension(destination_path, cache_ext or infer_extension(media_url, default_ext='.bin'))
-            shutil.copyfile(cache_path, resolved_destination_path)
-            return {
-                'status': 'cached',
-                'destination_path': resolved_destination_path,
-                'cache_path': cache_path,
-            }
+            try:
+                cache_path = normalize_valid_media_path(
+                    cache_path,
+                    max_download_bytes=max_download_bytes,
+                )
+            except MediaDownloadError:
+                remove_temporary_path(cache_path, 'invalid cached media file')
+            else:
+                _, cache_ext = os.path.splitext(cache_path)
+                resolved_destination_path = replace_extension(destination_path, cache_ext)
+                atomic_copyfile(cache_path, resolved_destination_path)
+                return {
+                    'status': 'cached',
+                    'destination_path': resolved_destination_path,
+                    'cache_path': cache_path,
+                }
     target_path = cache_path if cache_path is not None else destination_path
-    tmp_path = target_path + '.tmp'
+    tmp_path = make_temporary_sibling_path(target_path)
     response = None
     try:
         response = session.get(media_url, stream=True, timeout=REQUEST_TIMEOUT, headers=HTTP_HEADERS)
         response.raise_for_status()
-        chunk_iter = response.iter_content(chunk_size=1024 * 64)
-        first_chunk = b''
-        for chunk in chunk_iter:
-            if chunk:
-                first_chunk = chunk
-                break
-        resolved_ext = infer_extension_from_response(
-            response=response,
-            media_url=media_url,
-            first_chunk=first_chunk,
-            default_ext=infer_extension(media_url, default_ext='.bin'),
-        )
+        if not response_content_type_is_plausible_image(response):
+            content_type = (getattr(response, 'headers', {}) or {}).get('Content-Type', '')
+            raise MediaDownloadError('Media URL returned non-image Content-Type {!r}.'.format(content_type))
+        content_length = response_content_length(response)
+        if content_length is not None and content_length > max_download_bytes:
+            raise MediaDownloadError(
+                'Media response declares {} bytes, exceeding --max-download-bytes {}.'.format(
+                    content_length,
+                    max_download_bytes,
+                )
+            )
+        downloaded_bytes = 0
+        with open(tmp_path, 'wb') as handle:
+            for chunk in response.iter_content(chunk_size=1024 * 64):
+                if chunk:
+                    downloaded_bytes += len(chunk)
+                    if downloaded_bytes > max_download_bytes:
+                        raise MediaDownloadError(
+                            'Media response exceeded --max-download-bytes {}.'.format(max_download_bytes)
+                        )
+                    handle.write(chunk)
+        resolved_ext = validate_media_file(tmp_path, max_download_bytes=max_download_bytes)
         resolved_target_path = replace_extension(target_path, resolved_ext)
         resolved_destination_path = replace_extension(destination_path, resolved_ext)
-        tmp_path = resolved_target_path + '.tmp'
-        with open(tmp_path, 'wb') as handle:
-            if first_chunk:
-                handle.write(first_chunk)
-            for chunk in chunk_iter:
-                if chunk:
-                    handle.write(chunk)
         os.replace(tmp_path, resolved_target_path)
         if cache_path is not None:
-            shutil.copyfile(resolved_target_path, resolved_destination_path)
+            atomic_copyfile(resolved_target_path, resolved_destination_path)
             resolved_cache_path = resolved_target_path
         else:
             resolved_cache_path = None
@@ -2275,11 +2599,7 @@ def download_media(session, media_url, destination_path, cache_path=None):
             'cache_path': resolved_cache_path,
         }
     except Exception:
-        if os.path.exists(tmp_path):
-            try:
-                os.remove(tmp_path)
-            except Exception as exc:
-                warn_cleanup_failure('temporary media download file {}'.format(tmp_path), exc)
+        remove_temporary_path(tmp_path, 'temporary media download file')
         raise
     finally:
         if response is not None and hasattr(response, 'close'):
@@ -2318,20 +2638,37 @@ def write_attribution_markdown(path, selected_assets):
     lines = ['# Attribution', '']
     for local_path in sorted(grouped.keys()):
         assets = grouped[local_path]
-        representative = assets[0]
         species_names = sorted({asset['species_name'] for asset in assets})
+        unique_records = dict()
+        for asset in assets:
+            identity = (
+                asset['provider'],
+                asset['matched_name'],
+                asset['matched_rank'],
+                asset['attribution'] or '',
+                asset['license_code'],
+                asset['license_url'] or '',
+                asset['source_page_url'] or '',
+            )
+            unique_records.setdefault(identity, asset)
+        attribution_records = [unique_records[key] for key in sorted(unique_records)]
         lines.append('## {}'.format(', '.join(species_names)))
         lines.append('')
-        lines.append('Provider: {}'.format(representative['provider']))
-        lines.append('Matched taxon: {} ({})'.format(representative['matched_name'], representative['matched_rank']))
-        lines.append('Creator / attribution: {}'.format(representative['attribution'] or ''))
-        lines.append('License: {}'.format(representative['license_code']))
-        if representative['license_url']:
-            lines.append('License URL: {}'.format(representative['license_url']))
-        if representative['source_page_url']:
-            lines.append('Source: {}'.format(representative['source_page_url']))
         lines.append('Local file: {}'.format(local_path))
         lines.append('')
+        for index, record in enumerate(attribution_records, start=1):
+            if len(attribution_records) > 1:
+                lines.append('### Attribution record {}'.format(index))
+                lines.append('')
+            lines.append('Provider: {}'.format(record['provider']))
+            lines.append('Matched taxon: {} ({})'.format(record['matched_name'], record['matched_rank']))
+            lines.append('Creator / attribution: {}'.format(record['attribution'] or ''))
+            lines.append('License: {}'.format(record['license_code']))
+            if record['license_url']:
+                lines.append('License URL: {}'.format(record['license_url']))
+            if record['source_page_url']:
+                lines.append('Source: {}'.format(record['source_page_url']))
+            lines.append('')
 
     with open(path, 'w') as handle:
         handle.write('\n'.join(lines).rstrip() + '\n')
@@ -2355,6 +2692,10 @@ def validate_args(args):
         )
     if int(args.max_per_species) <= 0:
         raise ValueError('--max-per-species must be > 0.')
+    if int(getattr(args, 'max_download_bytes', DEFAULT_MAX_DOWNLOAD_BYTES)) <= 0:
+        raise ValueError('--max-download-bytes must be > 0.')
+    if float(getattr(args, 'query_cache_max_age_hours', DEFAULT_QUERY_CACHE_MAX_AGE_HOURS)) < 0:
+        raise ValueError('--query-cache-max-age-hours must be >= 0.')
     max_edge = getattr(args, 'max_edge', None)
     if max_edge not in (None, 0) and int(max_edge) <= 0:
         raise ValueError('--max-edge must be > 0 when specified.')
@@ -2368,40 +2709,23 @@ def _close_provider_bundle(session, ncbi):
         session.close()
 
 
-class ThreadLocalProviderPool:
-    def __init__(self, args, sources):
-        self.args = args
-        self.sources = sources
-        self._local = threading.local()
-        self._bundles = list()
-        self._lock = threading.Lock()
-
-    def _get_bundle(self):
-        bundle = getattr(self._local, 'bundle', None)
-        if bundle is not None:
-            return bundle
-        session, ncbi, providers = build_providers(args=self.args, sources=self.sources)
-        bundle = (session, ncbi, providers)
-        self._local.bundle = bundle
-        with self._lock:
-            self._bundles.append(bundle)
-        return bundle
-
-    def lookup_species(self, species_name):
-        _, _, providers = self._get_bundle()
-        return collect_candidates_for_species(
-            species_name=species_name,
-            args=self.args,
-            sources=self.sources,
-            providers=providers,
-        )
-
-    def close(self):
-        with self._lock:
-            bundles = list(self._bundles)
-            self._bundles = list()
-        for session, ncbi, _ in bundles:
-            _close_provider_bundle(session=session, ncbi=ncbi)
+def _collect_candidates_for_species_batch(species_names, args, sources):
+    session = None
+    ncbi = None
+    providers = None
+    try:
+        session, ncbi, providers = build_providers(args=args, sources=sources)
+        return {
+            species_name: collect_candidates_for_species(
+                species_name=species_name,
+                args=args,
+                sources=sources,
+                providers=providers,
+            )
+            for species_name in species_names
+        }
+    finally:
+        _close_provider_bundle(session=session, ncbi=ncbi)
 
 
 def resolve_lookup_worker_count(args, sources, species_count):
@@ -2440,35 +2764,26 @@ def collect_candidates_for_species_map(species_names, args, sources):
         return dict()
     max_workers = resolve_lookup_worker_count(args=args, sources=sources, species_count=len(species_names))
     if max_workers <= 1:
-        session = None
-        ncbi = None
-        providers = None
-        try:
-            session, ncbi, providers = build_providers(args=args, sources=sources)
-            return {
-                species_name: collect_candidates_for_species(
-                    species_name=species_name,
-                    args=args,
-                    sources=sources,
-                    providers=providers,
-                )
-                for species_name in species_names
-            }
-        finally:
-            _close_provider_bundle(session=session, ncbi=ncbi)
+        return _collect_candidates_for_species_batch(
+            species_names=species_names,
+            args=args,
+            sources=sources,
+        )
 
-    lookup_pool = ThreadLocalProviderPool(args=args, sources=sources)
-    future_to_species = dict()
+    species_batches = [species_names[index::max_workers] for index in range(max_workers)]
+    future_to_batch = dict()
     results = dict()
-    try:
-        with ThreadPoolExecutor(max_workers=max_workers) as executor:
-            for species_name in species_names:
-                future_to_species[executor.submit(lookup_pool.lookup_species, species_name)] = species_name
-            for future in as_completed(future_to_species):
-                species_name = future_to_species[future]
-                results[species_name] = future.result()
-    finally:
-        lookup_pool.close()
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        for species_batch in species_batches:
+            future = executor.submit(
+                _collect_candidates_for_species_batch,
+                species_batch,
+                args,
+                sources,
+            )
+            future_to_batch[future] = species_batch
+        for future in as_completed(future_to_batch):
+            results.update(future.result())
     return results
 
 
@@ -2519,12 +2834,10 @@ class SharedMediaMaterializer:
             raise KeyError('Missing media plan for {}'.format(media_url))
         species_name = plan_entry['species_name']
         candidate = plan_entry['candidate']
-        ext = infer_extension(media_url, default_ext='.bin')
-        filename = '{}__{}__{}{}'.format(
-            sanitize_filename_component(species_name.replace(' ', '_')),
-            candidate['provider'],
-            sanitize_filename_component(candidate['provider_record_id']),
-            ext,
+        filename = build_local_media_filename(
+            species_name=species_name,
+            candidate=candidate,
+            media_url=media_url,
         )
         absolute_local_path = os.path.join(self.images_dir, filename)
         cache_path = None
@@ -2540,6 +2853,7 @@ class SharedMediaMaterializer:
             media_url=media_url,
             destination_path=absolute_local_path,
             cache_path=cache_path,
+            max_download_bytes=getattr(self.args, 'max_download_bytes', DEFAULT_MAX_DOWNLOAD_BYTES),
         )
         if isinstance(download_result, dict):
             download_status = download_result['status']
@@ -2635,7 +2949,7 @@ def process_species_assets(
             break
         try:
             materialized = materializer.materialize(species_name=species_name, candidate=candidate)
-        except (requests.RequestException, OSError) as exc:
+        except (requests.RequestException, OSError, MediaDownloadError) as exc:
             message = '{} download failed for {}: {}'.format(
                 candidate['provider'],
                 species_name,

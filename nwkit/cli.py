@@ -455,6 +455,12 @@ pimage.add_argument('--fallback-rank', '--fallback_rank', dest='fallback_rank', 
                     help='default=%(default)s: Allow fallback matching above the species rank.')
 pimage.add_argument('--max-per-species', '--max_per_species', dest='max_per_species', metavar='INT', default=1, type=int, required=False, action='store',
                     help='default=%(default)s: Number of images to keep per species.')
+pimage.add_argument('--max-download-bytes', '--max_download_bytes', dest='max_download_bytes', metavar='INT', default=104857600, type=int, required=False, action='store',
+                    help='default=%(default)s: Reject any individual media download larger than this many bytes.')
+pimage.add_argument('--query-cache-max-age-hours', '--query_cache_max_age_hours', dest='query_cache_max_age_hours', metavar='FLOAT', default=168.0, type=float, required=False, action='store',
+                    help='default=%(default)s: Refresh provider and Bioicons query caches after this age; 0 disables expiration.')
+pimage.add_argument('--refresh-cache', '--refresh_cache', dest='refresh_cache', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                    help='default=%(default)s: Ignore existing provider and Bioicons query caches for this run.')
 pimage.add_argument('--species-name-tsv', '--species_name_tsv', dest='species_name_tsv', metavar='PATH', default=None, type=str, required=False, action='store',
                     help='default=%(default)s: Optional legacy-style TSV with "leaf_name" and "species_name" columns. Prefer --species-map-tsv.')
 pimage.add_argument('--name-tsv', '--name_tsv', dest='species_name_tsv', metavar='PATH', type=str, help=argparse.SUPPRESS)
