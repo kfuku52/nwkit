@@ -2,6 +2,7 @@ import re
 import requests
 import sys
 import time
+import math
 from collections import defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -18,6 +19,52 @@ SEARCH_RANKS = [
     'species', 'genus', 'tribe', 'family', 'order',
     'class', 'subphylum', 'phylum', 'kingdom', 'superkingdom',
 ]
+TIMETREE_RESPONSE_MAX_BYTES = 5 * 1024 * 1024
+TIMETREE_REQUEST_ATTEMPTS = 3
+
+
+def _finite_number(value, label, minimum=None, maximum=None, minimum_inclusive=True,
+                   maximum_inclusive=True):
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("{} must be numeric.".format(label)) from exc
+    if not math.isfinite(number):
+        raise ValueError("{} must be finite.".format(label))
+    if minimum is not None:
+        invalid = number < minimum if minimum_inclusive else number <= minimum
+        if invalid:
+            operator = '>=' if minimum_inclusive else '>'
+            raise ValueError("{} must be {} {}.".format(label, operator, minimum))
+    if maximum is not None:
+        invalid = number > maximum if maximum_inclusive else number >= maximum
+        if invalid:
+            operator = '<=' if maximum_inclusive else '<'
+            raise ValueError("{} must be {} {}.".format(label, operator, maximum))
+    return number
+
+
+def _number_text(value):
+    if isinstance(value, str):
+        return value.strip()
+    return '{:g}'.format(float(value))
+
+
+def _validated_tail_probability(args, side):
+    value = getattr(args, '{}_tail_prob'.format(side), None)
+    if value is None:
+        value = getattr(args, '{}_tailProb'.format(side), None)
+    if value is None:
+        value = 0.025
+    number = _finite_number(
+        value,
+        "'--{}-tail-prob'".format(side),
+        minimum=0,
+        maximum=1,
+        minimum_inclusive=False,
+        maximum_inclusive=False,
+    )
+    return _number_text(number)
 
 
 def _validate_threads(threads):
@@ -32,21 +79,42 @@ def _validate_threads(threads):
 
 def _fetch_timetree_url(request_url):
     start = time.time()
-    try:
-        response = requests.get(url=request_url, timeout=30)
-    except requests.RequestException as exc:
-        return {
-            'url': request_url,
-            'status_code': None,
-            'text': '',
-            'error': exc,
-            'elapsed': int(time.time() - start),
-        }
+    last_error = None
+    for attempt_index in range(TIMETREE_REQUEST_ATTEMPTS):
+        response = None
+        try:
+            response = requests.get(url=request_url, timeout=30)
+            text = str(response.text)
+            if len(text.encode('utf-8')) > TIMETREE_RESPONSE_MAX_BYTES:
+                raise ValueError('TimeTree response exceeds the size limit.')
+            status_code = response.status_code
+            should_retry_status = (
+                isinstance(response, requests.Response)
+                and status_code in (429, 500, 502, 503, 504)
+                and attempt_index + 1 < TIMETREE_REQUEST_ATTEMPTS
+            )
+            if not should_retry_status:
+                return {
+                    'url': request_url,
+                    'status_code': status_code,
+                    'text': text,
+                    'error': None,
+                    'elapsed': int(time.time() - start),
+                }
+        except (requests.RequestException, ValueError) as exc:
+            last_error = exc
+            if attempt_index + 1 == TIMETREE_REQUEST_ATTEMPTS:
+                break
+        finally:
+            close = getattr(response, 'close', None)
+            if callable(close):
+                close()
+        time.sleep(0.05 * (2 ** attempt_index))
     return {
         'url': request_url,
-        'status_code': response.status_code,
-        'text': response.text,
-        'error': None,
+        'status_code': None,
+        'text': '',
+        'error': last_error,
         'elapsed': int(time.time() - start),
     }
 
@@ -172,21 +240,28 @@ def _constraint_from_timetree_response(attempt, response_record, ncbi, subtree_s
         sys.stderr.write(txt.format(','.join(leaf_names)))
         return None
     try:
-        ci_high = float(timetree_dict['precomputed_ci_high'])
+        age = _finite_number(timetree_dict['precomputed_age'], 'TimeTree point age', minimum=0)
+        ci_low = _finite_number(timetree_dict['precomputed_ci_low'], 'TimeTree lower age', minimum=0)
+        ci_high = _finite_number(
+            timetree_dict['precomputed_ci_high'],
+            'TimeTree upper age',
+            minimum=0,
+            minimum_inclusive=False,
+        )
     except ValueError:
         txt = "Skipping. Non-numeric age estimate from timetree.org for the node containing: {}\n"
         sys.stderr.write(txt.format(','.join(leaf_names)))
         return None
-    if ci_high == 0:
-        txt = "Skipping. Upper age estimate at timetree.org is zero for the MRCA of {}\n"
+    if ci_low > ci_high or age < ci_low or age > ci_high:
+        txt = "Skipping. Inconsistent age estimates from timetree.org for the MRCA of {}\n"
         sys.stderr.write(txt.format(','.join(leaf_names)))
         return None
     if args.timetree == 'point':
-        constraint = '@' + timetree_dict['precomputed_age']
+        constraint = '@' + _number_text(timetree_dict['precomputed_age'])
     elif args.timetree == 'ci':
         constraint = 'B(' + ', '.join([
-            timetree_dict['precomputed_ci_low'],
-            timetree_dict['precomputed_ci_high'],
+            _number_text(timetree_dict['precomputed_ci_low']),
+            _number_text(timetree_dict['precomputed_ci_high']),
             _tail_probability(args, 'lower'),
             _tail_probability(args, 'upper'),
         ]) + ')'
@@ -196,10 +271,7 @@ def _constraint_from_timetree_response(attempt, response_record, ncbi, subtree_s
 
 
 def _tail_probability(args, side):
-    value = getattr(args, '{}_tail_prob'.format(side), None)
-    if value is None:
-        value = getattr(args, '{}_tailProb'.format(side), None)
-    return '0.025' if value is None else value
+    return _validated_tail_probability(args, side)
 
 def add_common_anc_constraint(tree, args):
     if (args.left_species is None) or (args.right_species is None):
@@ -208,37 +280,58 @@ def add_common_anc_constraint(tree, args):
         raise ValueError("'--left-species' and '--right-species' must be different species.")
     if (args.lower_bound is None) and (args.upper_bound is None):
         raise ValueError("Specify at least one of '--lower-bound' or '--upper-bound' when '--timetree no'.")
+    lower_bound = None
+    upper_bound = None
+    if args.lower_bound is not None:
+        lower_bound = _finite_number(args.lower_bound, "'--lower-bound'", minimum=0)
+    if args.upper_bound is not None:
+        upper_bound = _finite_number(
+            args.upper_bound,
+            "'--upper-bound'",
+            minimum=0,
+            minimum_inclusive=False,
+        )
+    if lower_bound is not None and upper_bound is not None and lower_bound > upper_bound:
+        raise ValueError("'--lower-bound' must be <= '--upper-bound'.")
+    _finite_number(args.lower_offset, "'--lower-offset'", minimum=0)
+    _finite_number(
+        args.lower_scale,
+        "'--lower-scale'",
+        minimum=0,
+        minimum_inclusive=False,
+    )
+    lower_tail_probability = _tail_probability(args, 'lower')
+    upper_tail_probability = _tail_probability(args, 'upper')
     leaf_name_set = set(tree.leaf_names())
     missing_species = [sp for sp in [args.left_species, args.right_species] if sp not in leaf_name_set]
     if missing_species:
         raise ValueError("Species not found in the input tree: {}".format(', '.join(missing_species)))
     common_anc = tree.common_ancestor([args.left_species, args.right_species])
-    is_point_bound = False
-    if (args.lower_bound is not None) and (args.upper_bound is not None):
-        try:
-            is_point_bound = (abs(float(args.lower_bound) - float(args.upper_bound)) < 10**-12)
-        except ValueError:
-            is_point_bound = (args.lower_bound == args.upper_bound)
-    if (args.lower_bound is not None) and (args.upper_bound is not None) and is_point_bound:
-        constraint = '@' + args.lower_bound
-    elif (args.lower_bound is not None) and (args.upper_bound is not None):
+    is_point_bound = (
+        lower_bound is not None
+        and upper_bound is not None
+        and abs(lower_bound - upper_bound) < 10**-12
+    )
+    if is_point_bound:
+        constraint = '@' + _number_text(args.lower_bound)
+    elif lower_bound is not None and upper_bound is not None:
         constraint = 'B(' + ', '.join([
-            args.lower_bound,
-            args.upper_bound,
-            _tail_probability(args, 'lower'),
-            _tail_probability(args, 'upper'),
+            _number_text(args.lower_bound),
+            _number_text(args.upper_bound),
+            lower_tail_probability,
+            upper_tail_probability,
         ]) + ')'
-    elif (args.lower_bound is not None):
+    elif lower_bound is not None:
         constraint = 'L(' + ', '.join([
-            args.lower_bound,
-            args.lower_offset,
-            args.lower_scale,
-            _tail_probability(args, 'lower'),
+            _number_text(args.lower_bound),
+            _number_text(args.lower_offset),
+            _number_text(args.lower_scale),
+            lower_tail_probability,
         ]) + ')'
-    elif (args.upper_bound is not None):
+    elif upper_bound is not None:
         constraint = 'U(' + ', '.join([
-            args.upper_bound,
-            _tail_probability(args, 'upper'),
+            _number_text(args.upper_bound),
+            upper_tail_probability,
         ]) + ')'
     constraint = '\'' + constraint + '\''
     common_anc.name = constraint
@@ -522,8 +615,14 @@ def mcmctree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if len(tree.get_children()) != 2:
         raise ValueError('The input tree should be rooted.')
-    if (args.min_clade_prop < 0) or (args.min_clade_prop > 1):
-        raise ValueError("'--min-clade-prop' must be between 0 and 1.")
+    args.min_clade_prop = _finite_number(
+        args.min_clade_prop,
+        "'--min-clade-prop'",
+        minimum=0,
+        maximum=1,
+    )
+    _tail_probability(args, 'lower')
+    _tail_probability(args, 'upper')
     for node in tree.traverse():
         if not node.is_leaf:
             if any([kw in (node.name or '') for kw in ['@', 'B(', 'L(', 'U(']]):

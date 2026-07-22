@@ -10,7 +10,13 @@ from ete4 import Tree
 
 from nwkit import __version__
 from nwkit.conventions import get_stdin_input_options
-from nwkit.util import inspect_tree_text, is_rooted, split_newick_stream
+from nwkit.util import (
+    acquire_exclusive_lock,
+    inspect_tree_text,
+    is_rooted,
+    split_newick_stream,
+    validate_distinct_output_paths,
+)
 
 
 OUTPUT_ARGUMENTS = frozenset((
@@ -30,12 +36,41 @@ OUTPUT_ARGUMENTS = frozenset((
 
 
 class _TeeTextWriter:
-    def __init__(self, stream, capture=False):
+    def __init__(self, stream, capture=False, max_lines=500, max_line_chars=8192):
         self.stream = stream
         self.capture = capture
+        self.max_lines = max_lines
+        self.max_line_chars = max_line_chars
         self.hasher = hashlib.sha256()
         self.byte_count = 0
-        self.parts = list()
+        self.lines = list()
+        self.warning_lines = list()
+        self._pending_line = ''
+        self._pending_is_warning = False
+
+    def _capture_complete_line(self, line, is_warning=False):
+        line = line[:self.max_line_chars]
+        if len(self.lines) < self.max_lines:
+            self.lines.append(line)
+        if is_warning and len(self.warning_lines) < self.max_lines:
+            self.warning_lines.append(line)
+
+    def _capture_text(self, text):
+        segments = text.split('\n')
+        for index, segment in enumerate(segments):
+            if index == 0:
+                self._pending_is_warning = (
+                    self._pending_is_warning
+                    or 'warning' in (self._pending_line + segment).lower()
+                )
+                self._pending_line = (self._pending_line + segment)[:self.max_line_chars]
+            else:
+                self._capture_complete_line(
+                    self._pending_line,
+                    is_warning=self._pending_is_warning,
+                )
+                self._pending_line = segment[:self.max_line_chars]
+                self._pending_is_warning = 'warning' in segment.lower()
 
     def write(self, text):
         text = str(text)
@@ -43,7 +78,7 @@ class _TeeTextWriter:
         self.hasher.update(encoded)
         self.byte_count += len(encoded)
         if self.capture:
-            self.parts.append(text)
+            self._capture_text(text)
         return self.stream.write(text)
 
     def flush(self):
@@ -57,8 +92,22 @@ class _TeeTextWriter:
         return self.hasher.hexdigest()
 
     @property
-    def text(self):
-        return ''.join(self.parts)
+    def captured_lines(self):
+        lines = list(self.lines)
+        if self._pending_line and len(lines) < self.max_lines:
+            lines.append(self._pending_line)
+        return lines
+
+    @property
+    def captured_warning_lines(self):
+        lines = list(self.warning_lines)
+        if (
+            self._pending_line
+            and self._pending_is_warning
+            and len(lines) < self.max_lines
+        ):
+            lines.append(self._pending_line)
+        return lines
 
 
 def _sha256_bytes(data):
@@ -130,33 +179,65 @@ def _path_candidates_from_value(value):
 
 
 def _input_file_records(args):
-    records = list()
-    seen = set()
+    records_by_path = dict()
+
+    def add_candidate(argument, candidate):
+        if candidate in ('', '-') or not os.path.isfile(candidate):
+            return
+        realpath = os.path.realpath(candidate)
+        record = records_by_path.get(realpath)
+        if record is None:
+            digest, size = _sha256_file(realpath)
+            record = {
+                'path': realpath,
+                'sha256': digest,
+                'bytes': size,
+                'arguments': set(),
+            }
+            records_by_path[realpath] = record
+        record['arguments'].add(argument)
+
     for argument, value in vars(args).items():
         if argument in OUTPUT_ARGUMENTS or argument == 'handler':
             continue
         if argument in ('manifest', 'attribution') and getattr(args, 'command', None) == 'image':
             continue
         for candidate in _path_candidates_from_value(value):
-            if candidate in ('', '-') or not os.path.isfile(candidate):
-                continue
-            realpath = os.path.realpath(candidate)
-            if realpath in seen:
-                continue
-            seen.add(realpath)
-            digest, size = _sha256_file(realpath)
-            records.append({
-                'argument': argument,
-                'path': realpath,
-                'sha256': digest,
-                'bytes': size,
-            })
+            add_candidate(argument, candidate)
+    if getattr(args, 'command', None) == 'compose':
+        manifest_path = getattr(args, 'manifest', None)
+        if manifest_path not in (None, '') and os.path.isfile(manifest_path):
+            try:
+                with open(manifest_path) as handle:
+                    manifest = json.load(handle)
+            except (OSError, ValueError, TypeError):
+                manifest = None
+            if isinstance(manifest, dict):
+                base_dir = os.path.dirname(os.path.realpath(manifest_path))
+                for key in ('root', 'name', 'support', 'length'):
+                    value = manifest.get(key)
+                    if value not in (None, '', '-'):
+                        candidate = value if os.path.isabs(str(value)) else os.path.join(base_dir, str(value))
+                        add_candidate('manifest:{}'.format(key), candidate)
+                properties = manifest.get('properties', [])
+                if isinstance(properties, list):
+                    for index, entry in enumerate(properties):
+                        if not isinstance(entry, dict) or entry.get('path') in (None, '', '-'):
+                            continue
+                        value = entry['path']
+                        candidate = value if os.path.isabs(str(value)) else os.path.join(base_dir, str(value))
+                        add_candidate('manifest:properties[{}]'.format(index), candidate)
+    records = list()
+    for record in records_by_path.values():
+        arguments = sorted(record.pop('arguments'))
+        record['argument'] = arguments[0]
+        record['arguments'] = arguments
+        records.append(record)
     return sorted(records, key=lambda record: (record['argument'], record['path']))
 
 
 def _output_file_records(args):
-    records = list()
-    seen = set()
+    records_by_path = dict()
     output_arguments = set(OUTPUT_ARGUMENTS)
     if getattr(args, 'command', None) == 'image':
         output_arguments.update(('manifest', 'attribution'))
@@ -184,28 +265,35 @@ def _output_file_records(args):
             if candidate in ('', '-'):
                 continue
             realpath = os.path.realpath(candidate)
-            if realpath in seen:
+            record = records_by_path.get(realpath)
+            if record is not None:
+                record['arguments'].add(argument)
                 continue
-            seen.add(realpath)
             if os.path.isfile(realpath):
                 digest, size = _sha256_file(realpath)
-                records.append({
-                    'argument': argument,
+                records_by_path[realpath] = {
                     'path': realpath,
                     'type': 'file',
                     'sha256': digest,
                     'bytes': size,
-                })
+                    'arguments': {argument},
+                }
             elif os.path.isdir(realpath):
                 digest, size, file_count = _sha256_directory(realpath)
-                records.append({
-                    'argument': argument,
+                records_by_path[realpath] = {
                     'path': realpath,
                     'type': 'directory',
                     'sha256': digest,
                     'bytes': size,
                     'file_count': file_count,
-                })
+                    'arguments': {argument},
+                }
+    records = list()
+    for record in records_by_path.values():
+        arguments = sorted(record.pop('arguments'))
+        record['argument'] = arguments[0]
+        record['arguments'] = arguments
+        records.append(record)
     return sorted(records, key=lambda record: (record['argument'], record['path']))
 
 
@@ -292,8 +380,18 @@ def _write_audit(path, record):
     parent = os.path.dirname(os.path.realpath(path))
     if parent:
         os.makedirs(parent, exist_ok=True)
-    with open(path, 'a') as handle:
-        handle.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + '\n')
+    payload = (json.dumps(record, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8')
+    lock_path = os.path.realpath(path) + '.lock'
+    with acquire_exclusive_lock(lock_path, lock_label='audit log'):
+        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o666)
+        try:
+            view = memoryview(payload)
+            while view:
+                written = os.write(fd, view)
+                view = view[written:]
+            os.fsync(fd)
+        finally:
+            os.close(fd)
 
 
 def run_with_audit(args, argv, handler):
@@ -302,6 +400,29 @@ def run_with_audit(args, argv, handler):
         return handler(args)
     if audit_path == '-':
         raise ValueError("'--audit' requires a file path; stdout is reserved for primary output.")
+    audit_collision_candidates = [('--audit', audit_path)]
+    for argument in OUTPUT_ARGUMENTS:
+        if argument == 'audit':
+            continue
+        value = getattr(args, argument, None)
+        if argument == 'group_table_prefix':
+            if (
+                value in (None, '')
+                and getattr(args, 'command', None) == 'skim'
+                and bool(getattr(args, 'output_groupfile', False))
+            ):
+                outfile = getattr(args, 'outfile', None)
+                if outfile not in (None, '', '-'):
+                    value = outfile.removesuffix('.nwk')
+            if value not in (None, ''):
+                audit_collision_candidates.extend((
+                    ('--group-table-prefix .all.tsv', '{}.all.tsv'.format(value)),
+                    ('--group-table-prefix .sampled.tsv', '{}.sampled.tsv'.format(value)),
+                ))
+        else:
+            for candidate in _path_candidates_from_value(value):
+                audit_collision_candidates.append(('--{}'.format(argument.replace('_', '-')), candidate))
+    validate_distinct_output_paths(audit_collision_candidates)
     original_stdin = sys.stdin
     original_stdout = sys.stdout
     original_stderr = sys.stderr
@@ -334,7 +455,7 @@ def run_with_audit(args, argv, handler):
         sys.stdin = original_stdin
         sys.stdout = original_stdout
         sys.stderr = original_stderr
-        stderr_lines = stderr_tee.text.splitlines()
+        stderr_lines = stderr_tee.captured_lines
         record = {
             'schema': 'nwkit-audit-v1',
             'started_at_utc': started_at,
@@ -359,8 +480,8 @@ def run_with_audit(args, argv, handler):
                 'sha256': stdout_tee.sha256,
                 'bytes': stdout_tee.byte_count,
             },
-            'warnings': [line for line in stderr_lines if 'warning' in line.lower()],
-            'messages': stderr_lines[:500],
+            'warnings': stderr_tee.captured_warning_lines,
+            'messages': stderr_lines,
         }
         try:
             _write_audit(audit_path, record)

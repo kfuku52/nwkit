@@ -1,8 +1,10 @@
 import math
 import multiprocessing
+import os
 import sys
+from itertools import islice
 from collections import defaultdict
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
 import pandas as pd
 from ete4 import Tree
@@ -13,6 +15,7 @@ from nwkit.util import (
     count_set_bits,
     get_subtree_leaf_bitmasks,
     is_rooted,
+    iter_tree_strings,
     read_tree,
     read_tree_strings,
     validate_unique_named_leaves,
@@ -117,6 +120,10 @@ def _aggregate_branch_lengths(observations, method):
         return dict()
     out = dict()
     for mask, records in observations.items():
+        if method == 'mean' and isinstance(records, tuple):
+            weighted_sum, weight_sum = records
+            out[mask] = None if weight_sum == 0 else weighted_sum / weight_sum
+            continue
         values = [value for value, _ in records if value is not None]
         weights = [weight for value, weight in records if value is not None]
         if len(values) == 0:
@@ -143,7 +150,7 @@ def _validate_threads(threads):
 
 def _get_process_pool_context():
     try:
-        return multiprocessing.get_context('fork')
+        return multiprocessing.get_context('forkserver')
     except ValueError:
         return None
 
@@ -174,10 +181,13 @@ def _collect_single_tree_clade_stats(
     leaf_names,
     leaf_name_to_bit,
     collect_branch_lengths=True,
+    branch_length_method=None,
 ):
+    if branch_length_method is None:
+        branch_length_method = 'median' if collect_branch_lengths else 'none'
     all_mask = (1 << len(leaf_names)) - 1
     clade_weights = defaultdict(float)
-    branch_length_observations = defaultdict(list)
+    branch_length_observations = {} if branch_length_method == 'mean' else defaultdict(list)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'consensus'")
     if not is_rooted(tree):
         raise ValueError("Consensus currently requires rooted trees. Tree {} is unrooted.".format(tree_index))
@@ -186,9 +196,16 @@ def _collect_single_tree_clade_stats(
     subtree_masks = get_subtree_leaf_bitmasks(tree, leaf_name_to_bit)
     for node, mask in subtree_masks.items():
         num_tips = count_set_bits(mask)
-        if collect_branch_lengths and (not node.is_root):
+        if branch_length_method != 'none' and (not node.is_root):
             dist_value = None if (node.dist is None) else float(node.dist)
-            branch_length_observations[mask].append((dist_value, tree_weight))
+            if branch_length_method == 'mean':
+                weighted_sum, weight_sum = branch_length_observations.get(mask, (0.0, 0.0))
+                if dist_value is not None:
+                    weighted_sum += dist_value * tree_weight
+                    weight_sum += tree_weight
+                branch_length_observations[mask] = (weighted_sum, weight_sum)
+            else:
+                branch_length_observations[mask].append((dist_value, tree_weight))
         if node.is_root or (num_tips <= 1) or (num_tips >= len(leaf_names)):
             continue
         clade_weights[mask] += tree_weight
@@ -200,7 +217,14 @@ def _merge_clade_stats(target_clade_weights, target_branch_length_observations, 
     for mask, weight in source_clade_weights.items():
         target_clade_weights[mask] += weight
     for mask, observations in source_branch_length_observations.items():
-        target_branch_length_observations[mask].extend(observations)
+        if isinstance(observations, tuple):
+            current_weighted_sum, current_weight_sum = target_branch_length_observations.get(mask, (0.0, 0.0))
+            target_branch_length_observations[mask] = (
+                current_weighted_sum + observations[0],
+                current_weight_sum + observations[1],
+            )
+        else:
+            target_branch_length_observations[mask].extend(observations)
 
 
 def _collect_tree_string_chunk_clade_stats(payload):
@@ -210,10 +234,11 @@ def _collect_tree_string_chunk_clade_stats(payload):
         quoted_node_names,
         leaf_names,
         collect_branch_lengths,
+        branch_length_method,
     ) = payload
     leaf_name_to_bit = {leaf_name: index for index, leaf_name in enumerate(leaf_names)}
     clade_weights = defaultdict(float)
-    branch_length_observations = defaultdict(list)
+    branch_length_observations = {} if branch_length_method == 'mean' else defaultdict(list)
     for tree_index, tree_string, tree_weight in records:
         tree = read_tree(tree_string, format, quoted_node_names, quiet=True)
         _, _, _, tree_clade_weights, tree_branch_length_observations = _collect_single_tree_clade_stats(
@@ -223,6 +248,7 @@ def _collect_tree_string_chunk_clade_stats(payload):
             leaf_names=leaf_names,
             leaf_name_to_bit=leaf_name_to_bit,
             collect_branch_lengths=collect_branch_lengths,
+            branch_length_method=branch_length_method,
         )
         _merge_clade_stats(
             target_clade_weights=clade_weights,
@@ -239,11 +265,17 @@ def _collect_clade_stats_from_tree_strings(
     quoted_node_names,
     collect_branch_lengths=True,
     threads=1,
+    branch_length_method=None,
 ):
-    if len(tree_strings) == 0:
+    tree_string_iterator = iter(tree_strings)
+    try:
+        first_tree_string = next(tree_string_iterator)
+    except StopIteration:
         raise ValueError('No input trees were found for consensus.')
     threads = _validate_threads(threads)
-    first_tree = read_tree(tree_strings[0], format, quoted_node_names, quiet=True)
+    if branch_length_method is None:
+        branch_length_method = 'median' if collect_branch_lengths else 'none'
+    first_tree = read_tree(first_tree_string, format, quoted_node_names, quiet=True)
     leaf_names, leaf_name_to_bit, all_mask = _initialize_clade_collection(first_tree)
     _, _, _, first_clade_weights, first_branch_length_observations = _collect_single_tree_clade_stats(
         tree=first_tree,
@@ -252,52 +284,66 @@ def _collect_clade_stats_from_tree_strings(
         leaf_names=leaf_names,
         leaf_name_to_bit=leaf_name_to_bit,
         collect_branch_lengths=collect_branch_lengths,
+        branch_length_method=branch_length_method,
     )
     clade_weights = defaultdict(float, first_clade_weights)
-    branch_length_observations = defaultdict(list)
+    branch_length_observations = {} if branch_length_method == 'mean' else defaultdict(list)
     for mask, observations in first_branch_length_observations.items():
-        branch_length_observations[mask].extend(observations)
-    records = [
-        (tree_index, tree_string, tree_weight)
-        for tree_index, (tree_string, tree_weight) in enumerate(zip(tree_strings[1:], tree_weights[1:]), start=2)
-    ]
-    if records:
-        max_workers = min(threads, len(records))
-        if max_workers <= 1:
-            chunk_results = [
-                _collect_tree_string_chunk_clade_stats(
-                    (
-                        records,
+        if isinstance(observations, tuple):
+            branch_length_observations[mask] = observations
+        else:
+            branch_length_observations[mask].extend(observations)
+    records = (
+        (tree_index, tree_string, tree_weights[tree_index - 1])
+        for tree_index, tree_string in enumerate(tree_string_iterator, start=2)
+    )
+    if threads <= 1:
+        chunk_result = _collect_tree_string_chunk_clade_stats((
+            records,
+            format,
+            quoted_node_names,
+            leaf_names,
+            collect_branch_lengths,
+            branch_length_method,
+        ))
+        _merge_clade_stats(
+            target_clade_weights=clade_weights,
+            target_branch_length_observations=branch_length_observations,
+            source=chunk_result,
+        )
+    else:
+        executor_kwargs = {'max_workers': threads}
+        process_pool_context = _get_process_pool_context()
+        if process_pool_context is not None:
+            executor_kwargs['mp_context'] = process_pool_context
+        with ProcessPoolExecutor(**executor_kwargs) as executor:
+            futures = set()
+            records_exhausted = False
+            while futures or not records_exhausted:
+                while len(futures) < threads * 2 and not records_exhausted:
+                    chunk = list(islice(records, 32))
+                    if not chunk:
+                        records_exhausted = True
+                        break
+                    payload = (
+                        chunk,
                         format,
                         quoted_node_names,
                         leaf_names,
                         collect_branch_lengths,
+                        branch_length_method,
                     )
-                )
-            ]
-        else:
-            payloads = [
-                (
-                    chunk,
-                    format,
-                    quoted_node_names,
-                    leaf_names,
-                    collect_branch_lengths,
-                )
-                for chunk in _chunk_sequence(records, max_workers)
-            ]
-            executor_kwargs = {'max_workers': max_workers}
-            process_pool_context = _get_process_pool_context()
-            if process_pool_context is not None:
-                executor_kwargs['mp_context'] = process_pool_context
-            with ProcessPoolExecutor(**executor_kwargs) as executor:
-                chunk_results = list(executor.map(_collect_tree_string_chunk_clade_stats, payloads))
-        for chunk_result in chunk_results:
-            _merge_clade_stats(
-                target_clade_weights=clade_weights,
-                target_branch_length_observations=branch_length_observations,
-                source=chunk_result,
-            )
+                    futures.add(executor.submit(_collect_tree_string_chunk_clade_stats, payload))
+                if not futures:
+                    continue
+                completed, futures = wait(futures, return_when=FIRST_COMPLETED)
+                for future in completed:
+                    chunk_result = future.result()
+                    _merge_clade_stats(
+                        target_clade_weights=clade_weights,
+                        target_branch_length_observations=branch_length_observations,
+                        source=chunk_result,
+                    )
     return leaf_names, leaf_name_to_bit, all_mask, dict(clade_weights), dict(branch_length_observations)
 
 
@@ -314,6 +360,7 @@ def _collect_clade_stats(trees, tree_weights, collect_branch_lengths=True):
             leaf_names=leaf_names,
             leaf_name_to_bit=leaf_name_to_bit,
             collect_branch_lengths=collect_branch_lengths,
+            branch_length_method='median' if collect_branch_lengths else 'none',
         )
         _merge_clade_stats(
             target_clade_weights=clade_weights,
@@ -436,11 +483,16 @@ def consensus_main(args):
     weight_tsv = getattr(args, 'weight_tsv', None)
     if (args.min_freq < 0.0) or (args.min_freq > 1.0):
         raise ValueError("'--min-freq' must be between 0 and 1.")
-    tree_strings = read_tree_strings(args.infile)
-    if len(tree_strings) == 0:
+    if os.path.isfile(args.infile):
+        num_trees = sum(1 for _ in iter_tree_strings(args.infile))
+        tree_strings = iter_tree_strings(args.infile)
+    else:
+        tree_strings = read_tree_strings(args.infile)
+        num_trees = len(tree_strings)
+    if num_trees == 0:
         raise ValueError('No input trees were found for consensus.')
-    sys.stderr.write('Number of input trees = {:,}\n'.format(len(tree_strings)))
-    tree_weights = _read_tree_weights(weight_tsv, len(tree_strings))
+    sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
+    tree_weights = _read_tree_weights(weight_tsv, num_trees)
     total_weight = sum(tree_weights)
     leaf_names, leaf_name_to_bit, all_mask, clade_weights, branch_length_observations = _collect_clade_stats_from_tree_strings(
         tree_strings=tree_strings,
@@ -449,6 +501,7 @@ def consensus_main(args):
         quoted_node_names=args.quoted_node_names,
         collect_branch_lengths=(branch_length != 'none'),
         threads=getattr(args, 'threads', 1),
+        branch_length_method=branch_length,
     )
     if args.reference not in ['', None]:
         reference_tree = read_tree(args.reference, args.reference_format, args.quoted_node_names)

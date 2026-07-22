@@ -4,7 +4,13 @@ import sys
 
 import pandas as pd
 
-from nwkit.util import read_tip_table, read_tree, validate_unique_named_leaves, write_tree
+from nwkit.util import (
+    read_tip_table,
+    read_tree,
+    validate_distinct_output_paths,
+    validate_unique_named_leaves,
+    write_tree,
+)
 
 
 NUMERIC_OPERATORS = {'ge', 'gt', 'le', 'lt'}
@@ -305,6 +311,10 @@ def sample_main(args):
         report_path = getattr(args, 'output_table', None)
     if report_path in ['', '-']:
         raise ValueError("'--report' must be a file path, not '-' or an empty string.")
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--report', report_path),
+    ])
 
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'sample'")

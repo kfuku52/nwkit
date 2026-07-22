@@ -4,6 +4,39 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.33.0] - 2026-07-22
+
+### Added
+
+- Taxonomy caches now support configurable freshness checks through
+  `--taxonomy-cache-max-age-days` and explicit refreshes through
+  `--refresh-taxonomy-cache`.
+
+### Changed
+
+- `image` now validates downloaded media, avoids filename collisions, bounds
+  and refreshes query caches, indexes NCBI image metadata in SQLite, and
+  records complete attribution for reused local files.
+- Consensus and clade-frequency collection stream tree files, ASR stochastic
+  maps aggregate simulations incrementally, and descendant-taxon caches use
+  compact representations for better behavior on large or unbalanced trees.
+- Provenance records include composition-manifest dependencies and every CLI
+  role associated with a physical input or output file.
+
+### Fixed
+
+- ETE4 taxonomy downloads and database builds are checksum-verified, bounded,
+  atomic, integrity-checked, and isolated from the caller's working directory.
+- Multi-output commands reject paths that resolve to the same file instead of
+  silently overwriting an earlier output.
+- MCMCtree calibration values and TimeTree responses reject non-numeric,
+  non-finite, inverted, or out-of-range values.
+- OpenTree and TimeTree requests validate response shapes and sizes, retry
+  transient failures, and preserve configured taxonomy-source fallbacks.
+- Cache and audit locks now tolerate incomplete lock metadata, verify ownership
+  before release, and serialize concurrent JSONL audit appends.
+- Audit stderr capture is bounded while retaining warning records.
+
 ## [0.32.0] - 2026-07-21
 
 ### Added

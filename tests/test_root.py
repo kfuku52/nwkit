@@ -520,6 +520,22 @@ class TestTransferRoot:
 
 
 class TestTaxonomyRooting:
+    def test_malformed_opentree_json_falls_back_to_next_source(self, monkeypatch):
+        install_fake_opentree(
+            monkeypatch,
+            tnrs_json=[],
+            induced_subtree_json={'newick': ''},
+        )
+        reference = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        monkeypatch.setattr(
+            root_mod,
+            '_build_ncbi_reference_tree',
+            lambda **kwargs: (reference, {'A', 'B', 'C', 'D'}, set()),
+        )
+        tree = Tree('((A:1,B:1):1,C:1,D:1);', parser=1)
+        rooted = taxonomy_rooting(tree, taxonomy_source='opentree,ncbi', rank='no')
+        assert {'A', 'B'} in [set(child.leaf_names()) for child in rooted.get_children()]
+
     def test_default_source_chain_constant(self):
         assert DEFAULT_TAXONOMY_SOURCE_CHAIN == 'ncbi,opentree,timetree'
 

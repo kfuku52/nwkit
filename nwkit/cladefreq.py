@@ -1,9 +1,17 @@
+import os
 import sys
 
 import pandas as pd
 
 from nwkit.consensus import _collect_clade_stats_from_tree_strings, _read_tree_weights, _scale_support
-from nwkit.util import count_set_bits, get_subtree_leaf_bitmasks, read_tree, read_tree_strings, support_is_missing
+from nwkit.util import (
+    count_set_bits,
+    get_subtree_leaf_bitmasks,
+    iter_tree_strings,
+    read_tree,
+    read_tree_strings,
+    support_is_missing,
+)
 
 
 CLADEFREQ_COLUMNS = ('descendant_taxa', 'num_taxa', 'weight_sum', 'frequency')
@@ -23,11 +31,16 @@ def _mask_to_leaf_set(mask, leaf_names):
 
 
 def cladefreq_main(args):
-    tree_strings = read_tree_strings(args.infile)
-    if len(tree_strings) == 0:
+    if os.path.isfile(args.infile):
+        num_trees = sum(1 for _ in iter_tree_strings(args.infile))
+        tree_strings = iter_tree_strings(args.infile)
+    else:
+        tree_strings = read_tree_strings(args.infile)
+        num_trees = len(tree_strings)
+    if num_trees == 0:
         raise ValueError('No input trees were found for cladefreq.')
-    sys.stderr.write('Number of input trees = {:,}\n'.format(len(tree_strings)))
-    tree_weights = _read_tree_weights(args.weight_tsv, len(tree_strings))
+    sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
+    tree_weights = _read_tree_weights(args.weight_tsv, num_trees)
     total_weight = sum(tree_weights)
     leaf_names, leaf_name_to_bit, _, clade_weights, _ = _collect_clade_stats_from_tree_strings(
         tree_strings=tree_strings,

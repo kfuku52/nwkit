@@ -1,4 +1,10 @@
-from nwkit.util import read_seqs, read_tree, write_seqs, write_tree
+from nwkit.util import (
+    read_seqs,
+    read_tree,
+    validate_distinct_output_paths,
+    write_seqs,
+    write_tree,
+)
 
 TRIE_TERM = '__TERM__'
 
@@ -76,6 +82,11 @@ def get_remove_names(arr1, arr2, match):
         raise ValueError('Unsupported match mode: {}'.format(match))
 
 def intersection_main(args):
+    seqout_path = args.seqout if args.seqout != '' else '-'
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--seqout', seqout_path if getattr(args, 'seqin', '') != '' else None),
+    ])
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     leaf_names = get_leaf_names(tree)
     if (args.infile2 == '') and (args.seqin == ''):

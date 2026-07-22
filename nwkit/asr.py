@@ -20,6 +20,7 @@ from nwkit.util import (
     read_tree,
     read_tip_table,
     validate_unique_named_leaves,
+    validate_distinct_output_paths,
 )
 
 
@@ -899,7 +900,10 @@ def _simulate_stochastic_map_chunk(spec, seed_sequences):
 
 def _simulate_stochastic_map_chunk_worker(payload):
     spec, seed_sequences = payload
-    return _simulate_stochastic_map_chunk(spec, seed_sequences)
+    return _merge_simulation_counts(
+        _simulate_stochastic_map_once(spec, seed_sequence)
+        for seed_sequence in seed_sequences
+    )
 
 
 def _merge_simulation_counts(simulation_counts_list):
@@ -912,9 +916,20 @@ def _merge_simulation_counts(simulation_counts_list):
     return total_counts, any_counts
 
 
+def _merge_count_summaries(count_summaries):
+    total_counts = defaultdict(int)
+    any_counts = defaultdict(int)
+    for chunk_total_counts, chunk_any_counts in count_summaries:
+        for key, count in chunk_total_counts.items():
+            total_counts[key] += count
+        for key, count in chunk_any_counts.items():
+            any_counts[key] += count
+    return total_counts, any_counts
+
+
 def _get_process_pool_context():
     try:
-        return multiprocessing.get_context('fork')
+        return multiprocessing.get_context('forkserver')
     except ValueError:
         return None
 
@@ -938,7 +953,10 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
     spec = _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts)
     seed_sequences = _simulation_seed_sequence(seed, num_simulations)
     if threads == 1 or num_simulations == 1:
-        simulation_counts_list = _simulate_stochastic_map_chunk(spec, seed_sequences)
+        total_counts, any_counts = _merge_simulation_counts(
+            _simulate_stochastic_map_once(spec, seed_sequence)
+            for seed_sequence in seed_sequences
+        )
     else:
         max_workers = min(threads, num_simulations)
         seed_sequence_chunks = [
@@ -950,18 +968,12 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
         if process_pool_context is not None:
             executor_kwargs['mp_context'] = process_pool_context
         with ProcessPoolExecutor(**executor_kwargs) as executor:
-            simulation_count_chunks = list(
+            total_counts, any_counts = _merge_count_summaries(
                 executor.map(
                     _simulate_stochastic_map_chunk_worker,
-                    [(spec, seed_sequence_chunk) for seed_sequence_chunk in seed_sequence_chunks],
+                    ((spec, seed_sequence_chunk) for seed_sequence_chunk in seed_sequence_chunks),
                 )
             )
-        simulation_counts_list = [
-            simulation_counts
-            for simulation_count_chunk in simulation_count_chunks
-            for simulation_counts in simulation_count_chunk
-        ]
-    total_counts, any_counts = _merge_simulation_counts(simulation_counts_list)
     rows = list()
     for node in tree.traverse():
         if node.is_root:
@@ -1023,6 +1035,12 @@ def asr_main(args):
                 ', '.join(stdout_auxiliary_outputs)
             )
         )
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--model-out', getattr(args, 'model_out', None)),
+        ('--tree-out', getattr(args, 'tree_out', None)),
+        ('--stochastic-map-out', getattr(args, 'stochastic_map_out', None)),
+    ])
     model = getattr(args, 'model', 'ER')
     if model not in SUPPORTED_MODELS:
         raise ValueError("Unsupported '--model': {}".format(model))

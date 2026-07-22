@@ -15,12 +15,14 @@ from nwkit.util import (
     TREE_FORMAT_PROP,
     assign_branch_ids,
     get_node_class,
+    get_subtree_leaf_name_sets,
     get_tree_property_names,
     get_target_nodes,
     is_all_leaf_names_identical,
     read_tree,
     support_is_missing,
     validate_unique_named_leaves,
+    validate_distinct_output_paths,
     write_tree,
 )
 
@@ -241,10 +243,7 @@ def _is_bifurcating_root_pair(nodes):
 
 def _physical_split_candidates(tree, shared_taxa):
     candidates = dict()
-    taxon_sets = {
-        node: frozenset(str(name) for name in taxa)
-        for node, taxa in tree.get_cached_content(prop='name').items()
-    }
+    taxon_sets = get_subtree_leaf_name_sets(tree)
     for node in tree.traverse():
         if node.is_root:
             continue
@@ -1000,6 +999,10 @@ def transfer_properties(target, source, property_specs, target_class='all',
 def transfer_main(args):
     if args.infile2 in ('', None):
         raise ValueError("'--infile2' is required for 'transfer'.")
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--report', getattr(args, 'report', None)),
+    ])
     property_specs = parse_property_specs(
         properties=getattr(args, 'property', None),
         property_maps=getattr(args, 'property_map', None),

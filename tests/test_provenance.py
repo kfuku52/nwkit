@@ -3,7 +3,10 @@ import io
 import json
 import sys
 
+import pytest
+
 from nwkit.cli import main
+from nwkit.provenance import _TeeTextWriter
 
 
 def _sha256(path):
@@ -73,3 +76,38 @@ def test_audit_records_skim_group_table_outputs(tmp_path):
     assert str(outfile.resolve()) in output_paths
     assert str((tmp_path / 'groups.all.tsv').resolve()) in output_paths
     assert str((tmp_path / 'groups.sampled.tsv').resolve()) in output_paths
+
+
+def test_audit_records_compose_manifest_dependencies_and_all_roles(tmp_path):
+    target = tmp_path / 'target.nwk'
+    source = tmp_path / 'source.nwk'
+    manifest = tmp_path / 'compose.json'
+    outfile = tmp_path / 'output.nwk'
+    audit = tmp_path / 'audit.jsonl'
+    target.write_text('((A:1,B:1):1,C:1);')
+    source.write_text('((A:1,B:1)AB:1,C:1);')
+    manifest.write_text(json.dumps({'name': 'source.nwk', 'support': 'source.nwk'}))
+    main([
+        'compose', '-i', str(target), '--manifest', str(manifest),
+        '-o', str(outfile), '--audit', str(audit),
+    ])
+    record = json.loads(audit.read_text().strip())
+    source_record = next(item for item in record['inputs'] if item['path'] == str(source.resolve()))
+    assert source_record['arguments'] == ['manifest:name', 'manifest:support']
+
+
+def test_stderr_capture_is_bounded():
+    writer = _TeeTextWriter(io.StringIO(), capture=True, max_lines=3, max_line_chars=10)
+    writer.write('warning one\nline two\nline three\nline four\n')
+    assert writer.captured_lines == ['warning on', 'line two', 'line three']
+    assert writer.warning_lines == ['warning on']
+    writer.write('final warning')
+    assert writer.captured_warning_lines == ['warning on', 'final warn']
+
+
+def test_audit_path_cannot_overwrite_primary_output(tmp_path):
+    infile = tmp_path / 'input.nwk'
+    output = tmp_path / 'same.out'
+    infile.write_text('(A:1,B:1);')
+    with pytest.raises(ValueError, match='Output paths must be distinct'):
+        main(['label', '-i', str(infile), '-o', str(output), '--audit', str(output)])

@@ -6,6 +6,7 @@ from nwkit.util import (
     read_tip_table,
     read_tree,
     validate_unique_named_leaves,
+    validate_distinct_output_paths,
     write_tree,
 )
 
@@ -169,6 +170,11 @@ def skim_main(args):
         group_table_prefix = args.outfile.removesuffix('.nwk')
     if group_table_prefix == '-':
         raise ValueError("'--group-table-prefix' must be a file path, not '-'.")
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--group-table-prefix .all.tsv', None if group_table_prefix in ('', None) else '{}.all.tsv'.format(group_table_prefix)),
+        ('--group-table-prefix .sampled.tsv', None if group_table_prefix in ('', None) else '{}.sampled.tsv'.format(group_table_prefix)),
+    ])
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'skim'")
     trait_df = read_trait(args, tree)

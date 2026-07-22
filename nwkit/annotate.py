@@ -13,6 +13,7 @@ from nwkit.util import (
     read_tree,
     read_tip_table,
     validate_unique_named_leaves,
+    validate_distinct_output_paths,
     write_tree,
 )
 
@@ -139,6 +140,10 @@ def _write_report(rows, path):
 def annotate_main(args):
     if getattr(args, 'table', None) in (None, ''):
         raise ValueError("'--table' is required for 'annotate'.")
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--report', getattr(args, 'report', None)),
+    ])
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'annotate'")
     table, table_only, tree_only = read_tip_table(

@@ -2,15 +2,21 @@ import os
 import sys
 import pytest
 import io
+import pickle
+import sqlite3
+import tarfile
 from contextlib import contextmanager
 from ete4 import Tree
 
 from nwkit.util import (
+    _break_stale_lock_if_needed,
+    _build_ete_taxonomy_database,
     acquire_exclusive_lock,
     extract_species_label,
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_monophyletic_species_groups,
+    iter_newick_stream,
     resolve_download_dir,
     resolve_ete_data_dir,
     read_tree,
@@ -23,11 +29,38 @@ from nwkit.util import (
     get_subtree_leaf_name_sets,
     get_subtree_leaf_bitmasks,
     validate_unique_named_leaves,
+    validate_distinct_output_paths,
     is_all_leaf_names_identical,
     get_target_nodes,
     is_rooted,
 )
 from tests.helpers import make_args
+
+
+def _write_valid_taxonomy_db(path):
+    connection = sqlite3.connect(path)
+    connection.executescript(
+        'CREATE TABLE stats (version INT PRIMARY KEY);'
+        'CREATE TABLE species (taxid INT PRIMARY KEY, parent INT, spname TEXT, common TEXT, rank TEXT, track TEXT);'
+        'CREATE TABLE synonym (taxid INT, spname TEXT);'
+        'CREATE TABLE merged (taxid_old INT, taxid_new INT);'
+        'INSERT INTO stats VALUES (2);'
+        "INSERT INTO species VALUES (1, 1, 'root', '', 'no rank', '1');"
+    )
+    connection.commit()
+    connection.close()
+    with open(str(path) + '.traverse.pkl', 'wb') as handle:
+        pickle.dump([1, 1], handle)
+
+
+def _write_valid_taxdump(path):
+    source_dir = path.parent / '{}-members'.format(path.name)
+    source_dir.mkdir()
+    for name in ('nodes.dmp', 'names.dmp', 'merged.dmp'):
+        (source_dir / name).write_text('1\t|\t1\t|\n')
+    with tarfile.open(path, 'w:gz') as archive:
+        for name in ('nodes.dmp', 'names.dmp', 'merged.dmp'):
+            archive.add(source_dir / name, arcname=name)
 
 
 class TestReadTree:
@@ -40,6 +73,13 @@ class TestReadTree:
         path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
         tree = read_tree(path, format='1', quoted_node_names=True, quiet=True)
         assert len(list(tree.leaves())) == 4
+
+    def test_streaming_newick_parser_handles_quote_boundaries(self):
+        text = "('A''quoted':1,B:1);\n(C:1,D:1);\n"
+        assert list(iter_newick_stream(io.StringIO(text), chunk_size=1)) == [
+            "('A''quoted':1,B:1);",
+            '(C:1,D:1);',
+        ]
 
     def test_read_tree_with_internal_names(self, tmp_nwk):
         path = tmp_nwk('((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;')
@@ -241,6 +281,20 @@ class TestDownloadDirHelpers:
             assert lock_path.exists()
         assert not lock_path.exists()
 
+    def test_new_empty_lock_receives_metadata_grace_period(self, tmp_path):
+        lock_path = tmp_path / '.lock'
+        lock_path.write_bytes(b'')
+        assert _break_stale_lock_if_needed(str(lock_path)) is False
+        assert lock_path.exists()
+
+    def test_distinct_output_paths_rejects_realpath_aliases(self, tmp_path):
+        output = tmp_path / 'result.tsv'
+        with pytest.raises(ValueError, match='Output paths must be distinct'):
+            validate_distinct_output_paths([
+                ('--outfile', str(output)),
+                ('--report', str(tmp_path / '.' / 'result.tsv')),
+            ])
+
     def test_get_ete_ncbitaxa_uses_download_dir_and_lock(self, monkeypatch, tmp_path):
         explicit_dir = tmp_path / 'shared-cache'
         args = make_args(download_dir=str(explicit_dir))
@@ -254,14 +308,19 @@ class TestDownloadDirHelpers:
 
         def fake_download_ete_taxdump(taxdump_file):
             calls['downloaded_taxdump_file'] = taxdump_file
-            with open(taxdump_file, 'wb') as handle:
-                handle.write(b'fake taxdump')
+            _write_valid_taxdump(tmp_path / 'shared-cache' / 'ete4' / 'taxdump.tar.gz')
+            return True
+
+        def fake_build(dbfile, taxdump_file):
+            calls['built_dbfile'] = dbfile
+            calls['built_taxdump_file'] = taxdump_file
+            _write_valid_taxonomy_db(dbfile)
 
         class FakeNCBI:
             def __init__(self, dbfile=None, taxdump_file=None, memory=False, update=True):
                 calls['dbfile'] = dbfile
                 calls['taxdump_file'] = taxdump_file
-                calls['taxdump_exists_at_init'] = os.path.exists(taxdump_file)
+                calls['taxdump_exists_at_init'] = taxdump_file is not None and os.path.exists(taxdump_file)
                 calls['memory'] = memory
                 calls['update'] = update
                 self.db = None
@@ -269,6 +328,7 @@ class TestDownloadDirHelpers:
         monkeypatch.setattr('nwkit.util.acquire_exclusive_lock', fake_lock)
         monkeypatch.setattr('nwkit.util._find_existing_ete_taxonomy_assets', lambda exclude_dbfile=None: None)
         monkeypatch.setattr('nwkit.util._download_ete_taxdump', fake_download_ete_taxdump)
+        monkeypatch.setattr('nwkit.util._build_ete_taxonomy_database', fake_build)
         monkeypatch.setattr('nwkit.util.ete4.NCBITaxa', FakeNCBI)
         ncbi = get_ete_ncbitaxa(args=args)
         assert isinstance(ncbi, FakeNCBI)
@@ -276,18 +336,50 @@ class TestDownloadDirHelpers:
         assert calls['lock_path'] == os.path.join(expected_ete_dir, '.ete4_taxonomy.lock')
         assert calls['lock_label'] == 'ETE4 taxonomy DB'
         assert calls['dbfile'] == os.path.join(expected_ete_dir, 'taxa.sqlite')
-        assert calls['taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
+        assert calls['taxdump_file'] is None
         assert calls['downloaded_taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
-        assert calls['taxdump_exists_at_init'] is True
+        assert calls['built_dbfile'] == os.path.join(expected_ete_dir, 'taxa.sqlite')
+        assert calls['built_taxdump_file'] == os.path.join(expected_ete_dir, 'taxdump.tar.gz')
 
-    def test_get_ete_ncbitaxa_auto_uses_ete_default_location(self, monkeypatch):
+    def test_taxonomy_build_isolated_from_calling_working_directory(self, monkeypatch, tmp_path):
+        caller_dir = tmp_path / 'caller'
+        target_dir = tmp_path / 'cache'
+        caller_dir.mkdir()
+        target_dir.mkdir()
+        sentinel = caller_dir / 'taxa.tab'
+        sentinel.write_text('keep me')
+        taxdump = target_dir / 'taxdump.tar.gz'
+        taxdump.write_bytes(b'placeholder')
+        observed = {}
+
+        def fake_run(command, cwd, check):
+            observed['cwd'] = cwd
+            observed['command'] = command
+            dbfile = command[-2]
+            with open(dbfile, 'wb') as handle:
+                handle.write(b'database')
+            with open(dbfile + '.traverse.pkl', 'wb') as handle:
+                pickle.dump([1], handle)
+
+        monkeypatch.chdir(caller_dir)
+        monkeypatch.setattr('nwkit.util.subprocess.run', fake_run)
+        monkeypatch.setattr('nwkit.util._validate_ete_taxonomy_db', lambda *args, **kwargs: True)
+        _build_ete_taxonomy_database(str(target_dir / 'taxa.sqlite'), str(taxdump))
+        assert os.path.realpath(observed['cwd']) != os.path.realpath(caller_dir)
+        assert sentinel.read_text() == 'keep me'
+        assert (target_dir / 'taxa.sqlite').read_bytes() == b'database'
+
+    def test_get_ete_ncbitaxa_auto_uses_ete_default_location(self, monkeypatch, tmp_path):
         calls = dict()
 
-        def fail_lock(*args, **kwargs):
-            raise AssertionError('lock should not be used when download_dir=auto')
+        default_db = tmp_path / 'ete-default' / 'taxa.sqlite'
+        default_db.parent.mkdir()
+        _write_valid_taxonomy_db(default_db)
 
-        def fail_download(*args, **kwargs):
-            raise AssertionError('taxdump should not be downloaded by nwkit when download_dir=auto')
+        @contextmanager
+        def fake_lock(lock_path, **kwargs):
+            calls['lock_path'] = lock_path
+            yield
 
         class FakeNCBI:
             def __init__(self, *args, **kwargs):
@@ -295,21 +387,20 @@ class TestDownloadDirHelpers:
                 calls['kwargs'] = kwargs
                 self.db = None
 
-        monkeypatch.setattr('nwkit.util.acquire_exclusive_lock', fail_lock)
-        monkeypatch.setattr('nwkit.util._download_ete_taxdump', fail_download)
+        monkeypatch.setattr('ete4.ncbi_taxonomy.ncbiquery.DEFAULT_TAXADB', str(default_db))
+        monkeypatch.setattr('nwkit.util.acquire_exclusive_lock', fake_lock)
         monkeypatch.setattr('nwkit.util.ete4.NCBITaxa', FakeNCBI)
         ncbi = get_ete_ncbitaxa(args=make_args(download_dir='auto'))
         assert isinstance(ncbi, FakeNCBI)
         assert calls['args'] == ()
-        assert calls['kwargs'] == {}
+        assert calls['kwargs'] == {'dbfile': str(default_db), 'update': False}
+        assert calls['lock_path'] == str(default_db.parent / '.ete4_taxonomy.lock')
 
-    def test_get_ete_ncbitaxa_reuses_existing_taxdump(self, monkeypatch, tmp_path):
+    def test_get_ete_ncbitaxa_checks_existing_taxdump_before_build(self, monkeypatch, tmp_path):
         explicit_dir = tmp_path / 'shared-cache'
         expected_ete_dir = os.path.join(os.path.realpath(explicit_dir), 'ete4')
         os.makedirs(expected_ete_dir, exist_ok=True)
-        existing_taxdump = os.path.join(expected_ete_dir, 'taxdump.tar.gz')
-        with open(existing_taxdump, 'wb') as handle:
-            handle.write(b'existing taxdump')
+        _write_valid_taxdump(tmp_path / 'shared-cache' / 'ete4' / 'taxdump.tar.gz')
         args = make_args(download_dir=str(explicit_dir))
         calls = dict(download_count=0)
 
@@ -320,6 +411,11 @@ class TestDownloadDirHelpers:
 
         def fake_download_ete_taxdump(taxdump_file):
             calls['download_count'] += 1
+            return False
+
+        def fake_build(dbfile, taxdump_file):
+            calls['build_count'] = calls.get('build_count', 0) + 1
+            _write_valid_taxonomy_db(dbfile)
 
         class FakeNCBI:
             def __init__(self, dbfile=None, taxdump_file=None, memory=False, update=True):
@@ -330,21 +426,22 @@ class TestDownloadDirHelpers:
         monkeypatch.setattr('nwkit.util.acquire_exclusive_lock', fake_lock)
         monkeypatch.setattr('nwkit.util._find_existing_ete_taxonomy_assets', lambda exclude_dbfile=None: None)
         monkeypatch.setattr('nwkit.util._download_ete_taxdump', fake_download_ete_taxdump)
+        monkeypatch.setattr('nwkit.util._build_ete_taxonomy_database', fake_build)
         monkeypatch.setattr('nwkit.util.ete4.NCBITaxa', FakeNCBI)
         ncbi = get_ete_ncbitaxa(args=args)
         assert isinstance(ncbi, FakeNCBI)
         assert calls['lock_path'] == os.path.join(expected_ete_dir, '.ete4_taxonomy.lock')
         assert calls['dbfile'] == os.path.join(expected_ete_dir, 'taxa.sqlite')
-        assert calls['taxdump_file'] == existing_taxdump
-        assert calls['download_count'] == 0
+        assert calls['taxdump_file'] is None
+        assert calls['download_count'] == 1
+        assert calls['build_count'] == 1
 
     def test_get_ete_ncbitaxa_reuses_existing_db_without_taxdump_update(self, monkeypatch, tmp_path):
         explicit_dir = tmp_path / 'shared-cache'
         expected_ete_dir = os.path.join(os.path.realpath(explicit_dir), 'ete4')
         os.makedirs(expected_ete_dir, exist_ok=True)
         existing_dbfile = os.path.join(expected_ete_dir, 'taxa.sqlite')
-        with open(existing_dbfile, 'wb') as handle:
-            handle.write(b'existing db')
+        _write_valid_taxonomy_db(existing_dbfile)
         args = make_args(download_dir=str(explicit_dir))
         calls = dict(download_count=0)
 
@@ -383,9 +480,8 @@ class TestDownloadDirHelpers:
         source_dbfile = source_dir / 'taxa.sqlite'
         source_traverse = source_dir / 'taxa.sqlite.traverse.pkl'
         source_taxdump = source_dir / 'taxdump.tar.gz'
-        source_dbfile.write_bytes(b'user db')
-        source_traverse.write_bytes(b'user traverse')
-        source_taxdump.write_bytes(b'user taxdump')
+        _write_valid_taxonomy_db(source_dbfile)
+        _write_valid_taxdump(source_taxdump)
         args = make_args(download_dir=str(explicit_dir))
         calls = dict(download_count=0)
 
@@ -422,12 +518,37 @@ class TestDownloadDirHelpers:
         assert calls['taxdump_file'] is None
         assert calls['update'] is False
         assert calls['download_count'] == 0
-        with open(os.path.join(expected_ete_dir, 'taxa.sqlite'), 'rb') as handle:
-            assert handle.read() == b'user db'
-        with open(os.path.join(expected_ete_dir, 'taxa.sqlite.traverse.pkl'), 'rb') as handle:
-            assert handle.read() == b'user traverse'
-        with open(os.path.join(expected_ete_dir, 'taxdump.tar.gz'), 'rb') as handle:
-            assert handle.read() == b'user taxdump'
+        assert os.path.getsize(os.path.join(expected_ete_dir, 'taxa.sqlite')) > 0
+        assert os.path.getsize(os.path.join(expected_ete_dir, 'taxa.sqlite.traverse.pkl')) > 0
+        assert os.path.getsize(os.path.join(expected_ete_dir, 'taxdump.tar.gz')) > 0
+
+    def test_get_ete_ncbitaxa_rebuilds_corrupt_database(self, monkeypatch, tmp_path):
+        explicit_dir = tmp_path / 'shared-cache'
+        ete_dir = explicit_dir / 'ete4'
+        ete_dir.mkdir(parents=True)
+        dbfile = ete_dir / 'taxa.sqlite'
+        dbfile.write_bytes(b'not a sqlite database')
+        calls = {'download': 0, 'build': 0}
+
+        def fake_download(path):
+            calls['download'] += 1
+            _write_valid_taxdump(ete_dir / 'taxdump.tar.gz')
+            return True
+
+        def fake_build(dbfile, taxdump_file):
+            calls['build'] += 1
+            os.remove(dbfile)
+            _write_valid_taxonomy_db(dbfile)
+
+        monkeypatch.setattr('nwkit.util._find_existing_ete_taxonomy_assets', lambda exclude_dbfile=None: None)
+        monkeypatch.setattr('nwkit.util._download_ete_taxdump', fake_download)
+        monkeypatch.setattr('nwkit.util._build_ete_taxonomy_database', fake_build)
+        ncbi = get_ete_ncbitaxa(args=make_args(download_dir=str(explicit_dir)))
+        try:
+            assert calls == {'download': 1, 'build': 1}
+            assert ncbi.get_taxid_translator([1])[1] == 'root'
+        finally:
+            ncbi.db.close()
 
 
 class TestSpeciesGrouping:

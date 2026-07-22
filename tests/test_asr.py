@@ -16,6 +16,17 @@ def _write_trait(tmp_path, rows, name='traits.tsv'):
 
 
 class TestAsrMain:
+    def test_rejects_colliding_primary_and_model_outputs(self, tmp_path):
+        output = tmp_path / 'same.tsv'
+        args = make_args(
+            outfile=str(output),
+            model_out=str(output),
+            tree_out=None,
+            stochastic_map_out=None,
+        )
+        with pytest.raises(ValueError, match='Output paths must be distinct'):
+            asr_main(args)
+
     def test_probabilities_report_internal_nodes_and_missing_tips(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree.nwk')
         trait = _write_trait(

@@ -8,7 +8,14 @@ from nwkit.clade_mapping import (
     projected_root_split,
 )
 from nwkit.transfer import _get_property, parse_property_specs
-from nwkit.util import assign_branch_ids, get_node_class, get_target_nodes, read_tree, validate_unique_named_leaves
+from nwkit.util import (
+    assign_branch_ids,
+    get_node_class,
+    get_subtree_leaf_name_sets,
+    get_target_nodes,
+    read_tree,
+    validate_unique_named_leaves,
+)
 
 
 DIFF_COLUMNS = (
@@ -48,11 +55,7 @@ def _format_split(split):
 
 
 def _taxon_sets(tree):
-    cached = tree.get_cached_content(prop='name')
-    return {
-        node: frozenset(str(name) for name in cached[node])
-        for node in tree.traverse()
-    }
+    return get_subtree_leaf_name_sets(tree)
 
 
 def _delta(target_value, source_value):

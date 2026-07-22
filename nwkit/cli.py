@@ -93,6 +93,10 @@ p_download.add_argument('--download-dir', '--download_dir', dest='download_dir',
                         help='default=%(default)s: Shared download/cache directory for external resources such as the ETE4 '
                              'NCBI taxonomy database. "auto" uses the ETE4 default cache location. '
                              '"inferred" stores downloads under <outfile_dir>/downloads, or ./downloads when writing to STDOUT.')
+p_download.add_argument('--taxonomy-cache-max-age-days', '--taxonomy_cache_max_age_days', dest='taxonomy_cache_max_age_days', metavar='FLOAT', default=30.0, type=float, required=False, action='store',
+                        help='default=%(default)s: Recheck the NCBI taxonomy archive after this many days. Use 0 to check every run.')
+p_download.add_argument('--refresh-taxonomy-cache', '--refresh_taxonomy_cache', dest='refresh_taxonomy_cache', action='store_true',
+                        help='Force a checksum check and rebuild the ETE4 taxonomy cache when NCBI has a newer archive.')
 
 p_tree_input = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',

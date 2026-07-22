@@ -12,7 +12,12 @@ from nwkit.transfer import (
     parse_root_edge_policies,
     transfer_properties,
 )
-from nwkit.util import get_tree_property_names, read_tree, write_tree
+from nwkit.util import (
+    get_tree_property_names,
+    read_tree,
+    validate_distinct_output_paths,
+    write_tree,
+)
 
 
 def _resolve_manifest_path(value, base_dir):
@@ -141,6 +146,10 @@ def _configured_sources(args):
 
 
 def compose_main(args):
+    validate_distinct_output_paths([
+        ('--outfile', getattr(args, 'outfile', None)),
+        ('--report', getattr(args, 'report', None)),
+    ])
     sources = _configured_sources(args)
     if not any(sources[key] for key in ('root', 'name', 'support', 'length')) and not sources['properties']:
         raise ValueError('At least one composition source must be specified.')

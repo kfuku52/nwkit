@@ -45,6 +45,31 @@ def make_mcmctree_args(**kwargs):
 
 
 class TestAddCommonAncConstraint:
+    @pytest.mark.parametrize('value', ['not-a-number', 'nan', 'inf'])
+    def test_rejects_non_finite_or_non_numeric_bounds(self, value):
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        args = make_mcmctree_args(
+            left_species='a', right_species='b',
+            lower_bound=value, upper_bound=value,
+        )
+        with pytest.raises(ValueError):
+            add_common_anc_constraint(tree, args)
+
+    def test_rejects_inverted_bounds_and_invalid_probabilities(self):
+        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        inverted = make_mcmctree_args(
+            left_species='a', right_species='b',
+            lower_bound='20', upper_bound='10',
+        )
+        with pytest.raises(ValueError, match='must be <='):
+            add_common_anc_constraint(tree, inverted)
+        invalid_probability = make_mcmctree_args(
+            left_species='a', right_species='b',
+            lower_bound='10', upper_bound='20', lower_tail_prob='1.5',
+        )
+        with pytest.raises(ValueError, match='tail-prob'):
+            add_common_anc_constraint(tree, invalid_probability)
+
     def test_bound_constraint(self):
         tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
         args = make_mcmctree_args(

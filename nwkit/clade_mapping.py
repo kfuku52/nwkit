@@ -1,6 +1,10 @@
 from dataclasses import dataclass
 
-from nwkit.util import get_node_class, validate_unique_named_leaves
+from nwkit.util import (
+    get_node_class,
+    get_subtree_leaf_name_sets,
+    validate_unique_named_leaves,
+)
 
 
 SUPPORTED_TAXON_MODES = ('exact', 'intersection')
@@ -16,10 +20,14 @@ class CladeMatch:
     status: str
     reason: str
     match_basis: str
-    projected_taxa: frozenset
-    projected_split: tuple | None
-    target_taxa: frozenset
-    source_taxa: frozenset | None
+    projected_taxa: object
+    target_taxa: object
+    source_taxa: object | None
+    shared_taxa: frozenset
+
+    @property
+    def projected_split(self):
+        return _projected_split_from_taxa(self.target_taxa, self.shared_taxa)
 
 
 @dataclass(frozen=True)
@@ -37,11 +45,7 @@ def _leaf_set(tree):
 
 
 def _node_taxon_sets(tree):
-    cached = tree.get_cached_content(prop='name')
-    return {
-        node: frozenset(str(name) for name in cached[node])
-        for node in tree.traverse()
-    }
+    return get_subtree_leaf_name_sets(tree)
 
 
 def _format_taxa(taxa):
@@ -61,6 +65,28 @@ def _mapping_key(node_class, taxa, shared_taxa, match_basis):
     if node_class in ('root', 'leaf') or match_basis == 'clade':
         return projected_taxa
     return _projected_split_from_taxa(taxa, shared_taxa)
+
+
+def _projected_masks(tree, taxon_to_bit):
+    masks = dict()
+    for node in tree.traverse(strategy='postorder'):
+        if node.is_leaf:
+            masks[node] = taxon_to_bit.get(str(node.name), 0)
+        else:
+            mask = 0
+            for child in node.get_children():
+                mask |= masks[child]
+            masks[node] = mask
+    return masks
+
+
+def _mask_mapping_key(node_class, mask, all_mask, match_basis):
+    if node_class in ('root', 'leaf') or match_basis == 'clade':
+        return mask
+    complement = all_mask ^ mask
+    if mask == 0 or complement == 0:
+        return None
+    return (min(mask, complement), max(mask, complement))
 
 
 def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade'):
@@ -102,15 +128,28 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
     target_taxa_by_node = _node_taxon_sets(target)
     source_taxa_by_node = _node_taxon_sets(source)
     same_leaf_set = target_leaf_set == source_leaf_set
+    taxon_to_bit = {
+        taxon: 1 << index
+        for index, taxon in enumerate(sorted(shared_taxa))
+    }
+    all_shared_mask = (1 << len(taxon_to_bit)) - 1
+    target_masks = _projected_masks(target, taxon_to_bit)
+    source_masks = _projected_masks(source, taxon_to_bit)
     target_groups = dict()
     source_groups = dict()
     for node, taxa in target_taxa_by_node.items():
         node_class = get_node_class(node)
-        key = (node_class, _mapping_key(node_class, taxa, shared_taxa, match_basis))
+        key = (
+            node_class,
+            _mask_mapping_key(node_class, target_masks[node], all_shared_mask, match_basis),
+        )
         target_groups.setdefault(key, list()).append(node)
     for node, taxa in source_taxa_by_node.items():
         node_class = get_node_class(node)
-        key = (node_class, _mapping_key(node_class, taxa, shared_taxa, match_basis))
+        key = (
+            node_class,
+            _mask_mapping_key(node_class, source_masks[node], all_shared_mask, match_basis),
+        )
         source_groups.setdefault(key, list()).append(node)
 
     matches = list()
@@ -118,9 +157,9 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
     for target_node in target.traverse():
         node_class = get_node_class(target_node)
         target_taxa = target_taxa_by_node[target_node]
-        projected_taxa = frozenset(target_taxa & shared_taxa)
-        projected_split = _projected_split_from_taxa(target_taxa, shared_taxa)
-        match_key = _mapping_key(node_class, target_taxa, shared_taxa, match_basis)
+        projected_mask = target_masks[target_node]
+        projected_taxa = target_taxa if same_leaf_set else frozenset(target_taxa & shared_taxa)
+        match_key = _mask_mapping_key(node_class, projected_mask, all_shared_mask, match_basis)
         key = (node_class, match_key)
         target_candidates = target_groups.get(key, [])
         source_candidates = source_groups.get(key, [])
@@ -129,17 +168,17 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
             source_node = source
             status = 'exact_match' if same_leaf_set else 'projected_match'
             reason = 'root_to_root'
-        elif not projected_taxa:
+        elif projected_mask == 0:
             status = 'unmatched'
             reason = 'no_shared_descendant_taxa'
-        elif taxon_mode == 'intersection' and node_class == 'intnode' and len(projected_taxa) < 2:
+        elif taxon_mode == 'intersection' and node_class == 'intnode' and projected_mask.bit_count() < 2:
             status = 'ambiguous'
             reason = 'fewer_than_two_shared_descendant_taxa'
         elif (
             node_class == 'intnode'
             and (
                 match_key is None
-                or (match_basis == 'clade' and projected_taxa == shared_taxa)
+                or (match_basis == 'clade' and projected_mask == all_shared_mask)
             )
         ):
             status = 'ambiguous'
@@ -183,9 +222,9 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
                 reason=reason,
                 match_basis=match_basis,
                 projected_taxa=projected_taxa,
-                projected_split=projected_split,
                 target_taxa=target_taxa,
                 source_taxa=source_taxa,
+                shared_taxa=shared_taxa,
             )
         )
     unmatched_source_nodes = tuple(

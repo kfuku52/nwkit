@@ -3,6 +3,8 @@ import re
 from collections import defaultdict
 
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from ete4 import Tree
 from ete4.parser.newick import make_parser
 
@@ -18,6 +20,7 @@ from nwkit.util import (
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_species_group_records,
+    get_subtree_leaf_name_sets,
     get_tree_property_names,
     is_all_leaf_names_identical,
     is_rooted,
@@ -36,6 +39,7 @@ from nwkit.clade_mapping import (
 
 SUPPORTED_TAXONOMY_SOURCES = ('ncbi', 'timetree', 'opentree')
 DEFAULT_TAXONOMY_SOURCE_CHAIN = 'ncbi,opentree,timetree'
+TAXONOMY_HTTP_MAX_BYTES = 10 * 1024 * 1024
 NCBI_PLACEHOLDER_NAME_PATTERNS = (
     re.compile(r'\bunknown\b', flags=re.I),
     re.compile(r'\bunidentified\b', flags=re.I),
@@ -46,6 +50,52 @@ NCBI_PLACEHOLDER_NAME_PATTERNS = (
     re.compile(r'\bartificial sequences?\b', flags=re.I),
     re.compile(r'\bother sequences?\b', flags=re.I),
 )
+
+
+def _new_taxonomy_http_session():
+    session = requests.Session()
+    mount = getattr(session, 'mount', None)
+    if callable(mount):
+        retry = Retry(
+            total=3,
+            connect=3,
+            read=3,
+            status=3,
+            backoff_factor=0.5,
+            status_forcelist=(429, 500, 502, 503, 504),
+            allowed_methods=frozenset(('GET', 'POST')),
+        )
+        adapter = HTTPAdapter(max_retries=retry)
+        mount('https://', adapter)
+        mount('http://', adapter)
+    return session
+
+
+def _bounded_response_text(response, source_name):
+    headers = getattr(response, 'headers', {}) or {}
+    content_length = headers.get('Content-Length')
+    if content_length is not None:
+        try:
+            declared_size = int(content_length)
+        except (TypeError, ValueError):
+            declared_size = None
+        if declared_size is not None and declared_size > TAXONOMY_HTTP_MAX_BYTES:
+            raise ValueError('{} response exceeds the size limit.'.format(source_name))
+    text = str(getattr(response, 'text', ''))
+    if len(text.encode('utf-8')) > TAXONOMY_HTTP_MAX_BYTES:
+        raise ValueError('{} response exceeds the size limit.'.format(source_name))
+    return text
+
+
+def _response_json_object(response, source_name):
+    _bounded_response_text(response, source_name)
+    try:
+        data = response.json()
+    except (TypeError, ValueError) as exc:
+        raise ValueError('Unexpected JSON response from {}.'.format(source_name)) from exc
+    if not isinstance(data, dict):
+        raise ValueError('Unexpected JSON response from {}.'.format(source_name))
+    return data
 
 def _close_ncbi_handle(ncbi):
     if ncbi is None:
@@ -325,7 +375,7 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
     subroot_from = tree_from.get_children()
     if len(subroot_from) != 2:
         raise ValueError('Root transfer requires the source tree root to have exactly two children.')
-    tree_from_leaf_sets = tree_from.get_cached_content(prop='name')
+    tree_from_leaf_sets = get_subtree_leaf_name_sets(tree_from)
     is_n0_bigger_than_n1 = (len(tree_from_leaf_sets[subroot_from[0]]) > len(tree_from_leaf_sets[subroot_from[1]]))
     ingroup_child = subroot_from[0] if is_n0_bigger_than_n1 else subroot_from[1]
     outgroup_child = subroot_from[1] if is_n0_bigger_than_n1 else subroot_from[0]
@@ -336,7 +386,7 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
     # Save original root name before set_outgroup (ete4 loses it)
     original_root_name = tree_to.name
     root_children = tree_to.get_children()
-    tree_to_leaf_sets = tree_to.get_cached_content(prop='name')
+    tree_to_leaf_sets = get_subtree_leaf_name_sets(tree_to)
     is_root_bipartition_already_matching = (
         (len(root_children) == 2) and
         any(outgroup_set == tree_to_leaf_sets[child] for child in root_children)
@@ -360,13 +410,13 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
             if outgroup_ancestor is None:
                 raise ValueError('No root bipartition found in --infile.')
         else:
-            outgroup_ancestor = tree_to.common_ancestor(outgroup_set)
-        reroot_leaf_sets = tree_to.get_cached_content(prop='name')
+            outgroup_ancestor = tree_to.common_ancestor(list(outgroup_set))
+        reroot_leaf_sets = get_subtree_leaf_name_sets(tree_to)
         if not outgroup_set == reroot_leaf_sets[outgroup_ancestor]:
             raise ValueError('No root bipartition found in --infile.')
         _normalize_root_distance_for_reroot(tree_to)
         tree_to.set_outgroup(outgroup_ancestor)
-        tree_to_leaf_sets = tree_to.get_cached_content(prop='name')
+        tree_to_leaf_sets = get_subtree_leaf_name_sets(tree_to)
     subroot_to = tree_to.get_children()
     total_subroot_length_to = sum((n.dist or 0) for n in subroot_to)
     total_subroot_length_from = sum((n.dist or 0) for n in subroot_from)
@@ -631,7 +681,7 @@ def mv_rooting(tree):
     tree.set_outgroup(best_node)
     # Adjust branch lengths at root: best_x from root to best_node, (L - best_x) to sibling
     best_subtree_leaves = set(best_node.leaf_names())
-    root_leaf_sets = tree.get_cached_content(prop='name')
+    root_leaf_sets = get_subtree_leaf_name_sets(tree)
     for child in tree.get_children():
         if root_leaf_sets[child] == best_subtree_leaves:
             child.dist = best_x
@@ -767,7 +817,7 @@ def _resolve_full_outgroup_set_from_resolved_split(tree, resolved_outgroup_set, 
     if not resolved_leaf_set <= leaf_name_set:
         raise ValueError('No root bipartition found in --infile.')
     root_children = analysis_tree.get_children()
-    subtree_leaf_sets = analysis_tree.get_cached_content(prop='name')
+    subtree_leaf_sets = get_subtree_leaf_name_sets(analysis_tree)
     matching_edges = dict()
     resolved_ingroup_set = resolved_leaf_set - resolved_outgroup_set
     for node in analysis_tree.traverse():
@@ -829,7 +879,7 @@ def _get_reference_root_outgroup_set(reference_tree, source_name):
         )
     if len(reference_tree.get_children()) != 2:
         return set(reference_tree.leaf_names())
-    child_leaf_sets = reference_tree.get_cached_content(prop='name')
+    child_leaf_sets = get_subtree_leaf_name_sets(reference_tree)
     root_children = reference_tree.get_children()
     is_n0_bigger_than_n1 = (len(child_leaf_sets[root_children[0]]) > len(child_leaf_sets[root_children[1]]))
     outgroup_child = root_children[1] if is_n0_bigger_than_n1 else root_children[0]
@@ -905,7 +955,7 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
         sys.stderr.write('Outgroups: {}\n'.format(' '.join(sorted(outgroup_set))))
     original_root_name = tree.name
     root_children = tree.get_children()
-    tree_leaf_sets = tree.get_cached_content(prop='name')
+    tree_leaf_sets = get_subtree_leaf_name_sets(tree)
     is_root_bipartition_already_matching = (
         (len(root_children) == 2) and
         any(outgroup_set == tree_leaf_sets[child] for child in root_children)
@@ -930,7 +980,7 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
                 raise ValueError('No root bipartition found in --infile.')
         else:
             outgroup_ancestor = tree.common_ancestor(outgroup_set)
-        reroot_leaf_sets = tree.get_cached_content(prop='name')
+        reroot_leaf_sets = get_subtree_leaf_name_sets(tree)
         if outgroup_set != reroot_leaf_sets[outgroup_ancestor]:
             raise ValueError('No root bipartition found in --infile.')
         _normalize_root_distance_for_reroot(tree)
@@ -961,7 +1011,7 @@ def _get_timetree_name_mapping(tree, args=None):
 
 def _build_timetree_reference_tree(tree, args=None):
     query_names, query_label_to_species_labels, species_to_leaf_labels = _get_timetree_name_mapping(tree, args=args)
-    session = requests.Session()
+    session = _new_taxonomy_http_session()
     try:
         try:
             upload_response = session.post(
@@ -980,7 +1030,7 @@ def _build_timetree_reference_tree(tree, args=None):
             raise ValueError('Failed to contact TimeTree.') from exc
         if newick_response.status_code != 200:
             raise ValueError('Failed to download a guide tree from TimeTree.')
-        timetree_newick = newick_response.text.strip()
+        timetree_newick = _bounded_response_text(newick_response, 'TimeTree').strip()
         if not timetree_newick.endswith(';'):
             raise ValueError('Unexpected response format from TimeTree when downloading the guide tree.')
         timetree_tree = Tree(timetree_newick, parser=1)
@@ -1017,7 +1067,7 @@ def _get_opentree_name_mapping(tree, args=None):
 
 def _extract_opentree_ott_ids(tree, args=None):
     query_names, query_label_to_species_labels, species_to_leaf_labels = _get_opentree_name_mapping(tree, args=args)
-    session = requests.Session()
+    session = _new_taxonomy_http_session()
     try:
         try:
             response = session.post(
@@ -1032,17 +1082,27 @@ def _extract_opentree_ott_ids(tree, args=None):
             raise ValueError('Failed to contact Open Tree of Life TNRS.') from exc
         if response.status_code != 200:
             raise ValueError('Open Tree of Life TNRS lookup failed.')
-        data = response.json()
+        data = _response_json_object(response, 'Open Tree of Life TNRS')
         results = data.get('results', [])
+        if not isinstance(results, list):
+            raise ValueError('Unexpected response format from Open Tree of Life TNRS.')
         if len(results) != len(query_names):
             raise ValueError('Unexpected response format from Open Tree of Life TNRS.')
         ott_ids = list()
         unresolved_labels = list()
         for query_name, result in zip(query_names, results):
+            if not isinstance(result, dict):
+                raise ValueError('Unexpected response format from Open Tree of Life TNRS.')
             matches = result.get('matches', [])
+            if not isinstance(matches, list):
+                raise ValueError('Unexpected response format from Open Tree of Life TNRS.')
             valid_matches = list()
             for match in matches:
+                if not isinstance(match, dict):
+                    continue
                 taxon = match.get('taxon', {})
+                if not isinstance(taxon, dict):
+                    continue
                 if match.get('is_approximate_match'):
                     continue
                 if taxon.get('is_suppressed_from_synth'):
@@ -1071,7 +1131,7 @@ def _extract_opentree_ott_ids(tree, args=None):
 
 def _build_opentree_reference_tree(tree, args=None):
     ott_ids, query_label_to_species_labels, species_to_leaf_labels = _extract_opentree_ott_ids(tree, args=args)
-    session = requests.Session()
+    session = _new_taxonomy_http_session()
     try:
         try:
             response = session.post(
@@ -1086,8 +1146,11 @@ def _build_opentree_reference_tree(tree, args=None):
             raise ValueError('Failed to contact Open Tree of Life synthetic tree API.') from exc
         if response.status_code != 200:
             raise ValueError('Open Tree of Life induced subtree lookup failed.')
-        data = response.json()
-        newick = data.get('newick', '').strip()
+        data = _response_json_object(response, 'Open Tree of Life induced subtree')
+        newick_value = data.get('newick', '')
+        if not isinstance(newick_value, str):
+            raise ValueError('Unexpected response format from Open Tree of Life induced subtree.')
+        newick = newick_value.strip()
         if not newick.endswith(';'):
             raise ValueError('Unexpected response format from Open Tree of Life induced subtree.')
         opentree_tree = Tree(newick, parser=1)

@@ -405,6 +405,9 @@ class TestConstrainRefactorValidation:
         rng = random.Random(41)
 
         class FakeNCBI:
+            def __init__(self, *args, **kwargs):
+                pass
+
             def get_lineage(self, taxid):
                 taxid = int(taxid)
                 return [1, taxid // 10, taxid]

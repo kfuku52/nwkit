@@ -1,16 +1,29 @@
 import csv
 import errno
+import hashlib
 import math
 import os
+import pickle
 import re
+import secrets
 import shutil
+import sqlite3
+import subprocess
 import sys
+import tarfile
+import tempfile
 import time
+from itertools import islice
+from urllib.parse import quote
 from collections import Counter, defaultdict
+from collections.abc import Set
 from contextlib import contextmanager
 from io import StringIO
 import ete4
 import pandas as pd
+import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from ete4 import Tree
 from nwkit.fasta import parse_fasta, write_fasta
 from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES
@@ -27,6 +40,10 @@ TREE_FORMAT_PROP = '_nwkit_parser_format'
 MISSING_SUPPORT_VALUE = -999999.0
 DOWNLOAD_LOCK_POLL_SECONDS = 1
 DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
+LOCK_METADATA_GRACE_SECONDS = 2
+ETE_TAXDUMP_URL = 'https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz'
+ETE_TAXDUMP_MAX_BYTES = 512 * 1024 * 1024
+ETE_TAXONOMY_DEFAULT_MAX_AGE_DAYS = 30.0
 COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser('~'), '.local', 'share', 'ete'),
     os.path.join(os.path.expanduser('~'), '.etetoolkit'),
@@ -151,6 +168,26 @@ def count_set_bits(value):
 def warn_cleanup_failure(resource_label, exc):
     sys.stderr.write('Warning: failed to clean up {}: {}\n'.format(resource_label, exc))
 
+
+def validate_distinct_output_paths(outputs):
+    """Reject multiple output roles that resolve to the same filesystem path."""
+    by_path = defaultdict(list)
+    for option_name, path in outputs:
+        if path in (None, '', '-'):
+            continue
+        by_path[os.path.realpath(os.fspath(path))].append(str(option_name))
+    collisions = [
+        (path, option_names)
+        for path, option_names in by_path.items()
+        if len(option_names) > 1
+    ]
+    if collisions:
+        details = '; '.join(
+            '{} -> {}'.format(', '.join(option_names), path)
+            for path, option_names in sorted(collisions)
+        )
+        raise ValueError('Output paths must be distinct: {}.'.format(details))
+
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
     if raw_dir is None:
@@ -180,11 +217,11 @@ def _find_existing_ete_taxonomy_assets(exclude_dbfile=None):
         dbfile = os.path.join(cache_dir, 'taxa.sqlite')
         if not os.path.isfile(dbfile):
             continue
-        if os.path.getsize(dbfile) <= 0:
+        if not _validate_ete_taxonomy_db(dbfile, require_traverse=True, full_check=True):
             continue
         if excluded_realpath is not None and os.path.realpath(dbfile) == excluded_realpath:
             continue
-        assets = {'dbfile': dbfile}
+        assets = {'dbfile': dbfile, 'validated': True}
         traverse_file = dbfile + '.traverse.pkl'
         taxdump_file = os.path.join(cache_dir, 'taxdump.tar.gz')
         if os.path.isfile(traverse_file):
@@ -197,13 +234,14 @@ def _find_existing_ete_taxonomy_assets(exclude_dbfile=None):
 def _seed_ete_taxonomy_assets(target_dbfile, source_assets):
     target_dir = os.path.dirname(target_dbfile)
     os.makedirs(target_dir, exist_ok=True)
-    shutil.copy2(source_assets['dbfile'], target_dbfile)
     source_traverse_file = source_assets.get('traverse_file')
     if source_traverse_file is not None:
-        shutil.copy2(source_traverse_file, target_dbfile + '.traverse.pkl')
+        _atomic_copy_file(source_traverse_file, target_dbfile + '.traverse.pkl')
     source_taxdump_file = source_assets.get('taxdump_file')
     if source_taxdump_file is not None:
-        shutil.copy2(source_taxdump_file, os.path.join(target_dir, 'taxdump.tar.gz'))
+        if _validate_ete_taxdump(source_taxdump_file):
+            _atomic_copy_file(source_taxdump_file, os.path.join(target_dir, 'taxdump.tar.gz'))
+    _atomic_copy_sqlite(source_assets['dbfile'], target_dbfile)
 
 def _contains_quoted_node_names(newick_text):
     return QUOTED_NODE_NAME_PATTERN.search(str(newick_text)) is not None
@@ -299,10 +337,15 @@ def _try_create_lock_file(lock_path):
     try:
         fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
     except FileExistsError:
-        return False
-    with os.fdopen(fd, 'w') as lock_handle:
-        lock_handle.write('{}\n'.format(os.getpid()))
-    return True
+        return None
+    token = secrets.token_hex(16)
+    try:
+        os.write(fd, '{} {}\n'.format(os.getpid(), token).encode('ascii'))
+        os.fsync(fd)
+    finally:
+        os.close(fd)
+    stat_result = os.stat(lock_path)
+    return token, stat_result.st_dev, stat_result.st_ino
 
 def _read_lock_owner_pid(lock_path):
     try:
@@ -313,7 +356,7 @@ def _read_lock_owner_pid(lock_path):
     if first_line == '':
         return None
     try:
-        pid = int(first_line)
+        pid = int(first_line.split()[0])
     except ValueError:
         return None
     if pid <= 0:
@@ -343,6 +386,9 @@ def _break_stale_lock_if_needed(lock_path, lock_label='Lock'):
         return False
     owner_pid = _read_lock_owner_pid(lock_path)
     if owner_pid is None:
+        age_seconds = max(0.0, time.time() - stat_before.st_mtime)
+        if age_seconds < LOCK_METADATA_GRACE_SECONDS:
+            return False
         stale_reason = 'missing/invalid owner PID'
     elif _is_process_alive(owner_pid):
         return False
@@ -364,6 +410,30 @@ def _break_stale_lock_if_needed(lock_path, lock_label='Lock'):
         return False
     sys.stderr.write('Removed stale {} lock: {} ({})\n'.format(lock_label, lock_path, stale_reason))
     return True
+
+
+def _remove_owned_lock(lock_path, owner_record, lock_label='Lock'):
+    owner_token, owner_device, owner_inode = owner_record
+    try:
+        stat_before = os.stat(lock_path)
+        with open(lock_path) as lock_handle:
+            fields = lock_handle.readline().strip().split()
+    except FileNotFoundError:
+        return
+    _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
+    if (
+        stat_before.st_dev != owner_device
+        or stat_before.st_ino != owner_inode
+        or len(fields) < 2
+        or fields[1] != owner_token
+    ):
+        sys.stderr.write(
+            'Warning: {} ownership changed before release; leaving lock in place: {}\n'.format(
+                lock_label, lock_path
+            )
+        )
+        return
+    os.remove(lock_path)
 
 @contextmanager
 def acquire_exclusive_lock(
@@ -387,13 +457,17 @@ def acquire_exclusive_lock(
     wait_start = time.time()
     has_reported_wait = False
     while True:
-        if _try_create_lock_file(lock_path):
+        owner_record = _try_create_lock_file(lock_path)
+        if owner_record is not None:
             try:
                 yield
             finally:
                 if os.path.lexists(lock_path):
-                    _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
-                    os.remove(lock_path)
+                    _remove_owned_lock(
+                        lock_path,
+                        owner_record=owner_record,
+                        lock_label=lock_label,
+                    )
             return
         _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
         if _break_stale_lock_if_needed(lock_path=lock_path, lock_label=lock_label):
@@ -412,33 +486,238 @@ def acquire_exclusive_lock(
             )
         time.sleep(poll_seconds)
 
-def _download_ete_taxdump(taxdump_file):
-    from ete4.ncbi_taxonomy.ncbiquery import update_local_taxdump
+def _validate_ete_taxdump(taxdump_file):
+    if not os.path.isfile(taxdump_file):
+        return False
+    try:
+        if os.path.getsize(taxdump_file) <= 0 or os.path.getsize(taxdump_file) > ETE_TAXDUMP_MAX_BYTES:
+            return False
+        with tarfile.open(taxdump_file, mode='r:gz') as archive:
+            members = {member.name: member for member in archive.getmembers()}
+            for required_name in ('nodes.dmp', 'names.dmp', 'merged.dmp'):
+                member = members.get(required_name)
+                if member is None or not member.isfile() or member.size <= 0:
+                    return False
+    except (OSError, tarfile.TarError):
+        return False
+    return True
 
-    update_local_taxdump(taxdump_file)
+
+def _validate_ete_taxonomy_db(dbfile, require_traverse=False, full_check=False):
+    if not os.path.isfile(dbfile) or os.path.getsize(dbfile) <= 0:
+        return False
+    try:
+        uri = 'file:{}?mode=ro'.format(quote(os.path.abspath(dbfile), safe='/'))
+        connection = sqlite3.connect(uri, uri=True)
+        try:
+            if full_check and connection.execute('PRAGMA quick_check').fetchone() != ('ok',):
+                return False
+            table_names = {
+                row[0]
+                for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")
+            }
+            if not {'stats', 'species', 'synonym', 'merged'}.issubset(table_names):
+                return False
+            if connection.execute('SELECT version FROM stats').fetchone() is None:
+                return False
+            if connection.execute('SELECT 1 FROM species LIMIT 1').fetchone() is None:
+                return False
+        finally:
+            connection.close()
+    except (OSError, sqlite3.DatabaseError):
+        return False
+    if require_traverse:
+        traverse_file = dbfile + '.traverse.pkl'
+        try:
+            with open(traverse_file, 'rb') as handle:
+                traversal = pickle.load(handle)
+            if not isinstance(traversal, list) or not traversal:
+                return False
+        except (OSError, EOFError, pickle.PickleError, ValueError, TypeError):
+            return False
+    return True
+
+
+def _atomic_copy_file(source, target):
+    target_dir = os.path.dirname(target)
+    os.makedirs(target_dir, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.{}.'.format(os.path.basename(target)), dir=target_dir)
+    os.close(fd)
+    try:
+        shutil.copy2(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+
+
+def _atomic_copy_sqlite(source, target):
+    target_dir = os.path.dirname(target)
+    os.makedirs(target_dir, exist_ok=True)
+    fd, temporary = tempfile.mkstemp(prefix='.{}.'.format(os.path.basename(target)), dir=target_dir)
+    os.close(fd)
+    source_uri = 'file:{}?mode=ro'.format(quote(os.path.abspath(source), safe='/'))
+    try:
+        source_connection = sqlite3.connect(source_uri, uri=True)
+        target_connection = sqlite3.connect(temporary)
+        try:
+            source_connection.backup(target_connection)
+        finally:
+            target_connection.close()
+            source_connection.close()
+        os.replace(temporary, target)
+    finally:
+        if os.path.exists(temporary):
+            os.remove(temporary)
+
+
+def _download_ete_taxdump(taxdump_file):
+    target_dir = os.path.dirname(taxdump_file)
+    os.makedirs(target_dir, exist_ok=True)
+    session = requests.Session()
+    retry = Retry(
+        total=3,
+        connect=3,
+        read=3,
+        status=3,
+        backoff_factor=0.5,
+        status_forcelist=(429, 500, 502, 503, 504),
+        allowed_methods=frozenset(('GET',)),
+    )
+    adapter = HTTPAdapter(max_retries=retry)
+    session.mount('https://', adapter)
+    session.mount('http://', adapter)
+    try:
+        with session.get(ETE_TAXDUMP_URL + '.md5', timeout=(10, 30)) as checksum_response:
+            checksum_response.raise_for_status()
+            checksum_text = checksum_response.text
+        if len(checksum_text.encode('utf-8')) > 4096:
+            raise ValueError('Unexpected NCBI taxonomy checksum response.')
+        checksum_tokens = checksum_text.split()
+        if not checksum_tokens:
+            raise ValueError('Unexpected NCBI taxonomy checksum response.')
+        expected_md5 = checksum_tokens[0].lower()
+        if re.fullmatch(r'[0-9a-f]{32}', expected_md5) is None:
+            raise ValueError('Unexpected NCBI taxonomy checksum response.')
+        if _validate_ete_taxdump(taxdump_file):
+            local_md5 = hashlib.md5()
+            with open(taxdump_file, 'rb') as handle:
+                for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+                    local_md5.update(chunk)
+            if local_md5.hexdigest() == expected_md5:
+                return False
+        fd, temporary = tempfile.mkstemp(prefix='.taxdump.', suffix='.tar.gz', dir=target_dir)
+        os.close(fd)
+        try:
+            downloaded = 0
+            digest = hashlib.md5()
+            with session.get(ETE_TAXDUMP_URL, stream=True, timeout=(10, 120)) as response:
+                response.raise_for_status()
+                content_length = response.headers.get('Content-Length')
+                if content_length is not None and int(content_length) > ETE_TAXDUMP_MAX_BYTES:
+                    raise ValueError('NCBI taxonomy archive exceeds the download size limit.')
+                with open(temporary, 'wb') as handle:
+                    for chunk in response.iter_content(chunk_size=1024 * 1024):
+                        if not chunk:
+                            continue
+                        downloaded += len(chunk)
+                        if downloaded > ETE_TAXDUMP_MAX_BYTES:
+                            raise ValueError('NCBI taxonomy archive exceeds the download size limit.')
+                        digest.update(chunk)
+                        handle.write(chunk)
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            if digest.hexdigest() != expected_md5:
+                raise ValueError('NCBI taxonomy archive checksum verification failed.')
+            if not _validate_ete_taxdump(temporary):
+                raise ValueError('Downloaded NCBI taxonomy archive is invalid.')
+            os.replace(temporary, taxdump_file)
+        finally:
+            if os.path.exists(temporary):
+                os.remove(temporary)
+    finally:
+        session.close()
+    return True
+
+
+def _build_ete_taxonomy_database(dbfile, taxdump_file):
+    target_dir = os.path.dirname(dbfile)
+    with tempfile.TemporaryDirectory(prefix='.taxonomy-build-', dir=target_dir) as work_dir:
+        temporary_db = os.path.join(work_dir, 'taxa.sqlite')
+        script = (
+            'import sys; '
+            'from ete4.ncbi_taxonomy.ncbiquery import update_db; '
+            'update_db(sys.argv[1], sys.argv[2])'
+        )
+        try:
+            subprocess.run(
+                [sys.executable, '-c', script, temporary_db, os.path.realpath(taxdump_file)],
+                cwd=work_dir,
+                check=True,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError('Failed to build the ETE4 taxonomy database.') from exc
+        if not _validate_ete_taxonomy_db(temporary_db, require_traverse=True, full_check=True):
+            raise ValueError('ETE4 produced an invalid taxonomy database.')
+        os.replace(temporary_db + '.traverse.pkl', dbfile + '.traverse.pkl')
+        os.replace(temporary_db, dbfile)
+
+
+def _taxonomy_cache_max_age_seconds(args):
+    value = getattr(args, 'taxonomy_cache_max_age_days', ETE_TAXONOMY_DEFAULT_MAX_AGE_DAYS)
+    try:
+        days = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("'--taxonomy-cache-max-age-days' must be numeric.") from exc
+    if not math.isfinite(days) or days < 0:
+        raise ValueError("'--taxonomy-cache-max-age-days' must be finite and >= 0.")
+    return days * 24 * 60 * 60
+
+
+def _taxonomy_cache_is_stale(dbfile, args):
+    if bool(getattr(args, 'refresh_taxonomy_cache', False)):
+        return True
+    return time.time() - os.path.getmtime(dbfile) > _taxonomy_cache_max_age_seconds(args)
 
 def get_ete_ncbitaxa(args=None):
     ete_data_dir = resolve_ete_data_dir(args)
     if ete_data_dir is None:
-        return ete4.NCBITaxa()
+        from ete4.ncbi_taxonomy.ncbiquery import DEFAULT_TAXADB
+
+        dbfile = os.path.realpath(DEFAULT_TAXADB)
+        ete_data_dir = os.path.dirname(dbfile)
+    else:
+        dbfile = os.path.join(ete_data_dir, 'taxa.sqlite')
     os.makedirs(ete_data_dir, exist_ok=True)
-    dbfile = os.path.join(ete_data_dir, 'taxa.sqlite')
     taxdump_file = os.path.join(ete_data_dir, 'taxdump.tar.gz')
     lock_path = os.path.join(ete_data_dir, '.ete4_taxonomy.lock')
     with acquire_exclusive_lock(lock_path=lock_path, lock_label='ETE4 taxonomy DB'):
         os.makedirs(ete_data_dir, exist_ok=True)
-        if os.path.isfile(dbfile) and os.path.getsize(dbfile) > 0:
+        db_valid = _validate_ete_taxonomy_db(dbfile, require_traverse=True)
+        if db_valid and not _taxonomy_cache_is_stale(dbfile, args):
             return ete4.NCBITaxa(dbfile=dbfile, update=False)
         existing_assets = _find_existing_ete_taxonomy_assets(exclude_dbfile=dbfile)
-        if existing_assets is not None:
+        if (
+            not db_valid
+            and existing_assets is not None
+            and (
+                existing_assets.get('validated')
+                or _validate_ete_taxonomy_db(
+                    existing_assets['dbfile'],
+                    require_traverse=True,
+                    full_check=True,
+                )
+            )
+            and not _taxonomy_cache_is_stale(existing_assets['dbfile'], args)
+        ):
             _seed_ete_taxonomy_assets(target_dbfile=dbfile, source_assets=existing_assets)
             return ete4.NCBITaxa(dbfile=dbfile, update=False)
-        if not os.path.exists(taxdump_file):
-            _download_ete_taxdump(taxdump_file)
-        return ete4.NCBITaxa(
-            dbfile=dbfile,
-            taxdump_file=taxdump_file,
-        )
+        archive_changed = _download_ete_taxdump(taxdump_file)
+        if db_valid and not archive_changed:
+            os.utime(dbfile, None)
+            return ete4.NCBITaxa(dbfile=dbfile, update=False)
+        _build_ete_taxonomy_database(dbfile=dbfile, taxdump_file=taxdump_file)
+        return ete4.NCBITaxa(dbfile=dbfile, update=False)
 
 def read_tree(infile, format, quoted_node_names, quiet=False):
     global INFILE_FORMAT
@@ -571,6 +850,51 @@ def split_newick_stream(newick_text):
     if ''.join(buffer).strip() != '':
         raise ValueError('Input tree collection ended before a terminal semicolon.')
     return trees
+
+
+def iter_newick_stream(handle, chunk_size=1024 * 1024):
+    """Yield semicolon-terminated Newick records without loading the stream at once."""
+    buffer = list()
+    in_quote = False
+    possible_closing_quote = False
+    while True:
+        chunk = handle.read(chunk_size)
+        if chunk == '':
+            break
+        for char in chunk:
+            if possible_closing_quote:
+                if char == "'":
+                    buffer.append(char)
+                    possible_closing_quote = False
+                    continue
+                in_quote = False
+                possible_closing_quote = False
+            buffer.append(char)
+            if char == "'":
+                if in_quote:
+                    possible_closing_quote = True
+                else:
+                    in_quote = True
+            elif char == ';' and not in_quote:
+                tree_text = ''.join(buffer).strip()
+                if tree_text:
+                    yield tree_text
+                buffer = list()
+    if possible_closing_quote:
+        in_quote = False
+    if in_quote or ''.join(buffer).strip():
+        raise ValueError('Input tree collection ended before a terminal semicolon.')
+
+
+def iter_tree_strings(infile):
+    if infile == '-':
+        yield from iter_newick_stream(sys.stdin)
+        return
+    if os.path.isfile(infile):
+        with open(infile) as handle:
+            yield from iter_newick_stream(handle)
+        return
+    yield from split_newick_stream(str(infile))
 
 def read_trees(infile, format, quoted_node_names, quiet=False):
     tree_strings = read_tree_strings(infile)
@@ -889,17 +1213,69 @@ def get_monophyletic_species_groups(tree, option_name='--infile', context='', ar
     )
     return leaf_name_to_species_label, species_label_to_leaf_names
 
+class _LeafIntervalSet(Set):
+    """Read-only set view over a contiguous DFS leaf interval."""
+    __slots__ = ('_leaf_names', '_name_to_index', '_start', '_end')
+
+    def __init__(self, leaf_names, name_to_index, start, end):
+        self._leaf_names = leaf_names
+        self._name_to_index = name_to_index
+        self._start = start
+        self._end = end
+
+    def __contains__(self, value):
+        index = self._name_to_index.get(value)
+        return index is not None and self._start <= index < self._end
+
+    def __iter__(self):
+        return islice(self._leaf_names, self._start, self._end)
+
+    def __len__(self):
+        return self._end - self._start
+
+    def __and__(self, other):
+        return frozenset(value for value in self if value in other)
+
+    def __rand__(self, other):
+        return self.__and__(other)
+
+    def __sub__(self, other):
+        return frozenset(value for value in self if value not in other)
+
+    def __repr__(self):
+        return repr(set(self))
+
+
 def get_subtree_leaf_name_sets(tree):
-    subtree_leaf_name_sets = dict()
+    leaf_nodes = list(tree.leaves())
+    leaf_names = tuple(node.name for node in leaf_nodes)
+    if len(set(leaf_names)) != len(leaf_names):
+        subtree_leaf_name_sets = dict()
+        for node in tree.traverse(strategy='postorder'):
+            if node.is_leaf:
+                subtree_leaf_name_sets[node] = {node.name}
+            else:
+                leaf_set = set()
+                for child in node.get_children():
+                    leaf_set.update(subtree_leaf_name_sets[child])
+                subtree_leaf_name_sets[node] = leaf_set
+        return subtree_leaf_name_sets
+    name_to_index = {name: index for index, name in enumerate(leaf_names)}
+    intervals = dict()
     for node in tree.traverse(strategy='postorder'):
         if node.is_leaf:
-            subtree_leaf_name_sets[node] = {node.name}
-            continue
-        leaf_names = set()
-        for child in node.get_children():
-            leaf_names.update(subtree_leaf_name_sets[child])
-        subtree_leaf_name_sets[node] = leaf_names
-    return subtree_leaf_name_sets
+            index = name_to_index[node.name]
+            intervals[node] = (index, index + 1)
+        else:
+            child_intervals = [intervals[child] for child in node.get_children()]
+            intervals[node] = (
+                min(start for start, _ in child_intervals),
+                max(end for _, end in child_intervals),
+            )
+    return {
+        node: _LeafIntervalSet(leaf_names, name_to_index, start, end)
+        for node, (start, end) in intervals.items()
+    }
 
 def get_subtree_leaf_bitmasks(tree, leaf_name_to_bit):
     subtree_leaf_bitmasks = dict()
