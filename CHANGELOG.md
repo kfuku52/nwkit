@@ -4,6 +4,26 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.34.0] - 2026-07-23
+
+### Added
+
+- `draw --tip-image-manifest` renders images and silhouettes from an `image`
+  manifest in an aligned tip column, with configurable size and padding,
+  offline path resolution, unmatched-tip policy, and image-asset provenance.
+- `draw` supports configurable figure geometry, typography, branch colors,
+  aligned or branch-end tip labels, root markers, categorical tip badges,
+  filtered node-probability pies, property labels, legends, and transparent
+  output.
+
+### Changed
+
+- PhyloPic selection prefers the exact taxon's curated `primaryImage`, then
+  ranks same-rank fallbacks by license openness, vector availability, drawable
+  aspect ratio, and resolution before considering genus or family fallbacks.
+- Image manifests record `is_primary`, `is_vector`, and `selection_reason` so
+  representative-image choices are auditable.
+
 ## [0.33.0] - 2026-07-22
 
 ### Added

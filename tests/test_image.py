@@ -12,6 +12,8 @@ from nwkit.image import (
     MediaDownloadError,
     NCBIProvider,
     OpenverseProvider,
+    PhylopicProvider,
+    allowed_candidates_from_scored_candidates,
     build_download_session,
     build_local_media_filename,
     build_retry_config,
@@ -22,6 +24,7 @@ from nwkit.image import (
     collect_candidates_for_species_map,
     download_media,
     extract_species_mapping,
+    get_aspect_fit_bonus,
     get_provider_quality_bonus,
     get_style_priority,
     image_main,
@@ -183,11 +186,161 @@ class TestFetchLimits:
             lower_quality, provider_index=0, style='photo'
         )
 
+    def test_candidate_score_prefers_primary_then_vector_and_drawable_aspect(self):
+        base = {
+            'matched_rank': 'species',
+            'license_code': 'cc-by',
+            'asset_type': 'silhouette',
+            'width': 1000,
+            'height': 1000,
+            'provider_quality': 0,
+            'media_url': 'https://example.org/image.png',
+        }
+        primary = dict(base, is_primary=True)
+        vector = dict(base, is_vector=True, media_url='https://example.org/image.svg')
+        raster = dict(base, is_vector=False)
+        extreme_vector = dict(vector, width=10000, height=100)
+        balanced_vector = dict(vector, width=1000, height=800)
+
+        assert candidate_score(primary, provider_index=0, style='silhouette') > candidate_score(
+            vector, provider_index=0, style='silhouette'
+        )
+        assert candidate_score(vector, provider_index=0, style='silhouette') > candidate_score(
+            raster, provider_index=0, style='silhouette'
+        )
+        assert candidate_score(balanced_vector, provider_index=0, style='silhouette') > candidate_score(
+            extreme_vector, provider_index=0, style='silhouette'
+        )
+        assert get_aspect_fit_bonus(balanced_vector) == 100
+        assert get_aspect_fit_bonus(extreme_vector) == 0
+
+    def test_candidate_score_keeps_exact_match_ahead_of_fallback_primary(self):
+        exact = {
+            'matched_rank': 'species',
+            'license_code': 'cc-by',
+            'asset_type': 'silhouette',
+            'width': 500,
+            'height': 500,
+            'is_primary': False,
+        }
+        genus_primary = dict(exact, matched_rank='genus', is_primary=True)
+
+        assert candidate_score(exact, provider_index=0, style='silhouette') > candidate_score(
+            genus_primary, provider_index=0, style='silhouette'
+        )
+
+    def test_disallowed_primary_falls_back_to_allowed_ranked_candidate(self):
+        primary = {
+            'matched_rank': 'species',
+            'license_code': 'cc-by-nc-sa',
+            'asset_type': 'silhouette',
+            'width': 1000,
+            'height': 1000,
+            'is_primary': True,
+            'media_url': 'https://example.org/primary.svg',
+        }
+        fallback = dict(
+            primary,
+            license_code='public-domain',
+            is_primary=False,
+            media_url='https://example.org/fallback.svg',
+        )
+        for candidate in (primary, fallback):
+            candidate['score'] = candidate_score(
+                candidate,
+                provider_index=0,
+                style='silhouette',
+            )
+
+        allowed = allowed_candidates_from_scored_candidates(
+            [primary, fallback],
+            args=make_image_args(license_max='public-domain'),
+        )
+
+        assert allowed == [fallback]
+
     def test_style_and_provider_quality_helpers(self):
         candidate = {'asset_type': 'silhouette', 'provider_quality': 12}
         assert get_style_priority(candidate, style='silhouette') == 2
         assert get_style_priority(candidate, style='photo') == 0
         assert get_provider_quality_bonus(candidate) == 12
+
+
+class TestPhylopicProvider:
+    @staticmethod
+    def _image_item(uuid, license_url, media_url, sizes='1000x800', vector=True):
+        selected_file = {
+            'href': media_url,
+            'sizes': sizes,
+            'type': 'image/svg+xml' if vector else 'image/png',
+        }
+        links = {
+            'license': {'href': license_url},
+            'self': {'href': '/images/{}'.format(uuid)},
+            'sourceFile': selected_file,
+        }
+        if vector:
+            links['vectorFile'] = selected_file
+        return {
+            '_links': links,
+            'attribution': 'Example Artist',
+            'uuid': uuid,
+        }
+
+    def test_fetch_candidates_marks_and_fetches_linked_primary_image(self, monkeypatch):
+        primary_uuid = 'primary-uuid'
+        fallback_item = self._image_item(
+            uuid='fallback-uuid',
+            license_url='https://creativecommons.org/publicdomain/zero/1.0/',
+            media_url='https://images.example.org/fallback.svg',
+        )
+        primary_item = self._image_item(
+            uuid=primary_uuid,
+            license_url='https://creativecommons.org/licenses/by/4.0/',
+            media_url='https://images.example.org/primary.png',
+            vector=False,
+        )
+
+        class FakeNCBI:
+            def get_name_translator(self, names):
+                return {'Apis mellifera': [7460]}
+
+        provider = PhylopicProvider(session=DummySession(), ncbi=FakeNCBI())
+        monkeypatch.setattr(
+            provider,
+            '_resolve_node',
+            lambda taxid: {
+                '_links': {
+                    'primaryImage': {
+                        'href': '/images/{}?build=545'.format(primary_uuid),
+                    },
+                },
+                'build': 545,
+                'uuid': 'node-uuid',
+            },
+        )
+        monkeypatch.setattr(provider, '_fetch_node_images', lambda node_uuid, build: [fallback_item])
+        linked_hrefs = list()
+
+        def fake_fetch_linked_image(href):
+            linked_hrefs.append(href)
+            return primary_item
+
+        monkeypatch.setattr(provider, '_fetch_linked_image', fake_fetch_linked_image)
+
+        candidates = provider.fetch_candidates('Apis mellifera')
+        candidates_by_uuid = {candidate['provider_record_id']: candidate for candidate in candidates}
+
+        assert linked_hrefs == ['/images/{}?build=545'.format(primary_uuid)]
+        assert candidates_by_uuid[primary_uuid]['is_primary'] is True
+        assert candidates_by_uuid[primary_uuid]['is_vector'] is False
+        assert candidates_by_uuid['fallback-uuid']['is_primary'] is False
+        assert candidates_by_uuid['fallback-uuid']['is_vector'] is True
+        assert candidate_score(
+            candidates_by_uuid[primary_uuid], provider_index=0, style='silhouette'
+        ) > candidate_score(
+            candidates_by_uuid['fallback-uuid'], provider_index=0, style='silhouette'
+        )
 
 
 class TestSourceParsing:
@@ -899,6 +1052,8 @@ class TestImageMain:
                 'width': 1200,
                 'height': 800,
                 'asset_type': 'silhouette',
+                'is_primary': True,
+                'is_vector': True,
             }],
         }
         inaturalist_candidates = {
@@ -950,6 +1105,10 @@ class TestImageMain:
         assert {row['status'] for row in manifest_rows} == {'downloaded'}
         assert any(row['local_path'].endswith('.svg') for row in manifest_rows)
         assert any(row['local_path'].endswith('.jpg') for row in manifest_rows)
+        homo_row = next(row for row in manifest_rows if row['species_name'] == 'Homo sapiens')
+        assert homo_row['is_primary'] == 'yes'
+        assert homo_row['is_vector'] == 'yes'
+        assert homo_row['selection_reason'] == 'exact_species_match;phylopic_primary_image'
 
         assert unmatched_rows == [{
             'leaf_name': 'BadLabel',

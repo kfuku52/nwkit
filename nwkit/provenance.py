@@ -160,7 +160,7 @@ def _argument_dict(args):
     return {
         key: _json_value(value)
         for key, value in vars(args).items()
-        if key != 'handler'
+        if key != 'handler' and not key.startswith('_nwkit_')
     }
 
 
@@ -198,7 +198,11 @@ def _input_file_records(args):
         record['arguments'].add(argument)
 
     for argument, value in vars(args).items():
-        if argument in OUTPUT_ARGUMENTS or argument == 'handler':
+        if (
+            argument in OUTPUT_ARGUMENTS
+            or argument == 'handler'
+            or argument.startswith('_nwkit_')
+        ):
             continue
         if argument in ('manifest', 'attribution') and getattr(args, 'command', None) == 'image':
             continue
@@ -227,6 +231,9 @@ def _input_file_records(args):
                         value = entry['path']
                         candidate = value if os.path.isabs(str(value)) else os.path.join(base_dir, str(value))
                         add_candidate('manifest:properties[{}]'.format(index), candidate)
+    if getattr(args, 'command', None) == 'draw':
+        for path in getattr(args, '_nwkit_tip_image_paths', ()):
+            add_candidate('tip_image_manifest:asset', path)
     records = list()
     for record in records_by_path.values():
         arguments = sorted(record.pop('arguments'))

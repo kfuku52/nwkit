@@ -388,7 +388,11 @@ pdist.set_defaults(handler=command_dist)
 def command_draw(args):
     from nwkit.draw import draw_main
     draw_main(args)
-pdraw = subparsers.add_parser('draw', help='Draw a phylogenetic tree with optional speciation/duplication node markers', parents=[p_tree_input, p_species, p_tip_table_policy])
+pdraw = subparsers.add_parser(
+    'draw',
+    help='Draw a phylogenetic tree with tip images, support, categorical properties, and node-probability annotations',
+    parents=[p_tree_input, p_species, p_tip_table_policy],
+)
 pdraw.add_argument('-o', '--outfile', metavar='PATH', default='nwkit_draw.pdf', type=str, required=False, action='store',
                    help='default=%(default)s: Output image file.')
 pdraw.add_argument('--image-format', '--image_format', dest='image_format', metavar='auto|pdf|png|svg', default='auto', type=str, required=False, action='store',
@@ -411,6 +415,66 @@ pdraw.add_argument('--support-labels', '--support_labels', dest='support_labels'
                    help='default=%(default)s: Whether to draw support labels on branches.')
 pdraw.add_argument('--support-min', '--support_min', dest='support_min', metavar='FLOAT', default=None, type=float, required=False, action='store',
                    help='default=%(default)s: Show only support labels greater than or equal to this value.')
+pdraw.add_argument('--figure-width', '--figure_width', dest='figure_width', metavar='FLOAT', default=3.6, type=float, required=False, action='store',
+                   help='default=%(default)s: Figure width in inches.')
+pdraw.add_argument('--figure-height', '--figure_height', dest='figure_height', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                   help='default=auto: Optional fixed figure height in inches. By default height follows the number of tips.')
+pdraw.add_argument('--label-panel-width', '--label_panel_width', dest='label_panel_width', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                   help='default=auto: Width in inches reserved for tip labels and badges.')
+pdraw.add_argument('--tip-image-manifest', '--tip_image_manifest', dest='tip_image_manifest', metavar='PATH', default=None, type=str, required=False, action='store',
+                   help='default=None: TSV produced by nwkit image, containing unique leaf_name and local_path columns. '
+                        'Matching images are drawn in an aligned column beside the tree.')
+pdraw.add_argument('--tip-image-root', '--tip_image_root', dest='tip_image_root', metavar='PATH', default=None, type=str, required=False, action='store',
+                   help='default=manifest directory: Base directory for relative local_path values in --tip-image-manifest. '
+                        'Required when the manifest is read from STDIN.')
+pdraw.add_argument('--tip-image-size', '--tip_image_size', dest='tip_image_size', metavar='FLOAT', default=18.0, type=float, required=False, action='store',
+                   help='default=%(default)s: Maximum width or height of each tip image in points.')
+pdraw.add_argument('--tip-image-gap', '--tip_image_gap', dest='tip_image_gap', metavar='FLOAT', default=4.0, type=float, required=False, action='store',
+                   help='default=%(default)s: Horizontal padding on each side of the aligned tip-image column in points.')
+pdraw.add_argument('--font-size', '--font_size', dest='font_size', metavar='FLOAT', default=8.0, type=float, required=False, action='store',
+                   help='default=%(default)s: Font size in points.')
+pdraw.add_argument('--font-family', '--font_family', dest='font_family', metavar='STR', default='Helvetica', type=str, required=False, action='store',
+                   help='default=%(default)s: Matplotlib font family used for labels and legends.')
+pdraw.add_argument('--branch-color', '--branch_color', dest='branch_color', metavar='COLOR', default='#000000', type=str, required=False, action='store',
+                   help='default=%(default)s: Matplotlib color for branches.')
+pdraw.add_argument('--terminal-branch-color', '--terminal_branch_color', dest='terminal_branch_color', metavar='COLOR', default=None, type=str, required=False, action='store',
+                   help='default=None: Optional color applied to terminal branches.')
+pdraw.add_argument('--tip-label-position', '--tip_label_position', dest='tip_label_position', metavar='aligned|branch-end', default='aligned', type=str, required=False, action='store',
+                   choices=['aligned', 'branch-end'],
+                   help='default=%(default)s: Align tip labels at the right edge or place each label beside its branch endpoint.')
+pdraw.add_argument('--root-marker', '--root_marker', dest='root_marker', metavar='none|circle|diamond', default='none', type=str, required=False, action='store',
+                   choices=['none', 'circle', 'diamond'],
+                   help='default=%(default)s: Optional marker drawn at the displayed root.')
+pdraw.add_argument('--root-marker-color', '--root_marker_color', dest='root_marker_color', metavar='COLOR', default='#0072B2', type=str, required=False, action='store',
+                   help='default=%(default)s: Matplotlib color for --root-marker.')
+pdraw.add_argument('--root-marker-size', '--root_marker_size', dest='root_marker_size', metavar='FLOAT', default=None, type=float, required=False, action='store',
+                   help='default=font size: Diameter of --root-marker in points.')
+pdraw.add_argument('--tip-badge-property', '--tip_badge_property', dest='tip_badge_property', metavar='PROPERTY', default=None, type=str, required=False, action='store',
+                   help='default=None: Display the value of this Newick/NHX property as a badge beside each matching tip.')
+pdraw.add_argument('--tip-badge-missing-label', '--tip_badge_missing_label', dest='tip_badge_missing_label', metavar='TEXT', default=None, type=str, required=False, action='store',
+                   help='default=None: Badge text used when --tip-badge-property is absent or empty; missing badges are otherwise omitted.')
+pdraw.add_argument('--node-pie-properties', '--node_pie_properties', dest='node_pie_properties', metavar='PROP1,PROP2,...', default=None, type=str, required=False, action='store',
+                   help='default=None: Draw node pie markers from comma-separated numeric Newick/NHX properties.')
+pdraw.add_argument('--node-pie-target', '--node_pie_target', dest='node_pie_target', metavar='root,intnode,leaf|all', default='root,intnode', type=str, required=False, action='store',
+                   help='default=%(default)s: Comma-separated node classes receiving --node-pie-properties.')
+pdraw.add_argument('--node-pie-leaf-filter', '--node_pie_leaf_filter', dest='node_pie_leaf_filter', metavar='PROPERTY:OP:VALUE', default=[], type=str, required=False, action='append',
+                   help='default=[]: Restrict leaf pies with OP in ge, gt, le, lt, eq, or ne; root and internal pies remain unaffected. May be repeated.')
+pdraw.add_argument('--node-label-property', '--node_label_property', dest='node_label_property', metavar='PROPERTY', default=None, type=str, required=False, action='store',
+                   help='default=None: Display this Newick/NHX property beside matching nodes.')
+pdraw.add_argument('--node-label-target', '--node_label_target', dest='node_label_target', metavar='root,intnode,leaf|all', default='intnode', type=str, required=False, action='store',
+                   help='default=%(default)s: Comma-separated node classes eligible for --node-label-property.')
+pdraw.add_argument('--node-label-filter', '--node_label_filter', dest='node_label_filter', metavar='PROPERTY:OP:VALUE', default=[], type=str, required=False, action='append',
+                   help='default=[]: Filter property labels with OP in ge, gt, le, lt, eq, or ne. May be repeated.')
+pdraw.add_argument('--node-label-decimals', '--node_label_decimals', dest='node_label_decimals', metavar='INT', default=2, type=int, required=False, action='store',
+                   help='default=%(default)s: Decimal places used for numeric --node-label-property values.')
+pdraw.add_argument('--node-label-prefix', '--node_label_prefix', dest='node_label_prefix', metavar='TEXT', default='', type=str, required=False, action='store',
+                   help='default="": Text prepended to each displayed --node-label-property value.')
+pdraw.add_argument('--property-color', '--property_color', dest='property_color', metavar='VALUE=COLOR', default=[], type=str, required=False, action='append',
+                   help='default=[]: Color assigned to a tip-badge value or node-pie property/state. May be repeated.')
+pdraw.add_argument('--legend', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Whether to draw legends for enabled categorical layers.')
+pdraw.add_argument('--transparent', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Save the figure with a transparent background.')
 pdraw.set_defaults(handler=command_draw)
 
 def command_drop(args):

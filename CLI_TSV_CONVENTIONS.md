@@ -50,6 +50,7 @@ unique to one command.
 |---|---|---|
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
 | `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
+| `draw --tip-image-manifest` | `leaf_name`, `local_path` | One row per tip. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
 | `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. |
 | `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |
 | `--weight-tsv` | `weight` | Positive finite weights. Optional `tree_id` values are unique, 1-based input-tree numbers; without it, row order is used and row count must equal tree count. |

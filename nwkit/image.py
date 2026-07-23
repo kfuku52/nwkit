@@ -51,7 +51,7 @@ NCBI_NEWTAXDUMP_URL = 'https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/new_taxdump/new
 REQUEST_TIMEOUT = (10, 60)
 DEFAULT_LOOKUP_WORKERS = 4
 DEFAULT_DOWNLOAD_WORKERS = 4
-IMAGE_QUERY_CACHE_VERSION = 2
+IMAGE_QUERY_CACHE_VERSION = 3
 LOOKUP_FALLBACK_BUFFER = 2
 BIOICONS_CATALOG_CACHE_VERSION = 2
 DEFAULT_QUERY_CACHE_MAX_AGE_HOURS = 168.0
@@ -1214,6 +1214,55 @@ def get_provider_quality_bonus(candidate):
     return int(candidate.get('provider_quality', 0) or 0)
 
 
+def candidate_is_vector(candidate):
+    explicit_value = candidate.get('is_vector')
+    if explicit_value is not None:
+        return bool(explicit_value)
+    media_url = str(candidate.get('media_url') or '')
+    return urlparse(media_url).path.lower().endswith('.svg')
+
+
+def get_aspect_fit_bonus(candidate):
+    try:
+        width = float(candidate.get('width') or 0)
+        height = float(candidate.get('height') or 0)
+    except (TypeError, ValueError):
+        return 0
+    if width <= 0 or height <= 0:
+        return 0
+    aspect_ratio = max(width, height) / min(width, height)
+    if aspect_ratio <= 1.5:
+        return 100
+    if aspect_ratio <= 2:
+        return 90
+    if aspect_ratio <= 3:
+        return 75
+    if aspect_ratio <= 4:
+        return 60
+    if aspect_ratio <= 6:
+        return 40
+    if aspect_ratio <= 10:
+        return 20
+    return 0
+
+
+def describe_candidate_selection(candidate):
+    rank_reason = {
+        'species': 'exact_species_match',
+        'genus': 'genus_fallback',
+        'family': 'family_fallback',
+    }.get(candidate.get('matched_rank'), 'taxon_match')
+    if candidate.get('provider') == 'phylopic':
+        choice_reason = (
+            'phylopic_primary_image'
+            if candidate.get('is_primary')
+            else 'phylopic_ranked_fallback'
+        )
+    else:
+        choice_reason = 'provider_ranked_candidate'
+    return '{};{}'.format(rank_reason, choice_reason)
+
+
 def dedupe_sorted_candidates(candidates):
     deduped = list()
     seen_urls = set()
@@ -1445,16 +1494,22 @@ def load_ncbi_images_records(database_path, taxid):
 def candidate_score(candidate, provider_index=0, style='auto'):
     rank_priority = {'species': 3, 'genus': 2, 'family': 1}.get(candidate['matched_rank'], 0)
     provider_priority = max(1, 100 - int(provider_index))
+    primary_priority = 1 if candidate.get('is_primary') else 0
     license_priority = max(0, LICENSE_OPENNESS.get(candidate['license_code'], 0))
     style_priority = get_style_priority(candidate, style=style)
+    vector_priority = 1 if candidate_is_vector(candidate) else 0
+    aspect_priority = get_aspect_fit_bonus(candidate)
     quality_priority = min(max(candidate.get('width') or 0, candidate.get('height') or 0), 10000)
     provider_quality = max(0, min(get_provider_quality_bonus(candidate), 99))
     score = (
-        rank_priority * 10**12
-        + provider_priority * 10**10
-        + license_priority * 10**8
-        + style_priority * 10**7
-        + quality_priority * 10**2
+        rank_priority * 10**15
+        + provider_priority * 10**12
+        + primary_priority * 10**11
+        + license_priority * 10**9
+        + style_priority * 10**8
+        + vector_priority * 10**7
+        + aspect_priority * 10**4
+        + quality_priority * 9
         + provider_quality
     )
     return int(score)
@@ -1532,6 +1587,32 @@ class PhylopicProvider:
         payload = response.json()
         return payload.get('_embedded', {}).get('items', [])
 
+    @staticmethod
+    def _primary_image_link(node):
+        primary_image = node.get('_links', {}).get('primaryImage')
+        return primary_image if isinstance(primary_image, dict) else {}
+
+    @classmethod
+    def _primary_image_uuid(cls, node):
+        href = cls._primary_image_link(node).get('href', '')
+        path_parts = [part for part in urlparse(href).path.split('/') if part]
+        if len(path_parts) >= 2 and path_parts[-2] == 'images':
+            return path_parts[-1]
+        return ''
+
+    def _fetch_linked_image(self, href):
+        if str(href).startswith(('http://', 'https://')):
+            url = href
+        else:
+            url = '{}{}'.format(PHYLIPIC_API_ROOT, href)
+        response = self.session.get(
+            url,
+            timeout=REQUEST_TIMEOUT,
+            headers=HTTP_HEADERS,
+        )
+        response.raise_for_status()
+        return response.json()
+
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
         for matched_rank, query_name in get_taxonomic_queries(species_name, fallback_rank=fallback_rank, ncbi=self.ncbi):
@@ -1545,17 +1626,31 @@ class PhylopicProvider:
             node_uuid = node.get('uuid')
             if build is None or node_uuid is None:
                 continue
-            for image_item in self._fetch_node_images(node_uuid=node_uuid, build=build):
+            image_items = self._fetch_node_images(node_uuid=node_uuid, build=build)
+            primary_uuid = self._primary_image_uuid(node)
+            if primary_uuid and not any(item.get('uuid') == primary_uuid for item in image_items):
+                primary_href = self._primary_image_link(node).get('href')
+                try:
+                    primary_item = self._fetch_linked_image(primary_href)
+                except requests.RequestException as exc:
+                    _stderr(
+                        'PhyloPic primary image lookup failed for {}: {}; '
+                        'using ranked fallback candidates.'.format(query_name, exc)
+                    )
+                else:
+                    image_items = [primary_item] + image_items
+            for image_item in image_items:
                 candidate = self._candidate_from_image(
                     image_item=image_item,
                     matched_name=query_name,
                     matched_rank=matched_rank,
+                    is_primary=bool(primary_uuid and image_item.get('uuid') == primary_uuid),
                 )
                 if candidate is not None:
                     candidates.append(candidate)
         return candidates
 
-    def _candidate_from_image(self, image_item, matched_name, matched_rank):
+    def _candidate_from_image(self, image_item, matched_name, matched_rank, is_primary=False):
         links = image_item.get('_links', {})
         vector_file = links.get('vectorFile')
         source_file = links.get('sourceFile')
@@ -1573,6 +1668,13 @@ class PhylopicProvider:
         license_code = normalize_license_code(raw_url=license_url, attribution=image_item.get('attribution'))
         width, height = parse_size(selected_file.get('sizes'))
         self_link = links.get('self', {}).get('href', '')
+        selected_type = str(selected_file.get('type') or '').lower()
+        selected_href = str(selected_file.get('href') or '')
+        is_vector = (
+            vector_file is not None
+            or selected_type == 'image/svg+xml'
+            or urlparse(selected_href).path.lower().endswith('.svg')
+        )
 
         return {
             'provider': self.provider_name,
@@ -1587,7 +1689,9 @@ class PhylopicProvider:
             'width': width,
             'height': height,
             'asset_type': 'silhouette',
-            'provider_quality': 30 if vector_file is not None else 10,
+            'is_primary': bool(is_primary),
+            'is_vector': is_vector,
+            'provider_quality': 30 if is_vector else 10,
         }
 
 
@@ -2967,6 +3071,9 @@ def process_species_assets(
                 'provider_record_id': candidate['provider_record_id'],
                 'matched_name': candidate['matched_name'],
                 'matched_rank': candidate['matched_rank'],
+                'is_primary': 'yes' if candidate.get('is_primary') else 'no',
+                'is_vector': 'yes' if candidate_is_vector(candidate) else 'no',
+                'selection_reason': describe_candidate_selection(candidate),
                 'license_code': candidate['license_code'],
                 'license_url': candidate['license_url'],
                 'attribution': candidate['attribution'],
@@ -3076,6 +3183,9 @@ def image_main(args):
         'provider_record_id',
         'matched_name',
         'matched_rank',
+        'is_primary',
+        'is_vector',
+        'selection_reason',
         'license_code',
         'license_url',
         'attribution',

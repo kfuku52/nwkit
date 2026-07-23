@@ -37,7 +37,9 @@ NWKIT requires Python 3.10 or newer.
 
 #### Optional dependencies for image post-processing
 
-`nwkit image` can normalize image format, trim margins, and resize/pad output files when the optional image-processing dependencies are installed:
+`nwkit image` can normalize image format, trim margins, and resize/pad output
+files, and `nwkit draw` can rasterize SVG tip images, when the optional
+image-processing dependencies are installed:
 
 ```
 pip install "nwkit[image]"
@@ -59,7 +61,7 @@ and output-column vocabulary are defined in
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
-- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing a phylogenetic tree with optional speciation/duplication node markers
+- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with aligned species images, support, categorical or missing-value badges, filtered node-probability pies, and property labels
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
@@ -83,6 +85,47 @@ and output-column vocabulary are defined in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+
+## Drawing trees with species images
+
+`nwkit image` writes a tip-keyed `manifest.tsv` that `nwkit draw` can consume
+without contacting external services again. Keep `--max-per-species 1` so the
+manifest contains one image per tree tip:
+
+```sh
+nwkit image -i tree.nwk \
+  --out-dir species-images \
+  --style silhouette \
+  --max-per-species 1 \
+  --output-format png \
+  --max-edge 256 \
+  --canvas square \
+  --background transparent \
+  --trim transparent
+
+nwkit draw -i tree.nwk \
+  --tip-image-manifest species-images/manifest.tsv \
+  --tip-image-size 18 \
+  --tip-image-gap 4 \
+  --figure-width 5 \
+  -o tree-with-images.svg
+```
+
+For PhyloPic, `nwkit image` prefers the taxon's curated `primaryImage`. If that
+image is unavailable or excluded by the license policy, candidates at the same
+taxonomic rank are ranked by license openness, vector availability, drawable
+aspect ratio, and resolution before genus or family fallbacks are considered.
+The manifest records `is_primary`, `is_vector`, and `selection_reason` for an
+auditable choice. This is a curated-representative policy, not a download-count
+ranking; the public PhyloPic API does not expose per-image download counts.
+
+Relative `local_path` values are resolved from the manifest directory.
+Use `--tip-image-root PATH` when a manifest has been moved independently from
+its image directory. Missing tip rows follow `--unmatched warn|error|ignore`;
+duplicated tip rows and broken local paths are rejected. The generated figure
+embeds the selected images, while license and creator information remains in
+the `ATTRIBUTION.md` written by `nwkit image`; distribute that file with the
+figure when its licenses require attribution.
 
 ## Tree comparison, composition, and provenance
 

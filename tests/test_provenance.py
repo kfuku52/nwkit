@@ -2,15 +2,30 @@ import hashlib
 import io
 import json
 import sys
+from argparse import Namespace
 
 import pytest
 
 from nwkit.cli import main
-from nwkit.provenance import _TeeTextWriter
+from nwkit.provenance import _TeeTextWriter, _argument_dict
 
 
 def _sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def test_argument_dict_omits_private_runtime_caches():
+    args = Namespace(
+        command='constrain',
+        species_parser='legacy',
+        _nwkit_species_parser_cache=object(),
+        _nwkit_species_parser_cache_key=('legacy', 'pattern', None),
+        handler=object(),
+    )
+    assert _argument_dict(args) == {
+        'command': 'constrain',
+        'species_parser': 'legacy',
+    }
 
 
 def test_global_audit_records_arguments_hashes_and_messages(tmp_path):
@@ -94,6 +109,41 @@ def test_audit_records_compose_manifest_dependencies_and_all_roles(tmp_path):
     record = json.loads(audit.read_text().strip())
     source_record = next(item for item in record['inputs'] if item['path'] == str(source.resolve()))
     assert source_record['arguments'] == ['manifest:name', 'manifest:support']
+
+
+def test_audit_records_draw_tip_image_manifest_and_assets(tmp_path):
+    Image = pytest.importorskip('PIL.Image')
+    infile = tmp_path / 'input.nwk'
+    image = tmp_path / 'tip.png'
+    manifest = tmp_path / 'manifest.tsv'
+    outfile = tmp_path / 'tree.svg'
+    audit = tmp_path / 'audit.jsonl'
+    infile.write_text('(A:1,B:1);')
+    Image.new('RGBA', (8, 8), (40, 120, 200, 255)).save(image)
+    manifest.write_text(
+        'leaf_name\tlocal_path\n'
+        'A\ttip.png\n'
+        'B\ttip.png\n'
+    )
+
+    main([
+        'draw',
+        '-i', str(infile),
+        '-o', str(outfile),
+        '--species-overlap-node-plot', 'no',
+        '--tip-image-manifest', str(manifest),
+        '--audit', str(audit),
+    ])
+
+    record = json.loads(audit.read_text().strip())
+    records_by_path = {
+        item['path']: item
+        for item in record['inputs']
+    }
+    assert records_by_path[str(manifest.resolve())]['argument'] == 'tip_image_manifest'
+    assert records_by_path[str(image.resolve())]['arguments'] == [
+        'tip_image_manifest:asset'
+    ]
 
 
 def test_stderr_capture_is_bounded():
