@@ -1,8 +1,10 @@
+import csv
 import hashlib
-import io
 import json
 import os
+import stat
 import sys
+import tempfile
 import time
 from datetime import datetime, timezone
 
@@ -14,6 +16,7 @@ from nwkit.util import (
     acquire_exclusive_lock,
     inspect_tree_text,
     is_rooted,
+    normalized_missing_path_key,
     split_newick_stream,
     validate_distinct_output_paths,
 )
@@ -33,6 +36,32 @@ OUTPUT_ARGUMENTS = frozenset((
     'group_table_prefix',
     'audit',
 ))
+
+INPUT_PATH_ARGUMENTS = frozenset((
+    'infile',
+    'infile2',
+    'length_source',
+    'manifest',
+    'name_source',
+    'name_tsv',
+    'property_source',
+    'reference',
+    'root_source',
+    'seqin',
+    'species_list',
+    'species_map_tsv',
+    'species_name_tsv',
+    'support_source',
+    'table',
+    'taxid_tsv',
+    'tip_image_manifest',
+    'trait',
+    'weight_tsv',
+))
+
+STDIN_SPOOL_MEMORY_BYTES = 8 * 1024 * 1024
+INPUT_SUMMARY_MAX_CHARS = 4 * 1024 * 1024
+STREAM_CHUNK_CHARS = 1024 * 1024
 
 
 class _TeeTextWriter:
@@ -117,13 +146,30 @@ def _sha256_bytes(data):
 def _sha256_file(path):
     hasher = hashlib.sha256()
     size = 0
-    with open(path, 'rb') as handle:
-        while True:
-            chunk = handle.read(1024 * 1024)
-            if not chunk:
-                break
-            size += len(chunk)
-            hasher.update(chunk)
+    flags = os.O_RDONLY
+    if hasattr(os, 'O_NOFOLLOW'):
+        flags |= os.O_NOFOLLOW
+    if hasattr(os, 'O_NONBLOCK'):
+        flags |= os.O_NONBLOCK
+    fd = os.open(path, flags)
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise ValueError(
+                "Audit hashing only supports regular files: '{}'.".format(path)
+            )
+        handle = os.fdopen(fd, 'rb')
+        fd = None
+        with handle:
+            while True:
+                chunk = handle.read(1024 * 1024)
+                if not chunk:
+                    break
+                size += len(chunk)
+                hasher.update(chunk)
+    finally:
+        if fd is not None:
+            os.close(fd)
     return hasher.hexdigest(), size
 
 
@@ -133,8 +179,30 @@ def _sha256_directory(path):
     file_count = 0
     for root, dirnames, filenames in os.walk(path):
         dirnames.sort()
+        for dirname in dirnames:
+            directory_path = os.path.join(root, dirname)
+            directory_stat = os.lstat(directory_path)
+            if stat.S_ISLNK(directory_stat.st_mode):
+                raise ValueError(
+                    "Audit directory hashing does not follow symbolic links: '{}'.".format(
+                        directory_path
+                    )
+                )
+            if not stat.S_ISDIR(directory_stat.st_mode):
+                raise ValueError(
+                    "Audit directory hashing encountered a special entry: '{}'.".format(
+                        directory_path
+                    )
+                )
         for filename in sorted(filenames):
             filepath = os.path.join(root, filename)
+            file_stat = os.lstat(filepath)
+            if not stat.S_ISREG(file_stat.st_mode):
+                raise ValueError(
+                    "Audit directory hashing only supports regular files: '{}'.".format(
+                        filepath
+                    )
+                )
             relative = os.path.relpath(filepath, path).replace(os.sep, '/')
             digest, size = _sha256_file(filepath)
             hasher.update(relative.encode('utf-8'))
@@ -166,10 +234,7 @@ def _argument_dict(args):
 
 def _path_candidates_from_value(value):
     if isinstance(value, str):
-        candidates = [value]
-        if '@' in value:
-            candidates.append(value.rsplit('@', 1)[1])
-        return candidates
+        return [value]
     if isinstance(value, (list, tuple)):
         candidates = list()
         for item in value:
@@ -178,36 +243,26 @@ def _path_candidates_from_value(value):
     return []
 
 
-def _input_file_records(args):
-    records_by_path = dict()
-
-    def add_candidate(argument, candidate):
-        if candidate in ('', '-') or not os.path.isfile(candidate):
-            return
-        realpath = os.path.realpath(candidate)
-        record = records_by_path.get(realpath)
-        if record is None:
-            digest, size = _sha256_file(realpath)
-            record = {
-                'path': realpath,
-                'sha256': digest,
-                'bytes': size,
-                'arguments': set(),
-            }
-            records_by_path[realpath] = record
-        record['arguments'].add(argument)
-
-    for argument, value in vars(args).items():
-        if (
-            argument in OUTPUT_ARGUMENTS
-            or argument == 'handler'
-            or argument.startswith('_nwkit_')
-        ):
+def _declared_input_path_candidates(args):
+    candidates = list()
+    for argument in sorted(INPUT_PATH_ARGUMENTS):
+        if not hasattr(args, argument):
             continue
         if argument in ('manifest', 'attribution') and getattr(args, 'command', None) == 'image':
             continue
-        for candidate in _path_candidates_from_value(value):
-            add_candidate(argument, candidate)
+        values = _path_candidates_from_value(getattr(args, argument))
+        if argument == 'property_source':
+            values = [
+                value.rsplit('@', 1)[1]
+                for value in values
+                if '@' in value
+            ]
+        candidates.extend((argument, value) for value in values)
+    return candidates
+
+
+def _input_path_candidates(args):
+    candidates = _declared_input_path_candidates(args)
     if getattr(args, 'command', None) == 'compose':
         manifest_path = getattr(args, 'manifest', None)
         if manifest_path not in (None, '') and os.path.isfile(manifest_path):
@@ -222,7 +277,7 @@ def _input_file_records(args):
                     value = manifest.get(key)
                     if value not in (None, '', '-'):
                         candidate = value if os.path.isabs(str(value)) else os.path.join(base_dir, str(value))
-                        add_candidate('manifest:{}'.format(key), candidate)
+                        candidates.append(('manifest:{}'.format(key), candidate))
                 properties = manifest.get('properties', [])
                 if isinstance(properties, list):
                     for index, entry in enumerate(properties):
@@ -230,10 +285,79 @@ def _input_file_records(args):
                             continue
                         value = entry['path']
                         candidate = value if os.path.isabs(str(value)) else os.path.join(base_dir, str(value))
-                        add_candidate('manifest:properties[{}]'.format(index), candidate)
+                        candidates.append((
+                            'manifest:properties[{}]'.format(index),
+                            candidate,
+                        ))
     if getattr(args, 'command', None) == 'draw':
+        manifest_path = getattr(args, 'tip_image_manifest', None)
+        if manifest_path not in (None, '', '-') and os.path.isfile(manifest_path):
+            tip_image_root = getattr(args, 'tip_image_root', None)
+            if tip_image_root in (None, ''):
+                tip_image_root = os.path.dirname(os.path.realpath(manifest_path))
+            try:
+                with open(manifest_path, newline='') as handle:
+                    for row in csv.DictReader(handle, delimiter='\t'):
+                        value = row.get('local_path')
+                        if value in (None, '', '-'):
+                            continue
+                        candidate = (
+                            value
+                            if os.path.isabs(value)
+                            else os.path.join(tip_image_root, value)
+                        )
+                        candidates.append(('tip_image_manifest:asset', candidate))
+            except (OSError, UnicodeError, csv.Error):
+                pass
         for path in getattr(args, '_nwkit_tip_image_paths', ()):
-            add_candidate('tip_image_manifest:asset', path)
+            candidates.append(('tip_image_manifest:asset', path))
+    return candidates
+
+
+def _input_file_records(args, input_candidates=None):
+    records_by_path = dict()
+    if input_candidates is None:
+        input_candidates = _input_path_candidates(args)
+    for argument, candidate in input_candidates:
+        if candidate in ('', '-'):
+            continue
+        try:
+            candidate_exists = os.path.lexists(candidate)
+        except (OSError, ValueError) as exc:
+            raise ValueError(
+                "Audit input path is invalid for '{}': {!r}.".format(
+                    argument,
+                    candidate,
+                )
+            ) from exc
+        if not candidate_exists:
+            continue
+        try:
+            candidate_stat = os.stat(candidate)
+        except OSError as exc:
+            raise ValueError(
+                "Audit input path is unavailable for '{}': '{}'.".format(
+                    argument,
+                    candidate,
+                )
+            ) from exc
+        if not stat.S_ISREG(candidate_stat.st_mode):
+            raise ValueError(
+                "Audit input paths must be regular files; use '-' for "
+                "standard input ({}): '{}'.".format(argument, candidate)
+            )
+        realpath = os.path.realpath(candidate)
+        record = records_by_path.get(realpath)
+        if record is None:
+            digest, size = _sha256_file(realpath)
+            record = {
+                'path': realpath,
+                'sha256': digest,
+                'bytes': size,
+                'arguments': set(),
+            }
+            records_by_path[realpath] = record
+        record['arguments'].add(argument)
     records = list()
     for record in records_by_path.values():
         arguments = sorted(record.pop('arguments'))
@@ -310,31 +434,43 @@ def _primary_input_text(args, stdin_text):
         return stdin_text
     if isinstance(infile, str) and os.path.isfile(infile):
         try:
-            with open(infile) as handle:
-                return handle.read()
+            with open(infile, errors='replace') as handle:
+                return handle.read(INPUT_SUMMARY_MAX_CHARS + 1)
         except UnicodeDecodeError:
             return None
     if isinstance(infile, str):
-        return infile
+        return infile[:INPUT_SUMMARY_MAX_CHARS + 1]
     return None
 
 
 def _input_summary(text, args):
     if text in (None, ''):
         return {}
+    truncated = len(text) > INPUT_SUMMARY_MAX_CHARS
+    if truncated:
+        text = text[:INPUT_SUMMARY_MAX_CHARS]
     try:
         tree_strings = split_newick_stream(text)
     except ValueError:
         first_line = text.splitlines()[0] if text.splitlines() else ''
         if '\t' in first_line:
-            return {
+            summary = {
                 'kind': 'table',
                 'columns': first_line.split('\t'),
                 'row_count': max(0, len(text.splitlines()) - 1),
             }
-        return {'kind': 'text'}
+            if truncated:
+                summary['truncated'] = True
+            return summary
+        summary = {'kind': 'text'}
+        if truncated:
+            summary['truncated'] = True
+        return summary
     if not tree_strings:
-        return {'kind': 'text'}
+        summary = {'kind': 'text'}
+        if truncated:
+            summary['truncated'] = True
+        return summary
     inspection = inspect_tree_text(
         tree_strings[0],
         format=getattr(args, 'format', 'auto'),
@@ -347,6 +483,8 @@ def _input_summary(text, args):
         'input_format': inspection['input_format'],
         'format_ambiguous': inspection['format_ambiguous'],
     }
+    if truncated:
+        summary['truncated'] = True
     if inspection['parse_ok']:
         try:
             tree = Tree(tree_strings[0], parser=int(inspection['input_format']))
@@ -383,14 +521,50 @@ def _external_context(args):
     }
 
 
+def _open_secure_audit(path):
+    path = os.fspath(path)
+    if os.path.lexists(path):
+        path_stat = os.lstat(path)
+        if stat.S_ISLNK(path_stat.st_mode):
+            raise ValueError("Audit path must not be a symbolic link: '{}'.".format(path))
+        if not stat.S_ISREG(path_stat.st_mode):
+            raise ValueError("Audit path must be a regular file: '{}'.".format(path))
+    flags = os.O_APPEND | os.O_CREAT | os.O_WRONLY
+    if hasattr(os, 'O_NOFOLLOW'):
+        flags |= os.O_NOFOLLOW
+    fd = os.open(path, flags, 0o600)
+    try:
+        file_stat = os.fstat(fd)
+        if not stat.S_ISREG(file_stat.st_mode):
+            raise ValueError("Audit path must be a regular file: '{}'.".format(path))
+        if hasattr(os, 'geteuid') and file_stat.st_uid != os.geteuid():
+            raise PermissionError("Audit file must be owned by the current user: '{}'.".format(path))
+        if file_stat.st_nlink != 1:
+            raise ValueError("Audit file must not have multiple hard links: '{}'.".format(path))
+        if hasattr(os, 'fchmod'):
+            os.fchmod(fd, 0o600)
+    except Exception:
+        os.close(fd)
+        raise
+    return fd
+
+
+def _prepare_audit(path):
+    parent = os.path.dirname(os.path.abspath(os.fspath(path)))
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    fd = _open_secure_audit(path)
+    os.close(fd)
+
+
 def _write_audit(path, record):
-    parent = os.path.dirname(os.path.realpath(path))
+    parent = os.path.dirname(os.path.abspath(os.fspath(path)))
     if parent:
         os.makedirs(parent, exist_ok=True)
     payload = (json.dumps(record, sort_keys=True, ensure_ascii=False) + '\n').encode('utf-8')
     lock_path = os.path.realpath(path) + '.lock'
     with acquire_exclusive_lock(lock_path, lock_label='audit log'):
-        fd = os.open(path, os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o666)
+        fd = _open_secure_audit(path)
         try:
             view = memoryview(payload)
             while view:
@@ -401,13 +575,30 @@ def _write_audit(path, record):
             os.close(fd)
 
 
-def run_with_audit(args, argv, handler):
-    audit_path = getattr(args, 'audit', None)
-    if audit_path in (None, ''):
-        return handler(args)
-    if audit_path == '-':
-        raise ValueError("'--audit' requires a file path; stdout is reserved for primary output.")
-    audit_collision_candidates = [('--audit', audit_path)]
+def _image_output_collision_candidates(args):
+    if getattr(args, 'command', None) != 'image':
+        return []
+    out_dir = getattr(args, 'out_dir', None)
+    if out_dir in (None, ''):
+        return []
+    out_dir = os.path.realpath(out_dir)
+    manifest_out = getattr(args, 'manifest_out', None) or getattr(args, 'manifest', None)
+    attribution_out = (
+        getattr(args, 'attribution_out', None)
+        or getattr(args, 'attribution', None)
+    )
+    candidates = [
+        ('--out-dir/unmatched.tsv', os.path.join(out_dir, 'unmatched.tsv')),
+    ]
+    if manifest_out in (None, ''):
+        candidates.append(('--manifest-out', os.path.join(out_dir, 'manifest.tsv')))
+    if attribution_out in (None, ''):
+        candidates.append(('--attribution-out', os.path.join(out_dir, 'ATTRIBUTION.md')))
+    return candidates
+
+
+def _audit_collision_candidates(args, audit_path):
+    candidates = [('--audit', audit_path)]
     for argument in OUTPUT_ARGUMENTS:
         if argument == 'audit':
             continue
@@ -422,76 +613,233 @@ def run_with_audit(args, argv, handler):
                 if outfile not in (None, '', '-'):
                     value = outfile.removesuffix('.nwk')
             if value not in (None, ''):
-                audit_collision_candidates.extend((
+                candidates.extend((
                     ('--group-table-prefix .all.tsv', '{}.all.tsv'.format(value)),
                     ('--group-table-prefix .sampled.tsv', '{}.sampled.tsv'.format(value)),
                 ))
         else:
             for candidate in _path_candidates_from_value(value):
-                audit_collision_candidates.append(('--{}'.format(argument.replace('_', '-')), candidate))
-    validate_distinct_output_paths(audit_collision_candidates)
+                candidates.append(('--{}'.format(argument.replace('_', '-')), candidate))
+    candidates.extend(_image_output_collision_candidates(args))
+    return candidates
+
+
+def _validate_audit_input_collision(audit_path, input_candidates):
+    audit_realpath = os.path.realpath(audit_path)
+    collision_arguments = set()
+    for argument, candidate in input_candidates:
+        if candidate in ('', '-'):
+            continue
+        candidate_realpath = os.path.realpath(candidate)
+        same_path = (
+            normalized_missing_path_key(candidate_realpath)
+            == normalized_missing_path_key(audit_realpath)
+        )
+        same_file = False
+        if (
+            not same_path
+            and os.path.exists(audit_path)
+            and os.path.exists(candidate)
+        ):
+            try:
+                same_file = os.path.samefile(audit_path, candidate)
+            except OSError:
+                same_file = False
+        if same_path or same_file:
+            collision_arguments.add(argument)
+    if collision_arguments:
+        raise ValueError(
+            "Audit path must be distinct from input paths ({}): '{}'.".format(
+                ', '.join(sorted(collision_arguments)),
+                audit_realpath,
+            )
+        )
+
+
+def _validate_audit_directory_collision(args, audit_path):
+    audit_realpath = os.path.realpath(audit_path)
+    out_dir = getattr(args, 'out_dir', None)
+    if out_dir in (None, '', '-'):
+        return
+    output_directory = os.path.realpath(out_dir)
+    try:
+        nested = os.path.commonpath((audit_realpath, output_directory)) == output_directory
+    except ValueError:
+        nested = False
+    if nested:
+        raise ValueError(
+            "Audit path must not be inside output directory '--out-dir': '{}'.".format(
+                output_directory
+            )
+        )
+
+
+def _spool_stdin(stream):
+    spool = tempfile.SpooledTemporaryFile(
+        max_size=STDIN_SPOOL_MEMORY_BYTES,
+        mode='w+t',
+        encoding='utf-8',
+        newline='',
+    )
+    hasher = hashlib.sha256()
+    byte_count = 0
+    summary_chunks = []
+    summary_chars = 0
+    try:
+        while True:
+            chunk = stream.read(STREAM_CHUNK_CHARS)
+            if not chunk:
+                break
+            if not isinstance(chunk, str):
+                raise TypeError('Standard input must be a text stream.')
+            spool.write(chunk)
+            encoded = chunk.encode('utf-8')
+            hasher.update(encoded)
+            byte_count += len(encoded)
+            if summary_chars <= INPUT_SUMMARY_MAX_CHARS:
+                remaining = INPUT_SUMMARY_MAX_CHARS + 1 - summary_chars
+                if remaining > 0:
+                    captured = chunk[:remaining]
+                    summary_chunks.append(captured)
+                    summary_chars += len(captured)
+    except Exception:
+        spool.close()
+        raise
+    spool.seek(0)
+    return spool, ''.join(summary_chunks), hasher.hexdigest(), byte_count
+
+
+def _runtime_input_file_records(args):
+    if getattr(args, 'command', None) != 'draw':
+        return []
+    records = []
+    for path in getattr(args, '_nwkit_tip_image_paths', ()):
+        if path in ('', '-') or not os.path.isfile(path):
+            continue
+        realpath = os.path.realpath(path)
+        digest, size = _sha256_file(realpath)
+        records.append({
+            'path': realpath,
+            'sha256': digest,
+            'bytes': size,
+            'argument': 'tip_image_manifest:asset',
+            'arguments': ['tip_image_manifest:asset'],
+        })
+    return sorted(records, key=lambda record: (record['argument'], record['path']))
+
+
+def _merge_input_records(snapshot_records, runtime_records):
+    merged = {record['path']: dict(record) for record in snapshot_records}
+    for record in runtime_records:
+        existing = merged.get(record['path'])
+        if existing is None:
+            merged[record['path']] = dict(record)
+            continue
+        arguments = sorted(set(existing['arguments']) | set(record['arguments']))
+        existing['argument'] = arguments[0]
+        existing['arguments'] = arguments
+    return sorted(merged.values(), key=lambda record: (record['argument'], record['path']))
+
+
+def run_with_audit(args, argv, handler):
+    audit_path = getattr(args, 'audit', None)
+    if audit_path in (None, ''):
+        return handler(args)
+    if audit_path == '-':
+        raise ValueError("'--audit' requires a file path; stdout is reserved for primary output.")
+    input_candidates = _input_path_candidates(args)
+    input_records = _input_file_records(args, input_candidates=input_candidates)
+    validate_distinct_output_paths(_audit_collision_candidates(args, audit_path))
+    _validate_audit_input_collision(audit_path, input_candidates)
+    _validate_audit_directory_collision(args, audit_path)
+    _prepare_audit(audit_path)
     original_stdin = sys.stdin
     original_stdout = sys.stdout
     original_stderr = sys.stderr
     stdin_text = None
+    stdin_sha256 = None
+    stdin_bytes = None
+    stdin_spool = None
     stdin_options = get_stdin_input_options(args)
     stdin_argument = stdin_options[0][0] if stdin_options else None
     if stdin_argument is not None:
-        stdin_text = original_stdin.read()
-        sys.stdin = io.StringIO(stdin_text)
+        stdin_spool, stdin_text, stdin_sha256, stdin_bytes = _spool_stdin(original_stdin)
+    try:
+        primary_input = _input_summary(_primary_input_text(args, stdin_text), args)
+    except BaseException:
+        if stdin_spool is not None:
+            stdin_spool.close()
+        raise
     stdout_tee = _TeeTextWriter(original_stdout, capture=False)
     stderr_tee = _TeeTextWriter(original_stderr, capture=True)
+    if stdin_spool is not None:
+        sys.stdin = stdin_spool
     sys.stdout = stdout_tee
     sys.stderr = stderr_tee
     start_time = time.monotonic()
     started_at = datetime.now(timezone.utc).isoformat()
     status = 'ok'
     error = None
+    handler_exception = None
     return_value = None
     try:
-        return_value = handler(args)
-    except (Exception, SystemExit) as exc:
-        status = 'error'
-        error = {
-            'type': type(exc).__name__,
-            'message': str(exc),
-        }
-        raise
-    finally:
-        duration = time.monotonic() - start_time
-        sys.stdin = original_stdin
-        sys.stdout = original_stdout
-        sys.stderr = original_stderr
-        stderr_lines = stderr_tee.captured_lines
-        record = {
-            'schema': 'nwkit-audit-v1',
-            'started_at_utc': started_at,
-            'duration_seconds': round(duration, 6),
-            'status': status,
-            'error': error,
-            'nwkit_version': __version__,
-            'command': argv[0] if argv else '',
-            'argv': list(argv),
-            'arguments': _argument_dict(args),
-            'random_seeds': _seed_arguments(args),
-            'external_context': _external_context(args),
-            'inputs': _input_file_records(args),
-            'primary_input': _input_summary(_primary_input_text(args, stdin_text), args),
-            'stdin': None if stdin_text is None else {
-                'argument': stdin_argument,
-                'sha256': _sha256_bytes(stdin_text.encode('utf-8')),
-                'bytes': len(stdin_text.encode('utf-8')),
-            },
-            'outputs': _output_file_records(args),
-            'stdout': {
-                'sha256': stdout_tee.sha256,
-                'bytes': stdout_tee.byte_count,
-            },
-            'warnings': stderr_tee.captured_warning_lines,
-            'messages': stderr_lines,
-        }
         try:
-            _write_audit(audit_path, record)
-        except Exception as audit_exc:
-            original_stderr.write('Warning: failed to write audit record: {}\n'.format(audit_exc))
+            return_value = handler(args)
+        except BaseException as exc:
+            handler_exception = exc
+            status = 'error'
+            error = {
+                'type': type(exc).__name__,
+                'message': str(exc),
+            }
+            raise
+        finally:
+            duration = time.monotonic() - start_time
+            sys.stdin = original_stdin
+            sys.stdout = original_stdout
+            sys.stderr = original_stderr
+            try:
+                stderr_lines = stderr_tee.captured_lines
+                runtime_records = _runtime_input_file_records(args)
+                record = {
+                    'schema': 'nwkit-audit-v1',
+                    'started_at_utc': started_at,
+                    'duration_seconds': round(duration, 6),
+                    'status': status,
+                    'error': error,
+                    'nwkit_version': __version__,
+                    'command': argv[0] if argv else '',
+                    'argv': list(argv),
+                    'arguments': _argument_dict(args),
+                    'random_seeds': _seed_arguments(args),
+                    'external_context': _external_context(args),
+                    'inputs': _merge_input_records(input_records, runtime_records),
+                    'primary_input': primary_input,
+                    'stdin': None if stdin_text is None else {
+                        'argument': stdin_argument,
+                        'sha256': stdin_sha256,
+                        'bytes': stdin_bytes,
+                    },
+                    'outputs': _output_file_records(args),
+                    'stdout': {
+                        'sha256': stdout_tee.sha256,
+                        'bytes': stdout_tee.byte_count,
+                    },
+                    'warnings': stderr_tee.captured_warning_lines,
+                    'messages': stderr_lines,
+                }
+                _write_audit(audit_path, record)
+            except Exception as audit_exc:
+                if handler_exception is None:
+                    raise
+                original_stderr.write(
+                    'Warning: failed to finalize the audit record while '
+                    'preserving the original command error: {}: {}\n'.format(
+                        type(audit_exc).__name__,
+                        audit_exc,
+                    )
+                )
+    finally:
+        if stdin_spool is not None:
+            stdin_spool.close()
     return return_value

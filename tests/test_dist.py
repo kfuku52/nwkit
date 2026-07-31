@@ -253,6 +253,92 @@ class TestDistanceMetrics:
             0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
         ])
 
+    @pytest.mark.parametrize(
+        ('source_length', 'expected_distance'),
+        [
+            ('1e308', 0.0),
+            ('1.5e308', 1e308),
+        ],
+    )
+    def test_unrooted_branch_metrics_stably_compare_huge_root_halves(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+        source_length,
+        expected_distance,
+    ):
+        path1 = tmp_nwk(
+            '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+            'tree1.nwk',
+        )
+        path2 = tmp_nwk(
+            '((A:1,B:1):{0},(C:1,D:1):{0});'.format(
+                source_length
+            ),
+            'tree2.nwk',
+        )
+        args = make_args(
+            infile=path1,
+            infile2=path2,
+            outfile=tmp_outfile,
+            format2='auto',
+            metric=['weighted-rf,branch-score'],
+            dist=None,
+            comparison='unrooted',
+        )
+
+        dist_main(args)
+
+        rows = {row['metric']: row for row in _read_tsv(tmp_outfile)}
+        assert float(rows['weighted-rf']['distance']) == pytest.approx(
+            expected_distance
+        )
+        assert float(rows['branch-score']['distance']) == pytest.approx(
+            expected_distance
+        )
+
+    @pytest.mark.parametrize(
+        ('tree1', 'tree2', 'expected_distance'),
+        [
+            (
+                '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+                '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+                0.0,
+            ),
+            (
+                '(A:5e307,B:5e307);',
+                '(A:7.5e307,B:7.5e307);',
+                5e307,
+            ),
+        ],
+    )
+    def test_path_length_stably_compares_huge_finite_paths(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+        tree1,
+        tree2,
+        expected_distance,
+    ):
+        path1 = tmp_nwk(tree1, 'tree1.nwk')
+        path2 = tmp_nwk(tree2, 'tree2.nwk')
+        args = make_args(
+            infile=path1,
+            infile2=path2,
+            outfile=tmp_outfile,
+            format2='auto',
+            metric=['path-length'],
+            dist=None,
+            comparison='unrooted',
+        )
+
+        dist_main(args)
+
+        row, = _read_tsv(tmp_outfile)
+        assert float(row['distance']) == pytest.approx(
+            expected_distance
+        )
+
     def test_single_taxon_rf_maximum_is_zero(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('A;', 'tree1.nwk')
         path2 = tmp_nwk('A;', 'tree2.nwk')
@@ -332,8 +418,20 @@ class TestDistanceMetrics:
         with pytest.raises(ValueError, match='branch length on every non-root edge'):
             dist_main(args)
 
-    @pytest.mark.parametrize('length', ['-1', 'nan', 'inf'])
-    def test_branch_metrics_reject_invalid_lengths(self, tmp_nwk, length):
+    @pytest.mark.parametrize(
+        ('length', 'error_pattern'),
+        [
+            ('-1', 'finite, nonnegative branch lengths'),
+            ('nan', 'branch lengths must be finite'),
+            ('inf', 'branch lengths must be finite'),
+        ],
+    )
+    def test_branch_metrics_reject_invalid_lengths(
+        self,
+        tmp_nwk,
+        length,
+        error_pattern,
+    ):
         path1 = tmp_nwk(
             '((A:{0},B:1):1,(C:1,D:1):1);'.format(length),
             'tree1.nwk',
@@ -349,7 +447,7 @@ class TestDistanceMetrics:
             comparison='rooted',
         )
 
-        with pytest.raises(ValueError, match='finite, nonnegative branch lengths'):
+        with pytest.raises(ValueError, match=error_pattern):
             dist_main(args)
 
     def test_unsupported_metric_raises_clear_error(self, tmp_nwk):

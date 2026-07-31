@@ -2,7 +2,7 @@ import pandas as pd
 import pytest
 
 from nwkit.nwk2table import nwk2table_main
-from nwkit.table2nwk import table2nwk_main
+from nwkit.table2nwk import _validate_parent_map, table2nwk_main
 from nwkit.util import read_tree
 from tests.helpers import make_args
 
@@ -42,3 +42,45 @@ class TestTable2NwkMain:
         args = make_args(infile=str(table_path), outfile='-', outformat='auto')
         with pytest.raises(ValueError, match='exactly one root'):
             table2nwk_main(args)
+
+    @pytest.mark.parametrize('column,value', [
+        ('dist', 'inf'),
+        ('dist', '-Infinity'),
+        ('support', 'NAN'),
+        ('support', '1e9999'),
+    ])
+    def test_rejects_non_finite_numeric_values(self, tmp_path, column, value):
+        table_path = tmp_path / 'invalid.tsv'
+        rows = [
+            {'branch_id': 0, 'parent': -1, 'name': 'root', column: ''},
+            {'branch_id': 1, 'parent': 0, 'name': 'A', column: value},
+        ]
+        pd.DataFrame(rows).to_csv(table_path, sep='\t', index=False)
+
+        with pytest.raises(ValueError, match="Column '{}' must contain finite".format(column)):
+            table2nwk_main(make_args(
+                infile=str(table_path),
+                outfile=str(tmp_path / 'output.nwk'),
+                outformat='auto',
+            ))
+
+    def test_parent_validation_is_linear_for_reverse_ordered_chain(self):
+        class CountingDict(dict):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.get_calls = 0
+
+            def get(self, key, default=None):
+                self.get_calls += 1
+                return super().get(key, default)
+
+        node_count = 5000
+        parent_map = CountingDict({0: -1})
+        parent_map.update(
+            (branch_id, branch_id - 1)
+            for branch_id in range(node_count - 1, 0, -1)
+        )
+
+        _validate_parent_map(parent_map, root_id=0)
+
+        assert parent_map.get_calls <= node_count

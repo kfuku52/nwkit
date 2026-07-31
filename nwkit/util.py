@@ -8,13 +8,15 @@ import re
 import secrets
 import shutil
 import sqlite3
+import stat
 import subprocess
 import sys
 import tarfile
 import tempfile
 import time
+import unicodedata
 from itertools import islice
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 from collections import Counter, defaultdict
 from collections.abc import Set
 from contextlib import contextmanager
@@ -25,6 +27,7 @@ import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from ete4 import Tree
+from nwkit import __version__
 from nwkit.fasta import parse_fasta, write_fasta
 from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES
 from nwkit.species_parser import (
@@ -32,10 +35,8 @@ from nwkit.species_parser import (
     get_species_parser,
 )
 
-NODENAME_PLACEHOLDER_PATTERN = re.compile(r'NODENAME_PLACEHOLDER\d{10}')
-QUOTED_NODE_NAME_PATTERN = re.compile(r"'(?:[^']|'')*'")
 NUMERIC_NODE_NAME_PATTERN = re.compile(r'[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?')
-UNQUOTED_NODE_NAME_PATTERN = re.compile(r"^[^\s\(\)\[\]':;,]+$")
+UNQUOTED_NODE_NAME_PATTERN = re.compile(r"""^[^\s\(\)\[\]'":;,]+$""")
 TREE_FORMAT_PROP = '_nwkit_parser_format'
 MISSING_SUPPORT_VALUE = -999999.0
 DOWNLOAD_LOCK_POLL_SECONDS = 1
@@ -43,6 +44,14 @@ DOWNLOAD_LOCK_TIMEOUT_SECONDS = 3600
 LOCK_METADATA_GRACE_SECONDS = 2
 ETE_TAXDUMP_URL = 'https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/taxdump.tar.gz'
 ETE_TAXDUMP_MAX_BYTES = 512 * 1024 * 1024
+ETE_CHECKSUM_MAX_BYTES = 4096
+ETE_DOWNLOAD_MAX_REDIRECTS = 5
+ETE_DOWNLOAD_HEADERS = {
+    'Accept': '*/*',
+    'User-Agent': 'nwkit/{} (+https://github.com/kfuku52/nwkit)'.format(
+        __version__
+    ),
+}
 ETE_TAXONOMY_DEFAULT_MAX_AGE_DAYS = 30.0
 COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser('~'), '.local', 'share', 'ete'),
@@ -105,7 +114,7 @@ def is_missing_table_value(value, missing_values=None):
 
 
 def read_tip_table(path, option_name='--trait', tree_leaf_names=None, required_columns=(),
-                   unmatched='warn', missing_values=None):
+                   unmatched='warn', missing_values=None, duplicate_leaf_names='error'):
     dataframe = read_tsv_preserving_leaf_name(path)
     if 'leaf_name' not in dataframe.columns:
         raise ValueError("Column 'leaf_name' is required in '{}'.".format(option_name))
@@ -121,13 +130,19 @@ def read_tip_table(path, option_name='--trait', tree_leaf_names=None, required_c
     duplicated = dataframe.loc[
         dataframe['leaf_name'].duplicated(keep=False), 'leaf_name'
     ].unique().tolist()
-    if duplicated:
+    if duplicate_leaf_names not in ('error', 'first'):
+        raise ValueError(
+            "Unsupported duplicate leaf-name policy: {}".format(duplicate_leaf_names)
+        )
+    if duplicated and duplicate_leaf_names == 'error':
         raise ValueError(
             "Duplicated 'leaf_name' entries in '{}': {}".format(
                 option_name,
                 ', '.join(sorted(str(name) for name in duplicated)),
             )
         )
+    if duplicated:
+        dataframe = dataframe.drop_duplicates(subset='leaf_name', keep='first').copy()
     table_only = list()
     tree_only = list()
     if tree_leaf_names is not None:
@@ -169,24 +184,65 @@ def warn_cleanup_failure(resource_label, exc):
     sys.stderr.write('Warning: failed to clean up {}: {}\n'.format(resource_label, exc))
 
 
+def _filesystem_is_case_insensitive(path):
+    """Infer case behavior from the nearest existing ancestor without writes."""
+    current = os.path.realpath(os.path.abspath(os.fspath(path)))
+    while not os.path.exists(current):
+        parent = os.path.dirname(current)
+        if parent == current:
+            return os.path.normcase('A') == os.path.normcase('a')
+        current = parent
+    swapped = current.swapcase()
+    if swapped == current:
+        return os.path.normcase('A') == os.path.normcase('a')
+    try:
+        return os.path.samefile(current, swapped)
+    except OSError:
+        return False
+
+
+def normalized_missing_path_key(path):
+    normalized = os.path.normcase(
+        os.path.normpath(os.path.realpath(os.fspath(path)))
+    )
+    if _filesystem_is_case_insensitive(normalized):
+        normalized = unicodedata.normalize('NFC', normalized).casefold()
+    return normalized
+
+
 def validate_distinct_output_paths(outputs):
-    """Reject multiple output roles that resolve to the same filesystem path."""
-    by_path = defaultdict(list)
+    """Reject output roles that resolve to the same path or filesystem object."""
+    by_identity = defaultdict(list)
     for option_name, path in outputs:
         if path in (None, '', '-'):
             continue
-        by_path[os.path.realpath(os.fspath(path))].append(str(option_name))
+        realpath = os.path.realpath(os.fspath(path))
+        try:
+            path_stat = os.stat(realpath)
+        except OSError:
+            identity = ('path', normalized_missing_path_key(realpath))
+        else:
+            identity = ('inode', path_stat.st_dev, path_stat.st_ino)
+        by_identity[identity].append((str(option_name), realpath))
     collisions = [
-        (path, option_names)
-        for path, option_names in by_path.items()
-        if len(option_names) > 1
+        records
+        for records in by_identity.values()
+        if len(records) > 1
     ]
     if collisions:
-        details = '; '.join(
-            '{} -> {}'.format(', '.join(option_names), path)
-            for path, option_names in sorted(collisions)
+        details = list()
+        for records in collisions:
+            option_names = sorted(record[0] for record in records)
+            paths = sorted({record[1] for record in records})
+            details.append(
+                '{} -> {}'.format(
+                    ', '.join(option_names),
+                    ' = '.join(paths),
+                )
+            )
+        raise ValueError(
+            'Output paths must be distinct: {}.'.format('; '.join(sorted(details)))
         )
-        raise ValueError('Output paths must be distinct: {}.'.format(details))
 
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, 'download_dir', 'auto') if args is not None else 'auto'
@@ -243,11 +299,80 @@ def _seed_ete_taxonomy_assets(target_dbfile, source_assets):
             _atomic_copy_file(source_taxdump_file, os.path.join(target_dir, 'taxdump.tar.gz'))
     _atomic_copy_sqlite(source_assets['dbfile'], target_dbfile)
 
+def _quoted_node_name_flags(newick_text):
+    """Return quoted leaf/internal flags without treating comment text as names."""
+    text = str(newick_text)
+    has_quoted_leaf_name = False
+    has_quoted_internal_name = False
+    expected_name_kind = 'leaf'
+    comment_depth = 0
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if comment_depth > 0:
+            if char == '[':
+                comment_depth += 1
+            elif char == ']':
+                comment_depth -= 1
+            i += 1
+            continue
+        if char == '[':
+            comment_depth = 1
+            i += 1
+            continue
+        if char.isspace():
+            i += 1
+            continue
+        if char == '(':
+            expected_name_kind = 'leaf'
+            i += 1
+            continue
+        if char == ',':
+            expected_name_kind = 'leaf'
+            i += 1
+            continue
+        if char == ')':
+            expected_name_kind = 'internal'
+            i += 1
+            continue
+        if char in ("'", '"'):
+            if expected_name_kind == 'leaf':
+                has_quoted_leaf_name = True
+            elif expected_name_kind == 'internal':
+                has_quoted_internal_name = True
+            expected_name_kind = None
+            quote_char = char
+            i += 1
+            while i < len(text):
+                char = text[i]
+                if char == quote_char:
+                    if i + 1 < len(text) and text[i + 1] == quote_char:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if char in (':', ';'):
+            expected_name_kind = None
+            i += 1
+            continue
+        if expected_name_kind is not None:
+            expected_name_kind = None
+        i += 1
+    return has_quoted_leaf_name, has_quoted_internal_name
+
+
 def _contains_quoted_node_names(newick_text):
-    return QUOTED_NODE_NAME_PATTERN.search(str(newick_text)) is not None
+    has_quoted_leaf_name, has_quoted_internal_name = _quoted_node_name_flags(
+        newick_text
+    )
+    return has_quoted_leaf_name or has_quoted_internal_name
+
 
 def _contains_quoted_internal_node_names(newick_text):
-    return re.search(r"\)\s*'(?:[^']|'')*'", str(newick_text)) is not None
+    _, has_quoted_internal_name = _quoted_node_name_flags(newick_text)
+    return has_quoted_internal_name
 
 def _is_numeric_node_name(name):
     if name in (None, ''):
@@ -264,11 +389,21 @@ def _should_quote_node_name(name, is_internal=False):
         return True
     return False
 
-def _serialize_newick_node_name(name, is_internal=False):
+def _serialize_newick_node_name(name, is_internal=False, quote_style='auto'):
     name_text = str(name)
+    if quote_style == 'single':
+        return "'{}'".format(name_text.replace("'", "''"))
+    if quote_style == 'double':
+        return '"{}"'.format(name_text.replace('"', '""'))
+    if quote_style not in ('auto', 'none', None):
+        raise ValueError("Unsupported node-name quote style: {}".format(quote_style))
     if _should_quote_node_name(name_text, is_internal=is_internal):
         return "'{}'".format(name_text.replace("'", "''"))
     return name_text
+
+
+def _compile_node_placeholder_pattern(placeholder_prefix):
+    return re.compile(re.escape(placeholder_prefix) + r'\d{10}')
 
 def _is_missing_support_value(support):
     if support is None:
@@ -327,24 +462,29 @@ def _read_tree_auto(infile):
     raise Exception('Failed to parse the input tree.')
 
 def _assert_lock_path_is_regular_file(lock_path, lock_label='Lock'):
-    if not os.path.lexists(lock_path):
+    try:
+        lock_stat = os.lstat(lock_path)
+    except FileNotFoundError:
         return
-    if os.path.islink(lock_path) or (not os.path.isfile(lock_path)):
+    if not stat.S_ISREG(lock_stat.st_mode):
         raise IsADirectoryError('{} path exists but is not a file: {}'.format(lock_label, lock_path))
 
 def _try_create_lock_file(lock_path):
     _assert_lock_path_is_regular_file(lock_path)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    if hasattr(os, 'O_NOFOLLOW'):
+        flags |= os.O_NOFOLLOW
     try:
-        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        fd = os.open(lock_path, flags, 0o600)
     except FileExistsError:
         return None
     token = secrets.token_hex(16)
     try:
         os.write(fd, '{} {}\n'.format(os.getpid(), token).encode('ascii'))
         os.fsync(fd)
+        stat_result = os.fstat(fd)
     finally:
         os.close(fd)
-    stat_result = os.stat(lock_path)
     return token, stat_result.st_dev, stat_result.st_ino
 
 def _read_lock_owner_pid(lock_path):
@@ -364,6 +504,8 @@ def _read_lock_owner_pid(lock_path):
     return pid
 
 def _is_process_alive(pid):
+    if os.name == 'nt':
+        return _is_windows_process_alive(int(pid))
     try:
         os.kill(int(pid), 0)
     except ProcessLookupError:
@@ -376,12 +518,54 @@ def _is_process_alive(pid):
         return True
     return True
 
+
+def _is_windows_process_alive(pid):
+    """Check a Windows PID without using os.kill(pid, 0).
+
+    On Windows, ``os.kill`` is a terminating operation for most signal values,
+    including zero. The native synchronization handle gives us a read-only
+    liveness check. Unexpected access/API failures conservatively mean alive,
+    so a lock owned by another process is never broken speculatively.
+    """
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        kernel32.OpenProcess.argtypes = (
+            wintypes.DWORD,
+            wintypes.BOOL,
+            wintypes.DWORD,
+        )
+        kernel32.OpenProcess.restype = wintypes.HANDLE
+        kernel32.WaitForSingleObject.argtypes = (
+            wintypes.HANDLE,
+            wintypes.DWORD,
+        )
+        kernel32.WaitForSingleObject.restype = wintypes.DWORD
+        kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+        kernel32.CloseHandle.restype = wintypes.BOOL
+        synchronize = 0x00100000
+        wait_object_0 = 0x00000000
+        error_invalid_parameter = 87
+        handle = kernel32.OpenProcess(synchronize, False, int(pid))
+        if not handle:
+            return ctypes.get_last_error() != error_invalid_parameter
+        try:
+            # Only a signaled process handle proves that the process exited.
+            # Timeouts and unexpected wait failures are conservatively alive.
+            return kernel32.WaitForSingleObject(handle, 0) != wait_object_0
+        finally:
+            kernel32.CloseHandle(handle)
+    except Exception:
+        return True
+
 def _break_stale_lock_if_needed(lock_path, lock_label='Lock'):
     if not os.path.lexists(lock_path):
         return False
     _assert_lock_path_is_regular_file(lock_path, lock_label=lock_label)
     try:
-        stat_before = os.stat(lock_path)
+        stat_before = os.lstat(lock_path)
     except FileNotFoundError:
         return False
     owner_pid = _read_lock_owner_pid(lock_path)
@@ -395,7 +579,7 @@ def _break_stale_lock_if_needed(lock_path, lock_label='Lock'):
     else:
         stale_reason = 'owner PID {} is not running'.format(owner_pid)
     try:
-        stat_now = os.stat(lock_path)
+        stat_now = os.lstat(lock_path)
     except FileNotFoundError:
         return False
     if (
@@ -415,7 +599,7 @@ def _break_stale_lock_if_needed(lock_path, lock_label='Lock'):
 def _remove_owned_lock(lock_path, owner_record, lock_label='Lock'):
     owner_token, owner_device, owner_inode = owner_record
     try:
-        stat_before = os.stat(lock_path)
+        stat_before = os.lstat(lock_path)
         with open(lock_path) as lock_handle:
             fields = lock_handle.readline().strip().split()
     except FileNotFoundError:
@@ -448,8 +632,9 @@ def acquire_exclusive_lock(
         raise ValueError('poll_seconds must be > 0.')
     if timeout_seconds <= 0:
         raise ValueError('timeout_seconds must be > 0.')
-    lock_path = os.path.realpath(lock_path)
-    lock_dir = os.path.dirname(lock_path)
+    absolute_lock_path = os.path.abspath(os.fspath(lock_path))
+    lock_dir = os.path.realpath(os.path.dirname(absolute_lock_path))
+    lock_path = os.path.join(lock_dir, os.path.basename(absolute_lock_path))
     if lock_dir != '':
         if os.path.exists(lock_dir) and (not os.path.isdir(lock_dir)):
             raise NotADirectoryError('Lock parent path exists but is not a directory: {}'.format(lock_dir))
@@ -530,12 +715,25 @@ def _validate_ete_taxonomy_db(dbfile, require_traverse=False, full_check=False):
         traverse_file = dbfile + '.traverse.pkl'
         try:
             with open(traverse_file, 'rb') as handle:
-                traversal = pickle.load(handle)
-            if not isinstance(traversal, list) or not traversal:
+                traversal = _SafeTaxonomyTraversalUnpickler(handle).load()
+            if (
+                not isinstance(traversal, list)
+                or not traversal
+                or any(type(taxid) is not int for taxid in traversal)
+            ):
                 return False
         except (OSError, EOFError, pickle.PickleError, ValueError, TypeError):
             return False
     return True
+
+
+class _SafeTaxonomyTraversalUnpickler(pickle.Unpickler):
+    """Load ETE's list-of-int traversal cache without resolving globals."""
+
+    def find_class(self, module, name):
+        raise pickle.UnpicklingError(
+            "Global objects are not allowed in an ETE taxonomy traversal cache."
+        )
 
 
 def _atomic_copy_file(source, target):
@@ -571,6 +769,74 @@ def _atomic_copy_sqlite(source, target):
             os.remove(temporary)
 
 
+def _validate_ete_download_url(url):
+    parsed = urlparse(str(url))
+    expected_host = urlparse(ETE_TAXDUMP_URL).hostname
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise ValueError('NCBI taxonomy download URL has an invalid port.') from exc
+    if (
+        parsed.scheme.lower() != 'https'
+        or parsed.hostname is None
+        or parsed.hostname.lower() != expected_host
+        or parsed.username is not None
+        or parsed.password is not None
+        or port not in (None, 443)
+    ):
+        raise ValueError(
+            'NCBI taxonomy downloads and redirects must use the expected HTTPS host.'
+        )
+    return parsed.geturl()
+
+
+def _open_ete_download_response(session, url, **kwargs):
+    current_url = _validate_ete_download_url(url)
+    for redirect_index in range(ETE_DOWNLOAD_MAX_REDIRECTS + 1):
+        response = session.get(
+            current_url,
+            allow_redirects=False,
+            headers=ETE_DOWNLOAD_HEADERS,
+            **kwargs,
+        )
+        if response.status_code not in (301, 302, 303, 307, 308):
+            try:
+                response.raise_for_status()
+            except BaseException:
+                response.close()
+                raise
+            return response
+        location = response.headers.get('Location')
+        response.close()
+        if not location:
+            raise ValueError('NCBI taxonomy redirect did not include a location.')
+        if redirect_index >= ETE_DOWNLOAD_MAX_REDIRECTS:
+            raise ValueError('Too many redirects while downloading NCBI taxonomy data.')
+        current_url = _validate_ete_download_url(urljoin(current_url, location))
+    raise AssertionError('unreachable')
+
+
+def _bounded_response_bytes(response, maximum_bytes, label):
+    content_length = response.headers.get('Content-Length')
+    if content_length is not None:
+        try:
+            declared_length = int(content_length)
+        except (TypeError, ValueError) as exc:
+            raise ValueError('{} response has an invalid Content-Length.'.format(label)) from exc
+        if declared_length < 0 or declared_length > maximum_bytes:
+            raise ValueError('{} response exceeds the download size limit.'.format(label))
+    chunks = list()
+    downloaded = 0
+    for chunk in response.iter_content(chunk_size=min(64 * 1024, maximum_bytes + 1)):
+        if not chunk:
+            continue
+        downloaded += len(chunk)
+        if downloaded > maximum_bytes:
+            raise ValueError('{} response exceeds the download size limit.'.format(label))
+        chunks.append(chunk)
+    return b''.join(chunks)
+
+
 def _download_ete_taxdump(taxdump_file):
     target_dir = os.path.dirname(taxdump_file)
     os.makedirs(target_dir, exist_ok=True)
@@ -588,11 +854,24 @@ def _download_ete_taxdump(taxdump_file):
     session.mount('https://', adapter)
     session.mount('http://', adapter)
     try:
-        with session.get(ETE_TAXDUMP_URL + '.md5', timeout=(10, 30)) as checksum_response:
-            checksum_response.raise_for_status()
-            checksum_text = checksum_response.text
-        if len(checksum_text.encode('utf-8')) > 4096:
-            raise ValueError('Unexpected NCBI taxonomy checksum response.')
+        checksum_response = _open_ete_download_response(
+            session,
+            ETE_TAXDUMP_URL + '.md5',
+            stream=True,
+            timeout=(10, 30),
+        )
+        try:
+            checksum_bytes = _bounded_response_bytes(
+                checksum_response,
+                ETE_CHECKSUM_MAX_BYTES,
+                'NCBI taxonomy checksum',
+            )
+        finally:
+            checksum_response.close()
+        try:
+            checksum_text = checksum_bytes.decode('ascii')
+        except UnicodeDecodeError as exc:
+            raise ValueError('Unexpected NCBI taxonomy checksum response.') from exc
         checksum_tokens = checksum_text.split()
         if not checksum_tokens:
             raise ValueError('Unexpected NCBI taxonomy checksum response.')
@@ -600,7 +879,9 @@ def _download_ete_taxdump(taxdump_file):
         if re.fullmatch(r'[0-9a-f]{32}', expected_md5) is None:
             raise ValueError('Unexpected NCBI taxonomy checksum response.')
         if _validate_ete_taxdump(taxdump_file):
-            local_md5 = hashlib.md5()
+            local_md5 = hashlib.md5(
+                usedforsecurity=False
+            )  # nosec - NCBI publishes MD5 for transfer-integrity checking
             with open(taxdump_file, 'rb') as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b''):
                     local_md5.update(chunk)
@@ -610,12 +891,28 @@ def _download_ete_taxdump(taxdump_file):
         os.close(fd)
         try:
             downloaded = 0
-            digest = hashlib.md5()
-            with session.get(ETE_TAXDUMP_URL, stream=True, timeout=(10, 120)) as response:
-                response.raise_for_status()
+            digest = hashlib.md5(
+                usedforsecurity=False
+            )  # nosec - transfer-integrity check against NCBI-published digest
+            response = _open_ete_download_response(
+                session,
+                ETE_TAXDUMP_URL,
+                stream=True,
+                timeout=(10, 120),
+            )
+            try:
                 content_length = response.headers.get('Content-Length')
-                if content_length is not None and int(content_length) > ETE_TAXDUMP_MAX_BYTES:
-                    raise ValueError('NCBI taxonomy archive exceeds the download size limit.')
+                if content_length is not None:
+                    try:
+                        declared_length = int(content_length)
+                    except (TypeError, ValueError) as exc:
+                        raise ValueError(
+                            'NCBI taxonomy archive response has an invalid Content-Length.'
+                        ) from exc
+                    if declared_length < 0 or declared_length > ETE_TAXDUMP_MAX_BYTES:
+                        raise ValueError(
+                            'NCBI taxonomy archive exceeds the download size limit.'
+                        )
                 with open(temporary, 'wb') as handle:
                     for chunk in response.iter_content(chunk_size=1024 * 1024):
                         if not chunk:
@@ -627,6 +924,8 @@ def _download_ete_taxdump(taxdump_file):
                         handle.write(chunk)
                     handle.flush()
                     os.fsync(handle.fileno())
+            finally:
+                response.close()
             if digest.hexdigest() != expected_md5:
                 raise ValueError('NCBI taxonomy archive checksum verification failed.')
             if not _validate_ete_taxdump(temporary):
@@ -719,7 +1018,7 @@ def get_ete_ncbitaxa(args=None):
         _build_ete_taxonomy_database(dbfile=dbfile, taxdump_file=taxdump_file)
         return ete4.NCBITaxa(dbfile=dbfile, update=False)
 
-def read_tree(infile, format, quoted_node_names, quiet=False):
+def read_tree(infile, format, quoted_node_names, quiet=False, allow_non_finite=False):
     global INFILE_FORMAT
     infile = read_input_text(infile).strip()
     if infile == '':
@@ -744,20 +1043,11 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
     for node in tree.traverse():
         node.props[TREE_FORMAT_PROP] = INFILE_FORMAT
     if format==0: # flexible with support values
-        # Single pass over nodes to detect max support and collect candidates.
-        # If max support is > 1.0, treat non-root None/1.0 as missing support.
-        max_support = None
-        missing_support_candidates = list()
+        # ETE4 represents an omitted internal support as None.  Never infer
+        # missingness from the numeric value: both 1% and a 1.0 proportion are
+        # legitimate, explicit support values.
         for node in tree.traverse():
-            support = node.support
-            if support is not None:
-                if (max_support is None) or (support > max_support):
-                    max_support = support
-            if not node.is_root:
-                if support is None or (abs(float(support) - 1.0) < 10**-9): # 1.0 is default for missing support values
-                    missing_support_candidates.append(node)
-        if (max_support is not None) and (max_support > 1.0):
-            for node in missing_support_candidates:
+            if (not node.is_root) and (not node.is_leaf) and node.support is None:
                 node.support = -999999
     if format==1: # flexible with internal node names
         for node in tree.traverse():
@@ -766,40 +1056,87 @@ def read_tree(infile, format, quoted_node_names, quiet=False):
                 ('support' not in node.props or node.support is None)
             ):  # Don't set support on root (breaks ete4 set_outgroup)
                 node.support = -999999
+    if not allow_non_finite:
+        for node in tree.traverse():
+            if node.dist is not None and not math.isfinite(float(node.dist)):
+                raise ValueError('Tree branch lengths must be finite.')
+            if (
+                node.support is not None
+                and not math.isfinite(float(node.support))
+            ):
+                raise ValueError('Tree support values must be finite.')
     if not quiet:
         num_leaves = len(list(tree.leaves()))
         txt = 'Number of leaves in input tree = {:,}, Input tree format = {}\n'
         sys.stderr.write(txt.format(num_leaves, format))
     return tree
 
-def write_tree(tree, args, format, quiet=False, props=None):
+
+def _validate_finite_tree_values(tree):
+    for node in tree.traverse():
+        if node.dist is not None:
+            try:
+                distance = float(node.dist)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError('Tree branch lengths must be finite numbers.') from exc
+            if not math.isfinite(distance):
+                raise ValueError('Tree branch lengths must be finite.')
+        if node.support is not None:
+            try:
+                support = float(node.support)
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise ValueError('Tree support values must be finite numbers.') from exc
+            if not math.isfinite(support):
+                raise ValueError('Tree support values must be finite.')
+
+
+def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
     if format=='auto':
         format = tree.props.get(TREE_FORMAT_PROP, globals().get('INFILE_FORMAT', 0))
         format = int(format)
     else:
         format = int(format)
+    _validate_finite_tree_values(tree)
     if not quiet:
         num_leaves = len(list(tree.leaves()))
         txt = 'Number of leaves in output tree = {:,}, Output tree format = {}\n'
         sys.stderr.write(txt.format(num_leaves, format))
+    if name_quote is None:
+        name_quote = getattr(args, 'name_quote', 'auto')
+    if name_quote == 'none':
+        name_quote = 'auto'
     node_name_dict = dict()
     original_node_names = list()
     original_support_values = list()
+    serialized_values = [
+        str(value)
+        for node in tree.traverse()
+        for value in (node.name, *node.props.values())
+        if value is not None
+    ]
+    while True:
+        placeholder_prefix = 'NWKITNODE{}_'.format(secrets.token_hex(16))
+        if not any(placeholder_prefix in value for value in serialized_values):
+            break
     i = 0
-    for node in tree.traverse():
-        original_node_names.append((node, node.name))
-        if (node.name is not None) and (str(node.name) != ''):
-            placeholder_name = 'NODENAME_PLACEHOLDER'+str(i).zfill(10)
-            node_name_dict[placeholder_name] = _serialize_newick_node_name(
-                node.name,
-                is_internal=(not node.is_leaf),
-            )
-            node.name = placeholder_name
-            i += 1
-        if _is_missing_support_value(node.support):
-            original_support_values.append((node, node.support))
-            node.support = None
     try:
+        for node in tree.traverse():
+            original_node_names.append((node, node.name))
+            if (node.name is not None) and (str(node.name) != ''):
+                placeholder_name = '{}{}'.format(
+                    placeholder_prefix,
+                    str(i).zfill(10),
+                )
+                node_name_dict[placeholder_name] = _serialize_newick_node_name(
+                    node.name,
+                    is_internal=(not node.is_leaf),
+                    quote_style=name_quote,
+                )
+                node.name = placeholder_name
+                i += 1
+            if _is_missing_support_value(node.support):
+                original_support_values.append((node, node.support))
+                node.support = None
         if props is None:
             props = getattr(args, 'output_properties', None)
         if props is not None:
@@ -819,9 +1156,17 @@ def write_tree(tree, args, format, quiet=False, props=None):
     if tree_str.endswith(':;'):
         tree_str = tree_str[:-2]+';'
     if node_name_dict:
-        tree_str = NODENAME_PLACEHOLDER_PATTERN.sub(lambda m: str(node_name_dict[m.group(0)]), tree_str)
-    if args.outfile=='-':
+        placeholder_pattern = _compile_node_placeholder_pattern(
+            placeholder_prefix
+        )
+        tree_str = placeholder_pattern.sub(
+            lambda match: str(node_name_dict[match.group(0)]),
+            tree_str,
+        )
+    if args.outfile == '-':
         print(tree_str)
+    elif hasattr(args.outfile, 'write'):
+        args.outfile.write(tree_str)
     else:
         with open(args.outfile, mode='w') as f:
             f.write(tree_str)
@@ -829,25 +1174,42 @@ def write_tree(tree, args, format, quiet=False, props=None):
 def split_newick_stream(newick_text):
     trees = list()
     buffer = list()
-    in_quote = False
+    quote_char = None
+    comment_depth = 0
     text = str(newick_text)
     i = 0
     while i < len(text):
         char = text[i]
         buffer.append(char)
-        if char == "'":
-            if in_quote and (i + 1 < len(text)) and (text[i + 1] == "'"):
+        if quote_char is not None:
+            if char == quote_char and (
+                i + 1 < len(text)
+                and text[i + 1] == quote_char
+            ):
                 buffer.append(text[i + 1])
                 i += 1
-            else:
-                in_quote = not in_quote
-        elif (char == ';') and (not in_quote):
+            elif char == quote_char:
+                quote_char = None
+        elif comment_depth > 0:
+            if char == '[':
+                comment_depth += 1
+            elif char == ']':
+                comment_depth -= 1
+        elif char in ("'", '"'):
+            quote_char = char
+        elif char == '[':
+            comment_depth = 1
+        elif char == ';':
             tree_text = ''.join(buffer).strip()
             if tree_text != '':
                 trees.append(tree_text)
             buffer = list()
         i += 1
-    if ''.join(buffer).strip() != '':
+    if comment_depth > 0:
+        raise ValueError(
+            'Input tree collection ended inside an unterminated Newick comment.'
+        )
+    if quote_char is not None or ''.join(buffer).strip() != '':
         raise ValueError('Input tree collection ended before a terminal semicolon.')
     return trees
 
@@ -855,34 +1217,46 @@ def split_newick_stream(newick_text):
 def iter_newick_stream(handle, chunk_size=1024 * 1024):
     """Yield semicolon-terminated Newick records without loading the stream at once."""
     buffer = list()
-    in_quote = False
+    quote_char = None
     possible_closing_quote = False
+    comment_depth = 0
     while True:
         chunk = handle.read(chunk_size)
         if chunk == '':
             break
         for char in chunk:
             if possible_closing_quote:
-                if char == "'":
+                if char == quote_char:
                     buffer.append(char)
                     possible_closing_quote = False
                     continue
-                in_quote = False
+                quote_char = None
                 possible_closing_quote = False
             buffer.append(char)
-            if char == "'":
-                if in_quote:
+            if quote_char is not None:
+                if char == quote_char:
                     possible_closing_quote = True
-                else:
-                    in_quote = True
-            elif char == ';' and not in_quote:
+            elif comment_depth > 0:
+                if char == '[':
+                    comment_depth += 1
+                elif char == ']':
+                    comment_depth -= 1
+            elif char in ("'", '"'):
+                quote_char = char
+            elif char == '[':
+                comment_depth = 1
+            elif char == ';':
                 tree_text = ''.join(buffer).strip()
                 if tree_text:
                     yield tree_text
                 buffer = list()
     if possible_closing_quote:
-        in_quote = False
-    if in_quote or ''.join(buffer).strip():
+        quote_char = None
+    if comment_depth > 0:
+        raise ValueError(
+            'Input tree collection ended inside an unterminated Newick comment.'
+        )
+    if quote_char is not None or ''.join(buffer).strip():
         raise ValueError('Input tree collection ended before a terminal semicolon.')
 
 
@@ -1010,7 +1384,11 @@ def compute_node_ages(tree, tolerance=10 ** -9):
             continue
         child_ages = list()
         for child in node.get_children():
-            child_dist = 0.0 if (child.dist is None) else float(child.dist)
+            if child.dist is None:
+                raise ValueError('Tree must contain all branch lengths to test ultrametricity.')
+            child_dist = float(child.dist)
+            if not math.isfinite(child_dist):
+                raise ValueError('Tree branch lengths must be finite.')
             child_ages.append(age_by_node[child] + child_dist)
         if len(child_ages) == 0:
             age_by_node[node] = 0.0
@@ -1037,19 +1415,69 @@ def write_seqs(records, outfile, seqformat='fasta', quiet=False):
         raise ValueError("Unsupported sequence format '{}'. Only 'fasta' is supported.".format(seqformat))
     if not quiet:
         sys.stderr.write('Number of output sequences: {:,}\n'.format(len(records)))
-    if outfile=='-':
+    if outfile == '-':
         write_fasta(records, sys.stdout, normalize_newlines=True)
+    elif hasattr(outfile, 'write'):
+        write_fasta(records, outfile)
     else:
         with open(outfile, 'w', newline='') as fh:
             write_fasta(records, fh)
 
-def remove_singleton(tree, verbose=False, preserve_branch_length=True):
+def _sum_finite_singleton_branch_lengths(branch_lengths):
+    if any(branch_length is None for branch_length in branch_lengths):
+        return None
+    try:
+        values = [float(branch_length) for branch_length in branch_lengths]
+        combined = math.fsum(values)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            'Collapsing singleton nodes must produce a finite branch length.'
+        ) from exc
+    if not all(math.isfinite(value) for value in values) or not math.isfinite(
+        combined
+    ):
+        raise ValueError(
+            'Collapsing singleton nodes must produce a finite branch length.'
+        )
+    return combined
+
+
+def _validate_singleton_branch_length_sums(tree):
+    if len(list(tree.leaves())) > 1:
+        root_chain = [tree.dist]
+        cursor = tree
+        while (
+            len(cursor.get_children()) == 1
+            and not cursor.get_children()[0].is_leaf
+        ):
+            cursor = cursor.get_children()[0]
+            root_chain.append(cursor.dist)
+        _sum_finite_singleton_branch_lengths(root_chain)
     for node in tree.traverse():
-        if node.is_leaf:
+        if node.is_root or node.is_leaf or len(node.get_children()) != 1:
+            continue
+        branch_chain = [node.dist]
+        cursor = node.get_children()[0]
+        while True:
+            branch_chain.append(cursor.dist)
+            if cursor.is_leaf or len(cursor.get_children()) != 1:
+                break
+            cursor = cursor.get_children()[0]
+        _sum_finite_singleton_branch_lengths(branch_chain)
+
+
+def remove_singleton(tree, verbose=False, preserve_branch_length=True):
+    if preserve_branch_length:
+        _validate_singleton_branch_length_sums(tree)
+    for node in tree.traverse():
+        if node.is_leaf or node.is_root:
             continue
         num_children = len(node.get_children())
         if (num_children>1):
             continue
+        if preserve_branch_length:
+            child = node.get_children()[0]
+            _sum_finite_singleton_branch_lengths((node.dist, child.dist))
         if verbose:
             sys.stderr.write('Deleting a singleton node: {}\n'.format(node.name))
         node.delete(prevent_nondicotomic=False, preserve_branch_length=preserve_branch_length)
@@ -1062,15 +1490,25 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
         if verbose:
             sys.stderr.write('Deleting a singleton node: {}\n'.format(tree.name))
         root_dist = tree.dist
+        child_dist = child.dist
+        if preserve_branch_length:
+            if root_dist is None or child_dist is None:
+                promoted_dist = None
+            else:
+                promoted_dist = _sum_finite_singleton_branch_lengths(
+                    (root_dist, child_dist)
+                )
+        else:
+            promoted_dist = root_dist
         child_props = {k: v for k, v in child.props.items() if k != 'dist'}
         child_name = child.name
         tree.remove_child(child)
         for grandchild in list(child.get_children()):
             tree.add_child(grandchild)
-        tree.dist = root_dist
-        tree.name = child_name
         tree.props.clear()
         tree.props.update(child_props)
+        tree.name = child_name
+        tree.dist = promoted_dist
     return tree
 
 def label2sciname(labels, in_delim='_', out_delim='_', args=None, species_parser=None, species_regex=None, species_map_tsv=None):
@@ -1141,7 +1579,8 @@ def extract_taxonomy_query(label, out_delim=' ', args=None, species_parser=None,
         return taxonomy_query
     return taxonomy_query.replace(' ', out_delim)
 
-def get_species_group_records(tree, option_name='--infile', context='', args=None, species_parser=None, species_regex=None, species_map_tsv=None):
+def get_species_group_records(tree, option_name='--infile', context='', args=None, species_parser=None, species_regex=None, species_map_tsv=None,
+                              require_monophyly=True):
     leaf_name_to_species_label = dict()
     species_label_to_leaf_names = defaultdict(list)
     species_label_to_taxonomy_query = dict()
@@ -1180,18 +1619,19 @@ def get_species_group_records(tree, option_name='--infile', context='', args=Non
                 ', '.join(sorted(unresolved_leaf_names)),
             )
         )
-    for species_label, leaf_names in species_label_to_leaf_names.items():
-        if len(leaf_names) <= 1:
-            continue
-        mrca = tree.common_ancestor(leaf_names)
-        if set(mrca.leaf_names()) != set(leaf_names):
-            raise ValueError(
-                "Leaf labels for the same species are not monophyletic in '{}'{}: {}".format(
-                    option_name,
-                    context,
-                    species_label,
+    if require_monophyly:
+        for species_label, leaf_names in species_label_to_leaf_names.items():
+            if len(leaf_names) <= 1:
+                continue
+            mrca = tree.common_ancestor(leaf_names)
+            if set(mrca.leaf_names()) != set(leaf_names):
+                raise ValueError(
+                    "Leaf labels for the same species are not monophyletic in '{}'{}: {}".format(
+                        option_name,
+                        context,
+                        species_label,
+                    )
                 )
-            )
     for species_label in species_label_to_leaf_names.keys():
         if species_label_to_taxonomy_query.get(species_label) is None:
             species_label_to_taxonomy_query[species_label] = species_label.replace('_', ' ')

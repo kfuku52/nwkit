@@ -114,3 +114,18 @@ class TestRescaleMain:
         args = make_args(infile=path, outfile='-', target='all', factor=factor)
         with pytest.raises(ValueError, match='finite'):
             rescale_main(args)
+
+    def test_rescale_rejects_non_finite_result(self, tmp_nwk, tmp_path):
+        path = tmp_nwk('(A:2,B:1);')
+        outfile = tmp_path / 'output.nwk'
+        args = make_args(
+            infile=path,
+            outfile=str(outfile),
+            target='all',
+            factor=1e308,
+        )
+
+        with pytest.raises(ValueError, match='non-finite branch length'):
+            rescale_main(args)
+
+        assert not outfile.exists()

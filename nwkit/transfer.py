@@ -211,11 +211,16 @@ def _coerce_fill(fill, target_prop):
         return None
     if target_prop in ('support', 'length'):
         try:
-            return float(fill)
+            numeric_fill = float(fill)
         except (TypeError, ValueError) as exc:
             raise ValueError(
                 "'--fill' must be numeric when support or length is transferred."
             ) from exc
+        if not math.isfinite(numeric_fill):
+            raise ValueError(
+                "'--fill' must be finite when support or length is transferred."
+            )
+        return numeric_fill
     return str(fill)
 
 
@@ -228,6 +233,57 @@ def _set_property(node, prop, value):
         node.dist = float(value)
     else:
         node.props[prop] = value
+
+
+def _root_edge_length_total_components(values):
+    """Represent a total as scale × normalized sum without overflowing."""
+    scale = max((abs(value) for value in values), default=0.0)
+    if scale == 0.0:
+        return 0.0, 0.0
+    normalized_total = math.fsum(value / scale for value in values)
+    if not math.isfinite(normalized_total):
+        raise ValueError(
+            'The physical root-edge length total must be finite.'
+        )
+    return scale, normalized_total
+
+
+def _scaled_root_edge_length(total_components, ratio=1.0):
+    scale, normalized_total = total_components
+    value = scale * (normalized_total * ratio)
+    if not math.isfinite(value):
+        raise ValueError(
+            'The physical root-edge length total is too large to represent.'
+        )
+    return value
+
+
+def _root_edge_ratio_records(candidates):
+    """Calculate root-half ratios without overflowing their finite sum."""
+    values = [float(candidate.dist or 0.0) for candidate in candidates]
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError('Target root-edge lengths must be finite.')
+    max_abs_value = max((abs(value) for value in values), default=0.0)
+    if max_abs_value == 0.0:
+        ratio_was_defined = False
+        ratios = [1.0 / len(values)] * len(values)
+    else:
+        scaled_values = [value / max_abs_value for value in values]
+        scaled_total = math.fsum(scaled_values)
+        ratio_was_defined = scaled_total != 0.0
+        ratios = (
+            [value / scaled_total for value in scaled_values]
+            if ratio_was_defined
+            else [1.0 / len(values)] * len(values)
+        )
+    if not all(math.isfinite(ratio) for ratio in ratios):
+        raise ValueError(
+            'Target root-edge length ratios are too large to represent.'
+        )
+    return {
+        id(candidate): (ratio, ratio_was_defined)
+        for candidate, ratio in zip(candidates, ratios)
+    }
 
 
 def _is_bifurcating_root_pair(nodes):
@@ -427,7 +483,10 @@ def _resolve_reduced_root_edge_value(mapping, metadata, source_records, policy):
             resolution='numeric_reducer_unresolved',
         )
     if policy == 'mean':
-        value = sum(numeric_values) / len(numeric_values)
+        value = math.fsum(
+            numeric_value / len(numeric_values)
+            for numeric_value in numeric_values
+        )
     elif policy == 'min':
         value = min(numeric_values)
     else:
@@ -465,26 +524,29 @@ def _resolve_root_edge_total(mapping, metadata, source_records, target_candidate
             reason='non_finite_root_edge_lengths',
             resolution='edge_total_unresolved',
         )
-    source_total = sum(numeric_values)
+    source_total_components = _root_edge_length_total_components(
+        numeric_values
+    )
     if _is_bifurcating_root_pair(target_candidates):
         ratio_record = target_root_ratios.get(id(target_node))
         if ratio_record is not None:
             ratio, ratio_was_defined = ratio_record
         else:
-            target_total = sum(float(candidate.dist or 0.0) for candidate in target_candidates)
-            ratio_was_defined = abs(target_total) > 10 ** -15
-            ratio = (
-                float(target_node.dist or 0.0) / target_total
-                if ratio_was_defined
-                else 1.0 / len(target_candidates)
-            )
+            ratio, ratio_was_defined = _root_edge_ratio_records(
+                target_candidates
+            )[id(target_node)]
         if ratio_was_defined:
             resolution = 'edge_total_target_ratio'
         else:
             resolution = 'edge_total_equal_zero_ratio'
-        output_value = source_total * ratio
+        output_value = _scaled_root_edge_length(
+            source_total_components,
+            ratio=ratio,
+        )
     else:
-        output_value = source_total
+        output_value = _scaled_root_edge_length(
+            source_total_components
+        )
         resolution = 'edge_total_single_branch'
     return _resolved_root_edge_value(
         mapping=mapping,
@@ -665,14 +727,15 @@ def _resolve_aligned_root_lengths(target, source, mapping, source_prop, policy):
                 resolution='edge_total_unresolved',
             )
         return resolutions
-    source_total = sum(source_values)
-    target_total = sum(float(candidate.dist or 0.0) for candidate in target_candidates)
+    source_total_components = _root_edge_length_total_components(
+        source_values
+    )
+    target_ratio_records = _root_edge_ratio_records(target_candidates)
     for target_node in target_candidates:
-        if abs(target_total) > 10 ** -15:
-            ratio = float(target_node.dist or 0.0) / target_total
+        ratio, ratio_was_defined = target_ratio_records[id(target_node)]
+        if ratio_was_defined:
             resolution = 'edge_total_target_ratio'
         else:
-            ratio = 1.0 / len(target_candidates)
             resolution = 'edge_total_equal_zero_ratio'
         matching_records = [
             record
@@ -681,11 +744,15 @@ def _resolve_aligned_root_lengths(target, source, mapping, source_prop, policy):
             == _candidate_projected_taxa(target_node, mapping.shared_taxa)
         ]
         source_record = matching_records[0] if len(matching_records) == 1 else source_records[0]
+        output_value = _scaled_root_edge_length(
+            source_total_components,
+            ratio=ratio,
+        )
         resolutions[id(target_node)] = _resolved_root_edge_value(
             mapping=mapping,
             metadata=metadata,
             source_record=source_record,
-            value=source_total * ratio,
+            value=output_value,
             has_value=True,
             reason='matching_aligned_root_edge_total',
             resolution=resolution,
@@ -794,17 +861,9 @@ def transfer_properties(target, source, property_specs, target_class='all',
     target_root_ratios = dict()
     target_root_children = target.get_children()
     if len(target_root_children) == 2:
-        target_root_total = sum(float(child.dist or 0.0) for child in target_root_children)
-        ratio_was_defined = abs(target_root_total) > 10 ** -15
-        for child in target_root_children:
-            target_root_ratios[id(child)] = (
-                (
-                    float(child.dist or 0.0) / target_root_total
-                    if ratio_was_defined
-                    else 1.0 / len(target_root_children)
-                ),
-                ratio_was_defined,
-            )
+        target_root_ratios = _root_edge_ratio_records(
+            target_root_children
+        )
     aligned_root_length_resolutions = dict()
     source_length_prop = next(
         (
@@ -933,6 +992,13 @@ def transfer_properties(target, source, property_specs, target_class='all',
                     status = 'transferred'
                     reason = effective_reason
                     changed_node_ids.add(id(target_node))
+                elif (
+                    target_node.is_root
+                    and source_prop in ('support', 'length')
+                    and target_prop in ('support', 'length')
+                ):
+                    status = 'not_applicable'
+                    reason = 'root_value_missing_not_applicable'
                 elif fill is not None:
                     output_value = _coerce_fill(fill, target_prop)
                     _set_property(target_node, target_prop, output_value)

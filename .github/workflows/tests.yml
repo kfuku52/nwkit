@@ -29,7 +29,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[test]'
+          pip install -e '.[test,image]'
 
       - name: Run tests
         run: pytest tests/ -q
@@ -49,16 +49,66 @@ jobs:
       - name: Install quality and build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[dev]'
+          pip install -e '.[dev,image]'
 
       - name: Run Ruff
-        run: ruff check nwkit tests
+        run: ruff check nwkit tests setup.py
 
       - name: Build and inspect distributions
         run: |
+          mkdir -p build/lib/nwkit
+          printf 'raise RuntimeError("stale build artifact")\n' > build/lib/nwkit/_mad.py
+          python -m build --wheel --outdir direct-dist
           python -m build
           python -m twine check dist/*
           check-wheel-contents dist/*.whl
+          python - <<'PY'
+          import glob
+          import tarfile
+          import zipfile
+
+          direct_wheel_path, = glob.glob('direct-dist/*.whl')
+          wheel_path, = glob.glob('dist/*.whl')
+          sdist_path, = glob.glob('dist/*.tar.gz')
+          forbidden_suffixes = ('/nwkit/_mad.py', '/THIRD_PARTY_NOTICES')
+          required_wheel = {
+              'nwkit/__init__.py',
+              'nwkit/root.py',
+              'nwkit/data_tree/apgiv.nwk',
+          }
+          for candidate_wheel in (direct_wheel_path, wheel_path):
+              with zipfile.ZipFile(candidate_wheel) as wheel:
+                  wheel_members = set(wheel.namelist())
+              assert required_wheel <= wheel_members
+              assert not any(
+                  member == 'nwkit/_mad.py'
+                  or member == 'THIRD_PARTY_NOTICES'
+                  or member.endswith('/THIRD_PARTY_NOTICES')
+                  for member in wheel_members
+              )
+          with tarfile.open(sdist_path, 'r:gz') as sdist:
+              sdist_members = set(sdist.getnames())
+          assert all(
+              any(member.endswith(suffix) for member in sdist_members)
+              for suffix in (
+                  '/nwkit/__init__.py',
+                  '/nwkit/root.py',
+                  '/nwkit/data_tree/apgiv.nwk',
+                  '/setup.py',
+              )
+          )
+          assert not any(
+              member.endswith(forbidden_suffixes)
+              for member in sdist_members
+          )
+          PY
+
+      - name: Test the source distribution in a clean tree
+        run: |
+          SDIST_TEST_DIR="$(mktemp -d)"
+          tar -xzf dist/*.tar.gz -C "${SDIST_TEST_DIR}"
+          cd "${SDIST_TEST_DIR}"/nwkit-*
+          pytest tests/ -q
 
       - name: Smoke-test the installed wheel
         run: |
@@ -66,3 +116,9 @@ jobs:
           cd /tmp
           nwkit --version
           printf '(A:1,B:1);' | nwkit validate --fail-on-issue yes > /dev/null
+          printf '(A:1,B:1);' | nwkit info > /dev/null
+          printf '(A:1,B:1);' | nwkit nwk2table | nwkit table2nwk > /dev/null
+          printf '<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="blue"/></svg>\n' > /tmp/nwkit-tip.svg
+          printf 'leaf_name\tlocal_path\nA\t/tmp/nwkit-tip.svg\n' > /tmp/nwkit-manifest.tsv
+          printf '(A:1,B:1);' | nwkit draw --species-overlap-node-plot no --tip-image-manifest /tmp/nwkit-manifest.tsv -o /tmp/nwkit-smoke.svg
+          test -s /tmp/nwkit-smoke.svg

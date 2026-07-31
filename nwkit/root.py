@@ -1,12 +1,15 @@
-import sys
+import json
+import math
 import re
+import sys
+from itertools import combinations
 from collections import defaultdict
+from fractions import Fraction
 
 import requests
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from ete4 import Tree
-from ete4.parser.newick import make_parser
 
 from nwkit.constrain import (
     get_taxid_counts,
@@ -40,6 +43,7 @@ from nwkit.clade_mapping import (
 SUPPORTED_TAXONOMY_SOURCES = ('ncbi', 'timetree', 'opentree')
 DEFAULT_TAXONOMY_SOURCE_CHAIN = 'ncbi,opentree,timetree'
 TAXONOMY_HTTP_MAX_BYTES = 10 * 1024 * 1024
+TAXONOMY_HTTP_CHUNK_BYTES = 64 * 1024
 NCBI_PLACEHOLDER_NAME_PATTERNS = (
     re.compile(r'\bunknown\b', flags=re.I),
     re.compile(r'\bunidentified\b', flags=re.I),
@@ -71,6 +75,12 @@ def _new_taxonomy_http_session():
     return session
 
 
+def _close_http_response(response):
+    close = getattr(response, 'close', None)
+    if callable(close):
+        close()
+
+
 def _bounded_response_text(response, source_name):
     headers = getattr(response, 'headers', {}) or {}
     content_length = headers.get('Content-Length')
@@ -80,18 +90,55 @@ def _bounded_response_text(response, source_name):
         except (TypeError, ValueError):
             declared_size = None
         if declared_size is not None and declared_size > TAXONOMY_HTTP_MAX_BYTES:
+            _close_http_response(response)
             raise ValueError('{} response exceeds the size limit.'.format(source_name))
-    text = str(getattr(response, 'text', ''))
-    if len(text.encode('utf-8')) > TAXONOMY_HTTP_MAX_BYTES:
-        raise ValueError('{} response exceeds the size limit.'.format(source_name))
-    return text
+
+    iter_content = getattr(response, 'iter_content', None)
+    try:
+        if callable(iter_content):
+            chunks = list()
+            total_size = 0
+            try:
+                content_iterator = iter_content(chunk_size=TAXONOMY_HTTP_CHUNK_BYTES)
+                for chunk in content_iterator:
+                    if not chunk:
+                        continue
+                    if isinstance(chunk, str):
+                        chunk = chunk.encode('utf-8')
+                    else:
+                        chunk = bytes(chunk)
+                    total_size += len(chunk)
+                    if total_size > TAXONOMY_HTTP_MAX_BYTES:
+                        raise ValueError(
+                            '{} response exceeds the size limit.'.format(source_name)
+                        )
+                    chunks.append(chunk)
+            except requests.RequestException as exc:
+                raise ValueError(
+                    'Failed while reading the {} response.'.format(source_name)
+                ) from exc
+            payload = b''.join(chunks)
+            encoding = getattr(response, 'encoding', None) or 'utf-8'
+            try:
+                return payload.decode(encoding)
+            except (LookupError, UnicodeError) as exc:
+                raise ValueError(
+                    'Unexpected text encoding in the {} response.'.format(source_name)
+                ) from exc
+
+        text = str(getattr(response, 'text', ''))
+        if len(text.encode('utf-8')) > TAXONOMY_HTTP_MAX_BYTES:
+            raise ValueError('{} response exceeds the size limit.'.format(source_name))
+        return text
+    finally:
+        _close_http_response(response)
 
 
 def _response_json_object(response, source_name):
-    _bounded_response_text(response, source_name)
+    text = _bounded_response_text(response, source_name)
     try:
-        data = response.json()
-    except (TypeError, ValueError) as exc:
+        data = json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError) as exc:
         raise ValueError('Unexpected JSON response from {}.'.format(source_name)) from exc
     if not isinstance(data, dict):
         raise ValueError('Unexpected JSON response from {}.'.format(source_name))
@@ -200,7 +247,19 @@ def _normalize_root_distance_for_reroot(tree):
 def _collapse_singleton_root(tree):
     while (len(tree.get_children()) == 1) and (len(list(tree.leaves())) > 1):
         child = tree.get_children()[0]
+        root_dist = tree.dist
+        child_dist = child.dist
         tree = child.copy(method='deepcopy')
+        if root_dist is None or child_dist is None:
+            tree.dist = None
+        else:
+            collapsed_root_dist = float(root_dist) + float(child_dist)
+            if not math.isfinite(collapsed_root_dist):
+                raise ValueError(
+                    'Collapsing a singleton root would produce a '
+                    'non-finite root branch length.'
+                )
+            tree.dist = collapsed_root_dist
     return tree
 
 
@@ -215,6 +274,76 @@ _RESERVED_NODE_PROPERTIES = frozenset((
 def _internal_branch_key(node, all_taxa):
     side = frozenset(str(name) for name in node.leaf_names())
     return canonical_split(side, all_taxa - side)
+
+
+def _snapshot_missing_branch_lengths(tree):
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    missing_splits = {
+        _internal_branch_key(node, all_taxa)
+        for node in tree.traverse()
+        if (not node.is_root) and node.dist is None
+    }
+    root_split = None
+    missing_root_sides = set()
+    root_children = tree.get_children()
+    if len(root_children) == 2:
+        root_sides = [
+            frozenset(str(name) for name in child.leaf_names())
+            for child in root_children
+        ]
+        if root_sides[0] and root_sides[1]:
+            root_split = canonical_split(root_sides[0], root_sides[1])
+            missing_root_sides = {
+                side
+                for child, side in zip(root_children, root_sides)
+                if child.dist is None
+            }
+    return {
+        'splits': missing_splits,
+        'root_split': root_split,
+        'missing_root_sides': missing_root_sides,
+    }
+
+
+def _restore_missing_branch_lengths(tree, snapshot):
+    missing_splits = snapshot['splits']
+    if not missing_splits:
+        return
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    same_root_split = False
+    root_children = tree.get_children()
+    if snapshot['root_split'] is not None and len(root_children) == 2:
+        final_root_sides = [
+            frozenset(str(name) for name in child.leaf_names())
+            for child in root_children
+        ]
+        same_root_split = (
+            canonical_split(final_root_sides[0], final_root_sides[1])
+            == snapshot['root_split']
+        )
+    for node in tree.traverse():
+        if node.is_root:
+            continue
+        split = _internal_branch_key(node, all_taxa)
+        if (
+            same_root_split
+            and node.up is tree
+            and split == snapshot['root_split']
+        ):
+            side = frozenset(str(name) for name in node.leaf_names())
+            if side in snapshot['missing_root_sides']:
+                node.dist = None
+            continue
+        if split in missing_splits:
+            node.dist = None
+
+
+def _first_leaf_name(tree, names):
+    names = set(names)
+    for leaf in tree.leaves():
+        if leaf.name in names:
+            return leaf.name
+    raise ValueError('No requested leaf was found in the tree.')
 
 
 def _custom_node_properties(node):
@@ -328,6 +457,8 @@ def _prepare_annotations_for_reroot(tree):
     snapshot = {
         'internal': _snapshot_internal_branch_annotations(tree),
         'root': _snapshot_node_annotation(tree),
+        'root_dist': tree.dist,
+        'missing_branch_lengths': _snapshot_missing_branch_lengths(tree),
         'leaves_by_identity': {
             id(leaf): _snapshot_node_annotation(leaf, include_name=False)
             for leaf in tree.leaves()
@@ -358,11 +489,81 @@ def _finish_annotations_after_reroot(tree, snapshot, verbose=False):
             annotation = candidates[offset]
             leaf_name_offsets[leaf_name] += 1
         _restore_node_annotation(leaf, annotation, include_name=False)
+    _restore_missing_branch_lengths(tree, snapshot['missing_branch_lengths'])
+    tree.dist = snapshot['root_dist']
     if verbose and snapshot['internal']['conflicts']:
         sys.stderr.write(
             'Dropped {} conflicting root-edge annotation(s) while rerooting.\n'.format(
                 len(snapshot['internal']['conflicts'])
             )
+        )
+
+
+def _redistribute_root_child_lengths(target, source, shared_taxa):
+    target_children = target.get_children()
+    source_children = source.get_children()
+    if len(target_children) != 2 or len(source_children) != 2:
+        return
+    # Missing, non-finite, or negative halves do not define a usable physical
+    # root-edge total or ratio. Leave the target lengths unchanged.
+    if (
+        any(child.dist is None for child in target_children)
+        or any(child.dist is None for child in source_children)
+    ):
+        return
+    try:
+        target_lengths = [float(child.dist) for child in target_children]
+        source_lengths = [float(child.dist) for child in source_children]
+    except (TypeError, ValueError):
+        return
+    if any(
+        (not math.isfinite(length)) or length < 0.0
+        for length in target_lengths + source_lengths
+    ):
+        return
+
+    shared_taxa = frozenset(str(taxon) for taxon in shared_taxa)
+    source_by_side = dict()
+    for child in source_children:
+        side = frozenset(
+            str(name)
+            for name in child.leaf_names()
+            if str(name) in shared_taxa
+        )
+        if not side or side == shared_taxa or side in source_by_side:
+            return
+        source_by_side[side] = child
+
+    target_by_side = dict()
+    for child in target_children:
+        side = frozenset(
+            str(name)
+            for name in child.leaf_names()
+            if str(name) in shared_taxa
+        )
+        if not side or side == shared_taxa or side in target_by_side:
+            return
+        target_by_side[side] = child
+    if set(target_by_side) != set(source_by_side):
+        return
+
+    source_length_by_id = {
+        id(child): length
+        for child, length in zip(source_children, source_lengths)
+    }
+    source_total = sum(source_lengths)
+    target_total = sum(target_lengths)
+    if (
+        source_total == 0.0
+        or not math.isfinite(source_total)
+        or not math.isfinite(target_total)
+    ):
+        return
+    for side, target_child in target_by_side.items():
+        source_child = source_by_side[side]
+        target_child.dist = (
+            target_total
+            * (source_length_by_id[id(source_child)] / source_total)
         )
 
 
@@ -372,6 +573,10 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
     tree_from = _collapse_singleton_root(tree_from)
     validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
     validate_unique_named_leaves(tree_from, option_name='--infile2', context=' for root transfer')
+    if not is_all_leaf_names_identical(tree_to, tree_from):
+        raise ValueError(
+            "Exact root transfer requires identical leaf labels in '--infile' and '--infile2'."
+        )
     subroot_from = tree_from.get_children()
     if len(subroot_from) != 2:
         raise ValueError('Root transfer requires the source tree root to have exactly two children.')
@@ -393,15 +598,15 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
     )
     annotation_backup = None
     if not is_root_bipartition_already_matching:
+        annotation_backup = _prepare_annotations_for_reroot(tree_to)
         # Ensure all None dists are 0 and clear support before rerooting.
         for node in tree_to.traverse():
             if node.dist is None:
                 node.dist = 0.0
-        annotation_backup = _prepare_annotations_for_reroot(tree_to)
         _normalize_root_distance_for_reroot(tree_to)
-        tree_to.set_outgroup(next(iter(ingroup_set)))
+        tree_to.set_outgroup(_first_leaf_name(tree_to, ingroup_set))
         if len(outgroup_set) == 1:
-            outgroup_name = next(iter(outgroup_set))
+            outgroup_name = min(outgroup_set, key=str)
             outgroup_ancestor = None
             for leaf in tree_to.leaves():
                 if leaf.name == outgroup_name:
@@ -410,22 +615,19 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
             if outgroup_ancestor is None:
                 raise ValueError('No root bipartition found in --infile.')
         else:
-            outgroup_ancestor = tree_to.common_ancestor(list(outgroup_set))
+            outgroup_ancestor = tree_to.common_ancestor(sorted(outgroup_set, key=str))
         reroot_leaf_sets = get_subtree_leaf_name_sets(tree_to)
         if not outgroup_set == reroot_leaf_sets[outgroup_ancestor]:
             raise ValueError('No root bipartition found in --infile.')
         _normalize_root_distance_for_reroot(tree_to)
         tree_to.set_outgroup(outgroup_ancestor)
         tree_to_leaf_sets = get_subtree_leaf_name_sets(tree_to)
-    subroot_to = tree_to.get_children()
-    total_subroot_length_to = sum((n.dist or 0) for n in subroot_to)
-    total_subroot_length_from = sum((n.dist or 0) for n in subroot_from)
-    if redistribute_root_length and abs(total_subroot_length_from) > 10**-15:
-        for n_to in subroot_to:
-            n_to_leaf_set = tree_to_leaf_sets[n_to]
-            for n_from in subroot_from:
-                if (n_to_leaf_set == tree_from_leaf_sets[n_from]):
-                    n_to.dist = total_subroot_length_to * ((n_from.dist or 0) / total_subroot_length_from)
+    if redistribute_root_length:
+        _redistribute_root_child_lengths(
+            target=tree_to,
+            source=tree_from,
+            shared_taxa=tree_to.leaf_names(),
+        )
     # Restore root name or assign 'Root' if it was unnamed
     if original_root_name:
         tree_to.name = original_root_name
@@ -466,6 +668,12 @@ def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbos
     if verbose:
         sys.stderr.write('Shared tips used for root transfer: {}\n'.format(len(shared_taxa)))
     if projected_root_split(tree_to, shared_taxa) == source_split:
+        if redistribute_root_length:
+            _redistribute_root_child_lengths(
+                target=tree_to,
+                source=tree_from,
+                shared_taxa=shared_taxa,
+            )
         return tree_to
     unique_candidates = list()
     seen_candidate_ids = set()
@@ -497,81 +705,505 @@ def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbos
         annotation_backup,
         verbose=verbose,
     )
+    if redistribute_root_length:
+        _redistribute_root_child_lengths(
+            target=tree_to,
+            source=tree_from,
+            shared_taxa=shared_taxa,
+        )
+        _restore_missing_branch_lengths(
+            tree_to,
+            annotation_backup['missing_branch_lengths'],
+        )
     if not original_root_name:
         tree_to.name = 'Root'
     if projected_root_split(tree_to, shared_taxa) != source_split:
         raise ValueError('Root transfer failed to reproduce the source split on shared tips.')
     return tree_to
 
+def _normalize_reroot_branch_lengths(tree, method_name):
+    """Validate and scale non-root branches for numerically stable rooting."""
+    branch_lengths = []
+    branch_length_scale = 0.0
+    for node in tree.traverse():
+        if node.is_root:
+            continue
+        if node.dist is None:
+            length = 0.0
+        else:
+            try:
+                length = float(node.dist)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    '{} rooting requires finite, non-negative branch lengths.'.format(
+                        method_name
+                    )
+                ) from exc
+            if not math.isfinite(length) or length < 0.0:
+                raise ValueError(
+                    '{} rooting requires finite, non-negative branch lengths.'.format(
+                        method_name
+                    )
+                )
+        branch_lengths.append((node, length))
+        if length > branch_length_scale:
+            branch_length_scale = length
+
+    if branch_length_scale == 0.0:
+        branch_length_scale = 1.0
+    for node, length in branch_lengths:
+        node.dist = length / branch_length_scale
+    return branch_length_scale
+
+
+def _restore_reroot_branch_length_scale(tree, branch_length_scale):
+    for node in tree.traverse():
+        if node.is_root or node.dist is None:
+            continue
+        node.dist = float(node.dist) * branch_length_scale
+
+
 def midpoint_rooting(tree):
     tree = tree.copy(method='deepcopy')
-    # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
-    for node in tree.traverse():
-        if node.dist is None:
-            node.dist = 0.0
+    validate_unique_named_leaves(
+        tree,
+        option_name='--infile',
+        context=' for midpoint rooting',
+    )
+    annotation_backup = _prepare_annotations_for_reroot(tree)
+    branch_length_scale = _normalize_reroot_branch_lengths(tree, 'Midpoint')
     _normalize_root_distance_for_reroot(tree)
     outgroup_node = tree.get_midpoint_outgroup()
     # If the outgroup is the root itself, tree is already optimally rooted
     if outgroup_node.is_root:
+        _restore_reroot_branch_length_scale(tree, branch_length_scale)
+        _finish_annotations_after_reroot(tree, annotation_backup)
         return tree
-    annotation_backup = _prepare_annotations_for_reroot(tree)
     tree.set_outgroup(outgroup_node)
+    _restore_reroot_branch_length_scale(tree, branch_length_scale)
     _finish_annotations_after_reroot(tree, annotation_backup)
     return tree
 
-def _rename_mad_leaf_names(tree):
-    placeholder_to_name = dict()
-    for index, leaf in enumerate(tree.leaves()):
-        if leaf.name in (None, ''):
-            continue
-        placeholder = 'NWKITMADLEAF{:010d}'.format(index)
-        placeholder_to_name[placeholder] = leaf.name
-        leaf.name = placeholder
-    return placeholder_to_name
-
-def _restore_mad_leaf_names(tree, placeholder_to_name):
-    if not placeholder_to_name:
-        return tree
-    for leaf in tree.leaves():
-        restored_name = placeholder_to_name.get(leaf.name)
-        if restored_name is not None:
-            leaf.name = restored_name
-    return tree
-
 def mad_rooting(tree):
-    """MAD (Minimal Ancestor Deviation) rooting. Tria et al. 2017, DOI:10.1038/s41559-017-0193"""
+    """Root a tree by minimal ancestor deviation (Tria et al. 2017)."""
     if len(list(tree.leaves())) < 3:
         raise ValueError('MAD rooting requires at least 3 leaves.')
-    import os
-    import subprocess
-    import tempfile
-    mad_script = os.path.join(os.path.dirname(__file__), '_mad.py')
-    parser = make_parser(5, dist='%0.8f')
-    working_tree = tree.copy(method='deepcopy')
-    placeholder_to_name = _rename_mad_leaf_names(working_tree)
-    annotation_backup = _prepare_annotations_for_reroot(working_tree)
-    with tempfile.NamedTemporaryFile(suffix='.nwk', mode='w', delete=False) as f:
-        f.write(working_tree.write(parser=parser))
-        tmpfile = f.name
-    try:
-        result = subprocess.run(
-            [sys.executable, mad_script, tmpfile],
-            check=True, capture_output=True, text=True,
+    tree = tree.copy(method='deepcopy')
+    validate_unique_named_leaves(tree, option_name='--infile', context=' for MAD rooting')
+    positive_branch_count = 0
+    branch_length_scale = 0.0
+    for node in tree.traverse():
+        if node.is_root:
+            continue
+        if node.dist is None:
+            raise ValueError('MAD rooting requires every branch length to be present.')
+        length = float(node.dist)
+        if not math.isfinite(length) or length < 0:
+            raise ValueError('MAD rooting requires finite, non-negative branch lengths.')
+        if length > 0:
+            positive_branch_count += 1
+            branch_length_scale = max(branch_length_scale, length)
+    if positive_branch_count < 3:
+        raise ValueError('MAD rooting requires at least 3 positive branch lengths.')
+
+    annotation_backup = _prepare_annotations_for_reroot(tree)
+    _normalize_root_distance_for_reroot(tree)
+    # Work on a dimensionless copy.  Besides improving the conditioning of
+    # the quadratic objective, this avoids overflowing when the two finite
+    # halves of an arbitrary input root have to be joined into one physical
+    # edge.
+    for node in tree.traverse():
+        if not node.is_root:
+            original_length = float(node.dist)
+            normalized_length = original_length / branch_length_scale
+            if original_length > 0.0 and normalized_length == 0.0:
+                raise ValueError(
+                    'MAD rooting cannot preserve this branch-length dynamic '
+                    'range with finite floating-point values.'
+                )
+            node.dist = normalized_length
+
+    # Suppress an arbitrary bifurcating root so every candidate is a physical
+    # edge of the unrooted tree. The two former root lengths form one edge.
+    children = tree.get_children()
+    if len(children) == 2:
+        first, second = children
+        dissolved = first if not first.is_leaf else (second if not second.is_leaf else None)
+        if dissolved is not None:
+            retained = second if dissolved is first else first
+            retained.dist = float(retained.dist) + float(dissolved.dist)
+            for grandchild in list(dissolved.get_children()):
+                tree.add_child(grandchild)
+            tree.remove_child(dissolved)
+
+    # MAD treats zero-distance tips as one effective OTU. Choose a
+    # deterministic representative while retaining every tip in the output.
+    all_nodes = list(tree.traverse(strategy='preorder'))
+    node_index_by_id = {
+        id(node): index
+        for index, node in enumerate(all_nodes)
+    }
+    component_parents = list(range(len(all_nodes)))
+
+    def find(index):
+        while component_parents[index] != index:
+            component_parents[index] = component_parents[
+                component_parents[index]
+            ]
+            index = component_parents[index]
+        return index
+
+    def union(first_index, second_index):
+        first_root = find(first_index)
+        second_root = find(second_index)
+        if first_root != second_root:
+            component_parents[max(first_root, second_root)] = min(
+                first_root,
+                second_root,
+            )
+
+    for node in all_nodes:
+        if not node.is_root and float(node.dist) == 0.0:
+            union(
+                node_index_by_id[id(node)],
+                node_index_by_id[id(node.up)],
+            )
+    all_tips = list(tree.leaves())
+    effective_groups = defaultdict(list)
+    for index, tip in enumerate(all_tips):
+        component = find(node_index_by_id[id(tip)])
+        effective_groups[component].append((index, tip))
+    tips = [
+        min(group, key=lambda item: (str(item[1].name), item[0]))[1]
+        for group in effective_groups.values()
+    ]
+    tips.sort(key=lambda tip: str(tip.name))
+    if len(tips) < 3:
+        raise ValueError('MAD rooting requires at least 3 effective leaves.')
+
+    num_tips = len(tips)
+    effective_tip_index_by_id = {
+        id(tip): index
+        for index, tip in enumerate(tips)
+    }
+    all_tips_by_name = sorted(all_tips, key=lambda tip: str(tip.name))
+    all_tip_index_by_id = {
+        id(tip): index
+        for index, tip in enumerate(all_tips_by_name)
+    }
+    effective_subtree_masks = dict()
+    all_subtree_masks = dict()
+    for node in tree.traverse(strategy='postorder'):
+        if node.is_leaf:
+            effective_index = effective_tip_index_by_id.get(id(node))
+            effective_subtree_masks[node] = (
+                0 if effective_index is None else (1 << effective_index)
+            )
+            all_subtree_masks[node] = 1 << all_tip_index_by_id[id(node)]
+            continue
+        effective_mask = 0
+        all_mask = 0
+        for child in node.get_children():
+            effective_mask |= effective_subtree_masks[child]
+            all_mask |= all_subtree_masks[child]
+        effective_subtree_masks[node] = effective_mask
+        all_subtree_masks[node] = all_mask
+
+    # MAD's objective is a weighted quadratic in the root-to-tip distances.
+    # Each tip pair affects exactly the edges on the path between the pair.
+    # Accumulate those path contributions once, then obtain every edge's
+    # fitted root position and score with two linear tree traversals.
+    node_count = len(all_nodes)
+    parent_indices = [0] * node_count
+    topological_depths = [0] * node_count
+    # Dyadic rational arithmetic preserves small path terms that would
+    # otherwise disappear when a short clade hangs below a very long edge.
+    # All inputs are binary floats, so these sums remain exact and bounded.
+    root_distances_by_index = [Fraction(0)] * node_count
+    for node in all_nodes:
+        node_index = node_index_by_id[id(node)]
+        if node.is_root:
+            parent_indices[node_index] = node_index
+            continue
+        parent_index = node_index_by_id[id(node.up)]
+        parent_indices[node_index] = parent_index
+        topological_depths[node_index] = topological_depths[parent_index] + 1
+        root_distances_by_index[node_index] = (
+            root_distances_by_index[parent_index]
+            + Fraction.from_float(float(node.dist))
         )
-        sys.stderr.write(result.stdout)
-        with open(tmpfile + '.rooted') as fh:
-            lines = [line.strip() for line in fh if line.strip() and line.strip().endswith(';')]
-        if not lines:
-            raise RuntimeError('MAD did not produce a rooted tree.')
-        rooted_nwk = lines[0]
-        rooted_tree = Tree(rooted_nwk, parser=1)
-        _finish_annotations_after_reroot(rooted_tree, annotation_backup)
-        rooted_tree = _restore_mad_leaf_names(rooted_tree, placeholder_to_name)
-    finally:
-        for p in [tmpfile, tmpfile + '.rooted']:
-            if os.path.exists(p):
-                os.unlink(p)
-    return rooted_tree
+
+    ancestor_levels = [parent_indices]
+    while (1 << len(ancestor_levels)) <= max(topological_depths):
+        previous = ancestor_levels[-1]
+        ancestor_levels.append([
+            previous[previous[index]]
+            for index in range(node_count)
+        ])
+
+    def lift_node_index(node_index, levels):
+        bit = 0
+        while levels:
+            if levels & 1:
+                node_index = ancestor_levels[bit][node_index]
+            levels >>= 1
+            bit += 1
+        return node_index
+
+    def lowest_common_ancestor_index(first_index, second_index):
+        first_depth = topological_depths[first_index]
+        second_depth = topological_depths[second_index]
+        if first_depth > second_depth:
+            first_index = lift_node_index(
+                first_index,
+                first_depth - second_depth,
+            )
+        elif second_depth > first_depth:
+            second_index = lift_node_index(
+                second_index,
+                second_depth - first_depth,
+            )
+        if first_index == second_index:
+            return first_index
+        for ancestors in reversed(ancestor_levels):
+            if ancestors[first_index] != ancestors[second_index]:
+                first_index = ancestors[first_index]
+                second_index = ancestors[second_index]
+        return parent_indices[first_index]
+
+    effective_node_indices = [
+        node_index_by_id[id(tip)]
+        for tip in tips
+    ]
+    pair_records = list()
+    for first_index, second_index in combinations(range(num_tips), 2):
+        first_node_index = effective_node_indices[first_index]
+        second_node_index = effective_node_indices[second_index]
+        ancestor_index = lowest_common_ancestor_index(
+            first_node_index,
+            second_node_index,
+        )
+        pair_distance_fraction = (
+            root_distances_by_index[first_node_index]
+            + root_distances_by_index[second_node_index]
+            - (2 * root_distances_by_index[ancestor_index])
+        )
+        if pair_distance_fraction <= 0:
+            raise ValueError('MAD rooting requires at least 3 effective leaves.')
+        pair_records.append((
+            first_node_index,
+            second_node_index,
+            ancestor_index,
+            pair_distance_fraction,
+            float(pair_distance_fraction),
+        ))
+
+    minimum_pair_distance = min(
+        pair_distance
+        for _, _, _, _, pair_distance in pair_records
+    )
+    maximum_pair_distance = max(
+        pair_distance
+        for _, _, _, _, pair_distance in pair_records
+    )
+    # The weight scale is algebraically arbitrary.  A geometric midpoint
+    # keeps both ends of the distance range representable. Squaring is done
+    # as a Fraction below, so even a full binary64 dynamic range is safe.
+    weight_distance_scale = (
+        math.sqrt(minimum_pair_distance)
+        * math.sqrt(maximum_pair_distance)
+    )
+    weight_distance_scale_fraction = Fraction.from_float(
+        weight_distance_scale
+    )
+
+    cut_weights = [Fraction(0)] * node_count
+    numerator_constants = [Fraction(0)] * node_count
+    numerator_depths = [Fraction(0)] * node_count
+    root_objective = Fraction(0)
+    for (
+        first_node_index,
+        second_node_index,
+        ancestor_index,
+        pair_distance_fraction,
+        pair_distance,
+    ) in pair_records:
+        weight_ratio = weight_distance_scale / pair_distance
+        weight_ratio_fraction = Fraction.from_float(weight_ratio)
+        weight = weight_ratio_fraction * weight_ratio_fraction
+
+        cut_weights[first_node_index] += weight
+        cut_weights[second_node_index] += weight
+        cut_weights[ancestor_index] -= 2 * weight
+
+        first_constant = weight * (
+            pair_distance_fraction
+            - (2 * root_distances_by_index[first_node_index])
+        )
+        second_constant = weight * (
+            pair_distance_fraction
+            - (2 * root_distances_by_index[second_node_index])
+        )
+        numerator_constants[first_node_index] += first_constant
+        numerator_constants[second_node_index] += second_constant
+        numerator_constants[ancestor_index] -= (
+            first_constant + second_constant
+        )
+
+        depth_coefficient = 2 * weight
+        numerator_depths[first_node_index] += depth_coefficient
+        numerator_depths[second_node_index] += depth_coefficient
+        numerator_depths[ancestor_index] -= 2 * depth_coefficient
+
+        root_distance_difference = (
+            root_distances_by_index[first_node_index]
+            - root_distances_by_index[second_node_index]
+        )
+        root_objective += (
+            weight * root_distance_difference * root_distance_difference
+        )
+
+    for node in tree.traverse(strategy='postorder'):
+        if node.is_root:
+            continue
+        node_index = node_index_by_id[id(node)]
+        parent_index = parent_indices[node_index]
+        cut_weights[parent_index] += cut_weights[node_index]
+        numerator_constants[parent_index] += numerator_constants[node_index]
+        numerator_depths[parent_index] += numerator_depths[node_index]
+
+    objectives_by_index = [Fraction(0)] * node_count
+    root_index = node_index_by_id[id(tree)]
+    objectives_by_index[root_index] = root_objective
+    numerators_by_index = [Fraction(0)] * node_count
+    for node in tree.traverse(strategy='preorder'):
+        if node.is_root:
+            continue
+        node_index = node_index_by_id[id(node)]
+        parent_index = parent_indices[node_index]
+        edge_length = Fraction.from_float(float(node.dist))
+        numerator = (
+            numerator_constants[node_index]
+            + (
+                numerator_depths[node_index]
+                * root_distances_by_index[node_index]
+            )
+        )
+        numerators_by_index[node_index] = numerator
+        objectives_by_index[node_index] = (
+            objectives_by_index[parent_index]
+            + (4 * edge_length * numerator)
+            - (4 * edge_length * edge_length * cut_weights[node_index])
+        )
+
+    best_score = math.inf
+    best_node = None
+    best_root_distance = 0.0
+    best_edge_length = 0.0
+    best_side_names = None
+    best_candidate_key = None
+    pair_count = len(pair_records)
+    all_leaf_mask = (1 << len(all_tips_by_name)) - 1
+
+    for node in tree.traverse():
+        if node.is_root:
+            continue
+        edge_length = Fraction.from_float(float(node.dist))
+        if edge_length == 0:
+            continue
+        side_mask = effective_subtree_masks[node]
+        if side_mask == 0 or side_mask == ((1 << num_tips) - 1):
+            continue
+
+        node_index = node_index_by_id[id(node)]
+        cut_weight = cut_weights[node_index]
+        numerator = numerators_by_index[node_index]
+        denominator = 2 * cut_weight
+        root_distance = (
+            Fraction(0)
+            if denominator == 0
+            else numerator / denominator
+        )
+        root_distance = min(max(root_distance, Fraction(0)), edge_length)
+
+        objective = (
+            objectives_by_index[node_index]
+            - (4 * root_distance * numerator)
+            + (4 * root_distance * root_distance * cut_weight)
+        )
+        normalized_objective = (
+            objective
+            / (
+                pair_count
+                * weight_distance_scale_fraction
+                * weight_distance_scale_fraction
+            )
+        )
+        score = math.sqrt(max(0.0, float(normalized_objective)))
+        side_name_mask = all_subtree_masks[node]
+        other_name_mask = all_leaf_mask ^ side_name_mask
+        side_name_indices = tuple(
+            index
+            for index in range(len(all_tips_by_name))
+            if side_name_mask & (1 << index)
+        )
+        other_name_indices = tuple(
+            index
+            for index in range(len(all_tips_by_name))
+            if other_name_mask & (1 << index)
+        )
+        candidate_key = (
+            (side_name_indices, other_name_indices)
+            if (len(side_name_indices), side_name_indices)
+            <= (len(other_name_indices), other_name_indices)
+            else (other_name_indices, side_name_indices)
+        )
+        is_tied = math.isclose(
+            score,
+            best_score,
+            rel_tol=10 ** -12,
+            abs_tol=10 ** -15,
+        )
+        if (
+            (score < best_score and not is_tied)
+            or (
+                is_tied
+                and (best_candidate_key is None or candidate_key < best_candidate_key)
+            )
+        ):
+            best_score = score
+            best_node = node
+            best_root_distance = float(root_distance)
+            best_edge_length = float(edge_length)
+            best_side_names = frozenset(
+                str(all_tips_by_name[index].name)
+                for index in side_name_indices
+            )
+            best_candidate_key = candidate_key
+
+    if best_node is None:
+        raise ValueError('MAD rooting could not identify a candidate root edge.')
+
+    sys.stderr.write('MAD rooting score: {:.6g}\n'.format(best_score))
+    tree.set_outgroup(best_node)
+    for child in tree.get_children():
+        side_names = frozenset(str(name) for name in child.leaf_names())
+        if side_names == best_side_names:
+            child.dist = best_root_distance
+        else:
+            child.dist = best_edge_length - best_root_distance
+    for node in tree.traverse():
+        if node.is_root:
+            continue
+        restored_length = float(node.dist) * branch_length_scale
+        if not math.isfinite(restored_length):
+            raise ValueError(
+                'MAD rooting produced a branch length that exceeds the '
+                'finite floating-point range.'
+            )
+        node.dist = restored_length
+    _finish_annotations_after_reroot(tree, annotation_backup)
+    return tree
 
 def _collect_leaf_distance_stats(tree):
     # For each node, store (leaf_count, sum_dist_to_leaves, sumsq_dist_to_leaves).
@@ -617,7 +1249,13 @@ def _collect_leaf_distance_stats(tree):
 def mv_rooting(tree):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
     tree = tree.copy(method='deepcopy')
+    validate_unique_named_leaves(
+        tree,
+        option_name='--infile',
+        context=' for MV rooting',
+    )
     annotation_backup = _prepare_annotations_for_reroot(tree)
+    branch_length_scale = _normalize_reroot_branch_lengths(tree, 'MV')
     # ete4.set_outgroup requires root.dist to be 0/None.
     if tree.dist is not None:
         tree.dist = 0.0
@@ -675,9 +1313,12 @@ def mv_rooting(tree):
             best_x = x
             best_L = L
     if best_node is None:
+        _restore_reroot_branch_length_scale(tree, branch_length_scale)
         _finish_annotations_after_reroot(tree, annotation_backup)
         return tree
-    sys.stderr.write('MV rooting variance: {:.6g}\n'.format(best_var))
+    reported_var = best_var * branch_length_scale
+    reported_var *= branch_length_scale
+    sys.stderr.write('MV rooting variance: {:.6g}\n'.format(reported_var))
     tree.set_outgroup(best_node)
     # Adjust branch lengths at root: best_x from root to best_node, (L - best_x) to sibling
     best_subtree_leaves = set(best_node.leaf_names())
@@ -687,6 +1328,7 @@ def mv_rooting(tree):
             child.dist = best_x
         else:
             child.dist = best_L - best_x
+    _restore_reroot_branch_length_scale(tree, branch_length_scale)
     _finish_annotations_after_reroot(tree, annotation_backup)
     return tree
 
@@ -694,10 +1336,11 @@ def outgroup_rooting(tree, outgroup_str):
     if outgroup_str is None:
         raise ValueError("Specify at least one outgroup label with '--outgroup'.")
     tree = tree.copy(method='deepcopy')
-    # Ensure all None dists are 0 (ete4 set_outgroup doesn't handle None well)
-    for node in tree.traverse():
-        if node.dist is None:
-            node.dist = 0.0
+    validate_unique_named_leaves(
+        tree,
+        option_name='--infile',
+        context=' for outgroup rooting',
+    )
     outgroup_list = [label.strip() for label in outgroup_str.split(',') if label.strip()]
     if len(outgroup_list) == 0:
         raise ValueError("Specify at least one outgroup label with '--outgroup'.")
@@ -715,6 +1358,11 @@ def outgroup_rooting(tree, outgroup_str):
     else:
         outgroup_node = tree.common_ancestor(outgroup_nodes)
     annotation_backup = _prepare_annotations_for_reroot(tree)
+    # ETE cannot reroot through missing distances; restore their missingness
+    # from the split-keyed snapshot after the topology operation.
+    for node in tree.traverse():
+        if node.dist is None:
+            node.dist = 0.0
     if outgroup_node is tree: # Reroot if the outgroup clade represents the whole tree
         outgroup_node_set = set(outgroup_nodes)
         non_outgroup_leaf = None
@@ -887,7 +1535,7 @@ def _get_reference_root_outgroup_set(reference_tree, source_name):
 
 def _expand_species_label_set(species_name_set, species_to_leaf_labels):
     leaf_label_set = set()
-    for species_name in species_name_set:
+    for species_name in sorted(species_name_set, key=str):
         if species_name not in species_to_leaf_labels:
             raise ValueError('Unexpected species label returned by the reference tree: {}'.format(species_name))
         leaf_label_set.update(species_to_leaf_labels[species_name])
@@ -908,7 +1556,7 @@ def _build_taxonomy_query_label_mapping(species_label_to_taxonomy_query):
 
 def _expand_query_label_set(query_label_set, query_label_to_species_labels, species_to_leaf_labels):
     species_label_set = set()
-    for query_label in query_label_set:
+    for query_label in sorted(query_label_set, key=str):
         if query_label not in query_label_to_species_labels:
             raise ValueError('Unexpected taxonomy query label returned by the reference tree: {}'.format(query_label))
         species_label_set.update(query_label_to_species_labels[query_label])
@@ -968,9 +1616,9 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
             if node.dist is None:
                 node.dist = 0.0
         _normalize_root_distance_for_reroot(tree)
-        tree.set_outgroup(next(iter(ingroup_set)))
+        tree.set_outgroup(_first_leaf_name(tree, ingroup_set))
         if len(outgroup_set) == 1:
-            outgroup_name = next(iter(outgroup_set))
+            outgroup_name = min(outgroup_set, key=str)
             outgroup_ancestor = None
             for leaf in tree.leaves():
                 if leaf.name == outgroup_name:
@@ -979,7 +1627,7 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
             if outgroup_ancestor is None:
                 raise ValueError('No root bipartition found in --infile.')
         else:
-            outgroup_ancestor = tree.common_ancestor(outgroup_set)
+            outgroup_ancestor = tree.common_ancestor(sorted(outgroup_set, key=str))
         reroot_leaf_sets = get_subtree_leaf_name_sets(tree)
         if outgroup_set != reroot_leaf_sets[outgroup_ancestor]:
             raise ValueError('No root bipartition found in --infile.')
@@ -1018,17 +1666,21 @@ def _build_timetree_reference_tree(tree, args=None):
                 'https://timetree.org/ajax/prune/load_names/',
                 files={'file': ('species.txt', '\n'.join(query_names) + '\n')},
                 timeout=60,
+                stream=True,
             )
+            _bounded_response_text(upload_response, 'TimeTree upload')
             if upload_response.status_code != 200:
                 raise ValueError('Failed to retrieve a pruned guide tree from TimeTree.')
             newick_response = session.post(
                 'https://timetree.org/ajax/newick/prunetree/download',
                 data={'export': 'newick', 'rank': ''},
                 timeout=60,
+                stream=True,
             )
         except requests.RequestException as exc:
             raise ValueError('Failed to contact TimeTree.') from exc
         if newick_response.status_code != 200:
+            _close_http_response(newick_response)
             raise ValueError('Failed to download a guide tree from TimeTree.')
         timetree_newick = _bounded_response_text(newick_response, 'TimeTree').strip()
         if not timetree_newick.endswith(';'):
@@ -1077,10 +1729,12 @@ def _extract_opentree_ott_ids(tree, args=None):
                     'do_approximate_matching': False,
                 },
                 timeout=60,
+                stream=True,
             )
         except requests.RequestException as exc:
             raise ValueError('Failed to contact Open Tree of Life TNRS.') from exc
         if response.status_code != 200:
+            _close_http_response(response)
             raise ValueError('Open Tree of Life TNRS lookup failed.')
         data = _response_json_object(response, 'Open Tree of Life TNRS')
         results = data.get('results', [])
@@ -1141,10 +1795,12 @@ def _build_opentree_reference_tree(tree, args=None):
                     'label_format': 'name',
                 },
                 timeout=60,
+                stream=True,
             )
         except requests.RequestException as exc:
             raise ValueError('Failed to contact Open Tree of Life synthetic tree API.') from exc
         if response.status_code != 200:
+            _close_http_response(response)
             raise ValueError('Open Tree of Life induced subtree lookup failed.')
         data = _response_json_object(response, 'Open Tree of Life induced subtree')
         newick_value = data.get('newick', '')

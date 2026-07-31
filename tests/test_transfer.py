@@ -125,6 +125,22 @@ class TestTransferMain:
         with pytest.raises(ValueError, match='must be numeric'):
             transfer_main(args)
 
+    @pytest.mark.parametrize('fill', ['nan', 'inf', '-inf'])
+    @pytest.mark.parametrize('target_prop', ['support', 'length'])
+    def test_non_finite_numeric_fill_raises_clear_error(self, tmp_nwk, fill, target_prop):
+        path1 = tmp_nwk('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', 'tree1.nwk')
+        path2 = tmp_nwk('(((A:1,C:1):1,B:1):1,(D:1,E:1):1);', 'tree2.nwk')
+        args = make_args(
+            infile=path1, infile2=path2, outfile='-',
+            format2='auto', target='intnode',
+            name=False,
+            support=target_prop == 'support',
+            length=target_prop == 'length',
+            fill=fill,
+        )
+        with pytest.raises(ValueError, match='must be finite'):
+            transfer_main(args)
+
     def test_transfer_with_fill(self, tmp_nwk, tmp_outfile):
         # Same topology but different internal structure (5 leaves, both rooted)
         # tree1 has ((A,B),(C,(D,E))), tree2 has ((A,B),(C,(D,E))) with extra node
@@ -180,6 +196,116 @@ class TestTransferMain:
         assert abs(leaves['B'] - 20.0) < 1e-6
         assert abs(leaves['C'] - 40.0) < 1e-6
         assert abs(leaves['D'] - 50.0) < 1e-6
+
+    def test_split_root_edge_total_rejects_unrepresentable_length(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+    ):
+        target = tmp_nwk(
+            '((A:1,B:1):1,C:1,D:1);',
+            'target.nwk',
+        )
+        source = tmp_nwk(
+            '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+            'source.nwk',
+        )
+        args = make_args(
+            infile=target,
+            infile2=source,
+            outfile=tmp_outfile,
+            format2='auto',
+            target='all',
+            name=False,
+            support=False,
+            length=True,
+            fill=None,
+            match_basis='split',
+            root_edge_policy=[],
+        )
+
+        with pytest.raises(
+            ValueError,
+            match='physical root-edge length total is too large',
+        ):
+            transfer_main(args)
+
+    def test_split_root_edge_target_ratios_do_not_overflow(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+    ):
+        target = tmp_nwk(
+            '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+            'target.nwk',
+        )
+        source = tmp_nwk(
+            '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+            'source.nwk',
+        )
+        args = make_args(
+            infile=target,
+            infile2=source,
+            outfile=tmp_outfile,
+            format2='auto',
+            target='all',
+            name=False,
+            support=False,
+            length=True,
+            fill=None,
+            match_basis='split',
+            root_edge_policy=[],
+        )
+
+        transfer_main(args)
+
+        tree = read_tree(
+            tmp_outfile,
+            format='auto',
+            quoted_node_names=True,
+            quiet=True,
+        )
+        assert sorted(child.dist for child in tree.get_children()) == [
+            1e308,
+            1e308,
+        ]
+
+    def test_split_root_edge_preserves_tiny_finite_target_ratios(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+    ):
+        target = tmp_nwk(
+            '((A:1,B:1):1e-300,(C:1,D:1):2e-300);',
+            'target.nwk',
+        )
+        source = tmp_nwk(
+            '((A:1,B:1):1,(C:1,D:1):2);',
+            'source.nwk',
+        )
+        args = make_args(
+            infile=target,
+            infile2=source,
+            outfile=tmp_outfile,
+            format2='auto',
+            target='all',
+            name=False,
+            support=False,
+            length=True,
+            fill=None,
+            match_basis='split',
+            root_edge_policy=[],
+        )
+
+        transfer_main(args)
+
+        tree = read_tree(
+            tmp_outfile,
+            format='auto',
+            quoted_node_names=True,
+            quiet=True,
+        )
+        assert sorted(child.dist for child in tree.get_children()) == [1.0, 2.0]
 
     def test_support_transfer_root_target_handles_missing_root_support(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')

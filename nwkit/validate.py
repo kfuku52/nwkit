@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 
 from nwkit.clade_mapping import projected_root_split
@@ -17,7 +19,8 @@ VALIDATE_COLUMNS = (
     'tree_id', 'status', 'parse_ok', 'parse_error', 'input_format', 'format_ambiguous',
     'has_quoted_node_names', 'has_quoted_internal_node_names', 'num_leaves', 'num_nodes',
     'num_singleton_nodes', 'num_multifurcation_nodes', 'num_zero_branch_nodes',
-    'num_negative_branch_nodes', 'num_missing_support_internal_nodes', 'is_rooted',
+    'num_negative_branch_nodes', 'num_non_finite_branch_nodes',
+    'num_missing_support_internal_nodes', 'num_non_finite_support_internal_nodes', 'is_rooted',
     'is_ultrametric', 'leaf_names_unique', 'num_duplicate_leaf_names', 'num_empty_leaf_names',
     'leaf_set_matches_first', 'rooting_matches_first', 'species_parseable',
     'species_groups_monophyletic', 'issues',
@@ -50,7 +53,9 @@ def _collect_tree_metrics(tree):
     num_multifurcation_nodes = 0
     num_zero_branch_nodes = 0
     num_negative_branch_nodes = 0
+    num_non_finite_branch_nodes = 0
     num_missing_support_internal_nodes = 0
+    num_non_finite_support_internal_nodes = 0
     for node in tree.traverse():
         num_nodes += 1
         if not node.is_leaf:
@@ -61,11 +66,21 @@ def _collect_tree_metrics(tree):
                 num_multifurcation_nodes += 1
             if (not node.is_root) and support_is_missing(node.support):
                 num_missing_support_internal_nodes += 1
-        if (not node.is_root) and (node.dist is not None):
-            if float(node.dist) == 0.0:
-                num_zero_branch_nodes += 1
-            if float(node.dist) < 0.0:
+            if node.support is not None:
+                try:
+                    if not math.isfinite(float(node.support)):
+                        num_non_finite_support_internal_nodes += 1
+                except (TypeError, ValueError):
+                    num_non_finite_support_internal_nodes += 1
+        if node.dist is not None:
+            distance = float(node.dist)
+            if not math.isfinite(distance):
+                num_non_finite_branch_nodes += 1
+            if math.isfinite(distance) and distance < 0.0:
                 num_negative_branch_nodes += 1
+            if not node.is_root:
+                if distance == 0.0:
+                    num_zero_branch_nodes += 1
     try:
         compute_node_ages(tree)
         is_ultrametric = True
@@ -78,7 +93,9 @@ def _collect_tree_metrics(tree):
         'num_multifurcation_nodes': num_multifurcation_nodes,
         'num_zero_branch_nodes': num_zero_branch_nodes,
         'num_negative_branch_nodes': num_negative_branch_nodes,
+        'num_non_finite_branch_nodes': num_non_finite_branch_nodes,
         'num_missing_support_internal_nodes': num_missing_support_internal_nodes,
+        'num_non_finite_support_internal_nodes': num_non_finite_support_internal_nodes,
         'is_rooted': is_rooted(tree),
         'is_ultrametric': is_ultrametric,
     }
@@ -118,7 +135,9 @@ def _build_parse_error_row(tree_id, inspection, issues):
         'num_multifurcation_nodes': '',
         'num_zero_branch_nodes': '',
         'num_negative_branch_nodes': '',
+        'num_non_finite_branch_nodes': '',
         'num_missing_support_internal_nodes': '',
+        'num_non_finite_support_internal_nodes': '',
         'is_rooted': '',
         'is_ultrametric': '',
         'leaf_names_unique': '',
@@ -172,7 +191,13 @@ def validate_main(args):
             rows.append(row)
             invalid_tree_ids.append(tree_id)
             continue
-        tree = read_tree(tree_string, args.format, args.quoted_node_names, quiet=True)
+        tree = read_tree(
+            tree_string,
+            args.format,
+            args.quoted_node_names,
+            quiet=True,
+            allow_non_finite=True,
+        )
         metrics = _collect_tree_metrics(tree)
         duplicate_leaf_names = _get_duplicate_leaf_names(tree)
         empty_leaf_names = _get_empty_leaf_names(tree)
@@ -182,6 +207,10 @@ def validate_main(args):
             issues.append('empty_leaf_names')
         if metrics['num_negative_branch_nodes'] > 0:
             issues.append('negative_branch_length')
+        if metrics['num_non_finite_branch_nodes'] > 0:
+            issues.append('non_finite_branch_length')
+        if metrics['num_non_finite_support_internal_nodes'] > 0:
+            issues.append('non_finite_support')
         if require_rooted and (not metrics['is_rooted']):
             issues.append('not_rooted')
         if require_ultrametric and (not metrics['is_ultrametric']):

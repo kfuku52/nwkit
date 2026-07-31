@@ -50,6 +50,7 @@ def _get_groups(tree, args):
         option_name='--infile',
         context=" for 'monophyly'",
         args=args,
+        require_monophyly=False,
     )
     return species_to_leaf_names
 
@@ -64,23 +65,24 @@ def monophyly_main(args):
         leaf_names = sorted(str(name) for name in group_to_leaf_names[group_name])
         if len(leaf_names) == 0:
             continue
-        is_monophyletic, status, _ = tree.check_monophyly(
+        is_monophyletic, status, foreign_leaves = tree.check_monophyly(
             values=leaf_names,
             prop='name',
             unrooted=args.unrooted,
         )
-        if len(leaf_names) == 1:
-            mrca = tree.search_nodes(name=leaf_names[0]).__next__()
-        else:
-            mrca = tree.common_ancestor(leaf_names)
-        mrca_leaf_names = sorted(str(name) for name in mrca.leaf_names())
-        intruder_leaf_names = sorted(set(mrca_leaf_names) - set(leaf_names))
+        intruder_leaf_names = sorted(
+            {
+                str(foreign_leaf.name)
+                for foreign_leaf in foreign_leaves
+                if str(foreign_leaf.name) not in set(leaf_names)
+            }
+        )
         row = {
             'group': group_name,
             'status': status,
             'is_monophyletic': bool(is_monophyletic),
             'num_target_taxa': len(leaf_names),
-            'num_mrca_taxa': len(mrca_leaf_names),
+            'num_mrca_taxa': len(leaf_names) + len(intruder_leaf_names),
             'num_intruder_taxa': len(intruder_leaf_names),
             'target_taxa': ','.join(leaf_names),
             'intruder_taxa': ','.join(intruder_leaf_names),

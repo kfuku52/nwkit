@@ -75,7 +75,10 @@ class TestSanitizeMain:
         sanitize_main(args)
         with open(tmp_outfile) as f:
             content = f.read()
-        assert "'" in content
+        assert "'''a'''" not in content
+        assert "'a'" in content
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd'}
 
     def test_add_double_quote(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
@@ -87,6 +90,8 @@ class TestSanitizeMain:
         with open(tmp_outfile) as f:
             content = f.read()
         assert '"' in content
+        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {'a', 'b', 'c', 'd'}
 
     def test_no_quote(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
@@ -115,6 +120,7 @@ class TestSanitizeMain:
         # Check raw output for single-quoted leaf names
         with open(tmp_outfile) as f:
             content = f.read()
+        assert "'''a'''" not in content
         for name in ['a', 'b', 'c', 'd', 'e', 'f']:
             assert f"'{name}'" in content
         # Verify tree structure: no singleton nodes should remain

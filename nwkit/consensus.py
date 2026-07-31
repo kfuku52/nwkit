@@ -48,6 +48,24 @@ def _masks_are_compatible(mask1, mask2):
     return (overlap == 0) or (overlap == mask1) or (overlap == mask2)
 
 
+def _orient_unrooted_split(mask, all_mask, anchor_bit):
+    """Represent an unrooted split by the side away from a fixed anchor."""
+    return (all_mask ^ mask) if (mask & anchor_bit) else mask
+
+
+def _branch_observation_mask(mask, all_mask, anchor_bit, comparison):
+    if comparison == 'rooted':
+        return mask
+    complement = all_mask ^ mask
+    # Keep pendant-edge lengths keyed by their singleton tip, including the
+    # anchor tip. Non-trivial splits are oriented away from the anchor.
+    if count_set_bits(mask) == 1:
+        return mask
+    if count_set_bits(complement) == 1:
+        return complement
+    return _orient_unrooted_split(mask, all_mask, anchor_bit)
+
+
 def _mask_min_order(mask, bit_to_order):
     return min(bit_to_order[bit] for bit in _iter_mask_bits(mask))
 
@@ -104,9 +122,15 @@ def _read_tree_weights(weight_tsv, num_trees):
     return weights
 
 
+def _normalize_relative_weights(weights):
+    """Scale weights for internal arithmetic without changing their ratios."""
+    max_weight = max(weights)
+    return [weight / max_weight for weight in weights]
+
+
 def _weighted_median(values, weights):
     sorted_pairs = sorted(zip(values, weights), key=lambda pair: pair[0])
-    total_weight = sum(weight for _, weight in sorted_pairs)
+    total_weight = math.fsum(weight for _, weight in sorted_pairs)
     cumulative_weight = 0.0
     for value, weight in sorted_pairs:
         cumulative_weight += weight
@@ -121,8 +145,8 @@ def _aggregate_branch_lengths(observations, method):
     out = dict()
     for mask, records in observations.items():
         if method == 'mean' and isinstance(records, tuple):
-            weighted_sum, weight_sum = records
-            out[mask] = None if weight_sum == 0 else weighted_sum / weight_sum
+            running_mean, weight_sum = records
+            out[mask] = None if weight_sum == 0 else running_mean
             continue
         values = [value for value, _ in records if value is not None]
         weights = [weight for value, weight in records if value is not None]
@@ -130,7 +154,10 @@ def _aggregate_branch_lengths(observations, method):
             out[mask] = None
             continue
         if method == 'mean':
-            out[mask] = sum(value * weight for value, weight in zip(values, weights)) / sum(weights)
+            out[mask] = (
+                math.fsum(value * weight for value, weight in zip(values, weights))
+                / math.fsum(weights)
+            )
         elif method == 'median':
             out[mask] = _weighted_median(values, weights)
         else:
@@ -166,8 +193,6 @@ def _chunk_sequence(items, num_chunks):
 
 def _initialize_clade_collection(first_tree):
     validate_unique_named_leaves(first_tree, option_name='--infile', context=" for 'consensus'")
-    if not is_rooted(first_tree):
-        raise ValueError("Consensus currently requires rooted trees. Root the input trees first.")
     leaf_names = list(first_tree.leaf_names())
     leaf_name_to_bit = {leaf_name: index for index, leaf_name in enumerate(leaf_names)}
     all_mask = (1 << len(leaf_names)) - 1
@@ -182,33 +207,68 @@ def _collect_single_tree_clade_stats(
     leaf_name_to_bit,
     collect_branch_lengths=True,
     branch_length_method=None,
+    comparison='rooted',
+    require_rooted=False,
 ):
     if branch_length_method is None:
         branch_length_method = 'median' if collect_branch_lengths else 'none'
     all_mask = (1 << len(leaf_names)) - 1
+    anchor_bit = 1 << leaf_name_to_bit[leaf_names[0]]
     clade_weights = defaultdict(float)
     branch_length_observations = {} if branch_length_method == 'mean' else defaultdict(list)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'consensus'")
-    if not is_rooted(tree):
-        raise ValueError("Consensus currently requires rooted trees. Tree {} is unrooted.".format(tree_index))
+    if require_rooted and not is_rooted(tree):
+        raise ValueError(
+            'Input tree {} is not rooted; cladefreq requires rooted trees.'.format(
+                tree_index
+            )
+        )
     if set(tree.leaf_names()) != set(leaf_names):
         raise ValueError('Leaf labels must be identical across all input trees for consensus.')
     subtree_masks = get_subtree_leaf_bitmasks(tree, leaf_name_to_bit)
+    branch_length_by_mask = dict()
+    clade_masks = set()
     for node, mask in subtree_masks.items():
         num_tips = count_set_bits(mask)
         if branch_length_method != 'none' and (not node.is_root):
+            observation_mask = _branch_observation_mask(
+                mask,
+                all_mask,
+                anchor_bit,
+                comparison,
+            )
             dist_value = None if (node.dist is None) else float(node.dist)
-            if branch_length_method == 'mean':
-                weighted_sum, weight_sum = branch_length_observations.get(mask, (0.0, 0.0))
-                if dist_value is not None:
-                    weighted_sum += dist_value * tree_weight
-                    weight_sum += tree_weight
-                branch_length_observations[mask] = (weighted_sum, weight_sum)
+            if observation_mask not in branch_length_by_mask:
+                branch_length_by_mask[observation_mask] = dist_value
             else:
-                branch_length_observations[mask].append((dist_value, tree_weight))
-        if node.is_root or (num_tips <= 1) or (num_tips >= len(leaf_names)):
+                previous_value = branch_length_by_mask[observation_mask]
+                branch_length_by_mask[observation_mask] = (
+                    None
+                    if previous_value is None or dist_value is None
+                    else previous_value + dist_value
+                )
+        if node.is_root:
             continue
-        clade_weights[mask] += tree_weight
+        if comparison == 'rooted':
+            if (num_tips <= 1) or (num_tips >= len(leaf_names)):
+                continue
+            clade_mask = mask
+        else:
+            if min(num_tips, len(leaf_names) - num_tips) <= 1:
+                continue
+            clade_mask = _orient_unrooted_split(mask, all_mask, anchor_bit)
+        clade_masks.add(clade_mask)
+    for mask in clade_masks:
+        clade_weights[mask] = tree_weight
+    for mask, dist_value in branch_length_by_mask.items():
+        if branch_length_method == 'mean':
+            branch_length_observations[mask] = (
+                (0.0, 0.0)
+                if dist_value is None
+                else (dist_value, tree_weight)
+            )
+        else:
+            branch_length_observations[mask].append((dist_value, tree_weight))
     return leaf_names, leaf_name_to_bit, all_mask, dict(clade_weights), dict(branch_length_observations)
 
 
@@ -218,10 +278,21 @@ def _merge_clade_stats(target_clade_weights, target_branch_length_observations, 
         target_clade_weights[mask] += weight
     for mask, observations in source_branch_length_observations.items():
         if isinstance(observations, tuple):
-            current_weighted_sum, current_weight_sum = target_branch_length_observations.get(mask, (0.0, 0.0))
+            source_mean, source_weight = observations
+            current = target_branch_length_observations.get(mask)
+            if current is None or current[1] == 0.0:
+                target_branch_length_observations[mask] = observations
+                continue
+            if source_weight == 0.0:
+                continue
+            current_mean, current_weight = current
+            combined_weight = current_weight + source_weight
             target_branch_length_observations[mask] = (
-                current_weighted_sum + observations[0],
-                current_weight_sum + observations[1],
+                math.fsum((
+                    current_mean * (current_weight / combined_weight),
+                    source_mean * (source_weight / combined_weight),
+                )),
+                combined_weight,
             )
         else:
             target_branch_length_observations[mask].extend(observations)
@@ -235,6 +306,8 @@ def _collect_tree_string_chunk_clade_stats(payload):
         leaf_names,
         collect_branch_lengths,
         branch_length_method,
+        comparison,
+        require_rooted,
     ) = payload
     leaf_name_to_bit = {leaf_name: index for index, leaf_name in enumerate(leaf_names)}
     clade_weights = defaultdict(float)
@@ -249,6 +322,8 @@ def _collect_tree_string_chunk_clade_stats(payload):
             leaf_name_to_bit=leaf_name_to_bit,
             collect_branch_lengths=collect_branch_lengths,
             branch_length_method=branch_length_method,
+            comparison=comparison,
+            require_rooted=require_rooted,
         )
         _merge_clade_stats(
             target_clade_weights=clade_weights,
@@ -266,6 +341,8 @@ def _collect_clade_stats_from_tree_strings(
     collect_branch_lengths=True,
     threads=1,
     branch_length_method=None,
+    comparison='rooted',
+    require_rooted=False,
 ):
     tree_string_iterator = iter(tree_strings)
     try:
@@ -285,6 +362,8 @@ def _collect_clade_stats_from_tree_strings(
         leaf_name_to_bit=leaf_name_to_bit,
         collect_branch_lengths=collect_branch_lengths,
         branch_length_method=branch_length_method,
+        comparison=comparison,
+        require_rooted=require_rooted,
     )
     clade_weights = defaultdict(float, first_clade_weights)
     branch_length_observations = {} if branch_length_method == 'mean' else defaultdict(list)
@@ -305,6 +384,8 @@ def _collect_clade_stats_from_tree_strings(
             leaf_names,
             collect_branch_lengths,
             branch_length_method,
+            comparison,
+            require_rooted,
         ))
         _merge_clade_stats(
             target_clade_weights=clade_weights,
@@ -332,6 +413,8 @@ def _collect_clade_stats_from_tree_strings(
                         leaf_names,
                         collect_branch_lengths,
                         branch_length_method,
+                        comparison,
+                        require_rooted,
                     )
                     futures.add(executor.submit(_collect_tree_string_chunk_clade_stats, payload))
                 if not futures:
@@ -347,7 +430,12 @@ def _collect_clade_stats_from_tree_strings(
     return leaf_names, leaf_name_to_bit, all_mask, dict(clade_weights), dict(branch_length_observations)
 
 
-def _collect_clade_stats(trees, tree_weights, collect_branch_lengths=True):
+def _collect_clade_stats(
+    trees,
+    tree_weights,
+    collect_branch_lengths=True,
+    comparison='rooted',
+):
     first_tree = trees[0]
     leaf_names, leaf_name_to_bit, all_mask = _initialize_clade_collection(first_tree)
     clade_weights = defaultdict(float)
@@ -361,6 +449,7 @@ def _collect_clade_stats(trees, tree_weights, collect_branch_lengths=True):
             leaf_name_to_bit=leaf_name_to_bit,
             collect_branch_lengths=collect_branch_lengths,
             branch_length_method='median' if collect_branch_lengths else 'none',
+            comparison=comparison,
         )
         _merge_clade_stats(
             target_clade_weights=clade_weights,
@@ -463,15 +552,32 @@ def _build_consensus_tree(leaf_names, all_mask, selected_masks, support_by_mask,
     return consensus_tree
 
 
-def _annotate_reference_tree(reference_tree, leaf_name_to_bit, num_leaves, clade_weights, total_weight, support_scale):
+def _annotate_reference_tree(
+    reference_tree,
+    leaf_name_to_bit,
+    num_leaves,
+    clade_weights,
+    total_weight,
+    support_scale,
+    comparison='rooted',
+):
     validate_unique_named_leaves(reference_tree, option_name='--reference', context=" for 'consensus'")
-    if not is_rooted(reference_tree):
-        raise ValueError("Consensus currently requires rooted reference trees. Root '--reference' first.")
     subtree_masks = get_subtree_leaf_bitmasks(reference_tree, leaf_name_to_bit)
+    all_mask = (1 << num_leaves) - 1
+    anchor_bit = 1 << leaf_name_to_bit[next(iter(leaf_name_to_bit))]
     for node, mask in subtree_masks.items():
-        if node.is_root or node.is_leaf or (count_set_bits(mask) >= num_leaves):
+        if node.is_root or node.is_leaf:
             continue
-        freq = clade_weights.get(mask, 0.0) / total_weight
+        num_tips = count_set_bits(mask)
+        if comparison == 'rooted':
+            if num_tips >= num_leaves:
+                continue
+            comparison_mask = mask
+        else:
+            if min(num_tips, num_leaves - num_tips) <= 1:
+                continue
+            comparison_mask = _orient_unrooted_split(mask, all_mask, anchor_bit)
+        freq = clade_weights.get(comparison_mask, 0.0) / total_weight
         node.support = _scale_support(freq, support_scale)
     reference_tree.props[TREE_FORMAT_PROP] = 0
     return reference_tree
@@ -480,7 +586,10 @@ def _annotate_reference_tree(reference_tree, leaf_name_to_bit, num_leaves, clade
 def consensus_main(args):
     method = getattr(args, 'method', 'greedy')
     branch_length = getattr(args, 'branch_length', 'none')
+    comparison = getattr(args, 'comparison', 'rooted')
     weight_tsv = getattr(args, 'weight_tsv', None)
+    if comparison not in ('rooted', 'unrooted'):
+        raise ValueError("Unsupported '--comparison': {}".format(comparison))
     if (args.min_freq < 0.0) or (args.min_freq > 1.0):
         raise ValueError("'--min-freq' must be between 0 and 1.")
     if os.path.isfile(args.infile):
@@ -492,8 +601,10 @@ def consensus_main(args):
     if num_trees == 0:
         raise ValueError('No input trees were found for consensus.')
     sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
-    tree_weights = _read_tree_weights(weight_tsv, num_trees)
-    total_weight = sum(tree_weights)
+    tree_weights = _normalize_relative_weights(
+        _read_tree_weights(weight_tsv, num_trees)
+    )
+    total_weight = math.fsum(tree_weights)
     leaf_names, leaf_name_to_bit, all_mask, clade_weights, branch_length_observations = _collect_clade_stats_from_tree_strings(
         tree_strings=tree_strings,
         tree_weights=tree_weights,
@@ -502,6 +613,7 @@ def consensus_main(args):
         collect_branch_lengths=(branch_length != 'none'),
         threads=getattr(args, 'threads', 1),
         branch_length_method=branch_length,
+        comparison=comparison,
     )
     if args.reference not in ['', None]:
         reference_tree = read_tree(args.reference, args.reference_format, args.quoted_node_names)
@@ -514,6 +626,7 @@ def consensus_main(args):
             clade_weights=clade_weights,
             total_weight=total_weight,
             support_scale=args.support_scale,
+            comparison=comparison,
         )
     else:
         selected_masks = _select_consensus_masks(

@@ -1,3 +1,4 @@
+import math
 import os
 import sys
 
@@ -7,10 +8,12 @@ from nwkit.consensus import _collect_clade_stats_from_tree_strings, _read_tree_w
 from nwkit.util import (
     count_set_bits,
     get_subtree_leaf_bitmasks,
+    is_rooted,
     iter_tree_strings,
     read_tree,
     read_tree_strings,
     support_is_missing,
+    validate_unique_named_leaves,
 )
 
 
@@ -41,7 +44,14 @@ def cladefreq_main(args):
         raise ValueError('No input trees were found for cladefreq.')
     sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
     tree_weights = _read_tree_weights(args.weight_tsv, num_trees)
-    total_weight = sum(tree_weights)
+    try:
+        total_weight = math.fsum(tree_weights)
+    except OverflowError as exc:
+        raise ValueError(
+            'The sum of tree weights is too large for cladefreq output.'
+        ) from exc
+    if not math.isfinite(total_weight):
+        raise ValueError('The sum of tree weights must be finite.')
     leaf_names, leaf_name_to_bit, _, clade_weights, _ = _collect_clade_stats_from_tree_strings(
         tree_strings=tree_strings,
         tree_weights=tree_weights,
@@ -49,10 +59,21 @@ def cladefreq_main(args):
         quoted_node_names=args.quoted_node_names,
         collect_branch_lengths=False,
         threads=getattr(args, 'threads', 1),
+        require_rooted=True,
     )
     reference_mask_to_node = dict()
     if args.reference not in ['', None]:
         reference_tree = read_tree(args.reference, args.reference_format, args.quoted_node_names)
+        validate_unique_named_leaves(
+            reference_tree,
+            option_name='--reference',
+            context=" for 'cladefreq'",
+        )
+        if not is_rooted(reference_tree):
+            raise ValueError(
+                "'--reference' must be rooted for rooted clade-frequency "
+                'comparisons.'
+            )
         if set(reference_tree.leaf_names()) != set(leaf_names):
             raise ValueError("Leaf labels in '--reference' must match the input tree collection.")
         subtree_masks = get_subtree_leaf_bitmasks(reference_tree, leaf_name_to_bit)

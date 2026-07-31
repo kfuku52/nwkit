@@ -1,4 +1,5 @@
 import json
+import math
 
 import pandas as pd
 
@@ -14,6 +15,7 @@ from nwkit.util import (
     get_subtree_leaf_name_sets,
     get_target_nodes,
     read_tree,
+    support_is_missing,
     validate_unique_named_leaves,
 )
 
@@ -41,6 +43,20 @@ DIFF_COLUMNS = (
     'source_properties',
 )
 
+NUMERIC_REL_TOLERANCE = 10 ** -9
+NUMERIC_ABS_TOLERANCE = 10 ** -12
+
+DIFFERENCE_STATUSES = frozenset((
+    'different',
+    'unresolved',
+    'target_only',
+    'source_only',
+    'ambiguous',
+    'unmatched',
+))
+
+MATCHED_STATUSES = frozenset(('exact_match', 'projected_match'))
+
 
 def _format_taxa(taxa):
     if taxa is None:
@@ -60,9 +76,34 @@ def _taxon_sets(tree):
 
 def _delta(target_value, source_value):
     try:
-        return float(target_value) - float(source_value)
+        target_number = float(target_value)
+        source_number = float(source_value)
     except (TypeError, ValueError):
         return ''
+    if not math.isfinite(target_number) or not math.isfinite(source_number):
+        raise ValueError('Numeric values must be finite to calculate a delta.')
+    scale = max(abs(target_number), abs(source_number))
+    if scale == 0.0:
+        return 0.0
+    delta = scale * math.fsum((
+        target_number / scale,
+        -source_number / scale,
+    ))
+    if not math.isfinite(delta):
+        raise ValueError('The numeric delta is too large to represent.')
+    return delta
+
+
+def _support_value(node):
+    if node is None or support_is_missing(node.support):
+        return ''
+    return node.support
+
+
+def _name_value(node):
+    if node is None or node.name is None:
+        return ''
+    return node.name
 
 
 def _property_json(node, properties):
@@ -80,13 +121,167 @@ def _property_json(node, properties):
     return json.dumps(values, sort_keys=True, ensure_ascii=False)
 
 
+def _values_equal(target_value, source_value):
+    if isinstance(target_value, dict) and isinstance(source_value, dict):
+        return (
+            target_value.keys() == source_value.keys()
+            and all(
+                _values_equal(target_value[key], source_value[key])
+                for key in target_value
+            )
+        )
+    if (
+        isinstance(target_value, (int, float))
+        and not isinstance(target_value, bool)
+        and isinstance(source_value, (int, float))
+        and not isinstance(source_value, bool)
+    ):
+        return math.isclose(
+            float(target_value),
+            float(source_value),
+            rel_tol=NUMERIC_REL_TOLERANCE,
+            abs_tol=NUMERIC_ABS_TOLERANCE,
+        )
+    return target_value == source_value
+
+
+def _property_values(serialized):
+    if serialized in ('', None):
+        return {}
+    return json.loads(serialized)
+
+
+_MISSING_EDGE_VALUE = object()
+
+
+def _node_report_values(node, properties):
+    if node is None:
+        return {
+            'name': '',
+            'support': '',
+            'length': '',
+            'properties': '',
+        }
+    return {
+        'name': _name_value(node),
+        'support': _support_value(node),
+        'length': node.dist if node.dist is not None else '',
+        'properties': _property_json(node, properties),
+    }
+
+
+def _coalesce_root_edge_annotation(values):
+    """Return the unique/equal non-missing value, or flag a conflict."""
+    present = [value for value in values if value is not _MISSING_EDGE_VALUE]
+    if not present:
+        return _MISSING_EDGE_VALUE, False
+    first = present[0]
+    if all(_values_equal(first, value) for value in present[1:]):
+        return first, False
+    return _MISSING_EDGE_VALUE, True
+
+
+def _root_edge_report_values(nodes, properties):
+    """Aggregate the two halves introduced by rooting a physical edge."""
+    conflicts = []
+
+    names = [
+        node.name if node.name not in (None, '') else _MISSING_EDGE_VALUE
+        for node in nodes
+    ]
+    name, conflict = _coalesce_root_edge_annotation(names)
+    if conflict:
+        conflicts.append('name')
+
+    supports = [
+        _MISSING_EDGE_VALUE if support_is_missing(node.support) else node.support
+        for node in nodes
+    ]
+    support, conflict = _coalesce_root_edge_annotation(supports)
+    if conflict:
+        conflicts.append('support')
+
+    if any(node.dist is None for node in nodes):
+        length = ''
+    else:
+        try:
+            length = math.fsum(float(node.dist) for node in nodes)
+        except OverflowError as exc:
+            raise ValueError(
+                'The physical root-edge length total is too large to report.'
+            ) from exc
+        if not math.isfinite(length):
+            raise ValueError(
+                'The physical root-edge length total must be finite.'
+            )
+
+    node_properties = [
+        _property_values(_property_json(node, properties))
+        for node in nodes
+    ]
+    property_values = {}
+    for _, output_prop in properties:
+        values = [
+            values.get(output_prop, _MISSING_EDGE_VALUE)
+            for values in node_properties
+        ]
+        value, conflict = _coalesce_root_edge_annotation(values)
+        if conflict:
+            conflicts.append(output_prop)
+        elif value is not _MISSING_EDGE_VALUE:
+            property_values[output_prop] = value
+
+    return {
+        'name': '' if name is _MISSING_EDGE_VALUE else name,
+        'support': '' if support is _MISSING_EDGE_VALUE else support,
+        'length': length,
+        'properties': (
+            json.dumps(property_values, sort_keys=True, ensure_ascii=False)
+            if property_values else ''
+        ),
+    }, tuple(conflicts)
+
+
+def _row_has_value_difference(row):
+    if row['record_type'] != 'node' or row['status'] not in MATCHED_STATUSES:
+        return False
+    return any((
+        not _values_equal(row['target_name'], row['source_name']),
+        not _values_equal(row['target_support'], row['source_support']),
+        not _values_equal(row['target_length'], row['source_length']),
+        not _values_equal(
+            _property_values(row['target_properties']),
+            _property_values(row['source_properties']),
+        ),
+    ))
+
+
+def _rows_have_differences(rows, comparison='rooted'):
+    return any(
+        (
+            row['status'] in DIFFERENCE_STATUSES
+            or _row_has_value_difference(row)
+        )
+        and not (
+            comparison == 'unrooted'
+            and row['record_type'] == 'summary'
+            and row['comparison'] == 'root_split'
+        )
+        for row in rows
+    )
+
+
 def _row_for_nodes(status, reason, comparison, target_node, source_node,
                    shared_key, target_taxa, source_taxa, target_ids, source_ids,
-                   properties):
-    target_support = target_node.support if target_node is not None else ''
-    source_support = source_node.support if source_node is not None else ''
-    target_length = target_node.dist if target_node is not None else ''
-    source_length = source_node.dist if source_node is not None else ''
+                   properties, target_values=None, source_values=None):
+    if target_values is None:
+        target_values = _node_report_values(target_node, properties)
+    if source_values is None:
+        source_values = _node_report_values(source_node, properties)
+    target_support = target_values['support']
+    source_support = source_values['support']
+    target_length = target_values['length']
+    source_length = source_values['length']
     return {
         'record_type': 'node',
         'comparison': comparison,
@@ -98,16 +293,16 @@ def _row_for_nodes(status, reason, comparison, target_node, source_node,
         'shared_taxa_or_split': shared_key,
         'target_taxa': _format_taxa(target_taxa),
         'source_taxa': _format_taxa(source_taxa),
-        'target_name': target_node.name if target_node is not None else '',
-        'source_name': source_node.name if source_node is not None else '',
+        'target_name': target_values['name'],
+        'source_name': source_values['name'],
         'target_support': target_support,
         'source_support': source_support,
         'support_delta': _delta(target_support, source_support),
         'target_length': target_length,
         'source_length': source_length,
         'length_delta': _delta(target_length, source_length),
-        'target_properties': _property_json(target_node, properties),
-        'source_properties': _property_json(source_node, properties),
+        'target_properties': target_values['properties'],
+        'source_properties': source_values['properties'],
     }
 
 
@@ -220,10 +415,20 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
 
     def resolved_candidate(candidates):
         if len(candidates) == 1:
-            return candidates[0], True
+            node = candidates[0]
+            return node, True, _node_report_values(node, properties), ()
         if is_root_pair(candidates):
-            return None, True
-        return None, False
+            values, conflicts = _root_edge_report_values(candidates, properties)
+            return None, True, values, conflicts
+        return None, False, _node_report_values(None, properties), ()
+
+    def root_edge_conflict_reason(target_conflicts, source_conflicts):
+        details = []
+        if target_conflicts:
+            details.append('target={}'.format(','.join(target_conflicts)))
+        if source_conflicts:
+            details.append('source={}'.format(','.join(source_conflicts)))
+        return 'conflicting_root_edge_annotations:{}'.format(';'.join(details))
 
     target_nodes = eligible_nodes(target, target_taxa_by_node)
     source_nodes = eligible_nodes(source, source_taxa_by_node)
@@ -241,11 +446,28 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
     for split in all_splits:
         target_candidates = target_groups.get(split, [])
         source_candidates = source_groups.get(split, [])
-        target_node, target_resolved = resolved_candidate(target_candidates)
-        source_node, source_resolved = resolved_candidate(source_candidates)
+        (
+            target_node,
+            target_resolved,
+            target_values,
+            target_conflicts,
+        ) = resolved_candidate(target_candidates)
+        (
+            source_node,
+            source_resolved,
+            source_values,
+            source_conflicts,
+        ) = resolved_candidate(source_candidates)
         if target_candidates and source_candidates and target_resolved and source_resolved:
-            status = 'exact_match' if same_leaf_set else 'projected_match'
-            reason = 'matching_unrooted_split'
+            if target_conflicts or source_conflicts:
+                status = 'ambiguous'
+                reason = root_edge_conflict_reason(
+                    target_conflicts,
+                    source_conflicts,
+                )
+            else:
+                status = 'exact_match' if same_leaf_set else 'projected_match'
+                reason = 'matching_unrooted_split'
         elif not target_candidates:
             status = 'source_only'
             reason = 'split_absent_from_target'
@@ -273,6 +495,8 @@ def _unrooted_rows(target, source, shared_taxa, target_class, properties,
             target_ids=target_ids,
             source_ids=source_ids,
             properties=properties,
+            target_values=target_values,
+            source_values=source_values,
         ))
     return rows
 
@@ -357,9 +581,8 @@ def diff_main(args):
         print(dataframe.to_csv(sep='\t', index=False), end='')
     else:
         dataframe.to_csv(args.outfile, sep='\t', index=False)
-    if getattr(args, 'fail_on_difference', False):
-        differences = dataframe[
-            dataframe['status'].isin(('different', 'unresolved', 'target_only', 'source_only', 'ambiguous', 'unmatched'))
-        ]
-        if not differences.empty:
-            raise ValueError('Tree differences were detected.')
+    if (
+        getattr(args, 'fail_on_difference', False)
+        and _rows_have_differences(rows, comparison=getattr(args, 'comparison', 'rooted'))
+    ):
+        raise ValueError('Tree differences were detected.')

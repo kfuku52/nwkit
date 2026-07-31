@@ -1,3 +1,5 @@
+import json
+
 import pandas as pd
 import pytest
 
@@ -80,6 +82,76 @@ def test_compose_json_manifest_resolves_relative_paths(tmp_path):
     compose_main(args)
     output = read_tree(str(outfile), format='1', quoted_node_names=True, quiet=True)
     assert output.common_ancestor(['A', 'B']).name == 'AB'
+
+
+def test_compose_property_targeting_name_selects_name_format(tmp_path):
+    topology = tmp_path / 'topology.nwk'
+    labels = tmp_path / 'labels.nwk'
+    outfile = tmp_path / 'output.nwk'
+    topology.write_text('((A:1,B:1)90:1,C:1);')
+    labels.write_text('((A:1,B:1):1[&&NHX:label=AB],C:1);')
+    args = make_args(
+        infile=str(topology),
+        outfile=str(outfile),
+        format='0',
+        outformat='auto',
+        manifest=None,
+        root_source=None,
+        name_source=None,
+        support_source=None,
+        length_source=None,
+        property_source=['label=name@{}'.format(labels)],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=None,
+    )
+    compose_main(args)
+    output = read_tree(str(outfile), format='1', quoted_node_names=True, quiet=True)
+    assert output.common_ancestor(['A', 'B']).name == 'AB'
+
+
+def test_compose_leaf_name_property_preserves_internal_support(tmp_path):
+    topology = tmp_path / 'topology.nwk'
+    labels = tmp_path / 'labels.nwk'
+    manifest = tmp_path / 'compose.json'
+    outfile = tmp_path / 'output.nwk'
+    topology.write_text('((A:1,B:1)90:1,C:1);')
+    labels.write_text('((A:1[&&NHX:label=X],B:1):1,C:1);')
+    manifest.write_text(json.dumps({
+        'properties': [{
+            'path': labels.name,
+            'source': 'label',
+            'target': 'name',
+            'target_class': 'leaf',
+        }],
+    }))
+    args = make_args(
+        infile=str(topology),
+        outfile=str(outfile),
+        format='0',
+        outformat='auto',
+        manifest=str(manifest),
+        root_source=None,
+        name_source=None,
+        support_source=None,
+        length_source=None,
+        property_source=[],
+        source_format='auto',
+        taxon_mode='exact',
+        policy='compatible-only',
+        match_basis='clade',
+        allow_projected_values=False,
+        report=None,
+    )
+
+    compose_main(args)
+
+    output = read_tree(str(outfile), format='0', quoted_node_names=True, quiet=True)
+    assert set(output.leaf_names()) == {'X', 'B', 'C'}
+    assert output.common_ancestor(['X', 'B']).support == pytest.approx(90.0)
 
 
 def test_compose_blocks_projected_lengths_without_opt_in(tmp_nwk, tmp_path):

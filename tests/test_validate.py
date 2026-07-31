@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from nwkit.validate import validate_main
 from tests.helpers import make_args
@@ -11,6 +12,113 @@ def _write_tree_collection(tmp_path, trees, name='trees.nwk'):
 
 
 class TestValidateMain:
+    def test_reports_non_finite_branch_length(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('(A:nan,B:0);', 'nonfinite.nwk')
+        outfile = tmp_path / 'validate.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            check_species=False,
+            require_rooted=False,
+            require_ultrametric=False,
+            require_same_leaf_set=True,
+            fail_on_issue=False,
+        )
+        validate_main(args)
+        table = pd.read_csv(outfile, sep='\t')
+        assert table.loc[0, 'status'] == 'invalid'
+        assert table.loc[0, 'num_non_finite_branch_nodes'] == 1
+        assert 'non_finite_branch_length' in table.loc[0, 'issues']
+        assert bool(table.loc[0, 'is_ultrametric']) is False
+
+    @pytest.mark.parametrize('root_length', ['nan', 'inf'])
+    def test_reports_non_finite_root_stem(self, tmp_nwk, tmp_path, root_length):
+        infile = tmp_nwk(
+            '(A:1,B:1):{};'.format(root_length),
+            'nonfinite-root.nwk',
+        )
+        outfile = tmp_path / 'validate.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            format=0,
+            check_species=False,
+            require_rooted=False,
+            require_ultrametric=False,
+            require_same_leaf_set=True,
+            fail_on_issue=False,
+        )
+
+        validate_main(args)
+
+        table = pd.read_csv(outfile, sep='\t')
+        assert table.loc[0, 'status'] == 'invalid'
+        assert table.loc[0, 'num_non_finite_branch_nodes'] == 1
+        assert 'non_finite_branch_length' in table.loc[0, 'issues']
+
+    def test_reports_negative_root_stem(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('(A:1,B:1):-1;', 'negative-root.nwk')
+        outfile = tmp_path / 'validate.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            format=1,
+            check_species=False,
+            require_rooted=False,
+            require_ultrametric=False,
+            require_same_leaf_set=True,
+            fail_on_issue=False,
+        )
+
+        validate_main(args)
+
+        table = pd.read_csv(outfile, sep='\t')
+        assert table.loc[0, 'status'] == 'invalid'
+        assert table.loc[0, 'num_negative_branch_nodes'] == 1
+        assert 'negative_branch_length' in table.loc[0, 'issues']
+
+    @pytest.mark.parametrize('root_support', ['nan', 'inf'])
+    def test_reports_non_finite_root_support(self, tmp_nwk, tmp_path, root_support):
+        infile = tmp_nwk(
+            '(A:1,B:1){};'.format(root_support),
+            'nonfinite-root-support.nwk',
+        )
+        outfile = tmp_path / 'validate.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            format=0,
+            check_species=False,
+            require_rooted=False,
+            require_ultrametric=False,
+            require_same_leaf_set=True,
+            fail_on_issue=False,
+        )
+
+        validate_main(args)
+
+        table = pd.read_csv(outfile, sep='\t')
+        assert table.loc[0, 'status'] == 'invalid'
+        assert table.loc[0, 'num_non_finite_support_internal_nodes'] == 1
+        assert 'non_finite_support' in table.loc[0, 'issues']
+
+    def test_missing_branch_lengths_are_not_ultrametric(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A,B),C);', 'missing-lengths.nwk')
+        outfile = tmp_path / 'validate.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            check_species=False,
+            require_rooted=False,
+            require_ultrametric=True,
+            require_same_leaf_set=True,
+            fail_on_issue=False,
+        )
+        validate_main(args)
+        table = pd.read_csv(outfile, sep='\t')
+        assert bool(table.loc[0, 'is_ultrametric']) is False
+        assert 'not_ultrametric' in table.loc[0, 'issues']
+
     def test_reports_duplicate_leaf_and_negative_branch_length(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('((A:-1,A:1):1,B:1);', 'tree.nwk')
         outfile = tmp_path / 'validate.tsv'

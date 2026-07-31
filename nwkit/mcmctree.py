@@ -77,16 +77,46 @@ def _validate_threads(threads):
     return threads
 
 
+def _read_limited_response_text(response):
+    iter_content = getattr(response, 'iter_content', None)
+    if not callable(iter_content):
+        text = str(response.text)
+        if len(text.encode('utf-8')) > TIMETREE_RESPONSE_MAX_BYTES:
+            raise ValueError('TimeTree response exceeds the size limit.')
+        return text
+    chunks = []
+    byte_count = 0
+    encoding = getattr(response, 'encoding', None) or 'utf-8'
+    for chunk in iter_content(chunk_size=64 * 1024):
+        if not chunk:
+            continue
+        if isinstance(chunk, str):
+            try:
+                chunk = chunk.encode(encoding)
+            except (LookupError, UnicodeError) as exc:
+                raise ValueError(
+                    'TimeTree response declared an invalid text encoding.'
+                ) from exc
+        byte_count += len(chunk)
+        if byte_count > TIMETREE_RESPONSE_MAX_BYTES:
+            raise ValueError('TimeTree response exceeds the size limit.')
+        chunks.append(chunk)
+    try:
+        return b''.join(chunks).decode(encoding, errors='replace')
+    except (LookupError, UnicodeError) as exc:
+        raise ValueError(
+            'TimeTree response declared an invalid text encoding.'
+        ) from exc
+
+
 def _fetch_timetree_url(request_url):
     start = time.time()
     last_error = None
     for attempt_index in range(TIMETREE_REQUEST_ATTEMPTS):
         response = None
         try:
-            response = requests.get(url=request_url, timeout=30)
-            text = str(response.text)
-            if len(text.encode('utf-8')) > TIMETREE_RESPONSE_MAX_BYTES:
-                raise ValueError('TimeTree response exceeds the size limit.')
+            response = requests.get(url=request_url, timeout=30, stream=True)
+            text = _read_limited_response_text(response)
             status_code = response.status_code
             should_retry_status = (
                 isinstance(response, requests.Response)

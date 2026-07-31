@@ -9,6 +9,7 @@ from nwkit.sample import (
     parse_filter_spec,
     sample_main,
     select_max_pd,
+    select_ranked,
     sort_candidates,
 )
 from tests.helpers import make_args
@@ -98,6 +99,162 @@ class TestSampleMain:
             expected.append({'leaf_name': best_leaf, 'pd_gain': best_gain, 'pd_total': pd_total})
 
         assert select_max_pd(candidate_order, path_edges_by_leaf, 4) == expected
+
+    def test_max_pd_retains_small_differences_below_a_large_shared_edge(self):
+        tree = Tree('((A:1,B:2):1e308,C:3);', parser=1)
+        candidate_order = ['A', 'B']
+        leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        path_edges_by_leaf = {
+            leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
+            for leaf_name in candidate_order
+        }
+
+        selected = select_max_pd(candidate_order, path_edges_by_leaf, 2)
+
+        assert [row['leaf_name'] for row in selected] == ['B', 'A']
+        assert selected[1]['pd_gain'] == pytest.approx(1.0)
+
+    def test_ranked_pd_retains_uncovered_small_edge_after_large_path(self):
+        tree = Tree('((A:1,B:2):1e308,C:3);', parser=1)
+        candidate_order = ['A', 'B']
+        leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        path_edges_by_leaf = {
+            leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
+            for leaf_name in candidate_order
+        }
+
+        selected = select_ranked(candidate_order, path_edges_by_leaf, 2)
+
+        assert [row['leaf_name'] for row in selected] == ['A', 'B']
+        assert selected[1]['pd_gain'] == pytest.approx(2.0)
+
+    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
+    @pytest.mark.parametrize(
+        'bad_length',
+        ['-1', 'inf', 'nan'],
+        ids=('negative', 'infinite', 'nan'),
+    )
+    def test_rejects_invalid_branch_lengths_before_outputs(
+            self, tmp_path, method, bad_length):
+        tree_path = tmp_path / 'tree.nwk'
+        out_tree = tmp_path / 'sampled.nwk'
+        out_table = tmp_path / 'sampled.tsv'
+        tree_path.write_text(
+            '(A:{},B:1,C:1);'.format(bad_length),
+            encoding='utf-8',
+        )
+        args = make_sample_args(
+            infile=str(tree_path),
+            outfile=str(out_tree),
+            report=str(out_table),
+            method=method,
+        )
+
+        with pytest.raises(ValueError, match='finite'):
+            sample_main(args)
+
+        assert not out_tree.exists()
+        assert not out_table.exists()
+
+    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
+    def test_rejects_unrepresentable_path_gain_before_outputs(
+            self, tmp_path, method):
+        tree_path = tmp_path / 'tree.nwk'
+        out_tree = tmp_path / 'sampled.nwk'
+        out_table = tmp_path / 'sampled.tsv'
+        tree_path.write_text(
+            '((A:1e308,B:1):1e308,C:1);',
+            encoding='utf-8',
+        )
+        args = make_sample_args(
+            infile=str(tree_path),
+            outfile=str(out_tree),
+            report=str(out_table),
+            method=method,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match='gain exceeds the finite floating-point range',
+        ):
+            sample_main(args)
+
+        assert not out_tree.exists()
+        assert not out_table.exists()
+
+    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
+    def test_rejects_unrepresentable_pd_total_before_outputs(
+            self, tmp_path, method):
+        tree_path = tmp_path / 'tree.nwk'
+        out_tree = tmp_path / 'sampled.nwk'
+        out_table = tmp_path / 'sampled.tsv'
+        tree_path.write_text(
+            '(A:1e308,B:1e308,C:1);',
+            encoding='utf-8',
+        )
+        args = make_sample_args(
+            infile=str(tree_path),
+            outfile=str(out_tree),
+            report=str(out_table),
+            method=method,
+            n=2,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match='total exceeds the finite floating-point range',
+        ):
+            sample_main(args)
+
+        assert not out_tree.exists()
+        assert not out_table.exists()
+
+    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
+    def test_rejects_total_just_above_maximum_float(
+            self, tmp_path, method):
+        tree_path = tmp_path / 'tree.nwk'
+        out_tree = tmp_path / 'sampled.nwk'
+        out_table = tmp_path / 'sampled.tsv'
+        maximum_float = float.fromhex('0x1.fffffffffffffp+1023')
+        tree_path.write_text(
+            '(A:{},B:1,C:0);'.format(maximum_float),
+            encoding='utf-8',
+        )
+        args = make_sample_args(
+            infile=str(tree_path),
+            outfile=str(out_tree),
+            report=str(out_table),
+            method=method,
+            n=2,
+        )
+
+        with pytest.raises(
+            ValueError,
+            match='total exceeds the finite floating-point range',
+        ):
+            sample_main(args)
+
+        assert not out_tree.exists()
+        assert not out_table.exists()
+
+    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
+    def test_missing_branch_lengths_use_unit_pd_edges(
+            self, tmp_path, method):
+        tree_path = tmp_path / 'tree.nwk'
+        out_tree = tmp_path / 'sampled.nwk'
+        out_table = tmp_path / 'sampled.tsv'
+        tree_path.write_text('(A,B,C);', encoding='utf-8')
+        args = make_sample_args(
+            infile=str(tree_path),
+            outfile=str(out_tree),
+            report=str(out_table),
+            method=method,
+        )
+
+        sample_main(args)
+
+        selected = pd.read_csv(out_table, sep='\t')
+        assert selected.loc[0, 'pd_gain'] == pytest.approx(1.0)
 
     def test_sample_without_trait_uses_tree_only_max_pd(self, tmp_path):
         tree_path = tmp_path / 'tree.nwk'

@@ -44,6 +44,70 @@ def make_mcmctree_args(**kwargs):
     return Namespace(**defaults)
 
 
+def test_timetree_response_is_streamed_without_accessing_text(monkeypatch):
+    observed = {}
+
+    class FakeResponse:
+        status_code = 200
+        encoding = 'utf-8'
+        closed = False
+
+        @property
+        def text(self):
+            raise AssertionError('streaming path must not access response.text')
+
+        def iter_content(self, chunk_size):
+            observed['chunk_size'] = chunk_size
+            yield b'precomputed_median,precomputed_age\n'
+            yield b'10,10\n'
+
+        def close(self):
+            self.closed = True
+
+    response = FakeResponse()
+
+    def fake_get(**kwargs):
+        observed.update(kwargs)
+        return response
+
+    monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+    record = mcmctree_mod._fetch_timetree_url('https://example.test/api/1+2')
+
+    assert observed['stream'] is True
+    assert observed['chunk_size'] == 64 * 1024
+    assert record['status_code'] == 200
+    assert record['text'].endswith('10,10\n')
+    assert response.closed is True
+
+
+def test_timetree_stream_enforces_decompressed_size_limit(monkeypatch):
+    class FakeResponse:
+        encoding = 'utf-8'
+
+        @property
+        def text(self):
+            raise AssertionError('streaming path must not access response.text')
+
+        def iter_content(self, chunk_size):
+            yield b'1234'
+            yield b'5678'
+
+    monkeypatch.setattr(mcmctree_mod, 'TIMETREE_RESPONSE_MAX_BYTES', 7)
+    with pytest.raises(ValueError, match='size limit'):
+        mcmctree_mod._read_limited_response_text(FakeResponse())
+
+
+def test_timetree_stream_rejects_unknown_response_encoding():
+    class FakeResponse:
+        encoding = 'definitely-not-a-codec'
+
+        def iter_content(self, chunk_size):
+            yield b'ok'
+
+    with pytest.raises(ValueError, match='invalid text encoding'):
+        mcmctree_mod._read_limited_response_text(FakeResponse())
+
+
 class TestAddCommonAncConstraint:
     @pytest.mark.parametrize('value', ['not-a-number', 'nan', 'inf'])
     def test_rejects_non_finite_or_non_numeric_bounds(self, value):
@@ -426,7 +490,8 @@ class TestMcmctreeMain:
             status_code = 200
             text = 'precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\r\n87.2,87.2,81.3,91'
 
-        def fake_get(url, timeout):
+        def fake_get(url, timeout, stream):
+            assert stream is True
             called_urls.append(url)
             return FakeResponse()
 

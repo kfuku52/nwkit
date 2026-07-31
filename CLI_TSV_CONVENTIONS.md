@@ -32,9 +32,11 @@ unique to one command.
 `sample`, and `skim` follow one shared contract:
 
 - The first-class key is `leaf_name`.
-- `leaf_name` values are exact tree tip labels, must be non-empty, and must be
-  unique. Values such as `001`, `NA`, `NaN`, and `null` are preserved as literal
-  labels rather than inferred as numbers or missing data.
+- `leaf_name` values are exact tree tip labels and must be non-empty. They are
+  unique except in `draw --tip-image-manifest`, where multiple ranked image
+  rows may describe one tip and the first row is used. Values such as `001`,
+  `NA`, `NaN`, and `null` are preserved as literal labels rather than inferred
+  as numbers or missing data.
 - Required command-specific data columns must be present. Extra columns are
   retained where the command can use or report them.
 - `--missing-values CSV` controls missing markers in non-key columns. The
@@ -50,7 +52,7 @@ unique to one command.
 |---|---|---|
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
 | `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
-| `draw --tip-image-manifest` | `leaf_name`, `local_path` | One row per tip. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
+| `draw --tip-image-manifest` | `leaf_name`, `local_path` | Multiple rows per tip are allowed and the first is used. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
 | `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. |
 | `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |
 | `--weight-tsv` | `weight` | Positive finite weights. Optional `tree_id` values are unique, 1-based input-tree numbers; without it, row order is used and row count must equal tree count. |

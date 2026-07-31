@@ -131,15 +131,61 @@ def _edge_length_vector(tree, comparison):
             key = frozenset(subtree_taxa[node])
         else:
             key = _canonical_unrooted_split(subtree_taxa[node], all_taxa)
-        vector[key] = vector.get(key, 0.0) + float(node.dist)
-    return vector
+        vector.setdefault(key, []).append(float(node.dist))
+    return {
+        key: tuple(lengths)
+        for key, lengths in vector.items()
+    }
+
+
+def _stable_component_difference(positive, negative):
+    scale = max(
+        (
+            abs(value)
+            for value in (*positive, *negative)
+        ),
+        default=0.0,
+    )
+    if scale == 0.0:
+        return 0.0
+    difference = scale * math.fsum(
+        [
+            *(value / scale for value in positive),
+            *(-value / scale for value in negative),
+        ]
+    )
+    if not math.isfinite(difference):
+        raise ValueError(
+            'A branch-length difference is too large to represent.'
+        )
+    return difference
 
 
 def _vector_distances(vector1, vector2):
     keys = vector1.keys() | vector2.keys()
-    differences = [vector1.get(key, 0.0) - vector2.get(key, 0.0) for key in keys]
-    weighted_rf = math.fsum(abs(difference) for difference in differences)
-    branch_score = math.sqrt(math.fsum(difference ** 2 for difference in differences))
+    differences = [
+        _stable_component_difference(
+            vector1.get(key, ()),
+            vector2.get(key, ()),
+        )
+        for key in keys
+    ]
+    try:
+        weighted_rf = math.fsum(
+            abs(difference)
+            for difference in differences
+        )
+    except OverflowError as exc:
+        raise ValueError(
+            'The weighted RF distance is too large to represent.'
+        ) from exc
+    branch_score = 0.0
+    for difference in differences:
+        branch_score = math.hypot(branch_score, difference)
+    if not math.isfinite(weighted_rf) or not math.isfinite(branch_score):
+        raise ValueError(
+            'The branch-length distance is too large to represent.'
+        )
     return weighted_rf, branch_score
 
 
@@ -160,23 +206,40 @@ def _path_distance(tree1, tree2, leaf_names, topological):
     root_sides1 = _binary_root_sides(tree1) if topological else None
     root_sides2 = _binary_root_sides(tree2) if topological else None
 
+    def path_edge_lengths(first_leaf, second_leaf):
+        first_ancestors = set()
+        cursor = first_leaf
+        while cursor is not None:
+            first_ancestors.add(cursor)
+            cursor = cursor.up
+        common_ancestor = second_leaf
+        while common_ancestor not in first_ancestors:
+            common_ancestor = common_ancestor.up
+        lengths = []
+        for leaf in (first_leaf, second_leaf):
+            cursor = leaf
+            while cursor is not common_ancestor:
+                lengths.append(float(cursor.dist))
+                cursor = cursor.up
+        return lengths
+
     def differences():
         for leaf_name1, leaf_name2 in combinations(leaf_names, 2):
             leaf1_tree1 = leaves1[leaf_name1]
             leaf2_tree1 = leaves1[leaf_name2]
             leaf1_tree2 = leaves2[leaf_name1]
             leaf2_tree2 = leaves2[leaf_name2]
-            distance1 = tree1.get_distance(
-                leaf1_tree1,
-                leaf2_tree1,
-                topological=topological,
-            )
-            distance2 = tree2.get_distance(
-                leaf1_tree2,
-                leaf2_tree2,
-                topological=topological,
-            )
             if topological:
+                distance1 = tree1.get_distance(
+                    leaf1_tree1,
+                    leaf2_tree1,
+                    topological=True,
+                )
+                distance2 = tree2.get_distance(
+                    leaf1_tree2,
+                    leaf2_tree2,
+                    topological=True,
+                )
                 if (
                     root_sides1 is not None
                     and root_sides1[leaf_name1] != root_sides1[leaf_name2]
@@ -187,9 +250,19 @@ def _path_distance(tree1, tree2, leaf_names, topological):
                     and root_sides2[leaf_name1] != root_sides2[leaf_name2]
                 ):
                     distance2 -= 1
-            yield float(distance1) - float(distance2)
+                yield float(distance1) - float(distance2)
+                continue
+            yield _stable_component_difference(
+                path_edge_lengths(leaf1_tree1, leaf2_tree1),
+                path_edge_lengths(leaf1_tree2, leaf2_tree2),
+            )
 
-    return math.sqrt(math.fsum(difference ** 2 for difference in differences()))
+    distance = 0.0
+    for difference in differences():
+        distance = math.hypot(distance, difference)
+    if not math.isfinite(distance):
+        raise ValueError('The path distance is too large to represent.')
+    return distance
 
 
 def _calculate_distances(tree1, tree2, leaf_names, metrics, comparison):

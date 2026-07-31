@@ -1,3 +1,7 @@
+import json as json_lib
+import math
+import time
+
 import pandas as pd
 import pytest
 from ete4 import Tree
@@ -69,6 +73,21 @@ def _assert_reroot_annotations(tree, expected_by_split):
         assert leaf.props['tip_tag'] == 'tip_{}'.format(leaf.name)
 
 
+def _scaled_branch_profile(tree, scale=1.0):
+    all_taxa = frozenset(tree.leaf_names())
+    profile = dict()
+    for node in tree.traverse():
+        if node.is_root:
+            continue
+        side = frozenset(node.leaf_names())
+        split = canonical_split(side, all_taxa - side)
+        profile.setdefault(split, list()).append(float(node.dist) / scale)
+    return {
+        split: sorted(lengths)
+        for split, lengths in profile.items()
+    }
+
+
 def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid, taxid_to_name=None, rank_by_taxid=None):
     if taxid_to_name is None:
         taxid_to_name = {int(taxid): str(taxid) for taxid in lineage_by_taxid.keys()}
@@ -105,13 +124,26 @@ def install_fake_ncbi(monkeypatch, name_to_taxid, lineage_by_taxid, taxid_to_nam
     monkeypatch.setattr(constrain_mod.ete4, 'NCBITaxa', FakeNCBI)
 
 def install_fake_timetree(monkeypatch, upload_html, newick_text, upload_status=200, newick_status=200):
+    calls = list()
+
     class FakeResponse:
         def __init__(self, text, status_code):
             self.text = text
             self.status_code = status_code
+            self.headers = {}
+            self.encoding = 'utf-8'
+
+        def iter_content(self, chunk_size):
+            payload = self.text.encode(self.encoding)
+            for offset in range(0, len(payload), chunk_size):
+                yield payload[offset:offset + chunk_size]
+
+        def close(self):
+            pass
 
     class FakeSession:
-        def post(self, url, files=None, data=None, timeout=None):
+        def post(self, url, files=None, data=None, timeout=None, stream=False):
+            calls.append((url, stream))
             if url.endswith('/ajax/prune/load_names/'):
                 return FakeResponse(upload_html, upload_status)
             if url.endswith('/ajax/newick/prunetree/download'):
@@ -119,28 +151,51 @@ def install_fake_timetree(monkeypatch, upload_html, newick_text, upload_status=2
             raise AssertionError('Unexpected TimeTree URL: {}'.format(url))
 
     monkeypatch.setattr(root_mod.requests, 'Session', FakeSession)
+    return calls
 
 def install_fake_opentree(monkeypatch, tnrs_json, induced_subtree_json, tnrs_status=200, induced_subtree_status=200):
+    calls = list()
+
     class FakeResponse:
         def __init__(self, text, status_code, json_data=None):
             self.text = text
             self.status_code = status_code
             self._json_data = json_data
+            self.headers = {}
+            self.encoding = 'utf-8'
 
         def json(self):
             if self._json_data is None:
                 raise AssertionError('JSON payload was not configured')
             return self._json_data
 
+        def iter_content(self, chunk_size):
+            payload = self.text.encode(self.encoding)
+            for offset in range(0, len(payload), chunk_size):
+                yield payload[offset:offset + chunk_size]
+
+        def close(self):
+            pass
+
     class FakeSession:
-        def post(self, url, json=None, timeout=None):
+        def post(self, url, json=None, timeout=None, stream=False):
+            calls.append((url, stream))
             if url.endswith('/v3/tnrs/match_names'):
-                return FakeResponse('', tnrs_status, json_data=tnrs_json)
+                return FakeResponse(
+                    json_lib.dumps(tnrs_json),
+                    tnrs_status,
+                    json_data=tnrs_json,
+                )
             if url.endswith('/v3/tree_of_life/induced_subtree'):
-                return FakeResponse('', induced_subtree_status, json_data=induced_subtree_json)
+                return FakeResponse(
+                    json_lib.dumps(induced_subtree_json),
+                    induced_subtree_status,
+                    json_data=induced_subtree_json,
+                )
             raise AssertionError('Unexpected OpenTree URL: {}'.format(url))
 
     monkeypatch.setattr(root_mod.requests, 'Session', FakeSession)
+    return calls
 
 
 class TestMidpointRooting:
@@ -179,6 +234,42 @@ class TestMidpointRooting:
         rooted = midpoint_rooting(tree)
         assert is_rooted(rooted)
         assert set(rooted.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_path_overflow_scale_invariance(self):
+        subtree = '(T0:1,T1:1):1'
+        for index in range(2, 23):
+            subtree = '({},T{}:1):1'.format(subtree, index)
+        tree = Tree('({},T23:1);'.format(subtree), parser=1)
+        huge_tree = tree.copy(method='deepcopy')
+        scale = 10 ** 307
+        for node in huge_tree.traverse():
+            if not node.is_root:
+                node.dist *= scale
+
+        rooted = midpoint_rooting(tree)
+        huge_rooted = midpoint_rooting(huge_tree)
+
+        expected_root_sides = {
+            frozenset(child.leaf_names())
+            for child in rooted.get_children()
+        }
+        observed_root_sides = {
+            frozenset(child.leaf_names())
+            for child in huge_rooted.get_children()
+        }
+        assert observed_root_sides == expected_root_sides
+        expected_profile = _scaled_branch_profile(rooted)
+        observed_profile = _scaled_branch_profile(huge_rooted, scale=scale)
+        assert observed_profile.keys() == expected_profile.keys()
+        for split in expected_profile:
+            assert observed_profile[split] == pytest.approx(
+                expected_profile[split],
+            )
+        assert all(
+            math.isfinite(node.dist)
+            for node in huge_rooted.traverse()
+            if not node.is_root
+        )
 
 
 class TestOutgroupRooting:
@@ -288,6 +379,212 @@ class TestMadRooting:
         with pytest.raises(ValueError, match='at least 3 leaves'):
             mad_rooting(tree)
 
+    def test_requires_at_least_three_positive_branches(self):
+        tree = Tree('(A:0,B:1,C:1,D:0);', parser=1)
+        with pytest.raises(ValueError, match='at least 3 positive branch lengths'):
+            mad_rooting(tree)
+
+    def test_requires_every_branch_length(self):
+        tree = Tree('(A,B:1,C:2,D:3);', parser=1)
+
+        with pytest.raises(ValueError, match='every branch length'):
+            mad_rooting(tree)
+
+    @pytest.mark.parametrize(
+        'bad_length',
+        [-1.0, float('inf'), float('nan')],
+        ids=('negative', 'infinite', 'nan'),
+    )
+    def test_rejects_invalid_branch_lengths(self, bad_length):
+        tree = Tree('(A:1,B:2,C:3,D:4);', parser=1)
+        next(leaf for leaf in tree.leaves() if leaf.name == 'A').dist = bad_length
+
+        with pytest.raises(ValueError, match='finite, non-negative'):
+            mad_rooting(tree)
+
+    def test_zero_distance_tips_are_retained_as_one_effective_tip(self):
+        tree = Tree('(E:3,D:2,C:1,B:0,A:0);', parser=1)
+        rooted = mad_rooting(tree)
+        assert is_rooted(rooted)
+        assert set(rooted.leaf_names()) == {'A', 'B', 'C', 'D', 'E'}
+
+    def test_tied_root_edges_use_a_deterministic_split(self):
+        expected_split = canonical_split(
+            frozenset({'A'}),
+            frozenset({'B', 'C', 'D'}),
+        )
+        observed_splits = list()
+        for newick in (
+            '(D:1,C:1,B:1,A:1);',
+            '(B:1,D:1,A:1,C:1);',
+        ):
+            rooted = mad_rooting(Tree(newick, parser=1))
+            children = rooted.get_children()
+            observed_splits.append(
+                canonical_split(
+                    frozenset(children[0].leaf_names()),
+                    frozenset(children[1].leaf_names()),
+                )
+            )
+        assert observed_splits == [expected_split, expected_split]
+
+    def test_root_position_is_invariant_to_branch_length_scale(self):
+        base_tree = Tree(
+            '((A:1,B:2):1,(C:3,(D:1,E:2):1):1);',
+            parser=1,
+        )
+        observations = list()
+        for scale in (10 ** -160, 1.0, 10 ** 160):
+            scaled_tree = base_tree.copy(method='deepcopy')
+            for node in scaled_tree.traverse():
+                if not node.is_root:
+                    node.dist = float(node.dist) * scale
+            rooted = mad_rooting(scaled_tree)
+            child_dist_by_taxa = {
+                frozenset(child.leaf_names()): child.dist
+                for child in rooted.get_children()
+            }
+            root_total = sum(child_dist_by_taxa.values())
+            observations.append((
+                frozenset(child_dist_by_taxa),
+                child_dist_by_taxa[frozenset({'A', 'B'})] / root_total,
+            ))
+
+        assert all(
+            split == frozenset((
+                frozenset({'A', 'B'}),
+                frozenset({'C', 'D', 'E'}),
+            ))
+            for split, _ in observations
+        )
+        assert [position for _, position in observations] == pytest.approx(
+            [observations[1][1]] * 3,
+            rel=10 ** -12,
+            abs=10 ** -12,
+        )
+
+    def test_extreme_within_tree_length_range_does_not_overflow(self):
+        rooted = mad_rooting(
+            Tree(
+                '(A:1e-160,B:1e-160,(C:1,D:1):1);',
+                parser=1,
+            )
+        )
+
+        assert is_rooted(rooted)
+        assert set(rooted.leaf_names()) == {'A', 'B', 'C', 'D'}
+        assert all(
+            math.isfinite(float(node.dist))
+            for node in rooted.traverse()
+            if not node.is_root
+        )
+
+    def test_heterogeneous_lengths_do_not_corrupt_path_delta_cancellation(self):
+        tree = Tree(
+            '(X1:1086.5437592639944,'
+            '(X3:0.00085007102927072819,'
+            '(X2:1.0785237796461825e-06,'
+            'X0:0.00057934556794108716):75531.807545509451)'
+            ':0.00763325784066344);',
+            parser=1,
+        )
+
+        rooted = mad_rooting(tree)
+
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in rooted.get_children()
+        }
+        assert set(child_dist_by_taxa) == {
+            frozenset({'X0', 'X2'}),
+            frozenset({'X1', 'X3'}),
+        }
+        assert child_dist_by_taxa[frozenset({'X0', 'X2'})] == pytest.approx(
+            38033.662192492,
+        )
+
+    def test_deep_short_clade_does_not_lose_root_distance_precision(self):
+        tree = Tree(
+            '(X4:0.0063973377995121773,'
+            'X3:9.9523327390797709e-06,'
+            '(X0:87377874218.288742,'
+            'X1:3.9277797271534321e-10):3.7230847581009794e-12,'
+            'X2:1540148.2696119624);',
+            parser=1,
+        )
+
+        rooted = mad_rooting(tree)
+
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in rooted.get_children()
+        }
+        assert frozenset({'X0'}) in child_dist_by_taxa
+        assert child_dist_by_taxa[frozenset({'X0'})] == pytest.approx(
+            43689129622.58888,
+        )
+
+    def test_finite_root_halves_are_joined_without_intermediate_overflow(self):
+        maximum_float = float.fromhex('0x1.fffffffffffffp+1023')
+        tree = Tree(
+            '((A:1,B:2):{0},(C:3,D:4):{0});'.format(maximum_float),
+            parser=1,
+        )
+
+        rooted = mad_rooting(tree)
+
+        assert all(
+            math.isfinite(float(node.dist))
+            for node in rooted.traverse()
+            if not node.is_root
+        )
+        assert [child.dist for child in rooted.get_children()] == pytest.approx(
+            [maximum_float, maximum_float],
+        )
+
+    def test_unrepresentable_normalized_dynamic_range_is_rejected(self):
+        tree = Tree(
+            '(A:5e-324,B:1,C:2,D:1e308);',
+            parser=1,
+        )
+
+        with pytest.raises(ValueError, match='branch-length dynamic range'):
+            mad_rooting(tree)
+
+    def test_scoring_does_not_walk_tree_paths_for_every_pair(self):
+        tree = Tree(
+            '((A:1,B:2):1,(C:3,(D:1,E:2):1):1);',
+            parser=1,
+        )
+
+        assert 'get_distance' not in mad_rooting.__code__.co_names
+        rooted = mad_rooting(tree)
+        assert is_rooted(rooted)
+
+    def test_balanced_320_tip_tree_completes_within_generous_budget(self):
+        def balanced_newick(labels, depth=0):
+            if len(labels) == 1:
+                index = int(labels[0][1:])
+                length = 0.7 + ((index * 17 + depth * 3) % 19) / 10
+                return '{}:{}'.format(labels[0], length)
+            midpoint = len(labels) // 2
+            length = 0.5 + ((len(labels) * 11 + depth) % 13) / 10
+            return '({},{}):{}'.format(
+                balanced_newick(labels[:midpoint], depth + 1),
+                balanced_newick(labels[midpoint:], depth + 1),
+                length,
+            )
+
+        labels = ['T{}'.format(index) for index in range(320)]
+        tree = Tree(balanced_newick(labels) + ';', parser=1)
+
+        started = time.perf_counter()
+        rooted = mad_rooting(tree)
+        elapsed = time.perf_counter() - started
+
+        assert set(rooted.leaf_names()) == set(labels)
+        assert elapsed < 5.0
+
     def test_wiki_exact_root_split(self):
         """MAD rooting on wiki tree: verify root split and pairwise distances.
 
@@ -298,6 +595,22 @@ class TestMadRooting:
         tree = Tree('((A:1,B:2):1,(C:3,(D:1,E:2):1):1);', parser=1)
         original = Tree('((A:1,B:2):1,(C:3,(D:1,E:2):1):1);', parser=1)
         rooted = mad_rooting(tree)
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in rooted.get_children()
+        }
+        assert set(child_dist_by_taxa) == {
+            frozenset({'A', 'B'}),
+            frozenset({'C', 'D', 'E'}),
+        }
+        assert child_dist_by_taxa[frozenset({'A', 'B'})] == pytest.approx(
+            1.584611134,
+            abs=10 ** -8,
+        )
+        assert child_dist_by_taxa[frozenset({'C', 'D', 'E'})] == pytest.approx(
+            0.415388866,
+            abs=10 ** -8,
+        )
         # Total root branch should sum to ≈ 2.0
         children = rooted.get_children()
         total = sum(c.dist for c in children)
@@ -393,8 +706,93 @@ class TestMvRooting:
         assert is_rooted(rooted)
         assert set(rooted.leaf_names()) == {'A', 'B', 'C'}
 
+    def test_squared_length_overflow_scale_invariance(self):
+        tree = Tree(
+            '((A:1,B:2):1,(C:3,(D:1,E:2):1):1);',
+            parser=1,
+        )
+        huge_tree = tree.copy(method='deepcopy')
+        scale = 10 ** 154
+        for node in huge_tree.traverse():
+            if not node.is_root:
+                node.dist *= scale
+
+        rooted = mv_rooting(tree)
+        huge_rooted = mv_rooting(huge_tree)
+
+        assert is_rooted(huge_rooted)
+        expected_root_sides = {
+            frozenset(child.leaf_names())
+            for child in rooted.get_children()
+        }
+        observed_root_sides = {
+            frozenset(child.leaf_names())
+            for child in huge_rooted.get_children()
+        }
+        assert observed_root_sides == expected_root_sides
+        expected_profile = _scaled_branch_profile(rooted)
+        observed_profile = _scaled_branch_profile(huge_rooted, scale=scale)
+        assert observed_profile.keys() == expected_profile.keys()
+        for split in expected_profile:
+            assert observed_profile[split] == pytest.approx(
+                expected_profile[split],
+            )
+        assert all(
+            math.isfinite(node.dist)
+            for node in huge_rooted.traverse()
+            if not node.is_root
+        )
+
 
 class TestRerootAnnotationSafety:
+    @pytest.mark.parametrize(
+        'rooter',
+        [
+            midpoint_rooting,
+            mv_rooting,
+            lambda tree: outgroup_rooting(tree, 'A'),
+        ],
+    )
+    def test_split_key_rooters_reject_duplicate_leaf_names(self, rooter):
+        tree = Tree('(A:1,A:2,(B:3,C:4):5);', parser=1)
+
+        with pytest.raises(ValueError, match='Duplicated leaf labels'):
+            rooter(tree)
+
+    @pytest.mark.parametrize(
+        ('method_name', 'rooter'),
+        [
+            ('Midpoint', midpoint_rooting),
+            ('MV', mv_rooting),
+        ],
+    )
+    @pytest.mark.parametrize(
+        'bad_length',
+        [-1.0, float('inf'), float('nan')],
+        ids=('negative', 'infinite', 'nan'),
+    )
+    def test_numeric_rooters_reject_invalid_nonroot_lengths(
+            self, method_name, rooter, bad_length):
+        tree = Tree('(A:1,B:2,(C:3,D:4):5);', parser=1)
+        next(leaf for leaf in tree.leaves() if leaf.name == 'A').dist = bad_length
+
+        with pytest.raises(
+            ValueError,
+            match='{} rooting requires finite, non-negative branch lengths'.format(
+                method_name
+            ),
+        ):
+            rooter(tree)
+
+    @pytest.mark.parametrize('rooter', [midpoint_rooting, mv_rooting])
+    def test_numeric_rooters_preserve_root_stem(self, rooter):
+        tree = Tree('((A:1,B:2):3,(C:4,D:5):6);', parser=1)
+        tree.dist = 7.5 * (10 ** 250)
+
+        rooted = rooter(tree)
+
+        assert rooted.dist == tree.dist
+
     @pytest.mark.parametrize(
         ('method_name', 'rooter'),
         [
@@ -417,7 +815,7 @@ class TestRerootAnnotationSafety:
         assert [set(child.leaf_names()) for child in tree.get_children()] == original_root_children
 
     def test_singleton_root_collapse_preserves_child_metadata(self):
-        tree = Tree('(((A:1,B:1):1,C:1)INNER:2);', parser=1)
+        tree = Tree('(((A:1,B:1):1,C:1)INNER:2):3;', parser=1)
         tree.get_children()[0].props['root_tag'] = 'kept'
         source = Tree('((A:1,B:1):1,C:1);', parser=1)
 
@@ -425,6 +823,42 @@ class TestRerootAnnotationSafety:
 
         assert rooted.name == 'INNER'
         assert rooted.props['root_tag'] == 'kept'
+        assert rooted.dist == pytest.approx(5.0)
+
+    def test_singleton_root_collapse_rejects_nonfinite_combined_length(self):
+        tree = Tree(
+            '(((A:1,B:1):1,C:1):1e308):1e308;',
+            parser=1,
+        )
+        source = Tree('((A:1,B:1):1,C:1);', parser=1)
+
+        with pytest.raises(ValueError, match='non-finite root branch length'):
+            transfer_root(tree, source)
+
+    @pytest.mark.parametrize(
+        'rooter',
+        [
+            midpoint_rooting,
+            lambda tree: outgroup_rooting(tree, 'A'),
+            mv_rooting,
+        ],
+    )
+    def test_rerooting_preserves_missing_branch_lengths(self, rooter):
+        tree = Tree('(A,(B,(C,D)));', parser=1)
+        rooted = rooter(tree)
+        assert all(node.dist is None for node in rooted.traverse() if not node.is_root)
+
+    def test_unchanged_root_preserves_one_sided_missing_root_length(self):
+        tree = Tree('((A:1,B:1),(C:1,D:1):0);', parser=1)
+
+        rooted = midpoint_rooting(tree)
+
+        child_by_taxa = {
+            frozenset(child.leaf_names()): child
+            for child in rooted.get_children()
+        }
+        assert child_by_taxa[frozenset({'A', 'B'})].dist is None
+        assert child_by_taxa[frozenset({'C', 'D'})].dist == pytest.approx(0.0)
 
 
 class TestTransferRoot:
@@ -496,19 +930,36 @@ class TestTransferRoot:
         assert is_rooted(result)
         assert set(result.leaf_names()) == {'A', 'B', 'C', 'D'}
 
-    def test_source_subroot_none_distance_does_not_crash(self):
+    def test_source_subroot_none_distance_does_not_redistribute(self):
         tree_from = Tree('((A:1,B:1),(C:1,D:1):1);', parser=1)
         tree_to = Tree('((A:1,B:1):2,(C:1,D:1):2);', parser=1)
         result = transfer_root(tree_to, tree_from)
-        children = result.get_children()
-        child_leaf_sets = [set(c.leaf_names()) for c in children]
-        assert {'A', 'B'} in child_leaf_sets
-        assert {'C', 'D'} in child_leaf_sets
-        for child in children:
-            if set(child.leaf_names()) == {'A', 'B'}:
-                assert abs((child.dist or 0.0) - 0.0) < 1e-9
-            if set(child.leaf_names()) == {'C', 'D'}:
-                assert abs((child.dist or 0.0) - 4.0) < 1e-9
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in result.get_children()
+        }
+        assert child_dist_by_taxa == {
+            frozenset({'A', 'B'}): 2.0,
+            frozenset({'C', 'D'}): 2.0,
+        }
+
+    @pytest.mark.parametrize('invalid_length', [float('nan'), float('inf'), -1.0])
+    def test_invalid_source_root_length_does_not_redistribute(
+            self, invalid_length):
+        tree_from = Tree('((A:1,B:1):1,(C:1,D:1):3);', parser=1)
+        tree_from.get_children()[0].dist = invalid_length
+        tree_to = Tree('((A:1,B:1):2,(C:1,D:1):4);', parser=1)
+
+        result = transfer_root(tree_to, tree_from)
+
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in result.get_children()
+        }
+        assert child_dist_by_taxa == {
+            frozenset({'A', 'B'}): 2.0,
+            frozenset({'C', 'D'}): 4.0,
+        }
 
     def test_singleton_root_in_target_does_not_create_unnamed_leaf(self):
         tree_from = Tree('((A:1,B:1):1,C:1);', parser=1)
@@ -517,6 +968,128 @@ class TestTransferRoot:
         leaf_names = list(result.leaf_names())
         assert set(leaf_names) == {'A', 'B', 'C'}
         assert None not in leaf_names
+
+    def test_exact_transfer_rejects_different_leaf_sets(self):
+        source = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        target = Tree('((A:1,B:1):1,C:1,D:1,X:1);', parser=1)
+        with pytest.raises(ValueError, match='identical leaf labels'):
+            transfer_root(target, source)
+
+    def test_intersection_transfer_honors_root_length_redistribution(self):
+        target = Tree('((A:1,B:1):2,C:1,D:1,X:1);', parser=1)
+        source = Tree('((A:1,B:1):1,(C:1,D:1):3);', parser=1)
+        redistributed = root_mod.transfer_root_with_taxon_mode(
+            target,
+            source,
+            taxon_mode='intersection',
+            redistribute_root_length=True,
+        )
+        unchanged = root_mod.transfer_root_with_taxon_mode(
+            target,
+            source,
+            taxon_mode='intersection',
+            redistribute_root_length=False,
+        )
+        assert sorted(child.dist for child in redistributed.get_children()) == pytest.approx([0.5, 1.5])
+        assert sorted(child.dist for child in unchanged.get_children()) == pytest.approx([1.0, 1.0])
+
+    def test_matching_intersection_root_still_honors_length_redistribution(self):
+        target = Tree(
+            '((A:1,B:1):2,(C:1,D:1,X:1):2);',
+            parser=1,
+        )
+        source = Tree('((A:1,B:1):1,(C:1,D:1):3);', parser=1)
+
+        redistributed = root_mod.transfer_root_with_taxon_mode(
+            target,
+            source,
+            taxon_mode='intersection',
+            redistribute_root_length=True,
+        )
+        unchanged = root_mod.transfer_root_with_taxon_mode(
+            target,
+            source,
+            taxon_mode='intersection',
+            redistribute_root_length=False,
+        )
+
+        redistributed_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in redistributed.get_children()
+        }
+        assert redistributed_by_taxa[frozenset({'A', 'B'})] == pytest.approx(1.0)
+        assert redistributed_by_taxa[frozenset({'C', 'D', 'X'})] == pytest.approx(3.0)
+        assert sorted(child.dist for child in unchanged.get_children()) == [2.0, 2.0]
+
+    def test_intersection_transfer_skips_missing_source_root_length(self):
+        target = Tree(
+            '((A:1,B:1):2,(C:1,D:1,X:1):4);',
+            parser=1,
+        )
+        source = Tree('((A:1,B:1),(C:1,D:1):3);', parser=1)
+
+        rooted = root_mod.transfer_root_with_taxon_mode(
+            target,
+            source,
+            taxon_mode='intersection',
+            redistribute_root_length=True,
+        )
+
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): child.dist
+            for child in rooted.get_children()
+        }
+        assert child_dist_by_taxa == {
+            frozenset({'A', 'B'}): 2.0,
+            frozenset({'C', 'D', 'X'}): 4.0,
+        }
+
+    def test_matching_exact_root_does_not_fill_missing_target_root_length(self):
+        target = Tree('((A:1,B:1),(C:1,D:1):4);', parser=1)
+        source = Tree('((A:1,B:1):1,(C:1,D:1):3);', parser=1)
+
+        rooted = transfer_root(target, source)
+
+        child_by_taxa = {
+            frozenset(child.leaf_names()): child
+            for child in rooted.get_children()
+        }
+        assert child_by_taxa[frozenset({'A', 'B'})].dist is None
+        assert child_by_taxa[frozenset({'C', 'D'})].dist == pytest.approx(4.0)
+
+
+class TestTaxonomyHttpBounds:
+    def test_streaming_reader_stops_at_decoded_body_limit(self, monkeypatch):
+        monkeypatch.setattr(root_mod, 'TAXONOMY_HTTP_MAX_BYTES', 8)
+        monkeypatch.setattr(root_mod, 'TAXONOMY_HTTP_CHUNK_BYTES', 4)
+
+        class StreamingResponse:
+            headers = {}
+            encoding = 'utf-8'
+
+            def __init__(self):
+                self.num_chunks_yielded = 0
+                self.closed = False
+
+            @property
+            def text(self):
+                raise AssertionError('Streaming responses must not access .text')
+
+            def iter_content(self, chunk_size):
+                assert chunk_size == 4
+                for chunk in (b'1234', b'5678', b'9abc', b'defg'):
+                    self.num_chunks_yielded += 1
+                    yield chunk
+
+            def close(self):
+                self.closed = True
+
+        response = StreamingResponse()
+        with pytest.raises(ValueError, match='exceeds the size limit'):
+            root_mod._bounded_response_text(response, 'test source')
+
+        assert response.num_chunks_yielded == 3
+        assert response.closed is True
 
 
 class TestTaxonomyRooting:
@@ -912,7 +1485,7 @@ class TestTaxonomyRooting:
             taxonomy_rooting(tree, taxonomy_source='ncbi', taxid_tsv=None, rank='no')
 
     def test_timetree_maps_species_names_back_to_original_labels(self, monkeypatch):
-        install_fake_timetree(
+        calls = install_fake_timetree(
             monkeypatch,
             upload_html='<div id="prunetree-msg-box"></div>',
             newick_text='((Homo_sapiens:1,Pan_troglodytes:1):10,(Arabidopsis_thaliana:1,Oryza_sativa:1):20);',
@@ -925,6 +1498,8 @@ class TestTaxonomyRooting:
         child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
         assert {'Homo_sapiens_gene1', 'Pan_troglodytes_gene1'} in child_leaf_sets
         assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1'} in child_leaf_sets
+        assert len(calls) == 2
+        assert all(stream is True for _, stream in calls)
 
     def test_timetree_allows_monophyletic_duplicate_species_labels(self, monkeypatch):
         install_fake_timetree(
@@ -977,7 +1552,7 @@ class TestTaxonomyRooting:
         assert {'Arabidopsis_thaliana', 'Oryza_sativa'} in child_leaf_sets
 
     def test_opentree_maps_species_names_back_to_original_labels(self, monkeypatch):
-        install_fake_opentree(
+        calls = install_fake_opentree(
             monkeypatch,
             tnrs_json={
                 'results': [
@@ -1000,6 +1575,8 @@ class TestTaxonomyRooting:
         child_leaf_sets = [set(child.leaf_names()) for child in rooted.get_children()]
         assert {'Homo_sapiens_gene1', 'Pan_troglodytes_gene1'} in child_leaf_sets
         assert {'Arabidopsis_thaliana_gene1', 'Oryza_sativa_gene1'} in child_leaf_sets
+        assert len(calls) == 2
+        assert all(stream is True for _, stream in calls)
 
     def test_opentree_allows_monophyletic_duplicate_species_labels(self, monkeypatch):
         install_fake_opentree(

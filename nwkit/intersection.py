@@ -1,3 +1,11 @@
+import copy
+import os
+import secrets
+import shutil
+import stat
+import sys
+import tempfile
+
 from nwkit.util import (
     read_seqs,
     read_tree,
@@ -81,29 +89,344 @@ def get_remove_names(arr1, arr2, match):
     else:
         raise ValueError('Unsupported match mode: {}'.format(match))
 
+
+def _resolve_output_target(target):
+    if target == '-':
+        return target
+    if os.path.islink(target):
+        resolved = os.path.realpath(target)
+        if os.path.islink(resolved):
+            raise ValueError("Output path contains an unresolved symbolic-link cycle: '{}'.".format(target))
+        return resolved
+    return target
+
+
+def _umask_adjusted_output_mode(directory):
+    for _ in range(100):
+        probe_path = os.path.join(
+            directory,
+            '.nwkit-mode-probe-{}'.format(secrets.token_hex(16)),
+        )
+        try:
+            fd = os.open(
+                probe_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o666,
+            )
+        except FileExistsError:
+            continue
+        try:
+            return stat.S_IMODE(os.fstat(fd).st_mode)
+        finally:
+            os.close(fd)
+            os.remove(probe_path)
+    raise FileExistsError('Could not allocate a temporary output-mode probe.')
+
+
+def _regular_output_stat(target):
+    try:
+        target_stat = os.stat(target)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISREG(target_stat.st_mode):
+        raise ValueError(
+            "Existing output target must be a regular file: '{}'.".format(
+                target
+            )
+        )
+    return target_stat
+
+
+def _copy_regular_output_to_backup(target, backup_fd):
+    flags = os.O_RDONLY
+    if hasattr(os, 'O_NOFOLLOW'):
+        flags |= os.O_NOFOLLOW
+    if hasattr(os, 'O_NONBLOCK'):
+        flags |= os.O_NONBLOCK
+    source_fd = os.open(target, flags)
+    try:
+        source_stat = os.fstat(source_fd)
+        if not stat.S_ISREG(source_stat.st_mode):
+            raise ValueError(
+                "Existing output target must be a regular file: '{}'.".format(
+                    target
+                )
+            )
+        with os.fdopen(source_fd, 'rb') as source_handle:
+            source_fd = None
+            with os.fdopen(os.dup(backup_fd), 'wb') as backup_handle:
+                shutil.copyfileobj(
+                    source_handle,
+                    backup_handle,
+                    length=1024 * 1024,
+                )
+                backup_handle.flush()
+                os.fsync(backup_handle.fileno())
+        source_mode = stat.S_IMODE(source_stat.st_mode)
+        if hasattr(os, 'fchmod'):
+            os.fchmod(backup_fd, source_mode)
+        return source_mode
+    finally:
+        if source_fd is not None:
+            os.close(source_fd)
+
+
+def _stage_file(target, writer):
+    if target == '-':
+        directory = None
+        prefix = '.nwkit-intersection-stdout-'
+    else:
+        absolute_target = os.path.abspath(target)
+        directory = os.path.dirname(absolute_target)
+        os.makedirs(directory, exist_ok=True)
+        prefix = '.{}.'.format(os.path.basename(absolute_target))
+    fd, staged_path = tempfile.mkstemp(prefix=prefix, dir=directory)
+    staged_stat = os.fstat(fd)
+    staged_read_fd = None
+    output_mode = None
+    try:
+        with os.fdopen(fd, 'w+', newline='') as staged_handle:
+            fd = None
+            writer(staged_handle)
+            staged_handle.flush()
+            os.fsync(staged_handle.fileno())
+            if target != '-':
+                target_stat = _regular_output_stat(target)
+            else:
+                target_stat = None
+            if target_stat is not None:
+                output_mode = stat.S_IMODE(target_stat.st_mode)
+            elif target != '-':
+                output_mode = _umask_adjusted_output_mode(directory)
+            else:
+                output_mode = None
+            if output_mode is not None and hasattr(os, 'fchmod'):
+                os.fchmod(staged_handle.fileno(), output_mode)
+            if target == '-':
+                # Keep an independent descriptor for the commit. Reopening the
+                # pathname after validation would let a local attacker replace
+                # it with a symlink and make us copy an unrelated file.
+                staged_read_fd = os.dup(staged_handle.fileno())
+        path_stat = os.lstat(staged_path)
+        if (
+            not stat.S_ISREG(path_stat.st_mode)
+            or path_stat.st_dev != staged_stat.st_dev
+            or path_stat.st_ino != staged_stat.st_ino
+        ):
+            raise RuntimeError(
+                'Intersection staging file was replaced before commit.'
+            )
+        if output_mode is not None and not hasattr(os, 'fchmod'):
+            # POSIX mode bits have no exact Windows equivalent. Apply the best
+            # available pathname operation only after verifying the random
+            # staging name, then verify that it still names our file.
+            os.chmod(staged_path, output_mode)
+            path_stat = os.lstat(staged_path)
+            if (
+                not stat.S_ISREG(path_stat.st_mode)
+                or path_stat.st_dev != staged_stat.st_dev
+                or path_stat.st_ino != staged_stat.st_ino
+            ):
+                raise RuntimeError(
+                    'Intersection staging file was replaced before commit.'
+                )
+    except BaseException:
+        if fd is not None:
+            os.close(fd)
+        if staged_read_fd is not None:
+            os.close(staged_read_fd)
+        if os.path.lexists(staged_path):
+            os.remove(staged_path)
+        raise
+    return {
+        'path': staged_path,
+        'read_fd': staged_read_fd,
+    }
+
+
+def _restore_staged_outputs(transactions):
+    for transaction in reversed(transactions):
+        target = transaction['target']
+        backup = transaction['backup']
+        if (
+            backup is not None
+            and transaction['installed']
+            and os.path.lexists(backup)
+        ):
+            os.replace(backup, target)
+        elif backup is not None and os.path.lexists(backup):
+            os.remove(backup)
+        elif transaction['installed'] and os.path.lexists(target):
+            os.remove(target)
+
+
+def _commit_staged_outputs(staged_outputs):
+    transactions = []
+    stdout_stages = []
+    commit_succeeded = False
+    try:
+        for target, staged in staged_outputs:
+            staged_path = staged['path']
+            if target == '-':
+                stdout_stages.append(staged)
+                continue
+            transaction = {
+                'target': target,
+                'backup': None,
+                'installed': False,
+                'staged_path': staged_path,
+            }
+            transactions.append(transaction)
+            if os.path.lexists(target):
+                directory = os.path.dirname(os.path.abspath(target))
+                backup_fd, backup = tempfile.mkstemp(
+                    prefix='.{}.backup.'.format(os.path.basename(target)),
+                    dir=directory,
+                )
+                backup_stat = os.fstat(backup_fd)
+                try:
+                    backup_mode = _copy_regular_output_to_backup(
+                        target,
+                        backup_fd,
+                    )
+                    path_stat = os.lstat(backup)
+                    if (
+                        not stat.S_ISREG(path_stat.st_mode)
+                        or path_stat.st_dev != backup_stat.st_dev
+                        or path_stat.st_ino != backup_stat.st_ino
+                    ):
+                        raise RuntimeError(
+                            'Intersection backup file was replaced before commit.'
+                        )
+                    if not hasattr(os, 'fchmod'):
+                        os.chmod(backup, backup_mode)
+                        path_stat = os.lstat(backup)
+                        if (
+                            not stat.S_ISREG(path_stat.st_mode)
+                            or path_stat.st_dev != backup_stat.st_dev
+                            or path_stat.st_ino != backup_stat.st_ino
+                        ):
+                            raise RuntimeError(
+                                'Intersection backup file was replaced before commit.'
+                            )
+                except BaseException:
+                    if os.path.lexists(backup):
+                        os.remove(backup)
+                    raise
+                finally:
+                    os.close(backup_fd)
+                transaction['backup'] = backup
+            os.replace(staged_path, target)
+            transaction['installed'] = True
+        for staged in stdout_stages:
+            os.lseek(staged['read_fd'], 0, os.SEEK_SET)
+            with os.fdopen(os.dup(staged['read_fd'])) as handle:
+                while True:
+                    chunk = handle.read(1024 * 1024)
+                    if chunk == '':
+                        break
+                    sys.stdout.write(chunk)
+        sys.stdout.flush()
+        commit_succeeded = True
+    except BaseException:
+        # If an asynchronous exception arrived immediately after the atomic
+        # replace completed, the staged path is already gone even though the
+        # flag assignment may not have run.
+        for transaction in transactions:
+            if (
+                not transaction['installed']
+                and not os.path.lexists(transaction['staged_path'])
+            ):
+                transaction['installed'] = True
+        try:
+            _restore_staged_outputs(transactions)
+        except BaseException as restore_exc:
+            raise RuntimeError(
+                'Failed to restore intersection outputs after a commit error; '
+                'backup files were preserved.'
+            ) from restore_exc
+        raise
+    finally:
+        if commit_succeeded:
+            for transaction in transactions:
+                backup = transaction['backup']
+                if backup is not None and os.path.lexists(backup):
+                    os.remove(backup)
+        for _, staged in staged_outputs:
+            staged_path = staged['path']
+            if staged['read_fd'] is not None:
+                os.close(staged['read_fd'])
+                staged['read_fd'] = None
+            if os.path.lexists(staged_path):
+                os.remove(staged_path)
+
+
+def _write_outputs_atomically(tree, args, new_seqs, seqout):
+    staged_outputs = []
+    try:
+        tree_args = copy.copy(args)
+        tree_target = _resolve_output_target(args.outfile)
+
+        def write_staged_tree(handle):
+            tree_args.outfile = handle
+            write_tree(tree, tree_args, format=args.outformat)
+
+        staged_tree = _stage_file(
+            tree_target,
+            write_staged_tree,
+        )
+        staged_outputs.append((tree_target, staged_tree))
+        if new_seqs is not None:
+            seq_target = _resolve_output_target(seqout)
+            staged_seq = _stage_file(
+                seq_target,
+                lambda handle: write_seqs(
+                    records=new_seqs,
+                    outfile=handle,
+                    seqformat=args.seqformat,
+                    quiet=False,
+                ),
+            )
+            staged_outputs.append((seq_target, staged_seq))
+        _commit_staged_outputs(staged_outputs)
+    except BaseException:
+        for _, staged in staged_outputs:
+            staged_path = staged['path']
+            if staged['read_fd'] is not None:
+                os.close(staged['read_fd'])
+                staged['read_fd'] = None
+            if os.path.lexists(staged_path):
+                os.remove(staged_path)
+        raise
+
+
 def intersection_main(args):
+    infile2 = getattr(args, 'infile2', '')
+    seqin = getattr(args, 'seqin', '')
+    has_infile2 = infile2 not in (None, '')
+    has_seqin = seqin not in (None, '')
+    if has_infile2 == has_seqin:
+        raise ValueError("Specify exactly one of '--infile2' or '--seqin'.")
     seqout_path = args.seqout if args.seqout != '' else '-'
     validate_distinct_output_paths([
         ('--outfile', getattr(args, 'outfile', None)),
-        ('--seqout', seqout_path if getattr(args, 'seqin', '') != '' else None),
+        ('--seqout', seqout_path if has_seqin else None),
     ])
+    if has_seqin and (args.outfile == '-') and (seqout_path == '-'):
+        raise ValueError(
+            "Tree and sequence outputs cannot both be written to stdout. "
+            "Set '--outfile' or '--seqout' to a file path."
+        )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     leaf_names = get_leaf_names(tree)
-    if (args.infile2 == '') and (args.seqin == ''):
-        raise ValueError("Specify at least one of '--infile2' or '--seqin'.")
-    if args.seqin != '':
-        seqout = args.seqout if args.seqout != '' else '-'
-        if (args.outfile == '-') and (seqout == '-'):
-            raise ValueError("Tree and sequence outputs cannot both be written to stdout. Set '--outfile' or '--seqout' to a file path.")
-    if (args.infile2 == ''):
-        leaf_names2 = []
-    else:
-        tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
+    if has_infile2:
+        tree2 = read_tree(infile2, args.format2, args.quoted_node_names)
         leaf_names2 = get_leaf_names(tree2)
-    if (args.seqin == ''):
         seq_names = []
+        new_seqs = None
     else:
-        seqs = read_seqs(seqfile=args.seqin, seqformat=args.seqformat, quiet=False)
+        leaf_names2 = []
+        seqs = read_seqs(seqfile=seqin, seqformat=args.seqformat, quiet=False)
         seq_names = get_seq_names(seqs)
         if args.match == 'complete':
             reference_names = set(leaf_names)
@@ -112,8 +435,6 @@ def intersection_main(args):
         else:
             seqs_to_remove = get_remove_names(seq_names, leaf_names + leaf_names2, match=args.match)
         new_seqs = get_new_seqs(seqs, seqs_to_remove)
-        seqout = args.seqout if args.seqout != '' else '-'
-        write_seqs(records=new_seqs, outfile=seqout, seqformat=args.seqformat, quiet=False)
     if args.match == 'complete':
         retained_names = set(seq_names)
         retained_names.update(leaf_names2)
@@ -125,4 +446,4 @@ def intersection_main(args):
     for leaf in tree.leaves():
         if leaf.name in leaves_to_remove:
             leaf.delete(preserve_branch_length=True)
-    write_tree(tree, args, format=args.outformat)
+    _write_outputs_atomically(tree, args, new_seqs, seqout_path)

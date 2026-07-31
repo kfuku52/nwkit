@@ -1,4 +1,5 @@
 import argparse
+import math
 import sys
 
 from nwkit import __version__
@@ -61,18 +62,40 @@ def strtobool(val):
     else:
         raise ValueError(f"Invalid truth value: {val}")
 
+
+def finite_float(value):
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise argparse.ArgumentTypeError("'{}' is not a valid floating-point value.".format(value)) from exc
+    if not math.isfinite(number):
+        raise argparse.ArgumentTypeError("Floating-point values must be finite.")
+    return number
+
+
+def unit_interval_float(value):
+    number = finite_float(value)
+    if not 0.0 <= number <= 1.0:
+        raise argparse.ArgumentTypeError("Value must be between 0.0 and 1.0, inclusive.")
+    return number
+
+
 # Main parser
 parser = NwkitArgumentParser(
     prog='nwkit',
     description='A toolkit for Newick trees. See `nwkit SUBCOMMAND -h` for usage (e.g., nwkit constrain -h)',
 )
 parser.add_argument('--version', action='version', version='%(prog)s {}'.format(__version__))
+parser.add_argument('--debug', action='store_true',
+                    help='Show a Python traceback when a command fails.')
 subparsers = parser.add_subparsers(dest='command')
 
 # Parent parser for shared options
 p_audit = argparse.ArgumentParser(add_help=False)
 p_audit.add_argument('--audit', metavar='PATH', default=None, type=str, required=False, action='store',
                      help='Append a JSONL provenance record containing arguments, hashes, warnings, and runtime metadata.')
+p_audit.add_argument('--debug', action='store_true', default=argparse.SUPPRESS,
+                     help='Show a Python traceback when a command fails.')
 
 p_parent = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
@@ -93,7 +116,7 @@ p_download.add_argument('--download-dir', '--download_dir', dest='download_dir',
                         help='default=%(default)s: Shared download/cache directory for external resources such as the ETE4 '
                              'NCBI taxonomy database. "auto" uses the ETE4 default cache location. '
                              '"inferred" stores downloads under <outfile_dir>/downloads, or ./downloads when writing to STDOUT.')
-p_download.add_argument('--taxonomy-cache-max-age-days', '--taxonomy_cache_max_age_days', dest='taxonomy_cache_max_age_days', metavar='FLOAT', default=30.0, type=float, required=False, action='store',
+p_download.add_argument('--taxonomy-cache-max-age-days', '--taxonomy_cache_max_age_days', dest='taxonomy_cache_max_age_days', metavar='FLOAT', default=30.0, type=finite_float, required=False, action='store',
                         help='default=%(default)s: Recheck the NCBI taxonomy archive after this many days. Use 0 to check every run.')
 p_download.add_argument('--refresh-taxonomy-cache', '--refresh_taxonomy_cache', dest='refresh_taxonomy_cache', action='store_true',
                         help='Force a checksum check and rebuild the ETE4 taxonomy cache when NCBI has a newer archive.')
@@ -181,7 +204,7 @@ pasr.add_argument('--states', metavar='STATE1,STATE2,...', default=None, type=st
 pasr.add_argument('--model', metavar='ER|SYM|ARD', default='ER', type=str, required=False, action='store', choices=['ER', 'SYM', 'ARD'],
                   help='default=%(default)s: Mk rate model. ER uses one shared off-diagonal rate, '
                        'SYM uses symmetric pairwise rates, and ARD uses all rates different.')
-pasr.add_argument('--rate', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pasr.add_argument('--rate', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                   help='default=%(default)s: Fixed ER off-diagonal transition rate. For SYM/ARD, this value is used as the initial rate for ML optimization.')
 pasr.add_argument('--rate-bounds', '--rate_bounds', dest='rate_bounds', metavar='MIN,MAX', default=None, type=str, required=False, action='store',
                   help='default=1e-9,1e3: Positive bounds used when estimating Mk rates.')
@@ -254,9 +277,9 @@ def command_collapse(args):
     from nwkit.collapse import collapse_main
     collapse_main(args)
 pcollapse = subparsers.add_parser('collapse', help='Collapse internal branches by support and/or branch length', parents=[p_parent])
-pcollapse.add_argument('--min-support', '--min_support', dest='min_support', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pcollapse.add_argument('--min-support', '--min_support', dest='min_support', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                        help='default=%(default)s: Collapse internal branches whose support is smaller than this threshold.')
-pcollapse.add_argument('--max-dist', '--max_dist', dest='max_dist', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pcollapse.add_argument('--max-dist', '--max_dist', dest='max_dist', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                        help='default=%(default)s: Collapse internal branches whose branch length is at most this threshold.')
 pcollapse.add_argument('--preserve-branch-length', '--preserve_branch_length', dest='preserve_branch_length', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                        help='default=%(default)s: Add the deleted branch length to descendant branches when collapsing.')
@@ -327,7 +350,10 @@ pconsensus.add_argument('--method', metavar='greedy|majority|strict', default='g
                         choices=['greedy', 'majority', 'strict'],
                         help='default=%(default)s: Consensus-clade selection rule. '
                              'greedy uses --min-freq, majority keeps clades with frequency > 0.5, and strict keeps only clades present in all trees.')
-pconsensus.add_argument('--min-freq', '--min_freq', dest='min_freq', metavar='0.0<=FLOAT<=1.0', default=0.5, type=float, required=False, action='store',
+pconsensus.add_argument('--comparison', metavar='rooted|unrooted', default='rooted', type=str,
+                        choices=['rooted', 'unrooted'],
+                        help='default=%(default)s: Treat input branches as rooted clades or root-independent unrooted splits.')
+pconsensus.add_argument('--min-freq', '--min_freq', dest='min_freq', metavar='0.0<=FLOAT<=1.0', default=0.5, type=unit_interval_float, required=False, action='store',
                         help='default=%(default)s: Minimum clade frequency retained when --method greedy is used.')
 pconsensus.add_argument('--branch-length', '--branch_length', dest='branch_length', metavar='none|mean|median', default='none', type=str, required=False, action='store',
                         choices=['none', 'mean', 'median'],
@@ -413,25 +439,26 @@ pdraw.add_argument('--trait-palette', '--trait_palette', dest='trait_palette', m
                    help='default=%(default)s: Matplotlib colormap name used for trait-group colors.')
 pdraw.add_argument('--support-labels', '--support_labels', dest='support_labels', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Whether to draw support labels on branches.')
-pdraw.add_argument('--support-min', '--support_min', dest='support_min', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pdraw.add_argument('--support-min', '--support_min', dest='support_min', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=%(default)s: Show only support labels greater than or equal to this value.')
-pdraw.add_argument('--figure-width', '--figure_width', dest='figure_width', metavar='FLOAT', default=3.6, type=float, required=False, action='store',
+pdraw.add_argument('--figure-width', '--figure_width', dest='figure_width', metavar='FLOAT', default=3.6, type=finite_float, required=False, action='store',
                    help='default=%(default)s: Figure width in inches.')
-pdraw.add_argument('--figure-height', '--figure_height', dest='figure_height', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pdraw.add_argument('--figure-height', '--figure_height', dest='figure_height', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=auto: Optional fixed figure height in inches. By default height follows the number of tips.')
-pdraw.add_argument('--label-panel-width', '--label_panel_width', dest='label_panel_width', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pdraw.add_argument('--label-panel-width', '--label_panel_width', dest='label_panel_width', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=auto: Width in inches reserved for tip labels and badges.')
 pdraw.add_argument('--tip-image-manifest', '--tip_image_manifest', dest='tip_image_manifest', metavar='PATH', default=None, type=str, required=False, action='store',
-                   help='default=None: TSV produced by nwkit image, containing unique leaf_name and local_path columns. '
+                   help='default=None: TSV produced by nwkit image, containing leaf_name and local_path columns. '
+                        'When a leaf has multiple rows, the first candidate is used. '
                         'Matching images are drawn in an aligned column beside the tree.')
 pdraw.add_argument('--tip-image-root', '--tip_image_root', dest='tip_image_root', metavar='PATH', default=None, type=str, required=False, action='store',
                    help='default=manifest directory: Base directory for relative local_path values in --tip-image-manifest. '
                         'Required when the manifest is read from STDIN.')
-pdraw.add_argument('--tip-image-size', '--tip_image_size', dest='tip_image_size', metavar='FLOAT', default=18.0, type=float, required=False, action='store',
+pdraw.add_argument('--tip-image-size', '--tip_image_size', dest='tip_image_size', metavar='FLOAT', default=18.0, type=finite_float, required=False, action='store',
                    help='default=%(default)s: Maximum width or height of each tip image in points.')
-pdraw.add_argument('--tip-image-gap', '--tip_image_gap', dest='tip_image_gap', metavar='FLOAT', default=4.0, type=float, required=False, action='store',
+pdraw.add_argument('--tip-image-gap', '--tip_image_gap', dest='tip_image_gap', metavar='FLOAT', default=4.0, type=finite_float, required=False, action='store',
                    help='default=%(default)s: Horizontal padding on each side of the aligned tip-image column in points.')
-pdraw.add_argument('--font-size', '--font_size', dest='font_size', metavar='FLOAT', default=8.0, type=float, required=False, action='store',
+pdraw.add_argument('--font-size', '--font_size', dest='font_size', metavar='FLOAT', default=8.0, type=finite_float, required=False, action='store',
                    help='default=%(default)s: Font size in points.')
 pdraw.add_argument('--font-family', '--font_family', dest='font_family', metavar='STR', default='Helvetica', type=str, required=False, action='store',
                    help='default=%(default)s: Matplotlib font family used for labels and legends.')
@@ -447,7 +474,7 @@ pdraw.add_argument('--root-marker', '--root_marker', dest='root_marker', metavar
                    help='default=%(default)s: Optional marker drawn at the displayed root.')
 pdraw.add_argument('--root-marker-color', '--root_marker_color', dest='root_marker_color', metavar='COLOR', default='#0072B2', type=str, required=False, action='store',
                    help='default=%(default)s: Matplotlib color for --root-marker.')
-pdraw.add_argument('--root-marker-size', '--root_marker_size', dest='root_marker_size', metavar='FLOAT', default=None, type=float, required=False, action='store',
+pdraw.add_argument('--root-marker-size', '--root_marker_size', dest='root_marker_size', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=font size: Diameter of --root-marker in points.')
 pdraw.add_argument('--tip-badge-property', '--tip_badge_property', dest='tip_badge_property', metavar='PROPERTY', default=None, type=str, required=False, action='store',
                    help='default=None: Display the value of this Newick/NHX property as a badge beside each matching tip.')
@@ -525,7 +552,7 @@ pimage.add_argument('--max-per-species', '--max_per_species', dest='max_per_spec
                     help='default=%(default)s: Number of images to keep per species.')
 pimage.add_argument('--max-download-bytes', '--max_download_bytes', dest='max_download_bytes', metavar='INT', default=104857600, type=int, required=False, action='store',
                     help='default=%(default)s: Reject any individual media download larger than this many bytes.')
-pimage.add_argument('--query-cache-max-age-hours', '--query_cache_max_age_hours', dest='query_cache_max_age_hours', metavar='FLOAT', default=168.0, type=float, required=False, action='store',
+pimage.add_argument('--query-cache-max-age-hours', '--query_cache_max_age_hours', dest='query_cache_max_age_hours', metavar='FLOAT', default=168.0, type=finite_float, required=False, action='store',
                     help='default=%(default)s: Refresh provider and Bioicons query caches after this age; 0 disables expiration.')
 pimage.add_argument('--refresh-cache', '--refresh_cache', dest='refresh_cache', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                     help='default=%(default)s: Ignore existing provider and Bioicons query caches for this run.')
@@ -543,7 +570,7 @@ pimage.add_argument('--fail-on-missing', '--fail_on_missing', dest='fail_on_miss
 pimage.add_argument('--output-format', '--output_format', dest='output_format', metavar='original|png|jpg', default='original', type=str, required=False, action='store',
                     choices=['original', 'png', 'jpg'],
                     help='default=%(default)s: Optional normalized output format. '
-                         'Image post-processing options require the optional "nwkit[image]" dependencies.')
+                         'SVG rasterization requires the optional "nwkit[image]" dependency set.')
 pimage.add_argument('--max-edge', '--max_edge', dest='max_edge', metavar='INT', default=None, type=int, required=False, action='store',
                     help='default=%(default)s: Downscale rasterized output so the longest edge is at most this value.')
 pimage.add_argument('--canvas', metavar='none|square', default='none', type=str, required=False, action='store',
@@ -670,7 +697,7 @@ pmcmctree.add_argument('--timetree', metavar='point|ci|no', default='no', type=s
                             'Repeated species labels are allowed only when their tips are monophyletic. '
                             'point: point estimate, ci: 95 percent confidence interval as upper and lower bounds. '
                             'no: disable the function.')
-pmcmctree.add_argument('--min-clade-prop', '--min_clade_prop', dest='min_clade_prop', metavar='0.0<=FLOAT<=1.0', default=0, type=float, required=False, action='store',
+pmcmctree.add_argument('--min-clade-prop', '--min_clade_prop', dest='min_clade_prop', metavar='0.0<=FLOAT<=1.0', default=0, type=unit_interval_float, required=False, action='store',
                        help='default=%(default)s: Minimum proportion of the clade size to the total number of species. '
                             'If the clade proportion is smaller than this value, time constraints are removed.')
 pmcmctree.add_argument('--higher-rank-search', '--higher_rank_search', dest='higher_rank_search', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
@@ -745,7 +772,7 @@ prescale.add_argument('-t', '--target', metavar='all|root|leaf|intnode', default
                    action='store',
                    choices=['all', 'root', 'leaf', 'intnode'],
                    help='default=%(default)s: Nodes to be edited.')
-prescale.add_argument('--factor', metavar='FLOAT', default=None, type=float, required=True, action='store',
+prescale.add_argument('--factor', metavar='FLOAT', default=None, type=finite_float, required=True, action='store',
                    help='default=%(default)s: Rescaling factor of branch length.')
 prescale.set_defaults(handler=command_rescale)
 
@@ -900,7 +927,7 @@ psubtree.add_argument('--orthogroup', metavar='yes|no', default='no', type=strto
                        help='default=%(default)s: The output subtree represents orthogroup(s) that contain all '
                             'specified leaves. Species assignment is controlled by '
                             '--species-parser/--species-regex/--species-map-tsv.')
-psubtree.add_argument('--dup-conf-score-threshold', '--dup_conf_score_threshold', dest='dup_conf_score_threshold', metavar='FLOAT', default=0, type=float, required=False, action='store',
+psubtree.add_argument('--dup-conf-score-threshold', '--dup_conf_score_threshold', dest='dup_conf_score_threshold', metavar='FLOAT', default=0, type=unit_interval_float, required=False, action='store',
                        help='default=%(default)s: The threshold of duplication-confidence score for orthogroup delimitation. '
                             '0 = most stringent, 1 = most relaxed. '
                             'For the score, see https://www.ensembl.org/info/genome/compara/homology_types.html')
@@ -1057,19 +1084,28 @@ def _warn_deprecated_option_aliases(argv, command):
 
 
 def main(argv=None):
+    is_console_invocation = argv is None
     raw_argv = list(sys.argv[1:] if argv is None else argv)
     args = parser.parse_args(raw_argv)
     if hasattr(args, 'handler'):
-        if getattr(args, 'audit', None) == '-':
-            raise ValueError("'--audit' requires a file path, not '-'.")
-        def invoke_handler(parsed_args):
-            _warn_deprecated_option_aliases(raw_argv, parsed_args.command)
-            _validate_stdin_ownership(parsed_args)
-            return parsed_args.handler(parsed_args)
-        if getattr(args, 'audit', None):
-            from nwkit.provenance import run_with_audit
-            return run_with_audit(args=args, argv=raw_argv, handler=invoke_handler)
-        return invoke_handler(args)
+        try:
+            if getattr(args, 'audit', None) == '-':
+                raise ValueError("'--audit' requires a file path, not '-'.")
+
+            def invoke_handler(parsed_args):
+                _warn_deprecated_option_aliases(raw_argv, parsed_args.command)
+                _validate_stdin_ownership(parsed_args)
+                return parsed_args.handler(parsed_args)
+
+            if getattr(args, 'audit', None):
+                from nwkit.provenance import run_with_audit
+                return run_with_audit(args=args, argv=raw_argv, handler=invoke_handler)
+            return invoke_handler(args)
+        except Exception as exc:
+            if (not is_console_invocation) or getattr(args, 'debug', False):
+                raise
+            sys.stderr.write('nwkit: error: {}\n'.format(exc))
+            return 2
     parser.print_help()
     return 0
 

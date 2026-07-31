@@ -52,6 +52,61 @@ class TestMonophylyMain:
         assert bool(homo_row['is_monophyletic']) is True
         assert homo_row['num_target_taxa'] == 2
 
+    def test_species_mode_reports_non_monophyletic_species(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk(
+            '((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1,'
+            '(Homo_sapiens_gene2:1,Mus_musculus_gene1:1):1);',
+            'tree.nwk',
+        )
+        outfile = tmp_path / 'monophyly.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            trait=None,
+            group_by=None,
+            unrooted=False,
+            fail_on_non_monophyly=False,
+        )
+
+        monophyly_main(args)
+
+        table = pd.read_csv(outfile, sep='\t')
+        homo_row = table.loc[table['group'] == 'Homo_sapiens'].iloc[0]
+        assert bool(homo_row['is_monophyletic']) is False
+        assert homo_row['num_target_taxa'] == 2
+        assert homo_row['num_intruder_taxa'] == 2
+        assert homo_row['intruder_taxa'] == 'Mus_musculus_gene1,Pan_troglodytes_gene1'
+
+    def test_unrooted_report_uses_the_same_clade_side_as_status(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1):1,(C:1,(D:1,E:1):1):1);', 'tree.nwk')
+        trait_path = tmp_path / 'traits.tsv'
+        pd.DataFrame(
+            {
+                'leaf_name': ['A', 'B', 'C', 'D', 'E'],
+                'group': ['x', 'x', 'x', 'y', 'z'],
+            }
+        ).to_csv(trait_path, sep='\t', index=False)
+        outfile = tmp_path / 'monophyly.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            trait=str(trait_path),
+            group_by='group',
+            unrooted=True,
+            fail_on_non_monophyly=False,
+        )
+
+        monophyly_main(args)
+
+        table = pd.read_csv(outfile, sep='\t')
+        row_x = table.loc[table['group'] == 'x'].iloc[0]
+        assert bool(row_x['is_monophyletic']) is True
+        assert row_x['status'] == 'monophyletic'
+        assert row_x['num_target_taxa'] == 3
+        assert row_x['num_mrca_taxa'] == 3
+        assert row_x['num_intruder_taxa'] == 0
+        assert pd.isna(row_x['intruder_taxa'])
+
     def test_fail_on_non_monophyly_raises(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', 'tree.nwk')
         trait_path = tmp_path / 'traits.tsv'

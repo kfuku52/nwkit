@@ -1,3 +1,4 @@
+import math
 import sys
 
 import pandas as pd
@@ -29,9 +30,12 @@ def _parse_optional_float(value, column_name):
     if is_missing_table_value(value):
         return None
     try:
-        return float(str(value).strip())
+        number = float(str(value).strip())
     except ValueError as exc:
         raise ValueError("Column '{}' must contain numeric values when present.".format(column_name)) from exc
+    if not math.isfinite(number):
+        raise ValueError("Column '{}' must contain finite numeric values when present.".format(column_name))
+    return number
 
 
 def _normalize_name(value):
@@ -41,13 +45,18 @@ def _normalize_name(value):
 
 
 def _validate_parent_map(parent_by_id, root_id):
+    resolved = {root_id}
     for branch_id in parent_by_id:
-        seen = set()
+        if branch_id in resolved:
+            continue
+        path = []
+        path_indexes = {}
         current = branch_id
-        while current != root_id:
-            if current in seen:
+        while current not in resolved:
+            if current in path_indexes:
                 raise ValueError('The parent-child table contains a cycle involving branch_id {}.'.format(branch_id))
-            seen.add(current)
+            path_indexes[current] = len(path)
+            path.append(current)
             parent_id = parent_by_id.get(current)
             if parent_id is None:
                 raise ValueError('Parent branch_id not found for branch_id {}.'.format(branch_id))
@@ -56,6 +65,7 @@ def _validate_parent_map(parent_by_id, root_id):
             if parent_id not in parent_by_id:
                 raise ValueError('Parent branch_id {} was not found in the table.'.format(parent_id))
             current = parent_id
+        resolved.update(path)
 
 
 def _resolve_output_format(args, child_ids, records_by_id):

@@ -1,11 +1,19 @@
 import re
 from argparse import Namespace
 
+import matplotlib
+import matplotlib.pyplot as plt
 import pandas as pd
 import pytest
 from ete4 import Tree
+from matplotlib.figure import Figure
 
-from nwkit.draw import _get_species_overlap_node_types, draw_main
+from nwkit.draw import (
+    _get_species_overlap_node_types,
+    _load_tip_image,
+    _read_tip_image_manifest,
+    draw_main,
+)
 
 
 def make_draw_args(**kwargs):
@@ -70,6 +78,74 @@ def extract_svg_text_positions(svg_text):
 
 
 class TestDrawMain:
+    def test_draw_rejects_unreasonably_large_tip_image_size(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('(A:1,B:1);')
+
+        with pytest.raises(
+            ValueError,
+            match='--tip-image-size must be no greater than 512 points',
+        ):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'oversized.svg'),
+                species_overlap_node_plot='no',
+                tip_image_size=1e308,
+            ))
+
+    def test_draw_closes_figure_when_save_fails(
+        self,
+        monkeypatch,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('(A:1,B:1);')
+        open_figures = set(plt.get_fignums())
+
+        def fail_save(*args, **kwargs):
+            raise OSError('simulated renderer failure')
+
+        monkeypatch.setattr(Figure, 'savefig', fail_save)
+
+        with pytest.raises(OSError, match='simulated renderer failure'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'failed.svg'),
+                species_overlap_node_plot='no',
+            ))
+
+        assert set(plt.get_fignums()) == open_figures
+
+    def test_draw_restores_process_wide_matplotlib_settings(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('(A:1,B:1);')
+        outfile = tmp_path / 'isolated.svg'
+        keys = ('font.size', 'font.family', 'font.sans-serif', 'svg.fonttype', 'svg.hashsalt')
+        before = {
+            key: list(matplotlib.rcParams[key])
+            if isinstance(matplotlib.rcParams[key], list)
+            else matplotlib.rcParams[key]
+            for key in keys
+        }
+
+        draw_main(make_draw_args(
+            infile=infile,
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            font_size=17.0,
+            font_family='DejaVu Sans',
+        ))
+
+        after = {
+            key: list(matplotlib.rcParams[key])
+            if isinstance(matplotlib.rcParams[key], list)
+            else matplotlib.rcParams[key]
+            for key in keys
+        }
+        assert after == before
+
     def test_species_overlap_node_types_use_descendant_species_once(self):
         tree = Tree('(((Homo_sapiens_G1:1,Homo_sapiens_G2:1):1,Mus_musculus_G1:1):1,Danio_rerio_G1:1);', parser=1)
         args = make_draw_args()
@@ -530,25 +606,25 @@ class TestDrawMain:
 
         assert outfile.read_text(encoding='utf-8').count('<image') == 2
 
-    def test_draw_rejects_duplicate_tip_image_rows(self, tmp_path):
-        infile = tmp_path / 'tree.nwk'
-        infile.write_text('(A:1,B:1);')
-        image = tmp_path / 'image.png'
-        write_test_png(image)
+    def test_draw_uses_first_duplicate_tip_image_row(self, tmp_path):
+        first_image = tmp_path / 'first.png'
+        second_image = tmp_path / 'second.png'
+        write_test_png(first_image)
+        write_test_png(second_image)
         manifest = tmp_path / 'manifest.tsv'
         manifest.write_text(
             'leaf_name\tlocal_path\n'
-            'A\timage.png\n'
-            'A\timage.png\n'
+            'A\tfirst.png\n'
+            'A\tsecond.png\n'
         )
 
-        with pytest.raises(ValueError, match="Duplicated 'leaf_name'"):
-            draw_main(make_draw_args(
-                infile=str(infile),
-                outfile=str(tmp_path / 'duplicate.svg'),
-                species_overlap_node_plot='no',
-                tip_image_manifest=str(manifest),
-            ))
+        path_by_leaf = _read_tip_image_manifest(
+            str(manifest),
+            tree=Tree('(A:1,B:1);'),
+            unmatched='ignore',
+        )
+
+        assert path_by_leaf['A'] == str(first_image.resolve())
 
     def test_draw_applies_unmatched_error_to_tip_image_manifest(self, tmp_path):
         infile = tmp_path / 'tree.nwk'
@@ -595,10 +671,14 @@ class TestDrawMain:
         infile.write_text('(A:1,B:1);')
         silhouette = tmp_path / 'silhouette.svg'
         silhouette.write_text(
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
+            '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
             '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
             '<path d="M2 18 L20 2 L38 18 Z" fill="#111111"/>'
             '</svg>'
         )
+        source_before = silhouette.read_bytes()
         manifest = tmp_path / 'manifest.tsv'
         manifest.write_text(
             'leaf_name\tlocal_path\n'
@@ -615,3 +695,39 @@ class TestDrawMain:
         ))
 
         assert outfile.read_text(encoding='utf-8').count('<image') == 2
+        assert silhouette.read_bytes() == source_before
+
+    def test_draw_rejects_utf16_svg_before_entity_parsing(self, tmp_path):
+        infile = tmp_path / 'tree.nwk'
+        infile.write_text('(A:1,B:1);')
+        silhouette = tmp_path / 'utf16-entity.svg'
+        silhouette.write_bytes((
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE svg [<!ENTITY local "expanded">]>'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
+            '<text>&local;</text>'
+            '</svg>'
+        ).encode('utf-16'))
+        manifest = tmp_path / 'manifest.tsv'
+        manifest.write_text(
+            'leaf_name\tlocal_path\n'
+            'A\tutf16-entity.svg\n'
+            'B\tutf16-entity.svg\n'
+        )
+
+        with pytest.raises(RuntimeError, match='UTF-16|encoding'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'utf16.svg'),
+                species_overlap_node_plot='no',
+                tip_image_manifest=str(manifest),
+            ))
+
+    def test_tip_image_loader_downsamples_before_retaining_array(self, tmp_path):
+        Image = pytest.importorskip('PIL.Image')
+        source = tmp_path / 'large.png'
+        Image.new('RGB', (400, 200), (20, 40, 60)).save(source)
+
+        loaded = _load_tip_image(str(source), max_edge_px=40)
+
+        assert loaded.shape == (20, 40, 4)

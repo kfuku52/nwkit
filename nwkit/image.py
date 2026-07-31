@@ -3,20 +3,25 @@ import json
 import glob
 import hashlib
 import html
+import ipaddress
 import io
 import math
 import os
 import re
+import secrets
 import shutil
+import socket
 import sqlite3
+import stat
 import sys
 import tarfile
 import tempfile
 import threading
 import time
+import xml.etree.ElementTree as ElementTree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
-from urllib.parse import urlparse
+from urllib.parse import quote, urljoin, urlparse
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -34,6 +39,7 @@ from nwkit.util import (
     read_tree,
     resolve_download_dir,
     validate_unique_named_leaves,
+    validate_distinct_output_paths,
     warn_cleanup_failure,
 )
 
@@ -48,6 +54,8 @@ BIOICONS_GITHUB_API_ROOT = 'https://api.github.com/repos/duerrsimon/bioicons/git
 BIOICONS_MEDIA_ROOT = 'https://bioicons.com/icons'
 OPENVERSE_API_ROOT = 'https://api.openverse.org/v1'
 NCBI_NEWTAXDUMP_URL = 'https://ftp.ncbi.nlm.nih.gov/pub/taxonomy/new_taxdump/new_taxdump.tar.gz'
+NCBI_LEGACY_IMAGE_HOSTS = frozenset(('ncbi.nlm.nih.gov', 'www.ncbi.nlm.nih.gov'))
+NCBI_LEGACY_IMAGE_PATH_PREFIX = '/Taxonomy/taxi/images/'
 REQUEST_TIMEOUT = (10, 60)
 DEFAULT_LOOKUP_WORKERS = 4
 DEFAULT_DOWNLOAD_WORKERS = 4
@@ -56,6 +64,20 @@ LOOKUP_FALLBACK_BUFFER = 2
 BIOICONS_CATALOG_CACHE_VERSION = 2
 DEFAULT_QUERY_CACHE_MAX_AGE_HOURS = 168.0
 DEFAULT_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024
+DEFAULT_MAX_PROVIDER_RESPONSE_BYTES = 8 * 1024 * 1024
+DEFAULT_MAX_DECODED_PIXELS = 40_000_000
+DEFAULT_MAX_IMAGE_DIMENSION = 32_768
+DEFAULT_MAX_SVG_BYTES = 10 * 1024 * 1024
+NCBI_NEWTAXDUMP_MAX_BYTES = 512 * 1024 * 1024
+NCBI_IMAGES_TABLE_MAX_BYTES = 512 * 1024 * 1024
+MAX_SAFE_REDIRECTS = 5
+REDIRECT_SAFE_HEADERS = frozenset((
+    'accept',
+    'accept-encoding',
+    'accept-language',
+    'range',
+    'user-agent',
+))
 SEMANTIC_MASK_MAX_DIM = 256
 SEMANTIC_ALPHA_THRESHOLD = 16
 SEMANTIC_DIFF_THRESHOLD_FLOOR = 12
@@ -63,11 +85,52 @@ REQUEST_RETRY_TOTAL = 4
 REQUEST_RETRY_BACKOFF_FACTOR = 1.0
 REQUEST_RETRY_STATUS_CODES = (429, 500, 502, 503, 504)
 HTTP_SESSION_POOL_SIZE = 16
-HTTP_HEADERS = {
+HTTP_USER_AGENT = 'nwkit-image/{} (+https://github.com/kfuku52/nwkit)'.format(
+    __version__
+)
+API_HTTP_HEADERS = {
     'Accept': 'application/json',
-    'User-Agent': 'nwkit-image/{} (+https://github.com/kfuku52/nwkit)'.format(__version__),
+    'User-Agent': HTTP_USER_AGENT,
 }
+MEDIA_HTTP_HEADERS = {
+    'Accept': 'image/*, application/octet-stream;q=0.9, */*;q=0.1',
+    'User-Agent': HTTP_USER_AGENT,
+}
+BINARY_HTTP_HEADERS = {
+    'Accept': '*/*',
+    'User-Agent': HTTP_USER_AGENT,
+}
+# Backward-compatible name for callers that customize provider API requests.
+HTTP_HEADERS = API_HTTP_HEADERS
 SUPPORTED_SOURCES = ('phylopic', 'bioicons', 'inaturalist', 'wikimedia', 'gbif', 'eol', 'idigbio', 'openverse', 'ncbi')
+PROVIDER_API_HOSTS = {
+    'phylopic': ('api.phylopic.org',),
+    'bioicons': ('api.github.com',),
+    'inaturalist': ('api.inaturalist.org',),
+    'wikimedia': ('commons.wikimedia.org',),
+    'gbif': ('api.gbif.org',),
+    'eol': ('eol.org',),
+    'idigbio': ('search.idigbio.org',),
+    'openverse': ('api.openverse.org',),
+    'ncbi': ('ftp.ncbi.nlm.nih.gov',),
+}
+PROVIDER_MEDIA_HOSTS = {
+    'phylopic': ('phylopic.org',),
+    'bioicons': ('bioicons.com',),
+    'inaturalist': (
+        'inaturalist.org',
+        'inaturalist-open-data.s3.amazonaws.com',
+        'inaturalist-open-data.s3.us-west-2.amazonaws.com',
+    ),
+    'wikimedia': ('wikimedia.org', 'wikimediausercontent.org'),
+    # Aggregators below intentionally index publisher-hosted media. Their
+    # effective allowlist is any DNS-resolved public host over HTTPS.
+    'gbif': None,
+    'eol': None,
+    'idigbio': None,
+    'openverse': None,
+    'ncbi': None,
+}
 DEFAULT_SOURCES = {
     'auto': ['phylopic', 'bioicons', 'inaturalist', 'wikimedia', 'gbif', 'eol', 'idigbio', 'openverse', 'ncbi'],
     'photo': ['inaturalist', 'wikimedia', 'gbif', 'eol', 'idigbio', 'openverse', 'ncbi'],
@@ -96,6 +159,8 @@ LICENSE_OPENNESS = {
     'all-rights-reserved': -50,
 }
 FILENAME_SANITIZE_PATTERN = re.compile(r'[^A-Za-z0-9._-]+')
+MAX_FILENAME_COMPONENT_LENGTH = 64
+FILENAME_COMPONENT_HASH_LENGTH = 12
 BIOICONS_DESCRIPTOR_TOKENS = {
     'adult', 'blackeyes', 'blue', 'brown', 'chunky', 'cyan', 'darkgray', 'early',
     'embryo', 'embryoearly', 'embryolate', 'fat', 'gender', 'gray', 'green', 'head',
@@ -125,7 +190,12 @@ MIME_TYPE_TO_EXTENSION = {
     'image/tiff': '.tif',
     'image/webp': '.webp',
 }
-PILLOW_INSTALL_HINT = 'Install optional image-processing dependencies with: pip install "nwkit[image]"'
+PILLOW_INSTALL_HINT = (
+    'Pillow is a required NWKIT dependency; reinstall with: pip install --upgrade nwkit'
+)
+CAIROSVG_INSTALL_HINT = (
+    'Install SVG rasterization support with: pip install "nwkit[image]"'
+)
 RASTER_OUTPUT_EXTENSIONS = {
     '.gif': 'GIF',
     '.jpg': 'JPEG',
@@ -135,6 +205,7 @@ RASTER_OUTPUT_EXTENSIONS = {
     '.tiff': 'TIFF',
     '.webp': 'WEBP',
 }
+SAFE_IMAGE_EXTENSIONS = frozenset(RASTER_OUTPUT_EXTENSIONS) | frozenset(('.svg',))
 BIOICONS_CATALOG_MEMORY_CACHE = dict()
 BIOICONS_CATALOG_MEMORY_CACHE_LOCK = threading.Lock()
 
@@ -177,6 +248,375 @@ def build_http_session():
     return session
 
 
+def _hostname_matches_allowlist(hostname, allowed_hosts):
+    hostname = str(hostname or '').lower().rstrip('.')
+    return any(
+        hostname == allowed_host or hostname.endswith('.' + allowed_host)
+        for allowed_host in (str(item).lower().rstrip('.') for item in allowed_hosts or ())
+    )
+
+
+def _validate_public_ip_address(value, url):
+    try:
+        address = ipaddress.ip_address(str(value).split('%', 1)[0])
+    except ValueError as exc:
+        raise MediaDownloadError("URL host has an invalid IP address: {!r}.".format(url)) from exc
+    if not address.is_global:
+        raise MediaDownloadError(
+            "URL resolves to a non-public address ({}) and was refused: {!r}.".format(address, url)
+        )
+
+
+def resolve_hostname_addresses(hostname):
+    """Resolve a host for SSRF checks; kept separate so callers can test deterministically."""
+    return {
+        entry[4][0]
+        for entry in socket.getaddrinfo(hostname, 443, type=socket.SOCK_STREAM)
+    }
+
+
+def _resolve_public_addresses(hostname, url):
+    try:
+        addresses = resolve_hostname_addresses(hostname)
+    except OSError as exc:
+        raise MediaDownloadError(
+            "Could not resolve external image URL host {!r}: {}.".format(hostname, exc)
+        ) from exc
+    if not addresses:
+        raise MediaDownloadError(
+            "External image URL host did not resolve: {!r}.".format(hostname)
+        )
+    for address in addresses:
+        _validate_public_ip_address(address, url)
+    return tuple(sorted(
+        addresses,
+        key=lambda address: (
+            ipaddress.ip_address(str(address).split('%', 1)[0]).version,
+            int(ipaddress.ip_address(str(address).split('%', 1)[0])),
+        ),
+    ))
+
+
+def validate_external_url(url, allowed_hosts=None, resolve_dns=False):
+    parsed = urlparse(str(url or ''))
+    if parsed.scheme.lower() != 'https':
+        raise MediaDownloadError("External image URLs must use HTTPS: {!r}.".format(url))
+    if parsed.username is not None or parsed.password is not None:
+        raise MediaDownloadError("External image URLs must not contain credentials: {!r}.".format(url))
+    hostname = parsed.hostname
+    if hostname in (None, ''):
+        raise MediaDownloadError("External image URL has no hostname: {!r}.".format(url))
+    try:
+        port = parsed.port
+    except ValueError as exc:
+        raise MediaDownloadError("External image URL has an invalid port: {!r}.".format(url)) from exc
+    if port not in (None, 443):
+        raise MediaDownloadError("External image URL must use HTTPS port 443: {!r}.".format(url))
+    if allowed_hosts and not _hostname_matches_allowlist(hostname, allowed_hosts):
+        raise MediaDownloadError(
+            "URL host {!r} is not allowed for this provider.".format(hostname)
+        )
+    try:
+        literal_address = ipaddress.ip_address(hostname.split('%', 1)[0])
+    except ValueError:
+        literal_address = None
+    if literal_address is not None:
+        _validate_public_ip_address(literal_address, url)
+    elif resolve_dns:
+        _resolve_public_addresses(hostname, url)
+    return str(url)
+
+
+def normalize_ncbi_image_url(url):
+    """Upgrade the legacy NCBI taxonomy-image endpoint without relaxing HTTPS."""
+    parsed = urlparse(str(url or ''))
+    hostname = str(parsed.hostname or '').lower().rstrip('.')
+    if (
+        parsed.scheme.lower() == 'http'
+        and hostname in NCBI_LEGACY_IMAGE_HOSTS
+        and parsed.username is None
+        and parsed.password is None
+        and parsed.port in (None, 80)
+        and parsed.path.startswith(NCBI_LEGACY_IMAGE_PATH_PREFIX)
+    ):
+        return parsed._replace(scheme='https', netloc=hostname).geturl()
+    return str(url)
+
+
+def _safe_cross_origin_redirect_headers(headers):
+    return {
+        key: value
+        for key, value in (headers or {}).items()
+        if str(key).lower() in REDIRECT_SAFE_HEADERS
+    }
+
+
+def _redirect_changes_origin(source_url, destination_url):
+    def origin(url):
+        parsed = urlparse(str(url))
+        try:
+            port = parsed.port
+        except ValueError:
+            return None
+        scheme = parsed.scheme.lower()
+        if port is None:
+            port = 443 if scheme == 'https' else 80 if scheme == 'http' else None
+        return (
+            scheme,
+            str(parsed.hostname or '').lower().rstrip('.'),
+            port,
+        )
+
+    return origin(source_url) != origin(destination_url)
+
+
+class _PinnedHTTPSAdapter(HTTPAdapter):
+    """Connect to one validated address while retaining the URL host for TLS."""
+
+    def __init__(self, address, tls_hostname, **kwargs):
+        self._nwkit_address = str(address)
+        self._nwkit_tls_hostname = str(tls_hostname)
+        super().__init__(**kwargs)
+
+    def _connection_from_pinned_host(self, pool_kwargs=None):
+        pool_kwargs = dict(pool_kwargs or {})
+        pool_kwargs.update({
+            'assert_hostname': self._nwkit_tls_hostname,
+            'server_hostname': self._nwkit_tls_hostname,
+        })
+        return self.poolmanager.connection_from_host(
+            host=self._nwkit_address,
+            port=443,
+            scheme='https',
+            pool_kwargs=pool_kwargs,
+        )
+
+    def get_connection_with_tls_context(self, request, verify, proxies=None, cert=None):
+        build_pool_key = getattr(self, 'build_connection_pool_key_attributes', None)
+        pool_kwargs = {}
+        if callable(build_pool_key):
+            _, pool_kwargs = build_pool_key(request, verify, cert)
+        return self._connection_from_pinned_host(pool_kwargs=pool_kwargs)
+
+    def get_connection(self, url, proxies=None):
+        # Compatibility with Requests versions predating
+        # get_connection_with_tls_context().
+        return self._connection_from_pinned_host()
+
+
+def _request_pinned_address(
+    session,
+    method,
+    url,
+    address,
+    suppress_sensitive_headers=False,
+    **kwargs
+):
+    parsed = urlparse(url)
+    hostname = str(parsed.hostname or '')
+    host_header = '[{}]'.format(hostname) if ':' in hostname else hostname
+    configured_proxies = dict(getattr(session, 'proxies', None) or {})
+    if getattr(session, 'trust_env', False):
+        configured_proxies.update(requests.utils.get_environ_proxies(url))
+    configured_proxies.update(kwargs.get('proxies', None) or {})
+    if any(configured_proxies.values()):
+        raise MediaDownloadError(
+            'Proxy-based external image requests are disabled because the '
+            'validated destination address cannot be pinned safely.'
+        )
+    original_adapter = session.get_adapter(url)
+    adapter = _PinnedHTTPSAdapter(
+        address=address,
+        tls_hostname=hostname,
+        max_retries=getattr(original_adapter, 'max_retries', 0),
+        pool_connections=getattr(original_adapter, '_pool_connections', 1),
+        pool_maxsize=getattr(original_adapter, '_pool_maxsize', 1),
+        pool_block=getattr(original_adapter, '_pool_block', False),
+    )
+    pinned_session = requests.Session()
+    pinned_session.trust_env = False
+    session_headers = session.headers
+    if suppress_sensitive_headers:
+        session_headers = _safe_cross_origin_redirect_headers(session_headers)
+    pinned_session.headers.update(session_headers)
+    if not suppress_sensitive_headers:
+        pinned_session.cookies.update(session.cookies)
+        pinned_session.params.update(session.params)
+    pinned_session.auth = None if suppress_sensitive_headers else session.auth
+    pinned_session.cert = None if suppress_sensitive_headers else session.cert
+    pinned_session.verify = session.verify
+    pinned_session.hooks = {
+        event: list(hooks)
+        for event, hooks in session.hooks.items()
+    }
+    pinned_session.mount('https://', adapter)
+    request_headers = dict(kwargs.pop('headers', None) or {})
+    if suppress_sensitive_headers:
+        request_headers = _safe_cross_origin_redirect_headers(request_headers)
+    request_headers['Host'] = host_header
+    kwargs['headers'] = request_headers
+    kwargs.pop('proxies', None)
+    response = None
+    try:
+        response = getattr(pinned_session, method)(url, **kwargs)
+        session.cookies.update(pinned_session.cookies)
+    except Exception:
+        if response is not None and hasattr(response, 'close'):
+            response.close()
+        pinned_session.close()
+        raise
+
+    original_close = response.close
+
+    def close_response_and_session():
+        try:
+            original_close()
+        finally:
+            pinned_session.close()
+
+    response.close = close_response_and_session
+    return response
+
+
+def safe_external_request(session, method, url, allowed_hosts=None, **kwargs):
+    """Make an external request while validating every redirect target."""
+    method = str(method).lower()
+    current_url = str(url)
+    resolve_dns = isinstance(session, requests.Session)
+    suppress_sensitive_headers = False
+    for redirect_count in range(MAX_SAFE_REDIRECTS + 1):
+        validate_external_url(
+            current_url,
+            allowed_hosts=allowed_hosts,
+            resolve_dns=False,
+        )
+        parsed = urlparse(current_url)
+        addresses = None
+        if resolve_dns:
+            literal_address = None
+            try:
+                literal_address = ipaddress.ip_address(
+                    str(parsed.hostname or '').split('%', 1)[0]
+                )
+            except ValueError:
+                pass
+            if literal_address is not None:
+                _validate_public_ip_address(literal_address, current_url)
+                addresses = (str(literal_address),)
+            else:
+                addresses = _resolve_public_addresses(parsed.hostname, current_url)
+        request_method = getattr(session, method)
+        if resolve_dns:
+            response = None
+            last_error = None
+            for address in addresses:
+                try:
+                    response = _request_pinned_address(
+                        session,
+                        method,
+                        current_url,
+                        address,
+                        suppress_sensitive_headers=suppress_sensitive_headers,
+                        allow_redirects=False,
+                        **kwargs
+                    )
+                    break
+                except requests.RequestException as exc:
+                    last_error = exc
+            if response is None:
+                raise last_error
+        else:
+            try:
+                response = request_method(current_url, allow_redirects=False, **kwargs)
+            except TypeError as exc:
+                if 'allow_redirects' not in str(exc):
+                    raise
+                raise MediaDownloadError(
+                    'External request sessions must support allow_redirects=False.'
+                ) from exc
+        status_code = int(getattr(response, 'status_code', 0) or 0)
+        location = (getattr(response, 'headers', {}) or {}).get('Location')
+        if status_code not in (301, 302, 303, 307, 308) or not location:
+            response_url = getattr(response, 'url', current_url) or current_url
+            validate_external_url(
+                response_url,
+                allowed_hosts=allowed_hosts,
+                resolve_dns=resolve_dns and str(response_url) != current_url,
+            )
+            return response
+        if hasattr(response, 'close'):
+            response.close()
+        if redirect_count >= MAX_SAFE_REDIRECTS:
+            raise requests.TooManyRedirects(
+                'External request exceeded {} redirects.'.format(MAX_SAFE_REDIRECTS)
+            )
+        next_url = urljoin(current_url, str(location))
+        if _redirect_changes_origin(current_url, next_url):
+            suppress_sensitive_headers = True
+            if kwargs.get('headers') is not None:
+                kwargs['headers'] = _safe_cross_origin_redirect_headers(kwargs['headers'])
+            kwargs.pop('auth', None)
+            kwargs.pop('cert', None)
+            kwargs.pop('cookies', None)
+        current_url = next_url
+        kwargs.pop('params', None)
+        if status_code == 303 or (status_code in (301, 302) and method == 'post'):
+            method = 'get'
+            kwargs.pop('json', None)
+            kwargs.pop('data', None)
+    raise requests.TooManyRedirects(
+        'External request exceeded {} redirects.'.format(MAX_SAFE_REDIRECTS)
+    )
+
+
+def bounded_response_json(response, max_bytes=DEFAULT_MAX_PROVIDER_RESPONSE_BYTES):
+    max_bytes = int(max_bytes)
+    content_length = response_content_length(response)
+    if content_length is not None and content_length > max_bytes:
+        raise MediaDownloadError(
+            'Provider response declares {} bytes, exceeding {}.'.format(content_length, max_bytes)
+        )
+    if hasattr(response, 'iter_content'):
+        chunks = list()
+        total = 0
+        for chunk in response.iter_content(chunk_size=64 * 1024):
+            if not chunk:
+                continue
+            total += len(chunk)
+            if total > max_bytes:
+                raise MediaDownloadError('Provider response exceeded {} bytes.'.format(max_bytes))
+            chunks.append(chunk)
+        try:
+            return json.loads(b''.join(chunks).decode('utf-8'))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise MediaDownloadError('Provider returned invalid JSON: {}.'.format(exc)) from exc
+    payload = response.json()
+    try:
+        encoded_size = len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))
+    except (TypeError, ValueError) as exc:
+        raise MediaDownloadError('Provider returned invalid JSON: {}.'.format(exc)) from exc
+    if encoded_size > max_bytes:
+        raise MediaDownloadError('Provider response exceeded {} bytes.'.format(max_bytes))
+    return payload
+
+
+def provider_json_request(session, provider, method, url, **kwargs):
+    kwargs.setdefault('stream', True)
+    response = safe_external_request(
+        session,
+        method,
+        url,
+        allowed_hosts=PROVIDER_API_HOSTS.get(provider, ()),
+        **kwargs
+    )
+    try:
+        response.raise_for_status()
+        return bounded_response_json(response)
+    finally:
+        if hasattr(response, 'close'):
+            response.close()
+
+
 def _close_ncbi_db(ncbi):
     if ncbi is None:
         return
@@ -203,17 +643,54 @@ def normalize_species_name(name):
 
 
 def sanitize_filename_component(value):
-    normalized = FILENAME_SANITIZE_PATTERN.sub('_', str(value).strip())
+    raw_value = str(value).strip()
+    normalized = FILENAME_SANITIZE_PATTERN.sub('_', raw_value)
     normalized = normalized.strip('._')
-    return normalized or 'item'
+    normalized = normalized or 'item'
+    if (
+        len(normalized) > MAX_FILENAME_COMPONENT_LENGTH
+        or len(raw_value.encode('utf-8')) > MAX_FILENAME_COMPONENT_LENGTH
+    ):
+        digest = hashlib.sha256(raw_value.encode('utf-8')).hexdigest()[
+            :FILENAME_COMPONENT_HASH_LENGTH
+        ]
+        prefix_length = (
+            MAX_FILENAME_COMPONENT_LENGTH
+            - FILENAME_COMPONENT_HASH_LENGTH
+            - 1
+        )
+        prefix = normalized[:prefix_length].rstrip('._-') or 'item'
+        normalized = '{}-{}'.format(prefix, digest)
+    return normalized
 
 
 def normalize_license_code(raw_code=None, raw_url=None, attribution=None):
+    code = None
     if raw_code is not None:
         code = str(raw_code).strip().lower()
         if code in ('', 'none', 'null', 'nan'):
             code = None
-        elif code in ('cc0', 'cc-0', 'pd', 'pdm', 'public-domain', 'public domain'):
+
+    attribution_text = str(attribution or '').strip().lower()
+    combined_text = ' '.join(
+        value for value in (code, attribution_text) if value
+    )
+    if 'all rights reserved' in combined_text:
+        return 'all-rights-reserved'
+    if re.search(
+        r'(?:'
+        r'\b(?:not|non)[ -]+public[ -]+domain\b|'
+        r'\bno\s+(?:redistribution|reuse|reproduction)\b|'
+        r'\blimited(?:\s+[a-z]+){0,3}\s+use\b|'
+        r'\b(?:personal|educational|editorial|research|'
+        r'noncommercial|non-commercial)\s+use\s+only\b'
+        r')',
+        combined_text,
+    ):
+        return 'unknown'
+
+    if code is not None:
+        if code in ('cc0', 'cc-0', 'pd', 'pdm', 'public-domain', 'public domain'):
             return 'public-domain'
         elif code in ('mit', 'mit license'):
             return 'mit'
@@ -233,44 +710,70 @@ def normalize_license_code(raw_code=None, raw_url=None, attribution=None):
             return 'cc-by-nc-nd'
         elif code in ('all-rights-reserved', 'arr', 'all rights reserved'):
             return 'all-rights-reserved'
-        elif ('public domain' in code) or ('cc0' in code) or ('pdm' == code):
+        elif (
+            re.fullmatch(r'cc[- ]?0(?:\s+\d+(?:\.\d+)*)?', code)
+            or re.fullmatch(
+                r'public[ -]+domain(?:[ -]+mark)?(?:\s+\d+(?:\.\d+)*)?',
+                code,
+            )
+        ):
             return 'public-domain'
-        elif 'mit' in code:
+        elif re.fullmatch(
+            r'mit(?:\s+software)?\s+licen[cs]e',
+            code,
+        ):
             return 'mit'
-        elif 'bsd' in code:
+        elif re.fullmatch(
+            r'bsd(?:[- ](?:2|3)[- ]clause)?(?:\s+licen[cs]e)?',
+            code,
+        ):
             return 'bsd'
-        elif ('cc by-nc-nd' in code) or ('cc-by-nc-nd' in code):
+        elif re.search(r'\bcc[ -]by[ -]nc[ -]nd\b', code):
             return 'cc-by-nc-nd'
-        elif ('cc by-nd' in code) or ('cc-by-nd' in code):
+        elif re.search(r'\bcc[ -]by[ -]nd\b', code):
             return 'cc-by-nd'
-        elif ('cc by-nc-sa' in code) or ('cc-by-nc-sa' in code):
+        elif re.search(r'\bcc[ -]by[ -]nc[ -]sa\b', code):
             return 'cc-by-nc-sa'
-        elif ('cc by-nc' in code) or ('cc-by-nc' in code):
+        elif re.search(r'\bcc[ -]by[ -]nc\b', code):
             return 'cc-by-nc'
-        elif ('cc by-sa' in code) or ('cc-by-sa' in code):
+        elif re.search(r'\bcc[ -]by[ -]sa\b', code):
             return 'cc-by-sa'
-        elif ('cc by' in code) or ('cc-by' in code):
+        elif re.search(r'\bcc[ -]by\b', code):
             return 'cc-by'
 
     if raw_url:
-        url = str(raw_url).strip().lower()
-        if any(token in url for token in ('publicdomain/zero', 'publicdomain/mark', '/zero/1.0', '/mark/1.0')):
-            return 'public-domain'
-        if '/licenses/by-nc-nd/' in url:
-            return 'cc-by-nc-nd'
-        if '/licenses/by-nd/' in url:
-            return 'cc-by-nd'
-        if '/licenses/by-nc-sa/' in url:
-            return 'cc-by-nc-sa'
-        if '/licenses/by-nc/' in url:
-            return 'cc-by-nc'
-        if '/licenses/by-sa/' in url:
-            return 'cc-by-sa'
-        if '/licenses/by/' in url:
-            return 'cc-by'
-
-    if attribution and ('all rights reserved' in str(attribution).lower()):
-        return 'all-rights-reserved'
+        parsed_url = urlparse(str(raw_url).strip())
+        hostname = str(parsed_url.hostname or '').lower().rstrip('.')
+        path = parsed_url.path.lower()
+        try:
+            port = parsed_url.port
+        except ValueError:
+            port = -1
+        has_canonical_origin = (
+            parsed_url.scheme.lower() in ('http', 'https')
+            and port in (
+                None,
+                80 if parsed_url.scheme.lower() == 'http' else 443,
+            )
+            and _hostname_matches_allowlist(
+                hostname,
+                ('creativecommons.org',),
+            )
+        )
+        if has_canonical_origin:
+            if re.fullmatch(
+                r'/publicdomain/(?:zero|mark)/1\.0/?',
+                path,
+            ):
+                return 'public-domain'
+            match = re.fullmatch(
+                r'/licenses/'
+                r'(by-nc-nd|by-nd|by-nc-sa|by-nc|by-sa|by)'
+                r'/\d+(?:\.\d+)*/?',
+                path,
+            )
+            if match is not None:
+                return 'cc-{}'.format(match.group(1))
     return 'unknown'
 
 
@@ -575,9 +1078,17 @@ def search_text_mentions_query(text_fragments, query_name):
 
 
 def infer_extension(url, default_ext='.bin'):
-    path = urlparse(url).path
+    try:
+        path = urlparse(str(url or '')).path
+    except (TypeError, ValueError):
+        return default_ext
+    if any(ord(character) < 32 or ord(character) == 127 for character in path):
+        return default_ext
     _, ext = os.path.splitext(path)
-    return ext.lower() if ext != '' else default_ext
+    normalized_ext = ext.lower()
+    if normalized_ext in SAFE_IMAGE_EXTENSIONS:
+        return normalized_ext
+    return default_ext
 
 
 def replace_extension(path, ext):
@@ -669,7 +1180,7 @@ def load_pillow_modules():
         from PIL import Image, ImageChops, ImageOps
     except ImportError as exc:
         raise RuntimeError(
-            'Image post-processing requires the optional Pillow dependency. {}'.format(PILLOW_INSTALL_HINT)
+            'Image validation and post-processing require Pillow. {}'.format(PILLOW_INSTALL_HINT)
         ) from exc
     return Image, ImageChops, ImageOps
 
@@ -679,9 +1190,218 @@ def load_cairosvg_module():
         import cairosvg
     except ImportError as exc:
         raise RuntimeError(
-            'SVG image post-processing requires the optional CairoSVG dependency. {}'.format(PILLOW_INSTALL_HINT)
+            'SVG image post-processing requires the optional CairoSVG dependency. {}'.format(
+                CAIROSVG_INSTALL_HINT
+            )
         ) from exc
     return cairosvg
+
+
+def validate_image_dimensions(
+    width,
+    height,
+    max_pixels=DEFAULT_MAX_DECODED_PIXELS,
+    max_dimension=DEFAULT_MAX_IMAGE_DIMENSION,
+    label='Image',
+):
+    try:
+        width = int(math.ceil(float(width)))
+        height = int(math.ceil(float(height)))
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise MediaDownloadError('{} has invalid dimensions.'.format(label)) from exc
+    if width <= 0 or height <= 0:
+        raise MediaDownloadError('{} has non-positive dimensions {}x{}.'.format(label, width, height))
+    if width > int(max_dimension) or height > int(max_dimension):
+        raise MediaDownloadError(
+            '{} dimensions {}x{} exceed the maximum edge {}.'.format(
+                label, width, height, int(max_dimension)
+            )
+        )
+    if width * height > int(max_pixels):
+        raise MediaDownloadError(
+            '{} dimensions {}x{} exceed the maximum decoded pixel count {}.'.format(
+                label, width, height, int(max_pixels)
+            )
+        )
+    return width, height
+
+
+def _svg_length_to_pixels(value):
+    match = re.fullmatch(
+        r'\s*([+]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*(px|pt|pc|in|cm|mm|q)?\s*',
+        str(value or ''),
+        flags=re.IGNORECASE,
+    )
+    if match is None:
+        return None
+    number = float(match.group(1))
+    unit = (match.group(2) or 'px').lower()
+    factors = {
+        'px': 1.0,
+        'pt': 96.0 / 72.0,
+        'pc': 16.0,
+        'in': 96.0,
+        'cm': 96.0 / 2.54,
+        'mm': 96.0 / 25.4,
+        'q': 96.0 / 101.6,
+    }
+    return number * factors[unit]
+
+
+def _svg_dimensions_from_root(root, enforce_limits=True):
+    if root.tag.rsplit('}', 1)[-1].lower() != 'svg':
+        raise MediaDownloadError('SVG image root element must be <svg>.')
+    view_box = str(root.attrib.get('viewBox') or root.attrib.get('viewbox') or '').replace(',', ' ').split()
+    view_width = view_height = None
+    if len(view_box) == 4:
+        try:
+            view_width = float(view_box[2])
+            view_height = float(view_box[3])
+        except (TypeError, ValueError):
+            view_width = view_height = None
+    width = _svg_length_to_pixels(root.attrib.get('width'))
+    height = _svg_length_to_pixels(root.attrib.get('height'))
+    if width is None:
+        width = view_width if view_width is not None else 300.0
+    if height is None:
+        height = view_height if view_height is not None else 150.0
+    if not math.isfinite(width) or not math.isfinite(height) or width <= 0 or height <= 0:
+        raise MediaDownloadError('SVG image has invalid or non-positive dimensions.')
+    if enforce_limits:
+        return validate_image_dimensions(width, height, label='SVG image')
+    return int(math.ceil(width)), int(math.ceil(height))
+
+
+def inspect_svg_dimensions(source_path, enforce_limits=True):
+    try:
+        size = os.path.getsize(source_path)
+    except OSError as exc:
+        raise MediaDownloadError('SVG image is unavailable: {}.'.format(exc)) from exc
+    if size <= 0 or size > DEFAULT_MAX_SVG_BYTES:
+        raise MediaDownloadError(
+            'SVG image size {} bytes is outside the supported range (1-{}).'.format(
+                size, DEFAULT_MAX_SVG_BYTES
+            )
+        )
+    try:
+        root = ElementTree.parse(source_path).getroot()
+    except (ElementTree.ParseError, OSError) as exc:
+        raise MediaDownloadError('SVG image is not well-formed XML: {}.'.format(exc)) from exc
+    return _svg_dimensions_from_root(root, enforce_limits=enforce_limits)
+
+
+def validate_safe_svg(
+    source_path,
+    allow_oversized_dimensions=False,
+    rewrite_sanitized=True,
+    return_sanitized_bytes=False,
+):
+    """Reject active or externally loaded SVG content while retaining safe SVG output."""
+    try:
+        size = os.path.getsize(source_path)
+        with open(source_path, 'rb') as handle:
+            raw = handle.read(DEFAULT_MAX_SVG_BYTES + 1)
+    except OSError as exc:
+        raise MediaDownloadError('SVG image is unavailable: {}.'.format(exc)) from exc
+    if size <= 0 or size > DEFAULT_MAX_SVG_BYTES or len(raw) > DEFAULT_MAX_SVG_BYTES:
+        raise MediaDownloadError(
+            'SVG image size {} bytes is outside the supported range (1-{}).'.format(
+                size, DEFAULT_MAX_SVG_BYTES
+            )
+        )
+    if raw.startswith((b'\xff\xfe', b'\xfe\xff', b'\x00\x00\xfe\xff')) or b'\x00' in raw:
+        raise MediaDownloadError(
+            'SVG image uses an unsupported UTF-16/UTF-32 or NUL-containing encoding.'
+        )
+    if re.search(br'<!\s*ENTITY\b', raw, flags=re.IGNORECASE):
+        raise MediaDownloadError('SVG image contains a forbidden entity declaration.')
+    if re.search(br'<!\s*DOCTYPE\b[^[]*\[', raw, flags=re.IGNORECASE):
+        raise MediaDownloadError('SVG image contains a forbidden internal document type subset.')
+    sanitized_raw = re.sub(
+        br'<!\s*DOCTYPE\b(?:(?:"[^"]*")|(?:\'[^\']*\')|[^>])*>\s*',
+        b'',
+        raw,
+        flags=re.IGNORECASE,
+    )
+    sanitized_raw = re.sub(
+        br'<\?(?!xml(?:\s|$))[\s\S]*?\?>\s*',
+        b'',
+        sanitized_raw,
+        flags=re.IGNORECASE,
+    )
+    if re.search(br'<!\s*DOCTYPE\b', sanitized_raw, flags=re.IGNORECASE):
+        raise MediaDownloadError('SVG image contains an unsupported document type declaration.')
+    try:
+        root = ElementTree.fromstring(sanitized_raw)
+    except ElementTree.ParseError as exc:
+        raise MediaDownloadError('SVG image is not well-formed XML: {}.'.format(exc)) from exc
+    if root.tag.rsplit('}', 1)[-1].lower() != 'svg':
+        raise MediaDownloadError('SVG image root element must be <svg>.')
+    forbidden_tags = {
+        'a', 'animate', 'animatemotion', 'animatetransform', 'audio', 'embed',
+        'foreignobject', 'iframe', 'image', 'object', 'script', 'set', 'video',
+    }
+    css_url = re.compile(r'url\s*\(\s*([^)]+?)\s*\)', flags=re.IGNORECASE)
+
+    def css_has_unsafe_reference(value):
+        value = str(value or '')
+        # CSS escapes can conceal tokens such as url(), @import, or a URL
+        # scheme from text-level checks. Reject them conservatively rather
+        # than attempting to implement a full CSS tokenizer.
+        if '\\' in value:
+            return True
+        if re.search(r'(?:@import\b|expression\s*\(|(?:java|vb)script\s*:)', value, flags=re.IGNORECASE):
+            return True
+        # Colons separate ordinary CSS declarations (for example,
+        # ``fill:red``), so only treat protocol-relative text and explicit
+        # resource-bearing url() functions as URL references here.
+        if '//' in value:
+            return True
+        for match in css_url.finditer(value):
+            target = match.group(1).strip().strip('"\'').strip()
+            if target and not target.startswith('#'):
+                return True
+        return False
+
+    for element_count, element in enumerate(root.iter(), start=1):
+        if element_count > 100_000:
+            raise MediaDownloadError('SVG image contains too many XML elements.')
+        local_tag = str(element.tag).rsplit('}', 1)[-1].lower()
+        if local_tag in forbidden_tags:
+            raise MediaDownloadError('SVG image contains forbidden <{}> content.'.format(local_tag))
+        if local_tag == 'style' and css_has_unsafe_reference(element.text):
+            raise MediaDownloadError('SVG image contains an external or executable CSS reference.')
+        for raw_name, raw_value in element.attrib.items():
+            local_name = str(raw_name).rsplit('}', 1)[-1].lower()
+            value = str(raw_value or '').strip()
+            if local_name.startswith('on'):
+                raise MediaDownloadError('SVG image contains an event-handler attribute.')
+            if local_name == 'base':
+                raise MediaDownloadError('SVG image contains a forbidden base URL.')
+            if local_name in ('href', 'src') and value not in ('',) and not value.startswith('#'):
+                raise MediaDownloadError('SVG image contains an external resource reference.')
+            if css_has_unsafe_reference(value):
+                raise MediaDownloadError('SVG image contains an external or executable CSS reference.')
+            if re.match(r'\s*(?:javascript|vbscript)\s*:', value, flags=re.IGNORECASE):
+                raise MediaDownloadError('SVG image contains an executable URL.')
+    _svg_dimensions_from_root(
+        root,
+        enforce_limits=not allow_oversized_dimensions,
+    )
+    if sanitized_raw != raw and rewrite_sanitized:
+        source_mode = stat.S_IMODE(os.stat(source_path).st_mode)
+        tmp_path = make_temporary_sibling_path(source_path)
+        try:
+            with open(tmp_path, 'wb') as handle:
+                handle.write(sanitized_raw)
+            os.chmod(tmp_path, source_mode)
+            os.replace(tmp_path, source_path)
+        except Exception:
+            remove_temporary_path(tmp_path, 'temporary sanitized SVG')
+            raise
+    if return_sanitized_bytes:
+        return sanitized_raw
+    return source_path
 
 
 def get_resampling_filter(Image):
@@ -926,6 +1646,7 @@ def square_canvas_image(image, background_mode, Image):
 
 def save_processed_raster_image(image, destination_path):
     ensure_directory(os.path.dirname(destination_path))
+    output_mode = output_file_mode(destination_path)
     dest_ext = os.path.splitext(destination_path)[1].lower()
     image_format = RASTER_OUTPUT_EXTENSIONS.get(dest_ext)
     if image_format is None:
@@ -945,17 +1666,40 @@ def save_processed_raster_image(image, destination_path):
     tmp_path = make_temporary_sibling_path(destination_path)
     try:
         image_to_save.save(tmp_path, format=image_format, **save_kwargs)
+        os.chmod(tmp_path, output_mode)
         os.replace(tmp_path, destination_path)
     except Exception:
         remove_temporary_path(tmp_path, 'temporary processed image')
         raise
 
 
-def rasterize_svg_to_image(source_path):
+def rasterize_svg_to_image(source_path, max_edge=None):
+    allow_oversized = max_edge not in (None, 0)
+    sanitized_svg = validate_safe_svg(
+        source_path,
+        allow_oversized_dimensions=allow_oversized,
+        rewrite_sanitized=False,
+        return_sanitized_bytes=True,
+    )
+    natural_width, natural_height = _svg_dimensions_from_root(
+        ElementTree.fromstring(sanitized_svg),
+        enforce_limits=not allow_oversized,
+    )
+    scale = 1.0
+    if max_edge not in (None, 0):
+        scale = min(1.0, float(max_edge) / float(max(natural_width, natural_height)))
+    output_width = max(1, int(round(natural_width * scale)))
+    output_height = max(1, int(round(natural_height * scale)))
+    validate_image_dimensions(output_width, output_height, label='Rasterized SVG image')
     cairosvg = load_cairosvg_module()
     Image, _, _ = load_pillow_modules()
-    png_bytes = cairosvg.svg2png(url=source_path)
+    png_bytes = cairosvg.svg2png(
+        bytestring=sanitized_svg,
+        output_width=output_width,
+        output_height=output_height,
+    )
     with Image.open(io.BytesIO(png_bytes)) as image:
+        validate_image_dimensions(*image.size, label='Rasterized SVG image')
         rasterized = image.convert('RGBA')
         rasterized.load()
     return rasterized
@@ -964,6 +1708,20 @@ def rasterize_svg_to_image(source_path):
 def process_raster_image(source_path, args):
     Image, ImageChops, ImageOps = load_pillow_modules()
     with Image.open(source_path) as source_image:
+        validate_image_dimensions(*source_image.size, label='Raster image')
+        max_edge = getattr(args, 'max_edge', None)
+        can_downsample_before_decode = (
+            max_edge not in (None, 0)
+            and getattr(args, 'trim', 'off') == 'off'
+            and getattr(args, 'trim_shape', 'bbox') == 'bbox'
+        )
+        if can_downsample_before_decode:
+            source_image.draft(source_image.mode, (int(max_edge), int(max_edge)))
+        if can_downsample_before_decode:
+            source_image.thumbnail(
+                (int(max_edge), int(max_edge)),
+                get_resampling_filter(Image),
+            )
         image = ImageOps.exif_transpose(source_image)
         image.load()
     image = trim_image(
@@ -987,8 +1745,27 @@ def process_raster_image(source_path, args):
     return destination_path
 
 
+def validate_safe_raster(source_path):
+    """Validate raster dimensions and file integrity without retaining pixels."""
+    Image, _, _ = load_pillow_modules()
+    try:
+        with Image.open(source_path) as image:
+            validate_image_dimensions(*image.size, label='Raster image')
+            image.verify()
+        with Image.open(source_path) as image:
+            validate_image_dimensions(*image.size, label='Raster image')
+            image.load()
+    except MediaDownloadError:
+        raise
+    except Exception as exc:
+        raise MediaDownloadError(
+            'Raster image is truncated, corrupt, or unsupported: {}.'.format(exc)
+        ) from exc
+    return source_path
+
+
 def process_svg_image(source_path, args):
-    rasterized = rasterize_svg_to_image(source_path)
+    rasterized = rasterize_svg_to_image(source_path, max_edge=getattr(args, 'max_edge', None))
     Image, ImageChops, _ = load_pillow_modules()
     image = trim_image(
         rasterized,
@@ -1013,9 +1790,20 @@ def process_svg_image(source_path, args):
 
 def postprocess_media_file(source_path, args):
     normalized_path = normalize_existing_media_path(source_path)
-    if not image_postprocessing_requested(args):
-        return normalized_path
     source_ext = os.path.splitext(normalized_path)[1].lower()
+    processing_requested = image_postprocessing_requested(args)
+    if source_ext == '.svg':
+        validate_safe_svg(
+            normalized_path,
+            allow_oversized_dimensions=(
+                processing_requested
+                and getattr(args, 'max_edge', None) not in (None, 0)
+            ),
+        )
+    elif not processing_requested:
+        validate_safe_raster(normalized_path)
+    if not processing_requested:
+        return normalized_path
     if source_ext == '.svg':
         return process_svg_image(normalized_path, args=args)
     return process_raster_image(normalized_path, args=args)
@@ -1023,9 +1811,12 @@ def postprocess_media_file(source_path, args):
 
 def resolve_image_cache_dir(args=None):
     download_dir = resolve_download_dir(args)
-    if download_dir is None:
+    if download_dir is not None:
+        return os.path.join(download_dir, 'nwkit', 'image-cache')
+    out_dir = getattr(args, 'out_dir', None) if args is not None else None
+    if out_dir in (None, ''):
         return None
-    return os.path.join(download_dir, 'nwkit', 'image-cache')
+    return os.path.join(os.path.realpath(out_dir), '.nwkit-cache', 'image-cache')
 
 
 def resolve_image_query_cache_dir(args=None):
@@ -1112,6 +1903,8 @@ def load_cached_provider_candidates(
             payload = json.load(handle)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
+    if not isinstance(payload, dict):
+        return None
     if payload.get('version') != IMAGE_QUERY_CACHE_VERSION:
         return None
     if not cache_timestamp_is_fresh(payload.get('cached_at'), max_age_seconds):
@@ -1125,7 +1918,83 @@ def load_cached_provider_candidates(
     candidates = payload.get('candidates')
     if not isinstance(candidates, list):
         return None
+    try:
+        for candidate in candidates:
+            validate_candidate_media_url(candidate, resolve_dns=False)
+    except (MediaDownloadError, TypeError, ValueError):
+        return None
     return candidates
+
+
+def validate_candidate_media_url(candidate, resolve_dns=False):
+    if not isinstance(candidate, dict):
+        raise MediaDownloadError('Image provider candidate must be an object.')
+    provider = str(candidate.get('provider') or '')
+    if provider not in SUPPORTED_SOURCES:
+        raise MediaDownloadError('Image provider candidate has an unknown provider {!r}.'.format(provider))
+    media_url = candidate.get('media_url')
+    allowed_hosts = PROVIDER_MEDIA_HOSTS.get(provider)
+    return validate_external_url(
+        media_url,
+        allowed_hosts=allowed_hosts,
+        resolve_dns=resolve_dns,
+    )
+
+
+def normalize_provider_candidate(candidate, expected_provider=None):
+    if not isinstance(candidate, dict):
+        raise ValueError('Image provider candidate must be an object.')
+    candidate = dict(candidate)
+    provider = candidate.get('provider')
+    if not isinstance(provider, str) or provider not in SUPPORTED_SOURCES:
+        raise ValueError('Image provider candidate has an invalid provider.')
+    if expected_provider is not None and provider != expected_provider:
+        raise ValueError(
+            'Image provider candidate source does not match its cache/provider.'
+        )
+    for field in (
+        'provider_record_id',
+        'matched_name',
+        'matched_rank',
+        'license_code',
+        'media_url',
+    ):
+        value = candidate.get(field)
+        if not isinstance(value, (str, int, float)) or isinstance(value, bool):
+            raise ValueError(
+                "Image provider candidate has an invalid '{}' value.".format(
+                    field
+                )
+            )
+        candidate[field] = str(value)
+    for field in ('license_url', 'attribution', 'source_page_url', 'asset_type'):
+        value = candidate.get(field)
+        candidate[field] = (
+            str(value)
+            if isinstance(value, (str, int, float)) and not isinstance(value, bool)
+            else ''
+        )
+    candidate['width'] = _finite_nonnegative_number(candidate.get('width'))
+    candidate['height'] = _finite_nonnegative_number(candidate.get('height'))
+    candidate['provider_quality'] = int(
+        _finite_nonnegative_number(candidate.get('provider_quality'))
+    )
+    for field in ('is_primary', 'is_vector'):
+        value = candidate.get(field)
+        if value is None:
+            continue
+        if isinstance(value, bool):
+            candidate[field] = value
+            continue
+        if isinstance(value, str) and value.strip().lower() in ('true', 'false'):
+            candidate[field] = value.strip().lower() == 'true'
+            continue
+        raise ValueError(
+            "Image provider candidate has an invalid '{}' value; "
+            "expected true or false.".format(field)
+        )
+    validate_candidate_media_url(candidate, resolve_dns=False)
+    return candidate
 
 
 def make_temporary_sibling_path(destination_path):
@@ -1176,6 +2045,8 @@ def load_cached_bioicons_catalog(cache_path, max_age_seconds=None, refresh=False
             payload = json.load(handle)
     except (FileNotFoundError, json.JSONDecodeError, OSError):
         return None
+    if not isinstance(payload, dict):
+        return None
     if payload.get('version') != BIOICONS_CATALOG_CACHE_VERSION:
         return None
     if not cache_timestamp_is_fresh(payload.get('cached_at'), max_age_seconds):
@@ -1210,8 +2081,18 @@ def get_style_priority(candidate, style='auto'):
     return 1 if asset_type in ('photo', 'silhouette') else 0
 
 
+def _finite_nonnegative_number(value, default=0.0):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    if not math.isfinite(number) or number < 0.0:
+        return float(default)
+    return number
+
+
 def get_provider_quality_bonus(candidate):
-    return int(candidate.get('provider_quality', 0) or 0)
+    return int(_finite_nonnegative_number(candidate.get('provider_quality')))
 
 
 def candidate_is_vector(candidate):
@@ -1223,11 +2104,8 @@ def candidate_is_vector(candidate):
 
 
 def get_aspect_fit_bonus(candidate):
-    try:
-        width = float(candidate.get('width') or 0)
-        height = float(candidate.get('height') or 0)
-    except (TypeError, ValueError):
-        return 0
+    width = _finite_nonnegative_number(candidate.get('width'))
+    height = _finite_nonnegative_number(candidate.get('height'))
     if width <= 0 or height <= 0:
         return 0
     aspect_ratio = max(width, height) / min(width, height)
@@ -1314,17 +2192,91 @@ def resolve_ncbi_taxonomy_image_cache_dir(args=None):
     return os.path.join(tempfile.gettempdir(), 'nwkit', 'ncbi-taxonomy-images')
 
 
-def _download_to_path(session, url, destination_path):
+def _file_md5(path):
+    digest = hashlib.md5(
+        usedforsecurity=False
+    )  # nosec - NCBI publishes MD5 for transfer-integrity checking
+    with open(path, 'rb') as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _fetch_ncbi_archive_md5(session):
+    checksum_url = NCBI_NEWTAXDUMP_URL + '.md5'
+    response = safe_external_request(
+        session,
+        'get',
+        checksum_url,
+        allowed_hosts=PROVIDER_API_HOSTS['ncbi'],
+        stream=True,
+        timeout=REQUEST_TIMEOUT,
+        headers=BINARY_HTTP_HEADERS,
+    )
+    try:
+        response.raise_for_status()
+        content_length = response_content_length(response)
+        if content_length is not None and content_length > 4096:
+            raise MediaDownloadError('NCBI checksum response is unexpectedly large.')
+        content = bytearray()
+        for chunk in response.iter_content(chunk_size=4096):
+            if chunk:
+                content.extend(chunk)
+                if len(content) > 4096:
+                    raise MediaDownloadError('NCBI checksum response is unexpectedly large.')
+        match = re.search(rb'\b([0-9a-fA-F]{32})\b', bytes(content))
+        if match is None:
+            raise MediaDownloadError('NCBI checksum response did not contain an MD5 digest.')
+        return match.group(1).decode('ascii').lower()
+    finally:
+        if hasattr(response, 'close'):
+            response.close()
+
+
+def _download_to_path(
+    session,
+    url,
+    destination_path,
+    max_bytes=NCBI_NEWTAXDUMP_MAX_BYTES,
+    expected_md5=None,
+):
     ensure_directory(os.path.dirname(destination_path))
     tmp_path = make_temporary_sibling_path(destination_path)
     response = None
     try:
-        response = session.get(url, stream=True, timeout=REQUEST_TIMEOUT, headers=HTTP_HEADERS)
+        response = safe_external_request(
+            session,
+            'get',
+            url,
+            allowed_hosts=PROVIDER_API_HOSTS['ncbi'],
+            stream=True,
+            timeout=REQUEST_TIMEOUT,
+            headers=BINARY_HTTP_HEADERS,
+        )
         response.raise_for_status()
+        content_length = response_content_length(response)
+        if content_length is not None and content_length > int(max_bytes):
+            raise MediaDownloadError(
+                'NCBI archive declares {} bytes, exceeding {}.'.format(content_length, int(max_bytes))
+            )
+        downloaded_bytes = 0
+        digest = hashlib.md5(
+            usedforsecurity=False
+        )  # nosec - transfer-integrity check against NCBI-published digest
         with open(tmp_path, 'wb') as handle:
             for chunk in response.iter_content(chunk_size=1024 * 256):
                 if chunk:
+                    downloaded_bytes += len(chunk)
+                    if downloaded_bytes > int(max_bytes):
+                        raise MediaDownloadError(
+                            'NCBI archive exceeded {} bytes.'.format(int(max_bytes))
+                        )
+                    digest.update(chunk)
                     handle.write(chunk)
+        if downloaded_bytes == 0:
+            raise MediaDownloadError('Downloaded NCBI archive is empty.')
+        if expected_md5 and digest.hexdigest().lower() != str(expected_md5).lower():
+            raise MediaDownloadError('Downloaded NCBI archive checksum did not match the published digest.')
         os.replace(tmp_path, destination_path)
     except Exception:
         remove_temporary_path(tmp_path, 'temporary NCBI archive download')
@@ -1343,12 +2295,30 @@ def _extract_ncbi_images_table(tarball_path, destination_path):
     try:
         with tarfile.open(tarball_path, 'r:gz') as handle:
             member = handle.getmember('images.dmp')
+            if not member.isfile():
+                raise MediaDownloadError('NCBI archive images.dmp entry is not a regular file.')
+            if member.size <= 0 or member.size > NCBI_IMAGES_TABLE_MAX_BYTES:
+                raise MediaDownloadError(
+                    'NCBI images.dmp size {} is outside the supported range.'.format(member.size)
+                )
             extracted = handle.extractfile(member)
             if extracted is None:
                 raise FileNotFoundError('images.dmp not found in {}'.format(tarball_path))
             try:
                 with open(tmp_path, 'wb') as out_handle:
-                    shutil.copyfileobj(extracted, out_handle)
+                    copied = 0
+                    while True:
+                        chunk = extracted.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        copied += len(chunk)
+                        if copied > NCBI_IMAGES_TABLE_MAX_BYTES:
+                            raise MediaDownloadError('Extracted NCBI images.dmp exceeded its size limit.')
+                        out_handle.write(chunk)
+                if copied != member.size:
+                    raise MediaDownloadError(
+                        'Extracted NCBI images.dmp size did not match the archive metadata.'
+                    )
             finally:
                 extracted.close()
         os.replace(tmp_path, destination_path)
@@ -1357,19 +2327,118 @@ def _extract_ncbi_images_table(tarball_path, destination_path):
         raise
 
 
+def _ncbi_images_table_is_valid(path):
+    try:
+        size = os.path.getsize(path)
+        if size <= 0 or size > NCBI_IMAGES_TABLE_MAX_BYTES:
+            return False
+        with open(path, 'r') as handle:
+            for line in handle:
+                if line.strip():
+                    parse_ncbi_images_dmp_line(line)
+                    return True
+    except (OSError, UnicodeError, ValueError):
+        return False
+    return False
+
+
+def _ncbi_images_database_is_valid(path):
+    try:
+        if os.path.getsize(path) <= 0:
+            return False
+        uri = 'file:{}?mode=ro'.format(
+            quote(os.path.abspath(path), safe='/')
+        )
+        connection = sqlite3.connect(uri, uri=True)
+        try:
+            quick_check = connection.execute('PRAGMA quick_check').fetchone()
+            if not quick_check or quick_check[0] != 'ok':
+                return False
+            columns = {
+                row[1]
+                for row in connection.execute('PRAGMA table_info(images)').fetchall()
+            }
+            if not {'taxid', 'record_id', 'image_url'}.issubset(columns):
+                return False
+            return connection.execute(
+                'SELECT 1 FROM images LIMIT 1'
+            ).fetchone() is not None
+        finally:
+            connection.close()
+    except (OSError, sqlite3.DatabaseError):
+        return False
+
+
 def ensure_ncbi_images_table(args, session):
     cache_dir = resolve_ncbi_taxonomy_image_cache_dir(args)
     images_path = os.path.join(cache_dir, 'images.dmp')
-    if os.path.exists(images_path) and os.path.getsize(images_path) > 0:
+    if _ncbi_images_table_is_valid(images_path):
         return images_path
     lock_path = os.path.join(cache_dir, '.ncbi_images.lock')
     tarball_path = os.path.join(cache_dir, 'new_taxdump.tar.gz')
     with acquire_exclusive_lock(lock_path=lock_path, lock_label='NCBI taxonomy images'):
-        if os.path.exists(images_path) and os.path.getsize(images_path) > 0:
+        if _ncbi_images_table_is_valid(images_path):
             return images_path
-        if (not os.path.exists(tarball_path)) or (os.path.getsize(tarball_path) == 0):
-            _download_to_path(session=session, url=NCBI_NEWTAXDUMP_URL, destination_path=tarball_path)
-        _extract_ncbi_images_table(tarball_path=tarball_path, destination_path=images_path)
+        remove_temporary_path(images_path, 'invalid cached NCBI images table')
+        try:
+            expected_md5 = _fetch_ncbi_archive_md5(session)
+        except (OSError, requests.RequestException, MediaDownloadError) as exc:
+            expected_md5 = None
+            _stderr('Warning: could not verify the published NCBI archive checksum: {}'.format(exc))
+        archive_is_valid = False
+        if os.path.isfile(tarball_path):
+            try:
+                archive_is_valid = (
+                    0 < os.path.getsize(tarball_path) <= NCBI_NEWTAXDUMP_MAX_BYTES
+                    and (expected_md5 is None or _file_md5(tarball_path) == expected_md5)
+                )
+                if archive_is_valid:
+                    with tarfile.open(tarball_path, 'r:gz') as archive:
+                        member = archive.getmember('images.dmp')
+                        archive_is_valid = (
+                            member.isfile()
+                            and 0 < member.size <= NCBI_IMAGES_TABLE_MAX_BYTES
+                        )
+            except (OSError, KeyError, tarfile.TarError):
+                archive_is_valid = False
+        downloaded_archive = False
+        if not archive_is_valid:
+            remove_temporary_path(tarball_path, 'invalid cached NCBI archive')
+            _download_to_path(
+                session=session,
+                url=NCBI_NEWTAXDUMP_URL,
+                destination_path=tarball_path,
+                max_bytes=NCBI_NEWTAXDUMP_MAX_BYTES,
+                expected_md5=expected_md5,
+            )
+            downloaded_archive = True
+        try:
+            _extract_ncbi_images_table(tarball_path=tarball_path, destination_path=images_path)
+            if not _ncbi_images_table_is_valid(images_path):
+                raise MediaDownloadError('Extracted NCBI images.dmp failed validation.')
+        except Exception:
+            remove_temporary_path(tarball_path, 'invalid NCBI archive')
+            remove_temporary_path(images_path, 'invalid extracted NCBI images table')
+            if downloaded_archive:
+                raise
+            _download_to_path(
+                session=session,
+                url=NCBI_NEWTAXDUMP_URL,
+                destination_path=tarball_path,
+                max_bytes=NCBI_NEWTAXDUMP_MAX_BYTES,
+                expected_md5=expected_md5,
+            )
+            try:
+                _extract_ncbi_images_table(
+                    tarball_path=tarball_path,
+                    destination_path=images_path,
+                )
+                if not _ncbi_images_table_is_valid(images_path):
+                    raise MediaDownloadError('Extracted NCBI images.dmp failed validation.')
+            except Exception:
+                remove_temporary_path(tarball_path, 'invalid NCBI archive')
+                remove_temporary_path(images_path, 'invalid extracted NCBI images table')
+                raise
         try:
             os.remove(tarball_path)
         except FileNotFoundError:
@@ -1456,14 +2525,46 @@ def build_ncbi_images_database(images_path, database_path):
 def ensure_ncbi_images_database(args, session):
     cache_dir = resolve_ncbi_taxonomy_image_cache_dir(args)
     database_path = os.path.join(cache_dir, 'images.sqlite3')
-    if os.path.exists(database_path) and os.path.getsize(database_path) > 0:
+    if _ncbi_images_database_is_valid(database_path):
         return database_path
     images_path = ensure_ncbi_images_table(args=args, session=session)
     lock_path = os.path.join(cache_dir, '.ncbi_images_database.lock')
     with acquire_exclusive_lock(lock_path=lock_path, lock_label='NCBI taxonomy images database'):
-        if os.path.exists(database_path) and os.path.getsize(database_path) > 0:
+        if _ncbi_images_database_is_valid(database_path):
             return database_path
-        build_ncbi_images_database(images_path=images_path, database_path=database_path)
+        remove_temporary_path(database_path, 'invalid cached NCBI images database')
+        for attempt in range(2):
+            try:
+                build_ncbi_images_database(
+                    images_path=images_path,
+                    database_path=database_path,
+                )
+            except (UnicodeError, ValueError):
+                remove_temporary_path(
+                    database_path,
+                    'invalid rebuilt NCBI images database',
+                )
+                if attempt > 0:
+                    raise
+            else:
+                if _ncbi_images_database_is_valid(database_path):
+                    return database_path
+                remove_temporary_path(
+                    database_path,
+                    'invalid rebuilt NCBI images database',
+                )
+                if attempt > 0:
+                    raise MediaDownloadError(
+                        'Rebuilt NCBI images database failed validation.'
+                    )
+            remove_temporary_path(
+                images_path,
+                'invalid cached NCBI images table',
+            )
+            images_path = ensure_ncbi_images_table(
+                args=args,
+                session=session,
+            )
     return database_path
 
 
@@ -1492,14 +2593,29 @@ def load_ncbi_images_records(database_path, taxid):
 
 
 def candidate_score(candidate, provider_index=0, style='auto'):
-    rank_priority = {'species': 3, 'genus': 2, 'family': 1}.get(candidate['matched_rank'], 0)
-    provider_priority = max(1, 100 - int(provider_index))
+    matched_rank = candidate.get('matched_rank')
+    if not isinstance(matched_rank, str):
+        matched_rank = ''
+    license_code = candidate.get('license_code')
+    if not isinstance(license_code, str):
+        license_code = ''
+    rank_priority = {'species': 3, 'genus': 2, 'family': 1}.get(matched_rank, 0)
+    provider_priority = max(
+        1,
+        100 - int(_finite_nonnegative_number(provider_index)),
+    )
     primary_priority = 1 if candidate.get('is_primary') else 0
-    license_priority = max(0, LICENSE_OPENNESS.get(candidate['license_code'], 0))
+    license_priority = max(0, LICENSE_OPENNESS.get(license_code, 0))
     style_priority = get_style_priority(candidate, style=style)
     vector_priority = 1 if candidate_is_vector(candidate) else 0
     aspect_priority = get_aspect_fit_bonus(candidate)
-    quality_priority = min(max(candidate.get('width') or 0, candidate.get('height') or 0), 10000)
+    quality_priority = min(
+        max(
+            _finite_nonnegative_number(candidate.get('width')),
+            _finite_nonnegative_number(candidate.get('height')),
+        ),
+        10000,
+    )
     provider_quality = max(0, min(get_provider_quality_bonus(candidate), 99))
     score = (
         rank_priority * 10**15
@@ -1561,18 +2677,29 @@ class PhylopicProvider:
         return int(taxids[0]) if taxids else None
 
     def _resolve_node(self, taxid):
-        response = self.session.get(
+        response = safe_external_request(
+            self.session,
+            'get',
             f'{PHYLIPIC_API_ROOT}/resolve/ncbi.nlm.nih.gov/taxid/{taxid}',
+            allowed_hosts=PROVIDER_API_HOSTS[self.provider_name],
+            stream=True,
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        if response.status_code == 404:
-            return None
-        response.raise_for_status()
-        return response.json()
+        try:
+            if response.status_code == 404:
+                return None
+            response.raise_for_status()
+            return bounded_response_json(response)
+        finally:
+            if hasattr(response, 'close'):
+                response.close()
 
     def _fetch_node_images(self, node_uuid, build):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             f'{PHYLIPIC_API_ROOT}/images',
             params={
                 'build': build,
@@ -1583,8 +2710,6 @@ class PhylopicProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        payload = response.json()
         return payload.get('_embedded', {}).get('items', [])
 
     @staticmethod
@@ -1605,13 +2730,14 @@ class PhylopicProvider:
             url = href
         else:
             url = '{}{}'.format(PHYLIPIC_API_ROOT, href)
-        response = self.session.get(
+        return provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             url,
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json()
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
@@ -1710,15 +2836,33 @@ class BioiconsProvider:
             return self._catalog
         cache_path = resolve_bioicons_catalog_cache_path(args=self.args)
         refresh_cache = bool(getattr(self.args, 'refresh_cache', False))
+        refresh_token = self.args if refresh_cache else None
         max_age_seconds = cache_max_age_seconds_from_args(self.args)
-        with BIOICONS_CATALOG_MEMORY_CACHE_LOCK:
-            memory_entry = BIOICONS_CATALOG_MEMORY_CACHE.get(cache_path)
-        if (
-            (not refresh_cache)
-            and memory_entry is not None
-            and cache_timestamp_is_fresh(memory_entry.get('cached_at'), max_age_seconds)
-        ):
-            self._catalog = memory_entry['catalog']
+
+        def load_memory_catalog():
+            with BIOICONS_CATALOG_MEMORY_CACHE_LOCK:
+                memory_entry = BIOICONS_CATALOG_MEMORY_CACHE.get(cache_path)
+            if memory_entry is None:
+                return None
+            if refresh_cache:
+                if memory_entry.get('refresh_token') is refresh_token:
+                    return memory_entry['catalog']
+                return None
+            if cache_timestamp_is_fresh(memory_entry.get('cached_at'), max_age_seconds):
+                return memory_entry['catalog']
+            return None
+
+        def remember_catalog(catalog):
+            with BIOICONS_CATALOG_MEMORY_CACHE_LOCK:
+                BIOICONS_CATALOG_MEMORY_CACHE[cache_path] = {
+                    'cached_at': time.time(),
+                    'catalog': catalog,
+                    'refresh_token': refresh_token,
+                }
+
+        catalog = load_memory_catalog()
+        if catalog is not None:
+            self._catalog = catalog
             return self._catalog
 
         catalog = load_cached_bioicons_catalog(
@@ -1729,44 +2873,45 @@ class BioiconsProvider:
         if catalog is None:
             lock_path = cache_path + '.lock'
             with acquire_exclusive_lock(lock_path=lock_path, lock_label='Bioicons catalog'):
-                catalog = load_cached_bioicons_catalog(
-                    cache_path,
-                    max_age_seconds=max_age_seconds,
-                    refresh=refresh_cache,
-                )
+                catalog = load_memory_catalog()
                 if catalog is None:
-                    response = self.session.get(
-                        BIOICONS_GITHUB_API_ROOT,
-                        params={'recursive': 1},
-                        timeout=REQUEST_TIMEOUT,
-                        headers=HTTP_HEADERS,
+                    catalog = load_cached_bioicons_catalog(
+                        cache_path,
+                        max_age_seconds=max_age_seconds,
+                        refresh=refresh_cache,
                     )
-                    response.raise_for_status()
-                    payload = response.json()
-                    catalog = list()
-                    for item in payload.get('tree', []):
-                        path = item.get('path', '')
-                        if (not path.startswith('static/icons/')) or (not path.endswith('.svg')):
-                            continue
-                        relative_path = path[len('static/icons/'):]
-                        parts = relative_path.split('/')
-                        if len(parts) != 4:
-                            continue
-                        license_slug, category, author_slug, filename = parts
-                        name, _ = os.path.splitext(filename)
-                        catalog.append({
-                            'license_slug': license_slug,
-                            'category': category,
-                            'author_slug': author_slug,
-                            'name': name,
-                            'relative_path': relative_path,
-                        })
-                    write_cached_bioicons_catalog(cache_path, catalog)
-        with BIOICONS_CATALOG_MEMORY_CACHE_LOCK:
-            BIOICONS_CATALOG_MEMORY_CACHE[cache_path] = {
-                'cached_at': time.time(),
-                'catalog': catalog,
-            }
+                    if catalog is None:
+                        payload = provider_json_request(
+                            self.session,
+                            self.provider_name,
+                            'get',
+                            BIOICONS_GITHUB_API_ROOT,
+                            params={'recursive': 1},
+                            timeout=REQUEST_TIMEOUT,
+                            headers=HTTP_HEADERS,
+                        )
+                        catalog = list()
+                        for item in payload.get('tree', []):
+                            path = item.get('path', '')
+                            if (not path.startswith('static/icons/')) or (not path.endswith('.svg')):
+                                continue
+                            relative_path = path[len('static/icons/'):]
+                            parts = relative_path.split('/')
+                            if len(parts) != 4:
+                                continue
+                            license_slug, category, author_slug, filename = parts
+                            name, _ = os.path.splitext(filename)
+                            catalog.append({
+                                'license_slug': license_slug,
+                                'category': category,
+                                'author_slug': author_slug,
+                                'name': name,
+                                'relative_path': relative_path,
+                            })
+                        write_cached_bioicons_catalog(cache_path, catalog)
+                remember_catalog(catalog)
+        else:
+            remember_catalog(catalog)
         self._catalog = catalog
         return self._catalog
 
@@ -1841,14 +2986,16 @@ class INaturalistProvider:
         self.result_limit = resolve_provider_fetch_limit(args=args, minimum=10, maximum=30)
 
     def _find_taxon(self, query_name, expected_rank):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             f'{INATURALIST_API_ROOT}/taxa',
             params={'q': query_name, 'per_page': self.result_limit},
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        results = response.json().get('results', [])
+        results = payload.get('results', [])
         expected_name = query_name.lower()
         matches = [
             item for item in results
@@ -1859,7 +3006,10 @@ class INaturalistProvider:
         return None
 
     def _fetch_observations(self, taxon_id, per_page):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             f'{INATURALIST_API_ROOT}/observations',
             params={
                 'taxon_id': taxon_id,
@@ -1871,8 +3021,7 @@ class INaturalistProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json().get('results', [])
+        return payload.get('results', [])
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
@@ -1934,7 +3083,10 @@ class EOLProvider:
         self.page_limit = resolve_provider_fetch_limit(args=args, minimum=3, maximum=5, extra_buffer=0)
 
     def _search_pages(self, query_name):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             '{}/search/1.0.json'.format(EOL_API_ROOT),
             params={
                 'q': query_name,
@@ -1944,11 +3096,13 @@ class EOLProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json().get('results', [])
+        return payload.get('results', [])
 
     def _fetch_page(self, page_id):
-        response = self.session.get(
+        return provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             '{}/pages/1.0/{}.json'.format(EOL_API_ROOT, page_id),
             params={
                 'details': 'true',
@@ -1967,8 +3121,6 @@ class EOLProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json()
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
@@ -2070,14 +3222,16 @@ class IDigBioProvider:
             'limit': int(self.result_limit if limit is None else limit),
             'offset': 0,
         }
-        response = self.session.post(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'post',
             '{}/search/media'.format(IDIGBIO_API_ROOT),
             json=body,
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json().get('items', [])
+        return payload.get('items', [])
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
@@ -2151,7 +3305,10 @@ class OpenverseProvider:
         self.result_limit = resolve_provider_fetch_limit(args=args, minimum=10, maximum=30)
 
     def _search_images(self, query_name, page_size=None):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             '{}/images/'.format(OPENVERSE_API_ROOT),
             params={
                 'q': query_name,
@@ -2160,8 +3317,7 @@ class OpenverseProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json().get('results', [])
+        return payload.get('results', [])
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
@@ -2227,7 +3383,10 @@ class WikimediaProvider:
         self.result_limit = resolve_provider_fetch_limit(args=args, minimum=5, maximum=10)
 
     def _search_pages(self, query_name, limit=10):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             WIKIMEDIA_API_ROOT,
             params={
                 'action': 'query',
@@ -2243,8 +3402,6 @@ class WikimediaProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        payload = response.json()
         pages = list(payload.get('query', {}).get('pages', {}).values())
         return sorted(pages, key=lambda page: int(page.get('index', 10**9)))
 
@@ -2309,7 +3466,10 @@ class GBIFProvider:
         self.result_limit = resolve_provider_fetch_limit(args=args, minimum=10, maximum=30)
 
     def _match_taxon(self, query_name, matched_rank):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             f'{GBIF_API_ROOT}/species/match',
             params={
                 'name': query_name,
@@ -2320,8 +3480,6 @@ class GBIFProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        payload = response.json()
         if str(payload.get('matchType', '')).upper() not in ('EXACT', 'HIGHERRANK'):
             return None
         usage_key = payload.get('usageKey')
@@ -2336,7 +3494,10 @@ class GBIFProvider:
         }
 
     def _fetch_occurrences(self, usage_key, limit=None):
-        response = self.session.get(
+        payload = provider_json_request(
+            self.session,
+            self.provider_name,
+            'get',
             f'{GBIF_API_ROOT}/occurrence/search',
             params={
                 'taxon_key': usage_key,
@@ -2346,8 +3507,7 @@ class GBIFProvider:
             timeout=REQUEST_TIMEOUT,
             headers=HTTP_HEADERS,
         )
-        response.raise_for_status()
-        return response.json().get('results', [])
+        return payload.get('results', [])
 
     def fetch_candidates(self, species_name, fallback_rank='none'):
         candidates = list()
@@ -2430,7 +3590,8 @@ class NCBIProvider:
         return candidates
 
     def _candidate_from_record(self, record, matched_name, matched_rank):
-        source_page_url = record['image_url']
+        media_url = normalize_ncbi_image_url(record['image_url'])
+        source_page_url = media_url
         attribution_bits = [record['attribution'], record['source_name']]
         attribution = ', '.join([bit for bit in attribution_bits if bit not in ('', None)])
         provider_quality = 0
@@ -2451,7 +3612,7 @@ class NCBIProvider:
             'license_url': record['license_url'],
             'attribution': attribution,
             'source_page_url': source_page_url,
-            'media_url': record['image_url'],
+            'media_url': media_url,
             'width': None,
             'height': None,
             'asset_type': 'photo',
@@ -2520,6 +3681,7 @@ def collect_candidates_for_species(species_name, args, sources, providers):
             species_name=species_name,
             fallback_rank=args.fallback_rank,
         )
+        fetched_candidates = False
         try:
             provider_candidates = load_cached_provider_candidates(
                 cache_path,
@@ -2529,7 +3691,9 @@ def collect_candidates_for_species(species_name, args, sources, providers):
             )
             if provider_candidates is None:
                 provider_candidates = provider.fetch_candidates(species_name, fallback_rank=args.fallback_rank)
-                write_cached_provider_candidates(cache_path, provider_candidates, fetch_limit=fetch_limit)
+                fetched_candidates = True
+            if not isinstance(provider_candidates, list):
+                raise ValueError('Image provider candidates must be a list.')
         except requests.RequestException as exc:
             message = '{} lookup failed for {}: {}'.format(source, species_name, exc)
             _stderr(message)
@@ -2540,10 +3704,54 @@ def collect_candidates_for_species(species_name, args, sources, providers):
             _stderr(message)
             provider_errors.append(message)
             continue
-        for candidate in provider_candidates:
-            candidate = dict(candidate)
-            candidate['score'] = candidate_score(candidate, provider_index=provider_index, style=args.style)
+        normalized_candidates = list()
+        for candidate_index, candidate in enumerate(provider_candidates, start=1):
+            try:
+                candidate = normalize_provider_candidate(
+                    candidate,
+                    expected_provider=source,
+                )
+                candidate['score'] = candidate_score(
+                    candidate,
+                    provider_index=provider_index,
+                    style=args.style,
+                )
+            except Exception as exc:
+                message = (
+                    '{} candidate {} was skipped for {}: {}'.format(
+                        source,
+                        candidate_index,
+                        species_name,
+                        exc,
+                    )
+                )
+                _stderr(message)
+                provider_errors.append(message)
+                continue
+            normalized_candidates.append(candidate)
             candidates.append(candidate)
+        if fetched_candidates:
+            try:
+                write_cached_provider_candidates(
+                    cache_path,
+                    [
+                        {
+                            key: value
+                            for key, value in candidate.items()
+                            if key != 'score'
+                        }
+                        for candidate in normalized_candidates
+                    ],
+                    fetch_limit=fetch_limit,
+                )
+            except Exception as exc:
+                message = '{} cache write failed for {}: {}'.format(
+                    source,
+                    species_name,
+                    exc,
+                )
+                _stderr(message)
+                provider_errors.append(message)
         if should_stop_after_provider(candidates, args=args):
             break
     return dedupe_sorted_candidates(candidates), provider_errors
@@ -2608,13 +3816,43 @@ def response_content_type_is_plausible_image(response):
 
 def atomic_copyfile(source_path, destination_path):
     ensure_directory(os.path.dirname(destination_path))
+    output_mode = output_file_mode(destination_path)
     tmp_path = make_temporary_sibling_path(destination_path)
     try:
         shutil.copyfile(source_path, tmp_path)
+        os.chmod(tmp_path, output_mode)
         os.replace(tmp_path, destination_path)
     except Exception:
         remove_temporary_path(tmp_path, 'temporary copied media file')
         raise
+
+
+def output_file_mode(destination_path):
+    try:
+        return stat.S_IMODE(os.stat(destination_path).st_mode)
+    except FileNotFoundError:
+        pass
+    directory = os.path.dirname(os.path.abspath(destination_path))
+    ensure_directory(directory)
+    for _ in range(100):
+        probe_path = os.path.join(
+            directory,
+            '.nwkit-mode-probe-{}'.format(secrets.token_hex(16)),
+        )
+        try:
+            fd = os.open(
+                probe_path,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o666,
+            )
+        except FileExistsError:
+            continue
+        try:
+            return stat.S_IMODE(os.fstat(fd).st_mode)
+        finally:
+            os.close(fd)
+            os.remove(probe_path)
+    raise FileExistsError('Could not allocate a temporary output-mode probe.')
 
 
 def download_media(
@@ -2623,24 +3861,31 @@ def download_media(
     destination_path,
     cache_path=None,
     max_download_bytes=DEFAULT_MAX_DOWNLOAD_BYTES,
+    provider=None,
+    reuse_destination=True,
 ):
     max_download_bytes = int(max_download_bytes)
+    if provider not in (None, '') and provider not in SUPPORTED_SOURCES:
+        raise MediaDownloadError('Unknown media provider {!r}.'.format(provider))
+    allowed_hosts = PROVIDER_MEDIA_HOSTS.get(provider)
+    validate_external_url(media_url, allowed_hosts=allowed_hosts, resolve_dns=False)
     ensure_directory(os.path.dirname(destination_path))
-    destination_path = normalize_existing_media_path(destination_path)
-    if os.path.exists(destination_path) and os.path.getsize(destination_path) > 0:
-        try:
-            destination_path = normalize_valid_media_path(
-                destination_path,
-                max_download_bytes=max_download_bytes,
-            )
-        except MediaDownloadError:
-            remove_temporary_path(destination_path, 'invalid existing media file')
-        else:
-            return {
-                'status': 'cached',
-                'destination_path': destination_path,
-                'cache_path': normalize_existing_media_path(cache_path) if cache_path is not None else None,
-            }
+    if reuse_destination:
+        destination_path = normalize_existing_media_path(destination_path)
+        if os.path.exists(destination_path) and os.path.getsize(destination_path) > 0:
+            try:
+                destination_path = normalize_valid_media_path(
+                    destination_path,
+                    max_download_bytes=max_download_bytes,
+                )
+            except MediaDownloadError:
+                remove_temporary_path(destination_path, 'invalid existing media file')
+            else:
+                return {
+                    'status': 'cached',
+                    'destination_path': destination_path,
+                    'cache_path': normalize_existing_media_path(cache_path) if cache_path is not None else None,
+                }
     if cache_path is not None:
         ensure_directory(os.path.dirname(cache_path))
         cache_path = normalize_existing_media_path(cache_path)
@@ -2665,7 +3910,15 @@ def download_media(
     tmp_path = make_temporary_sibling_path(target_path)
     response = None
     try:
-        response = session.get(media_url, stream=True, timeout=REQUEST_TIMEOUT, headers=HTTP_HEADERS)
+        response = safe_external_request(
+            session,
+            'get',
+            media_url,
+            allowed_hosts=allowed_hosts,
+            stream=True,
+            timeout=REQUEST_TIMEOUT,
+            headers=MEDIA_HTTP_HEADERS,
+        )
         response.raise_for_status()
         if not response_content_type_is_plausible_image(response):
             content_type = (getattr(response, 'headers', {}) or {}).get('Content-Type', '')
@@ -2691,6 +3944,8 @@ def download_media(
         resolved_ext = validate_media_file(tmp_path, max_download_bytes=max_download_bytes)
         resolved_target_path = replace_extension(target_path, resolved_ext)
         resolved_destination_path = replace_extension(destination_path, resolved_ext)
+        if cache_path is None:
+            os.chmod(tmp_path, output_file_mode(resolved_target_path))
         os.replace(tmp_path, resolved_target_path)
         if cache_path is not None:
             atomic_copyfile(resolved_target_path, resolved_destination_path)
@@ -2733,6 +3988,35 @@ def write_tsv(path, rows, fieldnames):
             writer.writerow(row)
 
 
+def rebase_local_paths_for_output(rows, out_dir, output_path):
+    output_dir = os.path.dirname(os.path.realpath(output_path))
+    rebased_rows = list()
+    for row in rows:
+        rebased_row = dict(row)
+        local_path = row.get('local_path')
+        if local_path not in (None, ''):
+            absolute_path = (
+                os.path.abspath(local_path)
+                if os.path.isabs(local_path)
+                else os.path.abspath(os.path.join(out_dir, local_path))
+            )
+            rebased_row['local_path'] = os.path.relpath(absolute_path, output_dir)
+        rebased_rows.append(rebased_row)
+    return rebased_rows
+
+
+def _safe_markdown_text(value, escape_markdown=True):
+    text = ''.join(
+        ' ' if (ord(character) < 32 or ord(character) == 127) else character
+        for character in str(value or '')
+    )
+    text = ' '.join(text.split())
+    text = html.escape(text, quote=True)
+    if escape_markdown:
+        text = re.sub(r'([\\`*_\[\]\(\)!|])', r'\\\1', text)
+    return text
+
+
 def write_attribution_markdown(path, selected_assets):
     ensure_directory(os.path.dirname(path))
     grouped = defaultdict(list)
@@ -2756,22 +4040,47 @@ def write_attribution_markdown(path, selected_assets):
             )
             unique_records.setdefault(identity, asset)
         attribution_records = [unique_records[key] for key in sorted(unique_records)]
-        lines.append('## {}'.format(', '.join(species_names)))
+        lines.append(
+            '## {}'.format(
+                ', '.join(_safe_markdown_text(name) for name in species_names)
+            )
+        )
         lines.append('')
-        lines.append('Local file: {}'.format(local_path))
+        lines.append(
+            'Local file: {}'.format(
+                _safe_markdown_text(local_path, escape_markdown=False)
+            )
+        )
         lines.append('')
         for index, record in enumerate(attribution_records, start=1):
             if len(attribution_records) > 1:
                 lines.append('### Attribution record {}'.format(index))
                 lines.append('')
-            lines.append('Provider: {}'.format(record['provider']))
-            lines.append('Matched taxon: {} ({})'.format(record['matched_name'], record['matched_rank']))
-            lines.append('Creator / attribution: {}'.format(record['attribution'] or ''))
-            lines.append('License: {}'.format(record['license_code']))
+            lines.append('Provider: {}'.format(_safe_markdown_text(record['provider'])))
+            lines.append(
+                'Matched taxon: {} ({})'.format(
+                    _safe_markdown_text(record['matched_name']),
+                    _safe_markdown_text(record['matched_rank']),
+                )
+            )
+            lines.append(
+                'Creator / attribution: {}'.format(
+                    _safe_markdown_text(record['attribution'] or '')
+                )
+            )
+            lines.append('License: {}'.format(_safe_markdown_text(record['license_code'])))
             if record['license_url']:
-                lines.append('License URL: {}'.format(record['license_url']))
+                lines.append(
+                    'License URL: {}'.format(
+                        _safe_markdown_text(record['license_url'])
+                    )
+                )
             if record['source_page_url']:
-                lines.append('Source: {}'.format(record['source_page_url']))
+                lines.append(
+                    'Source: {}'.format(
+                        _safe_markdown_text(record['source_page_url'])
+                    )
+                )
             lines.append('')
 
     with open(path, 'w') as handle:
@@ -2958,13 +4267,23 @@ class SharedMediaMaterializer:
             destination_path=absolute_local_path,
             cache_path=cache_path,
             max_download_bytes=getattr(self.args, 'max_download_bytes', DEFAULT_MAX_DOWNLOAD_BYTES),
+            provider=candidate.get('provider'),
+            reuse_destination=False,
         )
+        resolved_cache_path = None
         if isinstance(download_result, dict):
             download_status = download_result['status']
             absolute_local_path = download_result.get('destination_path', absolute_local_path)
+            resolved_cache_path = download_result.get('cache_path')
         else:
             download_status = download_result
-        absolute_local_path = postprocess_media_file(absolute_local_path, args=self.args)
+        try:
+            absolute_local_path = postprocess_media_file(absolute_local_path, args=self.args)
+        except (MediaDownloadError, OSError, ValueError):
+            remove_temporary_path(absolute_local_path, 'invalid materialized media file')
+            if resolved_cache_path and os.path.realpath(resolved_cache_path) != os.path.realpath(absolute_local_path):
+                remove_temporary_path(resolved_cache_path, 'invalid cached media file')
+            raise
         return {
             'local_path': os.path.relpath(absolute_local_path, self.out_dir),
             'download_status': download_status,
@@ -3053,7 +4372,12 @@ def process_species_assets(
             break
         try:
             materialized = materializer.materialize(species_name=species_name, candidate=candidate)
-        except (requests.RequestException, OSError, MediaDownloadError) as exc:
+        except (
+            requests.RequestException,
+            OSError,
+            MediaDownloadError,
+            ValueError,
+        ) as exc:
             message = '{} download failed for {}: {}'.format(
                 candidate['provider'],
                 species_name,
@@ -3103,6 +4427,13 @@ def image_main(args):
     validate_args(args)
     sources = parse_sources(style=args.style, source_arg=args.source)
     out_dir, images_dir, manifest_path, attribution_path, unmatched_path = default_output_paths(args)
+    validate_distinct_output_paths([
+        ('--out-dir', out_dir),
+        ('images directory', images_dir),
+        ('--manifest-out', manifest_path),
+        ('--attribution-out', attribution_path),
+        ('unmatched output', unmatched_path),
+    ])
     shared_cache_dir = resolve_image_cache_dir(args)
     ensure_directory(out_dir)
     ensure_directory(images_dir)
@@ -3197,9 +4528,19 @@ def image_main(args):
     ]
     unmatched_fieldnames = ['leaf_name', 'species_name', 'reason', 'details']
 
-    write_tsv(manifest_path, manifest_rows, manifest_fieldnames)
+    manifest_output_rows = rebase_local_paths_for_output(
+        manifest_rows,
+        out_dir=out_dir,
+        output_path=manifest_path,
+    )
+    attribution_output_assets = rebase_local_paths_for_output(
+        selected_assets,
+        out_dir=out_dir,
+        output_path=attribution_path,
+    )
+    write_tsv(manifest_path, manifest_output_rows, manifest_fieldnames)
     write_tsv(unmatched_path, unmatched_rows, unmatched_fieldnames)
-    write_attribution_markdown(attribution_path, selected_assets)
+    write_attribution_markdown(attribution_path, attribution_output_assets)
 
     if unmatched_rows and args.fail_on_missing:
         raise ValueError('{} tree tip(s) could not be resolved to an image.'.format(len(unmatched_rows)))

@@ -1,10 +1,20 @@
 import csv
+import io
 import os
+import sqlite3
+import stat
+import struct
+import tarfile
+import threading
+import time
+import zlib
 from argparse import Namespace
+from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 import requests
 
+from nwkit import image as image_module
 from nwkit.image import (
     BioiconsProvider,
     EOLProvider,
@@ -110,6 +120,26 @@ def read_tsv(path):
         return list(csv.DictReader(handle, delimiter='\t'))
 
 
+def write_valid_test_media(path):
+    if str(path).lower().endswith('.svg'):
+        with open(path, 'wb') as handle:
+            handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+        return
+    from PIL import Image
+
+    extension = os.path.splitext(str(path))[1].lower()
+    image_format = {
+        '.gif': 'GIF',
+        '.jpg': 'JPEG',
+        '.jpeg': 'JPEG',
+        '.png': 'PNG',
+        '.tif': 'TIFF',
+        '.tiff': 'TIFF',
+        '.webp': 'WEBP',
+    }.get(extension, 'PNG')
+    Image.new('RGB', (2, 2), 'white').save(path, format=image_format)
+
+
 class TestLicenseHelpers:
     def test_normalize_license_code_from_url(self):
         assert normalize_license_code(raw_url='https://creativecommons.org/licenses/by/4.0/') == 'cc-by'
@@ -119,11 +149,69 @@ class TestLicenseHelpers:
         assert normalize_license_code(raw_code='cc-by-nc-sa') == 'cc-by-nc-sa'
         assert normalize_license_code(raw_code='CC BY-SA 3.0') == 'cc-by-sa'
         assert normalize_license_code(raw_code='Public domain') == 'public-domain'
+        assert normalize_license_code(raw_code='CC0 1.0') == 'public-domain'
         assert normalize_license_code(raw_code='MIT') == 'mit'
         assert normalize_license_code(raw_code='BSD-3-Clause') == 'bsd'
         assert normalize_license_code(raw_code='by-sa') == 'cc-by-sa'
         assert normalize_license_code(raw_code='pdm') == 'public-domain'
         assert normalize_license_code(raw_code=None, attribution='(c) Someone, all rights reserved') == 'all-rights-reserved'
+
+    @pytest.mark.parametrize(
+        'raw_code',
+        [
+            'limited use only',
+            'no redistribution; limited educational use',
+            'submitted by user',
+            'not public domain',
+        ],
+    )
+    def test_restrictive_or_unrelated_metadata_is_not_open_license(
+        self,
+        raw_code,
+    ):
+        license_code = normalize_license_code(raw_code=raw_code)
+
+        assert license_code == 'unknown'
+        assert not license_allowed(license_code, license_max='any')
+
+    @pytest.mark.parametrize(
+        ('raw_code', 'expected'),
+        [
+            ('MIT License', 'mit'),
+            ('BSD-2-Clause', 'bsd'),
+            ('Public Domain Mark 1.0', 'public-domain'),
+        ],
+    )
+    def test_explicit_open_license_labels_remain_allowed(
+        self,
+        raw_code,
+        expected,
+    ):
+        license_code = normalize_license_code(raw_code=raw_code)
+
+        assert license_code == expected
+        assert license_allowed(license_code, license_max='any')
+
+    @pytest.mark.parametrize(
+        'raw_url',
+        [
+            'https://evil.example/licenses/by/4.0/',
+            'https://example.com/?next=/publicdomain/zero/1.0',
+            'https://notcreativecommons.org/licenses/by-nc/4.0/',
+            'javascript://creativecommons.org/licenses/by/4.0/',
+            'https://creativecommons.org:444/licenses/by/4.0/',
+        ],
+    )
+    def test_license_url_requires_an_official_host(self, raw_url):
+        assert normalize_license_code(raw_url=raw_url) == 'unknown'
+
+    def test_license_url_accepts_official_subdomains_and_ignores_query(self):
+        assert normalize_license_code(
+            raw_url=(
+                'https://licenses.creativecommons.org/licenses/by/4.0/'
+                '?next=/licenses/by-nc/4.0/'
+            )
+        ) == 'cc-by'
 
     def test_license_allowed_respects_nd_and_ceiling(self):
         assert license_allowed('cc-by', license_max='cc-by', allow_nd=False) is True
@@ -264,6 +352,98 @@ class TestFetchLimits:
         assert get_style_priority(candidate, style='silhouette') == 2
         assert get_style_priority(candidate, style='photo') == 0
         assert get_provider_quality_bonus(candidate) == 12
+
+    def test_candidate_score_normalizes_numeric_strings_and_nonfinite_values(
+        self,
+    ):
+        numeric_strings = {
+            'matched_rank': 'species',
+            'license_code': 'cc-by',
+            'width': '1024',
+            'height': '512',
+            'provider_quality': '1e3',
+        }
+        malformed_numbers = dict(
+            numeric_strings,
+            width=float('nan'),
+            height=float('inf'),
+            provider_quality='not-a-number',
+        )
+
+        assert isinstance(candidate_score(numeric_strings), int)
+        assert isinstance(candidate_score(malformed_numbers), int)
+        assert get_aspect_fit_bonus(malformed_numbers) == 0
+
+    def test_candidate_normalization_parses_only_explicit_boolean_values(self):
+        candidate = {
+            'provider': 'phylopic',
+            'provider_record_id': 'candidate-1',
+            'matched_name': 'Species alpha',
+            'matched_rank': 'species',
+            'license_code': 'cc-by',
+            'media_url': 'https://images.phylopic.org/candidate.svg',
+            'is_primary': 'false',
+            'is_vector': 'false',
+        }
+
+        normalized = image_module.normalize_provider_candidate(
+            candidate,
+            expected_provider='phylopic',
+        )
+
+        assert normalized['is_primary'] is False
+        assert normalized['is_vector'] is False
+        assert image_module.candidate_is_vector(normalized) is False
+
+        with pytest.raises(ValueError, match="invalid 'is_vector' value"):
+            image_module.normalize_provider_candidate(
+                dict(candidate, is_vector='yes'),
+                expected_provider='phylopic',
+            )
+
+    def test_candidate_collection_skips_malformed_records_individually(
+        self,
+        tmp_path,
+    ):
+        base = {
+            'provider': 'phylopic',
+            'provider_record_id': 'valid',
+            'matched_name': 'Species alpha',
+            'matched_rank': 'species',
+            'license_code': 'cc-by',
+            'license_url': 'https://creativecommons.org/licenses/by/4.0/',
+            'attribution': 'Artist',
+            'source_page_url': 'https://phylopic.org/images/valid',
+            'media_url': 'https://images.phylopic.org/valid.svg',
+            'asset_type': 'silhouette',
+            'width': '1024',
+            'height': '512',
+        }
+        candidates = [
+            dict(base, provider_record_id='bad-rank', matched_rank={'bad': 1}),
+            dict(base, provider_record_id='bad-license', license_code=['cc-by']),
+            base,
+        ]
+        args = make_image_args(
+            out_dir=str(tmp_path / 'out'),
+            source='phylopic',
+            style='silhouette',
+        )
+
+        collected, errors = collect_candidates_for_species(
+            'Species alpha',
+            args=args,
+            sources=['phylopic'],
+            providers={
+                'phylopic': DummyProvider({'Species alpha': candidates}),
+            },
+        )
+
+        assert [candidate['provider_record_id'] for candidate in collected] == [
+            'valid'
+        ]
+        assert collected[0]['width'] == 1024.0
+        assert len(errors) == 2
 
 
 class TestPhylopicProvider:
@@ -520,9 +700,19 @@ class TestNCBIHelpers:
 
         monkeypatch.setattr('nwkit.image.ensure_ncbi_images_table', lambda args, session: str(images_path))
 
-        provider = NCBIProvider(session=DummySession(), ncbi=FakeNCBI(), args=make_image_args(out_dir=str(tmp_path / 'out')))
-        candidates = provider.fetch_candidates('Cyanophora paradoxa', fallback_rank='none')
+        args = make_image_args(
+            out_dir=str(tmp_path / 'out'),
+            download_dir=str(tmp_path / 'cache'),
+        )
+        provider = NCBIProvider(session=DummySession(), ncbi=FakeNCBI(), args=args)
+        candidates, errors = collect_candidates_for_species(
+            'Cyanophora paradoxa',
+            args=args,
+            sources=['ncbi'],
+            providers={'ncbi': provider},
+        )
 
+        assert errors == []
         assert len(candidates) == 1
         candidate = candidates[0]
         assert candidate['provider'] == 'ncbi'
@@ -532,7 +722,29 @@ class TestNCBIHelpers:
         assert candidate['license_code'] == 'cc-by-sa'
         assert candidate['license_url'] == 'https://creativecommons.org/licenses/by-sa/3.0/'
         assert candidate['attribution'] == 'Wolfgang Bettighofer, Wikimedia Commons'
-        assert candidate['media_url'] == 'http://www.ncbi.nlm.nih.gov/Taxonomy/taxi/images/4'
+        assert candidate['media_url'] == 'https://www.ncbi.nlm.nih.gov/Taxonomy/taxi/images/4'
+
+    def test_ncbi_provider_does_not_upgrade_arbitrary_http_media(self):
+        provider = NCBIProvider(
+            session=DummySession(),
+            ncbi=None,
+            args=make_image_args(out_dir='unused'),
+        )
+        candidate = provider._candidate_from_record(
+            record={
+                'record_id': '1',
+                'image_url': 'http://example.org/Taxonomy/taxi/images/4',
+                'attribution': '',
+                'source_name': '',
+                'license_code_text': '',
+                'license_url': '',
+            },
+            matched_name='Example species',
+            matched_rank='species',
+        )
+
+        with pytest.raises(MediaDownloadError, match='HTTPS'):
+            image_module.validate_candidate_media_url(candidate)
 
     def test_build_providers_does_not_initialize_ncbi_eagerly(self, monkeypatch, tmp_path):
         call_counter = {'count': 0}
@@ -573,7 +785,7 @@ class TestNCBIHelpers:
                     'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                     'attribution': 'A',
                     'source_page_url': 'https://example.org/obs',
-                    'media_url': 'https://example.org/photo.jpg',
+                    'media_url': 'https://static.inaturalist.org/photo.jpg',
                     'width': 1000,
                     'height': 900,
                     'asset_type': 'photo',
@@ -629,7 +841,7 @@ class TestNCBIHelpers:
                         'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                         'attribution': 'A1',
                         'source_page_url': 'https://example.org/obs/1',
-                        'media_url': 'https://example.org/photo-1.jpg',
+                        'media_url': 'https://static.inaturalist.org/photo-1.jpg',
                         'width': 1000,
                         'height': 900,
                         'asset_type': 'photo',
@@ -643,7 +855,7 @@ class TestNCBIHelpers:
                         'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                         'attribution': 'A2',
                         'source_page_url': 'https://example.org/obs/2',
-                        'media_url': 'https://example.org/photo-2.jpg',
+                        'media_url': 'https://static.inaturalist.org/photo-2.jpg',
                         'width': 1200,
                         'height': 950,
                         'asset_type': 'photo',
@@ -657,7 +869,7 @@ class TestNCBIHelpers:
                         'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                         'attribution': 'A3',
                         'source_page_url': 'https://example.org/obs/3',
-                        'media_url': 'https://example.org/photo-3.jpg',
+                        'media_url': 'https://static.inaturalist.org/photo-3.jpg',
                         'width': 1100,
                         'height': 920,
                         'asset_type': 'photo',
@@ -674,7 +886,7 @@ class TestNCBIHelpers:
                     'license_url': 'https://creativecommons.org/publicdomain/zero/1.0/',
                     'attribution': 'B',
                     'source_page_url': 'https://example.org/ov/1',
-                    'media_url': 'https://example.org/photo-2.jpg',
+                    'media_url': 'https://static.inaturalist.org/photo-2.jpg',
                     'width': 3000,
                     'height': 2000,
                     'asset_type': 'photo',
@@ -796,7 +1008,7 @@ class TestNCBIHelpers:
 class TestBioiconsProvider:
     def test_bioicons_provider_fetches_matching_svg_candidates(self, tmp_path):
         class RoutingSession:
-            def get(self, url, params=None, timeout=None, headers=None):
+            def get(self, url, params=None, timeout=None, headers=None, stream=None, allow_redirects=None):
                 assert url.endswith('/git/trees/main')
                 return JSONResponse({
                     'tree': [
@@ -826,11 +1038,60 @@ class TestBioiconsProvider:
         assert candidate['asset_type'] == 'silhouette'
         assert candidate['provider_quality'] > 0
 
+    @pytest.mark.parametrize('parallel', [False, True], ids=['sequential', 'parallel'])
+    def test_bioicons_refresh_is_coalesced_across_provider_instances(
+        self,
+        tmp_path,
+        parallel,
+    ):
+        request_count = {'value': 0}
+        request_count_lock = threading.Lock()
+        args = make_image_args(
+            out_dir=str(tmp_path / 'out'),
+            refresh_cache=True,
+        )
+
+        class CountingSession:
+            def get(
+                self,
+                url,
+                params=None,
+                timeout=None,
+                headers=None,
+                stream=None,
+                allow_redirects=None,
+            ):
+                with request_count_lock:
+                    request_count['value'] += 1
+                time.sleep(0.05)
+                return JSONResponse({
+                    'tree': [{
+                        'path': 'static/icons/cc-0/Animals/Ben-Murrell/Mouse.svg',
+                    }],
+                }, url=url)
+
+        providers = [
+            BioiconsProvider(session=CountingSession(), args=args)
+            for _ in range(4)
+        ]
+        if parallel:
+            with ThreadPoolExecutor(max_workers=len(providers)) as executor:
+                catalogs = list(executor.map(
+                    lambda provider: provider._load_catalog(),
+                    providers,
+                ))
+        else:
+            catalogs = [provider._load_catalog() for provider in providers]
+
+        assert request_count['value'] == 1
+        assert all(catalog is catalogs[0] for catalog in catalogs)
+        assert catalogs[0][0]['relative_path'].endswith('/Mouse.svg')
+
 
 class TestEOLProvider:
     def test_eol_provider_fetches_candidates_from_page_media(self):
         class RoutingSession:
-            def get(self, url, params=None, timeout=None, headers=None):
+            def get(self, url, params=None, timeout=None, headers=None, stream=None, allow_redirects=None):
                 if url.endswith('/search/1.0.json'):
                     return JSONResponse({
                         'results': [{
@@ -886,7 +1147,7 @@ class TestEOLProvider:
 class TestIDigBioProvider:
     def test_idigbio_provider_fetches_candidates_from_media_search(self):
         class RoutingSession:
-            def post(self, url, json=None, timeout=None, headers=None):
+            def post(self, url, json=None, timeout=None, headers=None, stream=None, allow_redirects=None):
                 assert url.endswith('/search/media')
                 assert json['rq'] == {'scientificname': 'Panthera leo'}
                 assert json['limit'] == 10
@@ -937,7 +1198,7 @@ class TestIDigBioProvider:
 class TestOpenverseProvider:
     def test_openverse_provider_fetches_relevant_candidates(self):
         class RoutingSession:
-            def get(self, url, params=None, timeout=None, headers=None):
+            def get(self, url, params=None, timeout=None, headers=None, stream=None, allow_redirects=None):
                 assert url.endswith('/images/')
                 assert params['q'] == 'Danio rerio'
                 assert params['page_size'] == 10
@@ -1048,7 +1309,7 @@ class TestImageMain:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'PhyloPic Artist',
                 'source_page_url': 'https://api.phylopic.org/images/phy-1',
-                'media_url': 'https://images.example.org/homo.svg',
+                'media_url': 'https://images.phylopic.org/homo.svg',
                 'width': 1200,
                 'height': 800,
                 'asset_type': 'silhouette',
@@ -1080,9 +1341,8 @@ class TestImageMain:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'content')
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
+            write_valid_test_media(destination_path)
             return 'downloaded'
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1158,8 +1418,52 @@ class TestImageMain:
         assert 'License: cc-by\n' in text
         assert 'License: cc-by-sa\n' in text
 
+    def test_attribution_escapes_provider_controlled_markdown(self, tmp_path):
+        from nwkit.image import write_attribution_markdown
+
+        path = tmp_path / 'ATTRIBUTION.md'
+        rows = [{
+            'local_path': 'images/example.jpg',
+            'species_name': 'Species alpha\n## Forged species',
+            'provider': 'provider',
+            'matched_name': '<b>Species alpha</b>',
+            'matched_rank': 'species',
+            'attribution': '</p>\n## Fake license\n![track](https://evil.example/pixel)',
+            'license_code': 'cc-by',
+            'license_url': 'https://example.org/license',
+            'source_page_url': 'https://example.org/source',
+        }]
+
+        write_attribution_markdown(str(path), rows)
+
+        text = path.read_text()
+        assert '\n## Forged species' not in text
+        assert '\n## Fake license' not in text
+        assert '<b>' not in text
+        assert '</p>' not in text
+        assert '![track](' not in text
+        assert '&lt;b&gt;Species alpha&lt;/b&gt;' in text
+
 
 class TestMediaFilenames:
+    @pytest.mark.parametrize(
+        ('url', 'expected'),
+        [
+            ('https://example.org/image.JPG?size=large', '.jpg'),
+            ('https://example.org/image.jpeg', '.jpeg'),
+            ('https://example.org/image.tiff', '.tiff'),
+            ('https://example.org/image.svg#preview', '.svg'),
+            ('https://example.org/image.php', '.bin'),
+            ('https://example.org/image.tar.gz', '.bin'),
+            ('https://example.org/image.\0jpg', '.bin'),
+            ('https://example.org/image\0.jpg', '.bin'),
+            ('https://example.org/image.' + ('x' * 4096), '.bin'),
+        ],
+    )
+    def test_infer_extension_only_accepts_known_image_suffixes(
+            self, url, expected):
+        assert image_module.infer_extension(url) == expected
+
     def test_local_filename_distinguishes_urls_with_the_same_provider_record_id(self):
         candidate = {
             'provider': 'gbif',
@@ -1172,6 +1476,46 @@ class TestMediaFilenames:
         assert first != second
         assert first.endswith('.jpg')
         assert second.endswith('.jpg')
+
+    def test_long_filename_components_are_bounded_and_collision_resistant(self):
+        long_species = 'Species_' + ('a' * 500)
+        shared_prefix = 'record-' + ('x' * 500)
+        first_candidate = {
+            'provider': 'provider-' + ('p' * 500),
+            'provider_record_id': shared_prefix + '-first',
+        }
+        second_candidate = {
+            **first_candidate,
+            'provider_record_id': shared_prefix + '-second',
+        }
+
+        first_local = build_local_media_filename(
+            long_species,
+            first_candidate,
+            'https://example.org/image.jpg',
+        )
+        second_local = build_local_media_filename(
+            long_species,
+            second_candidate,
+            'https://example.org/image.jpg',
+        )
+        cache_name = os.path.basename(image_module.build_media_cache_path(
+            '/tmp/cache',
+            'https://example.org/image.jpg',
+            first_candidate['provider'],
+            first_candidate['provider_record_id'],
+        ))
+        query_name = os.path.basename(image_module.build_query_cache_path(
+            '/tmp/cache',
+            first_candidate['provider'],
+            long_species,
+            'fallback-' + ('f' * 500),
+        ))
+
+        assert first_local != second_local
+        assert image_module.sanitize_filename_component('Apis mellifera') == 'Apis_mellifera'
+        for filename in (first_local, second_local, cache_name, query_name):
+            assert len(os.fsencode(filename)) < 255
 
     def test_image_main_uses_name_tsv_override_and_strict_mode(self, monkeypatch, tmp_path):
         tree_path = tmp_path / 'tree.nwk'
@@ -1190,7 +1534,7 @@ class TestMediaFilenames:
                 'license_url': 'https://creativecommons.org/publicdomain/zero/1.0/',
                 'attribution': 'PhyloPic Artist',
                 'source_page_url': 'https://api.phylopic.org/images/phy-2',
-                'media_url': 'https://images.example.org/apis.svg',
+                'media_url': 'https://images.phylopic.org/apis.svg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'silhouette',
@@ -1203,9 +1547,8 @@ class TestMediaFilenames:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'content')
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
+            write_valid_test_media(destination_path)
             return 'downloaded'
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1299,7 +1642,7 @@ class TestMediaFilenames:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'PhyloPic Artist',
                 'source_page_url': 'https://api.phylopic.org/images/phy-cache',
-                'media_url': 'https://images.example.org/apis-cache.svg',
+                'media_url': 'https://images.phylopic.org/apis-cache.svg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'silhouette',
@@ -1315,7 +1658,7 @@ class TestMediaFilenames:
                 yield b'<svg xmlns="http://www.w3.org/2000/svg"></svg>'
 
         class CountingSession:
-            def get(self, media_url, stream=True, timeout=None, headers=None):
+            def get(self, media_url, stream=True, timeout=None, headers=None, allow_redirects=False):
                 call_counter['count'] += 1
                 return DownloadOnlyResponse()
 
@@ -1355,6 +1698,208 @@ class TestMediaFilenames:
         assert manifest_rows_2[0]['status'] == 'cached'
         assert (shared_download_dir / 'nwkit' / 'image-cache').is_dir()
 
+    @pytest.mark.parametrize(
+        ('use_shared_cache', 'expected_downloads'),
+        [(False, 1), (True, 1)],
+        ids=['reuse-local-raw-cache', 'reuse-shared-raw-cache'],
+    )
+    def test_image_main_reprocesses_raw_media_when_options_change(
+        self,
+        monkeypatch,
+        tmp_path,
+        use_shared_cache,
+        expected_downloads,
+    ):
+        Image = pytest.importorskip('PIL.Image')
+        tree_path = tmp_path / 'tree.nwk'
+        tree_path.write_text('(Apis_mellifera_A);')
+        out_dir = tmp_path / 'out'
+        shared_download_dir = tmp_path / 'shared-cache'
+        image_bytes = io.BytesIO()
+        Image.new('RGB', (80, 40), 'black').save(image_bytes, format='PNG')
+        raw_png = image_bytes.getvalue()
+        call_counter = {'count': 0}
+        candidates = {
+            'Apis mellifera': [{
+                'provider': 'phylopic',
+                'provider_record_id': 'phy-options',
+                'matched_name': 'Apis mellifera',
+                'matched_rank': 'species',
+                'license_code': 'cc-by',
+                'license_url': 'https://creativecommons.org/licenses/by/4.0/',
+                'attribution': 'PhyloPic Artist',
+                'source_page_url': 'https://api.phylopic.org/images/phy-options',
+                'media_url': 'https://images.phylopic.org/apis-options.png',
+                'width': 80,
+                'height': 40,
+                'asset_type': 'silhouette',
+            }],
+        }
+
+        class ImageResponse:
+            status_code = 200
+            headers = {'Content-Type': 'image/png'}
+            url = 'https://images.phylopic.org/apis-options.png'
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=65536):
+                yield raw_png
+
+            def close(self):
+                return None
+
+        class CountingSession:
+            def get(self, url, **kwargs):
+                call_counter['count'] += 1
+                return ImageResponse()
+
+            def close(self):
+                return None
+
+        def fake_build_providers(args, sources, session=None):
+            return DummySession(), None, {
+                'phylopic': DummyProvider(candidates),
+            }
+
+        monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
+        monkeypatch.setattr('nwkit.image.build_download_session', CountingSession)
+        download_dir = str(shared_download_dir) if use_shared_cache else 'auto'
+
+        image_main(make_image_args(
+            infile=str(tree_path),
+            out_dir=str(out_dir),
+            source='phylopic',
+            download_dir=download_dir,
+            output_format='png',
+            max_edge=20,
+        ))
+        first_manifest = read_tsv(out_dir / 'manifest.tsv')
+        first_path = out_dir / first_manifest[0]['local_path']
+        with Image.open(first_path) as first_image:
+            assert first_image.size == (20, 10)
+
+        image_main(make_image_args(
+            infile=str(tree_path),
+            out_dir=str(out_dir),
+            source='phylopic',
+            download_dir=download_dir,
+            output_format='png',
+            max_edge=40,
+        ))
+        second_manifest = read_tsv(out_dir / 'manifest.tsv')
+        second_path = out_dir / second_manifest[0]['local_path']
+        with Image.open(second_path) as second_image:
+            assert second_image.size == (40, 20)
+
+        assert call_counter['count'] == expected_downloads
+
+    def test_custom_manifest_and_attribution_paths_feed_draw_with_ranked_rows(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        tree_path = tmp_path / 'tree.nwk'
+        tree_path.write_text('(Apis_mellifera_A);')
+        out_dir = tmp_path / 'image-output'
+        metadata_dir = tmp_path / 'metadata'
+        manifest_path = metadata_dir / 'ranked-images.tsv'
+        attribution_path = metadata_dir / 'ATTRIBUTION.md'
+        candidates = {
+            'Apis mellifera': [
+                {
+                    'provider': 'phylopic',
+                    'provider_record_id': 'phy-first',
+                    'matched_name': 'Apis mellifera',
+                    'matched_rank': 'species',
+                    'license_code': 'cc-by',
+                    'license_url': 'https://creativecommons.org/licenses/by/4.0/',
+                    'attribution': 'First Artist',
+                    'source_page_url': 'https://api.phylopic.org/images/phy-first',
+                    'media_url': 'https://images.phylopic.org/apis-first.png',
+                    'width': 80,
+                    'height': 40,
+                    'asset_type': 'silhouette',
+                    'provider_quality': 20,
+                },
+                {
+                    'provider': 'phylopic',
+                    'provider_record_id': 'phy-second',
+                    'matched_name': 'Apis mellifera',
+                    'matched_rank': 'species',
+                    'license_code': 'cc-by',
+                    'license_url': 'https://creativecommons.org/licenses/by/4.0/',
+                    'attribution': 'Second Artist',
+                    'source_page_url': 'https://api.phylopic.org/images/phy-second',
+                    'media_url': 'https://images.phylopic.org/apis-second.png',
+                    'width': 80,
+                    'height': 40,
+                    'asset_type': 'silhouette',
+                    'provider_quality': 10,
+                },
+            ],
+        }
+
+        def fake_build_providers(args, sources, session=None):
+            return DummySession(), None, {
+                'phylopic': DummyProvider(candidates),
+            }
+
+        def fake_download_media(
+            session,
+            media_url,
+            destination_path,
+            **kwargs
+        ):
+            write_valid_test_media(destination_path)
+            return 'downloaded'
+
+        monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
+        monkeypatch.setattr('nwkit.image.download_media', fake_download_media)
+
+        image_main(make_image_args(
+            infile=str(tree_path),
+            out_dir=str(out_dir),
+            source='phylopic',
+            max_per_species=2,
+            manifest_out=str(manifest_path),
+            attribution_out=str(attribution_path),
+        ))
+
+        manifest_rows = read_tsv(manifest_path)
+        assert len(manifest_rows) == 2
+        assert [row['provider_record_id'] for row in manifest_rows] == [
+            'phy-first',
+            'phy-second',
+        ]
+        for row in manifest_rows:
+            assert os.path.isfile(metadata_dir / row['local_path'])
+        local_file_lines = [
+            line.split(': ', 1)[1]
+            for line in attribution_path.read_text().splitlines()
+            if line.startswith('Local file: ')
+        ]
+        assert len(local_file_lines) == 2
+        assert all(os.path.isfile(metadata_dir / path) for path in local_file_lines)
+
+        from nwkit.cli import main as cli_main
+
+        draw_path = tmp_path / 'ranked-images.svg'
+        cli_main([
+            'draw',
+            '-i',
+            str(tree_path),
+            '--species-overlap-node-plot',
+            'no',
+            '--tip-image-manifest',
+            str(manifest_path),
+            '-o',
+            str(draw_path),
+        ])
+
+        assert draw_path.read_text(encoding='utf-8').count('<image') == 1
+
     def test_image_main_does_not_rebuild_providers_for_download_stage(self, monkeypatch, tmp_path):
         tree_path = tmp_path / 'tree.nwk'
         tree_path.write_text('(Apis_mellifera_A);')
@@ -1371,7 +1916,7 @@ class TestMediaFilenames:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'PhyloPic Artist',
                 'source_page_url': 'https://api.phylopic.org/images/phy-once',
-                'media_url': 'https://images.example.org/apis-once.svg',
+                'media_url': 'https://images.phylopic.org/apis-once.svg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'silhouette',
@@ -1385,9 +1930,8 @@ class TestMediaFilenames:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'content')
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
+            write_valid_test_media(destination_path)
             return 'downloaded'
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1446,10 +1990,9 @@ class TestMediaFilenames:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
             call_counter['count'] += 1
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'content')
+            write_valid_test_media(destination_path)
             return 'downloaded'
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1500,10 +2043,9 @@ class TestMediaFilenames:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
             resolved_path = destination_path[:-4] + '.jpg'
-            with open(resolved_path, 'wb') as handle:
-                handle.write(b'jpeg-data')
+            write_valid_test_media(resolved_path)
             return {'status': 'downloaded', 'destination_path': resolved_path}
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1566,11 +2108,10 @@ class TestMediaFilenames:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
             if media_url.endswith('/fail/original.jpg'):
                 raise requests.ConnectionError('transient failure')
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'content')
+            write_valid_test_media(destination_path)
             return 'downloaded'
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1589,6 +2130,66 @@ class TestMediaFilenames:
 
         assert len(manifest_rows) == 1
         assert manifest_rows[0]['provider'] == 'wikimedia'
+        assert unmatched_rows == []
+
+    def test_materialize_value_error_falls_back_to_next_candidate(self):
+        candidates = [
+            {
+                'provider': 'inaturalist',
+                'provider_record_id': 'invalid',
+                'matched_name': 'Panthera leo',
+                'matched_rank': 'species',
+                'license_code': 'cc-by',
+                'license_url': 'https://creativecommons.org/licenses/by/4.0/',
+                'attribution': 'Invalid Photographer',
+                'source_page_url': 'https://example.org/invalid',
+                'media_url': 'https://example.org/invalid.jpg',
+                'asset_type': 'photo',
+                'score': 2.0,
+            },
+            {
+                'provider': 'wikimedia',
+                'provider_record_id': 'valid',
+                'matched_name': 'Panthera leo',
+                'matched_rank': 'species',
+                'license_code': 'cc-by',
+                'license_url': 'https://creativecommons.org/licenses/by/4.0/',
+                'attribution': 'Valid Photographer',
+                'source_page_url': 'https://example.org/valid',
+                'media_url': 'https://example.org/valid.jpg',
+                'asset_type': 'photo',
+                'score': 1.0,
+            },
+        ]
+
+        class Materializer:
+            def __init__(self):
+                self.calls = list()
+
+            def materialize(self, species_name, candidate):
+                self.calls.append(candidate['provider_record_id'])
+                if candidate['provider_record_id'] == 'invalid':
+                    raise ValueError('decoded image is invalid')
+                return {
+                    'local_path': 'images/valid.jpg',
+                    'download_status': 'downloaded',
+                }
+
+        materializer = Materializer()
+        manifest_rows, selected_assets, unmatched_rows = (
+            image_module.process_species_assets(
+                species_name='Panthera leo',
+                leaf_names=['Panthera_leo_A'],
+                candidates=candidates,
+                provider_errors=[],
+                args=make_image_args(max_per_species=1),
+                materializer=materializer,
+            )
+        )
+
+        assert materializer.calls == ['invalid', 'valid']
+        assert [row['provider'] for row in manifest_rows] == ['wikimedia']
+        assert selected_assets == manifest_rows
         assert unmatched_rows == []
 
     def test_image_main_reports_download_error_when_all_candidates_fail(self, monkeypatch, tmp_path):
@@ -1619,7 +2220,7 @@ class TestMediaFilenames:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
             raise requests.ConnectionError('transient failure')
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -1642,6 +2243,39 @@ class TestMediaFilenames:
 
 
 class TestDownloadMedia:
+    def test_download_media_uses_media_accept_header(self, tmp_path):
+        destination = tmp_path / 'out' / 'image.bin'
+        request_kwargs = {}
+
+        class JPEGResponse:
+            headers = {'Content-Type': 'image/jpeg'}
+            url = 'https://example.org/download'
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=65536):
+                yield b'\xff\xd8\xff\xe0fakejpeg'
+
+            def close(self):
+                return None
+
+        class JPEGSession:
+            def get(self, *args, **kwargs):
+                request_kwargs.update(kwargs)
+                return JPEGResponse()
+
+        download_media(
+            JPEGSession(),
+            'https://example.org/download',
+            str(destination),
+        )
+
+        assert request_kwargs['headers']['Accept'].startswith('image/*')
+        assert request_kwargs['headers']['Accept'] != 'application/json'
+        assert image_module.HTTP_HEADERS is image_module.API_HTTP_HEADERS
+        assert image_module.API_HTTP_HEADERS['Accept'] == 'application/json'
+
     def test_download_media_prefers_shared_cache_when_present(self, tmp_path):
         destination = tmp_path / 'out' / 'image.svg'
         cache_path = tmp_path / 'cache' / 'image.svg'
@@ -1656,6 +2290,41 @@ class TestDownloadMedia:
 
         assert result['status'] == 'cached'
         assert destination.read_bytes().startswith(b'<svg')
+
+    def test_cached_destination_uses_umask_and_preserves_existing_mode(
+        self,
+        tmp_path,
+    ):
+        destination = tmp_path / 'out' / 'image.svg'
+        cache_path = tmp_path / 'cache' / 'image.svg'
+        cache_path.parent.mkdir(parents=True)
+        cache_path.write_bytes(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+
+        class FailingSession:
+            def get(self, *args, **kwargs):
+                raise AssertionError('network should not be used when cache exists')
+
+        previous_umask = os.umask(0o027)
+        try:
+            download_media(
+                FailingSession(),
+                'https://images.example.org/item.svg',
+                str(destination),
+                cache_path=str(cache_path),
+            )
+        finally:
+            os.umask(previous_umask)
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+
+        destination.chmod(0o664)
+        download_media(
+            FailingSession(),
+            'https://images.example.org/item.svg',
+            str(destination),
+            cache_path=str(cache_path),
+            reuse_destination=False,
+        )
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o664
 
     def test_download_media_removes_partial_temp_file_on_error(self, tmp_path):
         destination = tmp_path / 'out' / 'image.svg'
@@ -1698,6 +2367,38 @@ class TestDownloadMedia:
         assert result['destination_path'].endswith('.jpg')
         assert os.path.exists(result['destination_path'])
         assert not os.path.exists(destination)
+
+    def test_direct_download_uses_umask_adjusted_mode(self, tmp_path):
+        destination = tmp_path / 'out' / 'image.bin'
+
+        class JPEGResponse:
+            headers = {'Content-Type': 'image/jpeg'}
+            url = 'https://example.org/download'
+
+            def raise_for_status(self):
+                return None
+
+            def iter_content(self, chunk_size=65536):
+                yield b'\xff\xd8\xff\xe0fakejpeg'
+
+            def close(self):
+                return None
+
+        class JPEGSession:
+            def get(self, *args, **kwargs):
+                return JPEGResponse()
+
+        previous_umask = os.umask(0o027)
+        try:
+            result = download_media(
+                JPEGSession(),
+                'https://example.org/download',
+                str(destination),
+            )
+        finally:
+            os.umask(previous_umask)
+
+        assert stat.S_IMODE(os.stat(result['destination_path']).st_mode) == 0o640
 
     def test_download_media_reuses_existing_cache_variant_extension(self, tmp_path):
         destination = tmp_path / 'out' / 'image.bin'
@@ -1774,6 +2475,34 @@ class TestDownloadMedia:
 
 
 class TestImagePostprocessing:
+    def test_processed_raster_uses_umask_and_preserves_existing_mode(
+        self,
+        tmp_path,
+    ):
+        Image = pytest.importorskip('PIL.Image')
+        source = tmp_path / 'image.png'
+        destination = tmp_path / 'image.jpg'
+        Image.new('RGB', (40, 20), 'black').save(source)
+
+        previous_umask = os.umask(0o027)
+        try:
+            result = postprocess_media_file(
+                str(source),
+                make_image_args(output_format='jpg', max_edge=16),
+            )
+        finally:
+            os.umask(previous_umask)
+        assert result == str(destination)
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+
+        Image.new('RGB', (40, 20), 'black').save(source)
+        destination.chmod(0o664)
+        postprocess_media_file(
+            str(source),
+            make_image_args(output_format='jpg', max_edge=12),
+        )
+        assert stat.S_IMODE(destination.stat().st_mode) == 0o664
+
     def test_postprocess_media_file_resizes_and_pads_raster(self, tmp_path):
         Image = pytest.importorskip('PIL.Image')
         source = tmp_path / 'image.png'
@@ -1919,7 +2648,7 @@ class TestImagePostprocessing:
 
         monkeypatch.setattr(
             'nwkit.image.rasterize_svg_to_image',
-            lambda source_path: Image.new('RGBA', (20, 10), (0, 0, 0, 255)),
+            lambda source_path, max_edge=None: Image.new('RGBA', (20, 10), (0, 0, 0, 255)),
         )
 
         result = postprocess_media_file(
@@ -1968,7 +2697,7 @@ class TestImagePostprocessing:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'PhyloPic Artist',
                 'source_page_url': 'https://api.phylopic.org/images/phy-plain',
-                'media_url': 'https://images.example.org/apis.svg',
+                'media_url': 'https://images.phylopic.org/apis.svg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'silhouette',
@@ -1981,7 +2710,7 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
             return {'status': 'downloaded', 'destination_path': destination_path}
@@ -2019,7 +2748,7 @@ class TestImagePostprocessing:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'Photographer',
                 'source_page_url': 'https://www.inaturalist.org/observations/1',
-                'media_url': 'https://images.example.org/apis.jpg',
+                'media_url': 'https://static.inaturalist.org/apis.jpg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'photo',
@@ -2032,9 +2761,8 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'jpeg-data')
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
+            write_valid_test_media(destination_path)
             return {'status': 'downloaded', 'destination_path': destination_path}
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -2069,7 +2797,7 @@ class TestImagePostprocessing:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'PhyloPic Artist',
                 'source_page_url': 'https://api.phylopic.org/images/phy-plain',
-                'media_url': 'https://images.example.org/apis.svg',
+                'media_url': 'https://images.phylopic.org/apis.svg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'silhouette',
@@ -2082,14 +2810,14 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
             with open(destination_path, 'wb') as handle:
                 handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
             return {'status': 'downloaded', 'destination_path': destination_path}
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
         monkeypatch.setattr('nwkit.image.download_media', fake_download_media)
-        monkeypatch.setattr('nwkit.image.rasterize_svg_to_image', lambda source_path: object())
+        monkeypatch.setattr('nwkit.image.rasterize_svg_to_image', lambda source_path, max_edge=None: object())
         monkeypatch.setattr(
             'nwkit.image.load_pillow_modules',
             lambda: (_ for _ in ()).throw(RuntimeError('Image post-processing requires the optional Pillow dependency. Install optional image-processing dependencies with: pip install "nwkit[image]"')),
@@ -2120,7 +2848,7 @@ class TestImagePostprocessing:
                 'license_url': 'https://creativecommons.org/licenses/by/4.0/',
                 'attribution': 'Photographer',
                 'source_page_url': 'https://www.inaturalist.org/observations/1',
-                'media_url': 'https://images.example.org/apis.jpg',
+                'media_url': 'https://static.inaturalist.org/apis.jpg',
                 'width': 1000,
                 'height': 900,
                 'asset_type': 'photo',
@@ -2133,9 +2861,8 @@ class TestImagePostprocessing:
             }
             return DummySession(), None, providers
 
-        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None):
-            with open(destination_path, 'wb') as handle:
-                handle.write(b'jpeg-data')
+        def fake_download_media(session, media_url, destination_path, cache_path=None, max_download_bytes=None, provider=None, **kwargs):
+            write_valid_test_media(destination_path)
             return {'status': 'downloaded', 'destination_path': destination_path}
 
         monkeypatch.setattr('nwkit.image.build_providers', fake_build_providers)
@@ -2154,3 +2881,694 @@ class TestImagePostprocessing:
                     trim='semantic',
                 )
             )
+
+
+class TestImageSecurityLimits:
+    @pytest.mark.parametrize(
+        'allowed_hosts',
+        [None, ('attacker.example',)],
+        ids=['arbitrary-host', 'allowlisted-host'],
+    )
+    def test_real_session_pins_the_single_validated_dns_result(
+        self,
+        monkeypatch,
+        allowed_hosts,
+    ):
+        resolver_calls = []
+        pinned_calls = []
+        public_address = '93.184.216.34'
+
+        def alternating_resolution(hostname):
+            resolver_calls.append(hostname)
+            if len(resolver_calls) == 1:
+                return {public_address}
+            return {'127.0.0.1'}
+
+        class Response:
+            status_code = 200
+            headers = {}
+            url = 'https://attacker.example/image.png'
+
+            def close(self):
+                return None
+
+        def fake_pinned_request(session, method, url, address, **kwargs):
+            pinned_calls.append((method, url, address))
+            return Response()
+
+        monkeypatch.setattr(
+            image_module,
+            'resolve_hostname_addresses',
+            alternating_resolution,
+        )
+        monkeypatch.setattr(
+            image_module,
+            '_request_pinned_address',
+            fake_pinned_request,
+        )
+        session = requests.Session()
+        try:
+            response = image_module.safe_external_request(
+                session,
+                'get',
+                'https://attacker.example/image.png',
+                allowed_hosts=allowed_hosts,
+            )
+        finally:
+            session.close()
+
+        assert response.status_code == 200
+        assert resolver_calls == ['attacker.example']
+        assert pinned_calls == [
+            ('get', 'https://attacker.example/image.png', public_address)
+        ]
+
+    def test_pinned_adapter_connects_to_ip_with_original_tls_hostname(self):
+        adapter = image_module._PinnedHTTPSAdapter(
+            address='93.184.216.34',
+            tls_hostname='example.com',
+        )
+        request = requests.Request('GET', 'https://example.com/image.png').prepare()
+        try:
+            pool = adapter.get_connection_with_tls_context(
+                request,
+                verify=True,
+            )
+            assert pool.host == '93.184.216.34'
+            assert pool.conn_kw['server_hostname'] == 'example.com'
+            assert pool.assert_hostname == 'example.com'
+        finally:
+            adapter.close()
+
+    def test_pinned_request_rejects_proxy_configuration(self):
+        session = requests.Session()
+        session.trust_env = False
+        session.proxies = {'https': 'http://proxy.example:8080'}
+        try:
+            with pytest.raises(MediaDownloadError, match='Proxy'):
+                image_module._request_pinned_address(
+                    session,
+                    'get',
+                    'https://example.com/image.png',
+                    '93.184.216.34',
+                )
+        finally:
+            session.close()
+
+    def test_cross_origin_redirect_drops_session_and_request_credentials(
+        self,
+        monkeypatch,
+    ):
+        calls = list()
+
+        class Response:
+            def __init__(self, status_code, url, location=None):
+                self.status_code = status_code
+                self.url = url
+                self.headers = {} if location is None else {'Location': location}
+
+            def close(self):
+                return None
+
+        responses = iter([
+            Response(
+                302,
+                'https://origin.example/start',
+                'https://other.example/next',
+            ),
+            Response(200, 'https://other.example/next'),
+        ])
+
+        def fake_get(pinned_session, url, **kwargs):
+            effective_headers = {
+                str(key).lower(): value
+                for key, value in pinned_session.headers.items()
+            }
+            effective_headers.update({
+                str(key).lower(): value
+                for key, value in (kwargs.get('headers') or {}).items()
+            })
+            calls.append({
+                'url': url,
+                'auth': pinned_session.auth,
+                'cert': pinned_session.cert,
+                'headers': effective_headers,
+                'cookies': pinned_session.cookies.get_dict(),
+                'params': dict(pinned_session.params),
+                'request_auth': kwargs.get('auth'),
+                'request_cert': kwargs.get('cert'),
+                'request_cookies': kwargs.get('cookies'),
+                'request_params': kwargs.get('params'),
+            })
+            return next(responses)
+
+        monkeypatch.setattr(requests.Session, 'get', fake_get)
+        monkeypatch.setattr(
+            image_module,
+            '_resolve_public_addresses',
+            lambda hostname, url: ('93.184.216.34',),
+        )
+        session = requests.Session()
+        session.trust_env = False
+        session.auth = ('session-user', 'session-secret')
+        session.cert = '/tmp/session-client.pem'
+        session.params = {'session-api-key': 'secret'}
+        session.headers.update({
+            'Authorization': 'Bearer session-secret',
+            'Cookie': 'session-cookie=secret',
+            'Proxy-Authorization': 'Basic proxy-secret',
+            'X-Api-Key': 'session-api-secret',
+        })
+        session.cookies.set('ambient-cookie', 'secret')
+        try:
+            response = image_module.safe_external_request(
+                session,
+                'get',
+                'https://origin.example/start',
+                headers={
+                    'Authorization': 'Bearer request-secret',
+                    'Cookie': 'request-cookie=secret',
+                    'Proxy-Authorization': 'Basic request-proxy-secret',
+                    'X-Api-Key': 'request-api-secret',
+                    'Accept-Language': 'ja',
+                },
+                auth=('request-user', 'request-secret'),
+                cert='/tmp/request-client.pem',
+                cookies={'request-cookie': 'secret'},
+                params={'request-api-key': 'secret'},
+            )
+            response.close()
+        finally:
+            session.close()
+
+        assert calls[0]['auth'] == ('session-user', 'session-secret')
+        assert calls[0]['cert'] == '/tmp/session-client.pem'
+        assert calls[0]['params'] == {'session-api-key': 'secret'}
+        assert calls[0]['request_auth'] == ('request-user', 'request-secret')
+        assert calls[0]['request_cert'] == '/tmp/request-client.pem'
+        assert calls[0]['request_cookies'] == {'request-cookie': 'secret'}
+        assert calls[0]['request_params'] == {'request-api-key': 'secret'}
+        assert calls[0]['cookies'] == {'ambient-cookie': 'secret'}
+        assert calls[1]['auth'] is None
+        assert calls[1]['cert'] is None
+        assert calls[1]['params'] == {}
+        assert calls[1]['request_auth'] is None
+        assert calls[1]['request_cert'] is None
+        assert calls[1]['request_cookies'] is None
+        assert calls[1]['request_params'] is None
+        assert calls[1]['cookies'] == {}
+        assert calls[1]['headers']['accept-language'] == 'ja'
+        assert 'authorization' not in calls[1]['headers']
+        assert 'cookie' not in calls[1]['headers']
+        assert 'proxy-authorization' not in calls[1]['headers']
+        assert 'x-api-key' not in calls[1]['headers']
+
+    def test_pinned_redirect_merges_response_cookies_into_caller_session(
+        self,
+        monkeypatch,
+    ):
+        cookies_seen = list()
+
+        class Response:
+            def __init__(self, status_code, url, location=None):
+                self.status_code = status_code
+                self.url = url
+                self.headers = {} if location is None else {'Location': location}
+
+            def close(self):
+                return None
+
+        def fake_get(pinned_session, url, **kwargs):
+            cookies_seen.append(pinned_session.cookies.get_dict(
+                domain='cookie.example',
+                path='/',
+            ))
+            if len(cookies_seen) == 1:
+                pinned_session.cookies.set(
+                    'route',
+                    'blue',
+                    domain='cookie.example',
+                    path='/',
+                )
+                return Response(302, url, '/next')
+            return Response(200, url)
+
+        monkeypatch.setattr(requests.Session, 'get', fake_get)
+        monkeypatch.setattr(
+            image_module,
+            '_resolve_public_addresses',
+            lambda hostname, url: ('93.184.216.34',),
+        )
+        session = requests.Session()
+        session.trust_env = False
+        try:
+            response = image_module.safe_external_request(
+                session,
+                'get',
+                'https://cookie.example/start',
+            )
+            response.close()
+            assert session.cookies.get(
+                'route',
+                domain='cookie.example',
+                path='/',
+            ) == 'blue'
+        finally:
+            session.close()
+
+        assert cookies_seen == [{}, {'route': 'blue'}]
+
+    def test_custom_session_without_redirect_control_is_not_retried(self):
+        calls = list()
+
+        class LegacySession:
+            def get(self, url, **kwargs):
+                calls.append(dict(kwargs))
+                if 'allow_redirects' in kwargs:
+                    raise TypeError(
+                        "get() got an unexpected keyword argument 'allow_redirects'"
+                    )
+                raise AssertionError('unsafe fallback request was attempted')
+
+        with pytest.raises(MediaDownloadError, match='allow_redirects=False'):
+            image_module.safe_external_request(
+                LegacySession(),
+                'get',
+                'https://public.example/start',
+            )
+
+        assert len(calls) == 1
+        assert calls[0]['allow_redirects'] is False
+
+    def test_mixed_public_and_private_dns_answers_are_rejected(self, monkeypatch):
+        monkeypatch.setattr(
+            image_module,
+            'resolve_hostname_addresses',
+            lambda hostname: {'93.184.216.34', '127.0.0.1'},
+        )
+        monkeypatch.setattr(
+            image_module,
+            '_request_pinned_address',
+            lambda *args, **kwargs: pytest.fail('request must not be sent'),
+        )
+        session = requests.Session()
+        try:
+            with pytest.raises(MediaDownloadError, match='non-public address'):
+                image_module.safe_external_request(
+                    session,
+                    'get',
+                    'https://mixed.example/image.png',
+                )
+        finally:
+            session.close()
+
+    def test_rejects_private_redirect_before_following_it(self):
+        calls = list()
+
+        class RedirectResponse:
+            status_code = 302
+            headers = {'Location': 'https://127.0.0.1/private'}
+            url = 'https://example.org/start'
+
+            def close(self):
+                return None
+
+        class RedirectSession:
+            def get(self, url, **kwargs):
+                calls.append(url)
+                return RedirectResponse()
+
+        with pytest.raises(MediaDownloadError, match='non-public address'):
+            image_module.safe_external_request(
+                RedirectSession(),
+                'get',
+                'https://example.org/start',
+            )
+        assert calls == ['https://example.org/start']
+
+    def test_download_rejects_provider_host_outside_allowlist(self, tmp_path):
+        class UnusedSession:
+            def get(self, *args, **kwargs):
+                raise AssertionError('request should not be sent')
+
+        with pytest.raises(MediaDownloadError, match='not allowed'):
+            download_media(
+                UnusedSession(),
+                'https://example.org/silhouette.svg',
+                str(tmp_path / 'image.svg'),
+                provider='phylopic',
+            )
+
+    def test_provider_json_body_is_bounded_while_streaming(self):
+        class LargeResponse:
+            headers = {}
+
+            def iter_content(self, chunk_size):
+                yield b'{"value":"'
+                yield b'x' * 32
+                yield b'"}'
+
+        with pytest.raises(MediaDownloadError, match='exceeded'):
+            image_module.bounded_response_json(LargeResponse(), max_bytes=16)
+
+    def test_cached_candidate_with_insecure_url_is_discarded(self, tmp_path):
+        cache_path = tmp_path / 'query.json'
+        image_module.write_cached_provider_candidates(
+            str(cache_path),
+            [{
+                'provider': 'openverse',
+                'media_url': 'http://example.org/image.jpg',
+            }],
+            fetch_limit=10,
+        )
+        assert image_module.load_cached_provider_candidates(str(cache_path)) is None
+
+    @pytest.mark.parametrize(
+        'loader',
+        [
+            image_module.load_cached_provider_candidates,
+            image_module.load_cached_bioicons_catalog,
+        ],
+    )
+    def test_non_object_json_cache_is_treated_as_a_cache_miss(
+        self,
+        loader,
+        tmp_path,
+    ):
+        cache_path = tmp_path / 'cache.json'
+        cache_path.write_text('[]')
+
+        assert loader(str(cache_path)) is None
+
+    def test_default_svg_output_rejects_external_content(self, tmp_path):
+        source = tmp_path / 'unsafe.svg'
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
+            '<image href="https://example.org/tracker.png"/>'
+            '</svg>'
+        )
+        with pytest.raises(MediaDownloadError, match='forbidden|external'):
+            postprocess_media_file(str(source), make_image_args())
+
+    def test_default_svg_output_allows_safe_inline_and_style_tag_css(self, tmp_path):
+        source = tmp_path / 'safe-css.svg'
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
+            '<defs>'
+            '<filter id="shadow"><feOffset dx="1" dy="1"/></filter>'
+            '<style>.safe { fill:red; stroke:#000; filter:url(#shadow); }</style>'
+            '</defs>'
+            '<rect class="safe" width="20" height="10" '
+            'style="fill:blue;stroke:red"/>'
+            '</svg>'
+        )
+
+        result = postprocess_media_file(str(source), make_image_args())
+
+        assert result == str(source)
+
+    @pytest.mark.parametrize(
+        'unsafe_css',
+        [
+            '<rect style="fill:url(https://attacker.example/pattern.svg)"/>',
+            '<rect style="fill:url(images/pattern.svg)"/>',
+            '<style>@import "https://attacker.example/theme.css";</style>',
+            '<rect style="width:expression(alert(1))"/>',
+            '<rect style="fill:javascript:alert(1)"/>',
+        ],
+        ids=[
+            'absolute-url',
+            'relative-url',
+            'import',
+            'expression',
+            'javascript',
+        ],
+    )
+    def test_default_svg_output_rejects_unsafe_css_references(
+        self,
+        tmp_path,
+        unsafe_css,
+    ):
+        source = tmp_path / 'unsafe-css.svg'
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
+            '{}'
+            '</svg>'.format(unsafe_css)
+        )
+
+        with pytest.raises(MediaDownloadError, match='external|executable'):
+            postprocess_media_file(str(source), make_image_args())
+
+    def test_default_svg_output_rejects_css_escape_obfuscation(self, tmp_path):
+        source = tmp_path / 'escaped-url.svg'
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
+            '<rect width="20" height="10" '
+            'style="fill:u\\72l(https://attacker.example/p.svg#x)"/>'
+            '</svg>'
+        )
+
+        with pytest.raises(MediaDownloadError, match='external|executable'):
+            postprocess_media_file(str(source), make_image_args())
+
+    def test_default_raster_output_rejects_truncated_png(self, tmp_path):
+        source = tmp_path / 'truncated.png'
+        source.write_bytes(b'\x89PNG\r\n\x1a\n\x00\x00\x00\x0d')
+
+        with pytest.raises(MediaDownloadError, match='truncated|corrupt|unsupported'):
+            postprocess_media_file(str(source), make_image_args())
+
+    def test_default_raster_output_rejects_truncated_jpeg(self, tmp_path):
+        source = tmp_path / 'truncated.jpg'
+        Image, _, _ = image_module.load_pillow_modules()
+        Image.new('RGB', (64, 64), 'red').save(source, format='JPEG')
+        source.write_bytes(source.read_bytes()[:-2])
+
+        with pytest.raises(MediaDownloadError, match='truncated|corrupt|unsupported'):
+            postprocess_media_file(str(source), make_image_args())
+
+    def test_svg_rejects_utf16_before_entity_parsing(self, tmp_path):
+        source = tmp_path / 'utf16-entity.svg'
+        source.write_bytes((
+            '<?xml version="1.0" encoding="UTF-16"?>'
+            '<!DOCTYPE svg [<!ENTITY local "expanded">]>'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
+            '<text>&local;</text>'
+            '</svg>'
+        ).encode('utf-16'))
+
+        with pytest.raises(MediaDownloadError, match='UTF-16|encoding'):
+            postprocess_media_file(str(source), make_image_args())
+
+    def test_default_raster_output_rejects_oversized_dimensions(self, tmp_path):
+        source = tmp_path / 'oversized.png'
+        Image, _, _ = image_module.load_pillow_modules()
+        Image.new('RGBA', (1, 1), (0, 0, 0, 255)).save(source)
+        payload = bytearray(source.read_bytes())
+        payload[16:24] = struct.pack('>II', 100_000, 100_000)
+        payload[29:33] = struct.pack(
+            '>I',
+            zlib.crc32(bytes(payload[12:29])) & 0xffffffff,
+        )
+        source.write_bytes(payload)
+
+        with pytest.raises(MediaDownloadError) as error:
+            postprocess_media_file(str(source), make_image_args())
+        assert 'pixel' in str(error.value).lower() or 'bomb' in str(error.value).lower()
+
+    def test_default_svg_output_strips_external_doctype(self, tmp_path):
+        source = tmp_path / 'doctype.svg'
+        source.write_text(
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
+            '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>'
+        )
+        source.chmod(0o664)
+
+        result = postprocess_media_file(str(source), make_image_args())
+
+        assert result == str(source)
+        assert '<!DOCTYPE' not in source.read_text()
+        assert stat.S_IMODE(source.stat().st_mode) == 0o664
+
+    def test_svg_dimensions_are_read_from_sanitized_xml_root(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        source = tmp_path / 'sanitized-dimensions.svg'
+        source.write_text(
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE svg SYSTEM "https://example.org/external.dtd">\n'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>'
+        )
+        monkeypatch.setattr(
+            image_module.ElementTree,
+            'parse',
+            lambda *args, **kwargs: pytest.fail(
+                'validated SVG dimensions must not reparse the original file'
+            ),
+        )
+
+        result = postprocess_media_file(str(source), make_image_args())
+
+        assert result == str(source)
+        assert '<!DOCTYPE' not in source.read_text()
+
+    def test_rasterizing_local_svg_does_not_modify_input(self, tmp_path):
+        pytest.importorskip('cairosvg')
+        source = tmp_path / 'local-input.svg'
+        source.write_text(
+            '<?xml version="1.0"?>\n'
+            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
+            '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
+            '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
+            '<rect width="20" height="10" fill="#000"/>'
+            '</svg>'
+        )
+        before = source.read_bytes()
+
+        rasterized = image_module.rasterize_svg_to_image(str(source))
+
+        assert rasterized.size == (20, 10)
+        assert source.read_bytes() == before
+
+    def test_svg_is_scaled_before_rasterization(self, tmp_path):
+        pytest.importorskip('cairosvg')
+        pytest.importorskip('PIL.Image')
+        source = tmp_path / 'huge.svg'
+        source.write_text(
+            '<svg xmlns="http://www.w3.org/2000/svg" width="100000" height="50000">'
+            '<rect width="100000" height="50000" fill="#000"/>'
+            '</svg>'
+        )
+        rasterized = image_module.rasterize_svg_to_image(str(source), max_edge=100)
+        assert rasterized.size == (100, 50)
+
+    def test_ncbi_extraction_rejects_oversized_member(self, monkeypatch, tmp_path):
+        archive_path = tmp_path / 'new_taxdump.tar.gz'
+        destination_path = tmp_path / 'images.dmp'
+        payload = b'12345'
+        with tarfile.open(archive_path, 'w:gz') as archive:
+            info = tarfile.TarInfo('images.dmp')
+            info.size = len(payload)
+            archive.addfile(info, io.BytesIO(payload))
+        monkeypatch.setattr(image_module, 'NCBI_IMAGES_TABLE_MAX_BYTES', 4)
+
+        with pytest.raises(MediaDownloadError, match='outside the supported range'):
+            image_module._extract_ncbi_images_table(
+                str(archive_path),
+                str(destination_path),
+            )
+        assert not destination_path.exists()
+
+    def test_ncbi_cache_replaces_corrupt_images_table(self, monkeypatch, tmp_path):
+        args = make_image_args(
+            download_dir=str(tmp_path / 'downloads'),
+            out_dir=str(tmp_path / 'out'),
+        )
+        cache_dir = tmp_path / 'downloads' / 'ncbi-taxonomy-images'
+        cache_dir.mkdir(parents=True)
+        images_path = cache_dir / 'images.dmp'
+        images_path.write_text('corrupt cache')
+        valid_row = (
+            b'64365\t|\timage:Cyanophora paradoxa\t|\t'
+            b'https://example.org/image.jpg\t|\tCC BY 4.0\t|\tAuthor\t|\t'
+            b'Publisher\t|\t\t|\t2762\t|\n'
+        )
+
+        def fake_download(session, url, destination_path, **kwargs):
+            with tarfile.open(destination_path, 'w:gz') as archive:
+                info = tarfile.TarInfo('images.dmp')
+                info.size = len(valid_row)
+                archive.addfile(info, io.BytesIO(valid_row))
+
+        monkeypatch.setattr(image_module, '_fetch_ncbi_archive_md5', lambda session: None)
+        monkeypatch.setattr(image_module, '_download_to_path', fake_download)
+
+        result = image_module.ensure_ncbi_images_table(args, DummySession())
+
+        assert result == str(images_path)
+        assert images_path.read_bytes() == valid_row
+
+    def test_ncbi_database_validation_handles_uri_characters_and_empty_tables(
+        self,
+        tmp_path,
+    ):
+        cache_dir = tmp_path / 'cache?#%'
+        cache_dir.mkdir()
+        database_path = cache_dir / 'images.sqlite3'
+        connection = sqlite3.connect(database_path)
+        connection.execute(
+            'CREATE TABLE images ('
+            'taxid INTEGER, record_id TEXT, image_url TEXT)'
+        )
+        connection.commit()
+        connection.close()
+
+        assert not image_module._ncbi_images_database_is_valid(
+            str(database_path)
+        )
+
+        connection = sqlite3.connect(database_path)
+        connection.execute(
+            'INSERT INTO images VALUES (?, ?, ?)',
+            (1, 'record', 'https://example.org/image.jpg'),
+        )
+        connection.commit()
+        connection.close()
+
+        assert image_module._ncbi_images_database_is_valid(str(database_path))
+
+    def test_ncbi_database_reloads_table_after_late_corrupt_row(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        args = make_image_args(
+            download_dir=str(tmp_path / 'downloads'),
+            out_dir=str(tmp_path / 'out'),
+        )
+        cache_dir = tmp_path / 'downloads' / 'ncbi-taxonomy-images'
+        images_path = cache_dir / 'images.dmp'
+        valid_row = (
+            '64365\t|\timage:Cyanophora paradoxa\t|\t'
+            'https://example.org/image.jpg\t|\tCC BY 4.0\t|\tAuthor\t|\t'
+            'Publisher\t|\t\t|\t2762\t|\n'
+        )
+        calls = {'count': 0}
+
+        def fake_ensure_table(args, session):
+            calls['count'] += 1
+            cache_dir.mkdir(parents=True, exist_ok=True)
+            payload = (
+                valid_row + 'corrupt later row\n'
+                if calls['count'] == 1
+                else valid_row
+            )
+            images_path.write_text(payload)
+            return str(images_path)
+
+        monkeypatch.setattr(
+            image_module,
+            'ensure_ncbi_images_table',
+            fake_ensure_table,
+        )
+
+        database_path = image_module.ensure_ncbi_images_database(
+            args,
+            DummySession(),
+        )
+
+        assert calls['count'] == 2
+        assert image_module._ncbi_images_database_is_valid(database_path)
+
+    def test_image_outputs_must_be_distinct(self, tmp_path):
+        out_dir = tmp_path / 'out'
+        with pytest.raises(ValueError, match='Output paths must be distinct'):
+            image_main(make_image_args(
+                out_dir=str(out_dir),
+                manifest_out=str(out_dir / 'ATTRIBUTION.md'),
+                source='phylopic',
+            ))

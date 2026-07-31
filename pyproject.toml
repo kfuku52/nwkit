@@ -9,7 +9,7 @@ description = "Tools for processing Newick trees"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
-license-files = ["LICENSE", "THIRD_PARTY_NOTICES"]
+license-files = ["LICENSE"]
 authors = [
   {name = "Kenji Fukushima", email = "kfuku52@gmail.com"},
 ]
@@ -30,15 +30,17 @@ classifiers = [
 dependencies = [
   "ete4>=4.4.0",
   "pandas",
-  "requests",
+  "requests>=2.32.2",
+  "urllib3>=2",
   "numpy",
   "scipy",
   "matplotlib",
+  "Pillow",
 ]
 
 [project.optional-dependencies]
 test = ["pytest>=7"]
-image = ["Pillow", "CairoSVG"]
+image = ["CairoSVG"]
 dev = [
   "build>=1.3",
   "check-wheel-contents>=0.6",
@@ -71,7 +73,6 @@ nwkit = ["data_tree/*.nwk"]
 
 [tool.ruff]
 target-version = "py310"
-exclude = ["nwkit/_mad.py"]
 
 [tool.ruff.lint]
 select = ["E4", "E7", "E9", "F"]

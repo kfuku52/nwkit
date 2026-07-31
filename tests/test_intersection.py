@@ -1,8 +1,10 @@
 import os
+import stat
 import pytest
 from ete4 import Tree
 
 from nwkit.fasta import FastaRecord, parse_fasta
+from nwkit import intersection as intersection_mod
 from nwkit.intersection import (
     get_leaf_names,
     get_seq_names,
@@ -106,6 +108,72 @@ class TestGetRemoveNames:
 
 
 class TestIntersectionMain:
+    def test_staging_writer_uses_open_descriptor_not_replaced_path(
+        self,
+        monkeypatch,
+        tmp_path,
+    ):
+        victim = tmp_path / 'victim.txt'
+        victim.write_text('unchanged\n')
+        real_mkstemp = intersection_mod.tempfile.mkstemp
+
+        def replace_created_path(*args, **kwargs):
+            fd, path = real_mkstemp(*args, **kwargs)
+            os.remove(path)
+            os.symlink(victim, path)
+            return fd, path
+
+        monkeypatch.setattr(
+            intersection_mod.tempfile,
+            'mkstemp',
+            replace_created_path,
+        )
+
+        with pytest.raises(RuntimeError, match='staging file was replaced'):
+            intersection_mod._stage_file(
+                '-',
+                lambda handle: handle.write('staged output\n'),
+            )
+
+        assert victim.read_text() == 'unchanged\n'
+
+    def test_stdout_commit_reads_validated_descriptor_not_replaced_path(
+        self,
+        tmp_path,
+        capsys,
+    ):
+        secret = tmp_path / 'secret.txt'
+        secret.write_text('SECRET-CONTENT\n')
+        staged = intersection_mod._stage_file(
+            '-',
+            lambda handle: handle.write('expected output\n'),
+        )
+        os.remove(staged['path'])
+        os.symlink(secret, staged['path'])
+
+        intersection_mod._commit_staged_outputs([('-', staged)])
+
+        assert capsys.readouterr().out == 'expected output\n'
+        assert secret.read_text() == 'SECRET-CONTENT\n'
+
+    @pytest.mark.skipif(
+        not hasattr(os, 'mkfifo'),
+        reason='FIFOs are unavailable on this platform',
+    )
+    def test_existing_fifo_output_is_rejected_without_opening_it(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        fifo_path = tmp_path / 'output.nwk'
+        nwk_path.write_text('(A:1,B:1);')
+        os.mkfifo(fifo_path)
+        args = make_args(
+            infile=str(nwk_path), infile2='(A:1,B:1);',
+            outfile=str(fifo_path), format2='auto', seqin='',
+            seqout='', seqformat='fasta', match='complete',
+        )
+
+        with pytest.raises(ValueError, match='regular file'):
+            intersection_main(args)
+
     def test_tree_tree_intersection(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('(((A:1,B:1):1,(C:1,D:1):1):1,(E:1,F:1):1):0;', 'tree1.nwk')
         path2 = tmp_nwk('(((A:1,B:1):1,C:1):1,G:1):0;', 'tree2.nwk')
@@ -128,6 +196,29 @@ class TestIntersectionMain:
         )
         with pytest.raises(ValueError, match='infile2'):
             intersection_main(args)
+
+    def test_rejects_both_second_tree_and_sequences_before_writing(self, tmp_path):
+        tree1 = tmp_path / 'tree1.nwk'
+        tree2 = tmp_path / 'tree2.nwk'
+        seqin = tmp_path / 'input.fasta'
+        outfile = tmp_path / 'output.nwk'
+        seqout = tmp_path / 'output.fasta'
+        tree1.write_text('(A:1,B:1);')
+        tree2.write_text('(A:1,C:1);')
+        seqin.write_text('>A\nATG\n')
+        outfile.write_text('original tree\n')
+        seqout.write_text('original sequences\n')
+        args = make_args(
+            infile=str(tree1), infile2=str(tree2), outfile=str(outfile),
+            format2='auto', seqin=str(seqin), seqout=str(seqout),
+            seqformat='fasta', match='complete',
+        )
+
+        with pytest.raises(ValueError, match='exactly one'):
+            intersection_main(args)
+
+        assert outfile.read_text() == 'original tree\n'
+        assert seqout.read_text() == 'original sequences\n'
 
     def test_no_overlap_raises(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
@@ -157,6 +248,133 @@ class TestIntersectionMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {'A', 'C', 'D', 'F'}
         assert os.path.exists(out_seq)
+
+    def test_tree_seq_no_overlap_leaves_both_outputs_unchanged(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        seq_path = tmp_path / 'seq.fasta'
+        out_tree = tmp_path / 'out.nwk'
+        out_seq = tmp_path / 'out.fasta'
+        nwk_path.write_text('(A:1,B:1);')
+        seq_path.write_text('>X\nATG\n>Y\nATG\n')
+        out_tree.write_text('original tree\n')
+        out_seq.write_text('original sequences\n')
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=str(out_tree),
+            seqin=str(seq_path), seqout=str(out_seq), seqformat='fasta',
+            format2='auto', match='complete',
+        )
+
+        with pytest.raises(ValueError, match='No overlap'):
+            intersection_main(args)
+
+        assert out_tree.read_text() == 'original tree\n'
+        assert out_seq.read_text() == 'original sequences\n'
+
+    def test_tree_seq_commit_failure_restores_both_outputs(self, monkeypatch, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        seq_path = tmp_path / 'seq.fasta'
+        out_tree = tmp_path / 'out.nwk'
+        out_seq = tmp_path / 'out.fasta'
+        nwk_path.write_text('(A:1,B:1);')
+        seq_path.write_text('>A\nATG\n>B\nATG\n')
+        out_tree.write_text('original tree\n')
+        out_seq.write_text('original sequences\n')
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=str(out_tree),
+            seqin=str(seq_path), seqout=str(out_seq), seqformat='fasta',
+            format2='auto', match='complete',
+        )
+        real_replace = os.replace
+        replace_calls = 0
+
+        def fail_second_replace(source, target):
+            nonlocal replace_calls
+            replace_calls += 1
+            if replace_calls == 2:
+                raise OSError('simulated second-output commit failure')
+            return real_replace(source, target)
+
+        monkeypatch.setattr(intersection_mod.os, 'replace', fail_second_replace)
+        with pytest.raises(OSError, match='second-output commit failure'):
+            intersection_main(args)
+
+        assert out_tree.read_text() == 'original tree\n'
+        assert out_seq.read_text() == 'original sequences\n'
+        leftovers = [
+            path.name
+            for path in tmp_path.iterdir()
+            if path.name.startswith('.out.')
+        ]
+        assert leftovers == []
+
+    def test_tree_seq_atomic_replace_preserves_existing_modes(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        seq_path = tmp_path / 'seq.fasta'
+        out_tree = tmp_path / 'out.nwk'
+        out_seq = tmp_path / 'out.fasta'
+        nwk_path.write_text('(A:1,B:1);')
+        seq_path.write_text('>A\nATG\n>B\nATG\n')
+        out_tree.write_text('old tree\n')
+        out_seq.write_text('old sequences\n')
+        out_tree.chmod(0o640)
+        out_seq.chmod(0o604)
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=str(out_tree),
+            seqin=str(seq_path), seqout=str(out_seq), seqformat='fasta',
+            format2='auto', match='complete',
+        )
+
+        intersection_main(args)
+
+        assert stat.S_IMODE(out_tree.stat().st_mode) == 0o640
+        assert stat.S_IMODE(out_seq.stat().st_mode) == 0o604
+
+    def test_tree_seq_new_outputs_honor_process_umask(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        seq_path = tmp_path / 'seq.fasta'
+        out_tree = tmp_path / 'out.nwk'
+        out_seq = tmp_path / 'out.fasta'
+        nwk_path.write_text('(A:1,B:1);')
+        seq_path.write_text('>A\nATG\n>B\nATG\n')
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=str(out_tree),
+            seqin=str(seq_path), seqout=str(out_seq), seqformat='fasta',
+            format2='auto', match='complete',
+        )
+        previous_umask = os.umask(0o027)
+        try:
+            intersection_main(args)
+        finally:
+            os.umask(previous_umask)
+
+        assert stat.S_IMODE(out_tree.stat().st_mode) == 0o640
+        assert stat.S_IMODE(out_seq.stat().st_mode) == 0o640
+
+    def test_tree_seq_outputs_follow_existing_symlinks(self, tmp_path):
+        nwk_path = tmp_path / 'tree.nwk'
+        seq_path = tmp_path / 'seq.fasta'
+        tree_target = tmp_path / 'tree-target.nwk'
+        seq_target = tmp_path / 'seq-target.fasta'
+        out_tree = tmp_path / 'out.nwk'
+        out_seq = tmp_path / 'out.fasta'
+        nwk_path.write_text('(A:1,B:1);')
+        seq_path.write_text('>A\nATG\n>B\nATG\n')
+        tree_target.write_text('old tree\n')
+        seq_target.write_text('old sequences\n')
+        out_tree.symlink_to(tree_target.name)
+        out_seq.symlink_to(seq_target.name)
+        args = make_args(
+            infile=str(nwk_path), infile2='', outfile=str(out_tree),
+            seqin=str(seq_path), seqout=str(out_seq), seqformat='fasta',
+            format2='auto', match='complete',
+        )
+
+        intersection_main(args)
+
+        assert out_tree.is_symlink()
+        assert out_seq.is_symlink()
+        assert tree_target.read_text().endswith(';')
+        assert seq_target.read_text() == '>A\nATG\n>B\nATG\n'
 
     def test_tree_seq_intersection_preserves_selected_fasta_records(self, tmp_path):
         nwk_path = tmp_path / 'tree.nwk'

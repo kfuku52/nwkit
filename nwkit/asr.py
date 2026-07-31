@@ -132,16 +132,20 @@ def _read_tip_states(
     trait_df = trait_df[trait_df['leaf_name'].isin(tree_leaf_name_set)].copy()
 
     missing_values = _parse_missing_values(missing_values_arg)
-    raw_state_by_leaf = dict()
+    observed_state_by_leaf_input = dict()
+    state_set_by_leaf = dict()
     observed_state_sets = list()
     for _, row in trait_df.iterrows():
         leaf_name = str(row['leaf_name'])
         raw_state = row[state_column]
         if _is_missing_trait_value(raw_state, missing_values):
-            raw_state_by_leaf[leaf_name] = None
+            observed_state_by_leaf_input[leaf_name] = None
+            state_set_by_leaf[leaf_name] = None
             continue
         state_set = _split_state_value(raw_state, ambiguous_separator)
-        raw_state_by_leaf[leaf_name] = '|'.join(state_set)
+        state_set_by_leaf[leaf_name] = tuple(state_set)
+        separator = '' if ambiguous_separator in ['', None] else str(ambiguous_separator)
+        observed_state_by_leaf_input[leaf_name] = separator.join(state_set)
         observed_state_sets.append(state_set)
 
     states = _parse_states(states_arg)
@@ -165,16 +169,16 @@ def _read_tip_states(
 
     state_to_index = {state: index for index, state in enumerate(states)}
     observed_state_by_leaf = {
-        leaf_name: raw_state_by_leaf.get(leaf_name)
+        leaf_name: observed_state_by_leaf_input.get(leaf_name)
         for leaf_name in tree_leaf_names
     }
     likelihood_by_leaf = dict()
     for leaf_name in tree_leaf_names:
-        raw_state = observed_state_by_leaf[leaf_name]
+        state_set = state_set_by_leaf.get(leaf_name)
         likelihood = np.ones(len(states), dtype=float)
-        if raw_state is not None:
+        if state_set is not None:
             likelihood = np.zeros(len(states), dtype=float)
-            for state in _split_state_value(raw_state, DEFAULT_AMBIGUOUS_SEPARATOR):
+            for state in state_set:
                 likelihood[state_to_index[state]] = 1.0
         likelihood_by_leaf[leaf_name] = likelihood
     return states, observed_state_by_leaf, likelihood_by_leaf
@@ -384,7 +388,17 @@ def _initial_rate_value(tree, rate, rate_bounds):
             for node in tree.traverse()
             if (not node.is_root) and node.dist is not None and float(node.dist) > 0.0
         ]
-        mean_branch_length = sum(branch_lengths) / len(branch_lengths) if branch_lengths else 1.0
+        if branch_lengths:
+            scale = max(branch_lengths)
+            mean_branch_length = scale * (
+                math.fsum(
+                    branch_length / scale
+                    for branch_length in branch_lengths
+                )
+                / len(branch_lengths)
+            )
+        else:
+            mean_branch_length = 1.0
         value = 1.0 / max(mean_branch_length, 1.0)
     lower, upper = rate_bounds
     return min(max(value, lower), upper)
@@ -441,8 +455,10 @@ def _fit_rate_matrix(tree, model, states, likelihood_by_leaf, root_prior, rate=N
         method='L-BFGS-B',
         bounds=[(lower_log, upper_log)] * num_params,
     )
-    if (not result.success) and (not math.isfinite(result.fun)):
+    if not result.success:
         raise ValueError("Failed to estimate Mk model parameters: {}".format(result.message))
+    if (not math.isfinite(float(result.fun))) or np.any(~np.isfinite(result.x)):
+        raise ValueError("Failed to estimate finite Mk model parameters.")
     rates = np.exp(result.x)
     rate_matrix = _build_rate_matrix(model, states, rates)
     log_likelihood = _log_likelihood(tree, likelihood_by_leaf, root_prior, rate_matrix)
@@ -550,6 +566,7 @@ def _should_output_node(node, observed_state_by_leaf, targets):
 
 def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node, targets, output_mode):
     node_to_branch_id = assign_branch_ids(tree)
+    state_ids = [_safe_column_state(state) for state in states]
     rows = list()
     for node in tree.traverse():
         if not _should_output_node(node, observed_state_by_leaf, targets):
@@ -568,8 +585,8 @@ def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node,
         if output_mode == 'probabilities':
             row['map_state'] = states[map_index]
             row['map_probability'] = float(posterior[map_index])
-            for state, probability in zip(states, posterior):
-                row['p_{}'.format(state)] = float(probability)
+            for state_id, probability in zip(state_ids, posterior):
+                row['p_{}'.format(state_id)] = float(probability)
         elif output_mode == 'map':
             row['state'] = states[map_index]
             row['probability'] = float(posterior[map_index])
@@ -586,7 +603,7 @@ def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node,
             'is_imputed',
             'map_state',
             'map_probability',
-        ] + ['p_{}'.format(state) for state in states]
+        ] + ['p_{}'.format(state_id) for state_id in state_ids]
     else:
         columns = [
             'branch_id',
@@ -602,10 +619,20 @@ def _build_output_table(tree, states, observed_state_by_leaf, posterior_by_node,
 
 
 def _safe_column_state(state):
-    return ''.join(char if char.isalnum() or char == '_' else '_' for char in str(state))
+    state_text = str(state)
+    escape_prefix = 'state_'
+    is_legacy_safe = bool(state_text) and all(
+        char.isalnum()
+        or char == '_'
+        for char in state_text
+    )
+    if is_legacy_safe and not state_text.startswith(escape_prefix):
+        return state_text
+    return '{}{}'.format(escape_prefix, state_text.encode('utf-8').hex())
 
 
 def _build_model_table(states, root_prior_mode, fit):
+    state_ids = [_safe_column_state(state) for state in states]
     row = {
         'model': fit['model'],
         'num_states': len(states),
@@ -618,11 +645,11 @@ def _build_model_table(states, root_prior_mode, fit):
     }
     if fit['model'] == 'ER' and len(fit['rates']) == 1:
         row['rate'] = float(fit['rates'][0])
-    for from_index, from_state in enumerate(states):
-        for to_index, to_state in enumerate(states):
+    for from_index, from_state_id in enumerate(state_ids):
+        for to_index, to_state_id in enumerate(state_ids):
             if from_index == to_index:
                 continue
-            row['rate_{}_to_{}'.format(_safe_column_state(from_state), _safe_column_state(to_state))] = float(
+            row['rate_{}_to_{}'.format(from_state_id, to_state_id)] = float(
                 fit['rate_matrix'][from_index, to_index]
             )
     return pd.DataFrame([row])
@@ -643,6 +670,7 @@ def _write_model_table(states, root_prior_mode, fit, outfile):
 
 
 def _annotate_tree(tree, states, posterior_by_node, observed_state_by_leaf):
+    state_ids = [_safe_column_state(state) for state in states]
     for node in tree.traverse():
         posterior = posterior_by_node[node]
         map_index = int(np.argmax(posterior))
@@ -653,8 +681,8 @@ def _annotate_tree(tree, states, posterior_by_node, observed_state_by_leaf):
         if node.is_leaf:
             observed_state = observed_state_by_leaf.get(node.name)
             node.add_props(asr_observed_state='' if observed_state is None else observed_state)
-        for state, probability in zip(states, posterior):
-            node.add_props(**{'asr_p_{}'.format(_safe_column_state(state)): float(probability)})
+        for state_id, probability in zip(state_ids, posterior):
+            node.add_props(**{'asr_p_{}'.format(state_id): float(probability)})
 
 
 def _write_annotated_tree(tree, states, posterior_by_node, observed_state_by_leaf, args):
@@ -671,7 +699,10 @@ def _write_annotated_tree(tree, states, posterior_by_node, observed_state_by_lea
         props = ['asr_state', 'asr_probability']
     elif tree_annotation == 'all':
         props = ['asr_state', 'asr_probability']
-        props += ['asr_observed_state'] + ['asr_p_{}'.format(_safe_column_state(state)) for state in states]
+        props += ['asr_observed_state'] + [
+            'asr_p_{}'.format(_safe_column_state(state))
+            for state in states
+        ]
     else:
         raise ValueError("Unsupported '--tree-annotation': {}".format(tree_annotation))
     parser_format = tree.props.get(TREE_FORMAT_PROP, 0)

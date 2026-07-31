@@ -1,4 +1,4 @@
-![](logo/logo_nwkit_large.png)
+![](https://raw.githubusercontent.com/kfuku52/nwkit/master/logo/logo_nwkit_large.png)
 
 [![Run Tests](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml/badge.svg)](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml)
 [![GitHub release](https://img.shields.io/github/v/tag/kfuku52/nwkit?label=release)](https://github.com/kfuku52/nwkit/releases)
@@ -35,11 +35,12 @@ pip install git+https://github.com/kfuku52/nwkit
 
 NWKIT requires Python 3.10 or newer.
 
-#### Optional dependencies for image post-processing
+#### Optional SVG rasterization support
 
-`nwkit image` can normalize image format, trim margins, and resize/pad output
-files, and `nwkit draw` can rasterize SVG tip images, when the optional
-image-processing dependencies are installed:
+Raster-image validation and processing use Pillow, which is installed with
+NWKIT. Install the optional CairoSVG integration to normalize, trim, or
+resize SVG files with `nwkit image`, or to render SVG tip images with
+`nwkit draw`:
 
 ```
 pip install "nwkit[image]"
@@ -89,8 +90,9 @@ and output-column vocabulary are defined in
 ## Drawing trees with species images
 
 `nwkit image` writes a tip-keyed `manifest.tsv` that `nwkit draw` can consume
-without contacting external services again. Keep `--max-per-species 1` so the
-manifest contains one image per tree tip:
+without contacting external services again. When `--max-per-species` writes
+multiple ranked candidates for a tip, `nwkit draw` uses the first manifest row
+for that tip:
 
 ```sh
 nwkit image -i tree.nwk \
@@ -122,10 +124,11 @@ ranking; the public PhyloPic API does not expose per-image download counts.
 Relative `local_path` values are resolved from the manifest directory.
 Use `--tip-image-root PATH` when a manifest has been moved independently from
 its image directory. Missing tip rows follow `--unmatched warn|error|ignore`;
-duplicated tip rows and broken local paths are rejected. The generated figure
-embeds the selected images, while license and creator information remains in
-the `ATTRIBUTION.md` written by `nwkit image`; distribute that file with the
-figure when its licenses require attribution.
+for duplicated tip rows, the first row is used deterministically. Broken local
+paths are rejected. The generated figure embeds the selected images, while
+license and creator information remains in the `ATTRIBUTION.md` written by
+`nwkit image`; distribute that file with the figure when its licenses require
+attribution.
 
 ## Tree comparison, composition, and provenance
 
@@ -243,12 +246,14 @@ Install the development and optional image dependencies, then run the same check
 
 ```
 pip install -e ".[dev,image]"
-ruff check nwkit tests
+ruff check nwkit tests setup.py
 pytest tests/ -q
 python -m build
 ```
 
-See [CHANGELOG.md](CHANGELOG.md) for changes and [RELEASING.md](RELEASING.md) for the release checklist.
+See [CHANGELOG.md](https://github.com/kfuku52/nwkit/blob/master/CHANGELOG.md) for changes and
+[RELEASING.md](https://github.com/kfuku52/nwkit/blob/master/RELEASING.md) for the release checklist.
 
 # Licensing
-This program is MIT-licensed. See [LICENSE](LICENSE) for details.
+This program is MIT-licensed. See
+[LICENSE](https://github.com/kfuku52/nwkit/blob/master/LICENSE) for details.

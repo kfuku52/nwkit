@@ -4,6 +4,81 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.34.1] - 2026-07-31
+
+### Added
+
+- `consensus --comparison rooted|unrooted` makes clade-versus-split semantics
+  explicit and supports root-position-invariant unrooted consensus trees.
+- Release validation now tests the source distribution and installed wheel,
+  including CLI round trips and embedded tip-image rendering.
+
+### Changed
+
+- MAD rooting now uses an independently implemented tree-DP algorithm that
+  preserves the established result while reducing large-tree runtime from
+  cubic behavior to approximately quadratic scaling.
+- Ranked and maximum-PD sampling use exact internal arithmetic so very small
+  gains remain distinguishable beneath extremely long shared branches.
+- Pillow is a core dependency for safe raster validation; CairoSVG remains an
+  optional dependency for SVG rasterization.
+- Source distributions include the test suite, while generated caches and the
+  removed legacy MAD implementation are excluded from release artifacts.
+
+### Fixed
+
+- Consensus and clade-frequency calculations now handle extreme finite weights
+  and branch lengths without overflowing, preserve arbitrary root positions,
+  and reject unrooted input where rooted clade frequencies are required.
+- Midpoint, minimum-variance, MAD, outgroup, and transferred rooting preserve
+  root stems, annotations, missing lengths, and finite scale across extreme
+  values; duplicate tip labels are rejected before split-keyed restoration.
+- Tree comparison treats the two halves of a bifurcating root as one physical
+  edge and reports length, annotation, rooting, and exit-status differences
+  consistently; branch, path, and delta metrics remain stable at the finite
+  floating-point limits.
+- ASR preserves custom ambiguous-state separators, emits collision-free state
+  identifiers, and rejects failed or non-finite optimizer results.
+- Unrooted monophyly reports use ETE's actual foreign leaves; validation,
+  rescaling, table conversion, sanitization, and composition now preserve
+  finite, parseable, and format-compatible output at boundary values.
+- Newick collection parsing recognizes single- and double-quoted labels,
+  escaped quotes, nested comments, and semicolons inside labels or comments;
+  failed serialization restores the caller's tree unchanged.
+- Root-edge property transfer preserves tiny target ratios, distributes huge
+  representable half-edges without overflowing their physical total, and
+  rejects only derived values that cannot be represented finitely.
+- Phylogenetic-diversity sampling rejects negative lengths and stops before
+  writing either output when a gain, total, or pruned edge would overflow.
+- Intersection writes are transactional and descriptor-backed, reject special
+  output files and aliases, retain output modes where supported, and roll back
+  partial multi-file commits.
+- Image candidate normalization, license classification, attribution, filename
+  generation, cache refreshes, media-type detection, SVG/CSS sanitization, and
+  raster processing now handle malformed, adversarial, and concurrent inputs
+  deterministically.
+- TimeTree and taxonomy downloads stream bounded responses, validate encodings
+  and content lengths, and close resources on every success and failure path.
+- Draw rejects impractical tip-image sizes and always releases Matplotlib
+  figures, including when rendering or output fails.
+
+### Security
+
+- Provider media requests enforce HTTPS host allowlists, DNS/IP checks,
+  redirect limits, cross-origin header stripping, response-size limits, and
+  media-appropriate `Accept` headers to reduce SSRF and content-confusion risk.
+- Provenance and cache locking now resist symlink, inode-replacement, FIFO,
+  path-collision, oversized-input, and stale-owner races; Windows process
+  liveness checks no longer use the terminating `os.kill(pid, 0)` behavior.
+- ETE taxonomy redirects remain on the expected NCBI HTTPS host, traversal
+  caches use a restricted unpickler, and taxonomy archives are bounded and
+  checksum-verified before atomic installation.
+- Direct wheel builds remove stale deleted modules from prior `build/` caches,
+  and CI inspects wheel and source archives to prevent legacy code or notices
+  from re-entering release artifacts.
+- Requests and urllib3 minimum versions exclude known-vulnerable legacy
+  releases.
+
 ## [0.34.0] - 2026-07-23
 
 ### Added
@@ -230,7 +305,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `mark` output format selection no longer depends on process-wide `sys.argv` state.
 - The image-provider User-Agent now follows the package version.
 
-[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.30.0...HEAD
+[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.34.1...HEAD
+[0.34.1]: https://github.com/kfuku52/nwkit/compare/v0.34.0...v0.34.1
+[0.34.0]: https://github.com/kfuku52/nwkit/compare/v0.33.0...v0.34.0
+[0.33.0]: https://github.com/kfuku52/nwkit/compare/v0.32.0...v0.33.0
+[0.32.0]: https://github.com/kfuku52/nwkit/compare/v0.31.0...v0.32.0
+[0.31.0]: https://github.com/kfuku52/nwkit/compare/v0.30.0...v0.31.0
 [0.30.0]: https://github.com/kfuku52/nwkit/compare/v0.29.0...v0.30.0
 [0.29.0]: https://github.com/kfuku52/nwkit/compare/v0.28.0...v0.29.0
 [0.28.0]: https://github.com/kfuku52/nwkit/compare/v0.27.0...v0.28.0

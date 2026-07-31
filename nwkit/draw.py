@@ -6,7 +6,6 @@ import matplotlib
 import numpy as np
 import pandas as pd
 
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
 from matplotlib.lines import Line2D
@@ -31,6 +30,8 @@ TIP_LABEL_GAP_PT = 0.5
 TIP_ROW_PITCH_PT = FONT_SIZE_PT + TIP_LABEL_GAP_PT
 TIP_IMAGE_SIZE_PT = 18.0
 TIP_IMAGE_GAP_PT = 4.0
+MAX_TIP_IMAGE_SIZE_PT = 512.0
+MAX_TIP_IMAGE_EDGE_PX = 2048
 SUPPORT_LABEL_OFFSET_PT = 0.0
 FIGURE_WIDTH_IN = 3.6
 SPECIATION_COLOR = (0.0, 0.0, 1.0)
@@ -38,11 +39,6 @@ DUPLICATION_COLOR = (1.0, 0.0, 0.0)
 BRANCH_COLOR = '#000000'
 LABEL_COLOR = '#2d2d2d'
 LEGEND_EDGE_COLOR = 'white'
-
-
-matplotlib.rcParams['font.family'] = [FONT_FAMILY]
-matplotlib.rcParams['font.sans-serif'] = [FONT_FAMILY]
-matplotlib.rcParams['svg.fonttype'] = 'none'
 
 
 def _resolve_image_format(outfile, image_format):
@@ -226,6 +222,7 @@ def _read_tip_image_manifest(
         required_columns=('local_path',),
         unmatched=unmatched,
         missing_values=missing_values,
+        duplicate_leaf_names='first',
     )
     if image_root in (None, ''):
         base_dir = os.path.dirname(os.path.realpath(path))
@@ -275,29 +272,54 @@ def _read_tip_image_manifest(
     return path_by_leaf
 
 
-def _load_tip_image(path):
-    from nwkit.image import load_pillow_modules, rasterize_svg_to_image
+def _load_tip_image(path, max_edge_px=None):
+    from nwkit.image import (
+        load_pillow_modules,
+        rasterize_svg_to_image,
+        validate_image_dimensions,
+    )
 
     Image, _, ImageOps = load_pillow_modules()
     try:
         if os.path.splitext(path)[1].lower() == '.svg':
-            image = rasterize_svg_to_image(path)
+            image = rasterize_svg_to_image(path, max_edge=max_edge_px)
         else:
             with Image.open(path) as source_image:
-                image = ImageOps.exif_transpose(source_image).convert('RGBA')
+                validate_image_dimensions(*source_image.size, label='Tip image')
+                if max_edge_px not in (None, 0):
+                    source_image.draft(
+                        source_image.mode,
+                        (int(max_edge_px), int(max_edge_px)),
+                    )
+                if max_edge_px not in (None, 0):
+                    resampling = getattr(Image, 'Resampling', Image)
+                    source_image.thumbnail(
+                        (int(max_edge_px), int(max_edge_px)),
+                        getattr(resampling, 'LANCZOS'),
+                    )
+                image = ImageOps.exif_transpose(source_image)
+                image = image.convert('RGBA')
                 image.load()
     except (OSError, ValueError) as exc:
         raise ValueError("Failed to read tip image '{}': {}".format(path, exc)) from exc
     return np.asarray(image)
 
 
-def _load_tip_images(path_by_leaf):
+def _load_tip_images(path_by_leaf, image_size_pt=18.0):
+    image_size_pt = _validated_tip_image_size(image_size_pt)
+    max_edge_px = max(
+        1,
+        min(
+            MAX_TIP_IMAGE_EDGE_PX,
+            int(math.ceil(image_size_pt * 4.0)),
+        ),
+    )
     image_by_leaf = dict()
     image_by_path = dict()
     for leaf_name, path in path_by_leaf.items():
         image = image_by_path.get(path)
         if image is None:
-            image = _load_tip_image(path)
+            image = _load_tip_image(path, max_edge_px=max_edge_px)
             image_by_path[path] = image
         image_by_leaf[leaf_name] = image
     return image_by_leaf
@@ -475,6 +497,36 @@ def _format_property_value(value, decimals=2):
         return str(value)
 
 
+def _isolated_matplotlib_state(function):
+    def wrapped(*args, **kwargs):
+        with matplotlib.rc_context({
+            'font.family': [FONT_FAMILY],
+            'font.sans-serif': [FONT_FAMILY],
+            'svg.fonttype': 'none',
+        }):
+            return function(*args, **kwargs)
+    return wrapped
+
+
+def _validated_tip_image_size(value):
+    try:
+        image_size_pt = float(value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('--tip-image-size must be a finite number.') from exc
+    if not math.isfinite(image_size_pt):
+        raise ValueError('--tip-image-size must be a finite number.')
+    if image_size_pt <= 0.0:
+        raise ValueError('--tip-image-size must be greater than zero.')
+    if image_size_pt > MAX_TIP_IMAGE_SIZE_PT:
+        raise ValueError(
+            '--tip-image-size must be no greater than {} points.'.format(
+                int(MAX_TIP_IMAGE_SIZE_PT)
+            )
+        )
+    return image_size_pt
+
+
+@_isolated_matplotlib_state
 def _draw_tree(
     tree,
     outfile,
@@ -533,10 +585,8 @@ def _draw_tree(
     fig_width = float(figure_width)
     if fig_width <= 0.0:
         raise ValueError('--figure-width must be greater than zero.')
-    tip_image_size_pt = float(tip_image_size)
+    tip_image_size_pt = _validated_tip_image_size(tip_image_size)
     tip_image_gap_pt = float(tip_image_gap)
-    if tip_image_size_pt <= 0.0:
-        raise ValueError('--tip-image-size must be greater than zero.')
     if tip_image_gap_pt < 0.0:
         raise ValueError('--tip-image-gap must be zero or greater.')
     image_panel_width_in = 0.0
@@ -944,14 +994,16 @@ def _draw_tree(
     elif image_format == 'pdf':
         metadata['CreationDate'] = None
         metadata['ModDate'] = None
-    fig.savefig(
-        outfile,
-        format=image_format,
-        dpi=300,
-        transparent=bool(transparent),
-        metadata=metadata,
-    )
-    plt.close(fig)
+    try:
+        fig.savefig(
+            outfile,
+            format=image_format,
+            dpi=300,
+            transparent=bool(transparent),
+            metadata=metadata,
+        )
+    finally:
+        plt.close(fig)
 
 
 def draw_main(args):
@@ -980,7 +1032,10 @@ def draw_main(args):
         '_nwkit_tip_image_paths',
         sorted(set(tip_image_path_by_leaf.values())),
     )
-    tip_image_by_leaf = _load_tip_images(tip_image_path_by_leaf)
+    tip_image_by_leaf = _load_tip_images(
+        tip_image_path_by_leaf,
+        image_size_pt=getattr(args, 'tip_image_size', 18.0),
+    )
     if tip_image_by_leaf:
         sys.stderr.write(
             'Loaded tip images for {} tree tip(s) from: {}\n'.format(

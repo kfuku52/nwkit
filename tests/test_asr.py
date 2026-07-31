@@ -15,6 +15,21 @@ def _write_trait(tmp_path, rows, name='traits.tsv'):
     return str(path)
 
 
+def test_initial_rate_stays_scaled_for_huge_finite_branch_lengths():
+    tree = Tree(
+        '((A:1e308,B:1e308):1e308,C:1e308);',
+        parser=1,
+    )
+
+    rate = asr._initial_rate_value(
+        tree,
+        rate=None,
+        rate_bounds=(1e-320, 1e3),
+    )
+
+    assert rate == pytest.approx(1e-308, rel=1e-12, abs=0.0)
+
+
 class TestAsrMain:
     def test_rejects_colliding_primary_and_model_outputs(self, tmp_path):
         output = tmp_path / 'same.tsv'
@@ -365,6 +380,99 @@ class TestAsrMain:
         assert a_row['observed_state'] == 'red|blue'
         assert a_row['p_red'] > 0.0
         assert a_row['p_blue'] > 0.0
+
+    def test_custom_ambiguous_separator_preserves_structured_states(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('(A:1,B:1);', 'tree.nwk')
+        trait = _write_trait(
+            tmp_path,
+            [
+                {'leaf_name': 'A', 'state': 'red|warm;blue'},
+                {'leaf_name': 'B', 'state': 'red|warm'},
+            ],
+        )
+        outfile = tmp_path / 'custom_ambiguous.tsv'
+        args = make_args(
+            infile=infile,
+            outfile=str(outfile),
+            trait=trait,
+            state_column='state',
+            states='red|warm,blue',
+            missing_values=None,
+            model='ER',
+            rate=0.2,
+            rate_bounds=None,
+            root_prior='equal',
+            target='leaf',
+            output='probabilities',
+            ambiguous_separator=';',
+        )
+
+        asr_main(args)
+
+        table = pd.read_csv(outfile, sep='\t')
+        a_row = table.loc[table['name'] == 'A'].iloc[0]
+        warm_column = 'p_{}'.format(asr._safe_column_state('red|warm'))
+        assert a_row['observed_state'] == 'red|warm;blue'
+        assert a_row[warm_column] > 0.0
+        assert a_row['p_blue'] > 0.0
+
+    def test_state_identifiers_are_injective_across_output_artifacts(self):
+        states = ['a-b', 'a b', 'state_612d62', 'A']
+        state_ids = [asr._safe_column_state(state) for state in states]
+        assert len(state_ids) == len(set(state_ids))
+
+        tree = Tree('(A:1,B:1);', parser=1)
+        posterior_by_node = {
+            node: pd.Series([0.1, 0.2, 0.3, 0.4]).to_numpy()
+            for node in tree.traverse()
+        }
+        observed_state_by_leaf = {'A': 'a-b', 'B': 'a b'}
+        table = asr._build_output_table(
+            tree=tree,
+            states=states,
+            observed_state_by_leaf=observed_state_by_leaf,
+            posterior_by_node=posterior_by_node,
+            targets={'all'},
+            output_mode='probabilities',
+        )
+        probability_columns = [
+            'p_{}'.format(state_id)
+            for state_id in state_ids
+        ]
+        assert all(column in table.columns for column in probability_columns)
+        assert len(table.columns) == len(set(table.columns))
+
+        asr._annotate_tree(tree, states, posterior_by_node, observed_state_by_leaf)
+        for node in tree.traverse():
+            assert all('asr_p_{}'.format(state_id) in node.props for state_id in state_ids)
+
+    def test_state_identifiers_preserve_legacy_safe_underscores(self):
+        assert asr._safe_column_state('dark_blue') == 'dark_blue'
+        assert asr._safe_column_state('café_2') == 'café_2'
+
+    def test_optimizer_non_success_is_rejected(self, monkeypatch):
+        tree = Tree('(A:1,B:1);', parser=1)
+        states = ['red', 'blue']
+        likelihood_by_leaf = {
+            'A': pd.Series([1.0, 0.0]).to_numpy(),
+            'B': pd.Series([0.0, 1.0]).to_numpy(),
+        }
+
+        class FailedResult:
+            success = False
+            fun = 1.0
+            x = pd.Series([0.0]).to_numpy()
+            message = 'iteration limit reached'
+
+        monkeypatch.setattr(asr, 'minimize', lambda *args, **kwargs: FailedResult())
+        with pytest.raises(ValueError, match='iteration limit reached'):
+            asr._fit_rate_matrix(
+                tree=tree,
+                model='ER',
+                states=states,
+                likelihood_by_leaf=likelihood_by_leaf,
+                root_prior=pd.Series([0.5, 0.5]).to_numpy(),
+            )
 
     def test_tree_out_writes_nhx_annotations(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('((A:1,B:1):1,C:2);', 'tree.nwk')

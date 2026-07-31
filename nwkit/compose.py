@@ -284,6 +284,10 @@ def compose_main(args):
         'Composition report: transferred={}, skipped={}\n'.format(transferred, skipped)
     )
     outformat = args.outformat
-    if outformat == 'auto' and sources['name']:
+    has_internal_names = any(
+        not node.is_leaf and node.name not in (None, '')
+        for node in target.traverse()
+    )
+    if outformat == 'auto' and has_internal_names:
         outformat = 1
     write_tree(target, args, format=outformat, props=output_properties)

@@ -1,6 +1,8 @@
 import heapq
+import math
 import os
 import sys
+from fractions import Fraction
 
 import pandas as pd
 
@@ -16,6 +18,7 @@ from nwkit.util import (
 NUMERIC_OPERATORS = {'ge', 'gt', 'le', 'lt'}
 COMPARISON_OPERATORS = NUMERIC_OPERATORS | {'eq', 'ne'}
 RANK_DIRECTIONS = {'asc', 'desc'}
+MAX_FINITE_PD_VALUE = Fraction.from_float(sys.float_info.max)
 
 
 def read_sample_trait(args, tree):
@@ -172,9 +175,17 @@ def _edge_length(node):
     if node.dist is None:
         return 1.0
     try:
-        return float(node.dist)
-    except (TypeError, ValueError):
-        return 1.0
+        length = float(node.dist)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            'Phylogenetic-diversity branch lengths must be numeric.'
+        ) from exc
+    if not math.isfinite(length) or length < 0.0:
+        raise ValueError(
+            'Phylogenetic-diversity branch lengths must be finite and '
+            'non-negative.'
+        )
+    return length
 
 
 def _leaf_path_edges(leaf):
@@ -186,25 +197,80 @@ def _leaf_path_edges(leaf):
     return path_edges
 
 
+def _validate_pd_tree(tree):
+    for node in tree.traverse():
+        _edge_length(node)
+
+
+def _exact_length(length):
+    try:
+        numeric_length = float(length)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            'Phylogenetic-diversity branch lengths must be numeric.'
+        ) from exc
+    if not math.isfinite(numeric_length) or numeric_length < 0.0:
+        raise ValueError(
+            'Phylogenetic-diversity branch lengths must be finite and '
+            'non-negative.'
+        )
+    return Fraction.from_float(numeric_length)
+
+
+def _exact_path_gain(path_edges, covered_edges):
+    return sum(
+        (
+            _exact_length(length)
+            for edge, length in path_edges
+            if edge not in covered_edges
+        ),
+        Fraction(0),
+    )
+
+
+def _finite_pd_value(value, quantity):
+    if value > MAX_FINITE_PD_VALUE:
+        raise ValueError(
+            'Phylogenetic-diversity {} exceeds the finite floating-point '
+            'range.'.format(quantity)
+        )
+    try:
+        numeric_value = float(value)
+    except OverflowError as exc:
+        raise ValueError(
+            'Phylogenetic-diversity {} exceeds the finite floating-point '
+            'range.'.format(quantity)
+        ) from exc
+    if not math.isfinite(numeric_value):
+        raise ValueError(
+            'Phylogenetic-diversity {} exceeds the finite floating-point '
+            'range.'.format(quantity)
+        )
+    return numeric_value
+
+
 def _path_gain(path_edges, covered_edges):
-    return sum(length for edge, length in path_edges if edge not in covered_edges)
+    return _finite_pd_value(
+        _exact_path_gain(path_edges, covered_edges),
+        'gain',
+    )
 
 
 def select_ranked(candidate_order, path_edges_by_leaf, n):
     covered_edges = set()
     selected = []
-    pd_total = 0.0
+    pd_total = Fraction(0)
     for leaf_name in candidate_order[:n]:
         path_edges = path_edges_by_leaf[leaf_name]
-        gain = _path_gain(path_edges, covered_edges)
+        gain = _exact_path_gain(path_edges, covered_edges)
         for edge, _length in path_edges:
             covered_edges.add(edge)
         pd_total += gain
         selected.append(
             {
                 'leaf_name': leaf_name,
-                'pd_gain': gain,
-                'pd_total': pd_total,
+                'pd_gain': _finite_pd_value(gain, 'gain'),
+                'pd_total': _finite_pd_value(pd_total, 'total'),
             }
         )
     return selected
@@ -217,7 +283,10 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
     leaf_to_index = {leaf_name: index for index, leaf_name in enumerate(leaf_names)}
     rank_index = {leaf_name: index for index, leaf_name in enumerate(candidate_order)}
     path_edges_by_index = [
-        list(path_edges_by_leaf[leaf_name])
+        [
+            (edge, _exact_length(length))
+            for edge, length in path_edges_by_leaf[leaf_name]
+        ]
         for leaf_name in leaf_names
     ]
     edge_to_leaf_indices = dict()
@@ -225,7 +294,10 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
     versions = [0] * len(leaf_names)
     remaining = [True] * len(leaf_names)
     for leaf_index, path_edges in enumerate(path_edges_by_index):
-        gains.append(sum(length for _edge, length in path_edges))
+        gains.append(sum(
+            (length for _edge, length in path_edges),
+            Fraction(0),
+        ))
         for edge, _length in path_edges:
             edge_to_leaf_indices.setdefault(edge, []).append(leaf_index)
     heap = [
@@ -235,18 +307,16 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
     heapq.heapify(heap)
     covered_edges = set()
     selected = []
-    pd_total = 0.0
+    pd_total = Fraction(0)
     for _index in range(n):
         best_leaf_index = None
-        best_gain = 0.0
+        best_gain = Fraction(0)
         while heap:
             negative_gain, _rank, leaf_index, version = heapq.heappop(heap)
             if (not remaining[leaf_index]) or (version != versions[leaf_index]):
                 continue
             best_leaf_index = leaf_index
             best_gain = -negative_gain
-            if abs(best_gain) < 10 ** -12:
-                best_gain = 0.0
             break
         if best_leaf_index is None:
             break
@@ -263,8 +333,8 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
         selected.append(
             {
                 'leaf_name': best_leaf,
-                'pd_gain': best_gain,
-                'pd_total': pd_total,
+                'pd_gain': _finite_pd_value(best_gain, 'gain'),
+                'pd_total': _finite_pd_value(pd_total, 'total'),
             }
         )
         for edge, length in newly_covered_edges:
@@ -274,8 +344,6 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
                 if not remaining[affected_leaf_index]:
                     continue
                 gains[affected_leaf_index] -= length
-                if abs(gains[affected_leaf_index]) < 10 ** -12:
-                    gains[affected_leaf_index] = 0.0
                 versions[affected_leaf_index] += 1
                 heapq.heappush(
                     heap,
@@ -318,6 +386,7 @@ def sample_main(args):
 
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     validate_unique_named_leaves(tree, option_name='--infile', context=" for 'sample'")
+    _validate_pd_tree(tree)
     trait_df = read_sample_trait(args, tree)
     filtered_df = apply_filters(trait_df, args.filter)
     if filtered_df.empty:
@@ -350,6 +419,9 @@ def sample_main(args):
         raise ValueError('No leaves were selected for output.')
     sys.stderr.write(''.join('Selected leaf: {}\n'.format(name) for name in selected_names))
 
+    tree.prune(selected_names, preserve_branch_length=True)
+    _validate_pd_tree(tree)
+
     if report_path is not None:
         output_df = _build_output_table(selected_rows, ranked_df)
         output_table_dir = os.path.dirname(os.path.realpath(report_path))
@@ -357,5 +429,4 @@ def sample_main(args):
             os.makedirs(output_table_dir, exist_ok=True)
         output_df.to_csv(report_path, sep='\t', index=False)
 
-    tree.prune(selected_names, preserve_branch_length=True)
     write_tree(tree, args, format=args.outformat)
