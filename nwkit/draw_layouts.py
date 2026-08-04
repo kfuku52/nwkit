@@ -8,6 +8,7 @@ layouts to coexist.
 
 from __future__ import annotations
 
+import bisect
 from dataclasses import dataclass, field
 import math
 
@@ -285,6 +286,7 @@ def _polar_coordinates(
     tree,
     use_topology_depth,
     angular_span_degrees=360.0,
+    angular_center_degrees=90.0,
     leaf_weight_by_leaf=None,
     base_layout=None,
 ):
@@ -303,36 +305,44 @@ def _polar_coordinates(
         or angular_span_degrees <= 0.0
         or angular_span_degrees > 360.0
     ):
-        raise ValueError('--fan-span must be greater than zero and no greater than 360.')
+        raise ValueError('--angular-span must be greater than zero and no greater than 360.')
+    angular_center_degrees = float(angular_center_degrees)
+    if not math.isfinite(angular_center_degrees):
+        raise ValueError('--angular-center must be a finite number.')
+    angular_center_degrees %= 360.0
     count = len(leaf_order)
     available = math.radians(angular_span_degrees)
+    center = math.radians(angular_center_degrees)
     if count <= 1:
-        start = 0.0
+        start = center
         denominator = 1.0
         linear_origin = 0.0
     elif angular_span_degrees < 360.0:
-        # Center the occupied fan on the right-facing horizontal axis.
-        start = -available / 2.0
+        start = center - (available / 2.0)
         leaf_positions = [linear_y[leaf] for leaf in leaf_order]
         linear_origin = min(leaf_positions)
         denominator = max(max(leaf_positions) - linear_origin, 1e-12)
     else:
-        start = -math.pi / 2.0
+        start = center - math.pi
         _, normalized_weight = _normalized_leaf_weights(
             tree,
             leaf_weight_by_leaf,
         )
-        linear_origin = linear_y[leaf_order[0]]
-        linear_span = max(
-            linear_y[leaf_order[-1]] - linear_origin,
-            0.0,
-        )
+        leaf_positions = {leaf: linear_y[leaf] for leaf in leaf_order}
+        first_at_seam = min(leaf_order, key=leaf_positions.get)
+        last_at_seam = max(leaf_order, key=leaf_positions.get)
+        linear_origin = leaf_positions[first_at_seam]
+        linear_span = max(leaf_positions.values()) - linear_origin
         # A complete circle also needs clearance across its seam. This formula
-        # reproduces the conventional weighted layout and remains valid after
-        # tidy compaction changes the interior gaps.
+        # reproduces the conventional weighted layout.  Tidy packing can move
+        # traversal-adjacent leaves past one another in the perpendicular
+        # coordinate, so the seam must be defined by the physical extrema,
+        # not by the first and last leaves in traversal order.  Keeping the
+        # occupied angular interval strictly below one turn makes the polar
+        # transform injective away from the common root.
         seam_gap = (
-            normalized_weight[leaf_order[0]]
-            + normalized_weight[leaf_order[-1]]
+            normalized_weight[first_at_seam]
+            + normalized_weight[last_at_seam]
         ) / 2.0
         denominator = max(linear_span + seam_gap, 1e-12)
     angle = {
@@ -378,20 +388,21 @@ def polar_layout(
     tree,
     mode,
     use_topology_depth=False,
-    fan_span=180.0,
+    angular_span=360.0,
+    angular_center=90.0,
     leaf_weight_by_leaf=None,
     base_layout=None,
     subtree_packing='standard',
 ):
-    """Return rooted circular, fan, or straight radial geometry."""
+    """Return rooted circular or straight radial geometry in a sector."""
 
-    if mode not in {'circular', 'fan', 'radial'}:
+    if mode not in {'circular', 'radial'}:
         raise ValueError('Unsupported polar layout: {}'.format(mode))
-    angular_span = fan_span if mode == 'fan' else 360.0
     radius, angle, xcoord, ycoord, leaf_order = _polar_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
         angular_span_degrees=angular_span,
+        angular_center_degrees=angular_center,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
         base_layout=base_layout,
     )
@@ -443,7 +454,11 @@ def polar_layout(
         root_path=root_path,
         equal_aspect=True,
         spatial=True,
-        metadata={'subtree_packing': subtree_packing},
+        metadata={
+            'subtree_packing': subtree_packing,
+            'angular_span_degrees': float(angular_span),
+            'angular_center_degrees': float(angular_center) % 360.0,
+        },
     )
 
 
@@ -1265,14 +1280,14 @@ def _sample_segment(start, end, samples):
     ]
 
 
-def _warp_path(path, transform, vertical_samples):
+def _warp_path(path, transform, vertical_sampler):
     warped = []
     for index, (start, end) in enumerate(zip(path, path[1:])):
         if abs(end[1] - start[1]) > 1e-12:
-            samples = vertical_samples(start[1], end[1])
+            source_segment = vertical_sampler(start, end)
         else:
-            samples = 8
-        segment = [transform(x, y) for x, y in _sample_segment(start, end, samples)]
+            source_segment = _sample_segment(start, end, 8)
+        segment = [transform(x, y) for x, y in source_segment]
         if index:
             segment = segment[1:]
         warped.extend(segment)
@@ -1345,40 +1360,64 @@ def spiral_layout(
     x_values = list(base.xcoord.values())
     x_min = min(x_values, default=0.0)
     x_span = max(max(x_values, default=1.0) - x_min, 1.0)
-    inner_radius = 0.10
+    # Parameterize an injective spiral strip.  The centreline advances by one
+    # radial pitch per turn, while tree depth occupies only 70% of that pitch.
+    # Therefore two points whose angles differ by a complete turn cannot share
+    # a radius.  The positive inner margin also prevents the negative-radius
+    # fold that affected the former normal-offset construction.
     outer_radius = 1.0
-    radial_pitch = (outer_radius - inner_radius) / turns
+    radial_pitch = outer_radius / (turns + 1.0)
+    inner_radius = radial_pitch
     band_width = radial_pitch * 0.70
     horizontal_scale = max(float(aspect_ratio), 1e-6)
 
     def transform(x, y):
         fraction = (float(y) - y_min) / y_span
         theta = (-math.pi / 2.0) + (2.0 * math.pi * turns * fraction)
-        radius = inner_radius + ((outer_radius - inner_radius) * fraction)
-        dx_dtheta = (
-            ((outer_radius - inner_radius) / (2.0 * math.pi * turns)) * math.cos(theta)
-            - radius * math.sin(theta)
-        )
-        dy_dtheta = (
-            ((outer_radius - inner_radius) / (2.0 * math.pi * turns)) * math.sin(theta)
-            + radius * math.cos(theta)
-        )
-        tangent_length = max(math.hypot(dx_dtheta, dy_dtheta), 1e-12)
-        normal_x = dy_dtheta / tangent_length
-        normal_y = -dx_dtheta / tangent_length
+        centre_radius = inner_radius + (turns * radial_pitch * fraction)
         depth = (float(x) - x_min) / x_span
-        offset = band_width * (depth - 1.0)
+        radius = centre_radius + (band_width * (depth - 1.0))
         return (
-            horizontal_scale * ((radius * math.cos(theta)) + (normal_x * offset)),
-            (radius * math.sin(theta)) + (normal_y * offset),
+            horizontal_scale * radius * math.cos(theta),
+            radius * math.sin(theta),
         )
 
-    def vertical_samples(start_y, end_y):
-        fraction = abs(float(end_y) - float(start_y)) / y_span
-        return min(512, max(4, int(math.ceil(fraction * turns * 32.0)) + 1))
+    angular_divisions = min(1024, max(48, int(math.ceil(turns * 32.0))))
+    global_fractions = sorted({
+        0.0,
+        1.0,
+        *(index / angular_divisions for index in range(angular_divisions + 1)),
+        *(
+            (float(base.ycoord[node]) - y_min) / y_span
+            for node in tree.traverse()
+        ),
+    })
+
+    def vertical_sampler(start, end):
+        """Sample tracks at shared angles and every radial branch junction."""
+
+        start_fraction = (float(start[1]) - y_min) / y_span
+        end_fraction = (float(end[1]) - y_min) / y_span
+        lower = min(start_fraction, end_fraction)
+        upper = max(start_fraction, end_fraction)
+        first_index = bisect.bisect_right(global_fractions, lower + 1e-12)
+        last_index = bisect.bisect_left(global_fractions, upper - 1e-12)
+        fractions = [
+            start_fraction,
+            *global_fractions[first_index:last_index],
+            end_fraction,
+        ]
+        if end_fraction < start_fraction:
+            fractions = list(reversed(sorted(fractions)))
+        else:
+            fractions = sorted(fractions)
+        return [
+            (float(start[0]), y_min + (fraction * y_span))
+            for fraction in fractions
+        ]
 
     edge_paths = {
-        node: _warp_path(path, transform, vertical_samples)
+        node: _warp_path(path, transform, vertical_sampler)
         for node, path in base.edge_paths.items()
     }
     xcoord = {}
@@ -1410,7 +1449,7 @@ def spiral_layout(
         label_angles[leaf] = math.degrees(
             math.atan2(outside[1] - at_leaf[1], outside[0] - at_leaf[0])
         )
-    root_path = _warp_path(base.root_path, transform, vertical_samples)
+    root_path = _warp_path(base.root_path, transform, vertical_sampler)
     return TreeDrawingLayout(
         name='spiral',
         xcoord=xcoord,
@@ -1617,7 +1656,8 @@ def make_tree_layout(
     use_topology_depth=False,
     aspect_ratio=1.0,
     spiral_turns=None,
-    fan_span=180.0,
+    angular_span=360.0,
+    angular_center=90.0,
     terminal_extent_by_leaf=None,
     label_size_by_leaf=None,
     tip_spacing='uniform',
@@ -1631,7 +1671,7 @@ def make_tree_layout(
     tip_spacing = str(tip_spacing).strip().lower()
     subtree_packing = str(subtree_packing).strip().lower()
     supported_layouts = {
-        'rectangular', 'slanted', 'cladogram', 'circular', 'fan', 'radial',
+        'rectangular', 'slanted', 'cladogram', 'circular', 'radial',
         'unrooted', 'spiral', 'fractal',
     }
     if layout not in supported_layouts:
@@ -1640,12 +1680,27 @@ def make_tree_layout(
         raise ValueError("'--tip-spacing' must be uniform or label-aware.")
     if subtree_packing not in {'standard', 'tidy'}:
         raise ValueError("'--subtree-packing' must be standard or tidy.")
-    tidy_layouts = {'rectangular', 'circular', 'fan', 'spiral'}
+    tidy_layouts = {'rectangular', 'circular', 'spiral'}
     if subtree_packing == 'tidy' and layout not in tidy_layouts:
         raise ValueError(
             "'--subtree-packing tidy' is supported only with rectangular, "
-            'circular, fan, and spiral layouts.'
+            'circular, and spiral layouts.'
         )
+    angular_span = float(angular_span)
+    angular_center = float(angular_center)
+    if not math.isfinite(angular_span) or angular_span <= 0.0 or angular_span > 360.0:
+        raise ValueError('--angular-span must be greater than zero and no greater than 360.')
+    if not math.isfinite(angular_center):
+        raise ValueError('--angular-center must be a finite number.')
+    if layout not in {'circular', 'radial'}:
+        if angular_span != 360.0:
+            raise ValueError(
+                "'--angular-span' is supported only with circular and radial layouts."
+            )
+        if angular_center % 360.0 != 90.0:
+            raise ValueError(
+                "'--angular-center' is supported only with circular and radial layouts."
+            )
     label_size_by_leaf = label_size_by_leaf or {}
     leaf_weight_by_leaf = None
     if tip_spacing == 'label-aware':
@@ -1698,7 +1753,7 @@ def make_tree_layout(
             aspect_ratio=aspect_ratio,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
-    if layout in {'circular', 'fan', 'radial'}:
+    if layout in {'circular', 'radial'}:
         base_layout = None
         if subtree_packing == 'tidy':
             base_layout = tidy_layout(
@@ -1711,7 +1766,8 @@ def make_tree_layout(
             tree,
             mode=layout,
             use_topology_depth=use_topology_depth,
-            fan_span=fan_span,
+            angular_span=angular_span,
+            angular_center=angular_center,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
             base_layout=base_layout,
             subtree_packing=subtree_packing,

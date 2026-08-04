@@ -89,7 +89,7 @@ and output-column vocabulary are defined in
 
 ## Tree drawing layouts
 
-`nwkit draw --layout` provides nine deterministic geometries from the same
+`nwkit draw --layout` provides eight deterministic geometries from the same
 Newick input. Subtree packing is selected independently:
 
 ```sh
@@ -97,16 +97,23 @@ nwkit draw -i tree.nwk --layout rectangular -o rectangular.svg
 nwkit draw -i tree.nwk --layout slanted     -o slanted.svg
 nwkit draw -i tree.nwk --layout cladogram   -o cladogram.svg
 nwkit draw -i tree.nwk --layout circular   -o circular.svg
-nwkit draw -i tree.nwk --layout fan        -o fan.svg
 nwkit draw -i tree.nwk --layout radial     -o radial.svg
 nwkit draw -i tree.nwk --layout unrooted   -o unrooted.svg
 nwkit draw -i tree.nwk --layout spiral     -o spiral.svg
 nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
 
-# Compact the same rectangular geometry without changing tip order or depth.
+# Restrict circular geometry to an upper semicircle (a fan drawing).
+nwkit draw -i tree.nwk --layout circular --angular-span 180 \
+  -o circular-sector.svg
+
+# Compact the same rectangular geometry without changing topology or depth.
 nwkit draw -i tree.nwk --layout rectangular --subtree-packing tidy \
   -o rectangular-tidy.svg
 ```
+
+The 10-versus-100-tip gallery used in the Wiki is reproducible with
+`python scripts/make_draw_layout_gallery.py --output-prefix PATH`; it writes
+both PNG and editable SVG output at 8 pt Helvetica.
 
 - `rectangular` is the conventional orthogonal phylogram and remains the
   default.
@@ -115,11 +122,10 @@ nwkit draw -i tree.nwk --layout rectangular --subtree-packing tidy \
 - `cladogram` ignores branch lengths, aligns all tips, and displays topology
   with slanted branches.
 - `circular` maps branch-length depth to radius and uses circular connectors
-  followed by radial branch segments. `fan` uses the same rooted geometry over
-  the angular range selected by `--fan-span`, which defaults to a right-facing
-  180-degree semicircle; use 360 for a complete circle.
+  followed by radial branch segments. `--angular-span` restricts it to a
+  sector; 180 degrees draws the conventional fan in the upper half-plane.
 - `radial` maps the rooted phylogram to polar coordinates and connects nodes
-  with straight branches.
+  with straight branches. It accepts the same angular-sector controls.
 - `unrooted` suppresses a degree-two input root and uses a central-node,
   branch-length-aware equal-angle arrangement. Add
   `--unrooted-method equal-daylight` to iteratively distribute open angular
@@ -130,8 +136,9 @@ nwkit draw -i tree.nwk --layout rectangular --subtree-packing tidy \
   or collapse the drawing above that limit.
 - `spiral` wraps the orthogonal phylogram around an Archimedean spiral. Use
   `--spiral-turns FLOAT` to override the tip-count-dependent turn count. The
-  warped geometry retains topology and relative depth within each spiral
-  track, but Euclidean distances in the finished image are not branch lengths.
+  warped geometry uses a non-overlapping radial band narrower than the pitch
+  between turns, retaining topology and relative depth without folding at the
+  inner turn. Euclidean distances in the finished image are not branch lengths.
 - `fractal` recursively assigns descendant-rich clades more space and fits the
   resulting crossing-free radial-fractal drawing to the requested rectangle. It is a
   topology-and-balance view: branch lengths intentionally do not determine
@@ -143,18 +150,33 @@ Subtree packing is independent of geometry. The default
 non-layered tidy tree algorithm of
 [van der Ploeg (2014)](https://doi.org/10.1002/spe.2213), as introduced for
 phylogenetic trees by
-[de Vienne (2022)](https://doi.org/10.1093/molbev/msac204). It preserves tip
-order and root-to-node depth while moving non-overlapping subtrees closer
-together. Tidy packing composes with `rectangular`, `circular`, `fan`, and
-`spiral`; other geometries reject it because their straight or recursively
-placed connectors do not yet have the same non-overlap guarantee. Complete
-circles reserve label-aware clearance across the angular seam.
+[de Vienne (2022)](https://doi.org/10.1093/molbev/msac204). It preserves
+topology and root-to-node depth while moving non-overlapping subtrees closer
+together; physical tip coordinates may differ from traversal order because
+branches and terminal labels at disjoint depths can pass one another. Tidy
+packing composes with `rectangular`, `circular`, and `spiral`; other geometries
+reject it because their straight or recursively placed connectors do not yet
+have the same non-overlap guarantee. Complete circles place their seam outside
+the extrema of the compacted coordinates, retaining a one-to-one, planar polar
+transform.
+
+Angular extent is independent of circular versus straight radial connectors.
+`--angular-span` accepts values greater than zero through 360 degrees for
+`circular` and `radial`. `--angular-center` rotates the sector using 0 degrees
+for right, 90 for up, 180 for left, and 270 for down. The defaults are 360 and
+90 degrees; consequently, a 180-degree sector occupies the upper half-plane
+from right to left. Spiral, unrooted, fractal, and Cartesian layouts reject
+non-default angular-sector settings rather than silently changing their
+meaning. When `--figure-height` is omitted, circular and radial sectors derive
+their height from the occupied angular bounds and measured label extents; an
+upper semicircle therefore uses approximately half the height of a complete
+circle instead of leaving an unused lower half-plane.
 
 Tip spacing is independent of tree layout. The default
 `--tip-spacing uniform` gives each tip the same row or angular allocation.
 `--tip-spacing label-aware` instead uses the measured height of wrapped labels,
 badges, tracks, and tip images. It varies rows in Cartesian layouts, boxes used
-by tidy packing, and angular sectors in circular, fan, radial, unrooted, spiral,
+by tidy packing, and angular sectors in circular, radial, unrooted, spiral,
 and fractal layouts. Thus a label-aware phylogram is requested directly, for
 example, as `--layout circular --tip-spacing label-aware`; it is not a separate
 layout type.
@@ -200,7 +222,9 @@ moved safely; `warn`, `error`, and `ignore` make the remaining-collision policy
 explicit. A machine-readable report records the layout, figure dimensions,
 font settings, branch-length encoding, equal-daylight convergence, wrapping,
 automatic collapsing, figure-boundary overflow, annotation occupancy, and a
-complete branch/annotation collision audit:
+complete branch/annotation collision audit. It also counts proper branch-pair
+crossings for drawings within the bounded crossing-audit size and reports
+explicitly when a larger drawing was skipped:
 
 ```sh
 nwkit draw -i tree.nhx -o annotated.svg \
@@ -220,7 +244,7 @@ the rendered width interval. Legends automatically use multiple columns and
 move to the right when they become too dense; the position and column count
 can also be fixed explicitly.
 
-An exact scale can be added to rectangular, circular, fan, and unrooted
+An exact scale can be added to rectangular, circular, and unrooted
 drawings:
 
 ```sh
@@ -247,7 +271,9 @@ nwkit draw -i tree.nwk --layout spiral --depth-guide auto \
 ```
 
 `slanted` receives a horizontal depth axis with vertical grid lines; `radial`
-receives concentric rings labelled in the largest empty root sector; and
+receives concentric rings for a complete circle or matching concentric arcs for
+an angular sector, labelled in the largest empty direction within the displayed
+sector; and
 `spiral` receives a linear root-to-node distance key for the depth encoded
 across its spiral band. These guides describe cumulative root-to-node distance,
 not the Euclidean length of a slanted, radial, or warped edge. `auto` chooses a

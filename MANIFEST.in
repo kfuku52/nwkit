@@ -1,3 +1,4 @@
 include CLI_TSV_CONVENTIONS.md
+include scripts/make_draw_layout_gallery.py
 graft tests
 global-exclude __pycache__ *.py[cod]

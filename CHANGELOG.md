@@ -6,16 +6,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
-- `draw --layout` adds slanted, aligned-tip cladogram, circular, open-fan,
-  rooted radial, equal-angle unrooted, Archimedean spiral, and
+- `draw --layout` adds slanted, aligned-tip cladogram, circular, rooted radial,
+  equal-angle unrooted, Archimedean spiral, and
   rectangle-fitted fractal alternatives to the default rectangular phylogram.
   Existing support, node, probability, property, and categorical annotations
   follow the selected layout.
-- `draw --fan-span` controls the displayed angular span of the fan layout and
-  defaults to a right-facing 180-degree semicircle.
+- `draw --angular-span` and `--angular-center` control the sector occupied by
+  circular or straight radial geometry. A 180-degree span defaults to the
+  upper half-plane; 360 degrees remains the default complete circle.
 - `draw --subtree-packing standard|tidy` independently compacts subtrees in
-  rectangular, circular, fan, and spiral geometries while preserving tip
-  order and root-to-node depth. Circular packing reserves label-aware
+  rectangular, circular, and spiral geometries while preserving topology
+  and root-to-node depth. Circular packing reserves label-aware
   clearance across the angular seam; unsupported geometries fail explicitly.
 - `draw --tip-spacing uniform|label-aware` independently controls spacing for
   every layout. Label-aware mode allocates rows, leaf boxes, or angular sectors
@@ -39,7 +40,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `draw --max-visible-tips` creates a drawing-only, auditable collapsed view
   for large trees.
 - `draw --collision-policy` and `--layout-report` provide deterministic
-  post-render collision handling and a JSON layout-quality report.
+  post-render collision handling and a JSON layout-quality report, including a
+  bounded branch-pair crossing audit.
 
 ### Changed
 
@@ -49,14 +51,21 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Label-aware spacing is now an orthogonal option rather than separate
   `packed` and `packed-phylogram` layout names. Those pre-release layout names
   have been removed without compatibility aliases.
+- Fan drawing is now an angular configuration of circular or radial geometry,
+  rather than a separate `--layout fan`. The pre-release `fan` layout name and
+  `--fan-span` option have been removed without compatibility aliases.
+- Circular and radial sectors now derive automatic figure height from their
+  occupied angular bounds and measured label extents. Radial depth guides use
+  matching arcs instead of expanding a partial sector to complete rings.
 - Dense legends are placed and columnized automatically, and rendered
   annotations participate in final figure-boundary fitting.
 - Equal-daylight refinement now preserves planarity by reducing or rejecting
   unsafe passes, reports its actual iterations and accepted/rejected
   rotations, and rejects impractically large inputs with an actionable
   equal-angle/collapse alternative.
-- Deep rectangular (including tidy packing), circular, fractal, and drawing-collapse
-  operations use iterative traversal instead of Python recursion.
+- Deep rectangular (including tidy packing), circular, fractal, and
+  drawing-collapse operations use iterative traversal instead of Python
+  recursion.
 - Drawing collapse no longer treats a property observed in only some
   descendants as constant or averages numeric properties implicitly.
   `--collapse-property-aggregation mean` opts into complete-case means.
@@ -68,14 +77,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   labels are drawn above the bar in a reserved strip below the tree panel so
   they do not overlap the tree or its annotations.
 - Layout reports now include the NWKIT/output/font configuration,
-  branch-length semantics, complete branch-collision status, and explicit
-  figure-boundary overflow measurements. Unresolved default-policy collisions
-  and unfit fixed-size figures emit warnings.
+  branch-length semantics, branch/annotation and branch-pair audit status, and
+  explicit figure-boundary overflow measurements. Unresolved default-policy
+  collisions and unfit fixed-size figures emit final, actionable warnings.
 
 ### Fixed
 
 - Centered every tidy-packed parent on its direct child nodes after compact,
   label-aware subtree placement.
+- Kept complete-circle tidy packing below one angular turn by locating the seam
+  from physical coordinate extrema, preventing wraparound branch crossings.
+- Replaced the folding inner normal-offset spiral with an injective radial band
+  and shared-angle curve sampling, preventing both true and polygonal branch
+  crossings in standard and tidy-packed spiral drawings.
 - Limited multiline-label height reservations in tidy packing to their actual
   terminal-axis extent, allowing horizontally disjoint labels and branches to
   use the same vertical space without overlap.

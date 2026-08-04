@@ -24,6 +24,7 @@ from nwkit.draw_layouts import (
 from nwkit.draw_prep import collapse_tree_for_drawing
 from nwkit.draw_quality import (
     DrawingArtist,
+    _proper_segment_intersection,
     _rectangle_union_area,
     evaluate_drawing,
 )
@@ -45,6 +46,63 @@ def _random_binary_tree(tip_count, seed):
         parent.add_child(second, dist=generator.uniform(0.1, 2.0))
         pool.append(parent)
     return pool[0]
+
+
+def _layout_branch_crossings(layout):
+    crossings = set()
+    paths = list(layout.edge_paths.items())
+    for first_index, (first_owner, first_path) in enumerate(paths):
+        for second_owner, second_path in paths[first_index + 1:]:
+            if first_owner is second_owner:
+                continue
+            for first_segment in zip(first_path, first_path[1:]):
+                for second_segment in zip(second_path, second_path[1:]):
+                    if _proper_segment_intersection(first_segment, second_segment):
+                        crossings.add((id(first_owner), id(second_owner)))
+                        break
+                if (id(first_owner), id(second_owner)) in crossings:
+                    break
+    return crossings
+
+
+@pytest.mark.parametrize('seed', range(20))
+def test_randomized_complete_circular_tidy_layouts_remain_planar(seed):
+    tree = _random_binary_tree(20, 81000 + seed)
+    generator = random.Random(82000 + seed)
+    layout = make_tree_layout(
+        tree,
+        layout='circular',
+        subtree_packing='tidy',
+        angular_span=360.0,
+        tip_spacing='label-aware',
+        label_size_by_leaf={
+            leaf: (generator.uniform(0.1, 1.0), generator.uniform(0.05, 1.5))
+            for leaf in tree.leaves()
+        },
+        terminal_extent_by_leaf={
+            leaf: generator.uniform(0.0, 2.0)
+            for leaf in tree.leaves()
+        },
+    )
+    angles = list(layout.label_angles.values())
+
+    assert max(angles) - min(angles) < 360.0
+    assert not _layout_branch_crossings(layout)
+
+
+@pytest.mark.parametrize('subtree_packing', ['standard', 'tidy'])
+@pytest.mark.parametrize('seed', range(20))
+def test_randomized_spiral_layouts_remain_planar(subtree_packing, seed):
+    tree = _random_binary_tree(20, 83000 + seed)
+    layout = make_tree_layout(
+        tree,
+        layout='spiral',
+        subtree_packing=subtree_packing,
+        spiral_turns=3.0,
+        aspect_ratio=1.7,
+    )
+
+    assert not _layout_branch_crossings(layout)
 
 
 def _deep_caterpillar(depth):
@@ -395,6 +453,24 @@ def test_collision_audit_remains_complete_above_500_artists():
         plt.close(figure)
 
     assert report['branch_collision_check_complete'] is True
+
+
+def test_collision_audit_reports_crossing_branch_pairs():
+    figure, axes = plt.subplots(figsize=(3.0, 3.0))
+    first = axes.plot([0.0, 1.0], [0.0, 1.0])[0]
+    second = axes.plot([0.0, 1.0], [1.0, 0.0])[0]
+    try:
+        report = evaluate_drawing(
+            figure,
+            [],
+            [('first', first), ('second', second)],
+            policy='ignore',
+        )
+    finally:
+        plt.close(figure)
+
+    assert report['branch_crossing_check_complete'] is True
+    assert report['branch_crossing_count'] == 1
 
 
 @pytest.mark.parametrize('layout_name', ['radial', 'circular'])

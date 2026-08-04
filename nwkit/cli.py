@@ -425,15 +425,17 @@ pdraw.add_argument('--image-format', '--image_format', dest='image_format', meta
                    choices=['auto', 'pdf', 'png', 'svg'],
                    help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.')
 pdraw.add_argument('--layout', metavar='LAYOUT', default='rectangular', type=str, required=False, action='store',
-                   choices=['rectangular', 'slanted', 'cladogram', 'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal'],
+                   choices=['rectangular', 'slanted', 'cladogram', 'circular', 'radial', 'unrooted', 'spiral', 'fractal'],
                    help='default=%(default)s: Tree geometry; subtree placement and label-aware spacing are controlled independently.')
 pdraw.add_argument('--subtree-packing', '--subtree_packing', dest='subtree_packing', metavar='standard|tidy', default='standard', type=str, required=False, action='store',
                    choices=['standard', 'tidy'],
-                   help='default=%(default)s: Subtree placement strategy. "tidy" compacts rectangular, circular, fan, and spiral layouts while preserving tip order.')
+                   help='default=%(default)s: Subtree placement strategy. "tidy" compacts rectangular, circular, and spiral layouts while preserving tip order.')
 pdraw.add_argument('--spiral-turns', '--spiral_turns', dest='spiral_turns', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=auto: Number of turns used by --layout spiral.')
-pdraw.add_argument('--fan-span', '--fan_span', dest='fan_span', metavar='DEGREES', default=180.0, type=finite_float, required=False, action='store',
-                   help='default=%(default)s: Angular span occupied by --layout fan; 180 draws a right-facing semicircle and 360 a complete circle.')
+pdraw.add_argument('--angular-span', '--angular_span', dest='angular_span', metavar='DEGREES', default=360.0, type=finite_float, required=False, action='store',
+                   help='default=%(default)s: Angular span occupied by circular or radial geometry; 180 uses a semicircle.')
+pdraw.add_argument('--angular-center', '--angular_center', dest='angular_center', metavar='DEGREES', default=90.0, type=finite_float, required=False, action='store',
+                   help='default=%(default)s: Direction at the center of a circular or radial sector; 90 centers a 180-degree sector on the upper half-plane.')
 pdraw.add_argument('--unrooted-method', '--unrooted_method', dest='unrooted_method', metavar='equal-angle|equal-daylight', default='equal-angle', type=str, choices=['equal-angle', 'equal-daylight'],
                    help='default=%(default)s: Angular optimization used by --layout unrooted.')
 pdraw.add_argument('--daylight-iterations', '--daylight_iterations', dest='daylight_iterations', metavar='INT', default=5, type=int,
@@ -557,7 +559,7 @@ pdraw.add_argument('--legend-position', '--legend_position', dest='legend_positi
 pdraw.add_argument('--collision-policy', '--collision_policy', dest='collision_policy', metavar='resolve|warn|error|ignore', default='resolve', type=str, choices=['resolve', 'warn', 'error', 'ignore'],
                    help='default=%(default)s: Resolve movable annotation collisions, report them, reject them, or leave them unchanged.')
 pdraw.add_argument('--layout-report', '--layout_report', dest='layout_report', metavar='PATH', default=None, type=str,
-                   help='default=None: Write a reproducible JSON report of layout choices, collisions, wrapping, and collapsing; use - for STDOUT.')
+                   help='default=None: Write a reproducible JSON report of layout choices, annotation collisions, branch crossings, wrapping, and collapsing; use - for STDOUT.')
 pdraw.add_argument('--transparent', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Save the figure with a transparent background.')
 pdraw.set_defaults(handler=command_draw)

@@ -15,7 +15,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
 from matplotlib.path import Path as MplPath
-from matplotlib.patches import Circle, Patch, Rectangle
+from matplotlib.patches import Arc, Circle, Patch, Rectangle
 from matplotlib.text import Text
 from matplotlib.font_manager import FontProperties
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -715,7 +715,7 @@ def _prepare_tip_label_text(
             font_family=font_family,
         )
         spatial = layout_name in {
-            'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal',
+            'circular', 'radial', 'unrooted', 'spiral', 'fractal',
         }
         normal_budget = max(min(panel_width_in, panel_height_in) * 0.20, 0.55)
         if spatial:
@@ -1000,6 +1000,82 @@ def _add_slanted_depth_guide(
     return artists
 
 
+def _angular_sector_bounds(radius, angular_span, angular_center):
+    """Return Cartesian bounds for an origin-anchored circular sector."""
+
+    radius = max(float(radius), 0.0)
+    span = min(max(float(angular_span), 0.0), 360.0)
+    center = float(angular_center)
+    if span >= 360.0:
+        return (-radius, radius, -radius, radius)
+    start = math.radians(center - (span / 2.0))
+    end = math.radians(center + (span / 2.0))
+    angles = [start, end]
+    first_quadrant = math.ceil(start / (math.pi / 2.0))
+    last_quadrant = math.floor(end / (math.pi / 2.0))
+    angles.extend(
+        index * (math.pi / 2.0)
+        for index in range(first_quadrant, last_quadrant + 1)
+    )
+    points = [(0.0, 0.0)] + [
+        (radius * math.cos(angle), radius * math.sin(angle))
+        for angle in angles
+    ]
+    x_values, y_values = zip(*points)
+    return min(x_values), max(x_values), min(y_values), max(y_values)
+
+
+def _sector_contains_direction(angular_span, angular_center, direction):
+    """Return whether a sector contains a cardinal direction in degrees."""
+
+    span = float(angular_span)
+    if span >= 360.0:
+        return True
+    delta = (
+        (float(direction) - float(angular_center) + 180.0) % 360.0
+    ) - 180.0
+    return abs(delta) <= (span / 2.0) + 1e-12
+
+
+def _polar_auto_figure_height(
+    panel_width,
+    angular_span,
+    angular_center,
+    radial_label_extent,
+    tangential_label_extent,
+    top_margin,
+    bottom_margin,
+):
+    """Estimate a sector-aware height including radially oriented labels."""
+
+    x_min, x_max, y_min, y_max = _angular_sector_bounds(
+        1.0,
+        angular_span,
+        angular_center,
+    )
+    x_span = max(x_max - x_min, 1e-6)
+    y_span = max(y_max - y_min, 1e-6)
+    radial = max(float(radial_label_extent), 0.0)
+    tangential = max(float(tangential_label_extent), 0.0)
+    horizontal_padding = 2.0 * tangential
+    vertical_padding = 2.0 * tangential
+    if _sector_contains_direction(angular_span, angular_center, 0.0):
+        horizontal_padding += radial
+    if _sector_contains_direction(angular_span, angular_center, 180.0):
+        horizontal_padding += radial
+    if _sector_contains_direction(angular_span, angular_center, 90.0):
+        vertical_padding += radial
+    if _sector_contains_direction(angular_span, angular_center, 270.0):
+        vertical_padding += radial
+    available_width = max(float(panel_width) - horizontal_padding, 0.2)
+    geometry_scale = available_width / x_span
+    panel_height = (geometry_scale * y_span) + vertical_padding
+    return max(
+        panel_height + float(top_margin) + float(bottom_margin),
+        float(top_margin) + float(bottom_margin) + 0.2,
+    )
+
+
 def _add_radial_depth_guide(
     axes,
     drawing_layout,
@@ -1009,7 +1085,7 @@ def _add_radial_depth_guide(
     font_family,
     font_size,
 ):
-    """Draw concentric root-depth rings and label them in an empty sector."""
+    """Draw root-depth arcs and label them within the occupied sector."""
 
     root_x = drawing_layout.xcoord[tree]
     root_y = drawing_layout.ycoord[tree]
@@ -1094,11 +1170,25 @@ def _add_radial_depth_guide(
         leaf_clearance = nearest_leaf_angle_distance(direction) * outer_radius
         return min(branch_clearance, leaf_clearance)
 
+    angular_span = float(
+        drawing_layout.metadata.get('angular_span_degrees', 360.0)
+    )
+    angular_center = float(
+        drawing_layout.metadata.get('angular_center_degrees', 90.0)
+    )
+    available = math.radians(angular_span)
+    start = math.radians(angular_center) - (available / 2.0)
     candidate_count = 360 if len(segments) <= 512 else 180
-    candidates = [
-        2.0 * math.pi * index / candidate_count
-        for index in range(candidate_count)
-    ]
+    if angular_span < 360.0:
+        candidates = [
+            start + (available * index / max(candidate_count - 1, 1))
+            for index in range(candidate_count)
+        ]
+    else:
+        candidates = [
+            2.0 * math.pi * index / candidate_count
+            for index in range(candidate_count)
+        ]
     direction = max(candidates, key=direction_score)
     best_score = direction_score(direction)
     labels_have_clear_sector = (
@@ -1107,16 +1197,29 @@ def _add_radial_depth_guide(
     )
     artists = []
     for depth in positive_ticks:
-        axes.add_patch(Circle(
-            (root_x, root_y),
-            depth,
-            facecolor='none',
-            edgecolor=color,
-            linewidth=0.45,
-            linestyle=(0, (1.5, 2.5)),
-            alpha=0.60,
-            zorder=0.25,
-        ))
+        guide_style = {
+            'facecolor': 'none',
+            'edgecolor': color,
+            'linewidth': 0.45,
+            'linestyle': (0, (1.5, 2.5)),
+            'alpha': 0.60,
+            'zorder': 0.25,
+        }
+        if angular_span < 360.0:
+            axes.add_patch(Arc(
+                (root_x, root_y),
+                2.0 * depth,
+                2.0 * depth,
+                theta1=math.degrees(start),
+                theta2=math.degrees(start + available),
+                **guide_style,
+            ))
+        else:
+            axes.add_patch(Circle(
+                (root_x, root_y),
+                depth,
+                **guide_style,
+            ))
         if not labels_have_clear_sector:
             continue
         x = root_x + (depth * math.cos(direction))
@@ -1486,7 +1589,8 @@ def _draw_tree(
     tip_image_gap=TIP_IMAGE_GAP_PT,
     layout='rectangular',
     spiral_turns=None,
-    fan_span=180.0,
+    angular_span=360.0,
+    angular_center=90.0,
     unrooted_method='equal-angle',
     daylight_iterations=5,
     scale_bar='none',
@@ -1522,7 +1626,6 @@ def _draw_tree(
         'slanted',
         'cladogram',
         'circular',
-        'fan',
         'radial',
         'unrooted',
         'spiral',
@@ -1530,20 +1633,40 @@ def _draw_tree(
     }
     if layout_name not in supported_layouts:
         raise ValueError("Unsupported '--layout': {}".format(layout))
+    angular_span = float(angular_span)
+    angular_center = float(angular_center)
+    if (
+        not math.isfinite(angular_span)
+        or angular_span <= 0.0
+        or angular_span > 360.0
+    ):
+        raise ValueError(
+            '--angular-span must be greater than zero and no greater than 360.'
+        )
+    if not math.isfinite(angular_center):
+        raise ValueError('--angular-center must be a finite number.')
+    if layout_name not in {'circular', 'radial'}:
+        if angular_span != 360.0:
+            raise ValueError(
+                "'--angular-span' is supported only with circular and radial layouts."
+            )
+        if angular_center % 360.0 != 90.0:
+            raise ValueError(
+                "'--angular-center' is supported only with circular and radial layouts."
+            )
     resolved_subtree_packing = str(subtree_packing).strip().lower()
     if resolved_subtree_packing not in {'standard', 'tidy'}:
         raise ValueError("'--subtree-packing' must be standard or tidy.")
     if (
         resolved_subtree_packing == 'tidy'
-        and layout_name not in {'rectangular', 'circular', 'fan', 'spiral'}
+        and layout_name not in {'rectangular', 'circular', 'spiral'}
     ):
         raise ValueError(
             "'--subtree-packing tidy' is supported only with rectangular, "
-            'circular, fan, and spiral layouts.'
+            'circular, and spiral layouts.'
         )
     spatial_layout = layout_name in {
         'circular',
-        'fan',
         'radial',
         'unrooted',
         'spiral',
@@ -1596,7 +1719,7 @@ def _draw_tree(
     base_x_max = max(base_x_values) if base_x_values else 1.0
     base_x_span = max(base_x_max - base_x_min, 1.0)
     segment_length_layouts = {
-        'rectangular', 'circular', 'fan', 'unrooted',
+        'rectangular', 'circular', 'unrooted',
     }
     depth_projection_layouts = {'slanted', 'radial'}
     warped_depth_layouts = {'spiral'}
@@ -1803,7 +1926,27 @@ def _draw_tree(
     left_margin_in = 2.0 / 72.0
     right_margin_in = 2.0 / 72.0
     if figure_height is None and spatial_layout:
-        fig_height = fig_width * 0.72 if layout_name == 'fractal' else fig_width
+        if layout_name in {'circular', 'radial'}:
+            radial_label_extent = (
+                max_tip_label_width_in if tip_labels else 0.0
+            ) + (track_span_pt / 72.0)
+            if tip_badge_property not in (None, ''):
+                radial_label_extent += (float(font_size) * 1.3) / 72.0
+            fig_height = _polar_auto_figure_height(
+                panel_width=tree_panel_width_in,
+                angular_span=angular_span,
+                angular_center=angular_center,
+                radial_label_extent=radial_label_extent,
+                tangential_label_extent=max_tip_label_height_in,
+                top_margin=top_margin_in,
+                bottom_margin=bottom_margin_in,
+            )
+        else:
+            fig_height = (
+                fig_width * 0.72
+                if layout_name == 'fractal'
+                else fig_width
+            )
     elif figure_height is None:
         # Refined after tidy coordinates have been calculated.
         fig_height = max(len(leaf_order), 1) * row_pitch_in + top_margin_in + bottom_margin_in
@@ -1853,7 +1996,8 @@ def _draw_tree(
         use_topology_depth=use_topology_depth,
         aspect_ratio=layout_aspect_ratio,
         spiral_turns=spiral_turns,
-        fan_span=fan_span,
+        angular_span=angular_span,
+        angular_center=angular_center,
         terminal_extent_by_leaf=terminal_extent_by_leaf,
         label_size_by_leaf=spacing_size_by_leaf,
         tip_spacing=resolved_tip_spacing,
@@ -1873,10 +2017,17 @@ def _draw_tree(
         guide_radius = max(depth_ticks)
         root_x = drawing_layout.xcoord[tree]
         root_y = drawing_layout.ycoord[tree]
-        x_min = min(x_min, root_x - guide_radius)
-        x_max = max(x_max, root_x + guide_radius)
-        y_min = min(y_min, root_y - guide_radius)
-        y_max = max(y_max, root_y + guide_radius)
+        guide_x_min, guide_x_max, guide_y_min, guide_y_max = (
+            _angular_sector_bounds(
+                guide_radius,
+                drawing_layout.metadata.get('angular_span_degrees', 360.0),
+                drawing_layout.metadata.get('angular_center_degrees', 90.0),
+            )
+        )
+        x_min = min(x_min, root_x + guide_x_min)
+        x_max = max(x_max, root_x + guide_x_max)
+        y_min = min(y_min, root_y + guide_y_min)
+        y_max = max(y_max, root_y + guide_y_max)
     x_span = max(x_max - x_min, 1e-9)
     y_span = max(y_max - y_min, 1e-9)
 
@@ -2680,11 +2831,22 @@ def _draw_tree(
             priority=100,
         ))
     if requested_depth_guide is not None:
+        radial_guide_name = (
+            'Concentric arcs'
+            if (
+                layout_name == 'radial'
+                and drawing_layout.metadata.get(
+                    'angular_span_degrees',
+                    360.0,
+                ) < 360.0
+            )
+            else 'Concentric rings'
+        )
         guide_prefix = {
             'slanted': 'Root-to-node distance',
             'radial': (
-                'Concentric rings every {:g}: root-to-node distance; root = 0'
-            ).format(requested_depth_guide),
+                '{} every {:g}: root-to-node distance; root = 0'
+            ).format(radial_guide_name, requested_depth_guide),
             'spiral': 'Root-to-node distance encoded across spiral band',
         }[layout_name]
         title_artist = _add_bottom_guide_title(
@@ -2743,11 +2905,21 @@ def _draw_tree(
         axes=ax,
         artists=[item.artist for item in drawing_artists],
     )
+    requested_collision_policy = str(collision_policy).strip().lower()
+    if requested_collision_policy not in {'resolve', 'warn', 'error', 'ignore'}:
+        raise ValueError(
+            "'--collision-policy' must be resolve, warn, error, or ignore."
+        )
     quality_report = evaluate_drawing(
         figure=fig,
         artists=drawing_artists,
         branch_lines=branch_lines,
-        policy=collision_policy,
+        policy=(
+            'resolve'
+            if requested_collision_policy == 'resolve'
+            else 'ignore'
+        ),
+        emit_warning=False,
     )
     final_fit_report = _fit_artists_within_figure(
         figure=fig,
@@ -2770,6 +2942,29 @@ def _draw_tree(
         policy='ignore',
         max_iterations=0,
     )
+    final_collision_count = final_quality['final_collision_count']
+    if final_collision_count:
+        collision_message = (
+            'Drawing contains {} unresolved collision(s) after final fitting. '
+            'Increase --figure-width (and --figure-height when fixed), use '
+            '--tip-label-wrap auto with --tip-spacing label-aware, or '
+            'reduce annotation density.'
+        ).format(final_collision_count)
+        if requested_collision_policy == 'error':
+            raise ValueError(collision_message)
+        if requested_collision_policy in {'resolve', 'warn'}:
+            sys.stderr.write(collision_message + '\n')
+    branch_crossing_count = final_quality['branch_crossing_count']
+    if branch_crossing_count:
+        crossing_message = (
+            'Drawing contains {} crossing branch pair(s); the selected '
+            'geometry is not planar for this input.'
+        ).format(branch_crossing_count)
+        if requested_collision_policy == 'error':
+            raise ValueError(crossing_message)
+        if requested_collision_policy in {'resolve', 'warn'}:
+            sys.stderr.write(crossing_message + '\n')
+    quality_report['collision_policy'] = requested_collision_policy
     quality_report['final_collision_count'] = final_quality['final_collision_count']
     quality_report['final_collisions_by_kind'] = final_quality['final_collisions_by_kind']
     quality_report['annotation_occupied_fraction'] = final_quality[
@@ -2777,6 +2972,12 @@ def _draw_tree(
     ]
     quality_report['branch_collision_check_complete'] = final_quality[
         'branch_collision_check_complete'
+    ]
+    quality_report['branch_crossing_count'] = final_quality[
+        'branch_crossing_count'
+    ]
+    quality_report['branch_crossing_check_complete'] = final_quality[
+        'branch_crossing_check_complete'
     ]
     quality_report.update(final_fit_report)
     quality_report.update({
@@ -2828,7 +3029,14 @@ def _draw_tree(
         'depth_guide_type': (
             {
                 'slanted': 'axis-grid',
-                'radial': 'concentric-rings',
+                'radial': (
+                    'concentric-arcs'
+                    if drawing_layout.metadata.get(
+                        'angular_span_degrees',
+                        360.0,
+                    ) < 360.0
+                    else 'concentric-rings'
+                ),
                 'spiral': 'spiral-depth-key',
             }[layout_name]
             if requested_depth_guide is not None
@@ -3070,7 +3278,8 @@ def draw_main(args):
         tip_image_gap=getattr(args, 'tip_image_gap', TIP_IMAGE_GAP_PT),
         layout=getattr(args, 'layout', 'rectangular'),
         spiral_turns=getattr(args, 'spiral_turns', None),
-        fan_span=getattr(args, 'fan_span', 180.0),
+        angular_span=getattr(args, 'angular_span', 360.0),
+        angular_center=getattr(args, 'angular_center', 90.0),
         unrooted_method=getattr(args, 'unrooted_method', 'equal-angle'),
         daylight_iterations=getattr(args, 'daylight_iterations', 5),
         scale_bar=getattr(args, 'scale_bar', 'none'),

@@ -84,6 +84,88 @@ def _line_segments(line):
     return list(zip(vertices, vertices[1:]))
 
 
+def _proper_segment_intersection(first, second):
+    """Return whether two finite line segments cross away from endpoints."""
+
+    first_start, first_end = first
+    second_start, second_end = second
+
+    def orientation(start, end, point):
+        return (
+            ((end[0] - start[0]) * (point[1] - start[1]))
+            - ((end[1] - start[1]) * (point[0] - start[0]))
+        )
+
+    values = (
+        orientation(first_start, first_end, second_start),
+        orientation(first_start, first_end, second_end),
+        orientation(second_start, second_end, first_start),
+        orientation(second_start, second_end, first_end),
+    )
+    coordinate_scale = max(
+        1.0,
+        abs(float(first_end[0]) - float(first_start[0])),
+        abs(float(first_end[1]) - float(first_start[1])),
+        abs(float(second_end[0]) - float(second_start[0])),
+        abs(float(second_end[1]) - float(second_start[1])),
+    )
+    tolerance = 1e-10 * coordinate_scale * coordinate_scale
+    return (
+        ((values[0] > tolerance and values[1] < -tolerance)
+         or (values[0] < -tolerance and values[1] > tolerance))
+        and ((values[2] > tolerance and values[3] < -tolerance)
+             or (values[2] < -tolerance and values[3] > tolerance))
+    )
+
+
+def _count_branch_crossings(branch_lines, segment_limit=8000):
+    """Count crossing branch pairs with a bounded spatial-index audit."""
+
+    branch_segments = [
+        (owner, segment)
+        for owner, line in branch_lines
+        for segment in _line_segments(line)
+    ]
+    if len(branch_segments) > int(segment_limit):
+        return 0, False
+    cell_size = 36.0
+    grid = {}
+    tested = set()
+    crossing_owners = set()
+    for index, (owner, (start, end)) in enumerate(branch_segments):
+        x0, x1 = sorted((float(start[0]), float(end[0])))
+        y0, y1 = sorted((float(start[1]), float(end[1])))
+        cells = [
+            (x_cell, y_cell)
+            for x_cell in range(
+                math.floor(x0 / cell_size),
+                math.floor(x1 / cell_size) + 1,
+            )
+            for y_cell in range(
+                math.floor(y0 / cell_size),
+                math.floor(y1 / cell_size) + 1,
+            )
+        ]
+        candidates = {
+            previous
+            for cell in cells
+            for previous in grid.get(cell, ())
+        }
+        for previous in candidates:
+            pair = (previous, index)
+            if pair in tested:
+                continue
+            tested.add(pair)
+            other_owner, other_segment = branch_segments[previous]
+            if owner is other_owner:
+                continue
+            if _proper_segment_intersection(other_segment, (start, end)):
+                crossing_owners.add(tuple(sorted((id(owner), id(other_owner)))))
+        for cell in cells:
+            grid.setdefault(cell, []).append(index)
+    return len(crossing_owners), True
+
+
 def _artist_bounds(figure, artists):
     figure.canvas.draw()
     renderer = figure.canvas.get_renderer()
@@ -248,6 +330,7 @@ def evaluate_drawing(
     branch_lines,
     policy='resolve',
     max_iterations=24,
+    emit_warning=True,
 ):
     """Resolve movable text collisions and return a serializable report."""
 
@@ -304,7 +387,10 @@ def evaluate_drawing(
     final, bounds, branch_check_complete = _find_collisions(
         figure, artists, branch_lines
     )
-    if final and policy in {'resolve', 'warn'}:
+    branch_crossing_count, branch_crossing_check_complete = (
+        _count_branch_crossings(branch_lines)
+    )
+    if final and policy in {'resolve', 'warn'} and emit_warning:
         sys.stderr.write(
             'Drawing contains {} unresolved collision(s).\n'.format(len(final))
         )
@@ -328,6 +414,8 @@ def evaluate_drawing(
         ),
         'annotation_occupied_fraction': min(occupied_area / figure_area, 1.0),
         'branch_collision_check_complete': branch_check_complete,
+        'branch_crossing_count': branch_crossing_count,
+        'branch_crossing_check_complete': branch_crossing_check_complete,
         'artist_counts': dict(sorted(Counter(item.kind for item in artists).items())),
     }
 

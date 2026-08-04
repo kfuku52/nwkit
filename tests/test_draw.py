@@ -9,11 +9,14 @@ import pandas as pd
 import pytest
 from ete4 import Tree
 from matplotlib.figure import Figure
+from matplotlib.patches import Arc, Circle
 
 from nwkit.draw import (
+    _add_radial_depth_guide,
     _add_scale_bar,
     _get_species_overlap_node_types,
     _load_tip_image,
+    _polar_auto_figure_height,
     _prepare_tip_label_text,
     _read_tip_image_manifest,
     _wrap_tip_label,
@@ -33,7 +36,8 @@ def make_draw_args(**kwargs):
         'layout': 'rectangular',
         'subtree_packing': 'standard',
         'spiral_turns': None,
-        'fan_span': 180.0,
+        'angular_span': 360.0,
+        'angular_center': 90.0,
         'unrooted_method': 'equal-angle',
         'daylight_iterations': 5,
         'max_visible_tips': None,
@@ -169,7 +173,6 @@ class TestDrawMain:
             'slanted',
             'cladogram',
             'circular',
-            'fan',
             'radial',
             'unrooted',
             'spiral',
@@ -229,38 +232,61 @@ class TestDrawMain:
         assert cladogram.xcoord[tree] == 0.0
         assert all(len(path) == 2 for path in cladogram.edge_paths.values())
 
-    @pytest.mark.parametrize('layout', ['circular', 'fan'])
-    def test_circular_layouts_use_arc_then_radial_paths(self, layout):
+    def test_circular_layout_uses_arc_then_radial_paths(self):
         tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', parser=1)
-        drawing = make_tree_layout(tree, layout=layout)
+        drawing = make_tree_layout(tree, layout='circular')
 
         assert drawing.spatial is True
         assert drawing.equal_aspect is True
         assert any(len(path) > 3 for path in drawing.edge_paths.values())
 
-    def test_fan_span_controls_tip_angular_span(self):
+    def test_circular_angular_span_controls_tip_sector(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
-        fan = make_tree_layout(tree, layout='fan', fan_span=60.0)
+        drawing = make_tree_layout(
+            tree,
+            layout='circular',
+            angular_span=60.0,
+        )
 
-        angles = sorted(fan.label_angles.values())
+        angles = sorted(drawing.label_angles.values())
         assert angles[-1] - angles[0] == pytest.approx(60.0)
 
-    def test_fan_defaults_to_right_facing_semicircle(self):
+    def test_circular_180_degree_sector_uses_upper_half_by_default(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
-        fan = make_tree_layout(tree, layout='fan')
+        drawing = make_tree_layout(
+            tree,
+            layout='circular',
+            angular_span=180.0,
+        )
 
-        angles = sorted(fan.label_angles.values())
+        angles = sorted(drawing.label_angles.values())
+        assert angles[0] == pytest.approx(0.0)
+        assert angles[-1] == pytest.approx(180.0)
+        assert min(drawing.ycoord.values()) >= -1e-12
+
+    def test_angular_center_rotates_a_circular_sector(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout='circular',
+            angular_span=180.0,
+            angular_center=0.0,
+        )
+
+        angles = sorted(drawing.label_angles.values())
         assert angles[0] == pytest.approx(-90.0)
         assert angles[-1] == pytest.approx(90.0)
 
-    def test_fan_span_360_matches_circular_geometry(self):
-        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
-        circular = make_tree_layout(tree, layout='circular')
-        fan = make_tree_layout(tree, layout='fan', fan_span=360.0)
+    def test_single_tip_sector_uses_angular_center(self):
+        tree = Tree('(A:1);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout='circular',
+            angular_span=180.0,
+            angular_center=135.0,
+        )
 
-        for node in tree.traverse():
-            assert fan.xcoord[node] == pytest.approx(circular.xcoord[node])
-            assert fan.ycoord[node] == pytest.approx(circular.ycoord[node])
+        assert drawing.label_angles[tree['A']] == pytest.approx(135.0)
 
     def test_radial_layout_uses_straight_edges(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
@@ -268,6 +294,66 @@ class TestDrawMain:
 
         assert radial.spatial is True
         assert all(len(path) == 2 for path in radial.edge_paths.values())
+
+    def test_radial_layout_accepts_an_upper_semicircle(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        radial = make_tree_layout(
+            tree,
+            layout='radial',
+            angular_span=180.0,
+        )
+
+        angles = sorted(radial.label_angles.values())
+        assert angles[0] == pytest.approx(0.0)
+        assert angles[-1] == pytest.approx(180.0)
+        assert min(radial.ycoord.values()) >= -1e-12
+
+    def test_radial_depth_guide_uses_sector_arcs(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout='radial',
+            angular_span=180.0,
+        )
+        figure, axes = plt.subplots()
+        try:
+            _add_radial_depth_guide(
+                axes=axes,
+                drawing_layout=drawing,
+                tree=tree,
+                ticks=[1.0, 2.0],
+                color='#888888',
+                font_family='Helvetica',
+                font_size=8.0,
+            )
+            assert len(axes.patches) == 2
+            assert all(isinstance(patch, Arc) for patch in axes.patches)
+            assert not any(isinstance(patch, Circle) for patch in axes.patches)
+        finally:
+            plt.close(figure)
+
+    def test_polar_auto_height_tracks_sector_aspect(self):
+        full = _polar_auto_figure_height(
+            panel_width=7.2,
+            angular_span=360.0,
+            angular_center=90.0,
+            radial_label_extent=0.0,
+            tangential_label_extent=0.0,
+            top_margin=0.0,
+            bottom_margin=0.0,
+        )
+        upper = _polar_auto_figure_height(
+            panel_width=7.2,
+            angular_span=180.0,
+            angular_center=90.0,
+            radial_label_extent=0.0,
+            tangential_label_extent=0.0,
+            top_margin=0.0,
+            bottom_margin=0.0,
+        )
+
+        assert full == pytest.approx(7.2)
+        assert upper == pytest.approx(3.6)
 
     def test_unrooted_layout_suppresses_degree_two_root_on_joined_edge(self):
         tree = Tree('((A:1,B:1):2,(C:1,D:1):4);', parser=1)
@@ -314,12 +400,24 @@ class TestDrawMain:
             )
             assert distance == pytest.approx(float(node.dist))
 
-    @pytest.mark.parametrize('fan_span', [0.0, 360.1])
-    def test_fan_layout_rejects_invalid_span(self, fan_span):
+    @pytest.mark.parametrize('angular_span', [0.0, 360.1])
+    def test_polar_layout_rejects_invalid_angular_span(self, angular_span):
         tree = Tree('(A:1,B:1);', parser=1)
 
-        with pytest.raises(ValueError, match='--fan-span'):
-            make_tree_layout(tree, layout='fan', fan_span=fan_span)
+        with pytest.raises(ValueError, match='--angular-span'):
+            make_tree_layout(
+                tree,
+                layout='circular',
+                angular_span=angular_span,
+            )
+
+    def test_nonpolar_layout_rejects_nondefault_angular_options(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+
+        with pytest.raises(ValueError, match='--angular-span'):
+            make_tree_layout(tree, layout='spiral', angular_span=180.0)
+        with pytest.raises(ValueError, match='--angular-center'):
+            make_tree_layout(tree, layout='fractal', angular_center=0.0)
 
     @pytest.mark.parametrize('layout_name', ['circular', 'radial', 'fractal'])
     def test_label_aware_spatial_layout_allocates_more_angle_to_tall_labels(
@@ -492,7 +590,6 @@ class TestDrawMain:
             'slanted',
             'cladogram',
             'circular',
-            'fan',
             'radial',
             'unrooted',
             'spiral',
@@ -515,7 +612,7 @@ class TestDrawMain:
         assert set(drawing.xcoord) == set(tree.traverse())
         assert set(drawing.ycoord) == set(tree.traverse())
 
-    @pytest.mark.parametrize('layout_name', ['rectangular', 'circular', 'fan', 'spiral'])
+    @pytest.mark.parametrize('layout_name', ['rectangular', 'circular', 'spiral'])
     def test_tidy_subtree_packing_composes_with_supported_layouts(
         self,
         layout_name,
@@ -581,7 +678,7 @@ class TestDrawMain:
         assert min(cyclic_gaps) > 0.0
         assert cyclic_gaps[-1] > min(cyclic_gaps[1:-1])
 
-    @pytest.mark.parametrize('layout_name', ['rectangular', 'circular', 'fan', 'spiral'])
+    @pytest.mark.parametrize('layout_name', ['rectangular', 'circular', 'spiral'])
     def test_tidy_subtree_packing_is_deterministic(self, layout_name):
         tree = Tree('(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);', parser=1)
         kwargs = {
@@ -664,7 +761,10 @@ class TestDrawMain:
             )
             assert length == pytest.approx(float(node.dist))
 
-    @pytest.mark.parametrize('removed_layout', ['packed', 'packed-phylogram', 'tidy'])
+    @pytest.mark.parametrize(
+        'removed_layout',
+        ['packed', 'packed-phylogram', 'tidy', 'fan'],
+    )
     def test_removed_packed_layout_names_have_no_compatibility_alias(
         self,
         removed_layout,
@@ -985,6 +1085,8 @@ class TestDrawMain:
             image_format='svg',
             layout='circular',
             subtree_packing='tidy',
+            angular_span=180.0,
+            angular_center=90.0,
             tip_label_position='branch-end',
             tip_spacing='label-aware',
             species_overlap_node_plot='no',
@@ -995,6 +1097,11 @@ class TestDrawMain:
         assert report['layout_requested'] == 'circular'
         assert report['layout'] == 'circular'
         assert report['subtree_packing'] == 'tidy'
+        assert report['angular_span_degrees'] == pytest.approx(180.0)
+        assert report['angular_center_degrees'] == pytest.approx(90.0)
+        assert report['fits_within_figure'] is True
+        assert report['branch_crossing_count'] == 0
+        assert report['branch_crossing_check_complete'] is True
 
     def test_draw_rejects_scale_bar_for_topology_only_layout(
         self,
@@ -1060,6 +1167,32 @@ class TestDrawMain:
             'depth_guide' in collision_kind
             for collision_kind in report['final_collisions_by_kind']
         )
+
+    def test_radial_sector_reports_concentric_depth_arcs(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('(((A:1,B:2):1,C:3):1,D:5);')
+        report_path = tmp_path / 'radial-sector.json'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(tmp_path / 'radial-sector.svg'),
+            image_format='svg',
+            layout='radial',
+            angular_span=180.0,
+            angular_center=90.0,
+            tip_label_position='branch-end',
+            species_overlap_node_plot='no',
+            depth_guide='1',
+            layout_report=str(report_path),
+            figure_width=5.0,
+        ))
+
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert report['depth_guide_type'] == 'concentric-arcs'
+        assert report['figure_height_inches'] < report['figure_width_inches']
 
     def test_draw_rejects_depth_guide_for_incompatible_layout(
         self,
