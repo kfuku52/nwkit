@@ -1463,6 +1463,7 @@ def _draw_tree(
     tip_label_position='aligned',
     tip_label_wrap='none',
     tip_spacing='uniform',
+    subtree_packing='standard',
     root_marker='none',
     root_marker_color='#0072B2',
     root_marker_size=None,
@@ -1520,7 +1521,6 @@ def _draw_tree(
         'rectangular',
         'slanted',
         'cladogram',
-        'tidy',
         'circular',
         'fan',
         'radial',
@@ -1530,6 +1530,17 @@ def _draw_tree(
     }
     if layout_name not in supported_layouts:
         raise ValueError("Unsupported '--layout': {}".format(layout))
+    resolved_subtree_packing = str(subtree_packing).strip().lower()
+    if resolved_subtree_packing not in {'standard', 'tidy'}:
+        raise ValueError("'--subtree-packing' must be standard or tidy.")
+    if (
+        resolved_subtree_packing == 'tidy'
+        and layout_name not in {'rectangular', 'circular', 'fan', 'spiral'}
+    ):
+        raise ValueError(
+            "'--subtree-packing tidy' is supported only with rectangular, "
+            'circular, fan, and spiral layouts.'
+        )
     spatial_layout = layout_name in {
         'circular',
         'fan',
@@ -1541,7 +1552,7 @@ def _draw_tree(
     if spatial_layout and tip_image_by_leaf:
         raise ValueError(
             "'--tip-image-manifest' is currently supported only with "
-            "rectangular, slanted, cladogram, and tidy layouts."
+            'rectangular, slanted, and cladogram layouts.'
         )
     if spatial_layout and label_panel_width is not None:
         raise ValueError(
@@ -1562,7 +1573,9 @@ def _draw_tree(
     resolved_tip_label_position = str(tip_label_position).strip().lower()
     if resolved_tip_label_position == 'auto':
         resolved_tip_label_position = (
-            'aligned' if layout_name == 'rectangular' else 'branch-end'
+            'aligned'
+            if layout_name == 'rectangular' and resolved_subtree_packing == 'standard'
+            else 'branch-end'
         )
     if spatial_layout and resolved_tip_label_position != 'branch-end':
         raise ValueError(
@@ -1583,7 +1596,7 @@ def _draw_tree(
     base_x_max = max(base_x_values) if base_x_values else 1.0
     base_x_span = max(base_x_max - base_x_min, 1.0)
     segment_length_layouts = {
-        'rectangular', 'tidy', 'circular', 'fan', 'unrooted',
+        'rectangular', 'circular', 'fan', 'unrooted',
     }
     depth_projection_layouts = {'slanted', 'radial'}
     warped_depth_layouts = {'spiral'}
@@ -1844,6 +1857,7 @@ def _draw_tree(
         terminal_extent_by_leaf=terminal_extent_by_leaf,
         label_size_by_leaf=spacing_size_by_leaf,
         tip_spacing=resolved_tip_spacing,
+        subtree_packing=resolved_subtree_packing,
         unrooted_method=unrooted_method,
         daylight_iterations=daylight_iterations,
     )
@@ -2770,6 +2784,7 @@ def _draw_tree(
         'output_format': str(image_format),
         'layout_requested': layout_name,
         'layout': drawing_layout.name,
+        'subtree_packing': resolved_subtree_packing,
         'unrooted_method': str(unrooted_method),
         'daylight_iterations_requested': daylight_iterations,
         **drawing_layout.metadata,
@@ -3032,6 +3047,7 @@ def draw_main(args):
         tip_label_position=getattr(args, 'tip_label_position', 'aligned'),
         tip_label_wrap=getattr(args, 'tip_label_wrap', 'none'),
         tip_spacing=getattr(args, 'tip_spacing', 'uniform'),
+        subtree_packing=getattr(args, 'subtree_packing', 'standard'),
         root_marker=getattr(args, 'root_marker', 'none'),
         root_marker_color=getattr(args, 'root_marker_color', '#0072B2'),
         root_marker_size=getattr(args, 'root_marker_size', None),

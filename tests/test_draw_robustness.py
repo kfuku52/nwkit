@@ -81,12 +81,25 @@ def test_equal_daylight_randomized_layouts_preserve_lengths_without_crossings():
 
 @pytest.mark.parametrize(
     'layout_name',
-    ['rectangular', 'cladogram', 'tidy', 'fractal', 'circular'],
+    ['rectangular', 'cladogram', 'fractal', 'circular'],
 )
 def test_deep_caterpillar_layouts_do_not_depend_on_python_recursion(layout_name):
     tree = _deep_caterpillar(1200)
 
     layout = make_tree_layout(tree, layout=layout_name)
+
+    assert len(layout.xcoord) == 2401
+    assert len(layout.leaf_order) == 1201
+
+
+def test_deep_caterpillar_tidy_packing_does_not_depend_on_python_recursion():
+    tree = _deep_caterpillar(1200)
+
+    layout = make_tree_layout(
+        tree,
+        layout='rectangular',
+        subtree_packing='tidy',
+    )
 
     assert len(layout.xcoord) == 2401
     assert len(layout.leaf_order) == 1201

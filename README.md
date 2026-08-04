@@ -62,7 +62,7 @@ and output-column vocabulary are defined in
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
-- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, compact tidy, equal-angle unrooted, spiral, or recursive fractal layouts; every layout can allocate space from measured labels and annotations
+- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, equal-angle unrooted, spiral, or recursive fractal geometry; layouts can allocate space from measured labels and annotations, and compatible rooted layouts can use tidy subtree packing
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
@@ -89,20 +89,23 @@ and output-column vocabulary are defined in
 
 ## Tree drawing layouts
 
-`nwkit draw --layout` provides ten deterministic layouts from the same
-Newick input:
+`nwkit draw --layout` provides nine deterministic geometries from the same
+Newick input. Subtree packing is selected independently:
 
 ```sh
 nwkit draw -i tree.nwk --layout rectangular -o rectangular.svg
 nwkit draw -i tree.nwk --layout slanted     -o slanted.svg
 nwkit draw -i tree.nwk --layout cladogram   -o cladogram.svg
-nwkit draw -i tree.nwk --layout tidy       -o tidy.svg
 nwkit draw -i tree.nwk --layout circular   -o circular.svg
 nwkit draw -i tree.nwk --layout fan        -o fan.svg
 nwkit draw -i tree.nwk --layout radial     -o radial.svg
 nwkit draw -i tree.nwk --layout unrooted   -o unrooted.svg
 nwkit draw -i tree.nwk --layout spiral     -o spiral.svg
 nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
+
+# Compact the same rectangular geometry without changing tip order or depth.
+nwkit draw -i tree.nwk --layout rectangular --subtree-packing tidy \
+  -o rectangular-tidy.svg
 ```
 
 - `rectangular` is the conventional orthogonal phylogram and remains the
@@ -111,11 +114,6 @@ nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
   and child directly.
 - `cladogram` ignores branch lengths, aligns all tips, and displays topology
   with slanted branches.
-- `tidy` uses a branch-length-aware implementation of the non-layered tidy
-  tree algorithm of [van der Ploeg (2014)](https://doi.org/10.1002/spe.2213),
-  as introduced for phylogenetic trees by
-  [de Vienne (2022)](https://doi.org/10.1093/molbev/msac204). It retains the
-  branch-length axis while moving non-overlapping subtrees closer together.
 - `circular` maps branch-length depth to radius and uses circular connectors
   followed by radial branch segments. `fan` uses the same rooted geometry over
   the angular range selected by `--fan-span`, which defaults to a right-facing
@@ -139,12 +137,25 @@ nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
   topology-and-balance view: branch lengths intentionally do not determine
   geometry.
 
+Subtree packing is independent of geometry. The default
+`--subtree-packing standard` uses conventional tip rows or angles.
+`--subtree-packing tidy` uses a branch-length-aware implementation of the
+non-layered tidy tree algorithm of
+[van der Ploeg (2014)](https://doi.org/10.1002/spe.2213), as introduced for
+phylogenetic trees by
+[de Vienne (2022)](https://doi.org/10.1093/molbev/msac204). It preserves tip
+order and root-to-node depth while moving non-overlapping subtrees closer
+together. Tidy packing composes with `rectangular`, `circular`, `fan`, and
+`spiral`; other geometries reject it because their straight or recursively
+placed connectors do not yet have the same non-overlap guarantee. Complete
+circles reserve label-aware clearance across the angular seam.
+
 Tip spacing is independent of tree layout. The default
 `--tip-spacing uniform` gives each tip the same row or angular allocation.
 `--tip-spacing label-aware` instead uses the measured height of wrapped labels,
-badges, tracks, and tip images. It varies rows in Cartesian layouts, leaf boxes
-in `tidy`, and angular sectors in circular, fan, radial, unrooted, spiral, and
-fractal layouts. Thus a label-aware phylogram is requested directly, for
+badges, tracks, and tip images. It varies rows in Cartesian layouts, boxes used
+by tidy packing, and angular sectors in circular, fan, radial, unrooted, spiral,
+and fractal layouts. Thus a label-aware phylogram is requested directly, for
 example, as `--layout circular --tip-spacing label-aware`; it is not a separate
 layout type.
 
@@ -170,11 +181,13 @@ prefers whitespace and
 tip name is never modified. `--tip-label-font-style taxonomy` italicizes only
 labels that consist exactly of such a binomial; `italic` applies to every tip.
 
-`--tip-label-position auto` aligns labels in the rectangular layout and puts
-them at branch ends in the other layouts. Branch-end labels are included in
-the collision geometry of `tidy`. Use `--tip-labels no` for dense overview
+`--tip-label-position auto` aligns labels in a standard rectangular layout and
+puts them at branch ends in other geometries and in tidy-packed rectangular
+drawings. Branch-end labels are included in tidy collision geometry. Use
+`--tip-labels no` for dense overview
 figures where individual names would be illegible. Tip-image columns currently
-apply to `rectangular`, `slanted`, `cladogram`, and `tidy`; node markers,
+apply to `rectangular` (with either packing strategy), `slanted`, and
+`cladogram`; node markers,
 support, pies, property labels, and categorical tip styling follow nodes in
 every layout.
 
@@ -207,7 +220,7 @@ the rendered width interval. Legends automatically use multiple columns and
 move to the right when they become too dense; the position and column count
 can also be fixed explicitly.
 
-An exact scale can be added to rectangular, tidy, circular, fan, and unrooted
+An exact scale can be added to rectangular, circular, fan, and unrooted
 drawings:
 
 ```sh

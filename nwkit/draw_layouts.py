@@ -286,12 +286,17 @@ def _polar_coordinates(
     use_topology_depth,
     angular_span_degrees=360.0,
     leaf_weight_by_leaf=None,
+    base_layout=None,
 ):
-    radius, linear_y, leaf_order = get_rectangular_coordinates(
-        tree,
-        use_topology_depth=use_topology_depth,
-        leaf_weight_by_leaf=leaf_weight_by_leaf,
-    )
+    if base_layout is None:
+        base_layout = rectangular_layout(
+            tree,
+            use_topology_depth=use_topology_depth,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
+        )
+    radius = base_layout.xcoord
+    linear_y = base_layout.ycoord
+    leaf_order = base_layout.leaf_order
     angular_span_degrees = float(angular_span_degrees)
     if (
         not math.isfinite(angular_span_degrees)
@@ -318,7 +323,18 @@ def _polar_coordinates(
             leaf_weight_by_leaf,
         )
         linear_origin = linear_y[leaf_order[0]]
-        denominator = max(sum(normalized_weight.values()), 1e-12)
+        linear_span = max(
+            linear_y[leaf_order[-1]] - linear_origin,
+            0.0,
+        )
+        # A complete circle also needs clearance across its seam. This formula
+        # reproduces the conventional weighted layout and remains valid after
+        # tidy compaction changes the interior gaps.
+        seam_gap = (
+            normalized_weight[leaf_order[0]]
+            + normalized_weight[leaf_order[-1]]
+        ) / 2.0
+        denominator = max(linear_span + seam_gap, 1e-12)
     angle = {
         node: start + (
             available * (linear_y[node] - linear_origin) / denominator
@@ -364,6 +380,8 @@ def polar_layout(
     use_topology_depth=False,
     fan_span=180.0,
     leaf_weight_by_leaf=None,
+    base_layout=None,
+    subtree_packing='standard',
 ):
     """Return rooted circular, fan, or straight radial geometry."""
 
@@ -375,6 +393,7 @@ def polar_layout(
         use_topology_depth=use_topology_depth,
         angular_span_degrees=angular_span,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
+        base_layout=base_layout,
     )
     edge_paths = {}
     support_anchors = {}
@@ -424,6 +443,7 @@ def polar_layout(
         root_path=root_path,
         equal_aspect=True,
         spatial=True,
+        metadata={'subtree_packing': subtree_packing},
     )
 
 
@@ -1221,7 +1241,7 @@ def tidy_layout(
         ycoord,
     )
     return TreeDrawingLayout(
-        name='tidy',
+        name='rectangular',
         xcoord=xcoord,
         ycoord=ycoord,
         leaf_order=leaf_order,
@@ -1230,6 +1250,7 @@ def tidy_layout(
         support_angles=support_angles,
         label_angles={leaf: 0.0 for leaf in leaf_order},
         root_path=root_path,
+        metadata={'subtree_packing': 'tidy'},
     )
 
 
@@ -1294,14 +1315,24 @@ def spiral_layout(
     turns=None,
     aspect_ratio=1.0,
     leaf_weight_by_leaf=None,
+    terminal_extent_by_leaf=None,
+    subtree_packing='standard',
 ):
     """Warp an orthogonal phylogram into an Archimedean spiral track."""
 
-    base = rectangular_layout(
-        tree,
-        use_topology_depth=use_topology_depth,
-        leaf_weight_by_leaf=leaf_weight_by_leaf,
-    )
+    if subtree_packing == 'tidy':
+        base = tidy_layout(
+            tree,
+            use_topology_depth=use_topology_depth,
+            terminal_extent_by_leaf=terminal_extent_by_leaf,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
+        )
+    else:
+        base = rectangular_layout(
+            tree,
+            use_topology_depth=use_topology_depth,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
+        )
     leaf_count = max(len(base.leaf_order), 1)
     if turns is None:
         turns = max(1.5, min(32.0, math.sqrt(leaf_count) / 2.0))
@@ -1392,6 +1423,7 @@ def spiral_layout(
         root_path=root_path,
         equal_aspect=True,
         spatial=True,
+        metadata={'subtree_packing': subtree_packing},
     )
 
 
@@ -1589,6 +1621,7 @@ def make_tree_layout(
     terminal_extent_by_leaf=None,
     label_size_by_leaf=None,
     tip_spacing='uniform',
+    subtree_packing='standard',
     unrooted_method='equal-angle',
     daylight_iterations=5,
 ):
@@ -1596,8 +1629,23 @@ def make_tree_layout(
 
     layout = str(layout).strip().lower()
     tip_spacing = str(tip_spacing).strip().lower()
+    subtree_packing = str(subtree_packing).strip().lower()
+    supported_layouts = {
+        'rectangular', 'slanted', 'cladogram', 'circular', 'fan', 'radial',
+        'unrooted', 'spiral', 'fractal',
+    }
+    if layout not in supported_layouts:
+        raise ValueError("Unsupported '--layout': {}".format(layout))
     if tip_spacing not in {'uniform', 'label-aware'}:
         raise ValueError("'--tip-spacing' must be uniform or label-aware.")
+    if subtree_packing not in {'standard', 'tidy'}:
+        raise ValueError("'--subtree-packing' must be standard or tidy.")
+    tidy_layouts = {'rectangular', 'circular', 'fan', 'spiral'}
+    if subtree_packing == 'tidy' and layout not in tidy_layouts:
+        raise ValueError(
+            "'--subtree-packing tidy' is supported only with rectangular, "
+            'circular, fan, and spiral layouts.'
+        )
     label_size_by_leaf = label_size_by_leaf or {}
     leaf_weight_by_leaf = None
     if tip_spacing == 'label-aware':
@@ -1609,11 +1657,20 @@ def make_tree_layout(
             for leaf in tree.leaves()
         }
     if layout == 'rectangular':
-        return rectangular_layout(
+        if subtree_packing == 'tidy':
+            return tidy_layout(
+                tree,
+                use_topology_depth=use_topology_depth,
+                terminal_extent_by_leaf=terminal_extent_by_leaf,
+                leaf_weight_by_leaf=leaf_weight_by_leaf,
+            )
+        drawing = rectangular_layout(
             tree,
             use_topology_depth=use_topology_depth,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
+        drawing.metadata['subtree_packing'] = subtree_packing
+        return drawing
     if layout == 'slanted':
         return slanted_layout(
             tree,
@@ -1625,13 +1682,6 @@ def make_tree_layout(
             tree,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
-    if layout == 'tidy':
-        return tidy_layout(
-            tree,
-            use_topology_depth=use_topology_depth,
-            terminal_extent_by_leaf=terminal_extent_by_leaf,
-            leaf_weight_by_leaf=leaf_weight_by_leaf,
-        )
     if layout == 'spiral':
         return spiral_layout(
             tree,
@@ -1639,6 +1689,8 @@ def make_tree_layout(
             turns=spiral_turns,
             aspect_ratio=aspect_ratio,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            terminal_extent_by_leaf=terminal_extent_by_leaf,
+            subtree_packing=subtree_packing,
         )
     if layout == 'fractal':
         return fractal_layout(
@@ -1647,12 +1699,22 @@ def make_tree_layout(
             leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     if layout in {'circular', 'fan', 'radial'}:
+        base_layout = None
+        if subtree_packing == 'tidy':
+            base_layout = tidy_layout(
+                tree,
+                use_topology_depth=use_topology_depth,
+                terminal_extent_by_leaf=terminal_extent_by_leaf,
+                leaf_weight_by_leaf=leaf_weight_by_leaf,
+            )
         return polar_layout(
             tree,
             mode=layout,
             use_topology_depth=use_topology_depth,
             fan_span=fan_span,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            base_layout=base_layout,
+            subtree_packing=subtree_packing,
         )
     if layout == 'unrooted':
         return unrooted_layout(

@@ -31,6 +31,7 @@ def make_draw_args(**kwargs):
         'outfile': None,
         'image_format': 'auto',
         'layout': 'rectangular',
+        'subtree_packing': 'standard',
         'spiral_turns': None,
         'fan_span': 180.0,
         'unrooted_method': 'equal-angle',
@@ -167,7 +168,6 @@ class TestDrawMain:
         [
             'slanted',
             'cladogram',
-            'tidy',
             'circular',
             'fan',
             'radial',
@@ -199,8 +199,14 @@ class TestDrawMain:
     def test_tidy_layout_preserves_branch_axis_and_compacts_tree(self):
         tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,E:8):1);', parser=1)
         rectangular = make_tree_layout(tree, layout='rectangular')
-        tidy = make_tree_layout(tree, layout='tidy')
+        tidy = make_tree_layout(
+            tree,
+            layout='rectangular',
+            subtree_packing='tidy',
+        )
 
+        assert tidy.name == 'rectangular'
+        assert tidy.metadata['subtree_packing'] == 'tidy'
         assert tidy.xcoord == rectangular.xcoord
         rectangular_span = max(rectangular.ycoord.values()) - min(rectangular.ycoord.values())
         tidy_span = max(tidy.ycoord.values()) - min(tidy.ycoord.values())
@@ -375,10 +381,15 @@ class TestDrawMain:
 
     def test_label_aware_tidy_layout_uses_variable_leaf_boxes(self):
         tree = Tree('(A:1,B:1,C:1);', parser=1)
-        uniform = make_tree_layout(tree, layout='tidy')
+        uniform = make_tree_layout(
+            tree,
+            layout='rectangular',
+            subtree_packing='tidy',
+        )
         aware = make_tree_layout(
             tree,
-            layout='tidy',
+            layout='rectangular',
+            subtree_packing='tidy',
             label_size_by_leaf={
                 tree['A']: (0.4, 0.1),
                 tree['B']: (0.4, 1.0),
@@ -396,7 +407,8 @@ class TestDrawMain:
             tree = Tree(newick, parser=1)
             drawing = make_tree_layout(
                 tree,
-                layout='tidy',
+                layout='rectangular',
+                subtree_packing='tidy',
                 label_size_by_leaf={
                     tree['A']: (2.0, 2.0),
                     tree['B']: (0.2, 0.1),
@@ -430,7 +442,8 @@ class TestDrawMain:
         tree = Tree('(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);', parser=1)
         drawing = make_tree_layout(
             tree,
-            layout='tidy',
+            layout='rectangular',
+            subtree_packing='tidy',
             label_size_by_leaf={
                 leaf: (
                     0.4,
@@ -478,7 +491,6 @@ class TestDrawMain:
             'rectangular',
             'slanted',
             'cladogram',
-            'tidy',
             'circular',
             'fan',
             'radial',
@@ -502,6 +514,93 @@ class TestDrawMain:
         assert drawing.leaf_order
         assert set(drawing.xcoord) == set(tree.traverse())
         assert set(drawing.ycoord) == set(tree.traverse())
+
+    @pytest.mark.parametrize('layout_name', ['rectangular', 'circular', 'fan', 'spiral'])
+    def test_tidy_subtree_packing_composes_with_supported_layouts(
+        self,
+        layout_name,
+    ):
+        tree = Tree('(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout=layout_name,
+            subtree_packing='tidy',
+            label_size_by_leaf={
+                leaf: (0.4, 1.0 if leaf.name == 'B' else 0.1)
+                for leaf in tree.leaves()
+            },
+            terminal_extent_by_leaf={leaf: 0.4 for leaf in tree.leaves()},
+            tip_spacing='label-aware',
+        )
+
+        assert drawing.name == layout_name
+        assert drawing.metadata['subtree_packing'] == 'tidy'
+        assert drawing.leaf_order == list(tree.leaves())
+        assert all(math.isfinite(value) for value in drawing.xcoord.values())
+        assert all(math.isfinite(value) for value in drawing.ycoord.values())
+
+    @pytest.mark.parametrize(
+        'layout_name',
+        ['slanted', 'cladogram', 'radial', 'unrooted', 'fractal'],
+    )
+    def test_tidy_subtree_packing_rejects_unverified_geometries(
+        self,
+        layout_name,
+    ):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+
+        with pytest.raises(ValueError, match='supported only with rectangular'):
+            make_tree_layout(
+                tree,
+                layout=layout_name,
+                subtree_packing='tidy',
+            )
+
+    def test_tidy_circular_packing_reserves_the_wraparound_seam(self):
+        tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,(E:1,F:1):1):1);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout='circular',
+            subtree_packing='tidy',
+            label_size_by_leaf={
+                leaf: (0.4, 1.5 if leaf.name in {'A', 'F'} else 0.1)
+                for leaf in tree.leaves()
+            },
+            terminal_extent_by_leaf={leaf: 0.4 for leaf in tree.leaves()},
+            tip_spacing='label-aware',
+        )
+        angles = [
+            math.radians(drawing.label_angles[leaf]) % (2.0 * math.pi)
+            for leaf in drawing.leaf_order
+        ]
+        cyclic_gaps = [
+            (angles[(index + 1) % len(angles)] - angles[index]) % (2.0 * math.pi)
+            for index in range(len(angles))
+        ]
+
+        assert min(cyclic_gaps) > 0.0
+        assert cyclic_gaps[-1] > min(cyclic_gaps[1:-1])
+
+    @pytest.mark.parametrize('layout_name', ['rectangular', 'circular', 'fan', 'spiral'])
+    def test_tidy_subtree_packing_is_deterministic(self, layout_name):
+        tree = Tree('(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);', parser=1)
+        kwargs = {
+            'layout': layout_name,
+            'subtree_packing': 'tidy',
+            'label_size_by_leaf': {
+                leaf: (0.4, 1.0 if leaf.name == 'B' else 0.1)
+                for leaf in tree.leaves()
+            },
+            'terminal_extent_by_leaf': {leaf: 0.4 for leaf in tree.leaves()},
+            'tip_spacing': 'label-aware',
+        }
+
+        first = make_tree_layout(tree, **kwargs)
+        second = make_tree_layout(tree, **kwargs)
+
+        assert first.xcoord == second.xcoord
+        assert first.ycoord == second.ycoord
+        assert first.edge_paths == second.edge_paths
 
     def test_label_aware_spiral_changes_tip_allocation(self):
         tree = Tree('(A:1,B:1,C:1,D:1);', parser=1)
@@ -565,7 +664,7 @@ class TestDrawMain:
             )
             assert length == pytest.approx(float(node.dist))
 
-    @pytest.mark.parametrize('removed_layout', ['packed', 'packed-phylogram'])
+    @pytest.mark.parametrize('removed_layout', ['packed', 'packed-phylogram', 'tidy'])
     def test_removed_packed_layout_names_have_no_compatibility_alias(
         self,
         removed_layout,
@@ -580,6 +679,12 @@ class TestDrawMain:
 
         with pytest.raises(ValueError, match='--tip-spacing'):
             make_tree_layout(tree, tip_spacing='packed')
+
+    def test_invalid_subtree_packing_is_rejected(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+
+        with pytest.raises(ValueError, match='--subtree-packing'):
+            make_tree_layout(tree, subtree_packing='dense')
 
     def test_tip_label_wrap_prefers_delimiters_and_hard_wraps(self):
         assert _wrap_tip_label('Arabidopsis_thaliana', 12) == 'Arabidopsis_\nthaliana'
@@ -859,6 +964,7 @@ class TestDrawMain:
         assert 'substitutions/site' in svg
         assert report['branch_lengths_encoded'] is True
         assert report['tip_spacing'] == 'label-aware'
+        assert report['subtree_packing'] == 'standard'
         assert report['scale_bar'] > 0.0
         assert report['scale_bar_position'] == 'bottom-reserved'
         assert report['scale_bar_label_position'] == 'above'
@@ -868,6 +974,27 @@ class TestDrawMain:
         )
         assert report['visible_tip_count'] == 4
         assert 'final_collisions_by_kind' in report
+
+    def test_draw_reports_composed_tidy_packing(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('(((A:1,B:2):1,C:1):1,(D:1,E:2):1);')
+        report_path = tmp_path / 'circular-tidy.json'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(tmp_path / 'circular-tidy.svg'),
+            image_format='svg',
+            layout='circular',
+            subtree_packing='tidy',
+            tip_label_position='branch-end',
+            tip_spacing='label-aware',
+            species_overlap_node_plot='no',
+            layout_report=str(report_path),
+        ))
+
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert report['layout_requested'] == 'circular'
+        assert report['layout'] == 'circular'
+        assert report['subtree_packing'] == 'tidy'
 
     def test_draw_rejects_scale_bar_for_topology_only_layout(
         self,

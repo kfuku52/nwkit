@@ -425,8 +425,11 @@ pdraw.add_argument('--image-format', '--image_format', dest='image_format', meta
                    choices=['auto', 'pdf', 'png', 'svg'],
                    help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.')
 pdraw.add_argument('--layout', metavar='LAYOUT', default='rectangular', type=str, required=False, action='store',
-                   choices=['rectangular', 'slanted', 'cladogram', 'tidy', 'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal'],
-                   help='default=%(default)s: Tree layout; label-aware spacing is controlled independently by --tip-spacing.')
+                   choices=['rectangular', 'slanted', 'cladogram', 'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal'],
+                   help='default=%(default)s: Tree geometry; subtree placement and label-aware spacing are controlled independently.')
+pdraw.add_argument('--subtree-packing', '--subtree_packing', dest='subtree_packing', metavar='standard|tidy', default='standard', type=str, required=False, action='store',
+                   choices=['standard', 'tidy'],
+                   help='default=%(default)s: Subtree placement strategy. "tidy" compacts rectangular, circular, fan, and spiral layouts while preserving tip order.')
 pdraw.add_argument('--spiral-turns', '--spiral_turns', dest='spiral_turns', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=auto: Number of turns used by --layout spiral.')
 pdraw.add_argument('--fan-span', '--fan_span', dest='fan_span', metavar='DEGREES', default=180.0, type=finite_float, required=False, action='store',

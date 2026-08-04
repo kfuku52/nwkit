@@ -161,6 +161,20 @@ def test_compatibility_aliases_resolve_to_canonical_destinations():
     assert dist_args.dist is None
     assert dist_args.comparison == 'unrooted'
 
+    draw_args = parser.parse_args([
+        'draw', '--layout', 'circular', '--subtree-packing', 'tidy',
+    ])
+    assert draw_args.layout == 'circular'
+    assert draw_args.subtree_packing == 'tidy'
+
+
+def test_tidy_is_a_packing_strategy_not_a_layout(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(['draw', '--layout', 'tidy'])
+
+    assert exc_info.value.code == 2
+    assert 'invalid choice' in capsys.readouterr().err
+
 
 @pytest.mark.parametrize('legacy_option', ['-d', '--dist'])
 def test_dist_legacy_metric_option_warns_and_preserves_rf_output(

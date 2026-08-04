@@ -6,13 +6,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
-- `draw --layout` adds slanted, aligned-tip cladogram, compact tidy, circular,
-  open-fan, rooted radial, equal-angle unrooted, Archimedean spiral, and
+- `draw --layout` adds slanted, aligned-tip cladogram, circular, open-fan,
+  rooted radial, equal-angle unrooted, Archimedean spiral, and
   rectangle-fitted fractal alternatives to the default rectangular phylogram.
   Existing support, node, probability, property, and categorical annotations
   follow the selected layout.
 - `draw --fan-span` controls the displayed angular span of the fan layout and
   defaults to a right-facing 180-degree semicircle.
+- `draw --subtree-packing standard|tidy` independently compacts subtrees in
+  rectangular, circular, fan, and spiral geometries while preserving tip
+  order and root-to-node depth. Circular packing reserves label-aware
+  clearance across the angular seam; unsupported geometries fail explicitly.
 - `draw --tip-spacing uniform|label-aware` independently controls spacing for
   every layout. Label-aware mode allocates rows, leaf boxes, or angular sectors
   from measured labels and tip annotations instead of treating every tip as
@@ -39,9 +43,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Changed
 
-- `draw --tip-label-position auto` now selects aligned labels for the default
-  rectangular layout and branch-end labels for other layouts. Tidy collision
-  geometry accounts for terminal label extents.
+- `draw --tip-label-position auto` now selects aligned labels for standard
+  rectangular drawings and branch-end labels for other geometries or tidy
+  packing. Tidy collision geometry accounts for terminal label extents.
 - Label-aware spacing is now an orthogonal option rather than separate
   `packed` and `packed-phylogram` layout names. Those pre-release layout names
   have been removed without compatibility aliases.
@@ -51,7 +55,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   unsafe passes, reports its actual iterations and accepted/rejected
   rotations, and rejects impractically large inputs with an actionable
   equal-angle/collapse alternative.
-- Deep rectangular, tidy, circular, fractal, and drawing-collapse
+- Deep rectangular (including tidy packing), circular, fractal, and drawing-collapse
   operations use iterative traversal instead of Python recursion.
 - Drawing collapse no longer treats a property observed in only some
   descendants as constant or averages numeric properties implicitly.
@@ -70,9 +74,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Fixed
 
-- Centered every tidy-layout parent on its direct child nodes after compact,
+- Centered every tidy-packed parent on its direct child nodes after compact,
   label-aware subtree placement.
-- Limited multiline-label height reservations in tidy layouts to their actual
+- Limited multiline-label height reservations in tidy packing to their actual
   terminal-axis extent, allowing horizontally disjoint labels and branches to
   use the same vertical space without overlap.
 - Prevented equal-daylight rotations from introducing branch crossings,
