@@ -1,3 +1,5 @@
+import json
+import math
 import re
 from argparse import Namespace
 
@@ -11,9 +13,13 @@ from matplotlib.figure import Figure
 from nwkit.draw import (
     _get_species_overlap_node_types,
     _load_tip_image,
+    _prepare_tip_label_text,
     _read_tip_image_manifest,
+    _wrap_tip_label,
     draw_main,
 )
+from nwkit.draw_layouts import make_tree_layout
+from nwkit.draw_quality import DrawingArtist, evaluate_drawing
 
 
 def make_draw_args(**kwargs):
@@ -23,6 +29,14 @@ def make_draw_args(**kwargs):
         'quoted_node_names': True,
         'outfile': None,
         'image_format': 'auto',
+        'layout': 'rectangular',
+        'spiral_turns': None,
+        'fan_open_angle': 30.0,
+        'unrooted_method': 'equal-angle',
+        'daylight_iterations': 5,
+        'max_visible_tips': None,
+        'collapse_label': None,
+        'collapse_property_aggregation': 'none',
         'species_parser': 'legacy',
         'species_regex': r'^([^_]+_[^_]+)(?:_|$)',
         'species_map_tsv': None,
@@ -43,8 +57,21 @@ def make_draw_args(**kwargs):
         'font_size': 8.0,
         'font_family': 'Helvetica',
         'branch_color': '#000000',
+        'branch_width': 0.8,
         'terminal_branch_color': None,
+        'branch_color_property': None,
+        'branch_width_property': None,
+        'branch_width_range': '0.4,2.5',
+        'scale_bar': 'none',
+        'branch_length_unit': '',
+        'tip_labels': True,
         'tip_label_position': 'aligned',
+        'tip_label_wrap': 'none',
+        'tip_label_font_style': 'plain',
+        'tip_track': [],
+        'tip_track_type': 'auto',
+        'tip_track_size': 5.0,
+        'tip_track_palette': 'viridis',
         'root_marker': 'none',
         'root_marker_color': '#0072B2',
         'root_marker_size': None,
@@ -60,6 +87,10 @@ def make_draw_args(**kwargs):
         'node_label_prefix': '',
         'property_color': [],
         'legend': True,
+        'legend_columns': 'auto',
+        'legend_position': 'auto',
+        'collision_policy': 'resolve',
+        'layout_report': None,
         'transparent': False,
     }
     defaults.update(kwargs)
@@ -78,6 +109,306 @@ def extract_svg_text_positions(svg_text):
 
 
 class TestDrawMain:
+    def test_collision_solver_moves_lower_priority_annotation(self):
+        figure, axes = plt.subplots(figsize=(2.0, 2.0))
+        fixed = axes.annotate('fixed', xy=(0.5, 0.5), xytext=(0.0, 0.0),
+                              textcoords='offset points')
+        movable = axes.annotate('movable', xy=(0.5, 0.5), xytext=(0.0, 0.0),
+                                textcoords='offset points')
+        artists = [
+            DrawingArtist(fixed, kind='node_label', priority=100),
+            DrawingArtist(
+                movable,
+                kind='node_label',
+                priority=10,
+                movable=True,
+            ),
+        ]
+
+        try:
+            report = evaluate_drawing(figure, artists, [], policy='resolve')
+        finally:
+            plt.close(figure)
+
+        assert report['initial_collision_count'] == 1
+        assert report['final_collision_count'] == 0
+        assert report['moved_artist_count'] == 1
+
+    @pytest.mark.parametrize(
+        'layout',
+        [
+            'slanted',
+            'cladogram',
+            'tidy',
+            'circular',
+            'fan',
+            'radial',
+            'unrooted',
+            'spiral',
+            'fractal',
+            'packed',
+            'packed-phylogram',
+        ],
+    )
+    def test_draw_writes_svg_with_modern_layout(self, tmp_nwk, tmp_path, layout):
+        infile = tmp_nwk('(((A:1,B:1):1,C:1):1,(D:1,E:8):1);')
+        outfile = tmp_path / '{}.svg'.format(layout)
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            layout=layout,
+            tip_label_position='branch-end',
+            species_overlap_node_plot='no',
+            figure_width=5.0,
+            figure_height=4.0,
+        ))
+
+        svg = outfile.read_text()
+        assert '<svg' in svg
+        for leaf_name in ('A', 'B', 'C', 'D', 'E'):
+            assert '>{}<'.format(leaf_name) in svg
+
+    def test_tidy_layout_preserves_branch_axis_and_compacts_tree(self):
+        tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,E:8):1);', parser=1)
+        rectangular = make_tree_layout(tree, layout='rectangular')
+        tidy = make_tree_layout(tree, layout='tidy')
+
+        assert tidy.xcoord == rectangular.xcoord
+        rectangular_span = max(rectangular.ycoord.values()) - min(rectangular.ycoord.values())
+        tidy_span = max(tidy.ycoord.values()) - min(tidy.ycoord.values())
+        assert tidy_span < rectangular_span
+
+    def test_slanted_layout_preserves_phylogram_depth_with_straight_edges(self):
+        tree = Tree('((A:1,B:2):3,C:4);', parser=1)
+        rectangular = make_tree_layout(tree, layout='rectangular')
+        slanted = make_tree_layout(tree, layout='slanted')
+
+        assert slanted.xcoord == rectangular.xcoord
+        assert all(len(path) == 2 for path in slanted.edge_paths.values())
+
+    def test_cladogram_aligns_tips_and_ignores_branch_lengths(self):
+        tree = Tree('(((A:1,B:9):2,C:7):3,D:4);', parser=1)
+        cladogram = make_tree_layout(tree, layout='cladogram')
+
+        tip_positions = {cladogram.xcoord[leaf] for leaf in tree.leaves()}
+        assert len(tip_positions) == 1
+        assert cladogram.xcoord[tree] == 0.0
+        assert all(len(path) == 2 for path in cladogram.edge_paths.values())
+
+    @pytest.mark.parametrize('layout', ['circular', 'fan'])
+    def test_circular_layouts_use_arc_then_radial_paths(self, layout):
+        tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', parser=1)
+        drawing = make_tree_layout(tree, layout=layout)
+
+        assert drawing.spatial is True
+        assert drawing.equal_aspect is True
+        assert any(len(path) > 3 for path in drawing.edge_paths.values())
+
+    def test_fan_open_angle_controls_tip_angular_span(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        fan = make_tree_layout(tree, layout='fan', fan_open_angle=60.0)
+
+        angles = sorted(fan.label_angles.values())
+        assert angles[-1] - angles[0] == pytest.approx(300.0)
+
+    def test_radial_layout_uses_straight_edges(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        radial = make_tree_layout(tree, layout='radial')
+
+        assert radial.spatial is True
+        assert all(len(path) == 2 for path in radial.edge_paths.values())
+
+    def test_unrooted_layout_suppresses_degree_two_root_on_joined_edge(self):
+        tree = Tree('((A:1,B:1):2,(C:1,D:1):4);', parser=1)
+        unrooted = make_tree_layout(tree, layout='unrooted')
+        first, second = tree.get_children()
+
+        joined_length = math.hypot(
+            unrooted.xcoord[second] - unrooted.xcoord[first],
+            unrooted.ycoord[second] - unrooted.ycoord[first],
+        )
+        first_to_root = math.hypot(
+            unrooted.xcoord[tree] - unrooted.xcoord[first],
+            unrooted.ycoord[tree] - unrooted.ycoord[first],
+        )
+        assert joined_length == pytest.approx(6.0)
+        assert first_to_root == pytest.approx(2.0)
+        assert unrooted.root_path == []
+
+    def test_equal_daylight_unrooted_layout_preserves_every_branch_length(self):
+        tree = Tree(
+            '(((A:1,B:2):1,C:3):2,((D:1,E:2):1,(F:1,G:1):2):4);',
+            parser=1,
+        )
+        equal_angle = make_tree_layout(tree, layout='unrooted')
+        daylight = make_tree_layout(
+            tree,
+            layout='unrooted',
+            unrooted_method='equal-daylight',
+            daylight_iterations=8,
+        )
+
+        assert daylight.name == 'unrooted-daylight'
+        assert any(
+            daylight.xcoord[node] != pytest.approx(equal_angle.xcoord[node])
+            or daylight.ycoord[node] != pytest.approx(equal_angle.ycoord[node])
+            for node in tree.traverse()
+        )
+        for node in tree.traverse():
+            if node.is_root:
+                continue
+            distance = math.hypot(
+                daylight.xcoord[node] - daylight.xcoord[node.up],
+                daylight.ycoord[node] - daylight.ycoord[node.up],
+            )
+            assert distance == pytest.approx(float(node.dist))
+
+    def test_fan_layout_rejects_invalid_open_angle(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+
+        with pytest.raises(ValueError, match='--fan-open-angle'):
+            make_tree_layout(tree, layout='fan', fan_open_angle=360.0)
+
+    def test_packed_layout_allocates_more_angle_to_tall_labels(self):
+        tree = Tree('(A:1,B:1,C:1);', parser=1)
+        sizes = {
+            tree['A']: (0.4, 0.1),
+            tree['B']: (0.4, 1.0),
+            tree['C']: (0.4, 0.1),
+        }
+        packed = make_tree_layout(
+            tree,
+            layout='packed',
+            aspect_ratio=1.4,
+            label_size_by_leaf=sizes,
+        )
+
+        angles = [
+            math.radians(packed.label_angles[tree[name]]) % (2.0 * math.pi)
+            for name in ('A', 'B', 'C')
+        ]
+        gaps = [
+            (angles[(index + 1) % 3] - angles[index]) % (2.0 * math.pi)
+            for index in range(3)
+        ]
+        assert packed.name == 'packed'
+        assert packed.spatial is True
+        assert gaps[0] > gaps[2]
+        assert gaps[1] > gaps[2]
+
+    def test_packed_phylogram_preserves_root_distance_as_radius(self):
+        tree = Tree('(((A:1,B:2):3,C:2):1,(D:5,E:1):2);', parser=1)
+        rectangular = make_tree_layout(tree, layout='rectangular')
+        packed = make_tree_layout(
+            tree,
+            layout='packed-phylogram',
+            label_size_by_leaf={
+                leaf: (0.5, 0.1 + index * 0.1)
+                for index, leaf in enumerate(tree.leaves())
+            },
+        )
+
+        assert packed.name == 'packed-phylogram'
+        for node in tree.traverse():
+            radius = math.hypot(packed.xcoord[node], packed.ycoord[node])
+            assert radius == pytest.approx(rectangular.xcoord[node])
+
+    def test_tip_label_wrap_prefers_delimiters_and_hard_wraps(self):
+        assert _wrap_tip_label('Arabidopsis_thaliana', 12) == 'Arabidopsis_\nthaliana'
+        assert _wrap_tip_label('ABCDEFGHIJ', 4) == 'ABCD\nEFGH\nIJ'
+
+    def test_auto_tip_label_wraps_long_names_but_leaves_short_names(self):
+        tree = Tree('(Short:1,VeryLongSpeciesNameWithoutDelimiter:1);', parser=1)
+        text_by_leaf, size_by_leaf = _prepare_tip_label_text(
+            leaf_order=list(tree.leaves()),
+            wrap='auto',
+            font_size=8.0,
+            font_family='DejaVu Sans',
+            layout_name='packed',
+            panel_width_in=7.2,
+            panel_height_in=5.0,
+        )
+
+        assert text_by_leaf[tree['Short']] == 'Short'
+        assert '\n' in text_by_leaf[tree['VeryLongSpeciesNameWithoutDelimiter']]
+        assert tree['VeryLongSpeciesNameWithoutDelimiter'].name == (
+            'VeryLongSpeciesNameWithoutDelimiter'
+        )
+        assert (
+            size_by_leaf[tree['VeryLongSpeciesNameWithoutDelimiter']][0]
+            < 1.0
+        )
+
+    def test_taxonomy_wrap_keeps_binomial_together(self):
+        tree = Tree('(Arabidopsis_thaliana_accession_Col_0:1);', parser=1)
+        text_by_leaf, _ = _prepare_tip_label_text(
+            leaf_order=list(tree.leaves()),
+            wrap='taxonomy',
+            font_size=8.0,
+            font_family='DejaVu Sans',
+            layout_name='packed',
+            panel_width_in=1.0,
+            panel_height_in=1.0,
+        )
+
+        displayed = text_by_leaf[tree['Arabidopsis_thaliana_accession_Col_0']]
+        assert displayed.startswith('Arabidopsis_thaliana\n')
+
+    def test_draw_rejects_invalid_tip_label_wrap(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('(A:1,B:1);')
+
+        with pytest.raises(ValueError, match='--tip-label-wrap'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'invalid-wrap.svg'),
+                species_overlap_node_plot='no',
+                tip_label_wrap='zero',
+            ))
+
+    def test_spiral_layout_warps_connectors_into_sampled_curves(self):
+        tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,E:8):1);', parser=1)
+        spiral = make_tree_layout(tree, layout='spiral', spiral_turns=2.5)
+
+        assert spiral.spatial is True
+        assert spiral.equal_aspect is True
+        assert any(len(path) > 3 for path in spiral.edge_paths.values())
+        assert all(math.isfinite(value) for value in spiral.xcoord.values())
+        assert all(math.isfinite(value) for value in spiral.ycoord.values())
+
+    def test_fractal_layout_fits_requested_rectangular_aspect(self):
+        tree = Tree('(((A:1,B:1):1,C:1):1,(D:1,E:8):1);', parser=1)
+        fractal = make_tree_layout(tree, layout='fractal', aspect_ratio=1.8)
+
+        node_x_span = max(fractal.xcoord.values()) - min(fractal.xcoord.values())
+        node_y_span = max(fractal.ycoord.values()) - min(fractal.ycoord.values())
+        assert node_x_span / node_y_span == pytest.approx(1.8)
+
+    def test_spiral_layout_rejects_nonpositive_turn_count(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+
+        with pytest.raises(ValueError, match='--spiral-turns'):
+            make_tree_layout(tree, layout='spiral', spiral_turns=0)
+
+    def test_draw_can_hide_tip_labels_for_dense_overview(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((Alpha:1,Beta:1):1,(Gamma:1,Delta:1):1);')
+        outfile = tmp_path / 'unlabelled-fractal.svg'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            layout='fractal',
+            tip_labels=False,
+            tip_label_position='branch-end',
+            species_overlap_node_plot='no',
+        ))
+
+        svg = outfile.read_text()
+        assert 'Alpha' not in svg
+        assert 'Beta' not in svg
+
     def test_draw_rejects_unreasonably_large_tip_image_size(
         self,
         tmp_nwk,
@@ -236,6 +567,147 @@ class TestDrawMain:
 
         assert outfile.exists()
         assert outfile.stat().st_size > 0
+
+    def test_draw_writes_scale_bar_and_layout_quality_report(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A:1,B:2):1,(C:3,D:4):2);')
+        outfile = tmp_path / 'scaled.svg'
+        report_path = tmp_path / 'layout.json'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            species_overlap_node_plot='no',
+            scale_bar='auto',
+            branch_length_unit='substitutions/site',
+            layout_report=str(report_path),
+        ))
+
+        svg = outfile.read_text(encoding='utf-8')
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert 'substitutions/site' in svg
+        assert report['branch_lengths_encoded'] is True
+        assert report['scale_bar'] > 0.0
+        assert report['visible_tip_count'] == 4
+        assert 'final_collisions_by_kind' in report
+
+    def test_draw_rejects_scale_bar_for_topology_only_layout(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A:1,B:2):1,C:3);')
+
+        with pytest.raises(ValueError, match='branch-length-preserving'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'packed.svg'),
+                species_overlap_node_plot='no',
+                layout='packed',
+                tip_label_position='branch-end',
+                scale_bar='auto',
+            ))
+
+    def test_draw_auto_collapses_only_the_rendering_copy(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk(
+            '(((A:1,B:1):1,(C:1,D:1):1):1,'
+            '((E:1,F:1):1,(G:1,H:1):1):1);'
+        )
+        outfile = tmp_path / 'collapsed.svg'
+        report_path = tmp_path / 'collapsed.json'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            max_visible_tips=4,
+            layout_report=str(report_path),
+        ))
+
+        svg = outfile.read_text(encoding='utf-8')
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert 'A…B (n=2)' in svg
+        assert report['input_tip_count'] == 8
+        assert report['visible_tip_count'] == 4
+        assert len(report['collapsed_clades']) == 4
+        with open(infile, encoding='utf-8') as handle:
+            assert handle.read().count('A') == 1
+
+    def test_draw_maps_tip_tracks_and_branch_styles_from_nhx(self, tmp_path):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        for index, node in enumerate(tree.traverse()):
+            if not node.is_root:
+                node.add_props(
+                    regime='foreground' if index % 2 else 'background',
+                    signal=index + 1,
+                )
+        for index, leaf in enumerate(tree.leaves()):
+            leaf.add_props(
+                state='X' if index % 2 else 'Y',
+                score=index / 3.0,
+            )
+        infile = tmp_path / 'layers.nhx'
+        infile.write_text(
+            tree.write(
+                props=['regime', 'signal', 'state', 'score'],
+                parser=1,
+                format_root_node=True,
+            ),
+            encoding='utf-8',
+        )
+        outfile = tmp_path / 'layers.svg'
+        report_path = tmp_path / 'layers.json'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            tip_track=['state', 'score'],
+            branch_color_property='regime',
+            branch_width_property='signal',
+            property_color=[
+                'regime:foreground=#D55E00',
+                'regime:background=#0072B2',
+                'state:X=#009E73',
+                'state:Y=#CC79A7',
+            ],
+            layout_report=str(report_path),
+        ))
+
+        svg = outfile.read_text(encoding='utf-8').lower()
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert '#d55e00' in svg
+        assert '#0072b2' in svg
+        assert '#009e73' in svg
+        assert '#cc79a7' in svg
+        assert report['artist_counts']['tip_track'] == 8
+        assert report['tip_track_properties'] == ['state', 'score']
+
+    def test_draw_taxonomy_typography_italicizes_exact_binomial(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('(Arabidopsis_thaliana:1,Sample_1:1);')
+        outfile = tmp_path / 'taxonomy.svg'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            species_overlap_node_plot='no',
+            tip_label_font_style='taxonomy',
+        ))
+
+        svg = outfile.read_text(encoding='utf-8')
+        assert "font: italic 8px 'Helvetica'" in svg
 
     def test_draw_uses_tight_tip_label_spacing(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')

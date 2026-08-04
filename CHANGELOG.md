@@ -4,6 +4,74 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- `draw --layout` adds slanted, aligned-tip cladogram, compact tidy, circular,
+  open-fan, rooted radial, equal-angle unrooted, Archimedean spiral, and
+  rectangle-fitted fractal alternatives to the default rectangular phylogram.
+  Existing support, node, probability, property, and categorical annotations
+  follow the selected layout.
+- `draw --fan-open-angle` controls the gap in the fan layout.
+- `draw --layout packed` allocates radial-fractal sectors from measured tip
+  label footprints and fits the tree into the remaining rectangular area.
+- `draw --tip-label-wrap none|auto|taxonomy|INT` adds display-only label wrapping. Auto
+  mode compares measured multiline candidates and wraps only when doing so
+  reduces estimated layout congestion; taxonomy mode preserves a recognized
+  `Genus_species` binomial prefix.
+- `draw --tip-labels no` suppresses individual names in dense overview figures.
+- `draw --layout packed-phylogram` allocates polar sectors from measured label
+  footprints while retaining branch-length depth as radius.
+- `draw --unrooted-method equal-daylight` iteratively equalizes open angular
+  space without changing edge lengths.
+- `draw --scale-bar` and `--branch-length-unit` add an exact scale only to
+  layouts whose geometry retains branch-length units.
+- `draw --tip-track`, branch property color/width mappings, taxonomic
+  typography, multi-column legends, and continuous palettes add composable
+  annotation layers.
+- `draw --max-visible-tips` creates a drawing-only, auditable collapsed view
+  for large trees.
+- `draw --collision-policy` and `--layout-report` provide deterministic
+  post-render collision handling and a JSON layout-quality report.
+
+### Changed
+
+- `draw --tip-label-position auto` now selects aligned labels for the default
+  rectangular layout and branch-end labels for other layouts. Tidy collision
+  geometry accounts for terminal label extents.
+- Dense legends are placed and columnized automatically, and rendered
+  annotations participate in final figure-boundary fitting.
+- Equal-daylight refinement now preserves planarity by reducing or rejecting
+  unsafe passes, reports its actual iterations and accepted/rejected
+  rotations, and rejects impractically large inputs with an actionable
+  equal-angle/collapse alternative.
+- Deep rectangular, tidy, fractal, packed-phylogram, and drawing-collapse
+  operations use iterative traversal instead of Python recursion.
+- Drawing collapse no longer treats a property observed in only some
+  descendants as constant or averages numeric properties implicitly.
+  `--collapse-property-aggregation mean` opts into complete-case means.
+- Categorical branch colors and legends now share one stable value-to-color
+  mapping; legends retain all categories, disclose missing track values, and
+  show a single swatch for a constant continuous track.
+- Scale bars are limited to layouts with directly measurable branch-length
+  segments and to values no greater than the displayed tree-depth span.
+- Layout reports now include the NWKIT/output/font configuration,
+  branch-length semantics, complete branch-collision status, and explicit
+  figure-boundary overflow measurements. Unresolved default-policy collisions
+  and unfit fixed-size figures emit warnings.
+
+### Fixed
+
+- Prevented equal-daylight rotations from introducing branch crossings,
+  spatial root stubs from overlapping a root branch, and deep caterpillar
+  trees from exceeding Python's recursion limit during drawing or collapse.
+- Prevented `--layout-report` from aliasing the image or any drawing input,
+  including image assets, before any output is written.
+- Removed quadratic rectangle-union scans and the former incomplete
+  branch-collision shortcut above 500 annotations; collision sweeps now choose
+  the less-congested axis and index branch segments spatially.
+- Matplotlib figures are released on every rendering exception, including
+  failures before the save step.
+
 ## [0.34.1] - 2026-07-31
 
 ### Added

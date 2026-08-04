@@ -424,6 +424,23 @@ pdraw.add_argument('-o', '--outfile', metavar='PATH', default='nwkit_draw.pdf', 
 pdraw.add_argument('--image-format', '--image_format', dest='image_format', metavar='auto|pdf|png|svg', default='auto', type=str, required=False, action='store',
                    choices=['auto', 'pdf', 'png', 'svg'],
                    help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.')
+pdraw.add_argument('--layout', metavar='LAYOUT', default='rectangular', type=str, required=False, action='store',
+                   choices=['rectangular', 'slanted', 'cladogram', 'tidy', 'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal', 'packed', 'packed-phylogram'],
+                   help='default=%(default)s: Tree layout, including label-aware packed topology and branch-length-preserving packed-phylogram arrangements.')
+pdraw.add_argument('--spiral-turns', '--spiral_turns', dest='spiral_turns', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
+                   help='default=auto: Number of turns used by --layout spiral.')
+pdraw.add_argument('--fan-open-angle', '--fan_open_angle', dest='fan_open_angle', metavar='DEGREES', default=30.0, type=finite_float, required=False, action='store',
+                   help='default=%(default)s: Left-side opening in degrees used by --layout fan; use 0 for a complete circle.')
+pdraw.add_argument('--unrooted-method', '--unrooted_method', dest='unrooted_method', metavar='equal-angle|equal-daylight', default='equal-angle', type=str, choices=['equal-angle', 'equal-daylight'],
+                   help='default=%(default)s: Angular optimization used by --layout unrooted.')
+pdraw.add_argument('--daylight-iterations', '--daylight_iterations', dest='daylight_iterations', metavar='INT', default=5, type=int,
+                   help='default=%(default)s: Maximum equal-daylight refinement passes.')
+pdraw.add_argument('--max-visible-tips', '--max_visible_tips', dest='max_visible_tips', metavar='INT', default=None, type=int,
+                   help='default=None: Automatically collapse clades in a drawing-only copy until no more than INT tips remain visible.')
+pdraw.add_argument('--collapse-label', '--collapse_label', dest='collapse_label', metavar='TEXT', default=None, type=str,
+                   help='default="{first}…{last} (n={tips})": Label template for automatically collapsed clades; fields are clade, first, last, and tips.')
+pdraw.add_argument('--collapse-property-aggregation', '--collapse_property_aggregation', dest='collapse_property_aggregation', metavar='none|mean', default='none', type=str, choices=['none', 'mean'],
+                   help='default=%(default)s: Preserve only complete constant properties on collapsed clades; mean explicitly averages complete numeric properties.')
 pdraw.add_argument('--species-overlap-node-plot', '--species_overlap_node_plot', dest='species_overlap_node_plot', metavar='yes|no|auto', default='auto', required=False, type=str,
                    choices=['yes', 'no', 'auto'],
                    help='default=%(default)s: Show speciation/duplication node markers. '
@@ -464,11 +481,37 @@ pdraw.add_argument('--font-family', '--font_family', dest='font_family', metavar
                    help='default=%(default)s: Matplotlib font family used for labels and legends.')
 pdraw.add_argument('--branch-color', '--branch_color', dest='branch_color', metavar='COLOR', default='#000000', type=str, required=False, action='store',
                    help='default=%(default)s: Matplotlib color for branches.')
+pdraw.add_argument('--branch-width', '--branch_width', dest='branch_width', metavar='FLOAT', default=0.8, type=finite_float,
+                   help='default=%(default)s: Base branch width in points.')
 pdraw.add_argument('--terminal-branch-color', '--terminal_branch_color', dest='terminal_branch_color', metavar='COLOR', default=None, type=str, required=False, action='store',
                    help='default=None: Optional color applied to terminal branches.')
-pdraw.add_argument('--tip-label-position', '--tip_label_position', dest='tip_label_position', metavar='aligned|branch-end', default='aligned', type=str, required=False, action='store',
-                   choices=['aligned', 'branch-end'],
-                   help='default=%(default)s: Align tip labels at the right edge or place each label beside its branch endpoint.')
+pdraw.add_argument('--branch-color-property', '--branch_color_property', dest='branch_color_property', metavar='PROPERTY', default=None, type=str,
+                   help='default=None: Map a categorical Newick/NHX branch property to color.')
+pdraw.add_argument('--branch-width-property', '--branch_width_property', dest='branch_width_property', metavar='PROPERTY', default=None, type=str,
+                   help='default=None: Map a numeric Newick/NHX branch property to width.')
+pdraw.add_argument('--branch-width-range', '--branch_width_range', dest='branch_width_range', metavar='MIN,MAX', default='0.4,2.5', type=str,
+                   help='default=%(default)s: Output width range for --branch-width-property.')
+pdraw.add_argument('--scale-bar', '--scale_bar', dest='scale_bar', metavar='none|auto|FLOAT', default='none', type=str,
+                   help='default=%(default)s: Add an exact scale to a layout with directly measurable branch-length segments.')
+pdraw.add_argument('--branch-length-unit', '--branch_length_unit', dest='branch_length_unit', metavar='TEXT', default='', type=str,
+                   help='default="": Unit appended to the scale-bar label, for example substitutions/site or Ma.')
+pdraw.add_argument('--tip-labels', '--tip_labels', dest='tip_labels', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
+                   help='default=%(default)s: Whether to draw tip labels. Disabling them is useful for dense overview layouts.')
+pdraw.add_argument('--tip-label-position', '--tip_label_position', dest='tip_label_position', metavar='auto|aligned|branch-end', default='auto', type=str, required=False, action='store',
+                   choices=['auto', 'aligned', 'branch-end'],
+                   help='default=%(default)s: Align labels at the right edge for rectangular layout and place them beside branch endpoints otherwise.')
+pdraw.add_argument('--tip-label-wrap', '--tip_label_wrap', dest='tip_label_wrap', metavar='none|auto|taxonomy|INT', default='none', type=str, required=False, action='store',
+                   help='default=%(default)s: Display-only wrapping; taxonomy preserves an underscore-delimited genus_species binomial on one line.')
+pdraw.add_argument('--tip-label-font-style', '--tip_label_font_style', dest='tip_label_font_style', metavar='plain|italic|taxonomy', default='plain', type=str, choices=['plain', 'italic', 'taxonomy'],
+                   help='default=%(default)s: Typography for tip labels; taxonomy italicizes exact genus_species binomials conservatively.')
+pdraw.add_argument('--tip-track', '--tip_track', dest='tip_track', metavar='PROPERTY', default=[], type=str, action='append',
+                   help='default=[]: Add a categorical or continuous tip annotation track. May be repeated.')
+pdraw.add_argument('--tip-track-type', '--tip_track_type', dest='tip_track_type', metavar='auto|categorical|continuous', default='auto', type=str, choices=['auto', 'categorical', 'continuous'],
+                   help='default=%(default)s: Shared interpretation of values in --tip-track properties.')
+pdraw.add_argument('--tip-track-size', '--tip_track_size', dest='tip_track_size', metavar='FLOAT', default=5.0, type=finite_float,
+                   help='default=%(default)s: Width and height of each tip-track tile in points.')
+pdraw.add_argument('--tip-track-palette', '--tip_track_palette', dest='tip_track_palette', metavar='STR', default='viridis', type=str,
+                   help='default=%(default)s: Matplotlib colormap for continuous tip tracks; categorical tracks use --trait-palette.')
 pdraw.add_argument('--root-marker', '--root_marker', dest='root_marker', metavar='none|circle|diamond', default='none', type=str, required=False, action='store',
                    choices=['none', 'circle', 'diamond'],
                    help='default=%(default)s: Optional marker drawn at the displayed root.')
@@ -500,6 +543,14 @@ pdraw.add_argument('--property-color', '--property_color', dest='property_color'
                    help='default=[]: Color assigned to a tip-badge value or node-pie property/state. May be repeated.')
 pdraw.add_argument('--legend', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Whether to draw legends for enabled categorical layers.')
+pdraw.add_argument('--legend-columns', '--legend_columns', dest='legend_columns', metavar='auto|INT', default='auto', type=str,
+                   help='default=%(default)s: Number of legend columns when the legend is above the tree.')
+pdraw.add_argument('--legend-position', '--legend_position', dest='legend_position', metavar='auto|top|right', default='auto', type=str, choices=['auto', 'top', 'right'],
+                   help='default=%(default)s: Place dense legends to the right automatically or force top/right placement.')
+pdraw.add_argument('--collision-policy', '--collision_policy', dest='collision_policy', metavar='resolve|warn|error|ignore', default='resolve', type=str, choices=['resolve', 'warn', 'error', 'ignore'],
+                   help='default=%(default)s: Resolve movable annotation collisions, report them, reject them, or leave them unchanged.')
+pdraw.add_argument('--layout-report', '--layout_report', dest='layout_report', metavar='PATH', default=None, type=str,
+                   help='default=None: Write a reproducible JSON report of layout choices, collisions, wrapping, and collapsing; use - for STDOUT.')
 pdraw.add_argument('--transparent', metavar='yes|no', default='no', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Save the figure with a transparent background.')
 pdraw.set_defaults(handler=command_draw)

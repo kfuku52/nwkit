@@ -1,3 +1,4 @@
+import hashlib
 import math
 import os
 import sys
@@ -8,12 +9,20 @@ import pandas as pd
 
 import matplotlib.pyplot as plt
 from matplotlib import colors as mcolors
+from matplotlib.backends.backend_agg import FigureCanvasAgg
+from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
-from matplotlib.offsetbox import AnnotationBbox, OffsetImage
+from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
 from matplotlib.path import Path as MplPath
-from matplotlib.patches import Patch
+from matplotlib.patches import Patch, Rectangle
+from matplotlib.text import Text
+from matplotlib.font_manager import FontProperties
+from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
 from nwkit import __version__
+from nwkit.draw_layouts import get_rectangular_coordinates, make_tree_layout
+from nwkit.draw_prep import collapse_tree_for_drawing
+from nwkit.draw_quality import DrawingArtist, evaluate_drawing, write_layout_report
 from nwkit.util import (
     extract_species_label,
     is_rooted,
@@ -50,6 +59,33 @@ def _resolve_image_format(outfile, image_format):
     return 'pdf'
 
 
+def _tree_drawing_fingerprint(tree):
+    """Hash ordered topology and node properties without recursive Newick I/O."""
+
+    digest = hashlib.sha256()
+
+    def add(value):
+        encoded = str(value).encode('utf-8', errors='backslashreplace')
+        digest.update(str(len(encoded)).encode('ascii'))
+        digest.update(b':')
+        digest.update(encoded)
+
+    stack = [('node', tree)]
+    while stack:
+        event, value = stack.pop()
+        if event == 'close':
+            digest.update(b')')
+            continue
+        node = value
+        digest.update(b'(')
+        for key in sorted(node.props):
+            add(key)
+            add(node.props[key])
+        stack.append(('close', None))
+        stack.extend(('node', child) for child in reversed(node.get_children()))
+    return digest.hexdigest()
+
+
 def _has_positive_branch_length(tree):
     for node in tree.traverse():
         if node.is_root:
@@ -60,37 +96,10 @@ def _has_positive_branch_length(tree):
 
 
 def _get_tree_plot_coordinates(tree, use_topology_depth=False):
-    xcoord = dict()
-    ycoord = dict()
-    leaf_order = list()
-
-    def assign_x(node, parent_x):
-        xcoord[node] = float(parent_x)
-        for child in node.get_children():
-            if use_topology_depth:
-                child_dist = 1.0
-            else:
-                child_dist = 0.0 if (child.dist is None) else float(child.dist)
-            assign_x(node=child, parent_x=parent_x + child_dist)
-
-    def assign_y(node, current_y):
-        if node.is_leaf:
-            ycoord[node] = float(current_y)
-            leaf_order.append(node)
-            return current_y + 1
-        child_ys = list()
-        for child in node.get_children():
-            current_y = assign_y(node=child, current_y=current_y)
-            child_ys.append(ycoord[child])
-        if len(child_ys) == 0:
-            ycoord[node] = float(current_y)
-            return current_y + 1
-        ycoord[node] = float(sum(child_ys) / len(child_ys))
-        return current_y
-
-    assign_x(node=tree, parent_x=0.0)
-    assign_y(node=tree, current_y=0)
-    return xcoord, ycoord, leaf_order
+    return get_rectangular_coordinates(
+        tree,
+        use_topology_depth=use_topology_depth,
+    )
 
 
 def _get_species_by_leaf(tree, args):
@@ -454,7 +463,8 @@ def _property_color(prop, value, property_colors, fallback_index=0, palette='tab
 def _draw_probability_pie(ax, x, y, probabilities, colors, marker_size_pt):
     total = sum(probabilities)
     if total <= 0.0:
-        return
+        return []
+    artists = []
     normalized = [probability / total for probability in probabilities]
     cumulative = 0.0
     for probability, color in zip(normalized, colors):
@@ -468,7 +478,7 @@ def _draw_probability_pie(ax, x, y, probabilities, colors, marker_size_pt):
         ]
         vertices = [(0.0, 0.0)] + [(math.cos(angle), math.sin(angle)) for angle in angles] + [(0.0, 0.0)]
         codes = [MplPath.MOVETO] + ([MplPath.LINETO] * len(angles)) + [MplPath.CLOSEPOLY]
-        ax.scatter(
+        artists.append(ax.scatter(
             [x],
             [y],
             s=marker_size_pt ** 2,
@@ -477,8 +487,8 @@ def _draw_probability_pie(ax, x, y, probabilities, colors, marker_size_pt):
             edgecolor='none',
             linewidth=0.0,
             zorder=6,
-        )
-    ax.scatter(
+        ))
+    artists.append(ax.scatter(
         [x],
         [y],
         s=marker_size_pt ** 2,
@@ -487,7 +497,8 @@ def _draw_probability_pie(ax, x, y, probabilities, colors, marker_size_pt):
         edgecolor=LEGEND_EDGE_COLOR,
         linewidth=0.45,
         zorder=7,
-    )
+    ))
+    return artists
 
 
 def _format_property_value(value, decimals=2):
@@ -499,12 +510,17 @@ def _format_property_value(value, decimals=2):
 
 def _isolated_matplotlib_state(function):
     def wrapped(*args, **kwargs):
-        with matplotlib.rc_context({
-            'font.family': [FONT_FAMILY],
-            'font.sans-serif': [FONT_FAMILY],
-            'svg.fonttype': 'none',
-        }):
-            return function(*args, **kwargs)
+        existing_figures = set(plt.get_fignums())
+        try:
+            with matplotlib.rc_context({
+                'font.family': [FONT_FAMILY],
+                'font.sans-serif': [FONT_FAMILY],
+                'svg.fonttype': 'none',
+            }):
+                return function(*args, **kwargs)
+        finally:
+            for figure_number in set(plt.get_fignums()) - existing_figures:
+                plt.close(figure_number)
     return wrapped
 
 
@@ -526,6 +542,538 @@ def _validated_tip_image_size(value):
     return image_size_pt
 
 
+def _readable_text_angle(angle):
+    """Return a left-to-right equivalent of an edge direction in degrees."""
+
+    angle = ((float(angle) + 180.0) % 360.0) - 180.0
+    if angle > 90.0:
+        angle -= 180.0
+    elif angle < -90.0:
+        angle += 180.0
+    return angle
+
+
+def _spatial_text_alignment(angle):
+    """Choose label alignment while retaining the outward offset direction."""
+
+    normalized = ((float(angle) + 180.0) % 360.0) - 180.0
+    points_right = -90.0 <= normalized <= 90.0
+    return _readable_text_angle(normalized), ('left' if points_right else 'right')
+
+
+def _parse_tip_label_wrap(value):
+    text = str(value).strip().lower()
+    if text in {'none', 'auto', 'taxonomy'}:
+        return text
+    try:
+        width = int(text)
+    except ValueError as error:
+        raise ValueError(
+            "'--tip-label-wrap' must be none, auto, taxonomy, or a positive integer."
+        ) from error
+    if width <= 0:
+        raise ValueError(
+            "'--tip-label-wrap' must be none, auto, taxonomy, or a positive integer."
+        )
+    return width
+
+
+def _wrap_tip_label(text, width):
+    """Insert display-only line breaks while preserving visible delimiters."""
+
+    text = str(text)
+    width = int(width)
+    if width <= 0 or len(text) <= width:
+        return text
+    lines = []
+    remaining = text
+    while len(remaining) > width:
+        whitespace_breaks = [
+            index
+            for index, char in enumerate(remaining[:width + 1])
+            if char.isspace() and index > 0
+        ]
+        delimiter_breaks = [
+            index + 1
+            for index, char in enumerate(remaining[:width])
+            if char in '_-/|' and index > 0
+        ]
+        if whitespace_breaks:
+            cut = whitespace_breaks[-1]
+            line = remaining[:cut].rstrip()
+            remaining = remaining[cut:].lstrip()
+        elif delimiter_breaks:
+            cut = delimiter_breaks[-1]
+            line = remaining[:cut]
+            remaining = remaining[cut:]
+        else:
+            cut = width
+            line = remaining[:cut]
+            remaining = remaining[cut:]
+        lines.append(line)
+    lines.append(remaining)
+    return '\n'.join(lines)
+
+
+def _measure_texts_in_inches(texts, font_size, font_family):
+    """Measure multiline strings with the same Matplotlib text renderer."""
+
+    figure = Figure(figsize=(1.0, 1.0), dpi=72.0)
+    canvas = FigureCanvasAgg(figure)
+    renderer = canvas.get_renderer()
+    measured = {}
+    for text in dict.fromkeys(texts):
+        artist = Text(
+            x=0.0,
+            y=0.0,
+            text=text,
+            fontsize=float(font_size),
+            fontfamily=font_family,
+            linespacing=1.15,
+        )
+        artist.set_figure(figure)
+        bounds = artist.get_window_extent(renderer=renderer)
+        measured[text] = (
+            max(float(bounds.width) / 72.0, 0.0),
+            max(float(bounds.height) / 72.0, float(font_size) / 72.0),
+        )
+    return measured
+
+
+def _auto_wrap_candidates(text):
+    length = len(str(text))
+    if length <= 1:
+        return [length]
+    widths = {length}
+    for line_count in range(2, min(5, length) + 1):
+        widths.add(max(1, int(math.ceil(length / line_count))))
+    return sorted(widths, reverse=True)
+
+
+def _taxonomic_prefix(text):
+    """Return a conservative underscore-delimited binomial prefix."""
+
+    parts = str(text).split('_')
+    if len(parts) < 2:
+        return None
+    genus, species = parts[:2]
+    if not genus or not species:
+        return None
+    if not genus[0].isupper() or not species[0].islower():
+        return None
+    return '{}_{}'.format(genus, species)
+
+
+def _wrap_taxonomic_label(text, width):
+    prefix = _taxonomic_prefix(text)
+    if prefix is None:
+        return _wrap_tip_label(text, width)
+    suffix = str(text)[len(prefix):].lstrip('_')
+    if not suffix:
+        return str(text)
+    wrapped_suffix = _wrap_tip_label(suffix, width)
+    return '{}\n{}'.format(prefix, wrapped_suffix)
+
+
+def _prepare_tip_label_text(
+    leaf_order,
+    wrap,
+    font_size,
+    font_family,
+    layout_name,
+    panel_width_in,
+    panel_height_in,
+):
+    """Resolve wrapping and return displayed labels with exact dimensions."""
+
+    wrap = _parse_tip_label_wrap(wrap)
+    raw_text_by_leaf = {leaf: str(leaf.name or '') for leaf in leaf_order}
+    if wrap == 'none':
+        text_by_leaf = dict(raw_text_by_leaf)
+    elif isinstance(wrap, int):
+        text_by_leaf = {
+            leaf: _wrap_tip_label(text, wrap)
+            for leaf, text in raw_text_by_leaf.items()
+        }
+    else:
+        candidates_by_leaf = {
+            leaf: [
+                _wrap_taxonomic_label(text, width)
+                for width in _auto_wrap_candidates(text)
+            ]
+            for leaf, text in raw_text_by_leaf.items()
+        }
+        all_candidates = [
+            candidate
+            for candidates in candidates_by_leaf.values()
+            for candidate in candidates
+        ]
+        candidate_sizes = _measure_texts_in_inches(
+            all_candidates,
+            font_size=font_size,
+            font_family=font_family,
+        )
+        spatial = layout_name in {
+            'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal', 'packed',
+            'packed-phylogram',
+        }
+        normal_budget = max(min(panel_width_in, panel_height_in) * 0.20, 0.55)
+        if spatial:
+            perimeter_per_tip = (
+                (2.0 * (panel_width_in + panel_height_in))
+                / max(len(leaf_order), 1)
+            )
+            tangential_budget = max(perimeter_per_tip * 0.72, float(font_size) / 72.0)
+        else:
+            tangential_budget = max(float(font_size) * 1.25 / 72.0, 1e-6)
+        text_by_leaf = {}
+        for leaf, candidates in candidates_by_leaf.items():
+            def score(candidate):
+                width, height = candidate_sizes[candidate]
+                congestion = max(
+                    width / normal_budget,
+                    height / tangential_budget,
+                )
+                line_penalty = 0.22 * candidate.count('\n')
+                return congestion + line_penalty, width * height, candidate.count('\n')
+
+            unwrapped = raw_text_by_leaf[leaf]
+            if unwrapped not in candidate_sizes:
+                candidate_sizes.update(_measure_texts_in_inches(
+                    [unwrapped],
+                    font_size=font_size,
+                    font_family=font_family,
+                ))
+                candidates = [unwrapped] + candidates
+            if wrap == 'taxonomy' and _taxonomic_prefix(unwrapped) is not None:
+                semantic_candidates = [
+                    candidate
+                    for candidate in candidates
+                    if '\n' in candidate or candidate == unwrapped
+                ]
+                candidates = semantic_candidates or candidates
+            unwrapped_width, unwrapped_height = candidate_sizes[unwrapped]
+            if (
+                unwrapped_width <= normal_budget
+                and unwrapped_height <= tangential_budget
+            ):
+                text_by_leaf[leaf] = unwrapped
+                continue
+            best = min(candidates, key=score)
+            if score(best)[0] < score(unwrapped)[0] * 0.95:
+                text_by_leaf[leaf] = best
+            else:
+                text_by_leaf[leaf] = unwrapped
+    sizes = _measure_texts_in_inches(
+        text_by_leaf.values(),
+        font_size=font_size,
+        font_family=font_family,
+    )
+    return (
+        text_by_leaf,
+        {leaf: sizes[text] for leaf, text in text_by_leaf.items()},
+    )
+
+
+def _fit_artists_within_figure(figure, axes, artists, padding_points=2.0):
+    """Shrink an axes until rendered artists fit the fixed-size figure."""
+
+    if not artists:
+        return {
+            'fits_within_figure': True,
+            'overflow_left_points': 0.0,
+            'overflow_right_points': 0.0,
+            'overflow_bottom_points': 0.0,
+            'overflow_top_points': 0.0,
+            'maximum_overflow_points': 0.0,
+        }
+    padding_pixels = float(padding_points) * figure.dpi / 72.0
+    for _ in range(4):
+        figure.canvas.draw()
+        renderer = figure.canvas.get_renderer()
+        bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
+        left = min(bound.x0 for bound in bounds)
+        right = max(bound.x1 for bound in bounds)
+        bottom = min(bound.y0 for bound in bounds)
+        top = max(bound.y1 for bound in bounds)
+        figure_bounds = figure.bbox
+        overflow_left = max((figure_bounds.x0 + padding_pixels) - left, 0.0)
+        overflow_right = max(right - (figure_bounds.x1 - padding_pixels), 0.0)
+        overflow_bottom = max((figure_bounds.y0 + padding_pixels) - bottom, 0.0)
+        overflow_top = max(top - (figure_bounds.y1 - padding_pixels), 0.0)
+        if max(overflow_left, overflow_right, overflow_bottom, overflow_top) < 0.25:
+            break
+        position = axes.get_position(original=True)
+        new_left = position.x0 + (overflow_left / figure_bounds.width)
+        new_right = position.x1 - (overflow_right / figure_bounds.width)
+        new_bottom = position.y0 + (overflow_bottom / figure_bounds.height)
+        new_top = position.y1 - (overflow_top / figure_bounds.height)
+        if new_right - new_left <= 0.1 or new_top - new_bottom <= 0.1:
+            break
+        axes.set_position([new_left, new_bottom, new_right - new_left, new_top - new_bottom])
+    figure.canvas.draw()
+    renderer = figure.canvas.get_renderer()
+    bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
+    figure_bounds = figure.bbox
+    overflow = {
+        'overflow_left_points': max(
+            (figure_bounds.x0 + padding_pixels) - min(bound.x0 for bound in bounds),
+            0.0,
+        ) * 72.0 / figure.dpi,
+        'overflow_right_points': max(
+            max(bound.x1 for bound in bounds) - (figure_bounds.x1 - padding_pixels),
+            0.0,
+        ) * 72.0 / figure.dpi,
+        'overflow_bottom_points': max(
+            (figure_bounds.y0 + padding_pixels) - min(bound.y0 for bound in bounds),
+            0.0,
+        ) * 72.0 / figure.dpi,
+        'overflow_top_points': max(
+            max(bound.y1 for bound in bounds) - (figure_bounds.y1 - padding_pixels),
+            0.0,
+        ) * 72.0 / figure.dpi,
+    }
+    overflow['maximum_overflow_points'] = max(overflow.values(), default=0.0)
+    overflow['fits_within_figure'] = bool(
+        overflow['maximum_overflow_points'] < 0.25
+    )
+    return overflow
+
+
+def _parse_scale_bar(value, tree_span):
+    text = str(value).strip().lower()
+    if text in {'none', ''}:
+        return None
+    if text == 'auto':
+        target = max(float(tree_span) / 5.0, 1e-12)
+        exponent = math.floor(math.log10(target))
+        scaled = target / (10.0 ** exponent)
+        base = 1.0 if scaled < 1.5 else (2.0 if scaled < 3.5 else 5.0)
+        return base * (10.0 ** exponent)
+    try:
+        result = float(text)
+    except ValueError as error:
+        raise ValueError("'--scale-bar' must be none, auto, or a positive number.") from error
+    if not math.isfinite(result) or result <= 0.0:
+        raise ValueError("'--scale-bar' must be none, auto, or a positive number.")
+    return result
+
+
+def _parse_legend_columns(value, item_count):
+    text = str(value).strip().lower()
+    if text == 'auto':
+        return max(1, min(4, int(math.ceil(max(item_count, 1) / 3.0))))
+    try:
+        columns = int(text)
+    except ValueError as error:
+        raise ValueError("'--legend-columns' must be auto or a positive integer.") from error
+    if columns <= 0:
+        raise ValueError("'--legend-columns' must be auto or a positive integer.")
+    return columns
+
+
+def _tip_font_style(text, mode):
+    mode = str(mode).strip().lower()
+    if mode == 'plain':
+        return 'normal'
+    if mode == 'italic':
+        return 'italic'
+    if mode == 'taxonomy':
+        prefix = _taxonomic_prefix(str(text).replace('\n', ''))
+        return 'italic' if prefix == str(text).replace('\n', '') else 'normal'
+    raise ValueError("'--tip-label-font-style' must be plain, italic, or taxonomy.")
+
+
+def _parse_branch_width_range(value):
+    parts = [part.strip() for part in str(value).split(',')]
+    if len(parts) != 2:
+        raise ValueError("'--branch-width-range' must contain MIN,MAX.")
+    try:
+        minimum, maximum = (float(part) for part in parts)
+    except ValueError as error:
+        raise ValueError("'--branch-width-range' must contain MIN,MAX.") from error
+    if minimum <= 0.0 or maximum < minimum or not all(map(math.isfinite, (minimum, maximum))):
+        raise ValueError("'--branch-width-range' must satisfy 0 < MIN <= MAX.")
+    return minimum, maximum
+
+
+def _branch_style_maps(
+    tree,
+    base_color,
+    base_width,
+    color_property,
+    width_property,
+    width_range,
+    property_colors,
+    palette,
+):
+    width = float(base_width)
+    if not math.isfinite(width) or width <= 0.0:
+        raise ValueError("'--branch-width' must be greater than zero.")
+    color_by_node = {}
+    width_by_node = {}
+    nodes = [node for node in tree.traverse() if not node.is_root]
+    if color_property not in (None, ''):
+        values = sorted({
+            str(node.props[color_property])
+            for node in nodes
+            if node.props.get(color_property) not in (None, '')
+        })
+        value_index = {value: index for index, value in enumerate(values)}
+        for node in nodes:
+            value = node.props.get(color_property)
+            if value not in (None, ''):
+                color_by_node[node] = _property_color(
+                    prop=color_property,
+                    value=value,
+                    property_colors=property_colors,
+                    fallback_index=value_index[str(value)],
+                    palette=palette,
+                )
+    if width_property not in (None, ''):
+        numeric = {}
+        for node in nodes:
+            try:
+                value = float(node.props.get(width_property))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                numeric[node] = value
+        if numeric:
+            output_min, output_max = _parse_branch_width_range(width_range)
+            input_min = min(numeric.values())
+            input_max = max(numeric.values())
+            for node, value in numeric.items():
+                fraction = (
+                    0.5
+                    if input_max <= input_min
+                    else (value - input_min) / (input_max - input_min)
+                )
+                width_by_node[node] = output_min + ((output_max - output_min) * fraction)
+    return (
+        {node: color_by_node.get(node, base_color) for node in nodes},
+        {node: width_by_node.get(node, width) for node in nodes},
+    )
+
+
+def _tip_track_colors(
+    tree,
+    properties,
+    mode,
+    property_colors,
+    categorical_palette,
+    continuous_palette,
+):
+    mode = str(mode).strip().lower()
+    if mode not in {'auto', 'categorical', 'continuous'}:
+        raise ValueError("'--tip-track-type' must be auto, categorical, or continuous.")
+    colors = {}
+    legend_entries = []
+    for property_name in properties:
+        raw = {
+            leaf: leaf.props.get(property_name)
+            for leaf in tree.leaves()
+        }
+        present = [value for value in raw.values() if value not in (None, '')]
+        numeric = {}
+        for leaf, value in raw.items():
+            try:
+                number = float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(number):
+                numeric[leaf] = number
+        continuous = mode == 'continuous' or (
+            mode == 'auto' and present and len(numeric) == len(present)
+        )
+        if mode == 'continuous' and len(numeric) != len(present):
+            raise ValueError(
+                "Tip-track property '{}' contains non-numeric values but "
+                "--tip-track-type continuous was requested.".format(property_name)
+            )
+        if continuous and numeric:
+            minimum = min(numeric.values())
+            maximum = max(numeric.values())
+            cmap = plt.get_cmap(continuous_palette)
+            for leaf in tree.leaves():
+                if leaf not in numeric:
+                    colors[(leaf, property_name)] = '#d9d9d9'
+                    continue
+                fraction = (
+                    0.5
+                    if maximum <= minimum
+                    else (numeric[leaf] - minimum) / (maximum - minimum)
+                )
+                colors[(leaf, property_name)] = mcolors.to_hex(cmap(fraction))
+            if maximum <= minimum:
+                legend_entries.append((
+                    '{}: {:g}'.format(property_name, minimum),
+                    mcolors.to_hex(cmap(0.5)),
+                ))
+            else:
+                legend_entries.extend([
+                    ('{}: {:g}'.format(property_name, minimum), mcolors.to_hex(cmap(0.0))),
+                    ('{}: {:g}'.format(property_name, maximum), mcolors.to_hex(cmap(1.0))),
+                ])
+        else:
+            values = sorted({str(value) for value in present})
+            for leaf, value in raw.items():
+                if value in (None, ''):
+                    colors[(leaf, property_name)] = '#d9d9d9'
+                else:
+                    colors[(leaf, property_name)] = _property_color(
+                        prop=property_name,
+                        value=value,
+                        property_colors=property_colors,
+                        fallback_index=values.index(str(value)),
+                        palette=categorical_palette,
+                    )
+            legend_entries.extend(
+                (
+                    '{}: {}'.format(property_name, value),
+                    _property_color(
+                        prop=property_name,
+                        value=value,
+                        property_colors=property_colors,
+                        fallback_index=index,
+                        palette=categorical_palette,
+                    ),
+                )
+                for index, value in enumerate(values)
+            )
+        if len(present) != len(raw):
+            legend_entries.append((
+                '{}: missing'.format(property_name),
+                '#d9d9d9',
+            ))
+    return colors, legend_entries
+
+
+def _tip_track_artist(ax, xy, offset_points, color, size_points):
+    drawing = DrawingArea(size_points, size_points, 0.0, 0.0)
+    drawing.add_artist(Rectangle(
+        (0.0, 0.0),
+        size_points,
+        size_points,
+        facecolor=color,
+        edgecolor='#ffffff',
+        linewidth=0.35,
+    ))
+    artist = AnnotationBbox(
+        drawing,
+        xy,
+        xybox=offset_points,
+        xycoords='data',
+        boxcoords='offset points',
+        frameon=False,
+        box_alignment=(0.5, 0.5),
+        annotation_clip=False,
+        zorder=8,
+    )
+    ax.add_artist(artist)
+    return artist
+
+
 @_isolated_matplotlib_state
 def _draw_tree(
     tree,
@@ -543,7 +1091,9 @@ def _draw_tree(
     font_family=FONT_FAMILY,
     branch_color=BRANCH_COLOR,
     terminal_branch_color=None,
+    tip_labels=True,
     tip_label_position='aligned',
+    tip_label_wrap='none',
     root_marker='none',
     root_marker_color='#0072B2',
     root_marker_size=None,
@@ -564,6 +1114,27 @@ def _draw_tree(
     tip_image_by_leaf=None,
     tip_image_size=TIP_IMAGE_SIZE_PT,
     tip_image_gap=TIP_IMAGE_GAP_PT,
+    layout='rectangular',
+    spiral_turns=None,
+    fan_open_angle=30.0,
+    unrooted_method='equal-angle',
+    daylight_iterations=5,
+    scale_bar='none',
+    branch_length_unit='',
+    branch_width=0.8,
+    branch_color_property=None,
+    branch_width_property=None,
+    branch_width_range='0.4,2.5',
+    tip_label_font_style='plain',
+    tip_track_properties=None,
+    tip_track_type='auto',
+    tip_track_size=5.0,
+    tip_track_palette='viridis',
+    legend_columns='auto',
+    legend_position='auto',
+    collision_policy='resolve',
+    layout_report=None,
+    collapsed_clades=None,
 ):
     _apply_font_style(font_size=font_size, font_family=font_family)
     matplotlib.rcParams['svg.hashsalt'] = 'nwkit'
@@ -572,16 +1143,77 @@ def _draw_tree(
     node_pie_leaf_filters = node_pie_leaf_filters or []
     node_label_filters = node_label_filters or []
     tip_image_by_leaf = tip_image_by_leaf or {}
+    tip_track_properties = tip_track_properties or []
+    collapsed_clades = collapsed_clades or []
+    layout_name = str(layout).strip().lower()
+    supported_layouts = {
+        'rectangular',
+        'slanted',
+        'cladogram',
+        'tidy',
+        'circular',
+        'fan',
+        'radial',
+        'unrooted',
+        'spiral',
+        'fractal',
+        'packed',
+        'packed-phylogram',
+    }
+    if layout_name not in supported_layouts:
+        raise ValueError("Unsupported '--layout': {}".format(layout))
+    spatial_layout = layout_name in {
+        'circular',
+        'fan',
+        'radial',
+        'unrooted',
+        'spiral',
+        'fractal',
+        'packed',
+        'packed-phylogram',
+    }
+    if spatial_layout and tip_image_by_leaf:
+        raise ValueError(
+            "'--tip-image-manifest' is currently supported only with "
+            "rectangular, slanted, cladogram, and tidy layouts."
+        )
+    if spatial_layout and label_panel_width is not None:
+        raise ValueError(
+            "'--label-panel-width' is not used by two-dimensional layouts."
+        )
+    track_size_pt = float(tip_track_size)
+    if not math.isfinite(track_size_pt) or track_size_pt <= 0.0:
+        raise ValueError("'--tip-track-size' must be greater than zero.")
+    track_stride_pt = track_size_pt + 2.0
+    track_span_pt = len(tip_track_properties) * track_stride_pt
+    _tip_font_style('', tip_label_font_style)
+    daylight_iterations = int(daylight_iterations)
+    if daylight_iterations <= 0:
+        raise ValueError("'--daylight-iterations' must be greater than zero.")
+    resolved_tip_label_position = str(tip_label_position).strip().lower()
+    if resolved_tip_label_position == 'auto':
+        resolved_tip_label_position = (
+            'aligned' if layout_name == 'rectangular' else 'branch-end'
+        )
+    if spatial_layout and resolved_tip_label_position != 'branch-end':
+        raise ValueError(
+            "Two-dimensional layouts require "
+            "'--tip-label-position branch-end'."
+        )
     use_topology_depth = (not _has_positive_branch_length(tree))
     if use_topology_depth:
-        sys.stderr.write('Tree has no positive branch lengths; drawing x positions by topology depth.\n')
-    xcoord, ycoord, leaf_order = _get_tree_plot_coordinates(tree=tree, use_topology_depth=use_topology_depth)
-    x_values = list(xcoord.values())
-    x_min = min(x_values) if len(x_values) > 0 else 0.0
-    x_max = max(x_values) if len(x_values) > 0 else 1.0
-    x_span = max(x_max - x_min, 1.0)
-    max_tip_label_chars = max([len(leaf.name or '') for leaf in leaf_order], default=1)
-
+        sys.stderr.write(
+            'Tree has no positive branch lengths; drawing positions by topology depth.\n'
+        )
+    base_xcoord, _, base_leaf_order = _get_tree_plot_coordinates(
+        tree=tree,
+        use_topology_depth=use_topology_depth,
+    )
+    base_x_values = list(base_xcoord.values())
+    base_x_min = min(base_x_values) if base_x_values else 0.0
+    base_x_max = max(base_x_values) if base_x_values else 1.0
+    base_x_span = max(base_x_max - base_x_min, 1.0)
+    leaf_order = base_leaf_order
     fig_width = float(figure_width)
     if fig_width <= 0.0:
         raise ValueError('--figure-width must be greater than zero.')
@@ -599,9 +1231,70 @@ def _draw_tree(
         raise ValueError(
             '--figure-width is too small for the requested tip-image column.'
         )
-    if label_panel_width is None:
+    label_height_guess_in = (
+        float(figure_height)
+        if figure_height is not None
+        else (fig_width * 0.72 if layout_name in {'fractal', 'packed'} else fig_width)
+    )
+    if tip_labels:
+        tip_label_text_by_leaf, tip_label_size_by_leaf = _prepare_tip_label_text(
+            leaf_order=leaf_order,
+            wrap=tip_label_wrap,
+            font_size=font_size,
+            font_family=font_family,
+            layout_name=layout_name,
+            panel_width_in=main_panel_width_in,
+            panel_height_in=max(label_height_guess_in, 0.2),
+        )
+    else:
+        _parse_tip_label_wrap(tip_label_wrap)
+        tip_label_text_by_leaf = {leaf: str(leaf.name or '') for leaf in leaf_order}
+        tip_label_size_by_leaf = {leaf: (0.0, 0.0) for leaf in leaf_order}
+    max_tip_label_width_in = max(
+        (size[0] for size in tip_label_size_by_leaf.values()),
+        default=0.0,
+    )
+    max_tip_label_height_in = max(
+        (size[1] for size in tip_label_size_by_leaf.values()),
+        default=(float(font_size) / 72.0 if tip_labels else 0.0),
+    )
+    tip_track_color_by_leaf_property, tip_track_legend_entries = _tip_track_colors(
+        tree=tree,
+        properties=tip_track_properties,
+        mode=tip_track_type,
+        property_colors=property_colors,
+        categorical_palette=trait_palette,
+        continuous_palette=tip_track_palette,
+    )
+    badge_values = []
+    if tip_badge_property not in (None, ''):
+        badge_values = sorted({
+            str(
+                tip_badge_missing_label
+                if leaf.props.get(tip_badge_property) in (None, '')
+                else leaf.props.get(tip_badge_property)
+            )
+            for leaf in tree.leaves()
+            if (
+                leaf.props.get(tip_badge_property) not in (None, '')
+                or tip_badge_missing_label not in (None, '')
+            )
+        })
+    badge_value_index = {
+        value: index for index, value in enumerate(badge_values)
+    }
+    if spatial_layout:
+        label_panel_width_in = 0.0
+    elif (
+        not tip_labels
+        and tip_badge_property in (None, '')
+        and not tip_track_properties
+        and label_panel_width is None
+    ):
+        label_panel_width_in = 0.0
+    elif label_panel_width is None:
         label_panel_width_in = min(
-            max(0.8, max_tip_label_chars * 0.07),
+            max(0.8, max_tip_label_width_in + (5.0 / 72.0)),
             main_panel_width_in * 0.58,
         )
     else:
@@ -616,26 +1309,80 @@ def _draw_tree(
         raise ValueError(
             '--figure-width is too small for the requested label and tip-image panels.'
         )
-    row_pitch_pt = float(font_size) + TIP_LABEL_GAP_PT
+    row_pitch_pt = max(
+        float(font_size),
+        max_tip_label_height_in * 72.0,
+    ) + TIP_LABEL_GAP_PT
     if tip_image_by_leaf:
         row_pitch_pt = max(
             row_pitch_pt,
             tip_image_size_pt + TIP_LABEL_GAP_PT,
         )
     row_pitch_in = row_pitch_pt / 72.0
-    tree_panel_height_in = max(len(leaf_order), 1) * row_pitch_in
-    property_legend_needed = bool(tip_badge_property or node_pie_properties) and bool(property_colors)
-    legend_needed = bool(legend) and bool(node_type_by_node or group_color_by_name or property_legend_needed)
-    top_margin_in = (28.0 / 72.0) if legend_needed else (4.0 / 72.0)
+    property_legend_needed = bool(badge_values or node_pie_properties)
+    legend_needed = bool(legend) and bool(
+        node_type_by_node
+        or group_color_by_name
+        or property_legend_needed
+        or tip_track_legend_entries
+        or branch_color_property not in (None, '')
+        or branch_width_property not in (None, '')
+    )
+    top_margin_in = (44.0 / 72.0) if legend_needed else (4.0 / 72.0)
     bottom_margin_in = 3.0 / 72.0
     left_margin_in = 2.0 / 72.0
     right_margin_in = 2.0 / 72.0
-    if figure_height is None:
-        fig_height = tree_panel_height_in + top_margin_in + bottom_margin_in
+    if figure_height is None and spatial_layout:
+        fig_height = fig_width * 0.72 if layout_name in {'fractal', 'packed'} else fig_width
+    elif figure_height is None:
+        # Refined after tidy coordinates have been calculated.
+        fig_height = max(len(leaf_order), 1) * row_pitch_in + top_margin_in + bottom_margin_in
     else:
         fig_height = float(figure_height)
         if fig_height <= top_margin_in + bottom_margin_in:
             raise ValueError('--figure-height is too small for the required margins.')
+
+    available_height_in = max(fig_height - top_margin_in - bottom_margin_in, 0.2)
+    terminal_extent_by_leaf = {}
+    label_data_per_inch = base_x_span / max(tree_panel_width_in, 0.2)
+    for leaf in leaf_order:
+        label_width_in = tip_label_size_by_leaf.get(leaf, (0.0, 0.0))[0]
+        label_extent = (
+            label_width_in + (track_span_pt / 72.0)
+        ) * label_data_per_inch
+        if tip_labels and resolved_tip_label_position == 'aligned':
+            label_extent += max(base_x_max - base_xcoord[leaf], 0.0)
+        terminal_extent_by_leaf[leaf] = label_extent
+
+    layout_aspect_ratio = tree_panel_width_in / available_height_in
+    if layout_name == 'packed' and tip_labels:
+        normal_label_margin = max_tip_label_width_in + (5.0 / 72.0)
+        packed_width = max(tree_panel_width_in - (2.0 * normal_label_margin), 0.2)
+        packed_height = max(available_height_in - (2.0 * normal_label_margin), 0.2)
+        layout_aspect_ratio = packed_width / packed_height
+    drawing_layout = make_tree_layout(
+        tree,
+        layout=layout_name,
+        use_topology_depth=use_topology_depth,
+        aspect_ratio=layout_aspect_ratio,
+        spiral_turns=spiral_turns,
+        fan_open_angle=fan_open_angle,
+        terminal_extent_by_leaf=terminal_extent_by_leaf,
+        label_size_by_leaf=tip_label_size_by_leaf,
+        unrooted_method=unrooted_method,
+        daylight_iterations=daylight_iterations,
+    )
+    xcoord = drawing_layout.xcoord
+    ycoord = drawing_layout.ycoord
+    leaf_order = drawing_layout.leaf_order
+    x_min, x_max, y_min, y_max = drawing_layout.bounds
+    x_span = max(x_max - x_min, 1e-9)
+    y_span = max(y_max - y_min, 1e-9)
+
+    if not spatial_layout:
+        tree_panel_height_in = max(y_span + 1.0, 1.0) * row_pitch_in
+        if figure_height is None:
+            fig_height = tree_panel_height_in + top_margin_in + bottom_margin_in
         if (
             tip_image_by_leaf
             and fig_height + 10 ** -9
@@ -645,47 +1392,86 @@ def _draw_tree(
                 '--figure-height is too small for non-overlapping tip images. '
                 'Increase it or reduce --tip-image-size.'
             )
+    else:
+        tree_panel_height_in = max(fig_height - top_margin_in - bottom_margin_in, 0.2)
 
-    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
-
-    for node in tree.traverse():
-        if node.is_leaf:
-            continue
-        children = node.get_children()
-        if len(children) <= 1:
-            continue
-        for child in children:
-            ax.plot(
-                [xcoord[node], xcoord[node]],
-                [ycoord[node], ycoord[child]],
-                color=branch_color,
-                linewidth=0.8,
-                zorder=1,
-                solid_capstyle=TREE_LINE_CAPSTYLE,
+    if layout_name in {'cladogram', 'fractal', 'packed'} and not use_topology_depth:
+        sys.stderr.write(
+            '{} layout encodes topology; input branch lengths do not determine geometry.\n'.format(
+                layout_name.capitalize(),
             )
-
-    for node in tree.traverse():
-        if node.is_root:
-            continue
-        edge_color = terminal_branch_color if node.is_leaf and terminal_branch_color else branch_color
-        ax.plot(
-            [xcoord[node.up], xcoord[node]],
-            [ycoord[node], ycoord[node]],
-            color=edge_color,
-            linewidth=0.8,
-            zorder=2,
-            solid_capstyle=TREE_LINE_CAPSTYLE,
         )
 
-    root_stub = max(x_span * 0.03, 0.03)
-    ax.plot(
-        [xcoord[tree] - root_stub, xcoord[tree]],
-        [ycoord[tree], ycoord[tree]],
-        color=branch_color,
-        linewidth=0.8,
-        zorder=2,
-        solid_capstyle=TREE_LINE_CAPSTYLE,
+    segment_length_layouts = {
+        'rectangular', 'tidy', 'circular', 'fan', 'unrooted',
+        'packed-phylogram',
+    }
+    depth_projection_layouts = {'slanted', 'radial'}
+    branch_length_layouts = segment_length_layouts | depth_projection_layouts
+    branch_depth_span = max(base_x_max - base_x_min, 0.0)
+    requested_scale_bar = _parse_scale_bar(scale_bar, branch_depth_span)
+    if requested_scale_bar is not None and layout_name not in segment_length_layouts:
+        raise ValueError(
+            "'--scale-bar' requires a branch-length-preserving layout with "
+            "directly measurable branch segments."
+        )
+    if requested_scale_bar is not None and use_topology_depth:
+        raise ValueError(
+            "'--scale-bar' requires positive input branch lengths."
+        )
+    if (
+        requested_scale_bar is not None
+        and requested_scale_bar > branch_depth_span + 1e-12
+    ):
+        raise ValueError(
+            "'--scale-bar' must not exceed the displayed tree-depth span "
+            "({:g}).".format(branch_depth_span)
+        )
+    color_by_node, width_by_node = _branch_style_maps(
+        tree=tree,
+        base_color=branch_color,
+        base_width=branch_width,
+        color_property=branch_color_property,
+        width_property=branch_width_property,
+        width_range=branch_width_range,
+        property_colors=property_colors,
+        palette=trait_palette,
     )
+    fig, ax = plt.subplots(figsize=(fig_width, fig_height))
+    drawing_artists = []
+    branch_lines = []
+
+    for node, path in drawing_layout.edge_paths.items():
+        if branch_color_property not in (None, '') and node.props.get(branch_color_property) not in (None, ''):
+            edge_color = color_by_node[node]
+        elif node.is_leaf and terminal_branch_color:
+            edge_color = terminal_branch_color
+        else:
+            edge_color = color_by_node[node]
+        path_x, path_y = zip(*path)
+        line = ax.plot(
+            path_x,
+            path_y,
+            color=edge_color,
+            linewidth=width_by_node[node],
+            zorder=2,
+            solid_capstyle=TREE_LINE_CAPSTYLE,
+            solid_joinstyle='round',
+        )[0]
+        branch_lines.append((node, line))
+
+    if drawing_layout.root_path:
+        root_x, root_y = zip(*drawing_layout.root_path)
+        root_line = ax.plot(
+            root_x,
+            root_y,
+            color=branch_color,
+            linewidth=float(branch_width),
+            zorder=2,
+            solid_capstyle=TREE_LINE_CAPSTYLE,
+            solid_joinstyle='round',
+        )[0]
+        branch_lines.append((tree, root_line))
 
     marker_area = 18.0 * (0.5 ** 2)
     marker_size_pt = 4.8 * 0.5
@@ -732,23 +1518,146 @@ def _draw_tree(
             Patch(facecolor=color, edgecolor='none', label=group_name)
             for group_name, color in sorted(group_color_by_name.items())
         )
-    if property_legend_needed:
+    if node_pie_properties:
         legend_handles.extend(
-            Patch(facecolor=color, edgecolor='none', label=value)
-            for value, color in property_colors.items()
+            Patch(
+                facecolor=_property_color(
+                    prop=prop,
+                    value=prop,
+                    property_colors=property_colors,
+                    fallback_index=index,
+                    palette=trait_palette,
+                ),
+                edgecolor='none',
+                label=prop,
+            )
+            for index, prop in enumerate(node_pie_properties)
         )
+    if badge_values:
+        legend_handles.extend(
+            Patch(
+                facecolor=_property_color(
+                    prop=tip_badge_property,
+                    value=value,
+                    property_colors=property_colors,
+                    fallback_index=badge_value_index[value],
+                    palette=trait_palette,
+                ),
+                edgecolor='none',
+                label='{}: {}'.format(tip_badge_property, value),
+            )
+            for value in badge_values
+        )
+    legend_handles.extend(
+        Patch(facecolor=color, edgecolor='none', label=label)
+        for label, color in tip_track_legend_entries
+    )
+    if branch_color_property not in (None, ''):
+        branch_values = sorted({
+            str(node.props[branch_color_property])
+            for node in tree.traverse()
+            if not node.is_root and node.props.get(branch_color_property) not in (None, '')
+        })
+        branch_value_index = {
+            value: index for index, value in enumerate(branch_values)
+        }
+        legend_handles.extend(
+            Line2D(
+                [0], [0],
+                color=_property_color(
+                    prop=branch_color_property,
+                    value=value,
+                    property_colors=property_colors,
+                    fallback_index=branch_value_index[value],
+                    palette=trait_palette,
+                ),
+                linewidth=float(branch_width),
+                label='{}: {}'.format(branch_color_property, value),
+            )
+            for value in branch_values
+        )
+        if any(
+            node.props.get(branch_color_property) in (None, '')
+            for node in tree.traverse()
+            if not node.is_root
+        ):
+            legend_handles.append(Line2D(
+                [0], [0],
+                color=branch_color,
+                linewidth=float(branch_width),
+                label='{}: missing'.format(branch_color_property),
+            ))
+    if branch_width_property not in (None, ''):
+        numeric_width_nodes = []
+        for node in tree.traverse():
+            if node.is_root:
+                continue
+            try:
+                value = float(node.props.get(branch_width_property))
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(value):
+                numeric_width_nodes.append((value, node))
+        if numeric_width_nodes:
+            numeric_width_nodes.sort(key=lambda item: item[0])
+            width_examples = [numeric_width_nodes[0]]
+            if numeric_width_nodes[-1][0] != numeric_width_nodes[0][0]:
+                width_examples.append(numeric_width_nodes[-1])
+            legend_handles.extend(
+                Line2D(
+                    [0], [0],
+                    color=branch_color,
+                    linewidth=width_by_node[node],
+                    label='{}: {:g}'.format(branch_width_property, value),
+                )
+                for value, node in width_examples
+            )
+    unique_legend_handles = []
+    seen_legend_labels = set()
+    for handle in legend_handles:
+        label = handle.get_label()
+        if label in seen_legend_labels:
+            continue
+        seen_legend_labels.add(label)
+        unique_legend_handles.append(handle)
+    legend_handles = unique_legend_handles
     if legend and len(legend_handles) > 0:
-        ax.legend(
+        resolved_legend_position = str(legend_position).strip().lower()
+        if resolved_legend_position == 'auto':
+            resolved_legend_position = (
+                'right'
+                if len(legend_handles) > 12
+                else 'top'
+            )
+        if resolved_legend_position not in {'top', 'right'}:
+            raise ValueError("'--legend-position' must be auto, top, or right.")
+        if resolved_legend_position == 'right':
+            legend_location = 'upper left'
+            legend_anchor = (1.005, 1.0)
+            legend_ncol = 1
+        else:
+            legend_location = 'lower right'
+            legend_anchor = (1.0, 1.005)
+            legend_ncol = _parse_legend_columns(
+                legend_columns,
+                len(legend_handles),
+            )
+        legend_artist = ax.legend(
             handles=legend_handles,
-            loc='lower left',
-            bbox_to_anchor=(0.0, 1.005),
+            loc=legend_location,
+            bbox_to_anchor=legend_anchor,
             frameon=False,
             borderaxespad=0.1,
             handletextpad=0.3,
             labelspacing=0.2,
-            ncol=1,
+            ncol=legend_ncol,
             prop={'family': font_family, 'size': font_size},
         )
+        drawing_artists.append(DrawingArtist(
+            legend_artist,
+            kind='legend',
+            priority=100,
+        ))
 
     for node in tree.traverse():
         if not support_labels:
@@ -758,22 +1667,42 @@ def _draw_tree(
         support_value = float(node.support)
         if (support_min is not None) and (support_value < support_min):
             continue
-        parent_x = xcoord[node.up]
-        node_x = xcoord[node]
-        label_x = parent_x + (node_x - parent_x) * 0.5
-        ax.annotate(
+        label_x, label_y = drawing_layout.support_anchors[node]
+        edge_angle = drawing_layout.support_angles.get(node, 0.0)
+        if spatial_layout:
+            radians = math.radians(edge_angle)
+            support_offset = (
+                -math.sin(radians) * 1.5,
+                math.cos(radians) * 1.5,
+            )
+        else:
+            support_offset = (0.0, SUPPORT_LABEL_OFFSET_PT)
+        support_artist = ax.annotate(
             _format_support_value(node.support),
-            xy=(label_x, ycoord[node]),
-            xytext=(0.0, SUPPORT_LABEL_OFFSET_PT),
+            xy=(label_x, label_y),
+            xytext=support_offset,
             textcoords='offset points',
             va='bottom',
             ha='center',
+            rotation=_readable_text_angle(edge_angle) if spatial_layout else 0.0,
+            rotation_mode='anchor',
             fontsize=font_size,
             fontfamily=font_family,
             color=LABEL_COLOR,
         )
+        drawing_artists.append(DrawingArtist(
+            support_artist,
+            kind='support_label',
+            priority=55,
+            movable=True,
+            shift_direction=(
+                -math.sin(math.radians(edge_angle)),
+                math.cos(math.radians(edge_angle)),
+            ) if spatial_layout else (0.0, 1.0),
+            owner=node,
+        ))
 
-    data_per_inch = x_span / tree_panel_width_in
+    data_per_inch = x_span / max(tree_panel_width_in, 0.2)
     leaf_pies_drawn = any(
         node_pie_properties
         and _node_matches_target(leaf, node_pie_target)
@@ -795,23 +1724,169 @@ def _draw_tree(
             (tip_pie_radius_pt + 2.0) / 72.0
         ) * data_per_inch
     label_offset = max(x_span * 0.02, 0.06, tip_pie_clearance)
+    tip_label_artists = []
+    track_span_data = (track_span_pt / 72.0) * data_per_inch
     for leaf in leaf_order:
-        if tip_label_position == 'branch-end':
-            label_x = xcoord[leaf] + label_offset
-        elif tip_label_position == 'aligned':
-            label_x = x_max + label_offset
+        label_angle = drawing_layout.label_angles.get(leaf, 0.0)
+        if spatial_layout:
+            text_rotation, text_alignment = _spatial_text_alignment(label_angle)
+            radians = math.radians(label_angle)
+            for track_index, property_name in enumerate(tip_track_properties):
+                track_distance = (
+                    3.0
+                    + (track_size_pt / 2.0)
+                    + track_index * track_stride_pt
+                )
+                track_artist = _tip_track_artist(
+                    ax=ax,
+                    xy=(xcoord[leaf], ycoord[leaf]),
+                    offset_points=(
+                        math.cos(radians) * track_distance,
+                        math.sin(radians) * track_distance,
+                    ),
+                    color=tip_track_color_by_leaf_property[(leaf, property_name)],
+                    size_points=track_size_pt,
+                )
+                drawing_artists.append(DrawingArtist(
+                    track_artist,
+                    kind='tip_track',
+                    priority=85,
+                    owner=leaf,
+                ))
+            label_offset_points = (
+                math.cos(radians) * (4.0 + track_span_pt),
+                math.sin(radians) * (4.0 + track_span_pt),
+            )
+            label_x = xcoord[leaf]
+            label_y = ycoord[leaf]
+            if tip_labels:
+                tip_artist = ax.annotate(
+                    tip_label_text_by_leaf[leaf],
+                    xy=(label_x, label_y),
+                    xytext=label_offset_points,
+                    textcoords='offset points',
+                    va='center',
+                    ha=text_alignment,
+                    rotation=text_rotation,
+                    rotation_mode='anchor',
+                    fontsize=font_size,
+                    fontfamily=font_family,
+                    fontstyle=_tip_font_style(leaf.name or '', tip_label_font_style),
+                    linespacing=1.15,
+                    color=leaf_label_color_by_leaf.get(leaf, LABEL_COLOR),
+                    annotation_clip=False,
+                )
+                tip_label_artists.append(tip_artist)
+                drawing_artists.append(DrawingArtist(
+                    tip_artist,
+                    kind='tip_label',
+                    priority=95,
+                    owner=leaf,
+                ))
+        elif resolved_tip_label_position == 'branch-end':
+            track_origin_x = xcoord[leaf] + label_offset
+            for track_index, property_name in enumerate(tip_track_properties):
+                track_artist = _tip_track_artist(
+                    ax=ax,
+                    xy=(track_origin_x, ycoord[leaf]),
+                    offset_points=(
+                        (track_size_pt / 2.0)
+                        + track_index * track_stride_pt,
+                        0.0,
+                    ),
+                    color=tip_track_color_by_leaf_property[(leaf, property_name)],
+                    size_points=track_size_pt,
+                )
+                drawing_artists.append(DrawingArtist(
+                    track_artist,
+                    kind='tip_track',
+                    priority=85,
+                    owner=leaf,
+                ))
+            label_x = track_origin_x + track_span_data + ((1.0 / 72.0) * data_per_inch)
+            label_y = ycoord[leaf]
+            if tip_labels:
+                tip_artist = ax.text(
+                    label_x,
+                    label_y,
+                    tip_label_text_by_leaf[leaf],
+                    va='center',
+                    ha='left',
+                    fontsize=font_size,
+                    fontfamily=font_family,
+                    fontstyle=_tip_font_style(leaf.name or '', tip_label_font_style),
+                    linespacing=1.15,
+                    color=leaf_label_color_by_leaf.get(leaf, LABEL_COLOR),
+                )
+                tip_label_artists.append(tip_artist)
+                drawing_artists.append(DrawingArtist(
+                    tip_artist,
+                    kind='tip_label',
+                    priority=95,
+                    owner=leaf,
+                ))
+        elif resolved_tip_label_position == 'aligned':
+            track_origin_x = x_max + label_offset
+            for track_index, property_name in enumerate(tip_track_properties):
+                track_artist = _tip_track_artist(
+                    ax=ax,
+                    xy=(track_origin_x, ycoord[leaf]),
+                    offset_points=(
+                        (track_size_pt / 2.0)
+                        + track_index * track_stride_pt,
+                        0.0,
+                    ),
+                    color=tip_track_color_by_leaf_property[(leaf, property_name)],
+                    size_points=track_size_pt,
+                )
+                drawing_artists.append(DrawingArtist(
+                    track_artist,
+                    kind='tip_track',
+                    priority=85,
+                    owner=leaf,
+                ))
+            label_x = track_origin_x + track_span_data + ((1.0 / 72.0) * data_per_inch)
+            label_y = ycoord[leaf]
+            if tip_labels:
+                tip_artist = ax.text(
+                    label_x,
+                    label_y,
+                    tip_label_text_by_leaf[leaf],
+                    va='center',
+                    ha='left',
+                    fontsize=font_size,
+                    fontfamily=font_family,
+                    fontstyle=_tip_font_style(leaf.name or '', tip_label_font_style),
+                    linespacing=1.15,
+                    color=leaf_label_color_by_leaf.get(leaf, LABEL_COLOR),
+                )
+                tip_label_artists.append(tip_artist)
+                drawing_artists.append(DrawingArtist(
+                    tip_artist,
+                    kind='tip_label',
+                    priority=95,
+                    owner=leaf,
+                ))
         else:
-            raise ValueError("Unsupported '--tip-label-position': {}".format(tip_label_position))
-        ax.text(
-            label_x,
-            ycoord[leaf],
-            leaf.name or '',
-            va='center',
-            ha='left',
-            fontsize=font_size,
-            fontfamily=font_family,
-            color=leaf_label_color_by_leaf.get(leaf, LABEL_COLOR),
-        )
+            raise ValueError(
+                "Unsupported '--tip-label-position': {}".format(tip_label_position)
+            )
+        if str(leaf.props.get('nwkit_collapsed', '')).lower() == 'true':
+            collapsed_marker = (
+                (3, 0, label_angle - 90.0)
+                if spatial_layout
+                else '>'
+            )
+            ax.scatter(
+                [xcoord[leaf]],
+                [ycoord[leaf]],
+                s=max(float(font_size), 5.0) ** 2,
+                marker=collapsed_marker,
+                facecolor=branch_color,
+                edgecolor=LEGEND_EDGE_COLOR,
+                linewidth=0.4,
+                zorder=7,
+            )
         if tip_badge_property not in (None, ''):
             raw_value = leaf.props.get(tip_badge_property)
             is_missing = raw_value in (None, '')
@@ -822,37 +1897,88 @@ def _draw_tree(
                 prop=tip_badge_property,
                 value=value,
                 property_colors=property_colors,
+                fallback_index=badge_value_index[value],
                 palette=trait_palette,
             )
-            approximate_label_width = max(len(leaf.name or ''), 1) * (font_size * 0.58 / 72.0) * data_per_inch
-            approximate_badge_width = max(len(value), 1) * (font_size * 0.58 / 72.0) * data_per_inch
-            badge_padding = (font_size * 0.16 / 72.0) * data_per_inch
-            badge_gap = (4.0 / 72.0) * data_per_inch
-            badge_offset = (
-                approximate_label_width
-                + badge_gap
-                + (approximate_badge_width / 2.0)
-                + badge_padding
-            )
-            ax.text(
-                label_x + badge_offset,
-                ycoord[leaf],
-                value,
-                va='center',
-                ha='center',
-                fontsize=font_size,
-                fontfamily=font_family,
-                fontweight='bold',
-                color=LABEL_COLOR,
-                bbox={
-                    'boxstyle': 'round,pad=0.16',
-                    'facecolor': badge_color,
-                    'edgecolor': LEGEND_EDGE_COLOR,
-                    'linewidth': 0.4,
-                    'alpha': 0.92,
-                },
-                zorder=8,
-            )
+            badge_style = {
+                'boxstyle': 'round,pad=0.16',
+                'facecolor': badge_color,
+                'edgecolor': LEGEND_EDGE_COLOR,
+                'linewidth': 0.4,
+                'alpha': 0.92,
+            }
+            if spatial_layout:
+                text_rotation, _ = _spatial_text_alignment(label_angle)
+                radians = math.radians(label_angle)
+                badge_offset_points = (
+                    track_span_pt
+                    + (tip_label_size_by_leaf[leaf][0] * 72.0 if tip_labels else 0.0)
+                    + 4.0
+                    + max(len(value), 1) * font_size * 0.29
+                    + (font_size * 0.16)
+                )
+                badge_artist = ax.annotate(
+                    value,
+                    xy=(label_x, label_y),
+                    xytext=(
+                        math.cos(radians) * badge_offset_points,
+                        math.sin(radians) * badge_offset_points,
+                    ),
+                    textcoords='offset points',
+                    va='center',
+                    ha='center',
+                    rotation=text_rotation,
+                    rotation_mode='anchor',
+                    fontsize=font_size,
+                    fontfamily=font_family,
+                    fontweight='bold',
+                    color=LABEL_COLOR,
+                    bbox=badge_style,
+                    zorder=8,
+                    annotation_clip=False,
+                )
+                drawing_artists.append(DrawingArtist(
+                    badge_artist,
+                    kind='tip_badge',
+                    priority=70,
+                    movable=True,
+                    shift_direction=(-math.sin(radians), math.cos(radians)),
+                    owner=leaf,
+                ))
+            else:
+                approximate_label_width = (
+                    tip_label_size_by_leaf[leaf][0] * data_per_inch
+                    if tip_labels
+                    else 0.0
+                )
+                approximate_badge_width = max(len(value), 1) * (font_size * 0.58 / 72.0) * data_per_inch
+                badge_padding = (font_size * 0.16 / 72.0) * data_per_inch
+                badge_gap = (4.0 / 72.0) * data_per_inch
+                badge_offset = (
+                    approximate_label_width
+                    + badge_gap
+                    + (approximate_badge_width / 2.0)
+                    + badge_padding
+                )
+                badge_artist = ax.text(
+                    label_x + badge_offset,
+                    label_y,
+                    value,
+                    va='center',
+                    ha='center',
+                    fontsize=font_size,
+                    fontfamily=font_family,
+                    fontweight='bold',
+                    color=LABEL_COLOR,
+                    bbox=badge_style,
+                    zorder=8,
+                )
+                drawing_artists.append(DrawingArtist(
+                    badge_artist,
+                    kind='tip_badge',
+                    priority=70,
+                    owner=leaf,
+                ))
 
     for node in tree.traverse():
         leaf_passes_pie_filters = (
@@ -896,7 +2022,7 @@ def _draw_tree(
             and _matches_property_filters(node, node_label_filters)
         ):
             label_offset_points = (-3.0, 3.0) if node.is_leaf else (2.0, 2.0)
-            ax.annotate(
+            node_label_artist = ax.annotate(
                 '{}{}'.format(
                     node_label_prefix,
                     _format_property_value(node.props[node_label_property], decimals=node_label_decimals),
@@ -911,6 +2037,14 @@ def _draw_tree(
                 color=LABEL_COLOR,
                 zorder=9,
             )
+            drawing_artists.append(DrawingArtist(
+                node_label_artist,
+                kind='node_label',
+                priority=45,
+                movable=True,
+                shift_direction=(0.0, 1.0),
+                owner=node,
+            ))
 
     root_marker_size_pt = max(float(font_size), 5.0)
     if root_marker_size is not None:
@@ -932,7 +2066,39 @@ def _draw_tree(
             zorder=8,
         )
 
-    label_panel_span = x_span * (label_panel_width_in / tree_panel_width_in)
+    if requested_scale_bar is not None:
+        scale_label = '{:g}'.format(requested_scale_bar)
+        if str(branch_length_unit).strip():
+            scale_label = '{} {}'.format(scale_label, str(branch_length_unit).strip())
+        scale_artist = AnchoredSizeBar(
+            ax.transData,
+            requested_scale_bar,
+            scale_label,
+            loc='upper left',
+            bbox_to_anchor=(0.0, -0.01),
+            bbox_transform=ax.transAxes,
+            pad=0.15,
+            borderpad=0.25,
+            sep=2.0,
+            frameon=False,
+            size_vertical=0.0,
+            color=branch_color,
+            fontproperties=FontProperties(
+                family=font_family,
+                size=font_size,
+            ),
+        )
+        scale_artist.set_zorder(10)
+        ax.add_artist(scale_artist)
+        drawing_artists.append(DrawingArtist(
+            scale_artist,
+            kind='scale_bar',
+            priority=100,
+        ))
+
+    label_panel_span = x_span * (
+        label_panel_width_in / max(tree_panel_width_in, 0.2)
+    )
     root_has_pie = (
         bool(node_pie_properties)
         and _node_matches_target(tree, node_pie_target)
@@ -950,12 +2116,57 @@ def _draw_tree(
         root_symbol_margin = (
             (root_symbol_radius_pt + 1.5) / 72.0
         ) * data_per_inch
-    left_plot_margin = max(root_stub * 1.2, root_symbol_margin)
-    ax.set_xlim(x_min - left_plot_margin, x_max + label_offset + label_panel_span)
-    if len(leaf_order) == 0:
-        ax.set_ylim(0.5, -0.5)
+    if spatial_layout:
+        horizontal_label_extent_in = 0.0
+        vertical_label_extent_in = 0.0
+        if tip_labels:
+            for leaf in leaf_order:
+                width_in, height_in = tip_label_size_by_leaf[leaf]
+                angle = math.radians(drawing_layout.label_angles.get(leaf, 0.0))
+                horizontal_label_extent_in = max(
+                    horizontal_label_extent_in,
+                    abs(math.cos(angle)) * width_in + abs(math.sin(angle)) * height_in,
+                )
+                vertical_label_extent_in = max(
+                    vertical_label_extent_in,
+                    abs(math.sin(angle)) * width_in + abs(math.cos(angle)) * height_in,
+                )
+            horizontal_label_extent_in += 5.0 / 72.0
+            vertical_label_extent_in += 5.0 / 72.0
+        if tip_badge_property not in (None, ''):
+            badge_extent = max(0.3, float(font_size) * 2.0 / 72.0)
+            horizontal_label_extent_in += badge_extent
+            vertical_label_extent_in += badge_extent
+        if tip_track_properties:
+            horizontal_label_extent_in += track_span_pt / 72.0
+            vertical_label_extent_in += track_span_pt / 72.0
+        horizontal_label_margin = horizontal_label_extent_in * (
+            x_span / max(tree_panel_width_in, 0.2)
+        )
+        vertical_label_margin = vertical_label_extent_in * (
+            y_span / max(tree_panel_height_in, 0.2)
+        )
+        plot_pad_x = max(x_span * 0.035, horizontal_label_margin)
+        plot_pad_y = max(y_span * 0.035, vertical_label_margin)
+        ax.set_xlim(x_min - plot_pad_x, x_max + plot_pad_x)
+        ax.set_ylim(y_min - plot_pad_y, y_max + plot_pad_y)
+        if drawing_layout.equal_aspect:
+            ax.set_aspect('equal', adjustable='box')
     else:
-        ax.set_ylim(float(len(leaf_order)) - 0.5, -0.5)
+        root_path_span = 0.0
+        if drawing_layout.root_path:
+            root_path_span = abs(
+                drawing_layout.root_path[-1][0] - drawing_layout.root_path[0][0]
+            )
+        left_plot_margin = max(root_path_span * 1.2, root_symbol_margin)
+        ax.set_xlim(
+            x_min - left_plot_margin,
+            x_max + label_offset + label_panel_span,
+        )
+        if len(leaf_order) == 0:
+            ax.set_ylim(0.5, -0.5)
+        else:
+            ax.set_ylim(y_max + 0.5, y_min - 0.5)
     ax.axis('off')
     axes_left = left_margin_in / fig_width
     axes_right = 1.0 - ((right_margin_in + image_panel_width_in) / fig_width)
@@ -988,6 +2199,86 @@ def _draw_tree(
             image_by_leaf=tip_image_by_leaf,
             image_size_pt=tip_image_size_pt,
         )
+    fit_report = _fit_artists_within_figure(
+        figure=fig,
+        axes=ax,
+        artists=[item.artist for item in drawing_artists],
+    )
+    quality_report = evaluate_drawing(
+        figure=fig,
+        artists=drawing_artists,
+        branch_lines=branch_lines,
+        policy=collision_policy,
+    )
+    final_fit_report = _fit_artists_within_figure(
+        figure=fig,
+        axes=ax,
+        artists=[item.artist for item in drawing_artists],
+    )
+    if not final_fit_report['fits_within_figure']:
+        overflow_message = (
+            'Drawing annotations exceed the fixed figure boundary by up to '
+            '{:.2f} point(s). Increase the figure size or enable label wrapping.'
+        ).format(final_fit_report['maximum_overflow_points'])
+        if str(collision_policy).strip().lower() == 'error':
+            raise ValueError(overflow_message)
+        if str(collision_policy).strip().lower() in {'resolve', 'warn'}:
+            sys.stderr.write(overflow_message + '\n')
+    final_quality = evaluate_drawing(
+        figure=fig,
+        artists=drawing_artists,
+        branch_lines=branch_lines,
+        policy='ignore',
+        max_iterations=0,
+    )
+    quality_report['final_collision_count'] = final_quality['final_collision_count']
+    quality_report['final_collisions_by_kind'] = final_quality['final_collisions_by_kind']
+    quality_report['annotation_occupied_fraction'] = final_quality[
+        'annotation_occupied_fraction'
+    ]
+    quality_report['branch_collision_check_complete'] = final_quality[
+        'branch_collision_check_complete'
+    ]
+    quality_report.update(final_fit_report)
+    quality_report.update({
+        'nwkit_version': __version__,
+        'output_format': str(image_format),
+        'layout_requested': layout_name,
+        'layout': drawing_layout.name,
+        'unrooted_method': str(unrooted_method),
+        'daylight_iterations_requested': daylight_iterations,
+        **drawing_layout.metadata,
+        'figure_width_inches': fig_width,
+        'figure_height_inches': fig_height,
+        'font_family': str(font_family),
+        'font_size_points': float(font_size),
+        'input_tip_count': sum(
+            int(item.get('tip_count', 1)) for item in collapsed_clades
+        ) + len(leaf_order) - len(collapsed_clades),
+        'visible_tip_count': len(leaf_order),
+        'display_tree_sha256': _tree_drawing_fingerprint(tree),
+        'collapsed_clades': collapsed_clades,
+        'wrapped_tip_count': sum(
+            '\n' in tip_label_text_by_leaf[leaf] for leaf in leaf_order
+        ),
+        'branch_lengths_encoded': (
+            layout_name in branch_length_layouts and not use_topology_depth
+        ),
+        'branch_length_encoding': (
+            'segment'
+            if layout_name in segment_length_layouts and not use_topology_depth
+            else (
+                'depth-projection'
+                if layout_name in depth_projection_layouts and not use_topology_depth
+                else 'none'
+            )
+        ),
+        'scale_bar': requested_scale_bar,
+        'branch_length_unit': str(branch_length_unit),
+        'tip_track_properties': list(tip_track_properties),
+        'tip_track_palette': str(tip_track_palette),
+        'initial_fit': fit_report,
+    })
     metadata = {'Creator': 'NWKIT {}'.format(__version__)}
     if image_format == 'svg':
         metadata['Date'] = None
@@ -1002,24 +2293,90 @@ def _draw_tree(
             transparent=bool(transparent),
             metadata=metadata,
         )
+        write_layout_report(layout_report, quality_report)
     finally:
         plt.close(fig)
+
+
+def _canonical_path(path):
+    if path in (None, '', '-'):
+        return None
+    return os.path.normcase(os.path.realpath(os.path.expanduser(str(path))))
+
+
+def _validate_draw_paths(outfile, layout_report, input_paths):
+    outputs = {
+        '--outfile': _canonical_path(outfile),
+        '--layout-report': _canonical_path(layout_report),
+    }
+    if outputs['--outfile'] == outputs['--layout-report'] and outputs['--outfile']:
+        raise ValueError("'--outfile' and '--layout-report' must use different paths.")
+    inputs = {
+        option: _canonical_path(path)
+        for option, path in input_paths.items()
+        if _canonical_path(path) is not None
+    }
+    for output_option, output_path in outputs.items():
+        if output_path is None:
+            continue
+        for input_option, input_path in inputs.items():
+            if output_path == input_path:
+                raise ValueError(
+                    '{} must not overwrite the {} input.'.format(
+                        output_option,
+                        input_option,
+                    )
+                )
 
 
 def draw_main(args):
     if args.outfile == '-':
         raise ValueError("STDOUT is not supported for 'draw'. Use --outfile PATH.")
+    trait_path = getattr(args, 'trait', None)
+    tip_image_manifest = getattr(args, 'tip_image_manifest', None)
+    layout_report = getattr(args, 'layout_report', None)
+    _validate_draw_paths(
+        outfile=args.outfile,
+        layout_report=layout_report,
+        input_paths={
+            '--infile': args.infile,
+            '--trait': trait_path,
+            '--tip-image-manifest': tip_image_manifest,
+        },
+    )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if bool(args.ladderize):
         tree.ladderize()
-    trait_path = getattr(args, 'trait', None)
+    max_visible_tips = getattr(args, 'max_visible_tips', None)
+    if max_visible_tips not in (None, '') and int(max_visible_tips) < 2:
+        raise ValueError("'--max-visible-tips' must be at least 2.")
+    collapse_required = (
+        max_visible_tips not in (None, '')
+        and len(list(tree.leaves())) > int(max_visible_tips)
+    )
+    if collapse_required and (
+        trait_path not in (None, '') or tip_image_manifest not in (None, '')
+    ):
+        raise ValueError(
+            "'--max-visible-tips' cannot currently be combined with "
+            "'--trait' or '--tip-image-manifest'."
+        )
+    tree, collapsed_clades = collapse_tree_for_drawing(
+        tree,
+        max_visible_tips=max_visible_tips,
+        label_template=getattr(args, 'collapse_label', None),
+        property_aggregation=getattr(
+            args,
+            'collapse_property_aggregation',
+            'none',
+        ),
+    )
     group_by = getattr(args, 'group_by', None)
     trait_palette = getattr(args, 'trait_palette', 'tab10')
     support_labels = getattr(args, 'support_labels', True)
     support_min = getattr(args, 'support_min', None)
     property_colors = _parse_property_colors(getattr(args, 'property_color', None))
     node_pie_properties = _parse_property_names(getattr(args, 'node_pie_properties', None))
-    tip_image_manifest = getattr(args, 'tip_image_manifest', None)
     tip_image_path_by_leaf = _read_tip_image_manifest(
         path=tip_image_manifest,
         tree=tree,
@@ -1031,6 +2388,19 @@ def draw_main(args):
         args,
         '_nwkit_tip_image_paths',
         sorted(set(tip_image_path_by_leaf.values())),
+    )
+    _validate_draw_paths(
+        outfile=args.outfile,
+        layout_report=layout_report,
+        input_paths={
+            '--infile': args.infile,
+            '--trait': trait_path,
+            '--tip-image-manifest': tip_image_manifest,
+            **{
+                "--tip-image '{}'".format(leaf_name): path
+                for leaf_name, path in tip_image_path_by_leaf.items()
+            },
+        },
     )
     tip_image_by_leaf = _load_tip_images(
         tip_image_path_by_leaf,
@@ -1107,7 +2477,9 @@ def draw_main(args):
         font_family=getattr(args, 'font_family', FONT_FAMILY),
         branch_color=getattr(args, 'branch_color', BRANCH_COLOR),
         terminal_branch_color=getattr(args, 'terminal_branch_color', None),
+        tip_labels=getattr(args, 'tip_labels', True),
         tip_label_position=getattr(args, 'tip_label_position', 'aligned'),
+        tip_label_wrap=getattr(args, 'tip_label_wrap', 'none'),
         root_marker=getattr(args, 'root_marker', 'none'),
         root_marker_color=getattr(args, 'root_marker_color', '#0072B2'),
         root_marker_size=getattr(args, 'root_marker_size', None),
@@ -1128,5 +2500,26 @@ def draw_main(args):
         tip_image_by_leaf=tip_image_by_leaf,
         tip_image_size=getattr(args, 'tip_image_size', TIP_IMAGE_SIZE_PT),
         tip_image_gap=getattr(args, 'tip_image_gap', TIP_IMAGE_GAP_PT),
+        layout=getattr(args, 'layout', 'rectangular'),
+        spiral_turns=getattr(args, 'spiral_turns', None),
+        fan_open_angle=getattr(args, 'fan_open_angle', 30.0),
+        unrooted_method=getattr(args, 'unrooted_method', 'equal-angle'),
+        daylight_iterations=getattr(args, 'daylight_iterations', 5),
+        scale_bar=getattr(args, 'scale_bar', 'none'),
+        branch_length_unit=getattr(args, 'branch_length_unit', ''),
+        branch_width=getattr(args, 'branch_width', 0.8),
+        branch_color_property=getattr(args, 'branch_color_property', None),
+        branch_width_property=getattr(args, 'branch_width_property', None),
+        branch_width_range=getattr(args, 'branch_width_range', '0.4,2.5'),
+        tip_label_font_style=getattr(args, 'tip_label_font_style', 'plain'),
+        tip_track_properties=getattr(args, 'tip_track', None),
+        tip_track_type=getattr(args, 'tip_track_type', 'auto'),
+        tip_track_size=getattr(args, 'tip_track_size', 5.0),
+        tip_track_palette=getattr(args, 'tip_track_palette', 'viridis'),
+        legend_columns=getattr(args, 'legend_columns', 'auto'),
+        legend_position=getattr(args, 'legend_position', 'auto'),
+        collision_policy=getattr(args, 'collision_policy', 'resolve'),
+        layout_report=layout_report,
+        collapsed_clades=collapsed_clades,
     )
     sys.stderr.write('Wrote tree image: {}\n'.format(os.path.realpath(args.outfile)))

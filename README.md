@@ -62,7 +62,7 @@ and output-column vocabulary are defined in
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
-- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with aligned species images, support, categorical or missing-value badges, filtered node-probability pies, and property labels
+- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with conventional Cartesian and polar layouts, compact tidy, equal-angle unrooted, spiral, recursive fractal, or label-aware packed arrangements and optional image or property annotations
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
@@ -86,6 +86,147 @@ and output-column vocabulary are defined in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+
+## Tree drawing layouts
+
+`nwkit draw --layout` provides twelve deterministic layouts from the same
+Newick input:
+
+```sh
+nwkit draw -i tree.nwk --layout rectangular -o rectangular.svg
+nwkit draw -i tree.nwk --layout slanted     -o slanted.svg
+nwkit draw -i tree.nwk --layout cladogram   -o cladogram.svg
+nwkit draw -i tree.nwk --layout tidy       -o tidy.svg
+nwkit draw -i tree.nwk --layout circular   -o circular.svg
+nwkit draw -i tree.nwk --layout fan        -o fan.svg
+nwkit draw -i tree.nwk --layout radial     -o radial.svg
+nwkit draw -i tree.nwk --layout unrooted   -o unrooted.svg
+nwkit draw -i tree.nwk --layout spiral     -o spiral.svg
+nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
+nwkit draw -i tree.nwk --layout packed     -o packed.svg
+nwkit draw -i tree.nwk --layout packed-phylogram -o packed-phylogram.svg
+```
+
+- `rectangular` is the conventional orthogonal phylogram and remains the
+  default.
+- `slanted` retains root-to-node branch-length depth but connects each parent
+  and child directly.
+- `cladogram` ignores branch lengths, aligns all tips, and displays topology
+  with slanted branches.
+- `tidy` uses a branch-length-aware implementation of the non-layered tidy
+  tree algorithm of [van der Ploeg (2014)](https://doi.org/10.1002/spe.2213),
+  as introduced for phylogenetic trees by
+  [de Vienne (2022)](https://doi.org/10.1093/molbev/msac204). It retains the
+  branch-length axis while moving non-overlapping subtrees closer together.
+- `circular` maps branch-length depth to radius and uses circular connectors
+  followed by radial branch segments. `fan` uses the same rooted geometry with
+  a left-side opening controlled by `--fan-open-angle` (30 degrees by default).
+- `radial` maps the rooted phylogram to polar coordinates and connects nodes
+  with straight branches.
+- `unrooted` suppresses a degree-two input root and uses a central-node,
+  branch-length-aware equal-angle arrangement. Add
+  `--unrooted-method equal-daylight` to iteratively distribute open angular
+  space around internal nodes while preserving every edge length. Each pass is
+  checked for branch crossings; unsafe rotations are reduced or rejected. The
+  pass limit is controlled by `--daylight-iterations`. Equal-daylight is
+  intended for detailed views of up to 2,000 displayed nodes; use equal-angle
+  or collapse the drawing above that limit.
+- `spiral` wraps the orthogonal phylogram around an Archimedean spiral. Use
+  `--spiral-turns FLOAT` to override the tip-count-dependent turn count. The
+  warped geometry retains topology and relative depth within each spiral
+  track, but Euclidean distances in the finished image are not branch lengths.
+- `fractal` recursively assigns descendant-rich clades more space and fits the
+  resulting crossing-free radial-fractal drawing to the requested rectangle. It is a
+  topology-and-balance view: branch lengths intentionally do not determine
+  geometry.
+- `packed` extends the radial-fractal arrangement with rendered-label-aware
+  sector allocation. Multiline labels contribute their measured tangential
+  height, while their measured width reduces the rectangle reserved for the
+  tree itself.
+- `packed-phylogram` uses the same measured label heights to allocate polar
+  sectors but retains root-to-node branch-length depth as radius. Circular
+  connectors change direction at the parent radius and radial segments encode
+  branch-length increments.
+
+Tip labels can be wrapped for display without changing names in the Newick
+tree:
+
+```sh
+nwkit draw -i tree.nwk --layout packed --tip-label-wrap auto -o packed.svg
+nwkit draw -i tree.nwk --layout packed --tip-label-wrap taxonomy -o taxa.svg
+nwkit draw -i tree.nwk --layout packed --tip-label-wrap 12   -o wrapped.svg
+```
+
+`--tip-label-wrap auto` measures wrapping targets corresponding to one through
+five lines with the selected Matplotlib font and wraps an individual label
+only when the reduction in layout congestion is meaningful. A positive integer sets the
+maximum characters per displayed line; `taxonomy` keeps a conservatively
+recognized underscore-delimited `Genus_species` prefix together. Wrapping
+prefers whitespace and
+`_`, `-`, `/`, or `|` boundaries before making a hard break. The underlying
+tip name is never modified. `--tip-label-font-style taxonomy` italicizes only
+labels that consist exactly of such a binomial; `italic` applies to every tip.
+
+`--tip-label-position auto` aligns labels in the rectangular layout and puts
+them at branch ends in the other layouts. Branch-end labels are included in
+the collision geometry of `tidy`. Use `--tip-labels no` for dense overview
+figures where individual names would be illegible. Tip-image columns currently
+apply to `rectangular`, `slanted`, `cladogram`, and `tidy`; node markers,
+support, pies, property labels, and categorical tip styling follow nodes in
+every layout.
+
+### Annotation-aware and auditable drawing
+
+Rendered label extents, badges, support labels, node-property labels, legends,
+tip tracks, and branches participate in a deterministic post-render collision
+check. The default `--collision-policy resolve` moves annotations that can be
+moved safely; `warn`, `error`, and `ignore` make the remaining-collision policy
+explicit. A machine-readable report records the layout, figure dimensions,
+font settings, branch-length encoding, equal-daylight convergence, wrapping,
+automatic collapsing, figure-boundary overflow, annotation occupancy, and a
+complete branch/annotation collision audit:
+
+```sh
+nwkit draw -i tree.nhx -o annotated.svg \
+  --layout packed-phylogram \
+  --tip-track habitat --tip-track temperature \
+  --branch-color-property regime \
+  --branch-width-property posterior \
+  --layout-report annotated.layout.json
+```
+
+Tip tracks read categorical or numeric Newick/NHX properties; `auto` infers
+the shared type separately for each property. Continuous tracks use
+`--tip-track-palette` (default `viridis`), while categorical tracks use
+`--trait-palette` and `--property-color` overrides. Branch color and width can
+likewise be mapped from properties, with `--branch-width-range MIN,MAX` setting
+the rendered width interval. Legends automatically use multiple columns and
+move to the right when they become too dense; the position and column count
+can also be fixed explicitly.
+
+An exact scale can be added to rectangular, tidy, circular, fan, unrooted, and
+packed-phylogram drawings:
+
+```sh
+nwkit draw -i tree.nwk -o tree.svg \
+  --scale-bar auto --branch-length-unit substitutions/site
+```
+
+Topology-only or geometrically warped layouts reject a scale bar rather than
+implying a false distance interpretation. Slanted and straight radial layouts
+retain root-to-node depth only as a projection, so they also reject a bar that
+could be mistaken for the length of a visible branch. A requested bar cannot
+exceed the displayed tree-depth span.
+
+For very large overview trees,
+`--max-visible-tips INT` collapses clades in a drawing-only copy and marks the
+resulting pseudo-tips; `--collapse-label` customizes their labels. The original
+tree file is never changed, and the report lists every collapsed clade.
+Collapsed properties are retained only when present and identical in every
+descendant tip; incomplete and heterogeneous properties become `partial` and
+`mixed`, respectively. `--collapse-property-aggregation mean` explicitly
+requests a mean for complete numeric properties. The report records the
+status and value of each summarized property.
 
 ## Drawing trees with species images
 
