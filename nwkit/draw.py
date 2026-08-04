@@ -13,8 +13,9 @@ from matplotlib import colors as mcolors
 from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
+from matplotlib.collections import LineCollection
 from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
-from matplotlib.patches import Arc, Circle, Patch, Rectangle, Wedge
+from matplotlib.patches import Arc, Circle, Patch, Polygon, Rectangle, Wedge
 from matplotlib.text import Text
 from matplotlib.font_manager import FontProperties
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -23,6 +24,12 @@ from nwkit import __version__
 from nwkit.draw_layouts import get_rectangular_coordinates, make_tree_layout
 from nwkit.draw_prep import collapse_tree_for_drawing
 from nwkit.draw_quality import DrawingArtist, evaluate_drawing, write_layout_report
+from nwkit.time_tree import (
+    posterior_sample_tree,
+    prepare_time_tree_annotations,
+    read_mcmctree_posterior,
+    summarize_mcmctree_posterior,
+)
 from nwkit.util import (
     extract_species_label,
     is_rooted,
@@ -1659,6 +1666,208 @@ def _tip_track_artist(ax, xy, offset_points, color, size_points):
     return artist
 
 
+def _remap_leaf_dictionary(source_tree, target_tree, values):
+    source_leaves = list(source_tree.leaves())
+    target_leaves = list(target_tree.leaves())
+    if [leaf.name for leaf in source_leaves] != [leaf.name for leaf in target_leaves]:
+        raise ValueError('Posterior sample tree tip order differs from the displayed topology.')
+    return {
+        target: values[source]
+        for source, target in zip(source_leaves, target_leaves)
+        if source in values
+    }
+
+
+def _make_posterior_drawing_layouts(
+    tree,
+    posterior,
+    posterior_topology,
+    ladderize,
+    *,
+    layout,
+    use_topology_depth,
+    aspect_ratio,
+    spiral_turns,
+    angular_span,
+    angular_center,
+    terminal_extent_by_leaf,
+    label_size_by_leaf,
+    tip_spacing,
+    subtree_packing,
+    unrooted_method,
+    daylight_iterations,
+):
+    """Render corresponding posterior trees with exactly the main-tree settings."""
+
+    reference_nodes = list(tree.traverse(strategy='preorder'))
+    layouts = []
+    for sample_index in range(posterior.sample_count):
+        posterior_tree = posterior_sample_tree(
+            posterior_topology,
+            posterior,
+            sample_index,
+        )
+        if ladderize:
+            posterior_tree.ladderize()
+        sample_nodes = list(posterior_tree.traverse(strategy='preorder'))
+        if len(sample_nodes) != len(reference_nodes):
+            raise ValueError('Posterior sample topology differs from the displayed topology.')
+        if [node.name for node in posterior_tree.leaves()] != [node.name for node in tree.leaves()]:
+            raise ValueError('Posterior sample topology has a different ordered tip set.')
+        sample_layout = make_tree_layout(
+            posterior_tree,
+            layout=layout,
+            use_topology_depth=use_topology_depth,
+            aspect_ratio=aspect_ratio,
+            spiral_turns=spiral_turns,
+            angular_span=angular_span,
+            angular_center=angular_center,
+            terminal_extent_by_leaf=_remap_leaf_dictionary(
+                tree, posterior_tree, terminal_extent_by_leaf,
+            ),
+            label_size_by_leaf=_remap_leaf_dictionary(
+                tree, posterior_tree, label_size_by_leaf,
+            ),
+            tip_spacing=tip_spacing,
+            subtree_packing=subtree_packing,
+            unrooted_method=unrooted_method,
+            daylight_iterations=daylight_iterations,
+        )
+        path_by_reference_node = {
+            reference: sample_layout.edge_paths[sample]
+            for reference, sample in zip(reference_nodes, sample_nodes)
+            if not reference.is_root
+        }
+        layouts.append((sample_layout.bounds, path_by_reference_node))
+    return layouts
+
+
+def _resample_polyline(path, sample_count=32):
+    points = np.asarray(path, dtype=float)
+    if len(points) == 0:
+        return np.zeros((sample_count, 2), dtype=float)
+    if len(points) == 1:
+        return np.repeat(points, sample_count, axis=0)
+    segment_lengths = np.sqrt(np.sum(np.diff(points, axis=0) ** 2, axis=1))
+    cumulative = np.concatenate(([0.0], np.cumsum(segment_lengths)))
+    if cumulative[-1] <= 1e-15:
+        return np.repeat(points[:1], sample_count, axis=0)
+    targets = np.linspace(0.0, cumulative[-1], sample_count)
+    return np.column_stack([
+        np.interp(targets, cumulative, points[:, dimension])
+        for dimension in range(2)
+    ])
+
+
+def _densitree_branch_envelope(paths, level, padding):
+    """Return the geometric central credible envelope for corresponding paths."""
+
+    sampled = np.stack([_resample_polyline(path) for path in paths], axis=0)
+    tail = (1.0 - float(level)) / 2.0
+    center_path = np.median(sampled, axis=0)
+    lower_curve = []
+    upper_curve = []
+    previous_axis = None
+    for point_index in range(sampled.shape[1]):
+        values = sampled[:, point_index, :]
+        center = center_path[point_index]
+        centered = values - center
+        if len(values) > 1 and np.linalg.norm(centered) > 1e-15:
+            _, _, vectors = np.linalg.svd(centered, full_matrices=False)
+            axis = vectors[0]
+        else:
+            before = center_path[max(0, point_index - 1)]
+            after = center_path[min(len(center_path) - 1, point_index + 1)]
+            tangent = after - before
+            tangent_norm = float(np.linalg.norm(tangent))
+            axis = (
+                np.asarray([-tangent[1], tangent[0]]) / tangent_norm
+                if tangent_norm > 1e-15
+                else np.asarray([0.0, 1.0])
+            )
+        if previous_axis is not None and float(np.dot(axis, previous_axis)) < 0.0:
+            axis = -axis
+        previous_axis = axis
+        projections = centered @ axis
+        low, high = np.quantile(projections, [tail, 1.0 - tail])
+        if high - low < 2.0 * padding:
+            midpoint = (low + high) / 2.0
+            low = midpoint - padding
+            high = midpoint + padding
+        lower_curve.append(center + axis * low)
+        upper_curve.append(center + axis * high)
+    return np.vstack((np.asarray(lower_curve), np.asarray(upper_curve)[::-1]))
+
+
+def _age_interval_path(node, drawing_layout):
+    try:
+        age = float(node.props['age'])
+        low = float(node.props['age_ci_low'])
+        high = float(node.props['age_ci_high'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if not all(math.isfinite(value) for value in (age, low, high)):
+        return None
+    center = np.asarray(
+        [drawing_layout.xcoord[node], drawing_layout.ycoord[node]],
+        dtype=float,
+    )
+    direction = None
+    scale = None
+    if node.is_root:
+        if drawing_layout.spatial or not drawing_layout.root_path:
+            return None
+        vector = center - np.asarray(drawing_layout.root_path[0], dtype=float)
+        length = float(np.linalg.norm(vector))
+        root_age = max(age, 1e-15)
+        display_span = max(
+            abs(float(drawing_layout.xcoord[other]) - float(center[0]))
+            for other in drawing_layout.xcoord
+        )
+        if length > 1e-15 and display_span > 1e-15:
+            direction = vector / length
+            scale = display_span / root_age
+    elif drawing_layout.name in {'rectangular', 'slanted'}:
+        direction = np.asarray([1.0, 0.0])
+        scale = 1.0
+    elif drawing_layout.name in {'circular', 'radial'}:
+        root_center = np.asarray([
+            drawing_layout.xcoord[node.root],
+            drawing_layout.ycoord[node.root],
+        ])
+        vector = center - root_center
+        length = float(np.linalg.norm(vector))
+        if length > 1e-15:
+            direction = vector / length
+            scale = 1.0
+    elif node.dist not in (None, 0):
+        path = drawing_layout.edge_paths.get(node, ())
+        for start, end in reversed(list(zip(path, path[1:]))):
+            vector = np.asarray(end, dtype=float) - np.asarray(start, dtype=float)
+            length = float(np.linalg.norm(vector))
+            if length > 1e-15:
+                direction = vector / length
+                scale = length / float(node.dist)
+                break
+    if direction is None:
+        for child in node.get_children():
+            vector = np.asarray(
+                [drawing_layout.xcoord[child], drawing_layout.ycoord[child]],
+                dtype=float,
+            ) - center
+            length = float(np.linalg.norm(vector))
+            child_dist = 0.0 if child.dist is None else float(child.dist)
+            if length > 1e-15 and child_dist > 0.0:
+                direction = vector / length
+                scale = length / child_dist
+                break
+    if direction is None or scale is None:
+        return None
+    younger = center + direction * max(age - low, 0.0) * scale
+    older = center - direction * max(high - age, 0.0) * scale
+    return np.vstack((older, younger))
+
+
 @_isolated_matplotlib_state
 def _draw_tree(
     tree,
@@ -1724,6 +1933,17 @@ def _draw_tree(
     collision_policy='resolve',
     layout_report=None,
     collapsed_clades=None,
+    time_constraints='auto',
+    time_credible_intervals='auto',
+    mcmctree_posterior=None,
+    mcmctree_posterior_topology=None,
+    posterior_ladderize=False,
+    densitree='none',
+    densitree_alpha=0.035,
+    densitree_color='#0072B2',
+    densitree_ci_level=0.95,
+    densitree_ci_alpha=0.18,
+    densitree_ci_color='#56B4E9',
 ):
     _apply_font_style(font_size=font_size, font_family=font_family)
     matplotlib.rcParams['svg.hashsalt'] = 'nwkit'
@@ -1734,6 +1954,26 @@ def _draw_tree(
     tip_image_by_leaf = tip_image_by_leaf or {}
     tip_track_properties = tip_track_properties or []
     collapsed_clades = collapsed_clades or []
+    densitree_mode = str(densitree).strip().lower()
+    if densitree_mode not in {'none', 'all', 'ci', 'both'}:
+        raise ValueError("'--densitree' must be none, all, ci, or both.")
+    if densitree_mode != 'none' and mcmctree_posterior is None:
+        raise ValueError("'--densitree' requires '--mcmctree-posterior'.")
+    densitree_alpha = float(densitree_alpha)
+    densitree_ci_alpha = float(densitree_ci_alpha)
+    densitree_ci_level = float(densitree_ci_level)
+    if not 0.0 < densitree_alpha <= 1.0:
+        raise ValueError("'--densitree-alpha' must be greater than 0 and no greater than 1.")
+    if not 0.0 < densitree_ci_alpha <= 1.0:
+        raise ValueError("'--densitree-ci-alpha' must be greater than 0 and no greater than 1.")
+    if not 0.0 < densitree_ci_level < 1.0:
+        raise ValueError("'--densitree-ci-level' must be between 0 and 1.")
+    constraint_mode = str(time_constraints).strip().lower()
+    credible_interval_mode = str(time_credible_intervals).strip().lower()
+    if constraint_mode not in {'auto', 'yes', 'no'}:
+        raise ValueError("'--time-constraints' must be auto, yes, or no.")
+    if credible_interval_mode not in {'auto', 'yes', 'no'}:
+        raise ValueError("'--time-credible-intervals' must be auto, yes, or no.")
     if node_pie_properties:
         _node_matches_target(tree, node_pie_target)
     if node_label_property not in (None, ''):
@@ -1766,6 +2006,33 @@ def _draw_tree(
     }
     if layout_name not in supported_layouts:
         raise ValueError("Unsupported '--layout': {}".format(layout))
+    if densitree_mode != 'none' and layout_name in {'cladogram', 'fractal'}:
+        raise ValueError(
+            "'--densitree' requires a layout that encodes branch-length or "
+            'root-to-node time variation; cladogram and fractal do not.'
+        )
+    topology_only_time_layout = layout_name in {'cladogram', 'fractal'}
+    has_credible_intervals = any(
+        'age_ci_low' in node.props for node in tree.traverse()
+    )
+    if (
+        topology_only_time_layout
+        and credible_interval_mode == 'yes'
+        and has_credible_intervals
+    ):
+        raise ValueError(
+            "'--time-credible-intervals yes' requires a layout that encodes "
+            'branch-length or root-to-node time variation.'
+        )
+    if (
+        topology_only_time_layout
+        and credible_interval_mode == 'auto'
+        and has_credible_intervals
+    ):
+        sys.stderr.write(
+            'Skipping time credible intervals because the selected layout '
+            'encodes topology rather than time.\n'
+        )
     angular_span = float(angular_span)
     angular_center = float(angular_center)
     if (
@@ -2138,10 +2405,34 @@ def _draw_tree(
         unrooted_method=unrooted_method,
         daylight_iterations=daylight_iterations,
     )
+    posterior_layouts = _make_posterior_drawing_layouts(
+        tree,
+        mcmctree_posterior,
+        mcmctree_posterior_topology,
+        bool(posterior_ladderize),
+        layout=layout_name,
+        use_topology_depth=use_topology_depth,
+        aspect_ratio=layout_aspect_ratio,
+        spiral_turns=spiral_turns,
+        angular_span=angular_span,
+        angular_center=angular_center,
+        terminal_extent_by_leaf=terminal_extent_by_leaf,
+        label_size_by_leaf=spacing_size_by_leaf,
+        tip_spacing=resolved_tip_spacing,
+        subtree_packing=resolved_subtree_packing,
+        unrooted_method=unrooted_method,
+        daylight_iterations=daylight_iterations,
+    ) if densitree_mode != 'none' else []
     xcoord = drawing_layout.xcoord
     ycoord = drawing_layout.ycoord
     leaf_order = drawing_layout.leaf_order
     x_min, x_max, y_min, y_max = drawing_layout.bounds
+    if posterior_layouts:
+        posterior_bounds = [bounds for bounds, _ in posterior_layouts]
+        x_min = min([x_min] + [bounds[0] for bounds in posterior_bounds])
+        x_max = max([x_max] + [bounds[1] for bounds in posterior_bounds])
+        y_min = min([y_min] + [bounds[2] for bounds in posterior_bounds])
+        y_max = max([y_max] + [bounds[3] for bounds in posterior_bounds])
     if (
         requested_depth_guide is not None
         and layout_name == 'radial'
@@ -2233,6 +2524,44 @@ def _draw_tree(
                 priority=100,
             ))
 
+    if densitree_mode in {'ci', 'both'}:
+        envelope_padding = max(min(x_span, y_span), 1e-9) * 0.0015
+        for node in tree.traverse():
+            if node.is_root:
+                continue
+            polygon_points = _densitree_branch_envelope(
+                [path_by_node[node] for _, path_by_node in posterior_layouts],
+                level=densitree_ci_level,
+                padding=envelope_padding,
+            )
+            if polygon_points is None:
+                continue
+            ax.add_patch(Polygon(
+                polygon_points,
+                closed=True,
+                facecolor=densitree_ci_color,
+                edgecolor='none',
+                alpha=densitree_ci_alpha,
+                zorder=0.6,
+            ))
+
+    if densitree_mode in {'all', 'both'}:
+        posterior_line_width = max(0.25, float(branch_width) * 0.65)
+        posterior_segments = [
+            np.asarray(path, dtype=float)
+            for _, path_by_node in posterior_layouts
+            for path in path_by_node.values()
+        ]
+        ax.add_collection(LineCollection(
+            posterior_segments,
+            colors=[densitree_color],
+            linewidths=posterior_line_width,
+            alpha=densitree_alpha,
+            zorder=1,
+            capstyle=TREE_LINE_CAPSTYLE,
+            joinstyle='round',
+        ))
+
     for node, path in drawing_layout.edge_paths.items():
         if branch_color_property not in (None, '') and node.props.get(branch_color_property) not in (None, ''):
             edge_color = color_by_node[node]
@@ -2264,6 +2593,172 @@ def _draw_tree(
             solid_joinstyle='round',
         )[0]
         branch_lines.append((tree, root_line))
+
+    credible_interval_count = 0
+    show_credible_intervals = credible_interval_mode == 'yes' or (
+        credible_interval_mode == 'auto'
+        and has_credible_intervals
+        and not topology_only_time_layout
+    )
+    if show_credible_intervals:
+        for node in tree.traverse():
+            interval_path = _age_interval_path(node, drawing_layout)
+            if interval_path is None:
+                if (
+                    node.is_root
+                    and 'age_ci_low' in node.props
+                    and 'age_ci_high' in node.props
+                ):
+                    credible_interval_count += 1
+                    kind = str(node.props.get('age_ci_kind', 'CI'))
+                    level = float(node.props.get('age_ci_level', 0.95))
+                    label = '{}% {} {:g}–{:g}'.format(
+                        int(round(level * 100.0)),
+                        kind,
+                        float(node.props['age_ci_low']),
+                        float(node.props['age_ci_high']),
+                    )
+                    artist = ax.annotate(
+                        label,
+                        xy=(xcoord[node], ycoord[node]),
+                        xytext=(-4.0, 6.0),
+                        textcoords='offset points',
+                        ha='right',
+                        va='bottom',
+                        fontsize=font_size,
+                        fontfamily=font_family,
+                        color='#D55E00',
+                        bbox={
+                            'boxstyle': 'round,pad=0.16',
+                            'facecolor': '#ffffff',
+                            'edgecolor': '#D55E00',
+                            'linewidth': 0.6,
+                            'alpha': 0.94,
+                        },
+                        zorder=10,
+                    )
+                    drawing_artists.append(DrawingArtist(
+                        artist,
+                        kind='time_credible_interval',
+                        priority=52,
+                        movable=True,
+                        shift_direction=(0.0, -1.0),
+                        owner=node,
+                    ))
+                continue
+            credible_interval_count += 1
+            ax.plot(
+                interval_path[:, 0],
+                interval_path[:, 1],
+                color='#D55E00',
+                linewidth=max(float(branch_width) * 1.5, 1.0),
+                alpha=0.9,
+                zorder=4,
+                solid_capstyle='round',
+            )
+            interval_vector = interval_path[1] - interval_path[0]
+            display_vector = np.asarray([
+                interval_vector[0] * tree_panel_width_in / max(x_span, 1e-15),
+                interval_vector[1] * tree_panel_height_in / max(y_span, 1e-15),
+            ])
+            display_length = float(np.linalg.norm(display_vector))
+            if display_length > 1e-15:
+                display_normal = np.asarray(
+                    [-display_vector[1], display_vector[0]],
+                    dtype=float,
+                ) / display_length
+                cap_half_inches = max(float(font_size) * 0.16, 1.1) / 72.0
+                cap_vector = np.asarray([
+                    display_normal[0] * cap_half_inches * x_span / max(tree_panel_width_in, 1e-15),
+                    display_normal[1] * cap_half_inches * y_span / max(tree_panel_height_in, 1e-15),
+                ])
+                for endpoint in interval_path:
+                    cap = np.vstack((
+                        endpoint - cap_vector,
+                        endpoint + cap_vector,
+                    ))
+                    ax.plot(
+                        cap[:, 0],
+                        cap[:, 1],
+                        color='#D55E00',
+                        linewidth=0.75,
+                        zorder=4.1,
+                    )
+
+    calibration_nodes = [
+        node for node in tree.traverse()
+        if node.props.get('calibration_type') not in (None, '')
+    ]
+    show_constraints = constraint_mode == 'yes' or (
+        constraint_mode == 'auto' and bool(calibration_nodes)
+    )
+    constraint_color_by_type = {
+        'point': '#CC79A7',
+        'bounded': '#009E73',
+        'lower': '#0072B2',
+        'upper': '#E69F00',
+    }
+    constraint_artist_count = 0
+    if show_constraints:
+        for node in calibration_nodes:
+            calibration_type = str(node.props['calibration_type'])
+            lower = node.props.get('calibration_lower')
+            upper = node.props.get('calibration_upper')
+            if calibration_type == 'point':
+                label = '@{:g}'.format(float(lower))
+            elif lower is not None and upper is not None:
+                label = '{:g}–{:g}'.format(float(lower), float(upper))
+            elif lower is not None:
+                label = '≥{:g}'.format(float(lower))
+            elif upper is not None:
+                label = '≤{:g}'.format(float(upper))
+            else:
+                label = str(node.props.get('calibration_raw', 'calibration'))
+            color = constraint_color_by_type.get(calibration_type, '#666666')
+            if spatial_layout:
+                placement = _spatial_node_label_placement(
+                    node,
+                    drawing_layout,
+                    clearance_points=max(float(font_size) * 1.35, 7.0),
+                )
+            else:
+                placement = {
+                    'offset': (4.0, max(float(font_size) * 0.8, 5.0)),
+                    'horizontal_alignment': 'left',
+                    'vertical_alignment': 'bottom',
+                    'rotation': 0.0,
+                    'shift_direction': (0.0, 1.0),
+                }
+            artist = ax.annotate(
+                label,
+                xy=(xcoord[node], ycoord[node]),
+                xytext=placement['offset'],
+                textcoords='offset points',
+                ha=placement['horizontal_alignment'],
+                va=placement['vertical_alignment'],
+                rotation=placement['rotation'],
+                rotation_mode='anchor',
+                fontsize=font_size,
+                fontfamily=font_family,
+                color=color,
+                bbox={
+                    'boxstyle': 'round,pad=0.18',
+                    'facecolor': '#ffffff',
+                    'edgecolor': color,
+                    'linewidth': 0.6,
+                    'alpha': 0.94,
+                },
+                zorder=10,
+            )
+            drawing_artists.append(DrawingArtist(
+                artist,
+                kind='time_constraint',
+                priority=50,
+                movable=True,
+                shift_direction=placement['shift_direction'],
+                owner=node,
+            ))
+            constraint_artist_count += 1
 
     marker_area = 18.0 * (0.5 ** 2)
     marker_size_pt = 4.8 * 0.5
@@ -3222,6 +3717,19 @@ def _draw_tree(
         'tip_track_properties': list(tip_track_properties),
         'tip_track_palette': str(tip_track_palette),
         'tip_spacing': resolved_tip_spacing,
+        'time_constraints': constraint_mode,
+        'time_constraint_count': constraint_artist_count,
+        'time_credible_intervals': credible_interval_mode,
+        'time_credible_interval_count': credible_interval_count,
+        'densitree': densitree_mode,
+        'densitree_sample_count': len(posterior_layouts),
+        'densitree_ci_level': (
+            densitree_ci_level if densitree_mode in {'ci', 'both'} else None
+        ),
+        'densitree_ci_interpretation': (
+            'branchwise geometric central envelope'
+            if densitree_mode in {'ci', 'both'} else None
+        ),
         'initial_fit': fit_report,
     })
     metadata = {'Creator': 'NWKIT {}'.format(__version__)}
@@ -3279,6 +3787,7 @@ def draw_main(args):
         raise ValueError("STDOUT is not supported for 'draw'. Use --outfile PATH.")
     trait_path = getattr(args, 'trait', None)
     tip_image_manifest = getattr(args, 'tip_image_manifest', None)
+    posterior_path = getattr(args, 'mcmctree_posterior', None)
     layout_report = getattr(args, 'layout_report', None)
     _validate_draw_paths(
         outfile=args.outfile,
@@ -3287,9 +3796,50 @@ def draw_main(args):
             '--infile': args.infile,
             '--trait': trait_path,
             '--tip-image-manifest': tip_image_manifest,
+            '--mcmctree-posterior': posterior_path,
         },
     )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    prepare_time_tree_annotations(tree)
+    densitree_mode = str(getattr(args, 'densitree', 'none')).strip().lower()
+    if (
+        densitree_mode != 'none'
+        and str(getattr(args, 'layout', 'rectangular')).strip().lower()
+        in {'cladogram', 'fractal'}
+    ):
+        raise ValueError(
+            "'--densitree' requires a layout that encodes branch-length or "
+            'root-to-node time variation; cladogram and fractal do not.'
+        )
+    posterior = None
+    posterior_topology = None
+    if posterior_path not in (None, ''):
+        if posterior_path == '-' and args.infile == '-':
+            raise ValueError(
+                "'--infile' and '--mcmctree-posterior' cannot both read from STDIN."
+            )
+        posterior = read_mcmctree_posterior(
+            posterior_path,
+            tree=tree,
+            burnin=getattr(args, 'posterior_burnin', 0),
+            thin=getattr(args, 'posterior_thin', 1),
+        )
+        summarize_mcmctree_posterior(
+            tree,
+            posterior=posterior,
+            point=getattr(args, 'posterior_point', 'mean'),
+            ci=getattr(args, 'posterior_ci', 'hpd'),
+            level=getattr(args, 'posterior_ci_level', 0.95),
+        )
+        if densitree_mode != 'none':
+            posterior_topology = tree.copy()
+            sys.stderr.write(
+                'Rendering {:,} posterior dated trees reconstructed from MCMCtree samples.\n'.format(
+                    posterior.sample_count,
+                )
+            )
+    elif densitree_mode != 'none':
+        raise ValueError("'--densitree' requires '--mcmctree-posterior'.")
     if bool(args.ladderize):
         tree.ladderize()
     max_visible_tips = getattr(args, 'max_visible_tips', None)
@@ -3299,6 +3849,10 @@ def draw_main(args):
         max_visible_tips not in (None, '')
         and len(list(tree.leaves())) > int(max_visible_tips)
     )
+    if collapse_required and densitree_mode != 'none':
+        raise ValueError(
+            "'--max-visible-tips' cannot currently be combined with '--densitree'."
+        )
     if collapse_required and (
         trait_path not in (None, '') or tip_image_manifest not in (None, '')
     ):
@@ -3341,6 +3895,7 @@ def draw_main(args):
             '--infile': args.infile,
             '--trait': trait_path,
             '--tip-image-manifest': tip_image_manifest,
+            '--mcmctree-posterior': posterior_path,
             **{
                 "--tip-image '{}'".format(leaf_name): path
                 for leaf_name, path in tip_image_path_by_leaf.items()
@@ -3470,5 +4025,16 @@ def draw_main(args):
         collision_policy=getattr(args, 'collision_policy', 'resolve'),
         layout_report=layout_report,
         collapsed_clades=collapsed_clades,
+        time_constraints=getattr(args, 'time_constraints', 'auto'),
+        time_credible_intervals=getattr(args, 'time_credible_intervals', 'auto'),
+        mcmctree_posterior=posterior,
+        mcmctree_posterior_topology=posterior_topology,
+        posterior_ladderize=bool(args.ladderize),
+        densitree=densitree_mode,
+        densitree_alpha=getattr(args, 'densitree_alpha', 0.035),
+        densitree_color=getattr(args, 'densitree_color', '#0072B2'),
+        densitree_ci_level=getattr(args, 'densitree_ci_level', 0.95),
+        densitree_ci_alpha=getattr(args, 'densitree_ci_alpha', 0.18),
+        densitree_ci_color=getattr(args, 'densitree_ci_color', '#56B4E9'),
     )
     sys.stderr.write('Wrote tree image: {}\n'.format(os.path.realpath(args.outfile)))

@@ -5,6 +5,7 @@ from argparse import Namespace
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
@@ -12,6 +13,7 @@ from matplotlib.figure import Figure
 from matplotlib.patches import Arc, Circle
 
 from nwkit.draw import (
+    _age_interval_path,
     _add_radial_depth_guide,
     _add_scale_bar,
     _get_species_overlap_node_types,
@@ -100,6 +102,20 @@ def make_draw_args(**kwargs):
         'collision_policy': 'resolve',
         'layout_report': None,
         'transparent': False,
+        'time_constraints': 'auto',
+        'time_credible_intervals': 'auto',
+        'mcmctree_posterior': None,
+        'posterior_point': 'mean',
+        'posterior_ci': 'hpd',
+        'posterior_ci_level': 0.95,
+        'posterior_burnin': 0,
+        'posterior_thin': 1,
+        'densitree': 'none',
+        'densitree_alpha': 0.035,
+        'densitree_color': '#0072B2',
+        'densitree_ci_level': 0.95,
+        'densitree_ci_alpha': 0.18,
+        'densitree_ci_color': '#56B4E9',
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -117,6 +133,151 @@ def extract_svg_text_positions(svg_text):
 
 
 class TestDrawMain:
+    def test_draw_shows_mcmctree_constraint_glyph(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk("((A:1,B:1)'B(2,4,0.025,0.025)':1,C:2);")
+        outfile = tmp_path / 'constraints.svg'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            species_overlap_node_plot='no',
+        ))
+
+        assert '2–4' in outfile.read_text()
+
+    def test_rectangular_root_age_interval_uses_horizontal_time_scale(self):
+        tree = Tree('((A:4,B:4):6,(C:3,D:3):7);', parser=1)
+        tree.props.update({
+            'age': 10.0,
+            'age_ci_low': 8.0,
+            'age_ci_high': 12.0,
+        })
+        layout = make_tree_layout(tree, layout='rectangular')
+
+        interval = _age_interval_path(tree, layout)
+
+        assert interval[:, 1].tolist() == pytest.approx([layout.ycoord[tree]] * 2)
+        assert interval[1, 0] - interval[0, 0] == pytest.approx(4.0)
+
+    def test_projected_and_radial_time_intervals_follow_their_time_axes(self):
+        tree = Tree('((A:4,B:4):6,(C:3,D:3):7);', parser=1)
+        node = tree.common_ancestor(['A', 'B'])
+        node.props.update({'age': 4.0, 'age_ci_low': 3.0, 'age_ci_high': 5.0})
+
+        slanted = make_tree_layout(tree, layout='slanted')
+        slanted_interval = _age_interval_path(node, slanted)
+        assert slanted_interval[:, 1].tolist() == pytest.approx(
+            [slanted.ycoord[node]] * 2
+        )
+        assert slanted_interval[1, 0] - slanted_interval[0, 0] == pytest.approx(2.0)
+
+        radial = make_tree_layout(tree, layout='radial')
+        radial_interval = _age_interval_path(node, radial)
+        radial_direction = np.asarray([
+            radial.xcoord[node] - radial.xcoord[tree],
+            radial.ycoord[node] - radial.ycoord[tree],
+        ])
+        radial_direction /= np.linalg.norm(radial_direction)
+        interval_direction = radial_interval[1] - radial_interval[0]
+        assert np.linalg.norm(interval_direction) == pytest.approx(2.0)
+        assert np.dot(interval_direction, radial_direction) == pytest.approx(2.0)
+
+    @pytest.mark.parametrize('layout', ['cladogram', 'fractal'])
+    def test_explicit_time_intervals_reject_topology_only_layouts(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk(
+            '((A:4,B:4):6,(C:3,D:3):7)'
+            '[&&NHX:age_ci_low=8:age_ci_high=12:age_ci_kind=HPD:age_ci_level=0.95];'
+        )
+
+        with pytest.raises(ValueError, match='encodes branch-length'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'invalid-time.svg'),
+                layout=layout,
+                tip_label_position='branch-end',
+                species_overlap_node_plot='no',
+                time_credible_intervals='yes',
+            ))
+
+    @pytest.mark.parametrize(
+        'layout',
+        ['rectangular', 'slanted', 'circular', 'radial', 'unrooted', 'spiral'],
+    )
+    def test_densitree_renders_branchwise_ci_across_time_aware_layouts(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A,B),(C,D));')
+        posterior = tmp_path / '{}-mcmc.txt'.format(layout)
+        posterior.write_text(
+            'Gen t_n5 t_n6 t_n7\n'
+            '1 10 4 3\n'
+            '2 12 5 4\n'
+            '3 11 6 5\n'
+            '4 13 7 6\n'
+        )
+        outfile = tmp_path / '{}-densitree.svg'.format(layout)
+        report = tmp_path / '{}-densitree.json'.format(layout)
+        densitree_mode = 'both' if layout == 'rectangular' else 'ci'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            layout=layout,
+            tip_label_position=(
+                'branch-end'
+                if layout in {'circular', 'radial', 'unrooted', 'spiral'}
+                else 'aligned'
+            ),
+            figure_width=5.0,
+            figure_height=4.0,
+            species_overlap_node_plot='no',
+            mcmctree_posterior=str(posterior),
+            densitree=densitree_mode,
+            layout_report=str(report),
+        ))
+
+        payload = json.loads(report.read_text())
+        assert outfile.stat().st_size > 1000
+        assert payload['densitree'] == densitree_mode
+        assert payload['densitree_sample_count'] == 4
+        assert payload['densitree_ci_interpretation'] == (
+            'branchwise geometric central envelope'
+        )
+
+    @pytest.mark.parametrize('layout', ['cladogram', 'fractal'])
+    def test_densitree_rejects_topology_only_layouts(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A,B),(C,D));')
+        posterior = tmp_path / 'mcmc.txt'
+        posterior.write_text(
+            'Gen t_n5 t_n6 t_n7\n1 10 4 3\n2 12 5 4\n'
+        )
+
+        with pytest.raises(ValueError, match='do not'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'invalid.svg'),
+                layout=layout,
+                tip_label_position='branch-end',
+                species_overlap_node_plot='no',
+                mcmctree_posterior=str(posterior),
+                densitree='ci',
+            ))
+
     def test_scale_bar_label_is_above_bar(self):
         figure, axes = plt.subplots(figsize=(3.0, 2.0))
         axes.set_xlim(0.0, 3.0)

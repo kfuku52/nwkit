@@ -99,7 +99,7 @@ p_audit.add_argument('--debug', action='store_true', default=argparse.SUPPRESS,
 
 p_parent = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
-                      help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+                      help='default=%(default)s: Input Newick/NHX or supported PAML/MCMCtree tree container. Use "-" for STDIN.')
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Output newick file. Use "-" for STDOUT.')
 p_parent.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
@@ -123,7 +123,7 @@ p_download.add_argument('--refresh-taxonomy-cache', '--refresh_taxonomy_cache', 
 
 p_tree_input = argparse.ArgumentParser(add_help=False, parents=[p_audit])
 p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
-                          help='default=%(default)s: Input newick file. Use "-" for STDIN.')
+                          help='default=%(default)s: Input Newick/NHX or supported PAML/MCMCtree tree container. Use "-" for STDIN.')
 p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
                           help='default=%(default)s: ETE tree format. '
                                '"auto-strict" fails on ambiguous unquoted numeric internal labels. '
@@ -502,6 +502,39 @@ pdraw.add_argument('--depth-guide', '--depth_guide', dest='depth_guide', metavar
                    help='default=%(default)s: Add root-to-node depth guides to slanted, radial, or spiral; FLOAT sets the tick interval.')
 pdraw.add_argument('--branch-length-unit', '--branch_length_unit', dest='branch_length_unit', metavar='TEXT', default='', type=str,
                    help='default="": Unit appended to scale-bar and depth-guide labels, for example substitutions/site or Ma.')
+pdraw.add_argument('--time-constraints', '--time_constraints', dest='time_constraints', metavar='auto|yes|no', default='auto', type=str,
+                   choices=['auto', 'yes', 'no'],
+                   help='default=%(default)s: Draw MCMCtree point, bounded, lower, and upper calibration glyphs when present.')
+pdraw.add_argument('--time-credible-intervals', '--time_credible_intervals', dest='time_credible_intervals', metavar='auto|yes|no', default='auto', type=str,
+                   choices=['auto', 'yes', 'no'],
+                   help='default=%(default)s: Draw node-age credible-interval whiskers from MCMCtree/FigTree annotations.')
+pdraw.add_argument('--mcmctree-posterior', '--mcmctree_posterior', dest='mcmctree_posterior', metavar='PATH', default=None, type=str,
+                   help='default=None: Read MCMCtree mcmc.txt ages on the input topology for dated-tree and DensiTree rendering.')
+pdraw.add_argument('--posterior-point', '--posterior_point', dest='posterior_point', metavar='mean|median', default='mean', type=str,
+                   choices=['mean', 'median'],
+                   help='default=%(default)s: Posterior point age used by --mcmctree-posterior.')
+pdraw.add_argument('--posterior-ci', '--posterior_ci', dest='posterior_ci', metavar='hpd|equal-tail', default='hpd', type=str,
+                   choices=['hpd', 'equal-tail'],
+                   help='default=%(default)s: Node-age interval used by --mcmctree-posterior.')
+pdraw.add_argument('--posterior-ci-level', '--posterior_ci_level', dest='posterior_ci_level', metavar='0<FLOAT<1', default=0.95, type=finite_float,
+                   help='default=%(default)s: Credible mass for dated-tree node intervals.')
+pdraw.add_argument('--posterior-burnin', '--posterior_burnin', dest='posterior_burnin', metavar='INT', default=0, type=int,
+                   help='default=%(default)s: Additional leading posterior rows to discard.')
+pdraw.add_argument('--posterior-thin', '--posterior_thin', dest='posterior_thin', metavar='INT', default=1, type=int,
+                   help='default=%(default)s: Keep every INT-th posterior row for summaries and DensiTree.')
+pdraw.add_argument('--densitree', metavar='none|all|ci|both', default='none', type=str,
+                   choices=['none', 'all', 'ci', 'both'],
+                   help='default=%(default)s: Draw all retained posterior trees, a branchwise geometric credible envelope, or both.')
+pdraw.add_argument('--densitree-alpha', '--densitree_alpha', dest='densitree_alpha', metavar='0<FLOAT<=1', default=0.035, type=finite_float,
+                   help='default=%(default)s: Opacity of each posterior tree in all/both mode.')
+pdraw.add_argument('--densitree-color', '--densitree_color', dest='densitree_color', metavar='COLOR', default='#0072B2', type=str,
+                   help='default=%(default)s: Color of posterior trees in all/both mode.')
+pdraw.add_argument('--densitree-ci-level', '--densitree_ci_level', dest='densitree_ci_level', metavar='0<FLOAT<1', default=0.95, type=finite_float,
+                   help='default=%(default)s: Central geometric mass retained in each branch envelope.')
+pdraw.add_argument('--densitree-ci-alpha', '--densitree_ci_alpha', dest='densitree_ci_alpha', metavar='0<FLOAT<=1', default=0.18, type=finite_float,
+                   help='default=%(default)s: Opacity of branch-envelope polygons.')
+pdraw.add_argument('--densitree-ci-color', '--densitree_ci_color', dest='densitree_ci_color', metavar='COLOR', default='#56B4E9', type=str,
+                   help='default=%(default)s: Color of branch-envelope polygons.')
 pdraw.add_argument('--tip-labels', '--tip_labels', dest='tip_labels', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Whether to draw tip labels. Disabling them is useful for dense overview layouts.')
 pdraw.add_argument('--tip-label-position', '--tip_label_position', dest='tip_label_position', metavar='auto|aligned|branch-end', default='auto', type=str, required=False, action='store',
@@ -725,9 +758,9 @@ pmark.set_defaults(handler=command_mark)
 def command_mcmctree(args):
     from nwkit.mcmctree import mcmctree_main
     mcmctree_main(args)
-pmcmctree = subparsers.add_parser('mcmctree', help='Introduce divergence time constraints for PAML\'s mcmctree', parents=[p_tree_input, p_download, p_species])
+pmcmctree = subparsers.add_parser('mcmctree', help='Prepare MCMCtree calibrations or summarize its posterior node ages', parents=[p_tree_input, p_download, p_species])
 pmcmctree.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
-                       help='default=%(default)s: Output MCMCtree Newick file. Use "-" for STDOUT.')
+                       help='default=%(default)s: Output MCMCtree calibration tree or posterior dated NHX tree. Use "-" for STDOUT.')
 pmcmctree.add_argument('--left-species', '--left_species', dest='left_species', metavar='STR', default=None, type=str, required=False,
                        help='default=%(default)s: Any species in the left clade. '
                             'If you want to set a bound on the node splitting Homo_sapiens and Mus_musculus, '
@@ -765,6 +798,20 @@ pmcmctree.add_argument('--higher-rank-search', '--higher_rank_search', dest='hig
                             'if the species-level search failed.')
 pmcmctree.add_argument('--threads', metavar='INT', default=1, type=int, required=False, action='store',
                        help='default=%(default)s: Number of parallel workers used for TimeTree HTTP requests at the same taxonomic rank.')
+pmcmctree.add_argument('--posterior', metavar='PATH', default=None, type=str,
+                       help='default=None: Summarize an MCMCtree mcmc.txt file on the input topology and emit a standard NHX dated tree instead of adding calibrations.')
+pmcmctree.add_argument('--posterior-point', '--posterior_point', dest='posterior_point', metavar='mean|median', default='mean', type=str,
+                       choices=['mean', 'median'],
+                       help='default=%(default)s: Point age used for dated-tree branch lengths with --posterior.')
+pmcmctree.add_argument('--posterior-ci', '--posterior_ci', dest='posterior_ci', metavar='hpd|equal-tail', default='hpd', type=str,
+                       choices=['hpd', 'equal-tail'],
+                       help='default=%(default)s: Marginal credible interval stored on each internal node with --posterior.')
+pmcmctree.add_argument('--posterior-ci-level', '--posterior_ci_level', dest='posterior_ci_level', metavar='0<FLOAT<1', default=0.95, type=finite_float,
+                       help='default=%(default)s: Credible mass for --posterior intervals.')
+pmcmctree.add_argument('--posterior-burnin', '--posterior_burnin', dest='posterior_burnin', metavar='INT', default=0, type=int,
+                       help='default=%(default)s: Additional leading posterior rows to discard.')
+pmcmctree.add_argument('--posterior-thin', '--posterior_thin', dest='posterior_thin', metavar='INT', default=1, type=int,
+                       help='default=%(default)s: Keep every INT-th posterior row.')
 pmcmctree.set_defaults(handler=command_mcmctree)
 
 def command_monophyly(args):

@@ -10,6 +10,7 @@ from nwkit.util import (
     is_rooted,
     read_tree,
     read_input_text,
+    normalize_phylogenetic_tree_text,
     split_newick_stream,
     support_is_missing,
 )
@@ -162,7 +163,10 @@ def validate_main(args):
     require_unquoted_names = getattr(args, 'require_unquoted_names', False)
     check_species = getattr(args, 'check_species', False)
     fail_on_issue = getattr(args, 'fail_on_issue', False)
-    raw_text = read_input_text(args.infile)
+    raw_text = normalize_phylogenetic_tree_text(
+        read_input_text(args.infile),
+        collection=True,
+    )
     tree_strings = split_newick_stream(raw_text)
     if len(tree_strings) == 0:
         raise Exception('Failed to parse the input trees.')

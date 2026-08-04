@@ -46,6 +46,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   arbitrary node properties, and probability pies are verified across every
   layout. Spatial node labels use locally empty incident-edge sectors, and pie
   extents participate in fitting and collision reports.
+- All shared tree readers accept PAML `nTips nTrees` treefiles, MCMCtree
+  `FigTree.tre` NEXUS output, and the annotated species-tree block in the main
+  MCMCtree output. FigTree age intervals are preserved as NHX properties.
+- `mcmctree --posterior` converts `mcmc.txt` node-age samples into a standard
+  dated NHX tree with mean/median ages and HPD or equal-tail intervals.
+- `draw --time-constraints` and `--time-credible-intervals` visualize
+  MCMCtree calibrations and dated-node uncertainty. `--densitree all|ci|both`
+  renders every retained posterior time tree, branchwise geometric credible
+  polygons, or both across six time-aware layouts.
 
 ### Changed
 
@@ -86,6 +95,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   branch-length semantics, branch/annotation and branch-pair audit status, and
   explicit figure-boundary overflow measurements. Unresolved default-policy
   collisions and unfit fixed-size figures emit final, actionable warnings.
+- DensiTree reports identify the retained sample count, interval level, and
+  branchwise (rather than joint-tree) interpretation. Explicit burn-in and
+  thinning controls govern both posterior summaries and overlays.
 
 ### Fixed
 
@@ -109,6 +121,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   the less-congested axis and index branch segments spatially.
 - Matplotlib figures are released on every rendering exception, including
   failures before the save step.
+- Preserved modern and legacy MCMCtree calibration labels when a PAML-header
+  tree is piped through repeated constraint steps, and rejected inconsistent,
+  non-finite, negative, or chronologically invalid posterior node ages before
+  output.
 
 ## [0.34.1] - 2026-07-31
 

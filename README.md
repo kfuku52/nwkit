@@ -69,7 +69,7 @@ and output-column vocabulary are defined in
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment
 - [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
-- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Introducing divergence time constraints for PAML's mcmctree
+- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML MCMCtree calibrations and converting posterior node ages into pipeable NHX dated trees
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
@@ -300,6 +300,50 @@ caption. Both scale bars and depth guides reserve a lower annotation strip.
 Cladogram and fractal layouts encode topology rather than branch-length depth
 and therefore support neither guide. A requested scale or guide interval cannot
 exceed the displayed tree-depth span.
+
+### MCMCtree constraints, dated trees, and posterior density
+
+Tree input is normalized centrally. Every NWKIT command that reads Newick can
+therefore also consume a PAML treefile with an `nTips nTrees` header, an
+MCMCtree `FigTree.tre` NEXUS file, or the annotated species tree in the main
+MCMCtree output. `95%HPD` and legacy `95%` FigTree comments are retained as
+standard NHX node properties rather than discarded.
+
+Convert the fixed topology and node-age columns in `mcmc.txt` into a normal,
+pipeable dated tree. The selected point estimate defines branch lengths and
+the marginal interval is stored on each internal node:
+
+```sh
+nwkit mcmctree -i species.trees --posterior mcmc.txt \
+  --posterior-point mean --posterior-ci hpd -o dated.nhx
+
+nwkit draw -i dated.nhx -o dated.svg \
+  --scale-bar auto --branch-length-unit Ma
+```
+
+`nwkit draw` recognizes MCMCtree point, bounded, lower-only, and upper-only
+calibrations and draws their age labels by default. It also draws dated-node
+credible intervals from either `FigTree.tre` or the NHX summary above. Both
+layers can be controlled with `--time-constraints` and
+`--time-credible-intervals`.
+
+For posterior visualization, give the original topology and `mcmc.txt`
+directly. `all` overlays every retained posterior time tree, `ci` draws a
+semi-transparent polygon around the geometric central fraction of every
+corresponding branch, and `both` combines them:
+
+```sh
+nwkit draw -i species.trees --mcmctree-posterior mcmc.txt \
+  --densitree both --densitree-ci-level 0.95 \
+  --layout circular --angular-span 180 \
+  --tip-label-position branch-end -o posterior.svg
+```
+
+The envelope is explicitly branchwise and geometric; it is not presented as a
+joint 95% credible set for the whole tree. Posterior trees use the same layout,
+angular, label-spacing, and subtree-packing settings as the foreground dated
+tree. `--posterior-burnin` and `--posterior-thin` provide explicit sample
+selection; without thinning, `all` really draws every retained sample.
 
 For very large overview trees,
 `--max-visible-tips INT` collapses clades in a drawing-only copy and marks the
