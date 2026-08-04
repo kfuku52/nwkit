@@ -213,13 +213,29 @@ apply to `rectangular` (with either packing strategy), `slanted`, and
 support, pies, property labels, and categorical tip styling follow nodes in
 every layout.
 
+Branch support and ordinary Newick node labels can be selected independently.
+A parsed node label is available through the `name` property, so the same
+property-label controls also handle named clades:
+
+```sh
+nwkit draw -i named-and-supported.nhx -o annotated.svg \
+  --support-labels yes --support-min 0.9 \
+  --node-label-property name --node-label-target root,intnode
+```
+
+`--node-label-filter`, `--node-label-decimals`, and `--node-label-prefix`
+provide selective formatting for any numeric or textual Newick/NHX property.
+When node pies and labels are combined, their rendered extents are included in
+fitting and collision reporting.
+
 ### Annotation-aware and auditable drawing
 
-Rendered label extents, badges, support labels, node-property labels, legends,
-tip tracks, and branches participate in a deterministic post-render collision
-check. The default `--collision-policy resolve` moves annotations that can be
-moved safely; `warn`, `error`, and `ignore` make the remaining-collision policy
-explicit. A machine-readable report records the layout, figure dimensions,
+Rendered label extents, badges, support labels, node-property labels, node pies,
+legends, tip tracks, and branches participate in a deterministic post-render
+collision check. The default `--collision-policy resolve` moves annotations
+that can be moved safely and retains the best non-worsening placement;
+`warn`, `error`, and `ignore` make the remaining-collision policy explicit. A
+machine-readable report records the layout, figure dimensions,
 font settings, branch-length encoding, equal-daylight convergence, wrapping,
 automatic collapsing, figure-boundary overflow, annotation occupancy, and a
 complete branch/annotation collision audit. It also counts proper branch-pair

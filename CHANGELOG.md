@@ -42,12 +42,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `draw --collision-policy` and `--layout-report` provide deterministic
   post-render collision handling and a JSON layout-quality report, including a
   bounded branch-pair crossing audit.
+- Support values, ordinary Newick node names (`--node-label-property name`),
+  arbitrary node properties, and probability pies are verified across every
+  layout. Spatial node labels use locally empty incident-edge sectors, and pie
+  extents participate in fitting and collision reports.
 
 ### Changed
 
 - `draw --tip-label-position auto` now selects aligned labels for standard
   rectangular drawings and branch-end labels for other geometries or tidy
   packing. Tidy collision geometry accounts for terminal label extents.
+- Collision resolution retains the best placement found, so a late attempted
+  shift cannot increase the reported number of annotation collisions.
 - Label-aware spacing is now an orthogonal option rather than separate
   `packed` and `packed-phylogram` layout names. Those pre-release layout names
   have been removed without compatibility aliases.

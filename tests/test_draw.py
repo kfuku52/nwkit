@@ -167,6 +167,45 @@ class TestDrawMain:
         assert report['final_collision_count'] == 0
         assert report['moved_artist_count'] == 1
 
+    def test_collision_solver_restores_best_non_worsening_placement(self):
+        figure, axes = plt.subplots(figsize=(2.0, 2.0))
+        fixed = axes.annotate(
+            'X',
+            xy=(0.5, 0.5),
+            xytext=(0.0, 0.0),
+            textcoords='offset points',
+            ha='center',
+            va='center',
+            fontsize=100,
+        )
+        movable = axes.annotate(
+            'movable',
+            xy=(0.5, 0.5),
+            xytext=(0.0, 0.0),
+            textcoords='offset points',
+            ha='center',
+            va='center',
+        )
+        artists = [
+            DrawingArtist(fixed, kind='node_label', priority=100),
+            DrawingArtist(
+                movable,
+                kind='node_label',
+                priority=10,
+                movable=True,
+            ),
+        ]
+
+        try:
+            report = evaluate_drawing(figure, artists, [], policy='resolve')
+        finally:
+            plt.close(figure)
+
+        assert report['initial_collision_count'] == 1
+        assert report['final_collision_count'] == 1
+        assert report['moved_artist_count'] == 0
+        assert movable.get_position() == (0.0, 0.0)
+
     @pytest.mark.parametrize(
         'layout',
         [
@@ -1592,6 +1631,160 @@ class TestDrawMain:
         assert '>P(Y)=0.60</text>' not in text
         assert '#56b4e9' in text.lower()
         assert '#e69f00' in text.lower()
+
+    @pytest.mark.parametrize(
+        ('layout', 'subtree_packing', 'angular_span'),
+        [
+            ('rectangular', 'standard', 360.0),
+            ('rectangular', 'tidy', 360.0),
+            ('slanted', 'standard', 360.0),
+            ('cladogram', 'standard', 360.0),
+            ('circular', 'standard', 180.0),
+            ('circular', 'tidy', 360.0),
+            ('radial', 'standard', 180.0),
+            ('unrooted', 'standard', 360.0),
+            ('spiral', 'standard', 360.0),
+            ('spiral', 'tidy', 360.0),
+            ('fractal', 'standard', 360.0),
+        ],
+    )
+    def test_support_names_and_pies_follow_every_layout(
+        self,
+        tmp_path,
+        layout,
+        subtree_packing,
+        angular_span,
+    ):
+        tree = Tree(
+            '(((A:0.4,B:0.7):0.5,(C:0.8,D:0.3):0.6):0.4,'
+            '((E:0.6,F:0.9):0.5,(G:0.7,H:0.4):0.8):0.5);',
+            parser=1,
+        )
+        internal_nodes = [node for node in tree.traverse() if not node.is_leaf]
+        for index, node in enumerate(internal_nodes):
+            node.add_props(
+                name='ROOT' if node.is_root else 'clade_{}'.format(index),
+                support=0.75 + (0.03 * index),
+                p_X=0.2 + (0.05 * index),
+                p_Y=0.8 - (0.05 * index),
+            )
+        infile = tmp_path / '{}-{}.nhx'.format(layout, subtree_packing)
+        infile.write_text(
+            tree.write(
+                props=['name', 'support', 'p_X', 'p_Y'],
+                parser=1,
+                format_root_node=True,
+            ),
+            encoding='utf-8',
+        )
+        outfile = tmp_path / '{}-{}.svg'.format(layout, subtree_packing)
+        report_path = tmp_path / '{}-{}.json'.format(layout, subtree_packing)
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            format='1',
+            outfile=str(outfile),
+            image_format='svg',
+            layout=layout,
+            subtree_packing=subtree_packing,
+            angular_span=angular_span,
+            figure_width=7.2,
+            tip_label_position='auto',
+            tip_spacing='label-aware',
+            species_overlap_node_plot='no',
+            support_labels=True,
+            support_min=0.80,
+            node_label_property='name',
+            node_label_target='root,intnode',
+            node_label_prefix='ID=',
+            node_pie_properties='p_X,p_Y',
+            node_pie_target='root,intnode',
+            property_color=['p_X=#56B4E9', 'p_Y=#E69F00'],
+            legend=False,
+            layout_report=str(report_path),
+        ))
+
+        svg = outfile.read_text(encoding='utf-8')
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert '>ID=ROOT</text>' in svg
+        assert '>ID=clade_1</text>' in svg
+        assert '>0.81</text>' in svg
+        assert '>0.78</text>' not in svg
+        assert report['artist_counts']['node_label'] == len(internal_nodes)
+        assert report['artist_counts']['node_pie'] == len(internal_nodes)
+        assert report['final_collision_count'] <= report['initial_collision_count']
+        assert not any(
+            kind == 'node_pie:branch'
+            for kind in report['final_collisions_by_kind']
+        )
+        assert report['branch_crossing_count'] == 0
+        assert report['fits_within_figure'] is True
+
+    @pytest.mark.parametrize(
+        ('option', 'value', 'message'),
+        [
+            ('node_label_decimals', -1, 'zero or greater'),
+            ('node_label_target', 'bogus', 'Unsupported node target'),
+        ],
+    )
+    def test_draw_validates_node_label_options_before_property_lookup(
+        self,
+        tmp_nwk,
+        tmp_path,
+        option,
+        value,
+        message,
+    ):
+        infile = tmp_nwk('((A:1,B:1):1,C:2);')
+        kwargs = {
+            'infile': infile,
+            'outfile': str(tmp_path / 'invalid.svg'),
+            'species_overlap_node_plot': 'no',
+            'node_label_property': 'missing_property',
+            option: value,
+        }
+
+        with pytest.raises(ValueError, match=message):
+            draw_main(make_draw_args(**kwargs))
+
+    def test_draw_rejects_every_malformed_node_label_filter(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk('((A:1,B:1):1,C:2);')
+
+        with pytest.raises(ValueError, match='PROPERTY:OP:VALUE'):
+            draw_main(make_draw_args(
+                infile=infile,
+                outfile=str(tmp_path / 'invalid-filter.svg'),
+                species_overlap_node_plot='no',
+                node_label_property='missing_property',
+                node_label_filter=['also_missing:eq:value', 'malformed'],
+            ))
+
+    @pytest.mark.parametrize('invalid_value', [-0.1, float('nan')])
+    def test_draw_rejects_invalid_node_pie_values(
+        self,
+        tmp_path,
+        invalid_value,
+    ):
+        tree = Tree('((A:1,B:1):1,C:2);', parser=1)
+        tree.add_props(p_X=invalid_value, p_Y=1.0)
+        infile = tmp_path / 'invalid-pie.nhx'
+        infile.write_text(
+            tree.write(
+                props=['p_X', 'p_Y'],
+                parser=1,
+                format_root_node=True,
+            ),
+            encoding='utf-8',
+        )
+
+        with pytest.raises(ValueError, match='finite, non-negative'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                format='1',
+                outfile=str(tmp_path / 'invalid-pie.svg'),
+                species_overlap_node_plot='no',
+                node_pie_properties='p_X,p_Y',
+            ))
 
     def test_draw_leaf_pie_filter_keeps_internal_and_matching_leaf_pies(self, tmp_path):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)

@@ -255,7 +255,14 @@ def _find_collisions(figure, artists, branch_lines):
                 candidates.update(segment_grid.get((x_cell, y_cell), ()))
         for index in candidates:
             owner, (start, end) = branch_segments[index]
-            if owner is item.owner:
+            if (
+                owner is item.owner
+                or (
+                    item.kind == 'node_pie'
+                    and item.owner is not None
+                    and getattr(owner, 'up', None) is item.owner
+                )
+            ):
                 continue
             if _segment_intersects_bbox(start, end, item_bounds):
                 collisions.append(('branch', item, owner))
@@ -342,10 +349,36 @@ def evaluate_drawing(
     )
     iterations = 0
     if policy == 'resolve' and initial:
+        movable = [
+            item
+            for item in artists
+            if item.movable and hasattr(item.artist, 'get_position')
+        ]
+
+        def snapshot():
+            return [
+                (item, tuple(item.artist.get_position()), item.total_shift)
+                for item in movable
+            ]
+
+        def restore(state):
+            for item, position, total_shift in state:
+                item.artist.set_position(position)
+                item.total_shift = total_shift
+
+        best_state = snapshot()
+        best_score = (len(initial), 0.0)
         for iterations in range(1, int(max_iterations) + 1):
             collisions, bounds, _ = _find_collisions(
                 figure, artists, branch_lines
             )
+            score = (
+                len(collisions),
+                sum(item.total_shift for item in movable),
+            )
+            if score < best_score:
+                best_state = snapshot()
+                best_score = score
             moved = False
             for collision_type, first, second in collisions:
                 if collision_type == 'artist':
@@ -384,6 +417,13 @@ def evaluate_drawing(
                     moved = target.shift(direction * 1.75) or moved
             if not collisions or not moved:
                 break
+        candidate, _, _ = _find_collisions(figure, artists, branch_lines)
+        candidate_score = (
+            len(candidate),
+            sum(item.total_shift for item in movable),
+        )
+        if candidate_score > best_score:
+            restore(best_state)
     final, bounds, branch_check_complete = _find_collisions(
         figure, artists, branch_lines
     )

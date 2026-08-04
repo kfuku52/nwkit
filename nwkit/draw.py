@@ -14,8 +14,7 @@ from matplotlib.backends.backend_agg import FigureCanvasAgg
 from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
-from matplotlib.path import Path as MplPath
-from matplotlib.patches import Arc, Circle, Patch, Rectangle
+from matplotlib.patches import Arc, Circle, Patch, Rectangle, Wedge
 from matplotlib.text import Text
 from matplotlib.font_manager import FontProperties
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -430,6 +429,7 @@ def _matches_property_filters(node, raw_filters, option_name='--node-label-filte
         'eq': lambda left, right: left == right,
         'ne': lambda left, right: left != right,
     }
+    parsed_filters = []
     for raw in raw_filters or []:
         parts = str(raw).split(':', 2)
         if len(parts) != 3 or parts[1].lower() not in operators:
@@ -438,6 +438,10 @@ def _matches_property_filters(node, raw_filters, option_name='--node-label-filte
                 'OP in ge,gt,le,lt,eq,ne: {}'.format(option_name, raw)
             )
         prop, operator, expected = parts[0].strip(), parts[1].lower(), parts[2].strip()
+        if not prop:
+            raise ValueError('{} requires a non-empty PROPERTY: {}'.format(option_name, raw))
+        parsed_filters.append((prop, operator, expected))
+    for prop, operator, expected in parsed_filters:
         if prop not in node.props:
             return False
         observed = _coerce_filter_value(node.props[prop])
@@ -462,44 +466,56 @@ def _property_color(prop, value, property_colors, fallback_index=0, palette='tab
 
 
 def _draw_probability_pie(ax, x, y, probabilities, colors, marker_size_pt):
-    total = sum(probabilities)
+    try:
+        values = [float(probability) for probability in probabilities]
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            'Node-pie properties must be finite, non-negative numbers.'
+        ) from exc
+    if any((not math.isfinite(value)) or value < 0.0 for value in values):
+        raise ValueError('Node-pie properties must be finite, non-negative numbers.')
+    total = sum(values)
     if total <= 0.0:
-        return []
-    artists = []
-    normalized = [probability / total for probability in probabilities]
+        return None
+    size = float(marker_size_pt)
+    drawing = DrawingArea(size, size, 0.0, 0.0)
+    center = size / 2.0
+    radius = max((size / 2.0) - 0.25, 0.1)
+    normalized = [probability / total for probability in values]
     cumulative = 0.0
     for probability, color in zip(normalized, colors):
         if probability <= 0.0:
             continue
         start = cumulative
         cumulative += probability
-        angles = [
-            (math.pi / 2.0) - (2.0 * math.pi * (start + probability * index / 24.0))
-            for index in range(25)
-        ]
-        vertices = [(0.0, 0.0)] + [(math.cos(angle), math.sin(angle)) for angle in angles] + [(0.0, 0.0)]
-        codes = [MplPath.MOVETO] + ([MplPath.LINETO] * len(angles)) + [MplPath.CLOSEPOLY]
-        artists.append(ax.scatter(
-            [x],
-            [y],
-            s=marker_size_pt ** 2,
-            marker=MplPath(vertices, codes),
+        drawing.add_artist(Wedge(
+            (center, center),
+            radius,
+            90.0 - (360.0 * cumulative),
+            90.0 - (360.0 * start),
             facecolor=color,
             edgecolor='none',
-            linewidth=0.0,
-            zorder=6,
         ))
-    artists.append(ax.scatter(
-        [x],
-        [y],
-        s=marker_size_pt ** 2,
-        marker='o',
+    drawing.add_artist(Circle(
+        (center, center),
+        radius,
         facecolor='none',
         edgecolor=LEGEND_EDGE_COLOR,
         linewidth=0.45,
-        zorder=7,
     ))
-    return artists
+    artist = AnnotationBbox(
+        drawing,
+        (x, y),
+        xybox=(0.0, 0.0),
+        xycoords='data',
+        boxcoords='offset points',
+        frameon=False,
+        box_alignment=(0.5, 0.5),
+        annotation_clip=False,
+        zorder=7,
+    )
+    ax.add_artist(artist)
+    return artist
 
 
 def _format_property_value(value, decimals=2):
@@ -560,6 +576,104 @@ def _spatial_text_alignment(angle):
     normalized = ((float(angle) + 180.0) % 360.0) - 180.0
     points_right = -90.0 <= normalized <= 90.0
     return _readable_text_angle(normalized), ('left' if points_right else 'right')
+
+
+def _first_nonzero_direction(points, from_end=False):
+    """Return a unit direction along the first or last nonzero path segment."""
+
+    pairs = list(zip(points, points[1:]))
+    if from_end:
+        pairs = list(reversed(pairs))
+    for start, end in pairs:
+        dx = float(end[0]) - float(start[0])
+        dy = float(end[1]) - float(start[1])
+        norm = math.hypot(dx, dy)
+        if norm > 1e-12:
+            return (dx / norm, dy / norm)
+    return (1.0, 0.0)
+
+
+def _spatial_node_label_placement(node, drawing_layout, clearance_points):
+    """Place a node label in locally open space beside its incident edges."""
+
+    if node.is_root:
+        if drawing_layout.root_path:
+            # Root paths run from the empty-side stub into the root. Reverse
+            # that direction so labels extend into the reserved empty sector.
+            inward = _first_nonzero_direction(
+                drawing_layout.root_path,
+                from_end=True,
+            )
+            direction = (-inward[0], -inward[1])
+        else:
+            child_angles = sorted(
+                math.atan2(direction[1], direction[0]) % (2.0 * math.pi)
+                for direction in (
+                    _first_nonzero_direction(
+                        drawing_layout.edge_paths.get(child, ()),
+                    )
+                    for child in node.get_children()
+                )
+            )
+            if child_angles:
+                cyclic = child_angles + [child_angles[0] + (2.0 * math.pi)]
+                gap_start, gap_end = max(
+                    zip(cyclic, cyclic[1:]),
+                    key=lambda gap: (gap[1] - gap[0], -gap[0]),
+                )
+                empty_angle = (gap_start + gap_end) / 2.0
+                direction = (math.cos(empty_angle), math.sin(empty_angle))
+            else:
+                direction = (-1.0, 0.0)
+    else:
+        incoming = _first_nonzero_direction(
+            drawing_layout.edge_paths.get(node, ()),
+            from_end=True,
+        )
+        incident_angles = [math.atan2(-incoming[1], -incoming[0])]
+        incident_angles.extend(
+            math.atan2(direction[1], direction[0])
+            for direction in (
+                _first_nonzero_direction(
+                    drawing_layout.edge_paths.get(child, ()),
+                )
+                for child in node.get_children()
+            )
+        )
+        incident_angles = sorted(angle % (2.0 * math.pi) for angle in incident_angles)
+        cyclic = incident_angles + [incident_angles[0] + (2.0 * math.pi)]
+        gap_start, gap_end = max(
+            zip(cyclic, cyclic[1:]),
+            key=lambda gap: (gap[1] - gap[0], -gap[0]),
+        )
+        empty_angle = (gap_start + gap_end) / 2.0
+        direction = (math.cos(empty_angle), math.sin(empty_angle))
+
+    if direction[0] > 0.2:
+        horizontal_alignment = 'left'
+    elif direction[0] < -0.2:
+        horizontal_alignment = 'right'
+    else:
+        horizontal_alignment = 'center'
+    if direction[1] > 0.4:
+        vertical_alignment = 'bottom'
+    elif direction[1] < -0.4:
+        vertical_alignment = 'top'
+    else:
+        vertical_alignment = 'center'
+    return {
+        'offset': (
+            direction[0] * clearance_points,
+            direction[1] * clearance_points,
+        ),
+        'rotation': 0.0,
+        'horizontal_alignment': horizontal_alignment,
+        'vertical_alignment': vertical_alignment,
+        # Horizontal node labels separate most efficiently along their short
+        # (vertical) axis. Preserve the locally empty half-plane for branch
+        # avoidance while still allowing artist--artist resolution to reverse.
+        'shift_direction': (0.0, 1.0 if direction[1] >= 0.0 else -1.0),
+    }
 
 
 def _parse_tip_label_wrap(value):
@@ -1620,6 +1734,25 @@ def _draw_tree(
     tip_image_by_leaf = tip_image_by_leaf or {}
     tip_track_properties = tip_track_properties or []
     collapsed_clades = collapsed_clades or []
+    if node_pie_properties:
+        _node_matches_target(tree, node_pie_target)
+    if node_label_property not in (None, ''):
+        _node_matches_target(tree, node_label_target)
+        if int(node_label_decimals) < 0:
+            raise ValueError('--node-label-decimals must be zero or greater.')
+        # Parse every filter before rendering so malformed later filters are
+        # not masked when an earlier property happens to be absent.
+        _matches_property_filters(
+            tree,
+            node_label_filters,
+            option_name='--node-label-filter',
+        )
+    if node_pie_leaf_filters:
+        _matches_property_filters(
+            tree,
+            node_pie_leaf_filters,
+            option_name='--node-pie-leaf-filter',
+        )
     layout_name = str(layout).strip().lower()
     supported_layouts = {
         'rectangular',
@@ -2324,6 +2457,8 @@ def _draw_tree(
         if not _has_meaningful_support(node):
             continue
         support_value = float(node.support)
+        if not math.isfinite(support_value):
+            raise ValueError('Displayed support values must be finite numbers.')
         if (support_min is not None) and (support_value < support_min):
             continue
         label_x, label_y = drawing_layout.support_anchors[node]
@@ -2655,7 +2790,7 @@ def _draw_tree(
             and leaf_passes_pie_filters
         ):
             if all(prop in node.props for prop in node_pie_properties):
-                probabilities = [float(node.props[prop]) for prop in node_pie_properties]
+                probabilities = [node.props[prop] for prop in node_pie_properties]
                 colors = [
                     _property_color(
                         prop=prop,
@@ -2666,7 +2801,7 @@ def _draw_tree(
                     )
                     for index, prop in enumerate(node_pie_properties)
                 ]
-                _draw_probability_pie(
+                node_pie_artist = _draw_probability_pie(
                     ax,
                     xcoord[node],
                     ycoord[node],
@@ -2674,23 +2809,59 @@ def _draw_tree(
                     colors=colors,
                     marker_size_pt=max(font_size, 4.5),
                 )
+                if node_pie_artist is not None:
+                    drawing_artists.append(DrawingArtist(
+                        node_pie_artist,
+                        kind='node_pie',
+                        priority=80,
+                        owner=node,
+                    ))
         if (
             node_label_property not in (None, '')
             and node_label_property in node.props
             and _node_matches_target(node, node_label_target)
             and _matches_property_filters(node, node_label_filters)
         ):
-            label_offset_points = (-3.0, 3.0) if node.is_leaf else (2.0, 2.0)
+            node_has_pie = (
+                bool(node_pie_properties)
+                and _node_matches_target(node, node_pie_target)
+                and leaf_passes_pie_filters
+                and all(prop in node.props for prop in node_pie_properties)
+            )
+            pie_radius = max(float(font_size), 4.5) / 2.0 if node_has_pie else 0.0
+            if spatial_layout:
+                placement = _spatial_node_label_placement(
+                    node,
+                    drawing_layout,
+                    clearance_points=(
+                        pie_radius + max(float(font_size) * 0.7, 4.0)
+                    ),
+                )
+            else:
+                clearance = pie_radius + 2.0
+                placement = {
+                    'offset': (
+                        (-clearance, clearance)
+                        if node.is_leaf
+                        else (clearance, clearance)
+                    ),
+                    'rotation': 0.0,
+                    'horizontal_alignment': 'right' if node.is_leaf else 'left',
+                    'vertical_alignment': 'bottom',
+                    'shift_direction': (0.0, 1.0),
+                }
             node_label_artist = ax.annotate(
                 '{}{}'.format(
                     node_label_prefix,
                     _format_property_value(node.props[node_label_property], decimals=node_label_decimals),
                 ),
                 xy=(xcoord[node], ycoord[node]),
-                xytext=label_offset_points,
+                xytext=placement['offset'],
                 textcoords='offset points',
-                va='bottom',
-                ha='right' if node.is_leaf else 'left',
+                va=placement['vertical_alignment'],
+                ha=placement['horizontal_alignment'],
+                rotation=placement['rotation'],
+                rotation_mode='anchor',
                 fontsize=font_size,
                 fontfamily=font_family,
                 color=LABEL_COLOR,
@@ -2701,7 +2872,7 @@ def _draw_tree(
                 kind='node_label',
                 priority=45,
                 movable=True,
-                shift_direction=(0.0, 1.0),
+                shift_direction=placement['shift_direction'],
                 owner=node,
             ))
 

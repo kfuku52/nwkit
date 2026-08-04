@@ -539,7 +539,7 @@ pdraw.add_argument('--node-pie-target', '--node_pie_target', dest='node_pie_targ
 pdraw.add_argument('--node-pie-leaf-filter', '--node_pie_leaf_filter', dest='node_pie_leaf_filter', metavar='PROPERTY:OP:VALUE', default=[], type=str, required=False, action='append',
                    help='default=[]: Restrict leaf pies with OP in ge, gt, le, lt, eq, or ne; root and internal pies remain unaffected. May be repeated.')
 pdraw.add_argument('--node-label-property', '--node_label_property', dest='node_label_property', metavar='PROPERTY', default=None, type=str, required=False, action='store',
-                   help='default=None: Display this Newick/NHX property beside matching nodes.')
+                   help='default=None: Display this Newick/NHX property beside matching nodes; use "name" for ordinary Newick node labels.')
 pdraw.add_argument('--node-label-target', '--node_label_target', dest='node_label_target', metavar='root,intnode,leaf|all', default='intnode', type=str, required=False, action='store',
                    help='default=%(default)s: Comma-separated node classes eligible for --node-label-property.')
 pdraw.add_argument('--node-label-filter', '--node_label_filter', dest='node_label_filter', metavar='PROPERTY:OP:VALUE', default=[], type=str, required=False, action='append',
