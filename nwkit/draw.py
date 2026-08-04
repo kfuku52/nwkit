@@ -1485,7 +1485,7 @@ def _draw_tree(
     tip_image_gap=TIP_IMAGE_GAP_PT,
     layout='rectangular',
     spiral_turns=None,
-    fan_open_angle=30.0,
+    fan_span=180.0,
     unrooted_method='equal-angle',
     daylight_iterations=5,
     scale_bar='none',
@@ -1840,7 +1840,7 @@ def _draw_tree(
         use_topology_depth=use_topology_depth,
         aspect_ratio=layout_aspect_ratio,
         spiral_turns=spiral_turns,
-        fan_open_angle=fan_open_angle,
+        fan_span=fan_span,
         terminal_extent_by_leaf=terminal_extent_by_leaf,
         label_size_by_leaf=spacing_size_by_leaf,
         tip_spacing=resolved_tip_spacing,
@@ -2671,7 +2671,7 @@ def _draw_tree(
             'radial': (
                 'Concentric rings every {:g}: root-to-node distance; root = 0'
             ).format(requested_depth_guide),
-            'spiral': 'Cross-track root-to-node distance',
+            'spiral': 'Root-to-node distance encoded across spiral band',
         }[layout_name]
         title_artist = _add_bottom_guide_title(
             figure=fig,
@@ -2814,7 +2814,7 @@ def _draw_tree(
             {
                 'slanted': 'axis-grid',
                 'radial': 'concentric-rings',
-                'spiral': 'cross-track-key',
+                'spiral': 'spiral-depth-key',
             }[layout_name]
             if requested_depth_guide is not None
             else None
@@ -3054,7 +3054,7 @@ def draw_main(args):
         tip_image_gap=getattr(args, 'tip_image_gap', TIP_IMAGE_GAP_PT),
         layout=getattr(args, 'layout', 'rectangular'),
         spiral_turns=getattr(args, 'spiral_turns', None),
-        fan_open_angle=getattr(args, 'fan_open_angle', 30.0),
+        fan_span=getattr(args, 'fan_span', 180.0),
         unrooted_method=getattr(args, 'unrooted_method', 'equal-angle'),
         daylight_iterations=getattr(args, 'daylight_iterations', 5),
         scale_bar=getattr(args, 'scale_bar', 'none'),

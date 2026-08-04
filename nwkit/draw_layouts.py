@@ -284,7 +284,7 @@ def cladogram_layout(tree, leaf_weight_by_leaf=None):
 def _polar_coordinates(
     tree,
     use_topology_depth,
-    open_angle_degrees=0.0,
+    angular_span_degrees=360.0,
     leaf_weight_by_leaf=None,
 ):
     radius, linear_y, leaf_order = get_rectangular_coordinates(
@@ -292,23 +292,22 @@ def _polar_coordinates(
         use_topology_depth=use_topology_depth,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
-    open_angle_degrees = float(open_angle_degrees)
+    angular_span_degrees = float(angular_span_degrees)
     if (
-        not math.isfinite(open_angle_degrees)
-        or open_angle_degrees < 0.0
-        or open_angle_degrees >= 360.0
+        not math.isfinite(angular_span_degrees)
+        or angular_span_degrees <= 0.0
+        or angular_span_degrees > 360.0
     ):
-        raise ValueError('--fan-open-angle must be between zero (inclusive) and 360 (exclusive).')
+        raise ValueError('--fan-span must be greater than zero and no greater than 360.')
     count = len(leaf_order)
-    open_angle = math.radians(open_angle_degrees)
-    available = (2.0 * math.pi) - open_angle
+    available = math.radians(angular_span_degrees)
     if count <= 1:
         start = 0.0
         denominator = 1.0
         linear_origin = 0.0
-    elif open_angle > 0.0:
-        # Place the gap on the left so the rooted fan opens towards the right.
-        start = -math.pi + (open_angle / 2.0)
+    elif angular_span_degrees < 360.0:
+        # Center the occupied fan on the right-facing horizontal axis.
+        start = -available / 2.0
         leaf_positions = [linear_y[leaf] for leaf in leaf_order]
         linear_origin = min(leaf_positions)
         denominator = max(max(leaf_positions) - linear_origin, 1e-12)
@@ -363,18 +362,18 @@ def polar_layout(
     tree,
     mode,
     use_topology_depth=False,
-    fan_open_angle=30.0,
+    fan_span=180.0,
     leaf_weight_by_leaf=None,
 ):
     """Return rooted circular, fan, or straight radial geometry."""
 
     if mode not in {'circular', 'fan', 'radial'}:
         raise ValueError('Unsupported polar layout: {}'.format(mode))
-    open_angle = fan_open_angle if mode == 'fan' else 0.0
+    angular_span = fan_span if mode == 'fan' else 360.0
     radius, angle, xcoord, ycoord, leaf_order = _polar_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
-        open_angle_degrees=open_angle,
+        angular_span_degrees=angular_span,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
     edge_paths = {}
@@ -1116,7 +1115,8 @@ def _tidy_second_walk(root_box, modifier_sum, coordinates):
         box, inherited = stack.pop()
         current = inherited + box.mod
         box.x = box.prelim + current
-        coordinates[box.node] = box.x + (box.w / 2.0)
+        if box.node is not None:
+            coordinates[box.node] = box.x + (box.w / 2.0)
         minimum = min(minimum, box.x)
         _tidy_add_child_spacing(box)
         stack.extend((child, current) for child in reversed(box.children))
@@ -1128,7 +1128,8 @@ def _tidy_third_walk(root_box, shift, coordinates):
     while stack:
         box = stack.pop()
         box.x += shift
-        coordinates[box.node] = box.x + (box.w / 2.0)
+        if box.node is not None:
+            coordinates[box.node] = box.x + (box.w / 2.0)
         stack.extend(reversed(box.children))
 
 
@@ -1159,6 +1160,7 @@ def tidy_layout(
     )
 
     box_by_node = {}
+    label_aware = leaf_weight_by_leaf is not None
     for node in tree.traverse(strategy='postorder'):
         children = [box_by_node[child] for child in node.get_children()]
         if node.is_root:
@@ -1167,11 +1169,30 @@ def tidy_layout(
         else:
             fixed = xcoord[node.up]
             height = max(xcoord[node] - fixed, 0.0)
-        if node.is_leaf:
-            height += max(float(terminal_extent_by_leaf.get(node, 0.0)), 0.0)
+        terminal_extent = (
+            max(float(terminal_extent_by_leaf.get(node, 0.0)), 0.0)
+            if node.is_leaf
+            else 0.0
+        )
+        if node.is_leaf and label_aware and terminal_extent > 0.0:
+            # A multiline label occupies only the terminal part of the fixed
+            # axis, not the leaf's entire incoming branch. Represent it as a
+            # one-child terminal box so the contour algorithm can let labels
+            # and branches at disjoint horizontal positions pass vertically.
+            children = [_TidyBox(
+                node=None,
+                width=normalized_weight[node],
+                height=terminal_extent,
+                fixed=xcoord[node],
+                children=[],
+            )]
+            width = 1.0
+        else:
+            height += terminal_extent
+            width = normalized_weight[node] if node.is_leaf else 1.0
         box_by_node[node] = _TidyBox(
             node=node,
-            width=normalized_weight[node] if node.is_leaf else 1.0,
+            width=width,
             height=height,
             fixed=fixed,
             children=children,
@@ -1185,6 +1206,15 @@ def tidy_layout(
     if ycoord:
         origin = min(ycoord.values())
         ycoord = {node: value - origin for node, value in ycoord.items()}
+    # The tidy algorithm allocates non-overlapping subtree boxes. Its box
+    # midpoint is not necessarily the midpoint of the child nodes when leaf
+    # boxes have different label-aware widths. Keep the compacted leaf
+    # positions, then restore the phylogenetic drawing convention that every
+    # parent joins its direct children at their arithmetic mean height.
+    for node in tree.traverse(strategy='postorder'):
+        children = node.get_children()
+        if children:
+            ycoord[node] = sum(ycoord[child] for child in children) / len(children)
     edge_paths, support_anchors, support_angles, root_path = _orthogonal_paths(
         tree,
         xcoord,
@@ -1555,7 +1585,7 @@ def make_tree_layout(
     use_topology_depth=False,
     aspect_ratio=1.0,
     spiral_turns=None,
-    fan_open_angle=30.0,
+    fan_span=180.0,
     terminal_extent_by_leaf=None,
     label_size_by_leaf=None,
     tip_spacing='uniform',
@@ -1621,7 +1651,7 @@ def make_tree_layout(
             tree,
             mode=layout,
             use_topology_depth=use_topology_depth,
-            fan_open_angle=fan_open_angle,
+            fan_span=fan_span,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     if layout == 'unrooted':

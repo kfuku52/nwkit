@@ -117,8 +117,9 @@ nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
   [de Vienne (2022)](https://doi.org/10.1093/molbev/msac204). It retains the
   branch-length axis while moving non-overlapping subtrees closer together.
 - `circular` maps branch-length depth to radius and uses circular connectors
-  followed by radial branch segments. `fan` uses the same rooted geometry with
-  a left-side opening controlled by `--fan-open-angle` (30 degrees by default).
+  followed by radial branch segments. `fan` uses the same rooted geometry over
+  the angular range selected by `--fan-span`, which defaults to a right-facing
+  180-degree semicircle; use 360 for a complete circle.
 - `radial` maps the rooted phylogram to polar coordinates and connects nodes
   with straight branches.
 - `unrooted` suppresses a degree-two input root and uses a central-node,
@@ -234,9 +235,10 @@ nwkit draw -i tree.nwk --layout spiral --depth-guide auto \
 
 `slanted` receives a horizontal depth axis with vertical grid lines; `radial`
 receives concentric rings labelled in the largest empty root sector; and
-`spiral` receives a cross-track depth key. These guides describe cumulative
-root-to-node distance, not the Euclidean length of a slanted, radial, or warped
-edge. `auto` chooses a readable interval and a positive number sets it
+`spiral` receives a linear root-to-node distance key for the depth encoded
+across its spiral band. These guides describe cumulative root-to-node distance,
+not the Euclidean length of a slanted, radial, or warped edge. `auto` chooses a
+readable interval and a positive number sets it
 explicitly. On a dense radial tree with no safe sector for ring numbers, the
 numbers are omitted and the interval remains explicit in the lower guide
 caption. Both scale bars and depth guides reserve a lower annotation strip.

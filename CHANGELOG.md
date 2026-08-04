@@ -11,7 +11,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   rectangle-fitted fractal alternatives to the default rectangular phylogram.
   Existing support, node, probability, property, and categorical annotations
   follow the selected layout.
-- `draw --fan-open-angle` controls the gap in the fan layout.
+- `draw --fan-span` controls the displayed angular span of the fan layout and
+  defaults to a right-facing 180-degree semicircle.
 - `draw --tip-spacing uniform|label-aware` independently controls spacing for
   every layout. Label-aware mode allocates rows, leaf boxes, or angular sectors
   from measured labels and tip annotations instead of treating every tip as
@@ -27,7 +28,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   layouts whose geometry retains branch-length units.
 - `draw --depth-guide none|auto|FLOAT` exposes cumulative root-to-node distance
   without implying visible-edge length: slanted uses an axis and grid, radial
-  uses concentric rings, and spiral uses a cross-track key.
+  uses concentric rings, and spiral uses a linear depth key for its band.
 - `draw --tip-track`, branch property color/width mappings, taxonomic
   typography, multi-column legends, and continuous palettes add composable
   annotation layers.
@@ -69,6 +70,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Fixed
 
+- Centered every tidy-layout parent on its direct child nodes after compact,
+  label-aware subtree placement.
+- Limited multiline-label height reservations in tidy layouts to their actual
+  terminal-axis extent, allowing horizontally disjoint labels and branches to
+  use the same vertical space without overlap.
 - Prevented equal-daylight rotations from introducing branch crossings,
   spatial root stubs from overlapping a root branch, and deep caterpillar
   trees from exceeding Python's recursion limit during drawing or collapse.

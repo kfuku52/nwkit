@@ -429,8 +429,8 @@ pdraw.add_argument('--layout', metavar='LAYOUT', default='rectangular', type=str
                    help='default=%(default)s: Tree layout; label-aware spacing is controlled independently by --tip-spacing.')
 pdraw.add_argument('--spiral-turns', '--spiral_turns', dest='spiral_turns', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=auto: Number of turns used by --layout spiral.')
-pdraw.add_argument('--fan-open-angle', '--fan_open_angle', dest='fan_open_angle', metavar='DEGREES', default=30.0, type=finite_float, required=False, action='store',
-                   help='default=%(default)s: Left-side opening in degrees used by --layout fan; use 0 for a complete circle.')
+pdraw.add_argument('--fan-span', '--fan_span', dest='fan_span', metavar='DEGREES', default=180.0, type=finite_float, required=False, action='store',
+                   help='default=%(default)s: Angular span occupied by --layout fan; 180 draws a right-facing semicircle and 360 a complete circle.')
 pdraw.add_argument('--unrooted-method', '--unrooted_method', dest='unrooted_method', metavar='equal-angle|equal-daylight', default='equal-angle', type=str, choices=['equal-angle', 'equal-daylight'],
                    help='default=%(default)s: Angular optimization used by --layout unrooted.')
 pdraw.add_argument('--daylight-iterations', '--daylight_iterations', dest='daylight_iterations', metavar='INT', default=5, type=int,

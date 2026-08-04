@@ -32,7 +32,7 @@ def make_draw_args(**kwargs):
         'image_format': 'auto',
         'layout': 'rectangular',
         'spiral_turns': None,
-        'fan_open_angle': 30.0,
+        'fan_span': 180.0,
         'unrooted_method': 'equal-angle',
         'daylight_iterations': 5,
         'max_visible_tips': None,
@@ -232,12 +232,29 @@ class TestDrawMain:
         assert drawing.equal_aspect is True
         assert any(len(path) > 3 for path in drawing.edge_paths.values())
 
-    def test_fan_open_angle_controls_tip_angular_span(self):
+    def test_fan_span_controls_tip_angular_span(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
-        fan = make_tree_layout(tree, layout='fan', fan_open_angle=60.0)
+        fan = make_tree_layout(tree, layout='fan', fan_span=60.0)
 
         angles = sorted(fan.label_angles.values())
-        assert angles[-1] - angles[0] == pytest.approx(300.0)
+        assert angles[-1] - angles[0] == pytest.approx(60.0)
+
+    def test_fan_defaults_to_right_facing_semicircle(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        fan = make_tree_layout(tree, layout='fan')
+
+        angles = sorted(fan.label_angles.values())
+        assert angles[0] == pytest.approx(-90.0)
+        assert angles[-1] == pytest.approx(90.0)
+
+    def test_fan_span_360_matches_circular_geometry(self):
+        tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
+        circular = make_tree_layout(tree, layout='circular')
+        fan = make_tree_layout(tree, layout='fan', fan_span=360.0)
+
+        for node in tree.traverse():
+            assert fan.xcoord[node] == pytest.approx(circular.xcoord[node])
+            assert fan.ycoord[node] == pytest.approx(circular.ycoord[node])
 
     def test_radial_layout_uses_straight_edges(self):
         tree = Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1)
@@ -291,11 +308,12 @@ class TestDrawMain:
             )
             assert distance == pytest.approx(float(node.dist))
 
-    def test_fan_layout_rejects_invalid_open_angle(self):
+    @pytest.mark.parametrize('fan_span', [0.0, 360.1])
+    def test_fan_layout_rejects_invalid_span(self, fan_span):
         tree = Tree('(A:1,B:1);', parser=1)
 
-        with pytest.raises(ValueError, match='--fan-open-angle'):
-            make_tree_layout(tree, layout='fan', fan_open_angle=360.0)
+        with pytest.raises(ValueError, match='--fan-span'):
+            make_tree_layout(tree, layout='fan', fan_span=fan_span)
 
     @pytest.mark.parametrize('layout_name', ['circular', 'radial', 'fractal'])
     def test_label_aware_spatial_layout_allocates_more_angle_to_tall_labels(
@@ -372,6 +390,69 @@ class TestDrawMain:
         uniform_span = max(uniform.ycoord.values()) - min(uniform.ycoord.values())
         aware_span = max(aware.ycoord.values()) - min(aware.ycoord.values())
         assert aware_span > uniform_span
+
+    def test_tidy_multiline_label_reserves_height_only_at_terminal_extent(self):
+        def drawing_for(newick):
+            tree = Tree(newick, parser=1)
+            drawing = make_tree_layout(
+                tree,
+                layout='tidy',
+                label_size_by_leaf={
+                    tree['A']: (2.0, 2.0),
+                    tree['B']: (0.2, 0.1),
+                    tree['C']: (0.2, 0.1),
+                },
+                terminal_extent_by_leaf={
+                    tree['A']: 2.0,
+                    tree['B']: 0.2,
+                    tree['C']: 0.2,
+                },
+                tip_spacing='label-aware',
+            )
+            return tree, drawing
+
+        separated_tree, separated = drawing_for('(A:10,B:1,C:1);')
+        overlapping_tree, overlapping = drawing_for('(A:1,B:1,C:1);')
+        separated_gap = (
+            separated.ycoord[separated_tree['B']]
+            - separated.ycoord[separated_tree['A']]
+        )
+        overlapping_gap = (
+            overlapping.ycoord[overlapping_tree['B']]
+            - overlapping.ycoord[overlapping_tree['A']]
+        )
+
+        assert separated_gap < overlapping_gap
+        assert separated_gap == pytest.approx(1.0)
+
+    @pytest.mark.parametrize('tip_spacing', ['uniform', 'label-aware'])
+    def test_tidy_parents_are_centered_on_direct_children(self, tip_spacing):
+        tree = Tree('(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout='tidy',
+            label_size_by_leaf={
+                leaf: (
+                    0.4,
+                    1.2 if leaf.name == 'B' else (
+                        0.6 if leaf.name == 'E' else 0.1
+                    ),
+                )
+                for leaf in tree.leaves()
+            },
+            tip_spacing=tip_spacing,
+        )
+
+        for node in tree.traverse():
+            children = node.get_children()
+            if not children:
+                continue
+            expected = sum(drawing.ycoord[child] for child in children) / len(children)
+            assert drawing.ycoord[node] == pytest.approx(expected)
+            assert min(drawing.ycoord[child] for child in children) <= drawing.ycoord[node]
+            assert drawing.ycoord[node] <= max(
+                drawing.ycoord[child] for child in children
+            )
 
     def test_label_aware_circular_layout_preserves_root_distance_as_radius(self):
         tree = Tree('(((A:1,B:2):3,C:2):1,(D:5,E:1):2);', parser=1)
@@ -810,7 +891,7 @@ class TestDrawMain:
         [
             ('slanted', 'axis-grid', 'depth-projection'),
             ('radial', 'concentric-rings', 'depth-projection'),
-            ('spiral', 'cross-track-key', 'warped-depth'),
+            ('spiral', 'spiral-depth-key', 'warped-depth'),
         ],
     )
     def test_draw_writes_layout_specific_depth_guide(
