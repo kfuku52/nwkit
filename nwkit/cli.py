@@ -425,8 +425,8 @@ pdraw.add_argument('--image-format', '--image_format', dest='image_format', meta
                    choices=['auto', 'pdf', 'png', 'svg'],
                    help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.')
 pdraw.add_argument('--layout', metavar='LAYOUT', default='rectangular', type=str, required=False, action='store',
-                   choices=['rectangular', 'slanted', 'cladogram', 'tidy', 'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal', 'packed', 'packed-phylogram'],
-                   help='default=%(default)s: Tree layout, including label-aware packed topology and branch-length-preserving packed-phylogram arrangements.')
+                   choices=['rectangular', 'slanted', 'cladogram', 'tidy', 'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal'],
+                   help='default=%(default)s: Tree layout; label-aware spacing is controlled independently by --tip-spacing.')
 pdraw.add_argument('--spiral-turns', '--spiral_turns', dest='spiral_turns', metavar='FLOAT', default=None, type=finite_float, required=False, action='store',
                    help='default=auto: Number of turns used by --layout spiral.')
 pdraw.add_argument('--fan-open-angle', '--fan_open_angle', dest='fan_open_angle', metavar='DEGREES', default=30.0, type=finite_float, required=False, action='store',
@@ -493,8 +493,10 @@ pdraw.add_argument('--branch-width-range', '--branch_width_range', dest='branch_
                    help='default=%(default)s: Output width range for --branch-width-property.')
 pdraw.add_argument('--scale-bar', '--scale_bar', dest='scale_bar', metavar='none|auto|FLOAT', default='none', type=str,
                    help='default=%(default)s: Add an exact scale to a layout with directly measurable branch-length segments.')
+pdraw.add_argument('--depth-guide', '--depth_guide', dest='depth_guide', metavar='none|auto|FLOAT', default='none', type=str,
+                   help='default=%(default)s: Add root-to-node depth guides to slanted, radial, or spiral; FLOAT sets the tick interval.')
 pdraw.add_argument('--branch-length-unit', '--branch_length_unit', dest='branch_length_unit', metavar='TEXT', default='', type=str,
-                   help='default="": Unit appended to the scale-bar label, for example substitutions/site or Ma.')
+                   help='default="": Unit appended to scale-bar and depth-guide labels, for example substitutions/site or Ma.')
 pdraw.add_argument('--tip-labels', '--tip_labels', dest='tip_labels', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                    help='default=%(default)s: Whether to draw tip labels. Disabling them is useful for dense overview layouts.')
 pdraw.add_argument('--tip-label-position', '--tip_label_position', dest='tip_label_position', metavar='auto|aligned|branch-end', default='auto', type=str, required=False, action='store',
@@ -502,6 +504,8 @@ pdraw.add_argument('--tip-label-position', '--tip_label_position', dest='tip_lab
                    help='default=%(default)s: Align labels at the right edge for rectangular layout and place them beside branch endpoints otherwise.')
 pdraw.add_argument('--tip-label-wrap', '--tip_label_wrap', dest='tip_label_wrap', metavar='none|auto|taxonomy|INT', default='none', type=str, required=False, action='store',
                    help='default=%(default)s: Display-only wrapping; taxonomy preserves an underscore-delimited genus_species binomial on one line.')
+pdraw.add_argument('--tip-spacing', '--tip_spacing', dest='tip_spacing', metavar='uniform|label-aware', default='uniform', type=str, choices=['uniform', 'label-aware'],
+                   help='default=%(default)s: Allocate tip rows or angular sectors uniformly, or from measured label and annotation heights.')
 pdraw.add_argument('--tip-label-font-style', '--tip_label_font_style', dest='tip_label_font_style', metavar='plain|italic|taxonomy', default='plain', type=str, choices=['plain', 'italic', 'taxonomy'],
                    help='default=%(default)s: Typography for tip labels; taxonomy italicizes exact genus_species binomials conservatively.')
 pdraw.add_argument('--tip-track', '--tip_track', dest='tip_track', metavar='PROPERTY', default=[], type=str, action='append',

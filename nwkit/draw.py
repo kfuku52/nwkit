@@ -1,3 +1,4 @@
+import bisect
 import hashlib
 import math
 import os
@@ -14,7 +15,7 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
 from matplotlib.path import Path as MplPath
-from matplotlib.patches import Patch, Rectangle
+from matplotlib.patches import Circle, Patch, Rectangle
 from matplotlib.text import Text
 from matplotlib.font_manager import FontProperties
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -714,8 +715,7 @@ def _prepare_tip_label_text(
             font_family=font_family,
         )
         spatial = layout_name in {
-            'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal', 'packed',
-            'packed-phylogram',
+            'circular', 'fan', 'radial', 'unrooted', 'spiral', 'fractal',
         }
         normal_budget = max(min(panel_width_in, panel_height_in) * 0.20, 0.55)
         if spatial:
@@ -857,6 +857,374 @@ def _parse_scale_bar(value, tree_span):
     if not math.isfinite(result) or result <= 0.0:
         raise ValueError("'--scale-bar' must be none, auto, or a positive number.")
     return result
+
+
+def _parse_depth_guide(value, tree_span):
+    text = str(value).strip().lower()
+    if text in {'none', ''}:
+        return None
+    if text == 'auto':
+        target = max(float(tree_span) / 4.0, 1e-12)
+        exponent = math.floor(math.log10(target))
+        scaled = target / (10.0 ** exponent)
+        base = 1.0 if scaled < 1.5 else (2.0 if scaled < 3.5 else 5.0)
+        return base * (10.0 ** exponent)
+    try:
+        interval = float(text)
+    except ValueError as error:
+        raise ValueError(
+            "'--depth-guide' must be none, auto, or a positive interval."
+        ) from error
+    if not math.isfinite(interval) or interval <= 0.0:
+        raise ValueError(
+            "'--depth-guide' must be none, auto, or a positive interval."
+        )
+    if interval > float(tree_span) + 1e-12:
+        raise ValueError(
+            "'--depth-guide' interval must not exceed the displayed tree-depth "
+            'span ({:g}).'.format(tree_span)
+        )
+    return interval
+
+
+def _depth_guide_ticks(tree_span, interval):
+    if interval is None:
+        return []
+    count = int(math.floor((float(tree_span) + 1e-12) / float(interval)))
+    if count > 50:
+        raise ValueError(
+            "'--depth-guide' would draw {} intervals; use an interval of at "
+            'least {:g}.'.format(count, float(tree_span) / 50.0)
+        )
+    return [float(interval) * index for index in range(count + 1)]
+
+
+def _distance_label(prefix, unit):
+    unit = str(unit).strip()
+    return '{} ({})'.format(prefix, unit) if unit else prefix
+
+
+def _add_scale_bar(
+    figure,
+    axes,
+    size,
+    label,
+    color,
+    font_family,
+    font_size,
+    anchor_x,
+    anchor_y,
+):
+    """Add a scale bar to the dedicated strip below the tree axes."""
+
+    artist = AnchoredSizeBar(
+        axes.transData,
+        size,
+        label,
+        loc='lower left',
+        bbox_to_anchor=(float(anchor_x), float(anchor_y)),
+        bbox_transform=figure.transFigure,
+        pad=0.0,
+        borderpad=0.0,
+        sep=2.0,
+        frameon=False,
+        size_vertical=0.0,
+        color=color,
+        label_top=True,
+        fontproperties=FontProperties(
+            family=font_family,
+            size=font_size,
+        ),
+    )
+    artist.set_zorder(10)
+    axes.add_artist(artist)
+    return artist
+
+
+def _add_slanted_depth_guide(
+    axes,
+    root_x,
+    ticks,
+    color,
+    font_family,
+    font_size,
+):
+    """Draw a projected-depth axis and vertical guides for a slanted tree."""
+
+    artists = []
+    transform = axes.get_xaxis_transform()
+    maximum = max(ticks, default=0.0)
+    axes.plot(
+        [root_x, root_x + maximum],
+        [0.0, 0.0],
+        transform=transform,
+        color=color,
+        linewidth=0.55,
+        clip_on=False,
+        zorder=0.4,
+    )
+    for depth in ticks:
+        x = root_x + depth
+        axes.axvline(
+            x,
+            color=color,
+            linewidth=0.45,
+            linestyle=(0, (1.5, 2.5)),
+            alpha=0.55,
+            zorder=0.25,
+        )
+        axes.plot(
+            [x, x],
+            [0.0, -0.014],
+            transform=transform,
+            color=color,
+            linewidth=0.55,
+            clip_on=False,
+            zorder=0.4,
+        )
+        label = axes.annotate(
+            '{:g}'.format(depth),
+            xy=(x, 0.0),
+            xycoords=('data', 'axes fraction'),
+            xytext=(0.0, -3.0),
+            textcoords='offset points',
+            ha='center',
+            va='top',
+            fontsize=font_size,
+            fontfamily=font_family,
+            color=LABEL_COLOR,
+            annotation_clip=False,
+            zorder=9,
+        )
+        artists.append(label)
+    return artists
+
+
+def _add_radial_depth_guide(
+    axes,
+    drawing_layout,
+    tree,
+    ticks,
+    color,
+    font_family,
+    font_size,
+):
+    """Draw concentric root-depth rings and label them in an empty sector."""
+
+    root_x = drawing_layout.xcoord[tree]
+    root_y = drawing_layout.ycoord[tree]
+    leaf_angles = sorted(
+        math.radians(drawing_layout.label_angles.get(leaf, 0.0))
+        % (2.0 * math.pi)
+        for leaf in tree.leaves()
+    )
+    segments = [
+        (start, end)
+        for path in drawing_layout.edge_paths.values()
+        for start, end in zip(path, path[1:])
+    ]
+
+    def point_segment_distance(point, start, end):
+        delta_x = end[0] - start[0]
+        delta_y = end[1] - start[1]
+        denominator = (delta_x * delta_x) + (delta_y * delta_y)
+        if denominator <= 1e-18:
+            return math.hypot(point[0] - start[0], point[1] - start[1])
+        fraction = (
+            ((point[0] - start[0]) * delta_x)
+            + ((point[1] - start[1]) * delta_y)
+        ) / denominator
+        fraction = min(max(fraction, 0.0), 1.0)
+        closest = (
+            start[0] + (fraction * delta_x),
+            start[1] + (fraction * delta_y),
+        )
+        return math.hypot(point[0] - closest[0], point[1] - closest[1])
+
+    positive_ticks = [depth for depth in ticks if depth > 1e-12]
+    outer_radius = max(positive_ticks, default=1.0)
+    if len(positive_ticks) <= 12:
+        score_ticks = positive_ticks
+    else:
+        score_ticks = [
+            positive_ticks[round(
+                index * (len(positive_ticks) - 1) / 11.0
+            )]
+            for index in range(12)
+        ]
+    if len(segments) <= 512:
+        score_segments = segments
+    else:
+        score_segments = [
+            segments[round(index * (len(segments) - 1) / 511.0)]
+            for index in range(512)
+        ]
+
+    def nearest_leaf_angle_distance(direction):
+        if not leaf_angles:
+            return math.pi
+        position = bisect.bisect_left(leaf_angles, direction)
+        neighbors = (
+            leaf_angles[position % len(leaf_angles)],
+            leaf_angles[(position - 1) % len(leaf_angles)],
+        )
+        return min(
+            abs(math.atan2(
+                math.sin(direction - angle),
+                math.cos(direction - angle),
+            ))
+            for angle in neighbors
+        )
+
+    def direction_score(direction):
+        cosine = math.cos(direction)
+        sine = math.sin(direction)
+        branch_clearance = min(
+            (
+                point_segment_distance(
+                    (root_x + (depth * cosine), root_y + (depth * sine)),
+                    start,
+                    end,
+                )
+                for depth in score_ticks
+                for start, end in score_segments
+            ),
+            default=outer_radius,
+        )
+        leaf_clearance = nearest_leaf_angle_distance(direction) * outer_radius
+        return min(branch_clearance, leaf_clearance)
+
+    candidate_count = 360 if len(segments) <= 512 else 180
+    candidates = [
+        2.0 * math.pi * index / candidate_count
+        for index in range(candidate_count)
+    ]
+    direction = max(candidates, key=direction_score)
+    best_score = direction_score(direction)
+    labels_have_clear_sector = (
+        len(segments) <= 2000
+        and best_score >= outer_radius * 0.012
+    )
+    artists = []
+    for depth in positive_ticks:
+        axes.add_patch(Circle(
+            (root_x, root_y),
+            depth,
+            facecolor='none',
+            edgecolor=color,
+            linewidth=0.45,
+            linestyle=(0, (1.5, 2.5)),
+            alpha=0.60,
+            zorder=0.25,
+        ))
+        if not labels_have_clear_sector:
+            continue
+        x = root_x + (depth * math.cos(direction))
+        y = root_y + (depth * math.sin(direction))
+        label = axes.annotate(
+            '{:g}'.format(depth),
+            xy=(x, y),
+            xytext=(3.0 * -math.sin(direction), 3.0 * math.cos(direction)),
+            textcoords='offset points',
+            ha='left' if math.cos(direction) >= 0.0 else 'right',
+            va='center',
+            fontsize=font_size,
+            fontfamily=font_family,
+            color=LABEL_COLOR,
+            bbox={
+                'boxstyle': 'square,pad=0.08',
+                'facecolor': '#ffffff',
+                'edgecolor': 'none',
+                'alpha': 0.88,
+            },
+            annotation_clip=False,
+            zorder=9,
+        )
+        artists.append(label)
+    return artists, labels_have_clear_sector
+
+
+def _add_bottom_guide_title(
+    figure,
+    text,
+    x,
+    y,
+    font_family,
+    font_size,
+):
+    return figure.text(
+        float(x),
+        float(y),
+        text,
+        ha='left',
+        va='bottom',
+        fontsize=font_size,
+        fontfamily=font_family,
+        color=LABEL_COLOR,
+        zorder=10,
+    )
+
+
+def _add_spiral_depth_key(
+    figure,
+    ticks,
+    tree_span,
+    axes_left,
+    axes_right,
+    strip_height_points,
+    font_family,
+    font_size,
+    color,
+):
+    """Add a linear key for depth encoded across the spiral track."""
+
+    if not ticks or tree_span <= 0.0:
+        return []
+    figure_height_points = figure.get_figheight() * 72.0
+    figure_width_points = figure.get_figwidth() * 72.0
+    start_x = float(axes_left) + (
+        max(float(font_size) * 0.45, 3.0) / figure_width_points
+    )
+    end_x = start_x + min((float(axes_right) - start_x) * 0.46, 0.42)
+    line_y = (float(strip_height_points) - float(font_size) - 5.0) / figure_height_points
+    tick_height = 3.0 / figure_height_points
+    line = Line2D(
+        [start_x, end_x],
+        [line_y, line_y],
+        transform=figure.transFigure,
+        color=color,
+        linewidth=0.65,
+        zorder=10,
+        clip_on=False,
+    )
+    figure.add_artist(line)
+    artists = []
+    for depth in ticks:
+        fraction = depth / float(tree_span)
+        x = start_x + ((end_x - start_x) * fraction)
+        tick = Line2D(
+            [x, x],
+            [line_y - tick_height, line_y + tick_height],
+            transform=figure.transFigure,
+            color=color,
+            linewidth=0.55,
+            zorder=10,
+            clip_on=False,
+        )
+        figure.add_artist(tick)
+        label = figure.text(
+            x,
+            line_y + tick_height + (1.0 / figure_height_points),
+            '{:g}'.format(depth),
+            ha='center',
+            va='bottom',
+            fontsize=font_size,
+            fontfamily=font_family,
+            color=LABEL_COLOR,
+            zorder=10,
+        )
+        artists.append(label)
+    return artists
 
 
 def _parse_legend_columns(value, item_count):
@@ -1094,6 +1462,7 @@ def _draw_tree(
     tip_labels=True,
     tip_label_position='aligned',
     tip_label_wrap='none',
+    tip_spacing='uniform',
     root_marker='none',
     root_marker_color='#0072B2',
     root_marker_size=None,
@@ -1120,6 +1489,7 @@ def _draw_tree(
     unrooted_method='equal-angle',
     daylight_iterations=5,
     scale_bar='none',
+    depth_guide='none',
     branch_length_unit='',
     branch_width=0.8,
     branch_color_property=None,
@@ -1157,8 +1527,6 @@ def _draw_tree(
         'unrooted',
         'spiral',
         'fractal',
-        'packed',
-        'packed-phylogram',
     }
     if layout_name not in supported_layouts:
         raise ValueError("Unsupported '--layout': {}".format(layout))
@@ -1169,8 +1537,6 @@ def _draw_tree(
         'unrooted',
         'spiral',
         'fractal',
-        'packed',
-        'packed-phylogram',
     }
     if spatial_layout and tip_image_by_leaf:
         raise ValueError(
@@ -1187,6 +1553,9 @@ def _draw_tree(
     track_stride_pt = track_size_pt + 2.0
     track_span_pt = len(tip_track_properties) * track_stride_pt
     _tip_font_style('', tip_label_font_style)
+    resolved_tip_spacing = str(tip_spacing).strip().lower()
+    if resolved_tip_spacing not in {'uniform', 'label-aware'}:
+        raise ValueError("'--tip-spacing' must be uniform or label-aware.")
     daylight_iterations = int(daylight_iterations)
     if daylight_iterations <= 0:
         raise ValueError("'--daylight-iterations' must be greater than zero.")
@@ -1213,6 +1582,56 @@ def _draw_tree(
     base_x_min = min(base_x_values) if base_x_values else 0.0
     base_x_max = max(base_x_values) if base_x_values else 1.0
     base_x_span = max(base_x_max - base_x_min, 1.0)
+    segment_length_layouts = {
+        'rectangular', 'tidy', 'circular', 'fan', 'unrooted',
+    }
+    depth_projection_layouts = {'slanted', 'radial'}
+    warped_depth_layouts = {'spiral'}
+    depth_guide_layouts = depth_projection_layouts | warped_depth_layouts
+    branch_length_layouts = (
+        segment_length_layouts
+        | depth_projection_layouts
+        | warped_depth_layouts
+    )
+    branch_depth_span = max(base_x_max - base_x_min, 0.0)
+    requested_scale_bar = _parse_scale_bar(scale_bar, branch_depth_span)
+    requested_depth_guide = _parse_depth_guide(
+        depth_guide,
+        branch_depth_span,
+    )
+    if requested_scale_bar is not None and layout_name not in segment_length_layouts:
+        raise ValueError(
+            "'--scale-bar' requires a branch-length-preserving layout with "
+            'directly measurable branch segments.'
+        )
+    if requested_scale_bar is not None and use_topology_depth:
+        raise ValueError(
+            "'--scale-bar' requires positive input branch lengths."
+        )
+    if (
+        requested_scale_bar is not None
+        and requested_scale_bar > branch_depth_span + 1e-12
+    ):
+        raise ValueError(
+            "'--scale-bar' must not exceed the displayed tree-depth span "
+            '({:g}).'.format(branch_depth_span)
+        )
+    if (
+        requested_depth_guide is not None
+        and layout_name not in depth_guide_layouts
+    ):
+        raise ValueError(
+            "'--depth-guide' is supported by slanted, radial, and spiral "
+            'layouts.'
+        )
+    if requested_depth_guide is not None and use_topology_depth:
+        raise ValueError(
+            "'--depth-guide' requires positive input branch lengths."
+        )
+    depth_ticks = _depth_guide_ticks(
+        branch_depth_span,
+        requested_depth_guide,
+    )
     leaf_order = base_leaf_order
     fig_width = float(figure_width)
     if fig_width <= 0.0:
@@ -1234,7 +1653,7 @@ def _draw_tree(
     label_height_guess_in = (
         float(figure_height)
         if figure_height is not None
-        else (fig_width * 0.72 if layout_name in {'fractal', 'packed'} else fig_width)
+        else (fig_width * 0.72 if layout_name == 'fractal' else fig_width)
     )
     if tip_labels:
         tip_label_text_by_leaf, tip_label_size_by_leaf = _prepare_tip_label_text(
@@ -1309,15 +1728,41 @@ def _draw_tree(
         raise ValueError(
             '--figure-width is too small for the requested label and tip-image panels.'
         )
-    row_pitch_pt = max(
-        float(font_size),
-        max_tip_label_height_in * 72.0,
-    ) + TIP_LABEL_GAP_PT
-    if tip_image_by_leaf:
-        row_pitch_pt = max(
-            row_pitch_pt,
-            tip_image_size_pt + TIP_LABEL_GAP_PT,
+    spacing_height_by_leaf = {}
+    for leaf in leaf_order:
+        spacing_height = (
+            tip_label_size_by_leaf[leaf][1]
+            if tip_labels
+            else 0.0
         )
+        if tip_track_properties:
+            spacing_height = max(spacing_height, track_size_pt / 72.0)
+        if tip_badge_property not in (None, ''):
+            spacing_height = max(
+                spacing_height,
+                float(font_size) * 1.3 / 72.0,
+            )
+        if str(leaf.name) in tip_image_by_leaf:
+            spacing_height = max(spacing_height, tip_image_size_pt / 72.0)
+        spacing_height_by_leaf[leaf] = max(
+            spacing_height,
+            float(font_size) / 72.0,
+        )
+    if resolved_tip_spacing == 'label-aware' and spacing_height_by_leaf:
+        row_pitch_pt = (
+            sum(spacing_height_by_leaf.values())
+            / len(spacing_height_by_leaf)
+        ) * 72.0 + TIP_LABEL_GAP_PT
+    else:
+        row_pitch_pt = max(
+            float(font_size),
+            max_tip_label_height_in * 72.0,
+        ) + TIP_LABEL_GAP_PT
+        if tip_image_by_leaf:
+            row_pitch_pt = max(
+                row_pitch_pt,
+                tip_image_size_pt + TIP_LABEL_GAP_PT,
+            )
     row_pitch_in = row_pitch_pt / 72.0
     property_legend_needed = bool(badge_values or node_pie_properties)
     legend_needed = bool(legend) and bool(
@@ -1329,11 +1774,23 @@ def _draw_tree(
         or branch_width_property not in (None, '')
     )
     top_margin_in = (44.0 / 72.0) if legend_needed else (4.0 / 72.0)
-    bottom_margin_in = 3.0 / 72.0
+    scale_bar_strip_pt = (
+        max(float(font_size) * 1.4 + 8.0, 18.0)
+        if requested_scale_bar is not None
+        else 0.0
+    )
+    depth_guide_strip_pt = (
+        max(float(font_size) * 2.6 + 14.0, 34.0)
+        if requested_depth_guide is not None
+        else 0.0
+    )
+    bottom_margin_in = (
+        3.0 + max(scale_bar_strip_pt, depth_guide_strip_pt)
+    ) / 72.0
     left_margin_in = 2.0 / 72.0
     right_margin_in = 2.0 / 72.0
     if figure_height is None and spatial_layout:
-        fig_height = fig_width * 0.72 if layout_name in {'fractal', 'packed'} else fig_width
+        fig_height = fig_width * 0.72 if layout_name == 'fractal' else fig_width
     elif figure_height is None:
         # Refined after tidy coordinates have been calculated.
         fig_height = max(len(leaf_order), 1) * row_pitch_in + top_margin_in + bottom_margin_in
@@ -1355,11 +1812,28 @@ def _draw_tree(
         terminal_extent_by_leaf[leaf] = label_extent
 
     layout_aspect_ratio = tree_panel_width_in / available_height_in
-    if layout_name == 'packed' and tip_labels:
+    if (
+        layout_name == 'fractal'
+        and resolved_tip_spacing == 'label-aware'
+        and tip_labels
+    ):
         normal_label_margin = max_tip_label_width_in + (5.0 / 72.0)
-        packed_width = max(tree_panel_width_in - (2.0 * normal_label_margin), 0.2)
-        packed_height = max(available_height_in - (2.0 * normal_label_margin), 0.2)
-        layout_aspect_ratio = packed_width / packed_height
+        label_aware_width = max(
+            tree_panel_width_in - (2.0 * normal_label_margin),
+            0.2,
+        )
+        label_aware_height = max(
+            available_height_in - (2.0 * normal_label_margin),
+            0.2,
+        )
+        layout_aspect_ratio = label_aware_width / label_aware_height
+    spacing_size_by_leaf = {
+        leaf: (
+            tip_label_size_by_leaf[leaf][0],
+            spacing_height_by_leaf[leaf],
+        )
+        for leaf in leaf_order
+    }
     drawing_layout = make_tree_layout(
         tree,
         layout=layout_name,
@@ -1368,7 +1842,8 @@ def _draw_tree(
         spiral_turns=spiral_turns,
         fan_open_angle=fan_open_angle,
         terminal_extent_by_leaf=terminal_extent_by_leaf,
-        label_size_by_leaf=tip_label_size_by_leaf,
+        label_size_by_leaf=spacing_size_by_leaf,
+        tip_spacing=resolved_tip_spacing,
         unrooted_method=unrooted_method,
         daylight_iterations=daylight_iterations,
     )
@@ -1376,6 +1851,18 @@ def _draw_tree(
     ycoord = drawing_layout.ycoord
     leaf_order = drawing_layout.leaf_order
     x_min, x_max, y_min, y_max = drawing_layout.bounds
+    if (
+        requested_depth_guide is not None
+        and layout_name == 'radial'
+        and depth_ticks
+    ):
+        guide_radius = max(depth_ticks)
+        root_x = drawing_layout.xcoord[tree]
+        root_y = drawing_layout.ycoord[tree]
+        x_min = min(x_min, root_x - guide_radius)
+        x_max = max(x_max, root_x + guide_radius)
+        y_min = min(y_min, root_y - guide_radius)
+        y_max = max(y_max, root_y + guide_radius)
     x_span = max(x_max - x_min, 1e-9)
     y_span = max(y_max - y_min, 1e-9)
 
@@ -1395,38 +1882,13 @@ def _draw_tree(
     else:
         tree_panel_height_in = max(fig_height - top_margin_in - bottom_margin_in, 0.2)
 
-    if layout_name in {'cladogram', 'fractal', 'packed'} and not use_topology_depth:
+    if layout_name in {'cladogram', 'fractal'} and not use_topology_depth:
         sys.stderr.write(
             '{} layout encodes topology; input branch lengths do not determine geometry.\n'.format(
                 layout_name.capitalize(),
             )
         )
 
-    segment_length_layouts = {
-        'rectangular', 'tidy', 'circular', 'fan', 'unrooted',
-        'packed-phylogram',
-    }
-    depth_projection_layouts = {'slanted', 'radial'}
-    branch_length_layouts = segment_length_layouts | depth_projection_layouts
-    branch_depth_span = max(base_x_max - base_x_min, 0.0)
-    requested_scale_bar = _parse_scale_bar(scale_bar, branch_depth_span)
-    if requested_scale_bar is not None and layout_name not in segment_length_layouts:
-        raise ValueError(
-            "'--scale-bar' requires a branch-length-preserving layout with "
-            "directly measurable branch segments."
-        )
-    if requested_scale_bar is not None and use_topology_depth:
-        raise ValueError(
-            "'--scale-bar' requires positive input branch lengths."
-        )
-    if (
-        requested_scale_bar is not None
-        and requested_scale_bar > branch_depth_span + 1e-12
-    ):
-        raise ValueError(
-            "'--scale-bar' must not exceed the displayed tree-depth span "
-            "({:g}).".format(branch_depth_span)
-        )
     color_by_node, width_by_node = _branch_style_maps(
         tree=tree,
         base_color=branch_color,
@@ -1440,6 +1902,38 @@ def _draw_tree(
     fig, ax = plt.subplots(figsize=(fig_width, fig_height))
     drawing_artists = []
     branch_lines = []
+    depth_guide_color = '#8c8c8c'
+    radial_depth_labels_drawn = None
+    if requested_depth_guide is not None and layout_name == 'slanted':
+        for artist in _add_slanted_depth_guide(
+            axes=ax,
+            root_x=xcoord[tree],
+            ticks=depth_ticks,
+            color=depth_guide_color,
+            font_family=font_family,
+            font_size=font_size,
+        ):
+            drawing_artists.append(DrawingArtist(
+                artist,
+                kind='depth_guide',
+                priority=100,
+            ))
+    elif requested_depth_guide is not None and layout_name == 'radial':
+        radial_artists, radial_depth_labels_drawn = _add_radial_depth_guide(
+            axes=ax,
+            drawing_layout=drawing_layout,
+            tree=tree,
+            ticks=depth_ticks,
+            color=depth_guide_color,
+            font_family=font_family,
+            font_size=font_size,
+        )
+        for artist in radial_artists:
+            drawing_artists.append(DrawingArtist(
+                artist,
+                kind='depth_guide',
+                priority=100,
+            ))
 
     for node, path in drawing_layout.edge_paths.items():
         if branch_color_property not in (None, '') and node.props.get(branch_color_property) not in (None, ''):
@@ -2066,36 +2560,6 @@ def _draw_tree(
             zorder=8,
         )
 
-    if requested_scale_bar is not None:
-        scale_label = '{:g}'.format(requested_scale_bar)
-        if str(branch_length_unit).strip():
-            scale_label = '{} {}'.format(scale_label, str(branch_length_unit).strip())
-        scale_artist = AnchoredSizeBar(
-            ax.transData,
-            requested_scale_bar,
-            scale_label,
-            loc='upper left',
-            bbox_to_anchor=(0.0, -0.01),
-            bbox_transform=ax.transAxes,
-            pad=0.15,
-            borderpad=0.25,
-            sep=2.0,
-            frameon=False,
-            size_vertical=0.0,
-            color=branch_color,
-            fontproperties=FontProperties(
-                family=font_family,
-                size=font_size,
-            ),
-        )
-        scale_artist.set_zorder(10)
-        ax.add_artist(scale_artist)
-        drawing_artists.append(DrawingArtist(
-            scale_artist,
-            kind='scale_bar',
-            priority=100,
-        ))
-
     label_panel_span = x_span * (
         label_panel_width_in / max(tree_panel_width_in, 0.2)
     )
@@ -2178,6 +2642,67 @@ def _draw_tree(
         top=axes_top,
         bottom=axes_bottom,
     )
+    if requested_scale_bar is not None:
+        scale_label = '{:g}'.format(requested_scale_bar)
+        if str(branch_length_unit).strip():
+            scale_label = '{} {}'.format(
+                scale_label,
+                str(branch_length_unit).strip(),
+            )
+        scale_artist = _add_scale_bar(
+            figure=fig,
+            axes=ax,
+            size=requested_scale_bar,
+            label=scale_label,
+            color=branch_color,
+            font_family=font_family,
+            font_size=font_size,
+            anchor_x=axes_left,
+            anchor_y=(2.0 / 72.0) / fig_height,
+        )
+        drawing_artists.append(DrawingArtist(
+            scale_artist,
+            kind='scale_bar',
+            priority=100,
+        ))
+    if requested_depth_guide is not None:
+        guide_prefix = {
+            'slanted': 'Root-to-node distance',
+            'radial': (
+                'Concentric rings every {:g}: root-to-node distance; root = 0'
+            ).format(requested_depth_guide),
+            'spiral': 'Cross-track root-to-node distance',
+        }[layout_name]
+        title_artist = _add_bottom_guide_title(
+            figure=fig,
+            text=_distance_label(guide_prefix, branch_length_unit),
+            x=axes_left,
+            y=(2.0 / 72.0) / fig_height,
+            font_family=font_family,
+            font_size=font_size,
+        )
+        drawing_artists.append(DrawingArtist(
+            title_artist,
+            kind='depth_guide_title',
+            priority=100,
+        ))
+        if layout_name == 'spiral':
+            for artist in _add_spiral_depth_key(
+                figure=fig,
+                ticks=depth_ticks,
+                tree_span=branch_depth_span,
+                axes_left=axes_left,
+                axes_right=axes_right,
+                strip_height_points=depth_guide_strip_pt,
+                font_family=font_family,
+                font_size=font_size,
+                color=depth_guide_color,
+            ):
+                drawing_artists.append(DrawingArtist(
+                    artist,
+                    kind='depth_guide',
+                    priority=100,
+                ))
     if tip_image_by_leaf:
         image_ax = fig.add_axes(
             [
@@ -2270,13 +2795,39 @@ def _draw_tree(
             else (
                 'depth-projection'
                 if layout_name in depth_projection_layouts and not use_topology_depth
-                else 'none'
+                else (
+                    'warped-depth'
+                    if layout_name in warped_depth_layouts and not use_topology_depth
+                    else 'none'
+                )
             )
         ),
         'scale_bar': requested_scale_bar,
+        'scale_bar_position': (
+            'bottom-reserved' if requested_scale_bar is not None else None
+        ),
+        'scale_bar_label_position': (
+            'above' if requested_scale_bar is not None else None
+        ),
+        'depth_guide_interval': requested_depth_guide,
+        'depth_guide_type': (
+            {
+                'slanted': 'axis-grid',
+                'radial': 'concentric-rings',
+                'spiral': 'cross-track-key',
+            }[layout_name]
+            if requested_depth_guide is not None
+            else None
+        ),
+        'depth_guide_in_panel_labels': (
+            radial_depth_labels_drawn
+            if requested_depth_guide is not None and layout_name == 'radial'
+            else None
+        ),
         'branch_length_unit': str(branch_length_unit),
         'tip_track_properties': list(tip_track_properties),
         'tip_track_palette': str(tip_track_palette),
+        'tip_spacing': resolved_tip_spacing,
         'initial_fit': fit_report,
     })
     metadata = {'Creator': 'NWKIT {}'.format(__version__)}
@@ -2480,6 +3031,7 @@ def draw_main(args):
         tip_labels=getattr(args, 'tip_labels', True),
         tip_label_position=getattr(args, 'tip_label_position', 'aligned'),
         tip_label_wrap=getattr(args, 'tip_label_wrap', 'none'),
+        tip_spacing=getattr(args, 'tip_spacing', 'uniform'),
         root_marker=getattr(args, 'root_marker', 'none'),
         root_marker_color=getattr(args, 'root_marker_color', '#0072B2'),
         root_marker_size=getattr(args, 'root_marker_size', None),
@@ -2506,6 +3058,7 @@ def draw_main(args):
         unrooted_method=getattr(args, 'unrooted_method', 'equal-angle'),
         daylight_iterations=getattr(args, 'daylight_iterations', 5),
         scale_bar=getattr(args, 'scale_bar', 'none'),
+        depth_guide=getattr(args, 'depth_guide', 'none'),
         branch_length_unit=getattr(args, 'branch_length_unit', ''),
         branch_width=getattr(args, 'branch_width', 0.8),
         branch_color_property=getattr(args, 'branch_color_property', None),

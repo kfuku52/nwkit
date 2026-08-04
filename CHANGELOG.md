@@ -12,19 +12,22 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   Existing support, node, probability, property, and categorical annotations
   follow the selected layout.
 - `draw --fan-open-angle` controls the gap in the fan layout.
-- `draw --layout packed` allocates radial-fractal sectors from measured tip
-  label footprints and fits the tree into the remaining rectangular area.
+- `draw --tip-spacing uniform|label-aware` independently controls spacing for
+  every layout. Label-aware mode allocates rows, leaf boxes, or angular sectors
+  from measured labels and tip annotations instead of treating every tip as
+  equally tall.
 - `draw --tip-label-wrap none|auto|taxonomy|INT` adds display-only label wrapping. Auto
   mode compares measured multiline candidates and wraps only when doing so
   reduces estimated layout congestion; taxonomy mode preserves a recognized
   `Genus_species` binomial prefix.
 - `draw --tip-labels no` suppresses individual names in dense overview figures.
-- `draw --layout packed-phylogram` allocates polar sectors from measured label
-  footprints while retaining branch-length depth as radius.
 - `draw --unrooted-method equal-daylight` iteratively equalizes open angular
   space without changing edge lengths.
 - `draw --scale-bar` and `--branch-length-unit` add an exact scale only to
   layouts whose geometry retains branch-length units.
+- `draw --depth-guide none|auto|FLOAT` exposes cumulative root-to-node distance
+  without implying visible-edge length: slanted uses an axis and grid, radial
+  uses concentric rings, and spiral uses a cross-track key.
 - `draw --tip-track`, branch property color/width mappings, taxonomic
   typography, multi-column legends, and continuous palettes add composable
   annotation layers.
@@ -38,13 +41,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `draw --tip-label-position auto` now selects aligned labels for the default
   rectangular layout and branch-end labels for other layouts. Tidy collision
   geometry accounts for terminal label extents.
+- Label-aware spacing is now an orthogonal option rather than separate
+  `packed` and `packed-phylogram` layout names. Those pre-release layout names
+  have been removed without compatibility aliases.
 - Dense legends are placed and columnized automatically, and rendered
   annotations participate in final figure-boundary fitting.
 - Equal-daylight refinement now preserves planarity by reducing or rejecting
   unsafe passes, reports its actual iterations and accepted/rejected
   rotations, and rejects impractically large inputs with an actionable
   equal-angle/collapse alternative.
-- Deep rectangular, tidy, fractal, packed-phylogram, and drawing-collapse
+- Deep rectangular, tidy, circular, fractal, and drawing-collapse
   operations use iterative traversal instead of Python recursion.
 - Drawing collapse no longer treats a property observed in only some
   descendants as constant or averages numeric properties implicitly.
@@ -53,7 +59,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   mapping; legends retain all categories, disclose missing track values, and
   show a single swatch for a constant continuous track.
 - Scale bars are limited to layouts with directly measurable branch-length
-  segments and to values no greater than the displayed tree-depth span.
+  segments and to values no greater than the displayed tree-depth span. Their
+  labels are drawn above the bar in a reserved strip below the tree panel so
+  they do not overlap the tree or its annotations.
 - Layout reports now include the NWKIT/output/font configuration,
   branch-length semantics, complete branch-collision status, and explicit
   figure-boundary overflow measurements. Unresolved default-policy collisions

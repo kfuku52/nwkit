@@ -47,7 +47,36 @@ class TreeDrawingLayout:
         return (min(xs), max(xs), min(ys), max(ys))
 
 
-def get_rectangular_coordinates(tree, use_topology_depth=False):
+def _normalized_leaf_weights(tree, leaf_weight_by_leaf=None):
+    leaves = list(tree.leaves())
+    leaf_weight_by_leaf = leaf_weight_by_leaf or {}
+    raw = {
+        leaf: max(float(leaf_weight_by_leaf.get(leaf, 1.0)), 1e-9)
+        for leaf in leaves
+    }
+    mean = sum(raw.values()) / max(len(raw), 1)
+    return leaves, {
+        leaf: value / max(mean, 1e-12)
+        for leaf, value in raw.items()
+    }
+
+
+def _weighted_leaf_positions(leaves, normalized_weight):
+    if not leaves:
+        return {}
+    positions = {leaves[0]: 0.0}
+    for previous, leaf in zip(leaves, leaves[1:]):
+        positions[leaf] = positions[previous] + (
+            (normalized_weight[previous] + normalized_weight[leaf]) / 2.0
+        )
+    return positions
+
+
+def get_rectangular_coordinates(
+    tree,
+    use_topology_depth=False,
+    leaf_weight_by_leaf=None,
+):
     """Return conventional phylogram coordinates and the displayed tip order."""
 
     xcoord = {}
@@ -66,8 +95,11 @@ def get_rectangular_coordinates(tree, use_topology_depth=False):
             pending.append((child, depth + child_dist))
         stack.extend(reversed(pending))
 
-    leaf_order = list(tree.leaves())
-    ycoord.update({leaf: float(index) for index, leaf in enumerate(leaf_order)})
+    leaf_order, normalized_weight = _normalized_leaf_weights(
+        tree,
+        leaf_weight_by_leaf,
+    )
+    ycoord.update(_weighted_leaf_positions(leaf_order, normalized_weight))
     for node in tree.traverse(strategy='postorder'):
         if node in ycoord:
             continue
@@ -138,10 +170,15 @@ def _orthogonal_paths(tree, xcoord, ycoord):
     return edge_paths, support_anchors, support_angles, root_path
 
 
-def rectangular_layout(tree, use_topology_depth=False):
+def rectangular_layout(
+    tree,
+    use_topology_depth=False,
+    leaf_weight_by_leaf=None,
+):
     xcoord, ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
     edge_paths, support_anchors, support_angles, root_path = _orthogonal_paths(
         tree,
@@ -183,12 +220,13 @@ def _straight_paths(tree, xcoord, ycoord):
     return edge_paths, support_anchors, support_angles, root_path
 
 
-def slanted_layout(tree, use_topology_depth=False):
+def slanted_layout(tree, use_topology_depth=False, leaf_weight_by_leaf=None):
     """Return a rooted phylogram with straight parent--child branches."""
 
     xcoord, ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
     edge_paths, support_anchors, support_angles, root_path = _straight_paths(
         tree,
@@ -208,12 +246,13 @@ def slanted_layout(tree, use_topology_depth=False):
     )
 
 
-def cladogram_layout(tree):
+def cladogram_layout(tree, leaf_weight_by_leaf=None):
     """Return an aligned-tip, topology-only slanted cladogram."""
 
     _, ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=True,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
     height = {}
     for node in tree.traverse(strategy='postorder'):
@@ -242,10 +281,16 @@ def cladogram_layout(tree):
     )
 
 
-def _polar_coordinates(tree, use_topology_depth, open_angle_degrees=0.0):
+def _polar_coordinates(
+    tree,
+    use_topology_depth,
+    open_angle_degrees=0.0,
+    leaf_weight_by_leaf=None,
+):
     radius, linear_y, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
     open_angle_degrees = float(open_angle_degrees)
     if (
@@ -260,15 +305,25 @@ def _polar_coordinates(tree, use_topology_depth, open_angle_degrees=0.0):
     if count <= 1:
         start = 0.0
         denominator = 1.0
+        linear_origin = 0.0
     elif open_angle > 0.0:
         # Place the gap on the left so the rooted fan opens towards the right.
         start = -math.pi + (open_angle / 2.0)
-        denominator = float(count - 1)
+        leaf_positions = [linear_y[leaf] for leaf in leaf_order]
+        linear_origin = min(leaf_positions)
+        denominator = max(max(leaf_positions) - linear_origin, 1e-12)
     else:
         start = -math.pi / 2.0
-        denominator = float(count)
+        _, normalized_weight = _normalized_leaf_weights(
+            tree,
+            leaf_weight_by_leaf,
+        )
+        linear_origin = linear_y[leaf_order[0]]
+        denominator = max(sum(normalized_weight.values()), 1e-12)
     angle = {
-        node: start + (available * linear_y[node] / denominator)
+        node: start + (
+            available * (linear_y[node] - linear_origin) / denominator
+        )
         for node in tree.traverse()
     }
     xcoord = {
@@ -309,6 +364,7 @@ def polar_layout(
     mode,
     use_topology_depth=False,
     fan_open_angle=30.0,
+    leaf_weight_by_leaf=None,
 ):
     """Return rooted circular, fan, or straight radial geometry."""
 
@@ -319,6 +375,7 @@ def polar_layout(
         tree,
         use_topology_depth=use_topology_depth,
         open_angle_degrees=open_angle,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
     )
     edge_paths = {}
     support_anchors = {}
@@ -419,23 +476,34 @@ def _root_graph(adjacency, root):
     return parent, order
 
 
-def _unrooted_center(adjacency):
+def _unrooted_component_weight(adjacency, leaf_weight_by_leaf=None):
+    leaf_weight_by_leaf = leaf_weight_by_leaf or {}
     arbitrary_root = next(iter(adjacency))
     parent, order = _root_graph(adjacency, arbitrary_root)
-    descendant_tips = {}
+    descendant_weight = {}
     for node in reversed(order):
-        own_tip = 1 if len(adjacency[node]) <= 1 else 0
-        descendant_tips[node] = own_tip + sum(
-            descendant_tips[neighbor]
+        own_weight = (
+            max(float(leaf_weight_by_leaf.get(node, 1.0)), 1e-9)
+            if len(adjacency[node]) <= 1
+            else 0.0
+        )
+        descendant_weight[node] = own_weight + sum(
+            descendant_weight[neighbor]
             for neighbor, _ in adjacency[node]
             if parent.get(neighbor) is node
         )
-    total_tips = max(descendant_tips[arbitrary_root], 1)
+    total_weight = max(descendant_weight[arbitrary_root], 1e-9)
 
-    def component_tips(node, neighbor):
+    def component_weight(node, neighbor):
         if parent.get(neighbor) is node:
-            return descendant_tips[neighbor]
-        return total_tips - descendant_tips[node]
+            return descendant_weight[neighbor]
+        return total_weight - descendant_weight[node]
+
+    return order, component_weight
+
+
+def _unrooted_center(adjacency):
+    order, component_weight = _unrooted_component_weight(adjacency)
 
     candidates = [node for node in order if len(adjacency[node]) > 1] or order
     order_index = {node: index for index, node in enumerate(order)}
@@ -443,13 +511,16 @@ def _unrooted_center(adjacency):
         candidates,
         key=lambda node: (
             max(
-                (component_tips(node, neighbor) for neighbor, _ in adjacency[node]),
+                (
+                    component_weight(node, neighbor)
+                    for neighbor, _ in adjacency[node]
+                ),
                 default=0,
             ),
             order_index[node],
         ),
     )
-    return center, component_tips
+    return center
 
 
 def _component_nodes(adjacency, origin, neighbor):
@@ -723,6 +794,7 @@ def unrooted_layout(
     use_topology_depth=False,
     method='equal-angle',
     daylight_iterations=5,
+    leaf_weight_by_leaf=None,
 ):
     """Return an equal-angle or equal-daylight unrooted tree."""
 
@@ -740,7 +812,11 @@ def unrooted_layout(
             equal_aspect=True,
             spatial=True,
         )
-    center, component_tips = _unrooted_center(adjacency)
+    center = _unrooted_center(adjacency)
+    _, component_weight = _unrooted_component_weight(
+        adjacency,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
+    )
     xcoord = {center: 0.0}
     ycoord = {center: 0.0}
     incoming_angle = {center: 0.0}
@@ -752,13 +828,16 @@ def unrooted_layout(
             for neighbor, length in adjacency[node]
             if neighbor is not previous
         ]
-        total = float(sum(component_tips(node, neighbor) for neighbor, _ in neighbors))
+        total = float(sum(
+            component_weight(node, neighbor)
+            for neighbor, _ in neighbors
+        ))
         if total <= 0.0:
             continue
         cursor = sector_start
         pending = []
         for neighbor, length in neighbors:
-            fraction = component_tips(node, neighbor) / total
+            fraction = component_weight(node, neighbor) / total
             child_start = cursor
             child_end = cursor + ((sector_end - sector_start) * fraction)
             direction = (child_start + child_end) / 2.0
@@ -1057,6 +1136,7 @@ def tidy_layout(
     tree,
     use_topology_depth=False,
     terminal_extent_by_leaf=None,
+    leaf_weight_by_leaf=None,
 ):
     """Draw a branch-length-aware non-layered tidy phylogram.
 
@@ -1071,6 +1151,11 @@ def tidy_layout(
     xcoord, _, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
+    )
+    _, normalized_weight = _normalized_leaf_weights(
+        tree,
+        leaf_weight_by_leaf,
     )
 
     box_by_node = {}
@@ -1086,7 +1171,7 @@ def tidy_layout(
             height += max(float(terminal_extent_by_leaf.get(node, 0.0)), 0.0)
         box_by_node[node] = _TidyBox(
             node=node,
-            width=1.0,
+            width=normalized_weight[node] if node.is_leaf else 1.0,
             height=height,
             fixed=fixed,
             children=children,
@@ -1178,10 +1263,15 @@ def spiral_layout(
     use_topology_depth=False,
     turns=None,
     aspect_ratio=1.0,
+    leaf_weight_by_leaf=None,
 ):
     """Warp an orthogonal phylogram into an Archimedean spiral track."""
 
-    base = rectangular_layout(tree, use_topology_depth=use_topology_depth)
+    base = rectangular_layout(
+        tree,
+        use_topology_depth=use_topology_depth,
+        leaf_weight_by_leaf=leaf_weight_by_leaf,
+    )
     leaf_count = max(len(base.leaf_order), 1)
     if turns is None:
         turns = max(1.5, min(32.0, math.sqrt(leaf_count) / 2.0))
@@ -1459,114 +1549,6 @@ def fractal_layout(
     )
 
 
-def packed_layout(tree, aspect_ratio=1.0, label_size_by_leaf=None):
-    """Return a label-aware, rectangle-fitted radial-fractal layout.
-
-    Multiline label height determines tangential demand at each tip. Descendant
-    sectors therefore reserve space for rendered labels rather than assuming
-    that every leaf occupies the same amount of perimeter.
-    """
-
-    label_size_by_leaf = label_size_by_leaf or {}
-    leaf_weight_by_leaf = {
-        leaf: max(float(label_size_by_leaf.get(leaf, (0.0, 0.0))[1]), 1e-6)
-        + (4.0 / 72.0)
-        for leaf in tree.leaves()
-    }
-    return fractal_layout(
-        tree,
-        aspect_ratio=aspect_ratio,
-        leaf_weight_by_leaf=leaf_weight_by_leaf,
-        layout_name='packed',
-    )
-
-
-def packed_phylogram_layout(
-    tree,
-    use_topology_depth=False,
-    label_size_by_leaf=None,
-):
-    """Return a branch-length-preserving label-aware circular phylogram."""
-
-    label_size_by_leaf = label_size_by_leaf or {}
-    weight = {}
-    for node in tree.traverse(strategy='postorder'):
-        if node.is_leaf:
-            weight[node] = max(
-                float(label_size_by_leaf.get(node, (0.0, 0.0))[1]),
-                1e-6,
-            ) + (4.0 / 72.0)
-        else:
-            weight[node] = sum(weight[child] for child in node.get_children())
-    angle = {tree: 0.0}
-    stack = [(tree, -math.pi / 2.0, 3.0 * math.pi / 2.0)]
-    while stack:
-        node, sector_start, sector_end = stack.pop()
-        children = node.get_children()
-        if not children:
-            continue
-        total = max(sum(weight[child] for child in children), 1e-12)
-        cursor = sector_start
-        pending = []
-        for child in children:
-            span = (sector_end - sector_start) * weight[child] / total
-            child_start = cursor
-            child_end = cursor + span
-            angle[child] = (child_start + child_end) / 2.0
-            pending.append((child, child_start, child_end))
-            cursor = child_end
-        stack.extend(reversed(pending))
-    radius, _, leaf_order = get_rectangular_coordinates(
-        tree,
-        use_topology_depth=use_topology_depth,
-    )
-    xcoord = {
-        node: radius[node] * math.cos(angle[node])
-        for node in tree.traverse()
-    }
-    ycoord = {
-        node: radius[node] * math.sin(angle[node])
-        for node in tree.traverse()
-    }
-    edge_paths = {}
-    support_anchors = {}
-    support_angles = {}
-    for node in tree.traverse():
-        if node.is_root:
-            continue
-        parent = node.up
-        path = _sample_arc(radius[parent], angle[parent], angle[node])
-        endpoint = (xcoord[node], ycoord[node])
-        if path[-1] != endpoint:
-            path.append(endpoint)
-        edge_paths[node] = path
-        support_radius = radius[parent] + ((radius[node] - radius[parent]) * 0.5)
-        support_anchors[node] = (
-            support_radius * math.cos(angle[node]),
-            support_radius * math.sin(angle[node]),
-        )
-        support_angles[node] = math.degrees(angle[node])
-    radius_span = max(max(radius.values(), default=1.0), 1.0)
-    return TreeDrawingLayout(
-        name='packed-phylogram',
-        xcoord=xcoord,
-        ycoord=ycoord,
-        leaf_order=leaf_order,
-        edge_paths=edge_paths,
-        support_anchors=support_anchors,
-        support_angles=support_angles,
-        label_angles={leaf: math.degrees(angle[leaf]) for leaf in leaf_order},
-        root_path=_root_stub_from_largest_gap(
-            tree,
-            xcoord,
-            ycoord,
-            radius_span * 0.03,
-        ),
-        equal_aspect=True,
-        spatial=True,
-    )
-
-
 def make_tree_layout(
     tree,
     layout='rectangular',
@@ -1576,23 +1558,49 @@ def make_tree_layout(
     fan_open_angle=30.0,
     terminal_extent_by_leaf=None,
     label_size_by_leaf=None,
+    tip_spacing='uniform',
     unrooted_method='equal-angle',
     daylight_iterations=5,
 ):
     """Dispatch to a validated layout implementation."""
 
     layout = str(layout).strip().lower()
+    tip_spacing = str(tip_spacing).strip().lower()
+    if tip_spacing not in {'uniform', 'label-aware'}:
+        raise ValueError("'--tip-spacing' must be uniform or label-aware.")
+    label_size_by_leaf = label_size_by_leaf or {}
+    leaf_weight_by_leaf = None
+    if tip_spacing == 'label-aware':
+        leaf_weight_by_leaf = {
+            leaf: max(
+                float(label_size_by_leaf.get(leaf, (0.0, 0.0))[1]),
+                0.0,
+            ) + (4.0 / 72.0)
+            for leaf in tree.leaves()
+        }
     if layout == 'rectangular':
-        return rectangular_layout(tree, use_topology_depth=use_topology_depth)
+        return rectangular_layout(
+            tree,
+            use_topology_depth=use_topology_depth,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
+        )
     if layout == 'slanted':
-        return slanted_layout(tree, use_topology_depth=use_topology_depth)
+        return slanted_layout(
+            tree,
+            use_topology_depth=use_topology_depth,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
+        )
     if layout == 'cladogram':
-        return cladogram_layout(tree)
+        return cladogram_layout(
+            tree,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
+        )
     if layout == 'tidy':
         return tidy_layout(
             tree,
             use_topology_depth=use_topology_depth,
             terminal_extent_by_leaf=terminal_extent_by_leaf,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     if layout == 'spiral':
         return spiral_layout(
@@ -1600,20 +1608,13 @@ def make_tree_layout(
             use_topology_depth=use_topology_depth,
             turns=spiral_turns,
             aspect_ratio=aspect_ratio,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     if layout == 'fractal':
-        return fractal_layout(tree, aspect_ratio=aspect_ratio)
-    if layout == 'packed':
-        return packed_layout(
+        return fractal_layout(
             tree,
             aspect_ratio=aspect_ratio,
-            label_size_by_leaf=label_size_by_leaf,
-        )
-    if layout == 'packed-phylogram':
-        return packed_phylogram_layout(
-            tree,
-            use_topology_depth=use_topology_depth,
-            label_size_by_leaf=label_size_by_leaf,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     if layout in {'circular', 'fan', 'radial'}:
         return polar_layout(
@@ -1621,6 +1622,7 @@ def make_tree_layout(
             mode=layout,
             use_topology_depth=use_topology_depth,
             fan_open_angle=fan_open_angle,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     if layout == 'unrooted':
         return unrooted_layout(
@@ -1628,5 +1630,6 @@ def make_tree_layout(
             use_topology_depth=use_topology_depth,
             method=unrooted_method,
             daylight_iterations=daylight_iterations,
+            leaf_weight_by_leaf=leaf_weight_by_leaf,
         )
     raise ValueError("Unsupported '--layout': {}".format(layout))

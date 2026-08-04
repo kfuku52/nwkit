@@ -11,6 +11,7 @@ from ete4 import Tree
 from matplotlib.figure import Figure
 
 from nwkit.draw import (
+    _add_scale_bar,
     _get_species_overlap_node_types,
     _load_tip_image,
     _prepare_tip_label_text,
@@ -63,10 +64,12 @@ def make_draw_args(**kwargs):
         'branch_width_property': None,
         'branch_width_range': '0.4,2.5',
         'scale_bar': 'none',
+        'depth_guide': 'none',
         'branch_length_unit': '',
         'tip_labels': True,
         'tip_label_position': 'aligned',
         'tip_label_wrap': 'none',
+        'tip_spacing': 'uniform',
         'tip_label_font_style': 'plain',
         'tip_track': [],
         'tip_track_type': 'auto',
@@ -109,6 +112,31 @@ def extract_svg_text_positions(svg_text):
 
 
 class TestDrawMain:
+    def test_scale_bar_label_is_above_bar(self):
+        figure, axes = plt.subplots(figsize=(3.0, 2.0))
+        axes.set_xlim(0.0, 3.0)
+        artist = _add_scale_bar(
+            figure=figure,
+            axes=axes,
+            size=1.0,
+            label='1 substitutions/site',
+            color='#000000',
+            font_family='DejaVu Sans',
+            font_size=8.0,
+            anchor_x=0.1,
+            anchor_y=0.02,
+        )
+
+        try:
+            figure.canvas.draw()
+            renderer = figure.canvas.get_renderer()
+            label_bounds = artist.txt_label.get_window_extent(renderer)
+            bar_bounds = artist.size_bar.get_window_extent(renderer)
+        finally:
+            plt.close(figure)
+
+        assert label_bounds.y0 >= bar_bounds.y1
+
     def test_collision_solver_moves_lower_priority_annotation(self):
         figure, axes = plt.subplots(figsize=(2.0, 2.0))
         fixed = axes.annotate('fixed', xy=(0.5, 0.5), xytext=(0.0, 0.0),
@@ -146,8 +174,6 @@ class TestDrawMain:
             'unrooted',
             'spiral',
             'fractal',
-            'packed',
-            'packed-phylogram',
         ],
     )
     def test_draw_writes_svg_with_modern_layout(self, tmp_nwk, tmp_path, layout):
@@ -271,49 +297,208 @@ class TestDrawMain:
         with pytest.raises(ValueError, match='--fan-open-angle'):
             make_tree_layout(tree, layout='fan', fan_open_angle=360.0)
 
-    def test_packed_layout_allocates_more_angle_to_tall_labels(self):
+    @pytest.mark.parametrize('layout_name', ['circular', 'radial', 'fractal'])
+    def test_label_aware_spatial_layout_allocates_more_angle_to_tall_labels(
+        self,
+        layout_name,
+    ):
         tree = Tree('(A:1,B:1,C:1);', parser=1)
         sizes = {
             tree['A']: (0.4, 0.1),
             tree['B']: (0.4, 1.0),
             tree['C']: (0.4, 0.1),
         }
-        packed = make_tree_layout(
+        drawing = make_tree_layout(
             tree,
-            layout='packed',
+            layout=layout_name,
             aspect_ratio=1.4,
             label_size_by_leaf=sizes,
+            tip_spacing='label-aware',
         )
 
         angles = [
-            math.radians(packed.label_angles[tree[name]]) % (2.0 * math.pi)
+            math.radians(drawing.label_angles[tree[name]]) % (2.0 * math.pi)
             for name in ('A', 'B', 'C')
         ]
         gaps = [
             (angles[(index + 1) % 3] - angles[index]) % (2.0 * math.pi)
             for index in range(3)
         ]
-        assert packed.name == 'packed'
-        assert packed.spatial is True
+        assert drawing.name == layout_name
+        assert drawing.spatial is True
         assert gaps[0] > gaps[2]
         assert gaps[1] > gaps[2]
 
-    def test_packed_phylogram_preserves_root_distance_as_radius(self):
+    @pytest.mark.parametrize('layout_name', ['rectangular', 'slanted', 'cladogram'])
+    def test_label_aware_cartesian_layout_uses_variable_tip_rows(
+        self,
+        layout_name,
+    ):
+        tree = Tree('(A:1,B:1,C:1);', parser=1)
+        sizes = {
+            tree['A']: (0.4, 0.1),
+            tree['B']: (0.4, 1.0),
+            tree['C']: (0.4, 0.1),
+        }
+        uniform = make_tree_layout(tree, layout=layout_name)
+        aware = make_tree_layout(
+            tree,
+            layout=layout_name,
+            label_size_by_leaf=sizes,
+            tip_spacing='label-aware',
+        )
+
+        assert aware.ycoord[tree['B']] - aware.ycoord[tree['A']] > (
+            uniform.ycoord[tree['B']] - uniform.ycoord[tree['A']]
+        )
+        assert aware.ycoord[tree['C']] - aware.ycoord[tree['B']] > (
+            uniform.ycoord[tree['C']] - uniform.ycoord[tree['B']]
+        )
+
+    def test_label_aware_tidy_layout_uses_variable_leaf_boxes(self):
+        tree = Tree('(A:1,B:1,C:1);', parser=1)
+        uniform = make_tree_layout(tree, layout='tidy')
+        aware = make_tree_layout(
+            tree,
+            layout='tidy',
+            label_size_by_leaf={
+                tree['A']: (0.4, 0.1),
+                tree['B']: (0.4, 1.0),
+                tree['C']: (0.4, 0.1),
+            },
+            tip_spacing='label-aware',
+        )
+
+        uniform_span = max(uniform.ycoord.values()) - min(uniform.ycoord.values())
+        aware_span = max(aware.ycoord.values()) - min(aware.ycoord.values())
+        assert aware_span > uniform_span
+
+    def test_label_aware_circular_layout_preserves_root_distance_as_radius(self):
         tree = Tree('(((A:1,B:2):3,C:2):1,(D:5,E:1):2);', parser=1)
         rectangular = make_tree_layout(tree, layout='rectangular')
-        packed = make_tree_layout(
+        circular = make_tree_layout(
             tree,
-            layout='packed-phylogram',
+            layout='circular',
             label_size_by_leaf={
                 leaf: (0.5, 0.1 + index * 0.1)
                 for index, leaf in enumerate(tree.leaves())
             },
+            tip_spacing='label-aware',
         )
 
-        assert packed.name == 'packed-phylogram'
+        assert circular.name == 'circular'
         for node in tree.traverse():
-            radius = math.hypot(packed.xcoord[node], packed.ycoord[node])
+            radius = math.hypot(circular.xcoord[node], circular.ycoord[node])
             assert radius == pytest.approx(rectangular.xcoord[node])
+
+    @pytest.mark.parametrize(
+        'layout_name',
+        [
+            'rectangular',
+            'slanted',
+            'cladogram',
+            'tidy',
+            'circular',
+            'fan',
+            'radial',
+            'unrooted',
+            'spiral',
+            'fractal',
+        ],
+    )
+    def test_every_layout_accepts_label_aware_tip_spacing(self, layout_name):
+        tree = Tree('((A:1,B:2):1,(C:1,D:3):2);', parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout=layout_name,
+            label_size_by_leaf={
+                leaf: (0.4, 0.1 + index * 0.25)
+                for index, leaf in enumerate(tree.leaves())
+            },
+            tip_spacing='label-aware',
+        )
+
+        assert drawing.leaf_order
+        assert set(drawing.xcoord) == set(tree.traverse())
+        assert set(drawing.ycoord) == set(tree.traverse())
+
+    def test_label_aware_spiral_changes_tip_allocation(self):
+        tree = Tree('(A:1,B:1,C:1,D:1);', parser=1)
+        sizes = {
+            tree['A']: (0.4, 0.1),
+            tree['B']: (0.4, 1.0),
+            tree['C']: (0.4, 0.1),
+            tree['D']: (0.4, 0.1),
+        }
+        uniform = make_tree_layout(tree, layout='spiral')
+        aware = make_tree_layout(
+            tree,
+            layout='spiral',
+            label_size_by_leaf=sizes,
+            tip_spacing='label-aware',
+        )
+
+        assert any(
+            aware.xcoord[leaf] != pytest.approx(uniform.xcoord[leaf])
+            or aware.ycoord[leaf] != pytest.approx(uniform.ycoord[leaf])
+            for leaf in tree.leaves()
+        )
+
+    def test_label_aware_unrooted_changes_angles_and_preserves_edge_lengths(self):
+        tree = Tree('((A:1,B:2):1,(C:3,(D:1,E:2):1):2);', parser=1)
+        uniform = make_tree_layout(tree, layout='unrooted')
+        aware = make_tree_layout(
+            tree,
+            layout='unrooted',
+            label_size_by_leaf={
+                leaf: (0.4, 1.2 if leaf.name == 'D' else 0.1)
+                for leaf in tree.leaves()
+            },
+            tip_spacing='label-aware',
+        )
+
+        assert any(
+            aware.xcoord[leaf] != pytest.approx(uniform.xcoord[leaf])
+            or aware.ycoord[leaf] != pytest.approx(uniform.ycoord[leaf])
+            for leaf in tree.leaves()
+        )
+        uniform_center = min(
+            tree.traverse(),
+            key=lambda node: math.hypot(
+                uniform.xcoord[node],
+                uniform.ycoord[node],
+            ),
+        )
+        aware_center = min(
+            tree.traverse(),
+            key=lambda node: math.hypot(
+                aware.xcoord[node],
+                aware.ycoord[node],
+            ),
+        )
+        assert aware_center is uniform_center
+        for node, path in aware.edge_paths.items():
+            length = sum(
+                math.hypot(end[0] - start[0], end[1] - start[1])
+                for start, end in zip(path, path[1:])
+            )
+            assert length == pytest.approx(float(node.dist))
+
+    @pytest.mark.parametrize('removed_layout', ['packed', 'packed-phylogram'])
+    def test_removed_packed_layout_names_have_no_compatibility_alias(
+        self,
+        removed_layout,
+    ):
+        tree = Tree('(A:1,B:1);', parser=1)
+
+        with pytest.raises(ValueError, match="Unsupported '--layout'"):
+            make_tree_layout(tree, layout=removed_layout)
+
+    def test_invalid_tip_spacing_is_rejected(self):
+        tree = Tree('(A:1,B:1);', parser=1)
+
+        with pytest.raises(ValueError, match='--tip-spacing'):
+            make_tree_layout(tree, tip_spacing='packed')
 
     def test_tip_label_wrap_prefers_delimiters_and_hard_wraps(self):
         assert _wrap_tip_label('Arabidopsis_thaliana', 12) == 'Arabidopsis_\nthaliana'
@@ -326,7 +511,7 @@ class TestDrawMain:
             wrap='auto',
             font_size=8.0,
             font_family='DejaVu Sans',
-            layout_name='packed',
+            layout_name='fractal',
             panel_width_in=7.2,
             panel_height_in=5.0,
         )
@@ -348,7 +533,7 @@ class TestDrawMain:
             wrap='taxonomy',
             font_size=8.0,
             font_family='DejaVu Sans',
-            layout_name='packed',
+            layout_name='fractal',
             panel_width_in=1.0,
             panel_height_in=1.0,
         )
@@ -582,6 +767,7 @@ class TestDrawMain:
             outfile=str(outfile),
             image_format='svg',
             species_overlap_node_plot='no',
+            tip_spacing='label-aware',
             scale_bar='auto',
             branch_length_unit='substitutions/site',
             layout_report=str(report_path),
@@ -591,7 +777,14 @@ class TestDrawMain:
         report = json.loads(report_path.read_text(encoding='utf-8'))
         assert 'substitutions/site' in svg
         assert report['branch_lengths_encoded'] is True
+        assert report['tip_spacing'] == 'label-aware'
         assert report['scale_bar'] > 0.0
+        assert report['scale_bar_position'] == 'bottom-reserved'
+        assert report['scale_bar_label_position'] == 'above'
+        assert not any(
+            'scale_bar' in collision_kind
+            for collision_kind in report['final_collisions_by_kind']
+        )
         assert report['visible_tip_count'] == 4
         assert 'final_collisions_by_kind' in report
 
@@ -605,11 +798,91 @@ class TestDrawMain:
         with pytest.raises(ValueError, match='branch-length-preserving'):
             draw_main(make_draw_args(
                 infile=str(infile),
-                outfile=str(tmp_path / 'packed.svg'),
+                outfile=str(tmp_path / 'fractal.svg'),
                 species_overlap_node_plot='no',
-                layout='packed',
+                layout='fractal',
                 tip_label_position='branch-end',
                 scale_bar='auto',
+            ))
+
+    @pytest.mark.parametrize(
+        ('layout_name', 'guide_type', 'encoding'),
+        [
+            ('slanted', 'axis-grid', 'depth-projection'),
+            ('radial', 'concentric-rings', 'depth-projection'),
+            ('spiral', 'cross-track-key', 'warped-depth'),
+        ],
+    )
+    def test_draw_writes_layout_specific_depth_guide(
+        self,
+        tmp_nwk,
+        tmp_path,
+        layout_name,
+        guide_type,
+        encoding,
+    ):
+        infile = tmp_nwk('(((A:1,B:2):1,C:3):1,D:5);')
+        outfile = tmp_path / '{}.svg'.format(layout_name)
+        report_path = tmp_path / '{}.json'.format(layout_name)
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            layout=layout_name,
+            tip_label_position='branch-end',
+            species_overlap_node_plot='no',
+            depth_guide='1',
+            branch_length_unit='substitutions/site',
+            layout_report=str(report_path),
+            figure_width=5.0,
+            figure_height=4.0,
+        ))
+
+        svg = outfile.read_text(encoding='utf-8')
+        report = json.loads(report_path.read_text(encoding='utf-8'))
+        assert 'root-to-node distance' in svg.lower()
+        assert report['depth_guide_interval'] == pytest.approx(1.0)
+        assert report['depth_guide_type'] == guide_type
+        assert report['branch_length_encoding'] == encoding
+        assert report['branch_lengths_encoded'] is True
+        if layout_name == 'radial':
+            assert report['depth_guide_in_panel_labels'] is True
+        assert not any(
+            'depth_guide' in collision_kind
+            for collision_kind in report['final_collisions_by_kind']
+        )
+
+    def test_draw_rejects_depth_guide_for_incompatible_layout(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('(A:1,B:2);')
+
+        with pytest.raises(ValueError, match='slanted, radial, and spiral'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'tree.svg'),
+                species_overlap_node_plot='no',
+                depth_guide='auto',
+            ))
+
+    def test_draw_rejects_depth_guide_without_positive_branch_lengths(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('(A,B);')
+
+        with pytest.raises(ValueError, match='positive input branch lengths'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'tree.svg'),
+                layout='slanted',
+                tip_label_position='branch-end',
+                species_overlap_node_plot='no',
+                depth_guide='auto',
             ))
 
     def test_draw_auto_collapses_only_the_rendering_copy(

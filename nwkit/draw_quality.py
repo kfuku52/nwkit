@@ -158,7 +158,7 @@ def _find_collisions(figure, artists, branch_lines):
             for y_cell in y_cells:
                 segment_grid.setdefault((x_cell, y_cell), []).append(index)
     for item in visible:
-        if item.kind in {'legend', 'scale_bar'}:
+        if item.kind == 'legend':
             continue
         item_bounds = bounds[id(item)]
         candidates = set(broad_segments)

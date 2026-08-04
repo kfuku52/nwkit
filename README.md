@@ -62,7 +62,7 @@ and output-column vocabulary are defined in
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
-- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with conventional Cartesian and polar layouts, compact tidy, equal-angle unrooted, spiral, recursive fractal, or label-aware packed arrangements and optional image or property annotations
+- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, compact tidy, equal-angle unrooted, spiral, or recursive fractal layouts; every layout can allocate space from measured labels and annotations
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
@@ -89,7 +89,7 @@ and output-column vocabulary are defined in
 
 ## Tree drawing layouts
 
-`nwkit draw --layout` provides twelve deterministic layouts from the same
+`nwkit draw --layout` provides ten deterministic layouts from the same
 Newick input:
 
 ```sh
@@ -103,8 +103,6 @@ nwkit draw -i tree.nwk --layout radial     -o radial.svg
 nwkit draw -i tree.nwk --layout unrooted   -o unrooted.svg
 nwkit draw -i tree.nwk --layout spiral     -o spiral.svg
 nwkit draw -i tree.nwk --layout fractal    -o fractal.svg
-nwkit draw -i tree.nwk --layout packed     -o packed.svg
-nwkit draw -i tree.nwk --layout packed-phylogram -o packed-phylogram.svg
 ```
 
 - `rectangular` is the conventional orthogonal phylogram and remains the
@@ -139,22 +137,26 @@ nwkit draw -i tree.nwk --layout packed-phylogram -o packed-phylogram.svg
   resulting crossing-free radial-fractal drawing to the requested rectangle. It is a
   topology-and-balance view: branch lengths intentionally do not determine
   geometry.
-- `packed` extends the radial-fractal arrangement with rendered-label-aware
-  sector allocation. Multiline labels contribute their measured tangential
-  height, while their measured width reduces the rectangle reserved for the
-  tree itself.
-- `packed-phylogram` uses the same measured label heights to allocate polar
-  sectors but retains root-to-node branch-length depth as radius. Circular
-  connectors change direction at the parent radius and radial segments encode
-  branch-length increments.
+
+Tip spacing is independent of tree layout. The default
+`--tip-spacing uniform` gives each tip the same row or angular allocation.
+`--tip-spacing label-aware` instead uses the measured height of wrapped labels,
+badges, tracks, and tip images. It varies rows in Cartesian layouts, leaf boxes
+in `tidy`, and angular sectors in circular, fan, radial, unrooted, spiral, and
+fractal layouts. Thus a label-aware phylogram is requested directly, for
+example, as `--layout circular --tip-spacing label-aware`; it is not a separate
+layout type.
 
 Tip labels can be wrapped for display without changing names in the Newick
 tree:
 
 ```sh
-nwkit draw -i tree.nwk --layout packed --tip-label-wrap auto -o packed.svg
-nwkit draw -i tree.nwk --layout packed --tip-label-wrap taxonomy -o taxa.svg
-nwkit draw -i tree.nwk --layout packed --tip-label-wrap 12   -o wrapped.svg
+nwkit draw -i tree.nwk --layout circular --tip-spacing label-aware \
+  --tip-label-wrap auto -o circular.svg
+nwkit draw -i tree.nwk --layout rectangular --tip-spacing label-aware \
+  --tip-label-wrap taxonomy -o taxa.svg
+nwkit draw -i tree.nwk --layout fractal --tip-spacing label-aware \
+  --tip-label-wrap 12 -o wrapped.svg
 ```
 
 `--tip-label-wrap auto` measures wrapping targets corresponding to one through
@@ -188,7 +190,7 @@ complete branch/annotation collision audit:
 
 ```sh
 nwkit draw -i tree.nhx -o annotated.svg \
-  --layout packed-phylogram \
+  --layout circular --tip-spacing label-aware \
   --tip-track habitat --tip-track temperature \
   --branch-color-property regime \
   --branch-width-property posterior \
@@ -204,18 +206,42 @@ the rendered width interval. Legends automatically use multiple columns and
 move to the right when they become too dense; the position and column count
 can also be fixed explicitly.
 
-An exact scale can be added to rectangular, tidy, circular, fan, unrooted, and
-packed-phylogram drawings:
+An exact scale can be added to rectangular, tidy, circular, fan, and unrooted
+drawings:
 
 ```sh
 nwkit draw -i tree.nwk -o tree.svg \
   --scale-bar auto --branch-length-unit substitutions/site
 ```
 
+The scale label is placed above the bar. A dedicated strip below the tree
+panel keeps both elements separate from branches, tip labels, and annotation
+layers; fixed-height figures reserve this space from the requested height.
+
 Topology-only or geometrically warped layouts reject a scale bar rather than
 implying a false distance interpretation. Slanted and straight radial layouts
-retain root-to-node depth only as a projection, so they also reject a bar that
-could be mistaken for the length of a visible branch. A requested bar cannot
+retain root-to-node depth only as a projection, so they reject a bar that could
+be mistaken for the length of a visible branch. Use `--depth-guide` instead:
+
+```sh
+nwkit draw -i tree.nwk --layout slanted --depth-guide auto \
+  --branch-length-unit substitutions/site -o slanted.svg
+nwkit draw -i tree.nwk --layout radial --depth-guide 0.5 \
+  --branch-length-unit substitutions/site -o radial.svg
+nwkit draw -i tree.nwk --layout spiral --depth-guide auto \
+  --branch-length-unit substitutions/site -o spiral.svg
+```
+
+`slanted` receives a horizontal depth axis with vertical grid lines; `radial`
+receives concentric rings labelled in the largest empty root sector; and
+`spiral` receives a cross-track depth key. These guides describe cumulative
+root-to-node distance, not the Euclidean length of a slanted, radial, or warped
+edge. `auto` chooses a readable interval and a positive number sets it
+explicitly. On a dense radial tree with no safe sector for ring numbers, the
+numbers are omitted and the interval remains explicit in the lower guide
+caption. Both scale bars and depth guides reserve a lower annotation strip.
+Cladogram and fractal layouts encode topology rather than branch-length depth
+and therefore support neither guide. A requested scale or guide interval cannot
 exceed the displayed tree-depth span.
 
 For very large overview trees,

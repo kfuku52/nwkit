@@ -81,7 +81,7 @@ def test_equal_daylight_randomized_layouts_preserve_lengths_without_crossings():
 
 @pytest.mark.parametrize(
     'layout_name',
-    ['rectangular', 'cladogram', 'tidy', 'fractal', 'packed-phylogram'],
+    ['rectangular', 'cladogram', 'tidy', 'fractal', 'circular'],
 )
 def test_deep_caterpillar_layouts_do_not_depend_on_python_recursion(layout_name):
     tree = _deep_caterpillar(1200)
@@ -384,7 +384,7 @@ def test_collision_audit_remains_complete_above_500_artists():
     assert report['branch_collision_check_complete'] is True
 
 
-@pytest.mark.parametrize('layout_name', ['radial', 'packed-phylogram'])
+@pytest.mark.parametrize('layout_name', ['radial', 'circular'])
 def test_spatial_root_stub_occupies_an_empty_angular_gap(layout_name):
     tree = Tree('(A:1,B:1,C:1,D:1);', parser=1)
     layout = make_tree_layout(tree, layout=layout_name)
