@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.34.2] - 2026-08-06
+
+### Changed
+
+- Restricted automated release tags, GitHub Releases, and downstream Bioconda
+  updates to major and minor versions whose patch component is zero.
+- Made release tagging wait for the full test workflow and use its exact tested
+  commit.
+
 ## [0.34.1] - 2026-07-31
 
 ### Added

@@ -1,0 +1,72 @@
+name: Create major/minor release tag
+
+on:
+  workflow_run:
+    workflows: [Tests]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  create_tag:
+    if: >-
+      (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/master') ||
+      (github.event_name == 'workflow_run' &&
+       github.event.workflow_run.conclusion == 'success' &&
+       github.event.workflow_run.event == 'push' &&
+       github.event.workflow_run.head_branch == 'master')
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout tested commit
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event_name == 'workflow_run' && github.event.workflow_run.head_sha || github.sha }}
+
+      - name: Read and classify version
+        id: version
+        shell: bash
+        run: |
+          VERSION=$(python3 -c 'import ast, pathlib; tree=ast.parse(pathlib.Path("nwkit/__init__.py").read_text()); values=[ast.literal_eval(node.value) for node in ast.walk(tree) if isinstance(node, ast.Assign) and any(getattr(target, "id", None) == "__version__" for target in node.targets)]; print(values[0] if len(values) == 1 else "")')
+          if [[ ! "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "Expected a semantic version in nwkit/__init__.py, got: $VERSION"
+            exit 1
+          fi
+
+          SHOULD_RELEASE=false
+          if (( 10#${BASH_REMATCH[3]} == 0 )); then
+            SHOULD_RELEASE=true
+          fi
+
+          {
+            echo "version=$VERSION"
+            echo "tag=v$VERSION"
+            echo "should_release=$SHOULD_RELEASE"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Skip patch-only version
+        if: steps.version.outputs.should_release != 'true'
+        run: echo "${{ steps.version.outputs.version }} is a patch-only version; no release tag will be created."
+
+      - name: Create annotated tag
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          EXPECTED=$(git rev-parse HEAD)
+          if git rev-parse --verify --quiet "refs/tags/$TAG" >/dev/null; then
+            ACTUAL=$(git rev-list -n 1 "$TAG")
+            if [ "$ACTUAL" != "$EXPECTED" ]; then
+              echo "Tag $TAG already points to $ACTUAL, expected $EXPECTED."
+              exit 1
+            fi
+            echo "Tag $TAG already points to the tested commit."
+          else
+            git config user.name "github-actions"
+            git config user.email "actions@github.com"
+            git tag -a "$TAG" "$EXPECTED" -m "$TAG"
+            git push origin "$TAG"
+          fi
