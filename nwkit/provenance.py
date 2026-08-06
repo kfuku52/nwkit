@@ -42,6 +42,7 @@ INPUT_PATH_ARGUMENTS = frozenset((
     'infile2',
     'length_source',
     'manifest',
+    'mcmctree_posterior',
     'name_source',
     'name_tsv',
     'property_source',
@@ -57,6 +58,7 @@ INPUT_PATH_ARGUMENTS = frozenset((
     'tip_image_manifest',
     'trait',
     'weight_tsv',
+    'densitree_trees',
 ))
 
 STDIN_SPOOL_MEMORY_BYTES = 8 * 1024 * 1024

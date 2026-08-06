@@ -258,7 +258,7 @@ def _find_collisions(figure, artists, branch_lines):
             if (
                 owner is item.owner
                 or (
-                    item.kind == 'node_pie'
+                    item.kind in {'node_pie', 'time_constraint'}
                     and item.owner is not None
                     and getattr(owner, 'up', None) is item.owner
                 )

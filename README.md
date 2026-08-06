@@ -329,8 +329,9 @@ layers can be controlled with `--time-constraints` and
 
 For posterior visualization, give the original topology and `mcmc.txt`
 directly. `all` overlays every retained posterior time tree, `ci` draws a
-semi-transparent polygon around the geometric central fraction of every
-corresponding branch, and `both` combines them:
+semi-transparent empirical envelope containing the requested central fraction
+of whole sampled paths for every corresponding branch, and `both` combines
+them:
 
 ```sh
 nwkit draw -i species.trees --mcmctree-posterior mcmc.txt \
@@ -339,11 +340,31 @@ nwkit draw -i species.trees --mcmctree-posterior mcmc.txt \
   --tip-label-position branch-end -o posterior.svg
 ```
 
-The envelope is explicitly branchwise and geometric; it is not presented as a
-joint 95% credible set for the whole tree. Posterior trees use the same layout,
-angular, label-spacing, and subtree-packing settings as the foreground dated
-tree. `--posterior-burnin` and `--posterior-thin` provide explicit sample
-selection; without thinning, `all` really draws every retained sample.
+An MCMCtree age table varies node ages on a fixed topology. To visualize both
+topology and branch-length uncertainty, instead supply a posterior or bootstrap
+multi-Newick collection against a reference tree:
+
+```sh
+nwkit draw -i consensus.nwk --densitree-trees posterior.trees \
+  --densitree all --layout slanted -o topology-posterior.svg
+```
+
+Tips and the root are held at their reference positions, so incompatible
+clades appear as alternative, potentially crossing connections rather than
+being silently reordered or acquiring a detached root. Tree-collection
+overlays are available for rectangular, slanted, cladogram, circular, radial,
+and spiral layouts. With `ci` or `both`, samples are first stratified by their
+complete rooted topology. Branch envelopes are then calculated only within
+each topology, preventing polygons from bridging discrete alternatives.
+Envelope opacity is scaled by the square root of each topology's frequency
+relative to the most frequent topology.
+
+Every envelope is an empirical, branchwise summary of complete sampled paths;
+it is not a joint credible set for the whole tree or its topology. Posterior
+trees use the same layout, angular, label-spacing, and subtree-packing settings
+as the foreground tree. `--posterior-burnin` and `--posterior-thin` provide
+explicit sample selection for either input source; without thinning, `all`
+really draws every retained sample.
 
 For very large overview trees,
 `--max-visible-tips INT` collapses clades in a drawing-only copy and marks the

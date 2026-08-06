@@ -15,7 +15,8 @@ from matplotlib.figure import Figure
 from matplotlib.lines import Line2D
 from matplotlib.collections import LineCollection
 from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
-from matplotlib.patches import Arc, Circle, Patch, Polygon, Rectangle, Wedge
+from matplotlib.patches import Arc, Circle, Patch, PathPatch, Rectangle, Wedge
+from matplotlib.path import Path as MatplotlibPath
 from matplotlib.text import Text
 from matplotlib.font_manager import FontProperties
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
@@ -35,6 +36,7 @@ from nwkit.util import (
     is_rooted,
     read_tip_table,
     read_tree,
+    read_trees,
     validate_unique_named_leaves,
 )
 
@@ -1669,13 +1671,34 @@ def _tip_track_artist(ax, xy, offset_points, color, size_points):
 def _remap_leaf_dictionary(source_tree, target_tree, values):
     source_leaves = list(source_tree.leaves())
     target_leaves = list(target_tree.leaves())
-    if [leaf.name for leaf in source_leaves] != [leaf.name for leaf in target_leaves]:
-        raise ValueError('Posterior sample tree tip order differs from the displayed topology.')
+    source_by_name = {str(leaf.name): leaf for leaf in source_leaves}
+    target_by_name = {str(leaf.name): leaf for leaf in target_leaves}
+    if set(source_by_name) != set(target_by_name):
+        raise ValueError('Posterior sample tree has a different tip set.')
     return {
-        target: values[source]
-        for source, target in zip(source_leaves, target_leaves)
-        if source in values
+        target: values[source_by_name[name]]
+        for name, target in target_by_name.items()
+        if source_by_name[name] in values
     }
+
+
+def _densitree_edge_key(node):
+    return frozenset(str(name) for name in node.leaf_names())
+
+
+def _densitree_topology_signature(tree):
+    all_tips = frozenset(str(name) for name in tree.leaf_names())
+    return tuple(sorted(
+        (
+            tuple(sorted(_densitree_edge_key(node)))
+            for node in tree.traverse()
+            if (
+                not node.is_root
+                and 1 < len(_densitree_edge_key(node)) < len(all_tips)
+            )
+        ),
+        key=lambda clade: (len(clade), clade),
+    ))
 
 
 def _make_posterior_drawing_layouts(
@@ -1733,12 +1756,87 @@ def _make_posterior_drawing_layouts(
             unrooted_method=unrooted_method,
             daylight_iterations=daylight_iterations,
         )
-        path_by_reference_node = {
-            reference: sample_layout.edge_paths[sample]
+        path_by_clade = {
+            _densitree_edge_key(reference): sample_layout.edge_paths[sample]
             for reference, sample in zip(reference_nodes, sample_nodes)
             if not reference.is_root
         }
-        layouts.append((sample_layout.bounds, path_by_reference_node))
+        layouts.append((sample_layout.bounds, path_by_clade))
+    return layouts
+
+
+def _make_tree_collection_drawing_layouts(
+    tree,
+    sample_trees,
+    *,
+    layout,
+    use_topology_depth,
+    aspect_ratio,
+    spiral_turns,
+    angular_span,
+    angular_center,
+    terminal_extent_by_leaf,
+    label_size_by_leaf,
+    tip_spacing,
+    subtree_packing,
+    unrooted_method,
+    daylight_iterations,
+):
+    """Render topology-varying trees against one fixed reference tip order."""
+
+    if layout in {'unrooted', 'fractal'}:
+        raise ValueError(
+            "'--densitree-trees' currently supports rectangular, slanted, "
+            'cladogram, circular, radial, and spiral layouts; fixed tip '
+            'positions are not defined for unrooted or fractal geometry.'
+        )
+    alignment_packing = (
+        subtree_packing
+        if layout in {'rectangular', 'circular', 'spiral'}
+        else 'standard'
+    )
+    alignment_layout = make_tree_layout(
+        tree,
+        layout='rectangular',
+        use_topology_depth=use_topology_depth,
+        terminal_extent_by_leaf=terminal_extent_by_leaf,
+        label_size_by_leaf=label_size_by_leaf,
+        tip_spacing=tip_spacing,
+        subtree_packing=alignment_packing,
+    )
+    fixed_leaf_position_by_name = {
+        str(leaf.name): float(alignment_layout.ycoord[leaf])
+        for leaf in alignment_layout.leaf_order
+    }
+    fixed_root_position = float(alignment_layout.ycoord[tree])
+    layouts = []
+    for sample_tree in sample_trees:
+        sample_layout = make_tree_layout(
+            sample_tree,
+            layout=layout,
+            use_topology_depth=use_topology_depth,
+            aspect_ratio=aspect_ratio,
+            spiral_turns=spiral_turns,
+            angular_span=angular_span,
+            angular_center=angular_center,
+            terminal_extent_by_leaf=_remap_leaf_dictionary(
+                tree, sample_tree, terminal_extent_by_leaf,
+            ),
+            label_size_by_leaf=_remap_leaf_dictionary(
+                tree, sample_tree, label_size_by_leaf,
+            ),
+            tip_spacing=tip_spacing,
+            subtree_packing=subtree_packing,
+            unrooted_method=unrooted_method,
+            daylight_iterations=daylight_iterations,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
+        )
+        path_by_clade = {
+            _densitree_edge_key(node): path
+            for node, path in sample_layout.edge_paths.items()
+        }
+        layouts.append((sample_layout.bounds, path_by_clade))
     return layouts
 
 
@@ -1759,44 +1857,128 @@ def _resample_polyline(path, sample_count=32):
     ])
 
 
-def _densitree_branch_envelope(paths, level, padding):
-    """Return the geometric central credible envelope for corresponding paths."""
+def _convex_hull(points):
+    """Return the counter-clockwise convex hull of two-dimensional points."""
 
-    sampled = np.stack([_resample_polyline(path) for path in paths], axis=0)
-    tail = (1.0 - float(level)) / 2.0
+    unique = sorted({(float(x), float(y)) for x, y in points})
+    if len(unique) <= 1:
+        return np.asarray(unique, dtype=float)
+
+    def cross(origin, first, second):
+        return (
+            (first[0] - origin[0]) * (second[1] - origin[1])
+            - (first[1] - origin[1]) * (second[0] - origin[0])
+        )
+
+    lower = []
+    for point in unique:
+        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0.0:
+            lower.pop()
+        lower.append(point)
+    upper = []
+    for point in reversed(unique):
+        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0.0:
+            upper.pop()
+        upper.append(point)
+    return np.asarray(lower[:-1] + upper[:-1], dtype=float)
+
+
+def _densitree_branch_envelope(
+    paths,
+    level,
+    padding,
+    sample_count=33,
+    segments_per_polygon=4,
+):
+    """Return a tube covering a central fraction of whole sampled paths.
+
+    Paths are selected as complete objects by their maximum displacement from
+    the coordinate-wise median path.  Consecutive points of every retained
+    resampled path are then enclosed by a padded convex hull.  The resulting
+    strip therefore does not claim pointwise or joint posterior probability,
+    but it does contain at least the requested empirical fraction of whole
+    resampled paths.
+    """
+
+    sampled = np.stack([
+        _resample_polyline(path, sample_count=sample_count)
+        for path in paths
+    ], axis=0)
     center_path = np.median(sampled, axis=0)
-    lower_curve = []
-    upper_curve = []
-    previous_axis = None
-    for point_index in range(sampled.shape[1]):
-        values = sampled[:, point_index, :]
-        center = center_path[point_index]
-        centered = values - center
-        if len(values) > 1 and np.linalg.norm(centered) > 1e-15:
-            _, _, vectors = np.linalg.svd(centered, full_matrices=False)
-            axis = vectors[0]
-        else:
-            before = center_path[max(0, point_index - 1)]
-            after = center_path[min(len(center_path) - 1, point_index + 1)]
-            tangent = after - before
-            tangent_norm = float(np.linalg.norm(tangent))
-            axis = (
-                np.asarray([-tangent[1], tangent[0]]) / tangent_norm
-                if tangent_norm > 1e-15
-                else np.asarray([0.0, 1.0])
-            )
-        if previous_axis is not None and float(np.dot(axis, previous_axis)) < 0.0:
-            axis = -axis
-        previous_axis = axis
-        projections = centered @ axis
-        low, high = np.quantile(projections, [tail, 1.0 - tail])
-        if high - low < 2.0 * padding:
-            midpoint = (low + high) / 2.0
-            low = midpoint - padding
-            high = midpoint + padding
-        lower_curve.append(center + axis * low)
-        upper_curve.append(center + axis * high)
-    return np.vstack((np.asarray(lower_curve), np.asarray(upper_curve)[::-1]))
+    maximum_displacement = np.max(
+        np.linalg.norm(sampled - center_path[None, :, :], axis=2),
+        axis=1,
+    )
+    retained_count = max(
+        1,
+        min(
+            len(paths),
+            int(math.ceil(float(level) * len(paths) - 1e-12)),
+        ),
+    )
+    retained_indices = np.argsort(
+        maximum_displacement,
+        kind='stable',
+    )[:retained_count]
+    retained = sampled[retained_indices]
+    diagonal = float(padding) / math.sqrt(2.0)
+    offsets = np.asarray([
+        (padding, 0.0),
+        (diagonal, diagonal),
+        (0.0, padding),
+        (-diagonal, diagonal),
+        (-padding, 0.0),
+        (-diagonal, -diagonal),
+        (0.0, -padding),
+        (diagonal, -diagonal),
+    ])
+    polygons = []
+    for start in range(0, sample_count - 1, segments_per_polygon):
+        stop = min(start + segments_per_polygon, sample_count - 1)
+        path_piece = retained[:, start:stop + 1, :].reshape(-1, 2)
+        padded = (path_piece[:, None, :] + offsets[None, :, :]).reshape(-1, 2)
+        hull = _convex_hull(padded)
+        if len(hull) >= 3:
+            polygons.append(hull)
+    return polygons, retained_indices
+
+
+def _densitree_topology_groups(posterior_layouts, sample_trees):
+    """Group rendered samples without interpolating between tree topologies."""
+
+    if not posterior_layouts:
+        return []
+    if not sample_trees:
+        return [((), list(posterior_layouts))]
+    grouped = {}
+    for sample_tree, rendered in zip(sample_trees, posterior_layouts):
+        signature = _densitree_topology_signature(sample_tree)
+        grouped.setdefault(signature, []).append(rendered)
+    return sorted(
+        grouped.items(),
+        key=lambda item: (-len(item[1]), item[0]),
+    )
+
+
+def _compound_polygon_path(polygons):
+    """Combine overlapping envelope pieces into one consistently filled path."""
+
+    vertices = []
+    codes = []
+    for polygon in polygons:
+        points = np.asarray(polygon, dtype=float)
+        if len(points) < 3:
+            continue
+        vertices.extend(points)
+        codes.extend([
+            MatplotlibPath.MOVETO,
+            *([MatplotlibPath.LINETO] * (len(points) - 1)),
+        ])
+        vertices.append(points[0])
+        codes.append(MatplotlibPath.CLOSEPOLY)
+    if not vertices:
+        return None
+    return MatplotlibPath(np.asarray(vertices), np.asarray(codes, dtype=np.uint8))
 
 
 def _age_interval_path(node, drawing_layout):
@@ -1937,6 +2119,7 @@ def _draw_tree(
     time_credible_intervals='auto',
     mcmctree_posterior=None,
     mcmctree_posterior_topology=None,
+    densitree_trees=None,
     posterior_ladderize=False,
     densitree='none',
     densitree_alpha=0.035,
@@ -1957,8 +2140,20 @@ def _draw_tree(
     densitree_mode = str(densitree).strip().lower()
     if densitree_mode not in {'none', 'all', 'ci', 'both'}:
         raise ValueError("'--densitree' must be none, all, ci, or both.")
-    if densitree_mode != 'none' and mcmctree_posterior is None:
-        raise ValueError("'--densitree' requires '--mcmctree-posterior'.")
+    densitree_trees = list(densitree_trees or [])
+    if (
+        densitree_mode != 'none'
+        and mcmctree_posterior is None
+        and not densitree_trees
+    ):
+        raise ValueError(
+            "'--densitree' requires '--mcmctree-posterior' or "
+            "'--densitree-trees'."
+        )
+    if mcmctree_posterior is not None and densitree_trees:
+        raise ValueError(
+            "'--mcmctree-posterior' and '--densitree-trees' are mutually exclusive."
+        )
     densitree_alpha = float(densitree_alpha)
     densitree_ci_alpha = float(densitree_ci_alpha)
     densitree_ci_level = float(densitree_ci_level)
@@ -2006,10 +2201,19 @@ def _draw_tree(
     }
     if layout_name not in supported_layouts:
         raise ValueError("Unsupported '--layout': {}".format(layout))
-    if densitree_mode != 'none' and layout_name in {'cladogram', 'fractal'}:
+    if (
+        densitree_mode != 'none'
+        and layout_name in {'cladogram', 'fractal'}
+        and not densitree_trees
+    ):
         raise ValueError(
             "'--densitree' requires a layout that encodes branch-length or "
             'root-to-node time variation; cladogram and fractal do not.'
+        )
+    if densitree_trees and layout_name in {'unrooted', 'fractal'}:
+        raise ValueError(
+            "'--densitree-trees' currently supports rectangular, slanted, "
+            'cladogram, circular, radial, and spiral layouts.'
         )
     topology_only_time_layout = layout_name in {'cladogram', 'fractal'}
     has_credible_intervals = any(
@@ -2405,24 +2609,44 @@ def _draw_tree(
         unrooted_method=unrooted_method,
         daylight_iterations=daylight_iterations,
     )
-    posterior_layouts = _make_posterior_drawing_layouts(
-        tree,
-        mcmctree_posterior,
-        mcmctree_posterior_topology,
-        bool(posterior_ladderize),
-        layout=layout_name,
-        use_topology_depth=use_topology_depth,
-        aspect_ratio=layout_aspect_ratio,
-        spiral_turns=spiral_turns,
-        angular_span=angular_span,
-        angular_center=angular_center,
-        terminal_extent_by_leaf=terminal_extent_by_leaf,
-        label_size_by_leaf=spacing_size_by_leaf,
-        tip_spacing=resolved_tip_spacing,
-        subtree_packing=resolved_subtree_packing,
-        unrooted_method=unrooted_method,
-        daylight_iterations=daylight_iterations,
-    ) if densitree_mode != 'none' else []
+    if densitree_mode == 'none':
+        posterior_layouts = []
+    elif densitree_trees:
+        posterior_layouts = _make_tree_collection_drawing_layouts(
+            tree,
+            densitree_trees,
+            layout=layout_name,
+            use_topology_depth=use_topology_depth,
+            aspect_ratio=layout_aspect_ratio,
+            spiral_turns=spiral_turns,
+            angular_span=angular_span,
+            angular_center=angular_center,
+            terminal_extent_by_leaf=terminal_extent_by_leaf,
+            label_size_by_leaf=spacing_size_by_leaf,
+            tip_spacing=resolved_tip_spacing,
+            subtree_packing=resolved_subtree_packing,
+            unrooted_method=unrooted_method,
+            daylight_iterations=daylight_iterations,
+        )
+    else:
+        posterior_layouts = _make_posterior_drawing_layouts(
+            tree,
+            mcmctree_posterior,
+            mcmctree_posterior_topology,
+            bool(posterior_ladderize),
+            layout=layout_name,
+            use_topology_depth=use_topology_depth,
+            aspect_ratio=layout_aspect_ratio,
+            spiral_turns=spiral_turns,
+            angular_span=angular_span,
+            angular_center=angular_center,
+            terminal_extent_by_leaf=terminal_extent_by_leaf,
+            label_size_by_leaf=spacing_size_by_leaf,
+            tip_spacing=resolved_tip_spacing,
+            subtree_packing=resolved_subtree_packing,
+            unrooted_method=unrooted_method,
+            daylight_iterations=daylight_iterations,
+        )
     xcoord = drawing_layout.xcoord
     ycoord = drawing_layout.ycoord
     leaf_order = drawing_layout.leaf_order
@@ -2524,33 +2748,66 @@ def _draw_tree(
                 priority=100,
             ))
 
+    densitree_topology_groups = _densitree_topology_groups(
+        posterior_layouts,
+        densitree_trees,
+    )
+    densitree_ci_group_report = []
     if densitree_mode in {'ci', 'both'}:
         envelope_padding = max(min(x_span, y_span), 1e-9) * 0.0015
-        for node in tree.traverse():
-            if node.is_root:
-                continue
-            polygon_points = _densitree_branch_envelope(
-                [path_by_node[node] for _, path_by_node in posterior_layouts],
-                level=densitree_ci_level,
-                padding=envelope_padding,
-            )
-            if polygon_points is None:
-                continue
-            ax.add_patch(Polygon(
-                polygon_points,
-                closed=True,
-                facecolor=densitree_ci_color,
-                edgecolor='none',
-                alpha=densitree_ci_alpha,
-                zorder=0.6,
-            ))
+        maximum_group_count = max(
+            (len(group) for _, group in densitree_topology_groups),
+            default=1,
+        )
+        for topology_rank, (signature, group) in enumerate(
+            densitree_topology_groups,
+            start=1,
+        ):
+            path_groups = {}
+            for _, path_by_clade in group:
+                for clade, path in path_by_clade.items():
+                    path_groups.setdefault(clade, []).append(path)
+            topology_frequency = len(group) / len(posterior_layouts)
+            relative_frequency = len(group) / maximum_group_count
+            group_alpha = densitree_ci_alpha * math.sqrt(relative_frequency)
+            envelope_polygons = []
+            retained_counts = []
+            for paths in path_groups.values():
+                polygons, retained_indices = _densitree_branch_envelope(
+                    paths,
+                    level=densitree_ci_level,
+                    padding=envelope_padding,
+                )
+                envelope_polygons.extend(polygons)
+                retained_counts.append(len(retained_indices))
+            compound_path = _compound_polygon_path(envelope_polygons)
+            if compound_path is not None:
+                ax.add_patch(PathPatch(
+                    compound_path,
+                    facecolor=densitree_ci_color,
+                    edgecolor='none',
+                    alpha=group_alpha,
+                    zorder=0.6,
+                ))
+            densitree_ci_group_report.append({
+                'topology_rank': topology_rank,
+                'sample_count': len(group),
+                'sample_fraction': topology_frequency,
+                'opacity': group_alpha,
+                'branch_count': len(path_groups),
+                'retained_path_count_min': min(retained_counts, default=0),
+                'retained_path_count_max': max(retained_counts, default=0),
+                'topology_sha256': hashlib.sha256(
+                    repr(signature).encode('utf-8')
+                ).hexdigest(),
+            })
 
     if densitree_mode in {'all', 'both'}:
         posterior_line_width = max(0.25, float(branch_width) * 0.65)
         posterior_segments = [
             np.asarray(path, dtype=float)
-            for _, path_by_node in posterior_layouts
-            for path in path_by_node.values()
+            for _, path_by_clade in posterior_layouts
+            for path in path_by_clade.values()
         ]
         ax.add_collection(LineCollection(
             posterior_segments,
@@ -2723,12 +2980,22 @@ def _draw_tree(
                 )
             else:
                 placement = {
-                    'offset': (4.0, max(float(font_size) * 0.8, 5.0)),
-                    'horizontal_alignment': 'left',
+                    'offset': (0.0, max(float(font_size) * 1.25, 8.0)),
+                    'horizontal_alignment': 'center',
                     'vertical_alignment': 'bottom',
                     'rotation': 0.0,
                     'shift_direction': (0.0, 1.0),
                 }
+            ax.scatter(
+                [xcoord[node]],
+                [ycoord[node]],
+                s=max(float(font_size) * 0.42, 2.8) ** 2,
+                marker='o',
+                facecolor='#ffffff',
+                edgecolor=color,
+                linewidth=0.75,
+                zorder=9.5,
+            )
             artist = ax.annotate(
                 label,
                 xy=(xcoord[node], ycoord[node]),
@@ -2747,6 +3014,13 @@ def _draw_tree(
                     'edgecolor': color,
                     'linewidth': 0.6,
                     'alpha': 0.94,
+                },
+                arrowprops={
+                    'arrowstyle': '-',
+                    'color': color,
+                    'linewidth': 0.65,
+                    'shrinkA': 1.5,
+                    'shrinkB': max(float(font_size) * 0.22, 1.5),
                 },
                 zorder=10,
             )
@@ -3722,14 +3996,45 @@ def _draw_tree(
         'time_credible_intervals': credible_interval_mode,
         'time_credible_interval_count': credible_interval_count,
         'densitree': densitree_mode,
+        'densitree_source': (
+            'tree-collection'
+            if densitree_trees
+            else ('mcmctree-ages' if mcmctree_posterior is not None else None)
+        ),
         'densitree_sample_count': len(posterior_layouts),
+        'densitree_topology_count': (
+            len({_densitree_topology_signature(sample) for sample in densitree_trees})
+            if densitree_trees else (1 if posterior_layouts else 0)
+        ),
+        'densitree_root_alignment': (
+            'reference-coordinate'
+            if densitree_trees
+            else ('shared-topology' if posterior_layouts else None)
+        ),
         'densitree_ci_level': (
             densitree_ci_level if densitree_mode in {'ci', 'both'} else None
         ),
         'densitree_ci_interpretation': (
-            'branchwise geometric central envelope'
+            (
+                'topology-stratified branchwise empirical central-path '
+                'envelope; opacity encodes relative topology frequency'
+                if densitree_trees
+                else 'branchwise empirical central-path envelope'
+            )
             if densitree_mode in {'ci', 'both'} else None
         ),
+        'densitree_ci_path_coverage': (
+            densitree_ci_level if densitree_mode in {'ci', 'both'} else None
+        ),
+        'densitree_ci_topology_group_count': (
+            len(densitree_ci_group_report)
+            if densitree_mode in {'ci', 'both'} else 0
+        ),
+        'densitree_ci_topology_frequency_encoding': (
+            'square-root opacity relative to the most frequent topology'
+            if densitree_trees and densitree_mode in {'ci', 'both'} else None
+        ),
+        'densitree_ci_topology_groups': densitree_ci_group_report,
         'initial_fit': fit_report,
     })
     metadata = {'Creator': 'NWKIT {}'.format(__version__)}
@@ -3788,6 +4093,7 @@ def draw_main(args):
     trait_path = getattr(args, 'trait', None)
     tip_image_manifest = getattr(args, 'tip_image_manifest', None)
     posterior_path = getattr(args, 'mcmctree_posterior', None)
+    densitree_tree_path = getattr(args, 'densitree_trees', None)
     layout_report = getattr(args, 'layout_report', None)
     _validate_draw_paths(
         outfile=args.outfile,
@@ -3797,15 +4103,23 @@ def draw_main(args):
             '--trait': trait_path,
             '--tip-image-manifest': tip_image_manifest,
             '--mcmctree-posterior': posterior_path,
+            '--densitree-trees': densitree_tree_path,
         },
     )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     prepare_time_tree_annotations(tree)
     densitree_mode = str(getattr(args, 'densitree', 'none')).strip().lower()
+    if posterior_path not in (None, '') and densitree_tree_path not in (None, ''):
+        raise ValueError(
+            "'--mcmctree-posterior' and '--densitree-trees' are mutually exclusive."
+        )
+    if densitree_tree_path not in (None, '') and densitree_mode == 'none':
+        raise ValueError("'--densitree-trees' requires '--densitree all, ci, or both'.")
     if (
         densitree_mode != 'none'
         and str(getattr(args, 'layout', 'rectangular')).strip().lower()
         in {'cladogram', 'fractal'}
+        and densitree_tree_path in (None, '')
     ):
         raise ValueError(
             "'--densitree' requires a layout that encodes branch-length or "
@@ -3813,6 +4127,7 @@ def draw_main(args):
         )
     posterior = None
     posterior_topology = None
+    densitree_sample_trees = []
     if posterior_path not in (None, ''):
         if posterior_path == '-' and args.infile == '-':
             raise ValueError(
@@ -3839,7 +4154,70 @@ def draw_main(args):
                 )
             )
     elif densitree_mode != 'none':
-        raise ValueError("'--densitree' requires '--mcmctree-posterior'.")
+        if densitree_tree_path in (None, ''):
+            raise ValueError(
+                "'--densitree' requires '--mcmctree-posterior' or "
+                "'--densitree-trees'."
+            )
+    if densitree_tree_path not in (None, ''):
+        if densitree_tree_path == '-' and args.infile == '-':
+            raise ValueError(
+                "'--infile' and '--densitree-trees' cannot both read from STDIN."
+            )
+        burnin = int(getattr(args, 'posterior_burnin', 0))
+        thin = int(getattr(args, 'posterior_thin', 1))
+        if burnin < 0:
+            raise ValueError("'--posterior-burnin' must be zero or greater.")
+        if thin < 1:
+            raise ValueError("'--posterior-thin' must be at least one.")
+        all_sample_trees = read_trees(
+            densitree_tree_path,
+            args.format,
+            args.quoted_node_names,
+            quiet=True,
+        )
+        densitree_sample_trees = all_sample_trees[burnin::thin]
+        if not densitree_sample_trees:
+            raise ValueError(
+                "'--posterior-burnin' and '--posterior-thin' retained no "
+                'DensiTree sample trees.'
+            )
+        validate_unique_named_leaves(
+            tree,
+            option_name='--infile',
+            context=" for '--densitree-trees'",
+        )
+        reference_tip_set = set(str(name) for name in tree.leaf_names())
+        for index, sample_tree in enumerate(densitree_sample_trees, start=1):
+            validate_unique_named_leaves(
+                sample_tree,
+                option_name='--densitree-trees',
+                context=' in retained tree {}'.format(index),
+            )
+            sample_tip_set = set(str(name) for name in sample_tree.leaf_names())
+            if sample_tip_set != reference_tip_set:
+                missing = sorted(reference_tip_set - sample_tip_set)
+                extra = sorted(sample_tip_set - reference_tip_set)
+                raise ValueError(
+                    "'--densitree-trees' retained tree {} has a different "
+                    'tip set (missing: {}; extra: {}).'.format(
+                        index,
+                        ','.join(missing) or 'none',
+                        ','.join(extra) or 'none',
+                    )
+                )
+            prepare_time_tree_annotations(sample_tree)
+            if bool(args.ladderize):
+                sample_tree.ladderize()
+        sys.stderr.write(
+            'Rendering {:,} retained trees representing {:,} rooted topologies.\n'.format(
+                len(densitree_sample_trees),
+                len({
+                    _densitree_topology_signature(sample_tree)
+                    for sample_tree in densitree_sample_trees
+                }),
+            )
+        )
     if bool(args.ladderize):
         tree.ladderize()
     max_visible_tips = getattr(args, 'max_visible_tips', None)
@@ -3896,6 +4274,7 @@ def draw_main(args):
             '--trait': trait_path,
             '--tip-image-manifest': tip_image_manifest,
             '--mcmctree-posterior': posterior_path,
+            '--densitree-trees': densitree_tree_path,
             **{
                 "--tip-image '{}'".format(leaf_name): path
                 for leaf_name, path in tip_image_path_by_leaf.items()
@@ -4029,6 +4408,7 @@ def draw_main(args):
         time_credible_intervals=getattr(args, 'time_credible_intervals', 'auto'),
         mcmctree_posterior=posterior,
         mcmctree_posterior_topology=posterior_topology,
+        densitree_trees=densitree_sample_trees,
         posterior_ladderize=bool(args.ladderize),
         densitree=densitree_mode,
         densitree_alpha=getattr(args, 'densitree_alpha', 0.035),

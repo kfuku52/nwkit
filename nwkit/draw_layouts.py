@@ -77,6 +77,8 @@ def get_rectangular_coordinates(
     tree,
     use_topology_depth=False,
     leaf_weight_by_leaf=None,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     """Return conventional phylogram coordinates and the displayed tip order."""
 
@@ -96,11 +98,36 @@ def get_rectangular_coordinates(
             pending.append((child, depth + child_dist))
         stack.extend(reversed(pending))
 
-    leaf_order, normalized_weight = _normalized_leaf_weights(
-        tree,
-        leaf_weight_by_leaf,
-    )
-    ycoord.update(_weighted_leaf_positions(leaf_order, normalized_weight))
+    if fixed_leaf_position_by_name is None:
+        leaf_order, normalized_weight = _normalized_leaf_weights(
+            tree,
+            leaf_weight_by_leaf,
+        )
+        ycoord.update(_weighted_leaf_positions(leaf_order, normalized_weight))
+    else:
+        leaves = list(tree.leaves())
+        missing = sorted({
+            str(leaf.name)
+            for leaf in leaves
+            if str(leaf.name) not in fixed_leaf_position_by_name
+        })
+        if missing:
+            raise ValueError(
+                'Fixed leaf positions are missing tip(s): {}'.format(
+                    ', '.join(missing),
+                )
+            )
+        ycoord.update({
+            leaf: float(fixed_leaf_position_by_name[str(leaf.name)])
+            for leaf in leaves
+        })
+        leaf_order = sorted(
+            leaves,
+            key=lambda leaf: (
+                ycoord[leaf],
+                str(leaf.name),
+            ),
+        )
     for node in tree.traverse(strategy='postorder'):
         if node in ycoord:
             continue
@@ -110,6 +137,11 @@ def get_rectangular_coordinates(
             if child_ys
             else float(len(ycoord))
         )
+    if fixed_root_position is not None and not tree.is_leaf:
+        fixed_root_position = float(fixed_root_position)
+        if not math.isfinite(fixed_root_position):
+            raise ValueError('Fixed root position must be finite.')
+        ycoord[tree] = fixed_root_position
     return xcoord, ycoord, leaf_order
 
 
@@ -175,11 +207,15 @@ def rectangular_layout(
     tree,
     use_topology_depth=False,
     leaf_weight_by_leaf=None,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     xcoord, ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
+        fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+        fixed_root_position=fixed_root_position,
     )
     edge_paths, support_anchors, support_angles, root_path = _orthogonal_paths(
         tree,
@@ -221,13 +257,21 @@ def _straight_paths(tree, xcoord, ycoord):
     return edge_paths, support_anchors, support_angles, root_path
 
 
-def slanted_layout(tree, use_topology_depth=False, leaf_weight_by_leaf=None):
+def slanted_layout(
+    tree,
+    use_topology_depth=False,
+    leaf_weight_by_leaf=None,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
+):
     """Return a rooted phylogram with straight parent--child branches."""
 
     xcoord, ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
+        fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+        fixed_root_position=fixed_root_position,
     )
     edge_paths, support_anchors, support_angles, root_path = _straight_paths(
         tree,
@@ -247,13 +291,20 @@ def slanted_layout(tree, use_topology_depth=False, leaf_weight_by_leaf=None):
     )
 
 
-def cladogram_layout(tree, leaf_weight_by_leaf=None):
+def cladogram_layout(
+    tree,
+    leaf_weight_by_leaf=None,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
+):
     """Return an aligned-tip, topology-only slanted cladogram."""
 
     _, ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=True,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
+        fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+        fixed_root_position=fixed_root_position,
     )
     height = {}
     for node in tree.traverse(strategy='postorder'):
@@ -289,12 +340,16 @@ def _polar_coordinates(
     angular_center_degrees=90.0,
     leaf_weight_by_leaf=None,
     base_layout=None,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     if base_layout is None:
         base_layout = rectangular_layout(
             tree,
             use_topology_depth=use_topology_depth,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     radius = base_layout.xcoord
     linear_y = base_layout.ycoord
@@ -393,6 +448,8 @@ def polar_layout(
     leaf_weight_by_leaf=None,
     base_layout=None,
     subtree_packing='standard',
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     """Return rooted circular or straight radial geometry in a sector."""
 
@@ -405,6 +462,8 @@ def polar_layout(
         angular_center_degrees=angular_center,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
         base_layout=base_layout,
+        fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+        fixed_root_position=fixed_root_position,
     )
     edge_paths = {}
     support_anchors = {}
@@ -1173,6 +1232,8 @@ def tidy_layout(
     use_topology_depth=False,
     terminal_extent_by_leaf=None,
     leaf_weight_by_leaf=None,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     """Draw a branch-length-aware non-layered tidy phylogram.
 
@@ -1184,11 +1245,31 @@ def tidy_layout(
     """
 
     terminal_extent_by_leaf = terminal_extent_by_leaf or {}
-    xcoord, _, leaf_order = get_rectangular_coordinates(
+    xcoord, fixed_ycoord, leaf_order = get_rectangular_coordinates(
         tree,
         use_topology_depth=use_topology_depth,
         leaf_weight_by_leaf=leaf_weight_by_leaf,
+        fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+        fixed_root_position=fixed_root_position,
     )
+    if fixed_leaf_position_by_name is not None:
+        edge_paths, support_anchors, support_angles, root_path = _orthogonal_paths(
+            tree,
+            xcoord,
+            fixed_ycoord,
+        )
+        return TreeDrawingLayout(
+            name='rectangular',
+            xcoord=xcoord,
+            ycoord=fixed_ycoord,
+            leaf_order=leaf_order,
+            edge_paths=edge_paths,
+            support_anchors=support_anchors,
+            support_angles=support_angles,
+            label_angles={leaf: 0.0 for leaf in leaf_order},
+            root_path=root_path,
+            metadata={'subtree_packing': 'fixed-reference'},
+        )
     _, normalized_weight = _normalized_leaf_weights(
         tree,
         leaf_weight_by_leaf,
@@ -1250,6 +1331,11 @@ def tidy_layout(
         children = node.get_children()
         if children:
             ycoord[node] = sum(ycoord[child] for child in children) / len(children)
+    if fixed_root_position is not None and not tree.is_leaf:
+        fixed_root_position = float(fixed_root_position)
+        if not math.isfinite(fixed_root_position):
+            raise ValueError('Fixed root position must be finite.')
+        ycoord[tree] = fixed_root_position
     edge_paths, support_anchors, support_angles, root_path = _orthogonal_paths(
         tree,
         xcoord,
@@ -1332,6 +1418,8 @@ def spiral_layout(
     leaf_weight_by_leaf=None,
     terminal_extent_by_leaf=None,
     subtree_packing='standard',
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     """Warp an orthogonal phylogram into an Archimedean spiral track."""
 
@@ -1341,12 +1429,16 @@ def spiral_layout(
             use_topology_depth=use_topology_depth,
             terminal_extent_by_leaf=terminal_extent_by_leaf,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     else:
         base = rectangular_layout(
             tree,
             use_topology_depth=use_topology_depth,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     leaf_count = max(len(base.leaf_order), 1)
     if turns is None:
@@ -1664,6 +1756,8 @@ def make_tree_layout(
     subtree_packing='standard',
     unrooted_method='equal-angle',
     daylight_iterations=5,
+    fixed_leaf_position_by_name=None,
+    fixed_root_position=None,
 ):
     """Dispatch to a validated layout implementation."""
 
@@ -1718,11 +1812,15 @@ def make_tree_layout(
                 use_topology_depth=use_topology_depth,
                 terminal_extent_by_leaf=terminal_extent_by_leaf,
                 leaf_weight_by_leaf=leaf_weight_by_leaf,
+                fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+                fixed_root_position=fixed_root_position,
             )
         drawing = rectangular_layout(
             tree,
             use_topology_depth=use_topology_depth,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
         drawing.metadata['subtree_packing'] = subtree_packing
         return drawing
@@ -1731,11 +1829,15 @@ def make_tree_layout(
             tree,
             use_topology_depth=use_topology_depth,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     if layout == 'cladogram':
         return cladogram_layout(
             tree,
             leaf_weight_by_leaf=leaf_weight_by_leaf,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     if layout == 'spiral':
         return spiral_layout(
@@ -1746,6 +1848,8 @@ def make_tree_layout(
             leaf_weight_by_leaf=leaf_weight_by_leaf,
             terminal_extent_by_leaf=terminal_extent_by_leaf,
             subtree_packing=subtree_packing,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     if layout == 'fractal':
         return fractal_layout(
@@ -1761,6 +1865,8 @@ def make_tree_layout(
                 use_topology_depth=use_topology_depth,
                 terminal_extent_by_leaf=terminal_extent_by_leaf,
                 leaf_weight_by_leaf=leaf_weight_by_leaf,
+                fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+                fixed_root_position=fixed_root_position,
             )
         return polar_layout(
             tree,
@@ -1771,6 +1877,8 @@ def make_tree_layout(
             leaf_weight_by_leaf=leaf_weight_by_leaf,
             base_layout=base_layout,
             subtree_packing=subtree_packing,
+            fixed_leaf_position_by_name=fixed_leaf_position_by_name,
+            fixed_root_position=fixed_root_position,
         )
     if layout == 'unrooted':
         return unrooted_layout(

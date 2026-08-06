@@ -53,8 +53,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   dated NHX tree with mean/median ages and HPD or equal-tail intervals.
 - `draw --time-constraints` and `--time-credible-intervals` visualize
   MCMCtree calibrations and dated-node uncertainty. `--densitree all|ci|both`
-  renders every retained posterior time tree, branchwise geometric credible
-  polygons, or both across six time-aware layouts.
+  renders every retained posterior time tree, branchwise empirical path
+  envelopes, or both across six time-aware layouts.
+- `draw --densitree-trees` accepts posterior or bootstrap multi-Newick
+  collections with topology variation. Sample trees share the reference tip
+  positions across rectangular, slanted, cladogram, circular, radial, and
+  spiral layouts; incompatible clades remain visible as alternative paths.
+  CI mode stratifies samples by complete rooted topology before constructing
+  branch envelopes and encodes relative topology frequency by opacity.
 
 ### Changed
 
@@ -95,11 +101,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   branch-length semantics, branch/annotation and branch-pair audit status, and
   explicit figure-boundary overflow measurements. Unresolved default-policy
   collisions and unfit fixed-size figures emit final, actionable warnings.
-- DensiTree reports identify the retained sample count, interval level, and
-  branchwise (rather than joint-tree) interpretation. Explicit burn-in and
-  thinning controls govern both posterior summaries and overlays.
+- DensiTree reports identify the retained sample count, path-coverage level,
+  topology groups and frequencies, opacity encoding, and branchwise (rather
+  than joint-tree) interpretation. Explicit burn-in and thinning controls
+  govern both posterior summaries and overlays.
 
 ### Fixed
+
+- DensiTree CI envelopes no longer interpolate between branches belonging to
+  different sampled topologies. The envelope now selects whole paths within
+  each topology and encloses the requested empirical fraction, avoiding large
+  unsupported polygons between discrete alternatives.
+- Topology-varying DensiTree samples now share the reference root coordinate as
+  well as reference tip positions. Alternative root splits therefore originate
+  at one common root instead of producing detached horizontal root-child paths.
 
 - Centered every tidy-packed parent on its direct child nodes after compact,
   label-aware subtree placement.

@@ -10,17 +10,22 @@ import pandas as pd
 import pytest
 from ete4 import Tree
 from matplotlib.figure import Figure
+from matplotlib.path import Path as MatplotlibPath
 from matplotlib.patches import Arc, Circle
 
 from nwkit.draw import (
     _age_interval_path,
     _add_radial_depth_guide,
     _add_scale_bar,
+    _densitree_branch_envelope,
+    _densitree_topology_groups,
     _get_species_overlap_node_types,
     _load_tip_image,
+    _make_tree_collection_drawing_layouts,
     _polar_auto_figure_height,
     _prepare_tip_label_text,
     _read_tip_image_manifest,
+    _resample_polyline,
     _wrap_tip_label,
     draw_main,
 )
@@ -105,6 +110,7 @@ def make_draw_args(**kwargs):
         'time_constraints': 'auto',
         'time_credible_intervals': 'auto',
         'mcmctree_posterior': None,
+        'densitree_trees': None,
         'posterior_point': 'mean',
         'posterior_ci': 'hpd',
         'posterior_ci_level': 0.95,
@@ -136,15 +142,20 @@ class TestDrawMain:
     def test_draw_shows_mcmctree_constraint_glyph(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1)'B(2,4,0.025,0.025)':1,C:2);")
         outfile = tmp_path / 'constraints.svg'
+        report = tmp_path / 'constraints.json'
 
         draw_main(make_draw_args(
             infile=str(infile),
             outfile=str(outfile),
             image_format='svg',
             species_overlap_node_plot='no',
+            layout_report=str(report),
         ))
 
         assert '2–4' in outfile.read_text()
+        payload = json.loads(report.read_text())
+        assert payload['time_constraint_count'] == 1
+        assert 'time_constraint:branch' not in payload['final_collisions_by_kind']
 
     def test_rectangular_root_age_interval_uses_horizontal_time_scale(self):
         tree = Tree('((A:4,B:4):6,(C:3,D:3):7);', parser=1)
@@ -251,8 +262,103 @@ class TestDrawMain:
         assert payload['densitree'] == densitree_mode
         assert payload['densitree_sample_count'] == 4
         assert payload['densitree_ci_interpretation'] == (
-            'branchwise geometric central envelope'
+            'branchwise empirical central-path envelope'
         )
+        assert payload['densitree_ci_path_coverage'] == pytest.approx(0.95)
+        assert payload['densitree_ci_topology_group_count'] == 1
+
+    def test_densitree_envelope_contains_the_selected_whole_paths(self):
+        paths = [
+            np.asarray([
+                (0.0, 0.0),
+                (0.45 + offset, 0.35 - offset / 2.0),
+                (1.0 + offset, 1.0),
+            ])
+            for offset in np.linspace(-0.3, 0.3, 20)
+        ]
+
+        polygons, retained_indices = _densitree_branch_envelope(
+            paths,
+            level=0.8,
+            padding=0.01,
+            sample_count=25,
+            segments_per_polygon=4,
+        )
+
+        assert len(retained_indices) == 16
+        assert len(polygons) == 6
+        for index in retained_indices:
+            sampled = _resample_polyline(paths[index], sample_count=25)
+            for polygon_index, polygon in enumerate(polygons):
+                start = polygon_index * 4
+                segment = sampled[start:min(start + 5, len(sampled))]
+                assert MatplotlibPath(polygon, closed=True).contains_points(
+                    segment,
+                    radius=1e-9,
+                ).all()
+
+    def test_densitree_envelopes_keep_distinct_topologies_separate(self):
+        trees = [
+            Tree('((A:1,B:1):1,(C:1,D:1):1);', parser=1),
+            Tree('((A:2,B:2):1,(C:2,D:2):1);', parser=1),
+            Tree('((A:1,C:1):1,(B:1,D:1):1);', parser=1),
+        ]
+        rendered = [('bounds-1', {}), ('bounds-2', {}), ('bounds-3', {})]
+
+        groups = _densitree_topology_groups(rendered, trees)
+
+        assert [len(group) for _, group in groups] == [2, 1]
+        assert groups[0][1] == rendered[:2]
+        assert groups[1][1] == rendered[2:]
+
+    @pytest.mark.parametrize(
+        'layout',
+        ['rectangular', 'slanted', 'cladogram', 'circular', 'radial', 'spiral'],
+    )
+    def test_topology_densitree_pins_every_sample_to_reference_root(self, layout):
+        reference = Tree(
+            '(((A:2,B:2):3,(C:2,D:2):3):4,(E:2,F:2):7);',
+            parser=1,
+        )
+        samples = [
+            Tree(
+                '(((A:2,B:2):3,(C:2,D:2):3):4,(E:2,F:2):7);',
+                parser=1,
+            ),
+            Tree(
+                '(((A:2,B:2):3,(E:2,F:2):3):4,(C:2,D:2):7);',
+                parser=1,
+            ),
+        ]
+        terminal_extents = {leaf: 0.0 for leaf in reference.leaves()}
+        label_sizes = {leaf: (0.0, 0.0) for leaf in reference.leaves()}
+
+        rendered = _make_tree_collection_drawing_layouts(
+            reference,
+            samples,
+            layout=layout,
+            use_topology_depth=False,
+            aspect_ratio=1.0,
+            spiral_turns=1.5,
+            angular_span=360.0,
+            angular_center=90.0,
+            terminal_extent_by_leaf=terminal_extents,
+            label_size_by_leaf=label_sizes,
+            tip_spacing='uniform',
+            subtree_packing='standard',
+            unrooted_method='equal-angle',
+            daylight_iterations=0,
+        )
+
+        root_starts = []
+        for sample, (_, paths) in zip(samples, rendered):
+            starts = [
+                paths[frozenset(child.leaf_names())][0]
+                for child in sample.get_children()
+            ]
+            assert np.allclose(starts, starts[0])
+            root_starts.append(starts[0])
+        assert np.allclose(root_starts, root_starts[0])
 
     @pytest.mark.parametrize('layout', ['cladogram', 'fractal'])
     def test_densitree_rejects_topology_only_layouts(
@@ -276,6 +382,160 @@ class TestDrawMain:
                 species_overlap_node_plot='no',
                 mcmctree_posterior=str(posterior),
                 densitree='ci',
+            ))
+
+    @pytest.mark.parametrize(
+        'layout',
+        ['rectangular', 'slanted', 'cladogram', 'circular', 'radial', 'spiral'],
+    )
+    def test_densitree_tree_collection_renders_topology_variation(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk(
+            '(((A:2,B:2):3,(C:2,D:2):3):4,'
+            '((E:2,F:2):3,(G:2,H:2):3):4);'
+        )
+        samples = tmp_path / '{}-trees.nwk'.format(layout)
+        samples.write_text(
+            '(((A:2,B:2):3,(C:2,D:2):3):4,'
+            '((E:2,F:2):3,(G:2,H:2):3):4);\n'
+            '(((A:2,C:2):3,(B:2,D:2):3):4,'
+            '((E:2,F:2):3,(G:2,H:2):3):4);\n'
+            '(((A:2,B:2):3,(C:2,D:2):3):4,'
+            '((E:2,G:2):3,(F:2,H:2):3):4);\n'
+            '(((A:2,B:2):3,(C:2,D:2):3):4,'
+            '((E:2,F:2):3,(G:2,H:2):3):4);\n'
+        )
+        outfile = tmp_path / '{}-topology-densitree.svg'.format(layout)
+        report = tmp_path / '{}-topology-densitree.json'.format(layout)
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(outfile),
+            image_format='svg',
+            layout=layout,
+            angular_span=180.0 if layout in {'circular', 'radial'} else 360.0,
+            tip_label_position=(
+                'branch-end'
+                if layout in {'circular', 'radial', 'spiral'}
+                else 'aligned'
+            ),
+            figure_width=5.0,
+            figure_height=4.0,
+            species_overlap_node_plot='no',
+            densitree_trees=str(samples),
+            densitree='both',
+            layout_report=str(report),
+        ))
+
+        payload = json.loads(report.read_text())
+        assert outfile.stat().st_size > 1000
+        assert payload['densitree_source'] == 'tree-collection'
+        assert payload['densitree_sample_count'] == 4
+        assert payload['densitree_topology_count'] == 3
+        assert payload['densitree_root_alignment'] == 'reference-coordinate'
+        assert payload['densitree_ci_topology_group_count'] == 3
+        groups = payload['densitree_ci_topology_groups']
+        assert [group['sample_fraction'] for group in groups] == pytest.approx(
+            [0.5, 0.25, 0.25]
+        )
+        assert groups[0]['opacity'] == pytest.approx(0.18)
+        assert groups[1]['opacity'] == pytest.approx(0.18 * math.sqrt(0.5))
+        assert groups[2]['opacity'] == pytest.approx(0.18 * math.sqrt(0.5))
+        assert payload['densitree_ci_topology_frequency_encoding'] == (
+            'square-root opacity relative to the most frequent topology'
+        )
+
+    @pytest.mark.parametrize('layout', ['unrooted', 'fractal'])
+    def test_topology_densitree_rejects_layouts_without_fixed_tip_alignment(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        samples = tmp_path / 'trees.nwk'
+        samples.write_text(
+            '((A:1,B:1):1,(C:1,D:1):1);\n'
+            '((A:1,C:1):1,(B:1,D:1):1);\n'
+        )
+
+        with pytest.raises(ValueError, match='currently supports'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'invalid.svg'),
+                image_format='svg',
+                layout=layout,
+                species_overlap_node_plot='no',
+                densitree_trees=str(samples),
+                densitree='all',
+            ))
+
+    def test_densitree_tree_collection_validates_tip_set_and_sample_selection(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        samples = tmp_path / 'trees.nwk'
+        samples.write_text(
+            '((A:1,B:1):1,(C:1,D:1):1);\n'
+            '((A:1,C:1):1,(B:1,D:1):1);\n'
+            '((A:1,B:1):1,(C:1,D:1):1);\n'
+        )
+        report = tmp_path / 'selected.json'
+
+        draw_main(make_draw_args(
+            infile=str(infile),
+            outfile=str(tmp_path / 'selected.svg'),
+            image_format='svg',
+            species_overlap_node_plot='no',
+            densitree_trees=str(samples),
+            densitree='all',
+            posterior_burnin=1,
+            posterior_thin=2,
+            layout_report=str(report),
+        ))
+
+        payload = json.loads(report.read_text())
+        assert payload['densitree_sample_count'] == 1
+        assert payload['densitree_topology_count'] == 1
+
+        mismatched = tmp_path / 'mismatched.nwk'
+        mismatched.write_text('((A:1,B:1):1,(C:1,E:1):1);\n')
+        with pytest.raises(ValueError, match='different tip set'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'mismatched.svg'),
+                image_format='svg',
+                species_overlap_node_plot='no',
+                densitree_trees=str(mismatched),
+                densitree='all',
+            ))
+
+    def test_densitree_sources_are_mutually_exclusive(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk('((A,B),(C,D));')
+        samples = tmp_path / 'trees.nwk'
+        samples.write_text('((A,B),(C,D));\n')
+        posterior = tmp_path / 'mcmc.txt'
+        posterior.write_text('Gen t_n5 t_n6 t_n7\n1 10 4 3\n')
+
+        with pytest.raises(ValueError, match='mutually exclusive'):
+            draw_main(make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / 'invalid.svg'),
+                image_format='svg',
+                species_overlap_node_plot='no',
+                mcmctree_posterior=str(posterior),
+                densitree_trees=str(samples),
+                densitree='all',
             ))
 
     def test_scale_bar_label_is_above_bar(self):

@@ -510,6 +510,8 @@ pdraw.add_argument('--time-credible-intervals', '--time_credible_intervals', des
                    help='default=%(default)s: Draw node-age credible-interval whiskers from MCMCtree/FigTree annotations.')
 pdraw.add_argument('--mcmctree-posterior', '--mcmctree_posterior', dest='mcmctree_posterior', metavar='PATH', default=None, type=str,
                    help='default=None: Read MCMCtree mcmc.txt ages on the input topology for dated-tree and DensiTree rendering.')
+pdraw.add_argument('--densitree-trees', '--densitree_trees', dest='densitree_trees', metavar='PATH', default=None, type=str,
+                   help='default=None: Overlay a posterior or bootstrap multi-Newick tree collection, including topology variation, against the input reference tree.')
 pdraw.add_argument('--posterior-point', '--posterior_point', dest='posterior_point', metavar='mean|median', default='mean', type=str,
                    choices=['mean', 'median'],
                    help='default=%(default)s: Posterior point age used by --mcmctree-posterior.')
@@ -519,20 +521,20 @@ pdraw.add_argument('--posterior-ci', '--posterior_ci', dest='posterior_ci', meta
 pdraw.add_argument('--posterior-ci-level', '--posterior_ci_level', dest='posterior_ci_level', metavar='0<FLOAT<1', default=0.95, type=finite_float,
                    help='default=%(default)s: Credible mass for dated-tree node intervals.')
 pdraw.add_argument('--posterior-burnin', '--posterior_burnin', dest='posterior_burnin', metavar='INT', default=0, type=int,
-                   help='default=%(default)s: Additional leading posterior rows to discard.')
+                   help='default=%(default)s: Leading MCMC rows or sampled trees to discard.')
 pdraw.add_argument('--posterior-thin', '--posterior_thin', dest='posterior_thin', metavar='INT', default=1, type=int,
-                   help='default=%(default)s: Keep every INT-th posterior row for summaries and DensiTree.')
+                   help='default=%(default)s: Keep every INT-th MCMC row or sampled tree.')
 pdraw.add_argument('--densitree', metavar='none|all|ci|both', default='none', type=str,
                    choices=['none', 'all', 'ci', 'both'],
-                   help='default=%(default)s: Draw all retained posterior trees, a branchwise geometric credible envelope, or both.')
+                   help='default=%(default)s: Draw retained trees, branchwise empirical path envelopes, or both from an MCMCtree age table or a multi-Newick tree collection; topology-varying samples are stratified before envelopes are calculated.')
 pdraw.add_argument('--densitree-alpha', '--densitree_alpha', dest='densitree_alpha', metavar='0<FLOAT<=1', default=0.035, type=finite_float,
                    help='default=%(default)s: Opacity of each posterior tree in all/both mode.')
 pdraw.add_argument('--densitree-color', '--densitree_color', dest='densitree_color', metavar='COLOR', default='#0072B2', type=str,
                    help='default=%(default)s: Color of posterior trees in all/both mode.')
 pdraw.add_argument('--densitree-ci-level', '--densitree_ci_level', dest='densitree_ci_level', metavar='0<FLOAT<1', default=0.95, type=finite_float,
-                   help='default=%(default)s: Central geometric mass retained in each branch envelope.')
+                   help='default=%(default)s: Central fraction of whole sampled paths retained in each within-topology branch envelope.')
 pdraw.add_argument('--densitree-ci-alpha', '--densitree_ci_alpha', dest='densitree_ci_alpha', metavar='0<FLOAT<=1', default=0.18, type=finite_float,
-                   help='default=%(default)s: Opacity of branch-envelope polygons.')
+                   help='default=%(default)s: Maximum opacity of branch-envelope polygons; topology groups are scaled by relative sample frequency.')
 pdraw.add_argument('--densitree-ci-color', '--densitree_ci_color', dest='densitree_ci_color', metavar='COLOR', default='#56B4E9', type=str,
                    help='default=%(default)s: Color of branch-envelope polygons.')
 pdraw.add_argument('--tip-labels', '--tip_labels', dest='tip_labels', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',

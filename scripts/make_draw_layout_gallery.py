@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""Generate the reproducible 10-versus-100-tip ``nwkit draw`` gallery."""
+"""Generate the reproducible 7.2-inch ``nwkit draw`` gallery."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import math
 from pathlib import Path
+import subprocess
+import sys
+import tempfile
 
 import matplotlib.pyplot as plt
 from ete4 import Tree
@@ -43,6 +47,29 @@ PANELS = (
     ('unrooted', 'unrooted', 'standard', 360.0, 'equal-angle unrooted'),
     ('spiral', 'spiral', 'standard', 360.0, 'injective spiral band'),
     ('fractal', 'fractal', 'standard', 360.0, 'rectangle-fitted topology'),
+)
+
+TIME_PANELS = (
+    (
+        'calibration constraints',
+        'bounded · min · max · fixed',
+        'constraints',
+    ),
+    (
+        'dated tree + 95% HPD',
+        'posterior ages + uncertainty',
+        'dated',
+    ),
+    (
+        'DensiTree samples',
+        '160 trees · topology + age',
+        'densitree-all',
+    ),
+    (
+        'topology-stratified envelopes',
+        '95% paths · 70/20/10%',
+        'densitree-ci',
+    ),
 )
 
 
@@ -186,7 +213,7 @@ def _draw_panel(axes, panel, dense, show_title):
     if drawing.equal_aspect:
         axes.set_aspect('equal', adjustable='datalim')
     x_padding = width * (0.10 if dense else (0.46 if drawing.spatial else 0.16))
-    y_padding = height * (0.10 if dense else (0.48 if drawing.spatial else 0.16))
+    y_padding = height * (0.10 if dense else (0.64 if drawing.spatial else 0.16))
     axes.set_xlim(x_min - x_padding, x_max + x_padding)
     axes.set_ylim(y_min - y_padding, y_max + y_padding)
     axes.axis('off')
@@ -228,37 +255,297 @@ def _draw_panel(axes, panel, dense, show_title):
         )
 
 
+def _time_example_files(directory):
+    constraint_tree = directory / 'constraints.nwk'
+    constraint_tree.write_text(
+        "(((A:18,B:25)'B(18,28,0.025,0.025)':40,"
+        "(C:27,D:34)'>22':31)'<80':38,"
+        "(E:20,F:31)'@30':70);\n"
+    )
+    topology = directory / 'topology.nwk'
+    topology.write_text(
+        '(((A:22,B:22):40,(C:31,D:31):31):38,'
+        '(E:37,F:37):63);\n'
+    )
+    posterior = directory / 'mcmc.txt'
+    rows = ['Gen t_n7 t_n8 t_n9 t_n10 t_n11']
+    for index in range(1, 161):
+        phase = 2.0 * math.pi * index / 41.0
+        root = 100.0 + 5.0 * math.sin(phase)
+        left = 62.0 + 4.0 * math.sin(phase * 1.37 + 0.2)
+        ab = 22.0 + 3.0 * math.sin(phase * 2.11 + 0.7)
+        cd = 31.0 + 4.0 * math.sin(phase * 1.73 + 1.3)
+        ef = 37.0 + 3.5 * math.sin(phase * 1.91 + 2.8)
+        rows.append(
+            '{} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}'.format(
+                index,
+                root,
+                left,
+                ab,
+                cd,
+                ef,
+            )
+        )
+    posterior.write_text('\n'.join(rows) + '\n')
+    tree_collection = directory / 'posterior-trees.nwk'
+    sample_newicks = []
+    for index in range(1, 161):
+        phase = 2.0 * math.pi * index / 41.0
+        root = 100.0 + 5.0 * math.sin(phase)
+        left = 62.0 + 4.0 * math.sin(phase * 1.37 + 0.2)
+        first_left = 22.0 + 3.0 * math.sin(phase * 2.11 + 0.7)
+        second_left = 31.0 + 4.0 * math.sin(phase * 1.73 + 1.3)
+        ef = 37.0 + 3.5 * math.sin(phase * 1.91 + 2.8)
+        mixture_position = (index - 1) % 20
+
+        def pair_newick(pair, age, parent_age):
+            return '({}:{:.6f},{}:{:.6f}):{:.6f}'.format(
+                pair[0],
+                age,
+                pair[1],
+                age,
+                parent_age - age,
+            )
+
+        if mixture_position < 14:
+            left_pairs = (('A', 'B'), ('C', 'D'))
+            left_newick = '({},{}):{:.6f}'.format(
+                pair_newick(left_pairs[0], first_left, left),
+                pair_newick(left_pairs[1], second_left, left),
+                root - left,
+            )
+            right_newick = pair_newick(('E', 'F'), ef, root)
+        elif mixture_position < 18:
+            left_pairs = (('A', 'C'), ('B', 'D'))
+            left_newick = '({},{}):{:.6f}'.format(
+                pair_newick(left_pairs[0], first_left, left),
+                pair_newick(left_pairs[1], second_left, left),
+                root - left,
+            )
+            right_newick = pair_newick(('E', 'F'), ef, root)
+        else:
+            mixed_age = 70.0 + 3.0 * math.sin(phase * 1.19 + 1.8)
+            left_newick = '({},{}):{:.6f}'.format(
+                pair_newick(('A', 'B'), first_left, mixed_age),
+                pair_newick(('E', 'F'), ef, mixed_age),
+                root - mixed_age,
+            )
+            right_newick = pair_newick(('C', 'D'), second_left, root)
+        sample_newicks.append('({},{});'.format(left_newick, right_newick))
+    tree_collection.write_text('\n'.join(sample_newicks) + '\n')
+    return constraint_tree, topology, posterior, tree_collection
+
+
+def _render_time_examples(directory, figure_width, figure_height):
+    constraint_tree, topology, posterior, tree_collection = _time_example_files(
+        directory
+    )
+    common = [
+        '--image-format',
+        'png',
+        '--figure-width',
+        '{:.6f}'.format(figure_width),
+        '--figure-height',
+        '{:.6f}'.format(figure_height),
+        '--font-size',
+        str(FONT_SIZE),
+        '--font-family',
+        FONT_FAMILY,
+        '--support-labels',
+        'no',
+        '--species-overlap-node-plot',
+        'no',
+        '--collision-policy',
+        'resolve',
+        '--branch-width',
+        '0.7',
+    ]
+    specifications = {
+        'constraints': [
+            '-i', str(constraint_tree),
+            '--layout', 'rectangular',
+            '--tip-label-position', 'aligned',
+            '--time-constraints', 'yes',
+            '--scale-bar', 'auto',
+            '--branch-length-unit', 'Ma',
+        ],
+        'dated': [
+            '-i', str(topology),
+            '--layout', 'rectangular',
+            '--tip-label-position', 'aligned',
+            '--mcmctree-posterior', str(posterior),
+            '--time-credible-intervals', 'yes',
+            '--scale-bar', 'auto',
+            '--branch-length-unit', 'Ma',
+        ],
+        'densitree-all': [
+            '-i', str(topology),
+            '--layout', 'slanted',
+            '--tip-label-position', 'aligned',
+            '--densitree-trees', str(tree_collection),
+            '--time-credible-intervals', 'no',
+            '--densitree', 'all',
+            '--densitree-alpha', '0.065',
+        ],
+        'densitree-ci': [
+            '-i', str(topology),
+            '--layout', 'slanted',
+            '--tip-label-position', 'aligned',
+            '--densitree-trees', str(tree_collection),
+            '--time-credible-intervals', 'no',
+            '--densitree', 'ci',
+            '--densitree-ci-alpha', '0.34',
+        ],
+    }
+    images = {}
+    for key, arguments in specifications.items():
+        output = directory / '{}.png'.format(key)
+        report = directory / '{}.json'.format(key)
+        command = [
+            sys.executable,
+            '-m',
+            'nwkit',
+            'draw',
+            *arguments,
+            *common,
+            '--layout-report',
+            str(report),
+            '-o',
+            str(output),
+        ]
+        subprocess.run(
+            command,
+            cwd=Path(__file__).resolve().parents[1],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        quality = json.loads(report.read_text())
+        if quality['final_collision_count'] != 0:
+            raise RuntimeError(
+                '{} panel retained {} annotation collision(s).'.format(
+                    key,
+                    quality['final_collision_count'],
+                )
+            )
+        if quality['maximum_overflow_points'] > 0.25:
+            raise RuntimeError(
+                '{} panel exceeds its figure bounds by {:.3f} pt.'.format(
+                    key,
+                    quality['maximum_overflow_points'],
+                )
+            )
+        images[key] = plt.imread(output)
+    return images
+
+
+def _draw_time_panel(axes, image):
+    axes.imshow(image)
+    axes.axis('off')
+
+
+def _draw_card_header(axes, title, descriptor):
+    axes.axis('off')
+    axes.text(
+        0.0,
+        0.98,
+        title,
+        transform=axes.transAxes,
+        ha='left',
+        va='top',
+        fontsize=FONT_SIZE,
+        fontfamily=FONT_FAMILY,
+        fontweight='bold',
+        color='#111111',
+    )
+    axes.text(
+        0.0,
+        0.08,
+        descriptor,
+        transform=axes.transAxes,
+        ha='left',
+        va='bottom',
+        fontsize=FONT_SIZE,
+        fontfamily=FONT_FAMILY,
+        color='#315A72',
+    )
+
+
 def make_gallery(output_prefix):
     plt.rcParams.update({
         'font.family': FONT_FAMILY,
         'font.size': FONT_SIZE,
         'svg.fonttype': 'none',
     })
-    figure = plt.figure(figsize=(14.4, 15.0), dpi=220)
+    figure = plt.figure(figsize=(7.2, 14.7), dpi=220)
     grid = figure.add_gridspec(
         5,
-        5,
-        left=0.035,
-        right=0.965,
-        top=0.90,
-        bottom=0.045,
-        width_ratios=(1.0, 1.0, 0.18, 1.0, 1.0),
-        hspace=0.54,
-        wspace=0.12,
+        2,
+        left=0.055,
+        right=0.955,
+        top=0.94,
+        bottom=0.225,
+        hspace=0.12,
+        wspace=0.14,
     )
-    axes = [
-        [figure.add_subplot(grid[row, column]) for column in (0, 1, 3, 4)]
-        for row in range(5)
-    ]
+    layout_axes = []
     for index, panel in enumerate(PANELS):
         row = index // 2
-        column = (index % 2) * 2
-        _draw_panel(axes[row][column], panel, dense=False, show_title=True)
-        _draw_panel(axes[row][column + 1], panel, dense=True, show_title=False)
+        column = index % 2
+        card = grid[row, column].subgridspec(
+            2,
+            2,
+            height_ratios=(0.12, 0.88),
+            width_ratios=(1.95, 0.85),
+            hspace=0.0,
+            wspace=0.02,
+        )
+        header = figure.add_subplot(card[0, :])
+        small_axis = figure.add_subplot(card[1, 0])
+        dense_axis = figure.add_subplot(card[1, 1])
+        _draw_card_header(header, panel[0], panel[4])
+        _draw_panel(small_axis, panel, dense=False, show_title=False)
+        _draw_panel(dense_axis, panel, dense=True, show_title=False)
+        layout_axes.append((small_axis, dense_axis))
+    time_grid = figure.add_gridspec(
+        1,
+        4,
+        left=0.055,
+        right=0.955,
+        top=0.172,
+        bottom=0.012,
+        wspace=0.10,
+    )
+    time_image_axes = []
+    for index, (title, descriptor, key) in enumerate(TIME_PANELS):
+        row = 0
+        column = index
+        card = time_grid[row, column].subgridspec(
+            2,
+            1,
+            height_ratios=(0.15, 0.85),
+            hspace=0.0,
+        )
+        header = figure.add_subplot(card[0, 0])
+        image_axis = figure.add_subplot(card[1, 0])
+        _draw_card_header(header, title, descriptor)
+        time_image_axes.append((image_axis, key))
+    figure.canvas.draw()
+    image_bounds = time_image_axes[0][0].get_position()
+    time_figure_width = image_bounds.width * figure.get_figwidth()
+    time_figure_height = image_bounds.height * figure.get_figheight()
+    with tempfile.TemporaryDirectory(prefix='nwkit-draw-gallery-') as temporary:
+        time_images = _render_time_examples(
+            Path(temporary),
+            figure_width=time_figure_width,
+            figure_height=time_figure_height,
+        )
+    for image_axis, key in time_image_axes:
+        _draw_time_panel(image_axis, time_images[key])
     figure.suptitle(
-        'NWKIT tree drawing configurations — 10 versus 100 tips',
-        x=0.035,
-        y=0.992,
+        'NWKIT tree drawing — layouts and time-aware overlays',
+        x=0.055,
+        y=0.993,
         ha='left',
         va='top',
         fontsize=FONT_SIZE,
@@ -266,30 +553,46 @@ def make_gallery(output_prefix):
         fontweight='bold',
     )
     figure.text(
-        0.035,
-        0.970,
-        'Eight geometries plus tidy-packed and 180° circular configurations; every label and caption is 8 pt Helvetica.',
+        0.055,
+        0.976,
+        'Eight geometries plus tidy-packed and 180° circular configurations.',
         ha='left',
         va='top',
         fontsize=FONT_SIZE,
         fontfamily=FONT_FAMILY,
         color='#444444',
     )
-    for axis, label in zip(
-        axes[0],
-        ('10 tips · labels shown', '100 tips · labels suppressed') * 2,
-    ):
-        bounds = axis.get_position()
-        figure.text(
-            (bounds.x0 + bounds.x1) / 2.0,
-            0.922,
-            label,
-            ha='center',
-            va='bottom',
-            fontsize=FONT_SIZE,
-            fontfamily=FONT_FAMILY,
-            fontweight='bold',
-        )
+    figure.text(
+        0.055,
+        0.959,
+        'Each card: 10 tips with labels (left) · 100 tips without labels (right) · all text 8 pt Helvetica',
+        ha='left',
+        va='top',
+        fontsize=FONT_SIZE,
+        fontfamily=FONT_FAMILY,
+        color='#444444',
+    )
+    figure.text(
+        0.055,
+        0.212,
+        'Time-aware drawing modes',
+        ha='left',
+        va='top',
+        fontsize=FONT_SIZE,
+        fontfamily=FONT_FAMILY,
+        fontweight='bold',
+        color='#111111',
+    )
+    figure.text(
+        0.055,
+        0.195,
+        'One row: calibration forms · dated-node HPD · topology/age samples · frequency-scaled within-topology envelopes.',
+        ha='left',
+        va='top',
+        fontsize=FONT_SIZE,
+        fontfamily=FONT_FAMILY,
+        color='#444444',
+    )
     output = Path(output_prefix).expanduser().resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
     figure.savefig(output.with_suffix('.png'), dpi=300, facecolor='white')
