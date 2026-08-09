@@ -51,6 +51,7 @@ jobs:
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
+          "HOME=$env:USERPROFILE" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           $url = 'https://files.pythonhosted.org/packages/fa/53/0ceedd63e4c872f668188a5de786a00b6b8854cb285a3dc69cd107c62038/ete4-4.4.0.tar.gz'
           $expected = '0306ab66c2a1685946f94a4912718a5812dfc3059070300fc25d0e2b881bb8d1'
           Invoke-WebRequest -Uri $url -OutFile ete4-4.4.0.tar.gz
