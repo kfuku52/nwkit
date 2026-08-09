@@ -247,7 +247,7 @@ Install the development and optional image dependencies, then run the same check
 ```
 pip install -e ".[dev,image]"
 ruff check nwkit tests setup.py
-pytest tests/ -q
+pytest -q --durations=20
 python -m build
 ```
 

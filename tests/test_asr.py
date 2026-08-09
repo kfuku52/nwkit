@@ -583,7 +583,34 @@ class TestAsrMain:
         asr_main(args)
         assert call_lengths == [1.0]
 
-    def test_threaded_stochastic_map_matches_single_thread_with_seed(self, tmp_nwk, tmp_path):
+    def test_threaded_stochastic_map_matches_single_thread_with_seed(
+        self,
+        tmp_nwk,
+        tmp_path,
+        monkeypatch,
+    ):
+        executor_calls = dict()
+
+        class InlineExecutor:
+            def __init__(self, **kwargs):
+                executor_calls['kwargs'] = kwargs
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, traceback):
+                return False
+
+            def map(self, function, payloads):
+                payloads = list(payloads)
+                executor_calls['chunk_sizes'] = [
+                    len(seed_sequences)
+                    for _, seed_sequences in payloads
+                ]
+                return [function(payload) for payload in payloads]
+
+        monkeypatch.setattr(asr, 'ProcessPoolExecutor', InlineExecutor)
+        monkeypatch.setattr(asr, '_get_process_pool_context', lambda: None)
         infile = tmp_nwk('((A:1,B:1):1,C:2);', 'tree.nwk')
         trait = _write_trait(
             tmp_path,
@@ -607,7 +634,7 @@ class TestAsrMain:
             root_prior='equal',
             target='intnode',
             output='map',
-            n_sim=30,
+            n_sim=8,
             seed=11,
         )
         asr_main(make_args(outfile=str(tmp_path / 'asr_single.tsv'), stochastic_map_out=str(single_out), threads=1, **common))
@@ -615,6 +642,10 @@ class TestAsrMain:
         single = pd.read_csv(single_out, sep='\t')
         threaded = pd.read_csv(threaded_out, sep='\t')
         pd.testing.assert_frame_equal(single, threaded)
+        assert executor_calls == {
+            'kwargs': {'max_workers': 4},
+            'chunk_sizes': [2, 2, 2, 2],
+        }
 
     def test_stochastic_map_rejects_non_positive_threads(self, tmp_nwk, tmp_path):
         infile = tmp_nwk('(A:1,B:1);', 'tree.nwk')

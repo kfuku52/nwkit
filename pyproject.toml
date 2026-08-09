@@ -79,3 +79,12 @@ select = ["E4", "E7", "E9", "F"]
 
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["E741"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--strict-markers"]
+xfail_strict = true
+markers = [
+  "integration: exercises a command or component boundary rather than one isolated unit",
+  "slow: intentionally performs comparatively expensive concurrency or numerical work",
+]

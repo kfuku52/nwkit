@@ -32,7 +32,7 @@ jobs:
           pip install -e '.[test,image]'
 
       - name: Run tests
-        run: pytest tests/ -q
+        run: pytest tests/ -q --durations=20 --durations-min=0.05
 
   quality:
     runs-on: ubuntu-latest
@@ -108,7 +108,8 @@ jobs:
           SDIST_TEST_DIR="$(mktemp -d)"
           tar -xzf dist/*.tar.gz -C "${SDIST_TEST_DIR}"
           cd "${SDIST_TEST_DIR}"/nwkit-*
-          pytest tests/ -q
+          pytest tests/test_cli.py tests/test_wiki_examples.py -q \
+            --durations=10 --durations-min=0.05
 
       - name: Smoke-test the installed wheel
         run: |

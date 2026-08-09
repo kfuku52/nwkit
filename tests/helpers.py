@@ -50,3 +50,10 @@ def make_args(**kwargs):
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
+
+
+def write_tree_collection(tmp_path, trees, name='trees.nwk'):
+    """Write one Newick tree per line and return the resulting path."""
+    path = tmp_path / name
+    path.write_text('\n'.join(trees) + '\n')
+    return str(path)

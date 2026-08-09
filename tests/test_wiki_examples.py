@@ -1,4 +1,5 @@
 import pandas as pd
+import pytest
 
 from nwkit.asr import asr_main
 from nwkit.cladefreq import cladefreq_main
@@ -9,14 +10,10 @@ from nwkit.nwk2table import nwk2table_main
 from nwkit.rename import rename_main
 from nwkit.table2nwk import table2nwk_main
 from nwkit.validate import validate_main
-from tests.helpers import make_args
+from tests.helpers import make_args, write_tree_collection as _write_tree_collection
 
 
-def _write_tree_collection(tmp_path, trees, name='trees.nwk'):
-    path = tmp_path / name
-    path.write_text('\n'.join(trees) + '\n')
-    return str(path)
-
+pytestmark = pytest.mark.integration
 
 class TestWikiExamples:
     def test_asr_example(self, tmp_path):

@@ -5,13 +5,7 @@ import pytest
 
 from nwkit.consensus import consensus_main
 from nwkit.util import read_tree
-from tests.helpers import make_args
-
-
-def _write_tree_collection(tmp_path, trees, name='trees.nwk'):
-    path = tmp_path / name
-    path.write_text('\n'.join(trees) + '\n')
-    return str(path)
+from tests.helpers import make_args, write_tree_collection as _write_tree_collection
 
 
 class TestConsensusMain:

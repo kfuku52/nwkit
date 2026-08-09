@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.34.4] - 2026-08-09
+
+### Changed
+
+- Reorganized the largest root, image, and utility test modules by concern and
+  centralized shared test factories and fakes.
+- Reduced the full test-suite runtime by replacing unnecessary taxonomy-cache
+  validation, subprocess startup, file-lock polling, and process-pool startup
+  with focused deterministic test doubles.
+- Added strict pytest marker configuration and slow-test duration reporting,
+  while limiting clean-source-distribution reruns to artifact-focused CLI and
+  documented-example smoke tests.
+
 ## [0.34.3] - 2026-08-09
 
 ### Changed
