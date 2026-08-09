@@ -253,9 +253,15 @@ def projected_root_split(tree, shared_taxa):
 
 
 def canonical_split(side_a, side_b):
+    len_a = len(side_a)
+    len_b = len(side_b)
+    if len_a < len_b:
+        return frozenset(side_a), frozenset(side_b)
+    if len_b < len_a:
+        return frozenset(side_b), frozenset(side_a)
     key_a = tuple(sorted(side_a))
     key_b = tuple(sorted(side_b))
-    if (len(side_a), key_a) <= (len(side_b), key_b):
+    if key_a <= key_b:
         return frozenset(side_a), frozenset(side_b)
     return frozenset(side_b), frozenset(side_a)
 

@@ -1,6 +1,6 @@
 import math
-import os
 import sys
+from itertools import chain
 
 import pandas as pd
 
@@ -11,7 +11,6 @@ from nwkit.util import (
     is_rooted,
     iter_tree_strings,
     read_tree,
-    read_tree_strings,
     support_is_missing,
     validate_unique_named_leaves,
 )
@@ -34,26 +33,21 @@ def _mask_to_leaf_set(mask, leaf_names):
 
 
 def cladefreq_main(args):
-    if os.path.isfile(args.infile):
-        num_trees = sum(1 for _ in iter_tree_strings(args.infile))
-        tree_strings = iter_tree_strings(args.infile)
-    else:
-        tree_strings = read_tree_strings(args.infile)
-        num_trees = len(tree_strings)
-    if num_trees == 0:
-        raise ValueError('No input trees were found for cladefreq.')
-    sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
-    tree_weights = _read_tree_weights(args.weight_tsv, num_trees)
+    raw_tree_strings = iter(iter_tree_strings(args.infile))
     try:
-        total_weight = math.fsum(tree_weights)
-    except OverflowError as exc:
-        raise ValueError(
-            'The sum of tree weights is too large for cladefreq output.'
-        ) from exc
-    if not math.isfinite(total_weight):
-        raise ValueError('The sum of tree weights must be finite.')
+        first_tree_string = next(raw_tree_strings)
+    except StopIteration:
+        raise ValueError('No input trees were found for cladefreq.')
+    tree_count = [0]
+
+    def counted_tree_strings():
+        for tree_string in chain((first_tree_string,), raw_tree_strings):
+            tree_count[0] += 1
+            yield tree_string
+
+    tree_weights = _read_tree_weights(args.weight_tsv)
     leaf_names, leaf_name_to_bit, _, clade_weights, _ = _collect_clade_stats_from_tree_strings(
-        tree_strings=tree_strings,
+        tree_strings=counted_tree_strings(),
         tree_weights=tree_weights,
         format=args.format,
         quoted_node_names=args.quoted_node_names,
@@ -61,6 +55,22 @@ def cladefreq_main(args):
         threads=getattr(args, 'threads', 1),
         require_rooted=True,
     )
+    num_trees = tree_count[0]
+    if tree_weights is not None and len(tree_weights) != num_trees:
+        raise ValueError('--weight-tsv must contain exactly one row per input tree.')
+    sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
+    try:
+        total_weight = (
+            float(num_trees)
+            if tree_weights is None
+            else math.fsum(tree_weights)
+        )
+    except OverflowError as exc:
+        raise ValueError(
+            'The sum of tree weights is too large for cladefreq output.'
+        ) from exc
+    if not math.isfinite(total_weight):
+        raise ValueError('The sum of tree weights must be finite.')
     reference_mask_to_node = dict()
     if args.reference not in ['', None]:
         reference_tree = read_tree(args.reference, args.reference_format, args.quoted_node_names)

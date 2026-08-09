@@ -22,10 +22,6 @@ from collections.abc import Set
 from contextlib import contextmanager
 from io import StringIO
 import ete4
-import pandas as pd
-import requests
-from requests.adapters import HTTPAdapter
-from urllib3.util.retry import Retry
 from ete4 import Tree
 from nwkit import __version__
 from nwkit.fasta import parse_fasta, write_fasta
@@ -84,6 +80,8 @@ def _read_raw_tsv_column_values(text, column_name):
 
 
 def read_tsv_preserving_leaf_name(path):
+    import pandas as pd
+
     text = read_input_text(path)
     dataframe = pd.read_csv(StringIO(text), sep='\t', keep_default_na=False)
     if 'leaf_name' not in dataframe.columns:
@@ -107,14 +105,22 @@ def parse_table_missing_values(value=None):
 
 
 def is_missing_table_value(value, missing_values=None):
-    if pd.isna(value):
+    if value is None:
         return True
+    try:
+        if bool(value != value):
+            return True
+    except (TypeError, ValueError):
+        if type(value).__name__ in {'NAType', 'NaTType'}:
+            return True
     markers = parse_table_missing_values(missing_values) if not isinstance(missing_values, set) else missing_values
     return str(value).strip() in markers
 
 
 def read_tip_table(path, option_name='--trait', tree_leaf_names=None, required_columns=(),
                    unmatched='warn', missing_values=None, duplicate_leaf_names='error'):
+    import pandas as pd
+
     dataframe = read_tsv_preserving_leaf_name(path)
     if 'leaf_name' not in dataframe.columns:
         raise ValueError("Column 'leaf_name' is required in '{}'.".format(option_name))
@@ -374,6 +380,79 @@ def _contains_quoted_internal_node_names(newick_text):
     _, has_quoted_internal_name = _quoted_node_name_flags(newick_text)
     return has_quoted_internal_name
 
+
+def _internal_node_label_kinds(newick_text):
+    """Return flags for quoted, numeric, and other internal labels."""
+    text = str(newick_text)
+    has_quoted = False
+    has_numeric = False
+    has_other = False
+    i = 0
+    while i < len(text):
+        char = text[i]
+        if char in ("'", '"'):
+            quote_char = char
+            i += 1
+            while i < len(text):
+                if text[i] == quote_char:
+                    if i + 1 < len(text) and text[i + 1] == quote_char:
+                        i += 2
+                        continue
+                    i += 1
+                    break
+                i += 1
+            continue
+        if char == '[':
+            depth = 1
+            i += 1
+            while i < len(text) and depth > 0:
+                if text[i] == '[':
+                    depth += 1
+                elif text[i] == ']':
+                    depth -= 1
+                i += 1
+            continue
+        if char != ')':
+            i += 1
+            continue
+
+        j = i + 1
+        while True:
+            while j < len(text) and text[j].isspace():
+                j += 1
+            if j >= len(text) or text[j] != '[':
+                break
+            depth = 1
+            j += 1
+            while j < len(text) and depth > 0:
+                if text[j] == '[':
+                    depth += 1
+                elif text[j] == ']':
+                    depth -= 1
+                j += 1
+        if j >= len(text) or text[j] in ':,);':
+            i += 1
+            continue
+        if text[j] in ("'", '"'):
+            has_quoted = True
+            i += 1
+            continue
+        end = j
+        while (
+            end < len(text)
+            and not text[end].isspace()
+            and text[end] not in ':,();[]'
+        ):
+            end += 1
+        label = text[j:end]
+        if label:
+            if _is_numeric_node_name(label):
+                has_numeric = True
+            else:
+                has_other = True
+        i += 1
+    return has_quoted, has_numeric, has_other
+
 def _is_numeric_node_name(name):
     if name in (None, ''):
         return False
@@ -413,12 +492,6 @@ def _is_missing_support_value(support):
     except (TypeError, ValueError):
         return False
 
-def _named_internal_nodes(tree):
-    return [
-        node for node in tree.traverse()
-        if (not node.is_leaf) and (str(node.name or '').strip() != '')
-    ]
-
 def _auto_format_ambiguity_message():
     return (
         'Ambiguous tree format: unquoted numeric internal labels can be interpreted as '
@@ -427,33 +500,25 @@ def _auto_format_ambiguity_message():
     )
 
 def _read_tree_auto(infile):
-    quoted_internal_names = _contains_quoted_internal_node_names(infile)
-    parsed = dict()
-    for candidate_format in [1, 0]:
+    quoted_internal_names, numeric_internal_names, other_internal_names = (
+        _internal_node_label_kinds(infile)
+    )
+    preferred_formats = (
+        (1, 0)
+        if quoted_internal_names or other_internal_names
+        else (0, 1)
+    )
+    for candidate_format in preferred_formats:
         try:
-            parsed[candidate_format] = Tree(infile, parser=candidate_format)
+            tree = Tree(infile, parser=candidate_format)
         except Exception:
-            parsed[candidate_format] = None
-    parser1_tree = parsed[1]
-    parser0_tree = parsed[0]
-    ambiguity_message = None
-    if parser1_tree is not None:
-        parser1_named_internal_nodes = _named_internal_nodes(parser1_tree)
-        if parser1_named_internal_nodes and (
-            quoted_internal_names or
-            any(not _is_numeric_node_name(node.name) for node in parser1_named_internal_nodes)
-        ):
-            return 1, parser1_tree, None
-        if (
-            parser0_tree is not None and
-            parser1_named_internal_nodes and
-            all(_is_numeric_node_name(node.name) for node in parser1_named_internal_nodes)
-        ):
-            ambiguity_message = _auto_format_ambiguity_message()
-    if parser0_tree is not None:
-        return 0, parser0_tree, ambiguity_message
-    if parser1_tree is not None:
-        return 1, parser1_tree, None
+            continue
+        ambiguity_message = (
+            _auto_format_ambiguity_message()
+            if candidate_format == 0 and numeric_internal_names
+            else None
+        )
+        return candidate_format, tree, ambiguity_message
     for candidate_format in [2, 3, 4, 5, 6, 7, 8, 9, 100]:
         try:
             return candidate_format, Tree(infile, parser=candidate_format), None
@@ -838,6 +903,10 @@ def _bounded_response_bytes(response, maximum_bytes, label):
 
 
 def _download_ete_taxdump(taxdump_file):
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+
     target_dir = os.path.dirname(taxdump_file)
     os.makedirs(target_dir, exist_ok=True)
     session = requests.Session()

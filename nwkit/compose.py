@@ -159,7 +159,9 @@ def compose_main(args):
     allow_projected_values = bool(getattr(args, 'allow_projected_values', False))
     source_format = getattr(args, 'source_format', 'auto')
     target = read_tree(args.infile, args.format, args.quoted_node_names)
+    collect_report = getattr(args, 'report', None) not in (None, '')
     report_rows = list()
+    status_counts = dict()
     output_properties = set(get_tree_property_names(target))
     failures = list()
 
@@ -170,15 +172,18 @@ def compose_main(args):
         root_match = next(match for match in mapping.matches if match.target.is_root)
         if policy == 'strict' and root_match.status == 'projected_match':
             reason = 'strict_policy_requires_exact_root_match'
-            report_rows.append(_root_report_row(
-                source_path=root_source_path,
-                target=target,
-                source=root_source,
-                mapping=mapping,
-                status='projected_match_rejected',
-                reason=reason,
-                taxon_mode=taxon_mode,
-            ))
+            root_status = 'projected_match_rejected'
+            if collect_report:
+                report_rows.append(_root_report_row(
+                    source_path=root_source_path,
+                    target=target,
+                    source=root_source,
+                    mapping=mapping,
+                    status=root_status,
+                    reason=reason,
+                    taxon_mode=taxon_mode,
+                ))
+            status_counts[root_status] = status_counts.get(root_status, 0) + 1
             failures.append(reason)
         else:
             try:
@@ -188,25 +193,31 @@ def compose_main(args):
                     taxon_mode=taxon_mode,
                     verbose=True,
                 )
-                report_rows.append(_root_report_row(
-                    source_path=root_source_path,
-                    target=target,
-                    source=root_source,
-                    mapping=mapping,
-                    status='transferred',
-                    reason='matching_root_split',
-                    taxon_mode=taxon_mode,
-                ))
+                root_status = 'transferred'
+                if collect_report:
+                    report_rows.append(_root_report_row(
+                        source_path=root_source_path,
+                        target=target,
+                        source=root_source,
+                        mapping=mapping,
+                        status=root_status,
+                        reason='matching_root_split',
+                        taxon_mode=taxon_mode,
+                    ))
+                status_counts[root_status] = status_counts.get(root_status, 0) + 1
             except ValueError as exc:
-                report_rows.append(_root_report_row(
-                    source_path=root_source_path,
-                    target=target,
-                    source=root_source,
-                    mapping=mapping,
-                    status='unmatched',
-                    reason=str(exc),
-                    taxon_mode=taxon_mode,
-                ))
+                root_status = 'unmatched'
+                if collect_report:
+                    report_rows.append(_root_report_row(
+                        source_path=root_source_path,
+                        target=target,
+                        source=root_source,
+                        mapping=mapping,
+                        status=root_status,
+                        reason=str(exc),
+                        taxon_mode=taxon_mode,
+                    ))
+                status_counts[root_status] = status_counts.get(root_status, 0) + 1
                 failures.append(str(exc))
 
     built_in_sources = (
@@ -232,9 +243,12 @@ def compose_main(args):
             allow_projected_values=allow_projected_values,
             allow_target_reroot=False,
             root_edge_policies=sources['root_edge_policies'],
+            collect_report=collect_report,
         )
         target = result['tree']
         report_rows.extend(result['rows'])
+        for status, count in result['status_counts'].items():
+            status_counts[status] = status_counts.get(status, 0) + count
         output_properties.update(result['output_properties'])
         if result['error'] is not None:
             failures.append(str(result['error']))
@@ -268,9 +282,12 @@ def compose_main(args):
             allow_projected_values=allow_projected_values,
             allow_target_reroot=False,
             root_edge_policies=property_root_edge_policies,
+            collect_report=collect_report,
         )
         target = result['tree']
         report_rows.extend(result['rows'])
+        for status, count in result['status_counts'].items():
+            status_counts[status] = status_counts.get(status, 0) + count
         output_properties.update(result['output_properties'])
         if result['error'] is not None:
             failures.append(str(result['error']))
@@ -278,8 +295,12 @@ def compose_main(args):
     _write_report(report_rows, getattr(args, 'report', None))
     if failures and policy == 'strict':
         raise ValueError('Strict composition failed: {}'.format(' | '.join(failures)))
-    transferred = sum(row.get('status') == 'transferred' for row in report_rows)
-    skipped = sum(row.get('status') not in ('transferred', 'filled') for row in report_rows)
+    transferred = status_counts.get('transferred', 0)
+    skipped = sum(
+        count
+        for status, count in status_counts.items()
+        if status not in ('transferred', 'filled')
+    )
     sys.stderr.write(
         'Composition report: transferred={}, skipped={}\n'.format(transferred, skipped)
     )

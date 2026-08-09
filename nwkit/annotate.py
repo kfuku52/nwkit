@@ -1,3 +1,4 @@
+import math
 import sys
 from collections import Counter
 
@@ -129,6 +130,108 @@ def _aggregate(values, method, column):
     raise AssertionError('Unhandled aggregation method: {}'.format(method))
 
 
+def _aggregation_requirements(aggregations):
+    methods_by_column = dict()
+    for column, method, _prop in aggregations:
+        methods_by_column.setdefault(column, set()).add(method)
+    return {
+        column: {
+            'numeric': bool(methods.intersection({'mean', 'sum', 'min', 'max'})),
+            'unique': bool(methods.intersection({'unique', 'mode', 'list'})),
+        }
+        for column, methods in methods_by_column.items()
+    }
+
+
+def _stable_numeric_sum(values):
+    # Keep integer columns exact until the final public float conversion.
+    if all(isinstance(value, int) and not isinstance(value, bool) for value in values):
+        return sum(values)
+    float_values = [float(value) for value in values]
+    if not all(math.isfinite(value) for value in float_values):
+        return sum(float_values)
+    scale = max((abs(value) for value in float_values), default=0.0)
+    if scale == 0.0:
+        return 0.0
+    return scale * math.fsum(value / scale for value in float_values)
+
+
+def _merge_aggregation_summaries(child_summaries, requirements):
+    count = sum(summary['count'] for summary in child_summaries)
+    summary = {'count': count}
+    if requirements['numeric']:
+        summary['sum'] = _stable_numeric_sum(
+            [child_summary['sum'] for child_summary in child_summaries]
+        )
+        populated = [
+            child_summary
+            for child_summary in child_summaries
+            if child_summary['count'] > 0
+        ]
+        summary['min'] = (
+            min(child_summary['min'] for child_summary in populated)
+            if populated
+            else None
+        )
+        summary['max'] = (
+            max(child_summary['max'] for child_summary in populated)
+            if populated
+            else None
+        )
+    if requirements['unique']:
+        child_maps = [child_summary['unique'] for child_summary in child_summaries]
+        unique = max(child_maps, key=len, default={})
+        for child_map in child_maps:
+            if child_map is unique:
+                continue
+            for text, (first_index, value, value_count) in child_map.items():
+                previous = unique.get(text)
+                if previous is None:
+                    unique[text] = (first_index, value, value_count)
+                else:
+                    previous_index, previous_value, previous_count = previous
+                    if first_index < previous_index:
+                        previous_index = first_index
+                        previous_value = value
+                    unique[text] = (
+                        previous_index,
+                        previous_value,
+                        previous_count + value_count,
+                    )
+        summary['unique'] = unique
+    return summary
+
+
+def _aggregate_summary(summary, method, column):
+    if method == 'count':
+        return summary['count'], True, 'count_non_missing'
+    if summary['count'] == 0:
+        return None, False, 'no_non_missing_values'
+    if method == 'unique':
+        if len(summary['unique']) == 1:
+            return next(iter(summary['unique'].values()))[1], True, 'single_unique_value'
+        return None, False, 'multiple_values'
+    if method == 'mode':
+        winning_text = min(
+            summary['unique'],
+            key=lambda text: (-summary['unique'][text][2], text),
+        )
+        return summary['unique'][winning_text][1], True, 'deterministic_mode'
+    if method == 'list':
+        return '|'.join(sorted(summary['unique'])), True, 'sorted_unique_values'
+    if method == 'mean':
+        return float(summary['sum'] / summary['count']), True, 'numeric_mean'
+    if method == 'sum':
+        return float(summary['sum']), True, 'numeric_sum'
+    if method == 'min':
+        return float(summary['min']), True, 'numeric_minimum'
+    if method == 'max':
+        return float(summary['max']), True, 'numeric_maximum'
+    raise AssertionError(
+        "Unhandled aggregation method for '{}': {}".format(column, method)
+    )
+
+
 def _write_report(rows, path):
     if path in (None, ''):
         return
@@ -166,12 +269,14 @@ def annotate_main(args):
     output_properties = set(get_tree_property_names(tree))
     output_properties.update(prop for _, prop in column_specs)
     output_properties.update(prop for _, _, prop in aggregations)
+    collect_report = getattr(args, 'report', None) not in (None, '')
     rows_by_leaf = {
         str(row['leaf_name']): row
         for _, row in table.iterrows()
     }
-    node_ids = assign_branch_ids(tree)
+    node_ids = assign_branch_ids(tree) if collect_report else None
     report_rows = list()
+    annotated = 0
     value_by_leaf_and_column = dict()
     for leaf in tree.leaves():
         leaf_name = str(leaf.name)
@@ -189,19 +294,21 @@ def annotate_main(args):
                     reason = 'missing_table_value'
                 else:
                     leaf.props[prop] = value
+                    annotated += 1
                     status = 'annotated'
                     reason = 'matching_leaf_name'
-            report_rows.append({
-                'branch_id': node_ids[leaf],
-                'node_class': 'leaf',
-                'descendant_taxa': leaf_name,
-                'input_column': column,
-                'property': prop,
-                'aggregation': '',
-                'value': value,
-                'status': status,
-                'reason': reason,
-            })
+            if collect_report:
+                report_rows.append({
+                    'branch_id': node_ids[leaf],
+                    'node_class': 'leaf',
+                    'descendant_taxa': leaf_name,
+                    'input_column': column,
+                    'property': prop,
+                    'aggregation': '',
+                    'value': value,
+                    'status': status,
+                    'reason': reason,
+                })
     # Populate values needed only for aggregation columns.
     for leaf_name, table_row in rows_by_leaf.items():
         for column, _, _ in aggregations:
@@ -209,47 +316,127 @@ def annotate_main(args):
                 table_row[column],
                 missing_values,
             )
+    requirements_by_column = _aggregation_requirements(aggregations)
+    has_aggregation_target = any(
+        not node.is_leaf
+        for node in tree.traverse()
+    )
+    leaf_order = {
+        str(leaf.name): index
+        for index, leaf in enumerate(tree.leaves())
+    }
+    numeric_values = dict()
+    for column, requirements in requirements_by_column.items():
+        if not requirements['numeric'] or not has_aggregation_target:
+            continue
+        leaf_names_and_values = [
+            (leaf_name, value)
+            for (leaf_name, value_column), value in value_by_leaf_and_column.items()
+            if (
+                value_column == column
+                and leaf_name in leaf_order
+                and value is not None
+            )
+        ]
+        try:
+            converted = pd.to_numeric(
+                pd.Series([value for _, value in leaf_names_and_values]),
+                errors='raise',
+            )
+        except (TypeError, ValueError) as exc:
+            method = next(
+                method
+                for aggregate_column, method, _prop in aggregations
+                if aggregate_column == column and method in {'mean', 'sum', 'min', 'max'}
+            )
+            raise ValueError(
+                "Aggregation '{}' requires numeric values in column '{}'.".format(
+                    method,
+                    column,
+                )
+            ) from exc
+        for (leaf_name, _value), numeric in zip(leaf_names_and_values, converted):
+            native_numeric = (
+                numeric.item()
+                if hasattr(numeric, 'item')
+                else numeric
+            )
+            numeric_values[(leaf_name, column)] = native_numeric
+
+    summaries_by_column = {
+        column: dict()
+        for column in requirements_by_column
+    }
     for node in tree.traverse(strategy='postorder'):
+        for column, requirements in requirements_by_column.items():
+            if node.is_leaf:
+                leaf_name = str(node.name)
+                value = value_by_leaf_and_column.get((leaf_name, column))
+                summary = {'count': 0 if value is None else 1}
+                if requirements['numeric']:
+                    numeric = numeric_values.get((leaf_name, column))
+                    summary.update({
+                        'sum': 0 if numeric is None else numeric,
+                        'min': numeric,
+                        'max': numeric,
+                    })
+                if requirements['unique']:
+                    summary['unique'] = (
+                        {}
+                        if value is None
+                        else {
+                            str(value): (leaf_order[leaf_name], value, 1),
+                        }
+                    )
+            else:
+                summary = _merge_aggregation_summaries(
+                    [
+                        summaries_by_column[column][child]
+                        for child in node.get_children()
+                    ],
+                    requirements,
+                )
+            summaries_by_column[column][node] = summary
         if node.is_leaf:
             continue
-        descendant_names = [str(name) for name in node.leaf_names()]
         for column, method, prop in aggregations:
-            values = [
-                value_by_leaf_and_column.get((leaf_name, column))
-                for leaf_name in descendant_names
-            ]
-            values = [value for value in values if value is not None]
-            value, assign, reason = _aggregate(values, method, column)
+            value, assign, reason = _aggregate_summary(
+                summaries_by_column[column][node],
+                method,
+                column,
+            )
             if assign:
                 node.props[prop] = value
+                annotated += 1
                 status = 'aggregated'
             else:
                 status = 'not_aggregated'
-            report_rows.append({
-                'branch_id': node_ids[node],
-                'node_class': get_node_class(node),
-                'descendant_taxa': _format_taxa(node),
-                'input_column': column,
-                'property': prop,
-                'aggregation': method,
-                'value': value,
-                'status': status,
-                'reason': reason,
-            })
-    for leaf_name in table_only:
-        for column, prop in column_specs:
-            report_rows.append({
-                'branch_id': '',
-                'node_class': '',
-                'descendant_taxa': leaf_name,
-                'input_column': column,
-                'property': prop,
-                'aggregation': '',
-                'value': _python_value(rows_by_leaf[leaf_name][column], missing_values),
-                'status': 'unmatched',
-                'reason': 'table_row_absent_from_tree',
-            })
+            if collect_report:
+                report_rows.append({
+                    'branch_id': node_ids[node],
+                    'node_class': get_node_class(node),
+                    'descendant_taxa': _format_taxa(node),
+                    'input_column': column,
+                    'property': prop,
+                    'aggregation': method,
+                    'value': value,
+                    'status': status,
+                    'reason': reason,
+                })
+    if collect_report:
+        for leaf_name in table_only:
+            for column, prop in column_specs:
+                report_rows.append({
+                    'branch_id': '',
+                    'node_class': '',
+                    'descendant_taxa': leaf_name,
+                    'input_column': column,
+                    'property': prop,
+                    'aggregation': '',
+                    'value': _python_value(rows_by_leaf[leaf_name][column], missing_values),
+                    'status': 'unmatched',
+                    'reason': 'table_row_absent_from_tree',
+                })
     _write_report(report_rows, getattr(args, 'report', None))
-    annotated = sum(row['status'] in ('annotated', 'aggregated') for row in report_rows)
     sys.stderr.write('Attached or aggregated {} property values.\n'.format(annotated))
     write_tree(tree, args, format=args.outformat, props=output_properties)

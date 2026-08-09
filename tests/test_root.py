@@ -524,6 +524,30 @@ class TestMadRooting:
             43689129622.58888,
         )
 
+    def test_moderate_dynamic_range_uses_exact_root_position(self):
+        tree = Tree(
+            '((((T6:5.2438826413098062e-08,T5:0.012135336082789326)'
+            ':2.6598233474091526e-05,T0:0.06529318198647692)'
+            ':3.4741992558598983e-05,(T1:0.0083846338251795938,'
+            'T8:0.69976274685535922):1.3509927071941638e-07)'
+            ':0.0017859630432441663,((T7:4.5932841447158775e-08,'
+            'T3:1.0848429873742806e-08):0.84197554627230875,'
+            '(T2:0.001082125534087372,(T9:0.0044256953801056686,'
+            'T4:0.00035731219490173113):3.930847287325036e-06)'
+            ':0.22936708849868917):0.6857711026599238);',
+            parser=1,
+        )
+
+        rooted = mad_rooting(tree)
+
+        child_dist_by_taxa = {
+            frozenset(child.leaf_names()): float(child.dist)
+            for child in rooted.get_children()
+        }
+        assert child_dist_by_taxa[
+            frozenset({'T2', 'T3', 'T4', 'T7', 'T9'})
+        ] == pytest.approx(0.2050488039025591, rel=10 ** -12)
+
     def test_finite_root_halves_are_joined_without_intermediate_overflow(self):
         maximum_float = float.fromhex('0x1.fffffffffffffp+1023')
         tree = Tree(

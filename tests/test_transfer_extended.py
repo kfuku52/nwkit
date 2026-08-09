@@ -620,3 +620,21 @@ def test_split_basis_transfers_edge_name_across_rootings(tmp_nwk, tmp_path):
     transfer_main(args)
     output = read_tree(str(outfile), format='1', quoted_node_names=True, quiet=True)
     assert output.common_ancestor(['A', 'B']).name == 'EdgeAB'
+
+
+def test_transfer_without_report_tracks_counts_without_building_rows():
+    result = transfer_properties(
+        target=Tree('(A:1,B:1,C:1);', parser=1),
+        source=Tree('(A:2,B:3,C:4);', parser=1),
+        property_specs=[('length', 'length')],
+        target_class='leaf',
+        align_roots=False,
+        collect_report=False,
+    )
+
+    assert result['rows'] == []
+    assert result['status_counts'] == {'transferred': 3}
+    assert {
+        leaf.name: float(leaf.dist)
+        for leaf in result['tree'].leaves()
+    } == {'A': 2.0, 'B': 3.0, 'C': 4.0}

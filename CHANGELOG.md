@@ -4,6 +4,27 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.34.3] - 2026-08-09
+
+### Changed
+
+- Reduced large-tree runtime and memory use in annotation aggregation, ASR,
+  property transfer and composition, tree-collection processing, path
+  distances, taxonomy constraint construction, automatic parsing, and MAD
+  rooting.
+- Deferred optional table and HTTP imports, streamed consensus and clade
+  frequency inputs in one pass, and avoided process-pool startup for small
+  collections.
+
+### Fixed
+
+- Preserved stable path distances and exact MAD root positions when float
+  acceleration would lose significance, while retaining fast paths for
+  well-conditioned inputs.
+- Preserved large-integer annotation sums, skipped unused numeric validation
+  on single-tip trees, and retained the former nonredundant taxonomy-helper
+  topology.
+
 ## [0.34.2] - 2026-08-06
 
 ### Changed

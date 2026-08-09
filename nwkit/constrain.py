@@ -102,26 +102,31 @@ def get_lineage(sp, ncbi, rank):
     lineage = ncbi.get_lineage(name2taxid[key][0])
     return limit_lineage_to_rank(lineage, ncbi, rank)
 
-def get_lineages(labels, rank, args=None):
+def get_lineages(labels, rank, args=None, ncbi=None):
     splist = [
         extract_taxonomy_query(label, args=args) or str(label)
         for label in labels
     ]
-    ncbi = get_ete_ncbitaxa(args=args)
+    owns_ncbi = ncbi is None
+    if ncbi is None:
+        ncbi = get_ete_ncbitaxa(args=args)
     try:
         lineages = dict()
         for sp,label in zip(splist,labels):
             lineages[label] = get_lineage(sp, ncbi, rank)
         return lineages
     finally:
-        _close_ncbi_db(ncbi)
+        if owns_ncbi:
+            _close_ncbi_db(ncbi)
 
 def get_lineage_from_taxid(taxid, ncbi, rank):
     lineage = ncbi.get_lineage(taxid)
     return limit_lineage_to_rank(lineage, ncbi, rank)
 
-def get_lineages_from_taxid(taxid_df, rank, args=None):
-    ncbi = get_ete_ncbitaxa(args=args)
+def get_lineages_from_taxid(taxid_df, rank, args=None, ncbi=None):
+    owns_ncbi = ncbi is None
+    if ncbi is None:
+        ncbi = get_ete_ncbitaxa(args=args)
     try:
         taxid_numeric = pd.to_numeric(taxid_df['taxid'], errors='coerce')
         if taxid_numeric.isna().any():
@@ -133,7 +138,8 @@ def get_lineages_from_taxid(taxid_df, rank, args=None):
             lineages[label] = get_lineage_from_taxid(taxid, ncbi, rank)
         return lineages
     finally:
-        _close_ncbi_db(ncbi)
+        if owns_ncbi:
+            _close_ncbi_db(ncbi)
 
 def match_taxa(tree, labels, backbone_method, args=None):
     splist = [
@@ -295,7 +301,7 @@ def get_polytomy_index(tree):
         num_polytomy += (len(node.get_children()) - 2)
     return num_polytomy
 
-def taxid2tree(lineages, taxid_counts, args=None):
+def taxid2tree(lineages, taxid_counts, args=None, ncbi=None):
     if len(lineages) == 0:
         raise ValueError('No valid taxa found to build a constraint tree.')
     if len(lineages) == 1:
@@ -303,44 +309,63 @@ def taxid2tree(lineages, taxid_counts, args=None):
         tree = ete4.Tree({'name': sp})
         tree.add_props(ancestors=lineages[sp])
         return tree
-    ncbi = get_ete_ncbitaxa(args=args)
     is_multiple = (taxid_counts[:,1]>1)
     multi_counts = taxid_counts[is_multiple,:]
     if multi_counts.shape[0] == 0:
         raise ValueError('No shared taxonomic ranks were found across input taxa.')
-    try:
-        clades = list()
-        clade_leaf_sets = list()
-        taxid_to_species = defaultdict(list)
-        for sp, lineage in lineages.items():
-            for taxid in lineage:
-                taxid_to_species[taxid].append(sp)
-        taxid_to_lineage_cache = dict()
-        for i in np.arange(multi_counts.shape[0]):
-            taxid = multi_counts[i,0]
-            #count = multi_counts[i,1]
-            if taxid not in taxid_to_lineage_cache:
-                taxid_to_lineage_cache[taxid] = ncbi.get_lineage(taxid)
-            ancestors = taxid_to_lineage_cache[taxid]
-            new_clade = ete4.Tree()
-            new_clade.add_props(ancestors=ancestors)
-            species_names = taxid_to_species.get(taxid, [])
-            for sp in species_names:
-                new_leaf = ete4.Tree({'name': sp})
-                new_leaf.add_props(ancestors=lineages[sp])
-                new_clade.add_child(new_leaf)
-            clades, clade_leaf_sets = _add_new_clade_with_leaf_set_cache(
-                clades=clades,
-                clade_leaf_sets=clade_leaf_sets,
-                new_clade=new_clade,
-                new_leaf_set=set(species_names),
-            )
-        if len(clades) != 1:
-            raise ValueError('Failed to merge clades into a single tree.')
-        tree = clades[0]
-        return tree
-    finally:
-        _close_ncbi_db(ncbi)
+    shared_taxids = {
+        int(taxid)
+        for taxid, count in multi_counts
+        if int(count) > 1
+    }
+    node_by_taxid = dict()
+    parent_taxid_by_taxid = dict()
+    root_taxids = set()
+    for species_name, raw_lineage in lineages.items():
+        lineage = [int(taxid) for taxid in raw_lineage]
+        shared_lineage = [
+            taxid
+            for taxid in lineage
+            if taxid in shared_taxids
+        ]
+        if not shared_lineage:
+            continue
+        parent_taxid = None
+        for lineage_index, taxid in enumerate(lineage):
+            if taxid not in shared_taxids:
+                continue
+            node = node_by_taxid.get(taxid)
+            if node is None:
+                node = ete4.Tree()
+                node.add_props(ancestors=lineage[:lineage_index + 1])
+                node_by_taxid[taxid] = node
+                parent_taxid_by_taxid[taxid] = parent_taxid
+                if parent_taxid is None:
+                    root_taxids.add(taxid)
+                else:
+                    node_by_taxid[parent_taxid].add_child(node)
+            elif parent_taxid_by_taxid[taxid] != parent_taxid:
+                raise ValueError(
+                    'Taxonomy lineages do not form a consistent hierarchy.'
+                )
+            parent_taxid = taxid
+        leaf = ete4.Tree({'name': species_name})
+        leaf.add_props(ancestors=lineage)
+        node_by_taxid[parent_taxid].add_child(leaf)
+    if len(root_taxids) != 1:
+        raise ValueError('Failed to merge clades into a single tree.')
+    tree = node_by_taxid[next(iter(root_taxids))]
+    # Successive ranks can describe the same species set. The former clade
+    # merger retained the first such rank instead of emitting a unary chain.
+    for node in list(tree.traverse(strategy='postorder')):
+        children = node.get_children()
+        if len(children) != 1 or children[0].is_leaf:
+            continue
+        redundant_child = children[0]
+        node.remove_child(redundant_child)
+        for grandchild in list(redundant_child.get_children()):
+            node.add_child(grandchild)
+    return tree
 
 def tree_sciname2label(tree, labels, args=None):
     leaf_name_to_nodes = defaultdict(list)
@@ -375,13 +400,31 @@ def collapse_genes(tree):
 def constrain_main(args):
     labels, taxid_df = check_input_file(args)
     if (args.backbone=='ncbi'):
-        if args.taxid_tsv is not None:
-            lineages = get_lineages_from_taxid(taxid_df, rank=args.rank, args=args)
-        else:
-            lineages = get_lineages(labels=labels, rank=args.rank, args=args)
-        taxid_counts = get_taxid_counts(lineages)
-        #taxid_counts = limit_rank(taxid_counts=taxid_counts, rank=args.rank)
-        tree = taxid2tree(lineages, taxid_counts, args=args)
+        ncbi = get_ete_ncbitaxa(args=args)
+        try:
+            if args.taxid_tsv is not None:
+                lineages = get_lineages_from_taxid(
+                    taxid_df,
+                    rank=args.rank,
+                    args=args,
+                    ncbi=ncbi,
+                )
+            else:
+                lineages = get_lineages(
+                    labels=labels,
+                    rank=args.rank,
+                    args=args,
+                    ncbi=ncbi,
+                )
+            taxid_counts = get_taxid_counts(lineages)
+            tree = taxid2tree(
+                lineages,
+                taxid_counts,
+                args=args,
+                ncbi=ncbi,
+            )
+        finally:
+            _close_ncbi_db(ncbi)
     else:
         if (args.backbone.endswith('user')):
             tree = read_tree(args.infile, args.format, args.quoted_node_names)

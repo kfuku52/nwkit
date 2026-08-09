@@ -242,26 +242,26 @@ class TestNcbiDownloadDirRouting:
         assert primates.props.get('has_taxon') is True
         assert primates.props.get('taxon_names') == ['Homo_sapiens']
 
-    def test_taxid2tree_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
-        observed = dict()
+    def test_taxid2tree_does_not_open_ncbi_db(self, monkeypatch):
+        def fail_if_opened(args=None):
+            pytest.fail('taxid2tree should only use the supplied lineages')
 
-        class FakeNCBI:
-            def __init__(self):
-                self.db = None
-
-            def get_lineage(self, taxid):
-                return [1, int(taxid)]
-
-        def fake_get_ete_ncbitaxa(args=None):
-            observed['download_dir'] = getattr(args, 'download_dir', None)
-            return FakeNCBI()
-
-        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
-        args = make_args(download_dir=str(tmp_path / 'cache'))
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', fail_if_opened)
         lineages = {'A': [1, 10], 'B': [1, 10], 'C': [1, 20], 'D': [1, 20]}
-        tree = taxid2tree(lineages, get_taxid_counts(lineages), args=args)
-        assert observed['download_dir'] == str(tmp_path / 'cache')
+        tree = taxid2tree(lineages, get_taxid_counts(lineages))
         assert set(tree.leaf_names()) == {'A', 'B', 'C', 'D'}
+
+    def test_taxid2tree_collapses_repeated_identical_taxonomic_clades(self):
+        lineages = {
+            'A': [1, 10, 100],
+            'B': [1, 10, 100],
+        }
+
+        tree = taxid2tree(lineages, get_taxid_counts(lineages))
+
+        assert len(list(tree.traverse())) == 3
+        assert len([node for node in tree.traverse() if not node.is_leaf]) == 1
+        assert tree.props['ancestors'] == [1]
 
     def test_get_mrca_taxid_uses_args_for_ncbi_db(self, monkeypatch, tmp_path):
         observed = dict()
@@ -317,6 +317,54 @@ class TestNcbiDownloadDirRouting:
 
 
 class TestConstrainMain:
+    def test_ncbi_backbone_reuses_one_database_handle(self, monkeypatch, tmp_path):
+        observed = {'opens': 0, 'closes': 0}
+
+        class FakeDB:
+            def close(self):
+                observed['closes'] += 1
+
+        class FakeNCBI:
+            def __init__(self):
+                self.db = FakeDB()
+
+            def get_name_translator(self, names):
+                return {
+                    name: [taxid]
+                    for name, taxid in (
+                        ('Homo sapiens', 9606),
+                        ('Mus musculus', 10090),
+                    )
+                    if name in names
+                }
+
+            def get_lineage(self, taxid):
+                return [1, 10, int(taxid)]
+
+        def open_ncbi(args=None):
+            observed['opens'] += 1
+            return FakeNCBI()
+
+        monkeypatch.setattr('nwkit.constrain.get_ete_ncbitaxa', open_ncbi)
+        species_path = tmp_path / 'species.txt'
+        species_path.write_text('Homo_sapiens\nMus_musculus\n')
+        outfile = tmp_path / 'constraint.nwk'
+
+        constrain_main(make_args(
+            outfile=str(outfile),
+            species_list=str(species_path),
+            taxid_tsv=None,
+            backbone='ncbi',
+            rank='no',
+            collapse=False,
+        ))
+
+        assert observed == {'opens': 1, 'closes': 1}
+        assert set(Tree(outfile.read_text(), parser=9).leaf_names()) == {
+            'Homo_sapiens',
+            'Mus_musculus',
+        }
+
     def test_user_backbone_no_match_raises_clear_error(self, tmp_path):
         species_path = tmp_path / 'species.txt'
         species_path.write_text('Pan_troglodytes_gene1\n')

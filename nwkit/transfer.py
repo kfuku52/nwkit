@@ -807,7 +807,8 @@ def transfer_properties(target, source, property_specs, target_class='all',
                         taxon_mode='exact', fill=None, policy='compatible-only',
                         align_roots=True, source_label='', exclude_root=False,
                         match_basis='clade', allow_projected_values=False,
-                        allow_target_reroot=True, root_edge_policies=None):
+                        allow_target_reroot=True, root_edge_policies=None,
+                        collect_report=True):
     if policy not in ('compatible-only', 'strict'):
         raise ValueError("Unsupported transfer policy: {}".format(policy))
     root_edge_policies = parse_root_edge_policies(root_edge_policies)
@@ -850,14 +851,18 @@ def transfer_properties(target, source, property_specs, target_class='all',
         match_basis=match_basis,
     )
     match_by_target_id = {id(match.target): match for match in mapping.matches}
-    target_physical_split_candidates = _physical_split_candidates(
-        target,
-        mapping.shared_taxa,
-    )
-    source_physical_split_candidates = _physical_split_candidates(
-        source,
-        mapping.shared_taxa,
-    )
+    if match_basis == 'split':
+        target_physical_split_candidates = _physical_split_candidates(
+            target,
+            mapping.shared_taxa,
+        )
+        source_physical_split_candidates = _physical_split_candidates(
+            source,
+            mapping.shared_taxa,
+        )
+    else:
+        target_physical_split_candidates = dict()
+        source_physical_split_candidates = dict()
     target_root_ratios = dict()
     target_root_children = target.get_children()
     if len(target_root_children) == 2:
@@ -886,8 +891,9 @@ def transfer_properties(target, source, property_specs, target_class='all',
     target_nodes = get_target_nodes(tree=target, target=target_class)
     if exclude_root:
         target_nodes = [node for node in target_nodes if not node.is_root]
-    traversal_ids = assign_branch_ids(target)
+    traversal_ids = assign_branch_ids(target) if collect_report else None
     rows = list()
+    status_counts = dict()
     failed = False
     changed_node_ids = set()
     output_properties = set(get_tree_property_names(target))
@@ -902,6 +908,11 @@ def transfer_properties(target, source, property_specs, target_class='all',
             output_properties.add(target_prop)
     for target_node in target_nodes:
         match = match_by_target_id[id(target_node)]
+        projected_split = (
+            match.projected_split
+            if match_basis == 'split' or collect_report
+            else None
+        )
         for source_prop, target_prop in property_specs:
             previous_value, _ = _get_property(target_node, target_prop)
             source_value = None
@@ -918,13 +929,13 @@ def transfer_properties(target, source, property_specs, target_class='all',
             source_candidate_count = ''
             source_candidate_values = ''
             root_edge_policy = _root_edge_policy_for(target_prop, root_edge_policies)
-            if target_prop == 'length' and match.projected_split is not None:
+            if target_prop == 'length' and projected_split is not None:
                 target_root_edge_candidates = target_physical_split_candidates.get(
-                    match.projected_split,
+                    projected_split,
                     (),
                 )
                 source_root_edge_candidates = source_physical_split_candidates.get(
-                    match.projected_split,
+                    projected_split,
                     (),
                 )
             else:
@@ -1018,35 +1029,37 @@ def transfer_properties(target, source, property_specs, target_class='all',
                 failed = True
             else:
                 failed = True
-            rows.append({
-                'source_file': source_label,
-                'target_branch_id': traversal_ids[target_node],
-                'target_node_class': get_node_class(target_node),
-                'target_taxa': _format_taxa(match.target_taxa),
-                'shared_descendant_taxa': _format_taxa(match.projected_taxa),
-                'shared_split': _format_split(match.projected_split),
-                'source_taxa': _format_taxa(effective_source_taxa),
-                'match_status': effective_match_status,
-                'match_basis': match.match_basis,
-                'projection_only': projection_only,
-                'source_property': source_prop,
-                'target_property': target_prop,
-                'source_value': source_value,
-                'previous_target_value': previous_value,
-                'output_value': output_value,
-                'status': status,
-                'reason': reason,
-                'ambiguity_policy': ambiguity_policy,
-                'ambiguity_resolution': ambiguity_resolution,
-                'target_candidate_count': target_candidate_count,
-                'source_candidate_count': source_candidate_count,
-                'source_candidate_values': source_candidate_values,
-                'projected_value_allowed': projected_value_allowed,
-                'taxon_mode': taxon_mode,
-                'num_shared_taxa': len(mapping.shared_taxa),
-                'num_target_only_taxa': len(mapping.target_only_taxa),
-                'num_source_only_taxa': len(mapping.source_only_taxa),
-            })
+            status_counts[status] = status_counts.get(status, 0) + 1
+            if collect_report:
+                rows.append({
+                    'source_file': source_label,
+                    'target_branch_id': traversal_ids[target_node],
+                    'target_node_class': get_node_class(target_node),
+                    'target_taxa': _format_taxa(match.target_taxa),
+                    'shared_descendant_taxa': _format_taxa(match.projected_taxa),
+                    'shared_split': _format_split(projected_split),
+                    'source_taxa': _format_taxa(effective_source_taxa),
+                    'match_status': effective_match_status,
+                    'match_basis': match.match_basis,
+                    'projection_only': projection_only,
+                    'source_property': source_prop,
+                    'target_property': target_prop,
+                    'source_value': source_value,
+                    'previous_target_value': previous_value,
+                    'output_value': output_value,
+                    'status': status,
+                    'reason': reason,
+                    'ambiguity_policy': ambiguity_policy,
+                    'ambiguity_resolution': ambiguity_resolution,
+                    'target_candidate_count': target_candidate_count,
+                    'source_candidate_count': source_candidate_count,
+                    'source_candidate_values': source_candidate_values,
+                    'projected_value_allowed': projected_value_allowed,
+                    'taxon_mode': taxon_mode,
+                    'num_shared_taxa': len(mapping.shared_taxa),
+                    'num_target_only_taxa': len(mapping.target_only_taxa),
+                    'num_source_only_taxa': len(mapping.source_only_taxa),
+                })
     if policy == 'strict' and failed:
         error = ValueError('Strict transfer failed because at least one requested value was not transferable.')
     else:
@@ -1054,6 +1067,7 @@ def transfer_properties(target, source, property_specs, target_class='all',
     return {
         'tree': target,
         'rows': rows,
+        'status_counts': status_counts,
         'output_properties': output_properties,
         'changed_node_count': len(changed_node_ids),
         'target_node_count': len(target_nodes),
@@ -1093,6 +1107,7 @@ def transfer_main(args):
         root_edge_policies=parse_root_edge_policies(
             getattr(args, 'root_edge_policy', None)
         ),
+        collect_report=getattr(args, 'report', None) not in (None, ''),
     )
     _write_report(result['rows'], getattr(args, 'report', None))
     sys.stderr.write(

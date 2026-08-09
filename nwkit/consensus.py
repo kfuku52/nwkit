@@ -1,8 +1,7 @@
 import math
 import multiprocessing
-import os
 import sys
-from itertools import islice
+from itertools import chain, islice
 from collections import defaultdict
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 
@@ -17,7 +16,6 @@ from nwkit.util import (
     is_rooted,
     iter_tree_strings,
     read_tree,
-    read_tree_strings,
     validate_unique_named_leaves,
     write_tree,
 )
@@ -70,19 +68,19 @@ def _mask_min_order(mask, bit_to_order):
     return min(bit_to_order[bit] for bit in _iter_mask_bits(mask))
 
 
-def _read_tree_weights(weight_tsv, num_trees):
+def _read_tree_weights(weight_tsv, num_trees=None):
     if weight_tsv in ['', None]:
-        return [1.0] * num_trees
+        return None if num_trees is None else [1.0] * num_trees
     weight_source = sys.stdin if weight_tsv == '-' else weight_tsv
     weight_df = pd.read_csv(weight_source, sep='\t')
     if 'weight' not in weight_df.columns:
         raise ValueError("--weight-tsv must contain a 'weight' column.")
     if weight_df['weight'].isna().any():
         raise ValueError("--weight-tsv contains missing values in 'weight'.")
-    weights = [None] * num_trees
     if 'tree_id' in weight_df.columns:
         if weight_df['tree_id'].isna().any():
             raise ValueError("--weight-tsv contains missing values in 'tree_id'.")
+        parsed_rows = list()
         for _, row in weight_df.iterrows():
             try:
                 tree_id_value = float(row['tree_id'])
@@ -91,19 +89,27 @@ def _read_tree_weights(weight_tsv, num_trees):
             if not tree_id_value.is_integer():
                 raise ValueError("--weight-tsv 'tree_id' values must be integers.")
             tree_id = int(tree_id_value)
-            if (tree_id < 1) or (tree_id > num_trees):
+            if tree_id < 1 or (num_trees is not None and tree_id > num_trees):
                 raise ValueError("--weight-tsv tree_id is out of range: {}".format(tree_id))
+            parsed_rows.append((tree_id, row['weight']))
+        expected_count = (
+            num_trees
+            if num_trees is not None
+            else max((tree_id for tree_id, _ in parsed_rows), default=0)
+        )
+        weights = [None] * expected_count
+        for tree_id, weight_value in parsed_rows:
             if weights[tree_id - 1] is not None:
                 raise ValueError("Duplicated 'tree_id' values are not supported in --weight-tsv.")
             try:
-                weight = float(row['weight'])
+                weight = float(weight_value)
             except (TypeError, ValueError) as exc:
                 raise ValueError("--weight-tsv 'weight' values must be numeric.") from exc
             if not math.isfinite(weight):
                 raise ValueError("Tree weights must be finite.")
             weights[tree_id - 1] = weight
     else:
-        if len(weight_df.index) != num_trees:
+        if num_trees is not None and len(weight_df.index) != num_trees:
             raise ValueError("--weight-tsv must contain exactly one row per input tree.")
         weights = list()
         for weight_value in weight_df['weight'].tolist():
@@ -180,15 +186,6 @@ def _get_process_pool_context():
         return multiprocessing.get_context('forkserver')
     except ValueError:
         return None
-
-
-def _chunk_sequence(items, num_chunks):
-    if num_chunks <= 1:
-        return [list(items)]
-    chunks = [list() for _ in range(num_chunks)]
-    for index, item in enumerate(items):
-        chunks[index % num_chunks].append(item)
-    return [chunk for chunk in chunks if chunk]
 
 
 def _initialize_clade_collection(first_tree):
@@ -354,9 +351,18 @@ def _collect_clade_stats_from_tree_strings(
         branch_length_method = 'median' if collect_branch_lengths else 'none'
     first_tree = read_tree(first_tree_string, format, quoted_node_names, quiet=True)
     leaf_names, leaf_name_to_bit, all_mask = _initialize_clade_collection(first_tree)
+    def tree_weight(tree_index):
+        if tree_weights is None:
+            return 1.0
+        if tree_index > len(tree_weights):
+            raise ValueError(
+                '--weight-tsv must contain exactly one row per input tree.'
+            )
+        return tree_weights[tree_index - 1]
+
     _, _, _, first_clade_weights, first_branch_length_observations = _collect_single_tree_clade_stats(
         tree=first_tree,
-        tree_weight=tree_weights[0],
+        tree_weight=tree_weight(1),
         tree_index=1,
         leaf_names=leaf_names,
         leaf_name_to_bit=leaf_name_to_bit,
@@ -373,9 +379,14 @@ def _collect_clade_stats_from_tree_strings(
         else:
             branch_length_observations[mask].extend(observations)
     records = (
-        (tree_index, tree_string, tree_weights[tree_index - 1])
+        (tree_index, tree_string, tree_weight(tree_index))
         for tree_index, tree_string in enumerate(tree_string_iterator, start=2)
     )
+    if threads > 1:
+        prefetched_records = list(islice(records, 64))
+        records = chain(prefetched_records, records)
+        if len(prefetched_records) < 64:
+            threads = 1
     if threads <= 1:
         chunk_result = _collect_tree_string_chunk_clade_stats((
             records,
@@ -592,21 +603,26 @@ def consensus_main(args):
         raise ValueError("Unsupported '--comparison': {}".format(comparison))
     if (args.min_freq < 0.0) or (args.min_freq > 1.0):
         raise ValueError("'--min-freq' must be between 0 and 1.")
-    if os.path.isfile(args.infile):
-        num_trees = sum(1 for _ in iter_tree_strings(args.infile))
-        tree_strings = iter_tree_strings(args.infile)
-    else:
-        tree_strings = read_tree_strings(args.infile)
-        num_trees = len(tree_strings)
-    if num_trees == 0:
+    raw_tree_strings = iter(iter_tree_strings(args.infile))
+    try:
+        first_tree_string = next(raw_tree_strings)
+    except StopIteration:
         raise ValueError('No input trees were found for consensus.')
-    sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
-    tree_weights = _normalize_relative_weights(
-        _read_tree_weights(weight_tsv, num_trees)
+    tree_count = [0]
+
+    def counted_tree_strings():
+        for tree_string in chain((first_tree_string,), raw_tree_strings):
+            tree_count[0] += 1
+            yield tree_string
+
+    raw_tree_weights = _read_tree_weights(weight_tsv)
+    tree_weights = (
+        None
+        if raw_tree_weights is None
+        else _normalize_relative_weights(raw_tree_weights)
     )
-    total_weight = math.fsum(tree_weights)
     leaf_names, leaf_name_to_bit, all_mask, clade_weights, branch_length_observations = _collect_clade_stats_from_tree_strings(
-        tree_strings=tree_strings,
+        tree_strings=counted_tree_strings(),
         tree_weights=tree_weights,
         format=args.format,
         quoted_node_names=args.quoted_node_names,
@@ -614,6 +630,15 @@ def consensus_main(args):
         threads=getattr(args, 'threads', 1),
         branch_length_method=branch_length,
         comparison=comparison,
+    )
+    num_trees = tree_count[0]
+    if tree_weights is not None and len(tree_weights) != num_trees:
+        raise ValueError('--weight-tsv must contain exactly one row per input tree.')
+    sys.stderr.write('Number of input trees = {:,}\n'.format(num_trees))
+    total_weight = (
+        float(num_trees)
+        if tree_weights is None
+        else math.fsum(tree_weights)
     )
     if args.reference not in ['', None]:
         reference_tree = read_tree(args.reference, args.reference_format, args.quoted_node_names)

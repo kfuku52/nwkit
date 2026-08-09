@@ -54,6 +54,7 @@ NCBI_PLACEHOLDER_NAME_PATTERNS = (
     re.compile(r'\bartificial sequences?\b', flags=re.I),
     re.compile(r'\bother sequences?\b', flags=re.I),
 )
+MAD_FLOAT_MAX_PATH_DYNAMIC_RANGE = 10 ** 6
 
 
 def _new_taxonomy_http_session():
@@ -792,6 +793,7 @@ def mad_rooting(tree):
     validate_unique_named_leaves(tree, option_name='--infile', context=' for MAD rooting')
     positive_branch_count = 0
     branch_length_scale = 0.0
+    minimum_positive_branch_length = math.inf
     for node in tree.traverse():
         if node.is_root:
             continue
@@ -803,6 +805,10 @@ def mad_rooting(tree):
         if length > 0:
             positive_branch_count += 1
             branch_length_scale = max(branch_length_scale, length)
+            minimum_positive_branch_length = min(
+                minimum_positive_branch_length,
+                length,
+            )
     if positive_branch_count < 3:
         raise ValueError('MAD rooting requires at least 3 positive branch lengths.')
 
@@ -914,12 +920,23 @@ def mad_rooting(tree):
     # Accumulate those path contributions once, then obtain every edge's
     # fitted root position and score with two linear tree traversals.
     node_count = len(all_nodes)
+    normalized_minimum_branch_length = (
+        minimum_positive_branch_length / branch_length_scale
+    )
+    use_float_arithmetic = (
+        positive_branch_count
+        <= (
+            MAD_FLOAT_MAX_PATH_DYNAMIC_RANGE
+            * normalized_minimum_branch_length
+        )
+    )
     parent_indices = [0] * node_count
     topological_depths = [0] * node_count
-    # Dyadic rational arithmetic preserves small path terms that would
-    # otherwise disappear when a short clade hangs below a very long edge.
-    # All inputs are binary floats, so these sums remain exact and bounded.
-    root_distances_by_index = [Fraction(0)] * node_count
+    # Ordinary trees use fast float arithmetic. For a path-length dynamic
+    # range large enough to lose short terms, dyadic rational arithmetic
+    # preserves every input binary float exactly.
+    zero = 0.0 if use_float_arithmetic else Fraction(0)
+    root_distances_by_index = [zero] * node_count
     for node in all_nodes:
         node_index = node_index_by_id[id(node)]
         if node.is_root:
@@ -928,9 +945,11 @@ def mad_rooting(tree):
         parent_index = node_index_by_id[id(node.up)]
         parent_indices[node_index] = parent_index
         topological_depths[node_index] = topological_depths[parent_index] + 1
+        edge_length = float(node.dist)
+        if not use_float_arithmetic:
+            edge_length = Fraction.from_float(edge_length)
         root_distances_by_index[node_index] = (
-            root_distances_by_index[parent_index]
-            + Fraction.from_float(float(node.dist))
+            root_distances_by_index[parent_index] + edge_length
         )
 
     ancestor_levels = [parent_indices]
@@ -975,62 +994,67 @@ def mad_rooting(tree):
         node_index_by_id[id(tip)]
         for tip in tips
     ]
-    pair_records = list()
-    for first_index, second_index in combinations(range(num_tips), 2):
-        first_node_index = effective_node_indices[first_index]
-        second_node_index = effective_node_indices[second_index]
-        ancestor_index = lowest_common_ancestor_index(
-            first_node_index,
-            second_node_index,
-        )
-        pair_distance_fraction = (
-            root_distances_by_index[first_node_index]
-            + root_distances_by_index[second_node_index]
-            - (2 * root_distances_by_index[ancestor_index])
-        )
-        if pair_distance_fraction <= 0:
-            raise ValueError('MAD rooting requires at least 3 effective leaves.')
-        pair_records.append((
-            first_node_index,
-            second_node_index,
-            ancestor_index,
-            pair_distance_fraction,
-            float(pair_distance_fraction),
-        ))
 
-    minimum_pair_distance = min(
-        pair_distance
-        for _, _, _, _, pair_distance in pair_records
-    )
-    maximum_pair_distance = max(
-        pair_distance
-        for _, _, _, _, pair_distance in pair_records
-    )
-    # The weight scale is algebraically arbitrary.  A geometric midpoint
-    # keeps both ends of the distance range representable. Squaring is done
-    # as a Fraction below, so even a full binary64 dynamic range is safe.
+    def iter_pair_records():
+        for first_index, second_index in combinations(range(num_tips), 2):
+            first_node_index = effective_node_indices[first_index]
+            second_node_index = effective_node_indices[second_index]
+            ancestor_index = lowest_common_ancestor_index(
+                first_node_index,
+                second_node_index,
+            )
+            pair_distance = (
+                root_distances_by_index[first_node_index]
+                + root_distances_by_index[second_node_index]
+                - (2 * root_distances_by_index[ancestor_index])
+            )
+            if pair_distance <= 0:
+                raise ValueError(
+                    'MAD rooting requires at least 3 effective leaves.'
+                )
+            yield (
+                first_node_index,
+                second_node_index,
+                ancestor_index,
+                pair_distance,
+                float(pair_distance),
+            )
+
+    minimum_pair_distance = math.inf
+    maximum_pair_distance = 0.0
+    for _, _, _, _, pair_distance in iter_pair_records():
+        minimum_pair_distance = min(minimum_pair_distance, pair_distance)
+        maximum_pair_distance = max(maximum_pair_distance, pair_distance)
+    # The weight scale is algebraically arbitrary. A geometric midpoint keeps
+    # both ends representable; the extreme-range fallback squares it exactly.
     weight_distance_scale = (
         math.sqrt(minimum_pair_distance)
         * math.sqrt(maximum_pair_distance)
     )
-    weight_distance_scale_fraction = Fraction.from_float(
+    weight_distance_scale_number = (
         weight_distance_scale
+        if use_float_arithmetic
+        else Fraction.from_float(weight_distance_scale)
     )
 
-    cut_weights = [Fraction(0)] * node_count
-    numerator_constants = [Fraction(0)] * node_count
-    numerator_depths = [Fraction(0)] * node_count
-    root_objective = Fraction(0)
+    cut_weights = [zero] * node_count
+    numerator_constants = [zero] * node_count
+    numerator_depths = [zero] * node_count
+    root_objective = zero
     for (
         first_node_index,
         second_node_index,
         ancestor_index,
         pair_distance_fraction,
         pair_distance,
-    ) in pair_records:
+    ) in iter_pair_records():
         weight_ratio = weight_distance_scale / pair_distance
-        weight_ratio_fraction = Fraction.from_float(weight_ratio)
-        weight = weight_ratio_fraction * weight_ratio_fraction
+        weight_number = (
+            weight_ratio
+            if use_float_arithmetic
+            else Fraction.from_float(weight_ratio)
+        )
+        weight = weight_number * weight_number
 
         cut_weights[first_node_index] += weight
         cut_weights[second_node_index] += weight
@@ -1072,16 +1096,18 @@ def mad_rooting(tree):
         numerator_constants[parent_index] += numerator_constants[node_index]
         numerator_depths[parent_index] += numerator_depths[node_index]
 
-    objectives_by_index = [Fraction(0)] * node_count
+    objectives_by_index = [zero] * node_count
     root_index = node_index_by_id[id(tree)]
     objectives_by_index[root_index] = root_objective
-    numerators_by_index = [Fraction(0)] * node_count
+    numerators_by_index = [zero] * node_count
     for node in tree.traverse(strategy='preorder'):
         if node.is_root:
             continue
         node_index = node_index_by_id[id(node)]
         parent_index = parent_indices[node_index]
-        edge_length = Fraction.from_float(float(node.dist))
+        edge_length = float(node.dist)
+        if not use_float_arithmetic:
+            edge_length = Fraction.from_float(edge_length)
         numerator = (
             numerator_constants[node_index]
             + (
@@ -1102,13 +1128,15 @@ def mad_rooting(tree):
     best_edge_length = 0.0
     best_side_names = None
     best_candidate_key = None
-    pair_count = len(pair_records)
+    pair_count = num_tips * (num_tips - 1) // 2
     all_leaf_mask = (1 << len(all_tips_by_name)) - 1
 
     for node in tree.traverse():
         if node.is_root:
             continue
-        edge_length = Fraction.from_float(float(node.dist))
+        edge_length = float(node.dist)
+        if not use_float_arithmetic:
+            edge_length = Fraction.from_float(edge_length)
         if edge_length == 0:
             continue
         side_mask = effective_subtree_masks[node]
@@ -1120,11 +1148,11 @@ def mad_rooting(tree):
         numerator = numerators_by_index[node_index]
         denominator = 2 * cut_weight
         root_distance = (
-            Fraction(0)
+            zero
             if denominator == 0
             else numerator / denominator
         )
-        root_distance = min(max(root_distance, Fraction(0)), edge_length)
+        root_distance = min(max(root_distance, zero), edge_length)
 
         objective = (
             objectives_by_index[node_index]
@@ -1135,11 +1163,20 @@ def mad_rooting(tree):
             objective
             / (
                 pair_count
-                * weight_distance_scale_fraction
-                * weight_distance_scale_fraction
+                * weight_distance_scale_number
+                * weight_distance_scale_number
             )
         )
         score = math.sqrt(max(0.0, float(normalized_objective)))
+        is_tied = math.isclose(
+            score,
+            best_score,
+            rel_tol=10 ** -12,
+            abs_tol=10 ** -15,
+        )
+        is_improvement = score < best_score and not is_tied
+        if not is_improvement and not is_tied:
+            continue
         side_name_mask = all_subtree_masks[node]
         other_name_mask = all_leaf_mask ^ side_name_mask
         side_name_indices = tuple(
@@ -1158,14 +1195,8 @@ def mad_rooting(tree):
             <= (len(other_name_indices), other_name_indices)
             else (other_name_indices, side_name_indices)
         )
-        is_tied = math.isclose(
-            score,
-            best_score,
-            rel_tol=10 ** -12,
-            abs_tol=10 ** -15,
-        )
         if (
-            (score < best_score and not is_tied)
+            is_improvement
             or (
                 is_tied
                 and (best_candidate_key is None or candidate_key < best_candidate_key)

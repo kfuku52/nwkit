@@ -7,6 +7,7 @@ import sqlite3
 import tarfile
 from contextlib import contextmanager
 from ete4 import Tree
+import requests
 
 from nwkit import util as util_mod
 from nwkit.util import (
@@ -548,7 +549,7 @@ class TestDownloadDirHelpers:
                 return None
 
         session = FakeSession()
-        monkeypatch.setattr(util_mod.requests, 'Session', lambda: session)
+        monkeypatch.setattr(requests, 'Session', lambda: session)
 
         with pytest.raises(ValueError, match='checksum response exceeds'):
             util_mod._download_ete_taxdump(str(tmp_path / 'taxdump.tar.gz'))
@@ -608,7 +609,7 @@ class TestDownloadDirHelpers:
                 raise ValueError('MD5 is unavailable for security use in FIPS mode')
             return real_md5(*args, **kwargs)
 
-        monkeypatch.setattr(util_mod.requests, 'Session', FakeSession)
+        monkeypatch.setattr(requests, 'Session', FakeSession)
         monkeypatch.setattr(util_mod, '_validate_ete_taxdump', lambda path: True)
         monkeypatch.setattr(util_mod.hashlib, 'md5', fips_md5)
 

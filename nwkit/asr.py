@@ -480,21 +480,21 @@ def _compute_outside_likelihoods(tree, child_terms, transition_matrices, root_pr
         children = list(node.get_children())
         if len(children) == 0:
             continue
-        sibling_product_by_child = dict()
-        for child in children:
-            sibling_product = np.ones_like(outside[node], dtype=float)
-            for sibling in children:
-                if sibling is child:
-                    continue
-                sibling_product *= child_terms[node][sibling]
-            sibling_product_by_child[child] = sibling_product
-        for child in children:
-            parent_weight = outside[node] * sibling_product_by_child[child]
+        terms = [child_terms[node][child] for child in children]
+        prefix_products = [np.ones_like(outside[node], dtype=float)]
+        for term in terms:
+            prefix_products.append(prefix_products[-1] * term)
+        suffix_product = np.ones_like(outside[node], dtype=float)
+        for child_index in range(len(children) - 1, -1, -1):
+            child = children[child_index]
+            sibling_product = prefix_products[child_index] * suffix_product
+            parent_weight = outside[node] * sibling_product
             matrix = transition_matrices[child]
             outside[child] = matrix.T.dot(parent_weight)
             total = float(outside[child].sum())
             if total > 0.0:
                 outside[child] = outside[child] / total
+            suffix_product = suffix_product * terms[child_index]
     return outside
 
 

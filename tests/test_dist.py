@@ -2,8 +2,9 @@ import csv
 import math
 
 import pytest
+from ete4 import Tree
 
-from nwkit.dist import dist_main
+from nwkit.dist import _path_distance, dist_main
 from tests.helpers import make_args
 
 
@@ -134,6 +135,36 @@ class TestDistMain:
 
 
 class TestDistanceMetrics:
+    def test_path_length_falls_back_for_nearly_identical_distance_matrices(self):
+        def balanced_newick(names):
+            if len(names) == 1:
+                return '{}:1'.format(names[0])
+            midpoint = len(names) // 2
+            return '({},{}):1'.format(
+                balanced_newick(names[:midpoint]),
+                balanced_newick(names[midpoint:]),
+            )
+
+        leaf_names = ['T{}'.format(index) for index in range(100)]
+        newick = balanced_newick(leaf_names).rsplit(':', 1)[0] + ';'
+        tree1 = Tree(newick, parser=1)
+        tree2 = Tree(newick, parser=1)
+        tree2['T0'].dist = 1.0 + 10 ** -15
+        stored_difference = float(tree2['T0'].dist) - 1.0
+
+        distance = _path_distance(
+            tree1,
+            tree2,
+            leaf_names,
+            topological=False,
+        )
+
+        assert distance == pytest.approx(
+            math.sqrt(len(leaf_names) - 1) * stored_difference,
+            rel=10 ** -12,
+            abs=0.0,
+        )
+
     def test_all_is_default_and_uses_stable_long_form_rows(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
         path2 = tmp_nwk('((A:1,C:1):1,(B:1,D:1):1);', 'tree2.nwk')
