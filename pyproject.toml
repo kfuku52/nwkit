@@ -90,6 +90,7 @@ select = ["E4", "E7", "E9", "F"]
 python_version = "3.10"
 files = ["nwkit"]
 ignore_missing_imports = true
+no_site_packages = true
 
 [tool.coverage.run]
 branch = true
