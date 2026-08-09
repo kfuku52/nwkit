@@ -1,9 +1,18 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Existing release tag to verify and publish
+        required: true
+        type: string
   push:
     tags:
       - 'v*'
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
 permissions:
   contents: read
@@ -14,6 +23,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          ref: ${{ env.RELEASE_TAG }}
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -24,7 +35,7 @@ jobs:
       - name: Verify tag matches package version
         run: |
           VERSION="$(python -c 'from nwkit import __version__; print(__version__)')"
-          test "v${VERSION}" = "${GITHUB_REF_NAME}"
+          test "v${VERSION}" = "${RELEASE_TAG}"
 
       - name: Install release dependencies
         run: |
@@ -139,4 +150,9 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
-        run: gh release create "${GITHUB_REF_NAME}" dist/* --verify-tag --generate-notes --title "${GITHUB_REF_NAME}"
+        run: |
+          if gh release view "${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Release ${RELEASE_TAG} already exists."
+          else
+            gh release create "${RELEASE_TAG}" dist/* --verify-tag --generate-notes --title "${RELEASE_TAG}"
+          fi

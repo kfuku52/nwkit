@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Explicitly dispatch the release workflow after an automated tag is created,
+  because tags pushed with the GitHub Actions token do not emit another
+  workflow-triggering push event.
+
 ## [0.35.0] - 2026-08-09
 
 ### Added

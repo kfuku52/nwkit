@@ -7,6 +7,7 @@ on:
   workflow_dispatch:
 
 permissions:
+  actions: write
   contents: write
 
 jobs:
@@ -69,4 +70,16 @@ jobs:
             git config user.email "actions@github.com"
             git tag -a "$TAG" "$EXPECTED" -m "$TAG"
             git push origin "$TAG"
+          fi
+
+      - name: Start release workflow
+        if: steps.version.outputs.should_release == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists."
+          else
+            gh workflow run release.yml --ref master --field tag="$TAG"
           fi
