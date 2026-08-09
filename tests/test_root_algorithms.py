@@ -14,7 +14,7 @@ from nwkit.root import (
 )
 from nwkit.clade_mapping import canonical_split
 from nwkit.util import is_rooted
-from tests.helpers import safe_get_distance
+from tests.helpers import make_deep_ladder_tree, safe_get_distance
 from tests.root_test_support import (
     annotated_reroot_tree as _annotated_reroot_tree,
     assert_reroot_annotations as _assert_reroot_annotations,
@@ -23,6 +23,15 @@ from tests.root_test_support import (
 
 
 class TestMidpointRooting:
+    @pytest.mark.slow
+    def test_deep_ladder_does_not_exceed_python_recursion_limit(self):
+        tree = make_deep_ladder_tree(1200)
+
+        rooted = midpoint_rooting(tree)
+
+        assert len(list(rooted.leaves())) == 1200
+        assert set(rooted.leaf_names()) == set(tree.leaf_names())
+
     def test_basic(self):
         tree = Tree('(A:1,B:3,(C:2,D:4):2);', parser=1)
         rooted = midpoint_rooting(tree)

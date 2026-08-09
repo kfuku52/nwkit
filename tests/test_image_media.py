@@ -1,3 +1,4 @@
+import builtins
 import io
 import os
 import sqlite3
@@ -464,6 +465,20 @@ class TestImagePostprocessing:
                     output_format='png',
                 ),
             )
+
+    def test_cairosvg_native_library_error_has_install_guidance(self, monkeypatch):
+        real_import = builtins.__import__
+
+        def import_with_missing_cairo(name, *args, **kwargs):
+            if name == 'cairosvg':
+                raise OSError('no library called cairo was found')
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, '__import__', import_with_missing_cairo)
+
+        with pytest.raises(RuntimeError, match='native Cairo library') as error:
+            image_module.load_cairosvg_module()
+        assert 'pip install -e ".[image]"' in str(error.value)
 
     def test_image_main_skips_optional_processing_deps_when_not_requested(self, monkeypatch, tmp_path):
         tree_path = tmp_path / 'tree.nwk'

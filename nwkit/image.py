@@ -18,17 +18,15 @@ import tarfile
 import tempfile
 import threading
 import time
-import xml.etree.ElementTree as ElementTree
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import defaultdict
 from urllib.parse import quote, urljoin, urlparse
 
 import requests
+from defusedxml import ElementTree
+from defusedxml.common import DefusedXmlException
 from requests.adapters import HTTPAdapter
-try:
-    from urllib3.util.retry import Retry
-except ImportError:  # pragma: no cover - fallback for older requests vendoring layouts
-    from requests.packages.urllib3.util.retry import Retry
+from urllib3.util.retry import Retry
 
 from nwkit import __version__
 from nwkit.species_parser import DEFAULT_SPECIES_REGEX
@@ -194,7 +192,8 @@ PILLOW_INSTALL_HINT = (
     'Pillow is a required NWKIT dependency; reinstall with: pip install --upgrade nwkit'
 )
 CAIROSVG_INSTALL_HINT = (
-    'Install SVG rasterization support with: pip install "nwkit[image]"'
+    'Install CairoSVG and the native Cairo library; from a source checkout run: '
+    'pip install -e ".[image]". See the NWKIT README for platform-specific steps.'
 )
 RASTER_OUTPUT_EXTENSIONS = {
     '.gif': 'GIF',
@@ -206,7 +205,7 @@ RASTER_OUTPUT_EXTENSIONS = {
     '.webp': 'WEBP',
 }
 SAFE_IMAGE_EXTENSIONS = frozenset(RASTER_OUTPUT_EXTENSIONS) | frozenset(('.svg',))
-BIOICONS_CATALOG_MEMORY_CACHE = dict()
+BIOICONS_CATALOG_MEMORY_CACHE: dict[str, dict[str, object]] = {}
 BIOICONS_CATALOG_MEMORY_CACHE_LOCK = threading.Lock()
 
 
@@ -1188,9 +1187,10 @@ def load_pillow_modules():
 def load_cairosvg_module():
     try:
         import cairosvg
-    except ImportError as exc:
+    except (ImportError, OSError) as exc:
         raise RuntimeError(
-            'SVG image post-processing requires the optional CairoSVG dependency. {}'.format(
+            'SVG image post-processing requires CairoSVG and its native Cairo '
+            'library. {}'.format(
                 CAIROSVG_INSTALL_HINT
             )
         ) from exc
@@ -1285,7 +1285,7 @@ def inspect_svg_dimensions(source_path, enforce_limits=True):
         )
     try:
         root = ElementTree.parse(source_path).getroot()
-    except (ElementTree.ParseError, OSError) as exc:
+    except (ElementTree.ParseError, DefusedXmlException, OSError) as exc:
         raise MediaDownloadError('SVG image is not well-formed XML: {}.'.format(exc)) from exc
     return _svg_dimensions_from_root(root, enforce_limits=enforce_limits)
 
@@ -1333,7 +1333,7 @@ def validate_safe_svg(
         raise MediaDownloadError('SVG image contains an unsupported document type declaration.')
     try:
         root = ElementTree.fromstring(sanitized_raw)
-    except ElementTree.ParseError as exc:
+    except (ElementTree.ParseError, DefusedXmlException) as exc:
         raise MediaDownloadError('SVG image is not well-formed XML: {}.'.format(exc)) from exc
     if root.tag.rsplit('}', 1)[-1].lower() != 'svg':
         raise MediaDownloadError('SVG image root element must be <svg>.')
@@ -2193,9 +2193,10 @@ def resolve_ncbi_taxonomy_image_cache_dir(args=None):
 
 
 def _file_md5(path):
+    # NCBI publishes MD5 for transfer-integrity checking.
     digest = hashlib.md5(
         usedforsecurity=False
-    )  # nosec - NCBI publishes MD5 for transfer-integrity checking
+    )
     with open(path, 'rb') as handle:
         for chunk in iter(lambda: handle.read(1024 * 1024), b''):
             digest.update(chunk)
@@ -2260,9 +2261,10 @@ def _download_to_path(
                 'NCBI archive declares {} bytes, exceeding {}.'.format(content_length, int(max_bytes))
             )
         downloaded_bytes = 0
+        # This is a transfer-integrity check against NCBI's published digest.
         digest = hashlib.md5(
             usedforsecurity=False
-        )  # nosec - transfer-integrity check against NCBI-published digest
+        )
         with open(tmp_path, 'wb') as handle:
             for chunk in response.iter_content(chunk_size=1024 * 256):
                 if chunk:

@@ -38,13 +38,20 @@ NWKIT requires Python 3.10 or newer.
 #### Optional SVG rasterization support
 
 Raster-image validation and processing use Pillow, which is installed with
-NWKIT. Install the optional CairoSVG integration to normalize, trim, or
-resize SVG files with `nwkit image`, or to render SVG tip images with
-`nwkit draw`:
+NWKIT. The optional CairoSVG integration also needs the native Cairo library.
+Install that library first (for example, `brew install cairo libffi` on macOS
+or `sudo apt-get install libcairo2 libffi-dev` on Debian/Ubuntu), then install
+NWKIT and its image extra from GitHub:
 
 ```
-pip install "nwkit[image]"
+pip install "nwkit[image] @ git+https://github.com/kfuku52/nwkit.git"
 ```
+
+From an existing source checkout, use `pip install -e ".[image]"`. If NWKIT
+was installed from Bioconda, install the native Cairo library and then run
+`pip install CairoSVG` in the same environment. These steps enable SVG
+normalization, trimming, resizing with `nwkit image`, and rendering SVG tip
+images with `nwkit draw`.
 
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.

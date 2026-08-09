@@ -46,8 +46,8 @@ TAXONOMIC_RANK_ALIASES = {
 
 @dataclass(frozen=True)
 class ParsedSpecies:
-    species_label: str = None
-    taxonomy_query: str = None
+    species_label: str | None = None
+    taxonomy_query: str | None = None
 
 
 def compile_species_regex(species_regex=None):

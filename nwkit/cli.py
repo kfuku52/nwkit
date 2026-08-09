@@ -91,13 +91,13 @@ parser.add_argument('--debug', action='store_true',
 subparsers = parser.add_subparsers(dest='command')
 
 # Parent parser for shared options
-p_audit = argparse.ArgumentParser(add_help=False)
+p_audit = NwkitArgumentParser(add_help=False)
 p_audit.add_argument('--audit', metavar='PATH', default=None, type=str, required=False, action='store',
                      help='Append a JSONL provenance record containing arguments, hashes, warnings, and runtime metadata.')
 p_audit.add_argument('--debug', action='store_true', default=argparse.SUPPRESS,
                      help='Show a Python traceback when a command fails.')
 
-p_parent = argparse.ArgumentParser(add_help=False, parents=[p_audit])
+p_parent = NwkitArgumentParser(add_help=False, parents=[p_audit])
 p_parent.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                       help='default=%(default)s: Input newick file. Use "-" for STDIN.')
 p_parent.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
@@ -111,7 +111,7 @@ p_parent.add_argument('-of', '--outformat', metavar='auto|INT', default='auto', 
 p_parent.add_argument('--quoted-node-names', '--quoted_node_names', dest='quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                         help='default=%(default)s: Whether node names are quoted in the input file.')
 
-p_download = argparse.ArgumentParser(add_help=False)
+p_download = NwkitArgumentParser(add_help=False)
 p_download.add_argument('--download-dir', '--download_dir', dest='download_dir', metavar='PATH', default='auto', type=str, required=False, action='store',
                         help='default=%(default)s: Shared download/cache directory for external resources such as the ETE4 '
                              'NCBI taxonomy database. "auto" uses the ETE4 default cache location. '
@@ -121,7 +121,7 @@ p_download.add_argument('--taxonomy-cache-max-age-days', '--taxonomy_cache_max_a
 p_download.add_argument('--refresh-taxonomy-cache', '--refresh_taxonomy_cache', dest='refresh_taxonomy_cache', action='store_true',
                         help='Force a checksum check and rebuild the ETE4 taxonomy cache when NCBI has a newer archive.')
 
-p_tree_input = argparse.ArgumentParser(add_help=False, parents=[p_audit])
+p_tree_input = NwkitArgumentParser(add_help=False, parents=[p_audit])
 p_tree_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                           help='default=%(default)s: Input newick file. Use "-" for STDIN.')
 p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', default='auto', type=str, required=False, action='store',
@@ -131,15 +131,15 @@ p_tree_input.add_argument('-f', '--format', metavar='auto|auto-strict|INT', defa
 p_tree_input.add_argument('--quoted-node-names', '--quoted_node_names', dest='quoted_node_names', metavar='yes|no', default='yes', type=strtobool, required=False, action='store',
                           help='default=%(default)s: Whether node names are quoted in the input file.')
 
-p_table_output = argparse.ArgumentParser(add_help=False)
+p_table_output = NwkitArgumentParser(add_help=False)
 p_table_output.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                             help='default=%(default)s: Output table file. Use "-" for STDOUT.')
 
-p_text_output = argparse.ArgumentParser(add_help=False)
+p_text_output = NwkitArgumentParser(add_help=False)
 p_text_output.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
                            help='default=%(default)s: Output text file. Use "-" for STDOUT.')
 
-p_table_input = argparse.ArgumentParser(add_help=False, parents=[p_audit])
+p_table_input = NwkitArgumentParser(add_help=False, parents=[p_audit])
 p_table_input.add_argument('-i', '--infile', metavar='PATH', default='-', type=str, required=False, action='store',
                            help='default=%(default)s: Input table file. Use "-" for STDIN.')
 p_table_input.add_argument('-o', '--outfile', metavar='PATH', default='-', type=str, required=False, action='store',
@@ -147,7 +147,7 @@ p_table_input.add_argument('-o', '--outfile', metavar='PATH', default='-', type=
 p_table_input.add_argument('-of', '--outformat', metavar='auto|INT', default='auto', type=str, required=False, action='store',
                            help='ETE tree format for --outfile. "auto" infers a suitable format from the input table.')
 
-p_species = argparse.ArgumentParser(add_help=False)
+p_species = NwkitArgumentParser(add_help=False)
 p_species.add_argument('--species-parser', '--species_parser', dest='species_parser', metavar='PRESET',
                        default=DEFAULT_SPECIES_PARSER, required=False, type=str,
                        choices=list(SUPPORTED_SPECIES_PARSERS),
@@ -167,7 +167,7 @@ p_species.add_argument('--species-map-tsv', '--species_map_tsv', dest='species_m
                             'The file must contain a "leaf_name" column and at least one of "species_label" or "taxonomy_query". '
                             'Mapped rows override the selected parser preset and regex.')
 
-p_tip_table_policy = argparse.ArgumentParser(add_help=False)
+p_tip_table_policy = NwkitArgumentParser(add_help=False)
 p_tip_table_policy.add_argument('--missing-values', '--missing_values', dest='missing_values', metavar='CSV',
                                 default=DEFAULT_TABLE_MISSING_VALUES_CSV, type=str, required=False, action='store',
                                 help='default=%(default)s: Comma-separated table values treated as missing.')

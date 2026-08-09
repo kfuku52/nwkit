@@ -11,11 +11,32 @@ permissions:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        include:
+          - os: ubuntu-latest
+            python-version: '3.10'
+            extras: test,image
+          - os: ubuntu-latest
+            python-version: '3.11'
+            extras: test,image
+          - os: ubuntu-latest
+            python-version: '3.12'
+            extras: test,image
+          - os: ubuntu-latest
+            python-version: '3.13'
+            extras: test,image
+          - os: ubuntu-latest
+            python-version: '3.14'
+            extras: test,image
+          - os: macos-latest
+            python-version: '3.14'
+            extras: test
+          - os: windows-latest
+            python-version: '3.14'
+            extras: test
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -29,10 +50,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[test,image]'
+          python -m pip install -e ".[${{ matrix.extras }}]"
 
       - name: Run tests
-        run: pytest tests/ -q --durations=20 --durations-min=0.05
+        run: python -m pytest tests/ -q --durations=20 --durations-min=0.05
 
   quality:
     runs-on: ubuntu-latest
@@ -52,7 +73,42 @@ jobs:
           pip install -e '.[dev,image]'
 
       - name: Run Ruff
-        run: ruff check nwkit tests setup.py
+        run: python -m ruff check nwkit tests setup.py
+
+      - name: Run type checks
+        run: python -m mypy --no-incremental
+
+      - name: Run tests with branch coverage
+        run: |
+          python -m coverage run -m pytest tests/ -q
+          python -m coverage report
+
+      - name: Audit security and dependency vulnerabilities
+        run: |
+          python -m pip check
+          python -m bandit -r nwkit -ll -ii -q
+          python -m pip_audit .
+
+      - name: Guard the maintainability baseline
+        run: |
+          python -m radon cc nwkit --json > radon.json
+          python - <<'PY'
+          import json
+
+          with open('radon.json') as handle:
+              results = json.load(handle)
+          blocks = [block for file_blocks in results.values() for block in file_blocks]
+          grade_f = [block for block in blocks if block['rank'] == 'F']
+          average = sum(block['complexity'] for block in blocks) / len(blocks)
+          assert len(grade_f) <= 5, 'Grade-F block count exceeded the baseline: {}'.format(len(grade_f))
+          assert max(block['complexity'] for block in blocks) <= 99
+          assert average <= 7.0
+          print('Radon baseline: {:.2f} average, {} grade-F blocks.'.format(average, len(grade_f)))
+          PY
+
+      - name: Set reproducible build timestamp
+        shell: bash
+        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
 
       - name: Build and inspect distributions
         run: |
@@ -60,6 +116,7 @@ jobs:
           printf 'raise RuntimeError("stale build artifact")\n' > build/lib/nwkit/_mad.py
           python -m build --wheel --outdir direct-dist
           python -m build
+          cmp direct-dist/*.whl dist/*.whl
           python -m twine check dist/*
           check-wheel-contents dist/*.whl
           python - <<'PY'

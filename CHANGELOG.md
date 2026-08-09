@@ -4,6 +4,30 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.35.0] - 2026-08-09
+
+### Added
+
+- Added branch-coverage, whole-package type, dependency-vulnerability,
+  static-security, and maintainability-baseline checks to CI.
+- Added current-Python test coverage on macOS and Windows alongside the full
+  Python 3.10-3.14 Linux matrix.
+
+### Changed
+
+- Hardened SVG parsing with `defusedxml` and documented the native Cairo setup
+  required by optional CairoSVG processing on common platforms.
+- Made release wheels reproducible by deriving archive timestamps from the
+  release commit and comparing direct and source-distribution-built wheels.
+
+### Fixed
+
+- Replaced recursive ETE deep copies with a property-preserving iterative tree
+  copy, allowing rooting, root transfer, and shuffling to handle deeply
+  unbalanced valid trees beyond Python's recursion limit.
+- Converted missing native Cairo-library failures into actionable NWKIT errors
+  instead of exposing an import-time `OSError`.
+
 ## [0.34.4] - 2026-08-09
 
 ### Changed
@@ -348,13 +372,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - `mark` output format selection no longer depends on process-wide `sys.argv` state.
 - The image-provider User-Agent now follows the package version.
 
-[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.34.1...HEAD
-[0.34.1]: https://github.com/kfuku52/nwkit/compare/v0.34.0...v0.34.1
-[0.34.0]: https://github.com/kfuku52/nwkit/compare/v0.33.0...v0.34.0
-[0.33.0]: https://github.com/kfuku52/nwkit/compare/v0.32.0...v0.33.0
-[0.32.0]: https://github.com/kfuku52/nwkit/compare/v0.31.0...v0.32.0
-[0.31.0]: https://github.com/kfuku52/nwkit/compare/v0.30.0...v0.31.0
-[0.30.0]: https://github.com/kfuku52/nwkit/compare/v0.29.0...v0.30.0
-[0.29.0]: https://github.com/kfuku52/nwkit/compare/v0.28.0...v0.29.0
-[0.28.0]: https://github.com/kfuku52/nwkit/compare/v0.27.0...v0.28.0
+[Unreleased]: https://github.com/kfuku52/nwkit/compare/v0.35.0...HEAD
+[0.35.0]: https://github.com/kfuku52/nwkit/compare/8d1250764cc5dfc6620655bf2fa3082d6acb59d9...v0.35.0
+[0.34.4]: https://github.com/kfuku52/nwkit/compare/557c461e0062631b13b97f9cc4ad66396e6363c1...8d1250764cc5dfc6620655bf2fa3082d6acb59d9
+[0.34.3]: https://github.com/kfuku52/nwkit/compare/d44ba92b697039ad83759c62070e45bfd5de1367...557c461e0062631b13b97f9cc4ad66396e6363c1
+[0.34.2]: https://github.com/kfuku52/nwkit/compare/c737e58c10cf67933b1ad0d8c0e231bbdc4b5ed9...d44ba92b697039ad83759c62070e45bfd5de1367
+[0.34.1]: https://github.com/kfuku52/nwkit/compare/5f7e41f1342216726cb3595f80861cec9020ac18...c737e58c10cf67933b1ad0d8c0e231bbdc4b5ed9
+[0.34.0]: https://github.com/kfuku52/nwkit/compare/846a53825e6536c61aee80547ad0d4befa0501a5...5f7e41f1342216726cb3595f80861cec9020ac18
+[0.33.0]: https://github.com/kfuku52/nwkit/compare/9b43aef933bda115fbb844e8f824d819f0408c2c...846a53825e6536c61aee80547ad0d4befa0501a5
+[0.32.0]: https://github.com/kfuku52/nwkit/compare/bb0af9f322948f608dd566a12cf97be5dfc150dc...9b43aef933bda115fbb844e8f824d819f0408c2c
+[0.31.0]: https://github.com/kfuku52/nwkit/compare/ffa752a904f1f2ca2c0310fff45aa8943bea6fa2...bb0af9f322948f608dd566a12cf97be5dfc150dc
+[0.30.0]: https://github.com/kfuku52/nwkit/compare/1bcd1ca7be22f8f9a54bd60031bc8f47b0f35743...ffa752a904f1f2ca2c0310fff45aa8943bea6fa2
+[0.29.0]: https://github.com/kfuku52/nwkit/compare/9d7353df9c4328c68c51a896c1ffa60b41339338...1bcd1ca7be22f8f9a54bd60031bc8f47b0f35743
+[0.28.0]: https://github.com/kfuku52/nwkit/compare/v0.27.0...9d7353df9c4328c68c51a896c1ffa60b41339338
 [0.27.0]: https://github.com/kfuku52/nwkit/compare/v0.21.1...v0.27.0

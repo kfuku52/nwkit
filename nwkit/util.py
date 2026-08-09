@@ -1,3 +1,4 @@
+import copy
 import csv
 import errno
 import hashlib
@@ -53,6 +54,31 @@ COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser('~'), '.local', 'share', 'ete'),
     os.path.join(os.path.expanduser('~'), '.etetoolkit'),
 )
+
+
+def copy_tree_iteratively(tree):
+    """Return a topology-and-properties copy without recursing over the tree."""
+    copied_values = {}
+
+    def copy_node(source):
+        target = Tree()
+        target.props.clear()
+        target.props.update(copy.deepcopy(source.props, copied_values))
+        return target
+
+    copied_root = copy_node(tree)
+    stack = [(tree, copied_root)]
+    while stack:
+        source_parent, target_parent = stack.pop()
+        child_pairs = []
+        for source_child in source_parent.get_children():
+            target_child = copy_node(source_child)
+            target_parent.add_child(target_child)
+            child_pairs.append((source_child, target_child))
+        stack.extend(reversed(child_pairs))
+    return copied_root
+
+
 def read_input_text(infile):
     if infile == '-':
         return sys.stdin.read()
@@ -948,9 +974,10 @@ def _download_ete_taxdump(taxdump_file):
         if re.fullmatch(r'[0-9a-f]{32}', expected_md5) is None:
             raise ValueError('Unexpected NCBI taxonomy checksum response.')
         if _validate_ete_taxdump(taxdump_file):
+            # NCBI publishes MD5 for transfer-integrity checking.
             local_md5 = hashlib.md5(
                 usedforsecurity=False
-            )  # nosec - NCBI publishes MD5 for transfer-integrity checking
+            )
             with open(taxdump_file, 'rb') as handle:
                 for chunk in iter(lambda: handle.read(1024 * 1024), b''):
                     local_md5.update(chunk)
@@ -960,9 +987,10 @@ def _download_ete_taxdump(taxdump_file):
         os.close(fd)
         try:
             downloaded = 0
+            # This is a transfer-integrity check against NCBI's published digest.
             digest = hashlib.md5(
                 usedforsecurity=False
-            )  # nosec - transfer-integrity check against NCBI-published digest
+            )
             response = _open_ete_download_response(
                 session,
                 ETE_TAXDUMP_URL,

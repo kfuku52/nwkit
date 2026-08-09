@@ -4,6 +4,7 @@ from ete4 import Tree
 from nwkit.util import (
     annotate_duplication_confidence_scores,
     annotate_scientific_names,
+    copy_tree_iteratively,
     extract_species_label,
     extract_taxonomy_query,
     get_monophyletic_species_groups,
@@ -17,7 +18,28 @@ from nwkit.util import (
     remove_singleton,
     validate_unique_named_leaves,
 )
-from tests.helpers import make_args
+from tests.helpers import make_args, make_deep_ladder_tree
+
+
+class TestCopyTreeIteratively:
+    def test_deep_tree_copy_preserves_topology_properties_and_independence(self):
+        tree = make_deep_ladder_tree(1200)
+        tree.name = 'root'
+        tree.props['metadata'] = {'values': [1, 2]}
+
+        copied = copy_tree_iteratively(tree)
+
+        assert len(list(copied.leaves())) == 1200
+        assert copied.name == 'root'
+        assert copied.props['metadata'] == {'values': [1, 2]}
+        assert copied.props['metadata'] is not tree.props['metadata']
+        assert [node.name for node in copied.leaves()] == [
+            node.name for node in tree.leaves()
+        ]
+        copied.props['metadata']['values'].append(3)
+        next(copied.leaves()).name = 'changed'
+        assert tree.props['metadata'] == {'values': [1, 2]}
+        assert next(tree.leaves()).name == 'T0'
 
 
 class TestSpeciesGrouping:

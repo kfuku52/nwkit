@@ -6,9 +6,18 @@
 2. Run the local release checks:
 
    ```sh
+   export SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
    ruff check nwkit tests
+   mypy --no-incremental
+   python -m pip check
+   bandit -r nwkit -ll -ii -q
+   python -m pip_audit .
    pytest tests/ -q
+   coverage run -m pytest tests/ -q
+   coverage report
+   python -m build --wheel --outdir direct-dist
    python -m build
+   cmp direct-dist/*.whl dist/*.whl
    python -m twine check dist/*
    check-wheel-contents dist/*.whl
    ```
@@ -21,7 +30,8 @@
    whose patch component is zero (for example, `0.35.0` or `1.0.0`) receive an
    annotated `v<version>` tag automatically.
 5. The tag starts the `Release` workflow, which verifies the source and tests,
-   builds the distributions, and creates the GitHub Release.
+   builds byte-for-byte reproducible distributions, and creates the GitHub
+   Release.
 6. Bioconda discovers tagged upstream releases, so its `nwkit` recipe is
    updated for major and minor releases only. Patch-only versions are
    intentionally not autobumped.

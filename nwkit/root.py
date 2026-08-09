@@ -20,6 +20,7 @@ from nwkit.constrain import (
 )
 from nwkit.util import (
     TREE_FORMAT_PROP,
+    copy_tree_iteratively,
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_species_group_records,
@@ -250,7 +251,7 @@ def _collapse_singleton_root(tree):
         child = tree.get_children()[0]
         root_dist = tree.dist
         child_dist = child.dist
-        tree = child.copy(method='deepcopy')
+        tree = copy_tree_iteratively(child)
         if root_dist is None or child_dist is None:
             tree.dist = None
         else:
@@ -569,7 +570,7 @@ def _redistribute_root_child_lengths(target, source, shared_taxa):
 
 
 def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=True):
-    tree_to = tree_to.copy(method='deepcopy')
+    tree_to = copy_tree_iteratively(tree_to)
     tree_to = _collapse_singleton_root(tree_to)
     tree_from = _collapse_singleton_root(tree_from)
     validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
@@ -656,7 +657,7 @@ def transfer_root_with_taxon_mode(tree_to, tree_from, taxon_mode='exact', verbos
         )
     if taxon_mode != 'intersection':
         raise ValueError("Unsupported taxon mode for root transfer: {}".format(taxon_mode))
-    tree_to = tree_to.copy(method='deepcopy')
+    tree_to = copy_tree_iteratively(tree_to)
     tree_to = _collapse_singleton_root(tree_to)
     tree_from = _collapse_singleton_root(tree_from)
     validate_unique_named_leaves(tree_to, option_name='--infile', context=' for root transfer')
@@ -765,7 +766,7 @@ def _restore_reroot_branch_length_scale(tree, branch_length_scale):
 
 
 def midpoint_rooting(tree):
-    tree = tree.copy(method='deepcopy')
+    tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(
         tree,
         option_name='--infile',
@@ -789,7 +790,7 @@ def mad_rooting(tree):
     """Root a tree by minimal ancestor deviation (Tria et al. 2017)."""
     if len(list(tree.leaves())) < 3:
         raise ValueError('MAD rooting requires at least 3 leaves.')
-    tree = tree.copy(method='deepcopy')
+    tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(tree, option_name='--infile', context=' for MAD rooting')
     positive_branch_count = 0
     branch_length_scale = 0.0
@@ -1279,7 +1280,7 @@ def _collect_leaf_distance_stats(tree):
 
 def mv_rooting(tree):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
-    tree = tree.copy(method='deepcopy')
+    tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(
         tree,
         option_name='--infile',
@@ -1366,7 +1367,7 @@ def mv_rooting(tree):
 def outgroup_rooting(tree, outgroup_str):
     if outgroup_str is None:
         raise ValueError("Specify at least one outgroup label with '--outgroup'.")
-    tree = tree.copy(method='deepcopy')
+    tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(
         tree,
         option_name='--infile',
@@ -1620,7 +1621,7 @@ def _resolve_reference_query_sets(reference_tree, query_label_to_species_labels,
     return resolved_leaf_set, unresolved_leaf_set
 
 def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
-    tree = tree.copy(method='deepcopy')
+    tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(tree, option_name='--infile', context=' for taxonomy rooting')
     outgroup_set = set(outgroup_set)
     if len(outgroup_set) == 0:

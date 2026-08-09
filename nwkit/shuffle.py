@@ -3,7 +3,7 @@ import sys
 
 import ete4
 
-from nwkit.util import is_rooted, read_tree, write_tree
+from nwkit.util import copy_tree_iteratively, is_rooted, read_tree, write_tree
 
 def get_shuffled_branch_lengths(nodes):
     branch_lengths = [n.dist for n in nodes]
@@ -32,7 +32,7 @@ def shuffle_main(args):
         random.seed(seed)
     try:
         tree = read_tree(args.infile, args.format, args.quoted_node_names)
-        tree_original = tree.copy(method='deepcopy')
+        tree_original = copy_tree_iteratively(tree)
         if args.topology:
             num_leaf = len(list(tree.leaves()))
             new_tree = ete4.Tree()

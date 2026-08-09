@@ -1,9 +1,10 @@
 import random
+import pytest
 from ete4 import Tree
 
 from nwkit.shuffle import get_shuffled_branch_lengths, print_rf_dist, shuffle_main
 from nwkit.util import read_tree
-from tests.helpers import make_args
+from tests.helpers import make_args, make_deep_ladder_tree
 
 
 class TestGetShuffledBranchLengths:
@@ -39,6 +40,32 @@ class TestPrintRfDist:
 
 
 class TestShuffleMain:
+    @pytest.mark.slow
+    def test_deep_ladder_does_not_exceed_python_recursion_limit(
+        self,
+        monkeypatch,
+        tmp_outfile,
+    ):
+        tree = make_deep_ladder_tree(1200)
+        monkeypatch.setattr('nwkit.shuffle.read_tree', lambda *args, **kwargs: tree)
+        args = make_args(
+            infile='unused',
+            outfile=tmp_outfile,
+            topology=False,
+            branch_length=False,
+            label=True,
+        )
+
+        shuffle_main(args)
+
+        output = read_tree(
+            tmp_outfile,
+            format='auto',
+            quoted_node_names=True,
+            quiet=True,
+        )
+        assert len(list(output.leaves())) == 1200
+
     def test_seed_makes_output_reproducible(self, tmp_nwk, tmp_path):
         path = tmp_nwk('(((A:1,B:2):3,C:4):5,(D:6,E:7):8);')
         outputs = [tmp_path / 'first.nwk', tmp_path / 'second.nwk']

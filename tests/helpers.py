@@ -1,4 +1,16 @@
 from argparse import Namespace
+from ete4 import Tree
+
+
+def make_deep_ladder_tree(tip_count):
+    root = Tree()
+    current = root
+    for index in range(tip_count - 2):
+        current.add_child(name='T{}'.format(index), dist=1)
+        current = current.add_child(dist=1)
+    current.add_child(name='T{}'.format(tip_count - 2), dist=1)
+    current.add_child(name='T{}'.format(tip_count - 1), dist=1)
+    return root
 
 def safe_get_distance(tree, node1, node2):
     """Compute distance between nodes, treating None dist as 0.
