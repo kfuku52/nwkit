@@ -108,6 +108,10 @@ class TestGetRemoveNames:
 
 
 class TestIntersectionMain:
+    @pytest.mark.skipif(
+        os.name == 'nt',
+        reason='requires POSIX open-file replacement semantics',
+    )
     def test_staging_writer_uses_open_descriptor_not_replaced_path(
         self,
         monkeypatch,
@@ -137,6 +141,10 @@ class TestIntersectionMain:
 
         assert victim.read_text() == 'unchanged\n'
 
+    @pytest.mark.skipif(
+        os.name == 'nt',
+        reason='requires POSIX open-file replacement semantics',
+    )
     def test_stdout_commit_reads_validated_descriptor_not_replaced_path(
         self,
         tmp_path,
@@ -307,6 +315,10 @@ class TestIntersectionMain:
         ]
         assert leftovers == []
 
+    @pytest.mark.skipif(
+        os.name == 'nt',
+        reason='POSIX file modes are unavailable on Windows',
+    )
     def test_tree_seq_atomic_replace_preserves_existing_modes(self, tmp_path):
         nwk_path = tmp_path / 'tree.nwk'
         seq_path = tmp_path / 'seq.fasta'
@@ -329,6 +341,10 @@ class TestIntersectionMain:
         assert stat.S_IMODE(out_tree.stat().st_mode) == 0o640
         assert stat.S_IMODE(out_seq.stat().st_mode) == 0o604
 
+    @pytest.mark.skipif(
+        os.name == 'nt',
+        reason='POSIX file modes are unavailable on Windows',
+    )
     def test_tree_seq_new_outputs_honor_process_umask(self, tmp_path):
         nwk_path = tmp_path / 'tree.nwk'
         seq_path = tmp_path / 'seq.fasta'

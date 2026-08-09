@@ -202,7 +202,8 @@ def test_audit_path_cannot_modify_an_input_file(tmp_path):
         ])
 
     assert infile.read_text() == original
-    assert stat.S_IMODE(infile.stat().st_mode) == 0o640
+    if os.name != 'nt':
+        assert stat.S_IMODE(infile.stat().st_mode) == 0o640
     assert not outfile.exists()
 
 
@@ -256,7 +257,8 @@ def test_audit_hard_link_cannot_modify_an_input_file(tmp_path):
         ])
 
     assert infile.read_text() == original
-    assert stat.S_IMODE(infile.stat().st_mode) == 0o640
+    if os.name != 'nt':
+        assert stat.S_IMODE(infile.stat().st_mode) == 0o640
     assert not outfile.exists()
 
 
@@ -282,7 +284,8 @@ def test_audit_path_cannot_modify_draw_manifest_asset(tmp_path):
         ])
 
     assert asset.read_bytes() == original_asset
-    assert stat.S_IMODE(asset.stat().st_mode) == 0o640
+    if os.name != 'nt':
+        assert stat.S_IMODE(asset.stat().st_mode) == 0o640
     assert not outfile.exists()
 
 
@@ -309,6 +312,10 @@ def test_audit_snapshots_input_before_in_place_output(tmp_path):
     assert output_record['sha256'] != original_digest
 
 
+@pytest.mark.skipif(
+    os.name == 'nt',
+    reason='POSIX file modes are unavailable on Windows',
+)
 def test_new_audit_file_is_private(tmp_path):
     infile = tmp_path / 'input.nwk'
     audit = tmp_path / 'audit.jsonl'
@@ -319,6 +326,10 @@ def test_new_audit_file_is_private(tmp_path):
     assert stat.S_IMODE(audit.stat().st_mode) == 0o600
 
 
+@pytest.mark.skipif(
+    os.name == 'nt',
+    reason='POSIX file modes are unavailable on Windows',
+)
 def test_existing_audit_permissions_are_tightened(tmp_path):
     infile = tmp_path / 'input.nwk'
     audit = tmp_path / 'audit.jsonl'

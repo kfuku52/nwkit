@@ -98,7 +98,8 @@ class TestDownloadMedia:
             )
         finally:
             os.umask(previous_umask)
-        assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+        if os.name != 'nt':
+            assert stat.S_IMODE(destination.stat().st_mode) == 0o640
 
         destination.chmod(0o664)
         download_media(
@@ -108,7 +109,8 @@ class TestDownloadMedia:
             cache_path=str(cache_path),
             reuse_destination=False,
         )
-        assert stat.S_IMODE(destination.stat().st_mode) == 0o664
+        if os.name != 'nt':
+            assert stat.S_IMODE(destination.stat().st_mode) == 0o664
 
     def test_download_media_removes_partial_temp_file_on_error(self, tmp_path):
         destination = tmp_path / 'out' / 'image.svg'
@@ -182,7 +184,8 @@ class TestDownloadMedia:
         finally:
             os.umask(previous_umask)
 
-        assert stat.S_IMODE(os.stat(result['destination_path']).st_mode) == 0o640
+        if os.name != 'nt':
+            assert stat.S_IMODE(os.stat(result['destination_path']).st_mode) == 0o640
 
     def test_download_media_reuses_existing_cache_variant_extension(self, tmp_path):
         destination = tmp_path / 'out' / 'image.bin'
@@ -277,7 +280,8 @@ class TestImagePostprocessing:
         finally:
             os.umask(previous_umask)
         assert result == str(destination)
-        assert stat.S_IMODE(destination.stat().st_mode) == 0o640
+        if os.name != 'nt':
+            assert stat.S_IMODE(destination.stat().st_mode) == 0o640
 
         Image.new('RGB', (40, 20), 'black').save(source)
         destination.chmod(0o664)
@@ -285,7 +289,8 @@ class TestImagePostprocessing:
             str(source),
             make_image_args(output_format='jpg', max_edge=12),
         )
-        assert stat.S_IMODE(destination.stat().st_mode) == 0o664
+        if os.name != 'nt':
+            assert stat.S_IMODE(destination.stat().st_mode) == 0o664
 
     def test_postprocess_media_file_resizes_and_pads_raster(self, tmp_path):
         Image = pytest.importorskip('PIL.Image')
@@ -1188,7 +1193,8 @@ class TestImageSecurityLimits:
 
         assert result == str(source)
         assert '<!DOCTYPE' not in source.read_text()
-        assert stat.S_IMODE(source.stat().st_mode) == 0o664
+        if os.name != 'nt':
+            assert stat.S_IMODE(source.stat().st_mode) == 0o664
 
     def test_svg_dimensions_are_read_from_sanitized_xml_root(
         self,
@@ -1294,7 +1300,7 @@ class TestImageSecurityLimits:
         self,
         tmp_path,
     ):
-        cache_dir = tmp_path / 'cache?#%'
+        cache_dir = tmp_path / ('cache #%' if os.name == 'nt' else 'cache?#%')
         cache_dir.mkdir()
         database_path = cache_dir / 'images.sqlite3'
         connection = sqlite3.connect(database_path)
