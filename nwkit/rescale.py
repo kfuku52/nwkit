@@ -13,7 +13,7 @@ def rescale_main(args):
         if node.dist is not None:
             scaled_distance = node.dist * args.factor
             if not math.isfinite(scaled_distance):
-                raise ValueError('Rescaling produced a non-finite branch length.')
+                raise ValueError("Rescaling produced a non-finite branch length.")
             scaled_distances.append((node, scaled_distance))
     for node, scaled_distance in scaled_distances:
         node.dist = scaled_distance

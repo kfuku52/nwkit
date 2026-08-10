@@ -3,6 +3,7 @@ import math
 import os
 import sys
 from fractions import Fraction
+from typing import Any
 
 import pandas as pd
 
@@ -14,68 +15,73 @@ from nwkit.util import (
     write_tree,
 )
 
-
-NUMERIC_OPERATORS = {'ge', 'gt', 'le', 'lt'}
-COMPARISON_OPERATORS = NUMERIC_OPERATORS | {'eq', 'ne'}
-RANK_DIRECTIONS = {'asc', 'desc'}
+NUMERIC_OPERATORS = {"ge", "gt", "le", "lt"}
+COMPARISON_OPERATORS = NUMERIC_OPERATORS | {"eq", "ne"}
+RANK_DIRECTIONS = {"asc", "desc"}
 MAX_FINITE_PD_VALUE = Fraction.from_float(sys.float_info.max)
 
 
 def read_sample_trait(args, tree):
     if args.trait is None:
-        return pd.DataFrame({'leaf_name': list(tree.leaf_names())})
+        return pd.DataFrame({"leaf_name": list(tree.leaf_names())})
     leaf_names_list = list(tree.leaf_names())
     leaf_name_set = set(leaf_names_list)
     trait_df, _, missing_leaf_names = read_tip_table(
         args.trait,
-        option_name='--trait',
+        option_name="--trait",
         tree_leaf_names=leaf_names_list,
-        unmatched=getattr(args, 'unmatched', 'warn'),
-        missing_values=getattr(args, 'missing_values', None),
+        unmatched=getattr(args, "unmatched", "warn"),
+        missing_values=getattr(args, "missing_values", None),
     )
-    trait_df = trait_df[trait_df['leaf_name'].isin(leaf_name_set)].copy()
+    trait_df = trait_df[trait_df["leaf_name"].isin(leaf_name_set)].copy()
     if len(missing_leaf_names) > 0:
         trait_df = pd.concat(
-            [trait_df, pd.DataFrame({'leaf_name': missing_leaf_names})],
+            [trait_df, pd.DataFrame({"leaf_name": missing_leaf_names})],
             ignore_index=True,
         )
     return trait_df
 
 
 def parse_filter_spec(spec):
-    parts = str(spec).split(':', 2)
+    parts = str(spec).split(":", 2)
     if len(parts) != 3:
         raise ValueError(
-            "Invalid --filter specification: '{}'. Expected COLUMN:OP:VALUE.".format(spec)
+            "Invalid --filter specification: '{}'. Expected COLUMN:OP:VALUE.".format(
+                spec
+            )
         )
     column, operator, value = parts
     column = column.strip()
     operator = operator.strip().lower()
-    if column == '':
+    if column == "":
         raise ValueError("Invalid --filter specification: column name is empty.")
     if operator not in COMPARISON_OPERATORS:
         raise ValueError(
             "Invalid --filter operator '{}'. Supported operators: {}.".format(
-                operator, ', '.join(sorted(COMPARISON_OPERATORS))
+                operator, ", ".join(sorted(COMPARISON_OPERATORS))
             )
         )
     return column, operator, value
 
 
 def parse_rank_spec(spec):
-    parts = str(spec).split(':', 1)
+    parts = str(spec).split(":", 1)
     if len(parts) != 2:
         raise ValueError(
-            "Invalid --rank specification: '{}'. Expected COLUMN:asc or COLUMN:desc.".format(spec)
+            "Invalid --rank specification: '{}'. Expected COLUMN:asc or COLUMN:desc.".format(
+                spec
+            )
         )
     column, direction = parts
     column = column.strip()
     direction = direction.strip().lower()
-    if column == '':
+    if column == "":
         raise ValueError("Invalid --rank specification: column name is empty.")
     if direction not in RANK_DIRECTIONS:
         raise ValueError(
-            "Invalid --rank direction '{}'. Supported directions: asc, desc.".format(direction)
+            "Invalid --rank direction '{}'. Supported directions: asc, desc.".format(
+                direction
+            )
         )
     return column, direction
 
@@ -84,17 +90,24 @@ def _require_columns(dataframe, columns, option_name):
     missing = [column for column in columns if column not in dataframe.columns]
     if missing:
         raise ValueError(
-            "{} references missing column(s): {}".format(option_name, ', '.join(missing))
+            "{} references missing column(s): {}".format(
+                option_name, ", ".join(missing)
+            )
         )
 
 
 def _numeric_series(dataframe, column, option_name):
-    numeric = pd.to_numeric(dataframe[column], errors='coerce')
-    bad_values = dataframe.loc[dataframe[column].notna() & numeric.isna(), column].astype(str).unique().tolist()
+    numeric = pd.to_numeric(dataframe[column], errors="coerce")
+    bad_values = (
+        dataframe.loc[dataframe[column].notna() & numeric.isna(), column]
+        .astype(str)
+        .unique()
+        .tolist()
+    )
     if bad_values:
         raise ValueError(
             "{} requires numeric values in column '{}'. Non-numeric value(s): {}".format(
-                option_name, column, ', '.join(sorted(bad_values))
+                option_name, column, ", ".join(sorted(bad_values))
             )
         )
     return numeric
@@ -102,7 +115,9 @@ def _numeric_series(dataframe, column, option_name):
 
 def apply_filters(dataframe, filter_specs):
     parsed_filters = [parse_filter_spec(spec) for spec in (filter_specs or [])]
-    _require_columns(dataframe, [column for column, _operator, _value in parsed_filters], '--filter')
+    _require_columns(
+        dataframe, [column for column, _operator, _value in parsed_filters], "--filter"
+    )
     keep = pd.Series(True, index=dataframe.index)
     for column, operator, raw_value in parsed_filters:
         if operator in NUMERIC_OPERATORS:
@@ -114,13 +129,13 @@ def apply_filters(dataframe, filter_specs):
                         operator, raw_value
                     )
                 ) from exc
-            values = _numeric_series(dataframe, column, '--filter')
+            values = _numeric_series(dataframe, column, "--filter")
             present = values.notna()
-            if operator == 'ge':
+            if operator == "ge":
                 current = present & (values >= threshold)
-            elif operator == 'gt':
+            elif operator == "gt":
                 current = present & (values > threshold)
-            elif operator == 'le':
+            elif operator == "le":
                 current = present & (values <= threshold)
             else:
                 current = present & (values < threshold)
@@ -128,7 +143,7 @@ def apply_filters(dataframe, filter_specs):
             values = dataframe[column]
             present = values.notna()
             values_as_text = values.astype(str)
-            if operator == 'eq':
+            if operator == "eq":
                 current = present & (values_as_text == str(raw_value))
             else:
                 current = present & (values_as_text != str(raw_value))
@@ -138,7 +153,9 @@ def apply_filters(dataframe, filter_specs):
 
 def sort_candidates(dataframe, rank_specs):
     parsed_ranks = [parse_rank_spec(spec) for spec in (rank_specs or [])]
-    _require_columns(dataframe, [column for column, _direction in parsed_ranks], '--rank')
+    _require_columns(
+        dataframe, [column for column, _direction in parsed_ranks], "--rank"
+    )
     if dataframe.empty:
         return dataframe.copy()
 
@@ -147,8 +164,8 @@ def sort_candidates(dataframe, rank_specs):
     sort_columns = []
     ascending = []
     for index, (column, direction) in enumerate(parsed_ranks):
-        helper_column = '__nwkit_rank_{}_{}'.format(index, column)
-        numeric_values = pd.to_numeric(sorted_df[column], errors='coerce')
+        helper_column = "__nwkit_rank_{}_{}".format(index, column)
+        numeric_values = pd.to_numeric(sorted_df[column], errors="coerce")
         non_missing = sorted_df[column].notna()
         if non_missing.any() and numeric_values[non_missing].notna().all():
             sorted_df[helper_column] = numeric_values
@@ -156,15 +173,15 @@ def sort_candidates(dataframe, rank_specs):
             sorted_df[helper_column] = sorted_df[column].astype(str)
         helper_columns.append(helper_column)
         sort_columns.append(helper_column)
-        ascending.append(direction == 'asc')
+        ascending.append(direction == "asc")
 
-    sort_columns.append('leaf_name')
+    sort_columns.append("leaf_name")
     ascending.append(True)
     sorted_df = sorted_df.sort_values(
         by=sort_columns,
         ascending=ascending,
-        kind='mergesort',
-        na_position='last',
+        kind="mergesort",
+        na_position="last",
     )
     return sorted_df.drop(columns=helper_columns)
 
@@ -178,12 +195,11 @@ def _edge_length(node):
         length = float(node.dist)
     except (TypeError, ValueError) as exc:
         raise ValueError(
-            'Phylogenetic-diversity branch lengths must be numeric.'
+            "Phylogenetic-diversity branch lengths must be numeric."
         ) from exc
     if not math.isfinite(length) or length < 0.0:
         raise ValueError(
-            'Phylogenetic-diversity branch lengths must be finite and '
-            'non-negative.'
+            "Phylogenetic-diversity branch lengths must be finite and non-negative."
         )
     return length
 
@@ -207,12 +223,11 @@ def _exact_length(length):
         numeric_length = float(length)
     except (TypeError, ValueError) as exc:
         raise ValueError(
-            'Phylogenetic-diversity branch lengths must be numeric.'
+            "Phylogenetic-diversity branch lengths must be numeric."
         ) from exc
     if not math.isfinite(numeric_length) or numeric_length < 0.0:
         raise ValueError(
-            'Phylogenetic-diversity branch lengths must be finite and '
-            'non-negative.'
+            "Phylogenetic-diversity branch lengths must be finite and non-negative."
         )
     return Fraction.from_float(numeric_length)
 
@@ -231,20 +246,23 @@ def _exact_path_gain(path_edges, covered_edges):
 def _finite_pd_value(value, quantity):
     if value > MAX_FINITE_PD_VALUE:
         raise ValueError(
-            'Phylogenetic-diversity {} exceeds the finite floating-point '
-            'range.'.format(quantity)
+            "Phylogenetic-diversity {} exceeds the finite floating-point range.".format(
+                quantity
+            )
         )
     try:
         numeric_value = float(value)
     except OverflowError as exc:
         raise ValueError(
-            'Phylogenetic-diversity {} exceeds the finite floating-point '
-            'range.'.format(quantity)
+            "Phylogenetic-diversity {} exceeds the finite floating-point range.".format(
+                quantity
+            )
         ) from exc
     if not math.isfinite(numeric_value):
         raise ValueError(
-            'Phylogenetic-diversity {} exceeds the finite floating-point '
-            'range.'.format(quantity)
+            "Phylogenetic-diversity {} exceeds the finite floating-point range.".format(
+                quantity
+            )
         )
     return numeric_value
 
@@ -252,12 +270,12 @@ def _finite_pd_value(value, quantity):
 def _path_gain(path_edges, covered_edges):
     return _finite_pd_value(
         _exact_path_gain(path_edges, covered_edges),
-        'gain',
+        "gain",
     )
 
 
 def select_ranked(candidate_order, path_edges_by_leaf, n):
-    covered_edges = set()
+    covered_edges: set[Any] = set()
     selected = []
     pd_total = Fraction(0)
     for leaf_name in candidate_order[:n]:
@@ -268,9 +286,9 @@ def select_ranked(candidate_order, path_edges_by_leaf, n):
         pd_total += gain
         selected.append(
             {
-                'leaf_name': leaf_name,
-                'pd_gain': _finite_pd_value(gain, 'gain'),
-                'pd_total': _finite_pd_value(pd_total, 'total'),
+                "leaf_name": leaf_name,
+                "pd_gain": _finite_pd_value(gain, "gain"),
+                "pd_total": _finite_pd_value(pd_total, "total"),
             }
         )
     return selected
@@ -289,20 +307,22 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
         ]
         for leaf_name in leaf_names
     ]
-    edge_to_leaf_indices = dict()
+    edge_to_leaf_indices: dict[Any, list[int]] = {}
     gains = list()
     versions = [0] * len(leaf_names)
     remaining = [True] * len(leaf_names)
     for leaf_index, path_edges in enumerate(path_edges_by_index):
-        gains.append(sum(
-            (length for _edge, length in path_edges),
-            Fraction(0),
-        ))
+        gains.append(
+            sum(
+                (length for _edge, length in path_edges),
+                Fraction(0),
+            )
+        )
         for edge, _length in path_edges:
             edge_to_leaf_indices.setdefault(edge, []).append(leaf_index)
     heap = [
         (-gain, rank_index[leaf_name], leaf_to_index[leaf_name], 0)
-        for leaf_name, gain in zip(leaf_names, gains)
+        for leaf_name, gain in zip(leaf_names, gains, strict=True)
     ]
     heapq.heapify(heap)
     covered_edges = set()
@@ -332,9 +352,9 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
         pd_total += best_gain
         selected.append(
             {
-                'leaf_name': best_leaf,
-                'pd_gain': _finite_pd_value(best_gain, 'gain'),
-                'pd_total': _finite_pd_value(pd_total, 'total'),
+                "leaf_name": best_leaf,
+                "pd_gain": _finite_pd_value(best_gain, "gain"),
+                "pd_total": _finite_pd_value(pd_total, "total"),
             }
         )
         for edge, length in newly_covered_edges:
@@ -359,13 +379,15 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
 
 def _build_output_table(selected_rows, candidate_df):
     selected_df = pd.DataFrame(selected_rows)
-    selected_df.insert(0, 'sample_order', range(1, len(selected_df.index) + 1))
-    metadata_columns = [column for column in candidate_df.columns if column != 'leaf_name']
+    selected_df.insert(0, "sample_order", range(1, len(selected_df.index) + 1))
+    metadata_columns = [
+        column for column in candidate_df.columns if column != "leaf_name"
+    ]
     if metadata_columns:
         selected_df = selected_df.merge(
-            candidate_df[['leaf_name', *metadata_columns]],
-            on='leaf_name',
-            how='left',
+            candidate_df[["leaf_name", *metadata_columns]],
+            on="leaf_name",
+            how="left",
             sort=False,
         )
     return selected_df
@@ -374,30 +396,34 @@ def _build_output_table(selected_rows, candidate_df):
 def sample_main(args):
     if args.n < 1:
         raise ValueError("'--n' must be a positive integer.")
-    report_path = getattr(args, 'report', None)
+    report_path = getattr(args, "report", None)
     if report_path is None:
-        report_path = getattr(args, 'output_table', None)
-    if report_path in ['', '-']:
+        report_path = getattr(args, "output_table", None)
+    if report_path in ["", "-"]:
         raise ValueError("'--report' must be a file path, not '-' or an empty string.")
-    validate_distinct_output_paths([
-        ('--outfile', getattr(args, 'outfile', None)),
-        ('--report', report_path),
-    ])
+    validate_distinct_output_paths(
+        [
+            ("--outfile", getattr(args, "outfile", None)),
+            ("--report", report_path),
+        ]
+    )
 
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    validate_unique_named_leaves(tree, option_name='--infile', context=" for 'sample'")
+    validate_unique_named_leaves(tree, option_name="--infile", context=" for 'sample'")
     _validate_pd_tree(tree)
     trait_df = read_sample_trait(args, tree)
     filtered_df = apply_filters(trait_df, args.filter)
     if filtered_df.empty:
-        raise ValueError('No leaves passed the requested --filter condition(s).')
+        raise ValueError("No leaves passed the requested --filter condition(s).")
 
     ranked_df = sort_candidates(filtered_df, args.rank)
-    candidate_order = ranked_df['leaf_name'].tolist()
+    candidate_order = ranked_df["leaf_name"].tolist()
     if len(candidate_order) < args.n and not args.allow_fewer:
         raise ValueError(
             "Only {} leaves passed the requested filters, fewer than --n {}. "
-            "Adjust --filter/--n or set --allow-fewer yes.".format(len(candidate_order), args.n)
+            "Adjust --filter/--n or set --allow-fewer yes.".format(
+                len(candidate_order), args.n
+            )
         )
     n_select = min(args.n, len(candidate_order))
 
@@ -407,17 +433,19 @@ def sample_main(args):
         for leaf_name in candidate_order
     }
 
-    if args.method == 'max-pd':
+    if args.method == "max-pd":
         selected_rows = select_max_pd(candidate_order, path_edges_by_leaf, n_select)
-    elif args.method == 'ranked':
+    elif args.method == "ranked":
         selected_rows = select_ranked(candidate_order, path_edges_by_leaf, n_select)
     else:
         raise ValueError("Unsupported --method: {}".format(args.method))
 
-    selected_names = [row['leaf_name'] for row in selected_rows]
+    selected_names = [row["leaf_name"] for row in selected_rows]
     if not selected_names:
-        raise ValueError('No leaves were selected for output.')
-    sys.stderr.write(''.join('Selected leaf: {}\n'.format(name) for name in selected_names))
+        raise ValueError("No leaves were selected for output.")
+    sys.stderr.write(
+        "".join("Selected leaf: {}\n".format(name) for name in selected_names)
+    )
 
     tree.prune(selected_names, preserve_branch_length=True)
     _validate_pd_tree(tree)
@@ -427,6 +455,6 @@ def sample_main(args):
         output_table_dir = os.path.dirname(os.path.realpath(report_path))
         if output_table_dir:
             os.makedirs(output_table_dir, exist_ok=True)
-        output_df.to_csv(report_path, sep='\t', index=False)
+        output_df.to_csv(report_path, sep="\t", index=False)
 
     write_tree(tree, args, format=args.outformat)

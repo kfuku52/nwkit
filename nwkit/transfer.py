@@ -2,6 +2,7 @@ import json
 import math
 import re
 import sys
+from typing import Any
 
 import pandas as pd
 
@@ -16,75 +17,78 @@ from nwkit.util import (
     assign_branch_ids,
     get_node_class,
     get_subtree_leaf_name_sets,
-    get_tree_property_names,
     get_target_nodes,
+    get_tree_property_names,
     is_all_leaf_names_identical,
     read_tree,
     support_is_missing,
-    validate_unique_named_leaves,
     validate_distinct_output_paths,
+    validate_unique_named_leaves,
     write_tree,
 )
 
-
-SPECIAL_PROPERTIES = frozenset(('name', 'support', 'length'))
-PROPERTY_NAME_PATTERN = re.compile(r'^[A-Za-z_][A-Za-z0-9_.-]*$')
-ROOT_EDGE_POLICIES = frozenset((
-    'auto',
-    'skip',
-    'equal-only',
-    'matching-side',
-    'mean',
-    'min',
-    'max',
-    'edge-total',
-))
+SPECIAL_PROPERTIES = frozenset(("name", "support", "length"))
+PROPERTY_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
+ROOT_EDGE_POLICIES = frozenset(
+    (
+        "auto",
+        "skip",
+        "equal-only",
+        "matching-side",
+        "mean",
+        "min",
+        "max",
+        "edge-total",
+    )
+)
 REPORT_COLUMNS = (
-    'source_file',
-    'target_branch_id',
-    'target_node_class',
-    'target_taxa',
-    'shared_descendant_taxa',
-    'shared_split',
-    'source_taxa',
-    'match_status',
-    'match_basis',
-    'projection_only',
-    'source_property',
-    'target_property',
-    'source_value',
-    'previous_target_value',
-    'output_value',
-    'status',
-    'reason',
-    'ambiguity_policy',
-    'ambiguity_resolution',
-    'target_candidate_count',
-    'source_candidate_count',
-    'source_candidate_values',
-    'projected_value_allowed',
-    'taxon_mode',
-    'num_shared_taxa',
-    'num_target_only_taxa',
-    'num_source_only_taxa',
+    "source_file",
+    "target_branch_id",
+    "target_node_class",
+    "target_taxa",
+    "shared_descendant_taxa",
+    "shared_split",
+    "source_taxa",
+    "match_status",
+    "match_basis",
+    "projection_only",
+    "source_property",
+    "target_property",
+    "source_value",
+    "previous_target_value",
+    "output_value",
+    "status",
+    "reason",
+    "ambiguity_policy",
+    "ambiguity_resolution",
+    "target_candidate_count",
+    "source_candidate_count",
+    "source_candidate_values",
+    "projected_value_allowed",
+    "taxon_mode",
+    "num_shared_taxa",
+    "num_target_only_taxa",
+    "num_source_only_taxa",
 )
 
 
 def _format_taxa(taxa):
     if taxa is None:
-        return ''
-    return ','.join(sorted(str(taxon) for taxon in taxa))
+        return ""
+    return ",".join(sorted(str(taxon) for taxon in taxa))
 
 
 def _format_split(split):
     if split is None:
-        return ''
-    return '{}|{}'.format(_format_taxa(split[0]), _format_taxa(split[1]))
+        return ""
+    return "{}|{}".format(_format_taxa(split[0]), _format_taxa(split[1]))
 
 
 def _validate_property_name(prop):
     if prop == TREE_FORMAT_PROP:
-        raise ValueError("Property '{}' is reserved for internal NWKIT use.".format(prop))
+        raise ValueError(
+            "Property '{}' is reserved for internal NWKIT use.".format(prop)
+        )
     if prop in SPECIAL_PROPERTIES:
         return prop
     if not PROPERTY_NAME_PATTERN.fullmatch(str(prop)):
@@ -96,25 +100,32 @@ def _validate_property_name(prop):
     return str(prop)
 
 
-def parse_property_specs(properties=None, property_maps=None, include_name=False,
-                         include_support=False, include_length=False):
+def parse_property_specs(
+    properties=None,
+    property_maps=None,
+    include_name=False,
+    include_support=False,
+    include_length=False,
+):
     specs = list()
     if include_name:
-        specs.append(('name', 'name'))
+        specs.append(("name", "name"))
     if include_support:
-        specs.append(('support', 'support'))
+        specs.append(("support", "support"))
     if include_length:
-        specs.append(('length', 'length'))
+        specs.append(("length", "length"))
     for raw_property in properties or []:
-        for prop in str(raw_property).split(','):
+        for prop in str(raw_property).split(","):
             prop = prop.strip()
             if prop:
                 prop = _validate_property_name(prop)
                 specs.append((prop, prop))
     for raw_mapping in property_maps or []:
-        if '=' not in str(raw_mapping):
-            raise ValueError("--property-map must use SOURCE=TARGET syntax: {}".format(raw_mapping))
-        source_prop, target_prop = str(raw_mapping).split('=', 1)
+        if "=" not in str(raw_mapping):
+            raise ValueError(
+                "--property-map must use SOURCE=TARGET syntax: {}".format(raw_mapping)
+            )
+        source_prop, target_prop = str(raw_mapping).split("=", 1)
         source_prop = _validate_property_name(source_prop.strip())
         target_prop = _validate_property_name(target_prop.strip())
         specs.append((source_prop, target_prop))
@@ -122,7 +133,9 @@ def parse_property_specs(properties=None, property_maps=None, include_name=False
     seen_targets = set()
     for source_prop, target_prop in specs:
         if target_prop in seen_targets:
-            raise ValueError("Target property is specified more than once: {}".format(target_prop))
+            raise ValueError(
+                "Target property is specified more than once: {}".format(target_prop)
+            )
         seen_targets.add(target_prop)
         deduplicated.append((source_prop, target_prop))
     return deduplicated
@@ -136,37 +149,45 @@ def parse_root_edge_policies(specs=None):
     else:
         raw_items = list()
         for raw in specs:
-            if '=' not in str(raw):
+            if "=" not in str(raw):
                 raise ValueError(
-                    "--root-edge-policy must use TARGET_PROPERTY=POLICY syntax: {}".format(raw)
+                    "--root-edge-policy must use TARGET_PROPERTY=POLICY syntax: {}".format(
+                        raw
+                    )
                 )
-            target_prop, policy = str(raw).split('=', 1)
+            target_prop, policy = str(raw).split("=", 1)
             raw_items.append((target_prop, policy))
     policies = dict()
     for raw_target_prop, raw_policy in raw_items:
         target_prop = str(raw_target_prop).strip()
-        if target_prop != '*':
+        if target_prop != "*":
             target_prop = _validate_property_name(target_prop)
         policy = str(raw_policy).strip().lower()
         if policy not in ROOT_EDGE_POLICIES:
             raise ValueError(
                 "Unknown root-edge policy '{}'. Choose from: {}.".format(
                     policy,
-                    ', '.join(sorted(ROOT_EDGE_POLICIES)),
+                    ", ".join(sorted(ROOT_EDGE_POLICIES)),
                 )
             )
         if target_prop in policies:
             raise ValueError(
-                'Root-edge policy is specified more than once for target property: {}'.format(
+                "Root-edge policy is specified more than once for target property: {}".format(
                     target_prop
                 )
             )
-        if target_prop == 'name' and policy in ('mean', 'min', 'max', 'edge-total'):
-            raise ValueError("Root-edge policy '{}' is not valid for node names.".format(policy))
-        if target_prop == 'length' and policy in ('equal-only', 'mean', 'min', 'max'):
-            raise ValueError("Root-edge policy '{}' is not valid for branch lengths.".format(policy))
-        if target_prop == 'support' and policy == 'edge-total':
-            raise ValueError("Root-edge policy 'edge-total' is only valid for branch lengths.")
+        if target_prop == "name" and policy in ("mean", "min", "max", "edge-total"):
+            raise ValueError(
+                "Root-edge policy '{}' is not valid for node names.".format(policy)
+            )
+        if target_prop == "length" and policy in ("equal-only", "mean", "min", "max"):
+            raise ValueError(
+                "Root-edge policy '{}' is not valid for branch lengths.".format(policy)
+            )
+        if target_prop == "support" and policy == "edge-total":
+            raise ValueError(
+                "Root-edge policy 'edge-total' is only valid for branch lengths."
+            )
         policies[target_prop] = policy
     return policies
 
@@ -174,30 +195,36 @@ def parse_root_edge_policies(specs=None):
 def _root_edge_policy_for(target_prop, policies):
     if target_prop in policies:
         return policies[target_prop]
-    if '*' in policies:
-        return policies['*']
-    if target_prop == 'length':
-        return 'edge-total'
-    return 'auto'
+    if "*" in policies:
+        return policies["*"]
+    if target_prop == "length":
+        return "edge-total"
+    return "auto"
 
 
 def _validate_root_edge_policy_for_property(target_prop, policy):
-    if target_prop == 'name' and policy in ('mean', 'min', 'max', 'edge-total'):
-        raise ValueError("Root-edge policy '{}' is not valid for node names.".format(policy))
-    if target_prop == 'length' and policy in ('equal-only', 'mean', 'min', 'max'):
-        raise ValueError("Root-edge policy '{}' is not valid for branch lengths.".format(policy))
-    if target_prop != 'length' and policy == 'edge-total':
-        raise ValueError("Root-edge policy 'edge-total' is only valid for branch lengths.")
+    if target_prop == "name" and policy in ("mean", "min", "max", "edge-total"):
+        raise ValueError(
+            "Root-edge policy '{}' is not valid for node names.".format(policy)
+        )
+    if target_prop == "length" and policy in ("equal-only", "mean", "min", "max"):
+        raise ValueError(
+            "Root-edge policy '{}' is not valid for branch lengths.".format(policy)
+        )
+    if target_prop != "length" and policy == "edge-total":
+        raise ValueError(
+            "Root-edge policy 'edge-total' is only valid for branch lengths."
+        )
 
 
 def _get_property(node, prop):
-    if prop == 'name':
+    if prop == "name":
         value = node.name
-        return value, value not in (None, '')
-    if prop == 'support':
+        return value, value not in (None, "")
+    if prop == "support":
         value = node.support
         return value, not support_is_missing(value)
-    if prop == 'length':
+    if prop == "length":
         value = node.dist
         return value, value is not None
     if prop not in node.props:
@@ -209,7 +236,7 @@ def _get_property(node, prop):
 def _coerce_fill(fill, target_prop):
     if fill is None:
         return None
-    if target_prop in ('support', 'length'):
+    if target_prop in ("support", "length"):
         try:
             numeric_fill = float(fill)
         except (TypeError, ValueError) as exc:
@@ -225,11 +252,11 @@ def _coerce_fill(fill, target_prop):
 
 
 def _set_property(node, prop, value):
-    if prop == 'name':
+    if prop == "name":
         node.name = value
-    elif prop == 'support':
+    elif prop == "support":
         node.support = float(value)
-    elif prop == 'length':
+    elif prop == "length":
         node.dist = float(value)
     else:
         node.props[prop] = value
@@ -242,9 +269,7 @@ def _root_edge_length_total_components(values):
         return 0.0, 0.0
     normalized_total = math.fsum(value / scale for value in values)
     if not math.isfinite(normalized_total):
-        raise ValueError(
-            'The physical root-edge length total must be finite.'
-        )
+        raise ValueError("The physical root-edge length total must be finite.")
     return scale, normalized_total
 
 
@@ -253,7 +278,7 @@ def _scaled_root_edge_length(total_components, ratio=1.0):
     value = scale * (normalized_total * ratio)
     if not math.isfinite(value):
         raise ValueError(
-            'The physical root-edge length total is too large to represent.'
+            "The physical root-edge length total is too large to represent."
         )
     return value
 
@@ -262,7 +287,7 @@ def _root_edge_ratio_records(candidates):
     """Calculate root-half ratios without overflowing their finite sum."""
     values = [float(candidate.dist or 0.0) for candidate in candidates]
     if not all(math.isfinite(value) for value in values):
-        raise ValueError('Target root-edge lengths must be finite.')
+        raise ValueError("Target root-edge lengths must be finite.")
     max_abs_value = max((abs(value) for value in values), default=0.0)
     if max_abs_value == 0.0:
         ratio_was_defined = False
@@ -277,12 +302,10 @@ def _root_edge_ratio_records(candidates):
             else [1.0 / len(values)] * len(values)
         )
     if not all(math.isfinite(ratio) for ratio in ratios):
-        raise ValueError(
-            'Target root-edge length ratios are too large to represent.'
-        )
+        raise ValueError("Target root-edge length ratios are too large to represent.")
     return {
         id(candidate): (ratio, ratio_was_defined)
-        for candidate, ratio in zip(candidates, ratios)
+        for candidate, ratio in zip(candidates, ratios, strict=True)
     }
 
 
@@ -292,13 +315,11 @@ def _is_bifurcating_root_pair(nodes):
     parent = nodes[0].up
     if parent is None or not parent.is_root or len(parent.get_children()) != 2:
         return False
-    return {id(node) for node in nodes} == {
-        id(node) for node in parent.get_children()
-    }
+    return {id(node) for node in nodes} == {id(node) for node in parent.get_children()}
 
 
 def _physical_split_candidates(tree, shared_taxa):
-    candidates = dict()
+    candidates: dict[Any, list[Any]] = {}
     taxon_sets = get_subtree_leaf_name_sets(tree)
     for node in tree.traverse():
         if node.is_root:
@@ -310,10 +331,7 @@ def _physical_split_candidates(tree, shared_taxa):
         )
         if split is not None:
             candidates.setdefault(split, list()).append(node)
-    return {
-        split: tuple(nodes)
-        for split, nodes in candidates.items()
-    }
+    return {split: tuple(nodes) for split, nodes in candidates.items()}
 
 
 def _candidate_projected_taxa(node, shared_taxa):
@@ -332,7 +350,7 @@ def _candidate_sort_key(node, shared_taxa):
 
 
 def _json_safe_value(value):
-    if hasattr(value, 'item'):
+    if hasattr(value, "item"):
         value = value.item()
     if isinstance(value, float) and not math.isfinite(value):
         return str(value)
@@ -343,15 +361,19 @@ def _json_safe_value(value):
 
 def _source_candidate_records(candidates, source_prop, shared_taxa):
     records = list()
-    for node in sorted(candidates, key=lambda candidate: _candidate_sort_key(candidate, shared_taxa)):
+    for node in sorted(
+        candidates, key=lambda candidate: _candidate_sort_key(candidate, shared_taxa)
+    ):
         value, present = _get_property(node, source_prop)
-        records.append({
-            'node': node,
-            'taxa': frozenset(str(name) for name in node.leaf_names()),
-            'projected_taxa': _candidate_projected_taxa(node, shared_taxa),
-            'value': value,
-            'present': present,
-        })
+        records.append(
+            {
+                "node": node,
+                "taxa": frozenset(str(name) for name in node.leaf_names()),
+                "projected_taxa": _candidate_projected_taxa(node, shared_taxa),
+                "value": value,
+                "present": present,
+            }
+        )
     return records
 
 
@@ -359,53 +381,56 @@ def _candidate_values_json(records):
     return json.dumps(
         [
             {
-                'present': record['present'],
-                'projected_taxa': sorted(record['projected_taxa']),
-                'taxa': sorted(record['taxa']),
-                'value': _json_safe_value(record['value']) if record['present'] else None,
+                "present": record["present"],
+                "projected_taxa": sorted(record["projected_taxa"]),
+                "taxa": sorted(record["taxa"]),
+                "value": _json_safe_value(record["value"])
+                if record["present"]
+                else None,
             }
             for record in records
         ],
         ensure_ascii=False,
         sort_keys=True,
-        separators=(',', ':'),
+        separators=(",", ":"),
     )
 
 
 def _root_edge_resolution_metadata(policy, target_candidates, source_records):
     return {
-        'ambiguity_policy': policy,
-        'target_candidate_count': len(target_candidates),
-        'source_candidate_count': len(source_records),
-        'source_candidate_values': _candidate_values_json(source_records),
+        "ambiguity_policy": policy,
+        "target_candidate_count": len(target_candidates),
+        "source_candidate_count": len(source_records),
+        "source_candidate_values": _candidate_values_json(source_records),
     }
 
 
-def _resolved_root_edge_value(mapping, metadata, source_record, value, has_value,
-                              reason, resolution):
+def _resolved_root_edge_value(
+    mapping, metadata, source_record, value, has_value, reason, resolution
+):
     return {
         **metadata,
-        'resolved': True,
-        'status': (
-            'projected_match'
+        "resolved": True,
+        "status": (
+            "projected_match"
             if mapping.target_only_taxa or mapping.source_only_taxa
-            else 'exact_match'
+            else "exact_match"
         ),
-        'reason': reason,
-        'ambiguity_resolution': resolution,
-        'source': source_record['node'],
-        'source_taxa': source_record['taxa'],
-        'source_value': value,
-        'source_has_value': has_value,
+        "reason": reason,
+        "ambiguity_resolution": resolution,
+        "source": source_record["node"],
+        "source_taxa": source_record["taxa"],
+        "source_value": value,
+        "source_has_value": has_value,
     }
 
 
 def _unresolved_root_edge_value(metadata, reason, resolution):
     return {
         **metadata,
-        'resolved': False,
-        'reason': reason,
-        'ambiguity_resolution': resolution,
+        "resolved": False,
+        "reason": reason,
+        "ambiguity_resolution": resolution,
     }
 
 
@@ -416,15 +441,15 @@ def _resolve_equal_root_edge_value(mapping, metadata, source_records):
             mapping=mapping,
             metadata=metadata,
             source_record=record,
-            value=record['value'],
-            has_value=record['present'],
-            reason='matching_unique_canonical_root_edge',
-            resolution='unique_edge_value',
+            value=record["value"],
+            has_value=record["present"],
+            reason="matching_unique_canonical_root_edge",
+            resolution="unique_edge_value",
         )
-    if not all(record['present'] for record in source_records):
+    if not all(record["present"] for record in source_records):
         return None
-    first_value = source_records[0]['value']
-    if not all(record['value'] == first_value for record in source_records[1:]):
+    first_value = source_records[0]["value"]
+    if not all(record["value"] == first_value for record in source_records[1:]):
         return None
     return _resolved_root_edge_value(
         mapping=mapping,
@@ -432,8 +457,8 @@ def _resolve_equal_root_edge_value(mapping, metadata, source_records):
         source_record=source_records[0],
         value=first_value,
         has_value=True,
-        reason='matching_equal_root_edge_values',
-        resolution='equal_edge_values',
+        reason="matching_equal_root_edge_values",
+        resolution="equal_edge_values",
     )
 
 
@@ -441,53 +466,52 @@ def _resolve_matching_root_edge_side(match, mapping, metadata, source_records):
     matching_records = [
         record
         for record in source_records
-        if record['projected_taxa'] == match.projected_taxa
+        if record["projected_taxa"] == match.projected_taxa
     ]
     if len(matching_records) != 1:
         return _unresolved_root_edge_value(
             metadata,
-            reason='matching_root_edge_side_not_unique',
-            resolution='matching_side_unresolved',
+            reason="matching_root_edge_side_not_unique",
+            resolution="matching_side_unresolved",
         )
     record = matching_records[0]
     return _resolved_root_edge_value(
         mapping=mapping,
         metadata=metadata,
         source_record=record,
-        value=record['value'],
-        has_value=record['present'],
-        reason='matching_root_edge_side',
-        resolution='matching_side',
+        value=record["value"],
+        has_value=record["present"],
+        reason="matching_root_edge_side",
+        resolution="matching_side",
     )
 
 
 def _resolve_reduced_root_edge_value(mapping, metadata, source_records, policy):
-    if not source_records or not all(record['present'] for record in source_records):
+    if not source_records or not all(record["present"] for record in source_records):
         return _unresolved_root_edge_value(
             metadata,
-            reason='incomplete_root_edge_values',
-            resolution='numeric_reducer_unresolved',
+            reason="incomplete_root_edge_values",
+            resolution="numeric_reducer_unresolved",
         )
     try:
-        numeric_values = [float(record['value']) for record in source_records]
+        numeric_values = [float(record["value"]) for record in source_records]
     except (TypeError, ValueError):
         return _unresolved_root_edge_value(
             metadata,
-            reason='non_numeric_root_edge_values',
-            resolution='numeric_reducer_unresolved',
+            reason="non_numeric_root_edge_values",
+            resolution="numeric_reducer_unresolved",
         )
     if not all(math.isfinite(value) for value in numeric_values):
         return _unresolved_root_edge_value(
             metadata,
-            reason='non_finite_root_edge_values',
-            resolution='numeric_reducer_unresolved',
+            reason="non_finite_root_edge_values",
+            resolution="numeric_reducer_unresolved",
         )
-    if policy == 'mean':
+    if policy == "mean":
         value = math.fsum(
-            numeric_value / len(numeric_values)
-            for numeric_value in numeric_values
+            numeric_value / len(numeric_values) for numeric_value in numeric_values
         )
-    elif policy == 'min':
+    elif policy == "min":
         value = min(numeric_values)
     else:
         value = max(numeric_values)
@@ -497,72 +521,81 @@ def _resolve_reduced_root_edge_value(mapping, metadata, source_records, policy):
         source_record=source_records[0],
         value=value,
         has_value=True,
-        reason='reduced_root_edge_values',
+        reason="reduced_root_edge_values",
         resolution=policy,
     )
 
 
-def _resolve_root_edge_total(mapping, metadata, source_records, target_candidates,
-                             target_node, target_root_ratios):
-    if not source_records or not all(record['present'] for record in source_records):
+def _resolve_root_edge_total(
+    mapping,
+    metadata,
+    source_records,
+    target_candidates,
+    target_node,
+    target_root_ratios,
+):
+    if not source_records or not all(record["present"] for record in source_records):
         return _unresolved_root_edge_value(
             metadata,
-            reason='incomplete_root_edge_lengths',
-            resolution='edge_total_unresolved',
+            reason="incomplete_root_edge_lengths",
+            resolution="edge_total_unresolved",
         )
     try:
-        numeric_values = [float(record['value']) for record in source_records]
+        numeric_values = [float(record["value"]) for record in source_records]
     except (TypeError, ValueError):
         return _unresolved_root_edge_value(
             metadata,
-            reason='non_numeric_root_edge_lengths',
-            resolution='edge_total_unresolved',
+            reason="non_numeric_root_edge_lengths",
+            resolution="edge_total_unresolved",
         )
     if not all(math.isfinite(value) for value in numeric_values):
         return _unresolved_root_edge_value(
             metadata,
-            reason='non_finite_root_edge_lengths',
-            resolution='edge_total_unresolved',
+            reason="non_finite_root_edge_lengths",
+            resolution="edge_total_unresolved",
         )
-    source_total_components = _root_edge_length_total_components(
-        numeric_values
-    )
+    source_total_components = _root_edge_length_total_components(numeric_values)
     if _is_bifurcating_root_pair(target_candidates):
         ratio_record = target_root_ratios.get(id(target_node))
         if ratio_record is not None:
             ratio, ratio_was_defined = ratio_record
         else:
-            ratio, ratio_was_defined = _root_edge_ratio_records(
-                target_candidates
-            )[id(target_node)]
+            ratio, ratio_was_defined = _root_edge_ratio_records(target_candidates)[
+                id(target_node)
+            ]
         if ratio_was_defined:
-            resolution = 'edge_total_target_ratio'
+            resolution = "edge_total_target_ratio"
         else:
-            resolution = 'edge_total_equal_zero_ratio'
+            resolution = "edge_total_equal_zero_ratio"
         output_value = _scaled_root_edge_length(
             source_total_components,
             ratio=ratio,
         )
     else:
-        output_value = _scaled_root_edge_length(
-            source_total_components
-        )
-        resolution = 'edge_total_single_branch'
+        output_value = _scaled_root_edge_length(source_total_components)
+        resolution = "edge_total_single_branch"
     return _resolved_root_edge_value(
         mapping=mapping,
         metadata=metadata,
         source_record=source_records[0],
         value=output_value,
         has_value=True,
-        reason='matching_root_edge_total',
+        reason="matching_root_edge_total",
         resolution=resolution,
     )
 
 
-def _resolve_split_root_edge_property(match, mapping, source_prop, target_prop, policy,
-                                      target_root_ratios, target_candidates,
-                                      source_candidates):
-    if match.match_basis != 'split':
+def _resolve_split_root_edge_property(
+    match,
+    mapping,
+    source_prop,
+    target_prop,
+    policy,
+    target_root_ratios,
+    target_candidates,
+    source_candidates,
+):
+    if match.match_basis != "split":
         return None
     if not target_candidates or not source_candidates:
         return None
@@ -582,13 +615,13 @@ def _resolve_split_root_edge_property(match, mapping, source_prop, target_prop, 
         target_candidates=target_candidates,
         source_records=source_records,
     )
-    if policy == 'skip':
+    if policy == "skip":
         return _unresolved_root_edge_value(
             metadata,
-            reason='root_edge_policy_skip',
-            resolution='skipped',
+            reason="root_edge_policy_skip",
+            resolution="skipped",
         )
-    if policy in ('auto', 'equal-only') and target_prop != 'length':
+    if policy in ("auto", "equal-only") and target_prop != "length":
         equal_resolution = _resolve_equal_root_edge_value(
             mapping=mapping,
             metadata=metadata,
@@ -596,32 +629,32 @@ def _resolve_split_root_edge_property(match, mapping, source_prop, target_prop, 
         )
         if equal_resolution is not None:
             return equal_resolution
-        if policy == 'equal-only':
+        if policy == "equal-only":
             reason = (
-                'incomplete_root_edge_values'
-                if not all(record['present'] for record in source_records)
-                else 'conflicting_root_edge_values'
+                "incomplete_root_edge_values"
+                if not all(record["present"] for record in source_records)
+                else "conflicting_root_edge_values"
             )
             return _unresolved_root_edge_value(
                 metadata,
                 reason=reason,
-                resolution='equal_values_required',
+                resolution="equal_values_required",
             )
-    if policy == 'matching-side':
+    if policy == "matching-side":
         return _resolve_matching_root_edge_side(
             match=match,
             mapping=mapping,
             metadata=metadata,
             source_records=source_records,
         )
-    if policy in ('mean', 'min', 'max'):
+    if policy in ("mean", "min", "max"):
         return _resolve_reduced_root_edge_value(
             mapping=mapping,
             metadata=metadata,
             source_records=source_records,
             policy=policy,
         )
-    if policy in ('auto', 'edge-total') and target_prop == 'length':
+    if policy in ("auto", "edge-total") and target_prop == "length":
         return _resolve_root_edge_total(
             mapping=mapping,
             metadata=metadata,
@@ -630,7 +663,7 @@ def _resolve_split_root_edge_property(match, mapping, source_prop, target_prop, 
             target_node=match.target,
             target_root_ratios=target_root_ratios,
         )
-    if policy == 'auto':
+    if policy == "auto":
         return _resolve_matching_root_edge_side(
             match=match,
             mapping=mapping,
@@ -639,8 +672,8 @@ def _resolve_split_root_edge_property(match, mapping, source_prop, target_prop, 
         )
     return _unresolved_root_edge_value(
         metadata,
-        reason='root_edge_policy_not_applicable',
-        resolution='unresolved',
+        reason="root_edge_policy_not_applicable",
+        resolution="unresolved",
     )
 
 
@@ -660,27 +693,27 @@ def _resolve_aligned_root_lengths(target, source, mapping, source_prop, policy):
         source_records=source_records,
     )
     resolutions = dict()
-    if policy == 'skip':
+    if policy == "skip":
         for target_node in target_candidates:
             resolutions[id(target_node)] = _unresolved_root_edge_value(
                 metadata,
-                reason='root_edge_policy_skip',
-                resolution='skipped_aligned_root_edge',
+                reason="root_edge_policy_skip",
+                resolution="skipped_aligned_root_edge",
             )
         return resolutions
-    if policy == 'matching-side':
+    if policy == "matching-side":
         for target_node in target_candidates:
             projected_taxa = _candidate_projected_taxa(target_node, mapping.shared_taxa)
             matching_records = [
                 record
                 for record in source_records
-                if record['projected_taxa'] == projected_taxa
+                if record["projected_taxa"] == projected_taxa
             ]
             if len(matching_records) != 1:
                 resolutions[id(target_node)] = _unresolved_root_edge_value(
                     metadata,
-                    reason='matching_aligned_root_edge_side_not_unique',
-                    resolution='matching_side_unresolved',
+                    reason="matching_aligned_root_edge_side_not_unique",
+                    resolution="matching_side_unresolved",
                 )
                 continue
             record = matching_records[0]
@@ -688,62 +721,62 @@ def _resolve_aligned_root_lengths(target, source, mapping, source_prop, policy):
                 mapping=mapping,
                 metadata=metadata,
                 source_record=record,
-                value=record['value'],
-                has_value=record['present'],
-                reason='matching_aligned_root_edge_side',
-                resolution='matching_side',
+                value=record["value"],
+                has_value=record["present"],
+                reason="matching_aligned_root_edge_side",
+                resolution="matching_side",
             )
         return resolutions
-    if policy not in ('auto', 'edge-total'):
+    if policy not in ("auto", "edge-total"):
         for target_node in target_candidates:
             resolutions[id(target_node)] = _unresolved_root_edge_value(
                 metadata,
-                reason='root_edge_policy_not_applicable',
-                resolution='unresolved_aligned_root_edge',
+                reason="root_edge_policy_not_applicable",
+                resolution="unresolved_aligned_root_edge",
             )
         return resolutions
-    if not all(record['present'] for record in source_records):
+    if not all(record["present"] for record in source_records):
         for target_node in target_candidates:
             resolutions[id(target_node)] = _unresolved_root_edge_value(
                 metadata,
-                reason='incomplete_root_edge_lengths',
-                resolution='edge_total_unresolved',
+                reason="incomplete_root_edge_lengths",
+                resolution="edge_total_unresolved",
             )
         return resolutions
     try:
-        source_values = [float(record['value']) for record in source_records]
+        source_values = [float(record["value"]) for record in source_records]
     except (TypeError, ValueError):
         source_values = []
     if not source_values or not all(math.isfinite(value) for value in source_values):
         reason = (
-            'non_finite_root_edge_lengths'
+            "non_finite_root_edge_lengths"
             if source_values
-            else 'non_numeric_root_edge_lengths'
+            else "non_numeric_root_edge_lengths"
         )
         for target_node in target_candidates:
             resolutions[id(target_node)] = _unresolved_root_edge_value(
                 metadata,
                 reason=reason,
-                resolution='edge_total_unresolved',
+                resolution="edge_total_unresolved",
             )
         return resolutions
-    source_total_components = _root_edge_length_total_components(
-        source_values
-    )
+    source_total_components = _root_edge_length_total_components(source_values)
     target_ratio_records = _root_edge_ratio_records(target_candidates)
     for target_node in target_candidates:
         ratio, ratio_was_defined = target_ratio_records[id(target_node)]
         if ratio_was_defined:
-            resolution = 'edge_total_target_ratio'
+            resolution = "edge_total_target_ratio"
         else:
-            resolution = 'edge_total_equal_zero_ratio'
+            resolution = "edge_total_equal_zero_ratio"
         matching_records = [
             record
             for record in source_records
-            if record['projected_taxa']
+            if record["projected_taxa"]
             == _candidate_projected_taxa(target_node, mapping.shared_taxa)
         ]
-        source_record = matching_records[0] if len(matching_records) == 1 else source_records[0]
+        source_record = (
+            matching_records[0] if len(matching_records) == 1 else source_records[0]
+        )
         output_value = _scaled_root_edge_length(
             source_total_components,
             ratio=ratio,
@@ -754,7 +787,7 @@ def _resolve_aligned_root_lengths(target, source, mapping, source_prop, policy):
             source_record=source_record,
             value=output_value,
             has_value=True,
-            reason='matching_aligned_root_edge_total',
+            reason="matching_aligned_root_edge_total",
             resolution=resolution,
         )
     return resolutions
@@ -784,38 +817,270 @@ def _try_align_roots(target, source, taxon_mode, allow_target_reroot=True):
             )
         elif source_bifurcating:
             sys.stderr.write(
-                'Skipping root alignment because changing the target root is disabled.\n'
+                "Skipping root alignment because changing the target root is disabled.\n"
             )
         else:
             sys.stderr.write(
-                'Skipping root alignment because neither input tree has a bifurcating root.\n'
+                "Skipping root alignment because neither input tree has a bifurcating root.\n"
             )
     except (SystemExit, ValueError) as exc:
-        sys.stderr.write('Skipping root alignment: {}\n'.format(exc))
+        sys.stderr.write("Skipping root alignment: {}\n".format(exc))
     return target, source
 
 
 def _write_report(rows, report_path):
-    if report_path in (None, ''):
+    if report_path in (None, ""):
         return
-    if report_path == '-':
+    if report_path == "-":
         raise ValueError("'--report' requires a file path, not '-'.")
-    pd.DataFrame(rows, columns=REPORT_COLUMNS).to_csv(report_path, sep='\t', index=False)
+    pd.DataFrame(rows, columns=REPORT_COLUMNS).to_csv(
+        report_path, sep="\t", index=False
+    )
 
 
-def transfer_properties(target, source, property_specs, target_class='all',
-                        taxon_mode='exact', fill=None, policy='compatible-only',
-                        align_roots=True, source_label='', exclude_root=False,
-                        match_basis='clade', allow_projected_values=False,
-                        allow_target_reroot=True, root_edge_policies=None,
-                        collect_report=True):
-    if policy not in ('compatible-only', 'strict'):
+def _transfer_root_edge_candidates(
+    target_prop,
+    projected_split,
+    match,
+    target_physical_split_candidates,
+    source_physical_split_candidates,
+):
+    if target_prop == "length" and projected_split is not None:
+        return (
+            target_physical_split_candidates.get(projected_split, ()),
+            source_physical_split_candidates.get(projected_split, ()),
+        )
+    return match.target_candidates, match.source_candidates
+
+
+def _transfer_one_property(
+    target_node,
+    match,
+    source_prop,
+    target_prop,
+    mapping,
+    match_basis,
+    collect_report,
+    target_physical_split_candidates,
+    source_physical_split_candidates,
+    target_root_ratios,
+    aligned_root_length_resolutions,
+    root_edge_policies,
+    allow_projected_values,
+    policy,
+    fill,
+):
+    previous_value, _ = _get_property(target_node, target_prop)
+    projected_split = (
+        match.projected_split if match_basis == "split" or collect_report else None
+    )
+    target_candidates, source_candidates = _transfer_root_edge_candidates(
+        target_prop,
+        projected_split,
+        match,
+        target_physical_split_candidates,
+        source_physical_split_candidates,
+    )
+    root_edge_resolution = _resolve_split_root_edge_property(
+        match=match,
+        mapping=mapping,
+        source_prop=source_prop,
+        target_prop=target_prop,
+        policy=_root_edge_policy_for(target_prop, root_edge_policies),
+        target_root_ratios=target_root_ratios,
+        target_candidates=target_candidates,
+        source_candidates=source_candidates,
+    )
+    if root_edge_resolution is None and target_prop == "length":
+        root_edge_resolution = aligned_root_length_resolutions.get(id(target_node))
+
+    state: dict[str, Any] = {
+        "source_value": None,
+        "output_value": previous_value,
+        "effective_match_status": match.status,
+        "effective_reason": match.reason,
+        "effective_source": match.source,
+        "effective_source_taxa": match.source_taxa,
+        "source_has_value": False,
+        "projected_value_allowed": "",
+        "ambiguity_policy": "",
+        "ambiguity_resolution": "",
+        "target_candidate_count": "",
+        "source_candidate_count": "",
+        "source_candidate_values": "",
+    }
+    if root_edge_resolution is not None:
+        for key in (
+            "ambiguity_policy",
+            "ambiguity_resolution",
+            "target_candidate_count",
+            "source_candidate_count",
+            "source_candidate_values",
+        ):
+            state[key] = root_edge_resolution[key]
+        state["effective_reason"] = root_edge_resolution["reason"]
+        if root_edge_resolution["resolved"]:
+            state.update(
+                {
+                    "effective_match_status": root_edge_resolution["status"],
+                    "effective_source": root_edge_resolution["source"],
+                    "effective_source_taxa": root_edge_resolution["source_taxa"],
+                    "source_value": root_edge_resolution["source_value"],
+                    "source_has_value": root_edge_resolution["source_has_value"],
+                }
+            )
+        else:
+            state["effective_match_status"] = "ambiguous"
+
+    effective_status = state["effective_match_status"]
+    projection_only = effective_status == "projected_match"
+    if effective_status in ("exact_match", "projected_match"):
+        if root_edge_resolution is None:
+            state["source_value"], state["source_has_value"] = _get_property(
+                state["effective_source"], source_prop
+            )
+        state["projected_value_allowed"] = (
+            not projection_only
+            or (
+                source_prop not in ("support", "length")
+                and target_prop not in ("support", "length")
+            )
+            or bool(allow_projected_values)
+        )
+
+    status, reason = effective_status, state["effective_reason"]
+    failed = False
+    changed = False
+    if projection_only and policy == "strict":
+        status, reason, failed = (
+            "projected_match_rejected",
+            "strict_policy_requires_exact_match",
+            True,
+        )
+    elif projection_only and not state["projected_value_allowed"]:
+        status, reason, failed = (
+            "projected_value_rejected",
+            "projected_support_or_length_requires_opt_in",
+            True,
+        )
+    elif effective_status in ("exact_match", "projected_match"):
+        if state["source_has_value"]:
+            _set_property(target_node, target_prop, state["source_value"])
+            state["output_value"] = state["source_value"]
+            status, reason, changed = "transferred", state["effective_reason"], True
+        elif (
+            target_node.is_root
+            and source_prop in ("support", "length")
+            and target_prop in ("support", "length")
+        ):
+            status, reason = "not_applicable", "root_value_missing_not_applicable"
+        elif fill is not None:
+            state["output_value"] = _coerce_fill(fill, target_prop)
+            _set_property(target_node, target_prop, state["output_value"])
+            status, reason, changed, failed = (
+                "filled",
+                "source_property_missing",
+                True,
+                True,
+            )
+        else:
+            status, reason, failed = (
+                "missing_source_value",
+                "source_property_missing",
+                True,
+            )
+    elif fill is not None:
+        state["output_value"] = _coerce_fill(fill, target_prop)
+        _set_property(target_node, target_prop, state["output_value"])
+        status, changed, failed = "filled", True, True
+    else:
+        failed = True
+    state.update(
+        {
+            "previous_value": previous_value,
+            "projected_split": projected_split,
+            "projection_only": projection_only,
+            "status": status,
+            "reason": reason,
+            "failed": failed,
+            "changed": changed,
+        }
+    )
+    return state
+
+
+def _transfer_report_row(
+    state,
+    source_label,
+    traversal_id,
+    target_node,
+    match,
+    source_prop,
+    target_prop,
+    taxon_mode,
+    mapping,
+):
+    return {
+        "source_file": source_label,
+        "target_branch_id": traversal_id,
+        "target_node_class": get_node_class(target_node),
+        "target_taxa": _format_taxa(match.target_taxa),
+        "shared_descendant_taxa": _format_taxa(match.projected_taxa),
+        "shared_split": _format_split(state["projected_split"]),
+        "source_taxa": _format_taxa(state["effective_source_taxa"]),
+        "match_status": state["effective_match_status"],
+        "match_basis": match.match_basis,
+        "projection_only": state["projection_only"],
+        "source_property": source_prop,
+        "target_property": target_prop,
+        "source_value": state["source_value"],
+        "previous_target_value": state["previous_value"],
+        "output_value": state["output_value"],
+        "status": state["status"],
+        "reason": state["reason"],
+        "ambiguity_policy": state["ambiguity_policy"],
+        "ambiguity_resolution": state["ambiguity_resolution"],
+        "target_candidate_count": state["target_candidate_count"],
+        "source_candidate_count": state["source_candidate_count"],
+        "source_candidate_values": state["source_candidate_values"],
+        "projected_value_allowed": state["projected_value_allowed"],
+        "taxon_mode": taxon_mode,
+        "num_shared_taxa": len(mapping.shared_taxa),
+        "num_target_only_taxa": len(mapping.target_only_taxa),
+        "num_source_only_taxa": len(mapping.source_only_taxa),
+    }
+
+
+def transfer_properties(
+    target,
+    source,
+    property_specs,
+    target_class="all",
+    taxon_mode="exact",
+    fill=None,
+    policy="compatible-only",
+    align_roots=True,
+    source_label="",
+    exclude_root=False,
+    match_basis="clade",
+    allow_projected_values=False,
+    allow_target_reroot=True,
+    root_edge_policies=None,
+    collect_report=True,
+):
+    if policy not in ("compatible-only", "strict"):
         raise ValueError("Unsupported transfer policy: {}".format(policy))
     root_edge_policies = parse_root_edge_policies(root_edge_policies)
-    validate_unique_named_leaves(target, option_name='--infile', context=" for 'transfer'")
-    validate_unique_named_leaves(source, option_name='--infile2', context=" for 'transfer'")
-    if taxon_mode == 'exact' and not is_all_leaf_names_identical(target, source, verbose=True):
-        raise ValueError('Leaf labels must match exactly when --taxon-mode exact.')
+    validate_unique_named_leaves(
+        target, option_name="--infile", context=" for 'transfer'"
+    )
+    validate_unique_named_leaves(
+        source, option_name="--infile2", context=" for 'transfer'"
+    )
+    if taxon_mode == "exact" and not is_all_leaf_names_identical(
+        target, source, verbose=True
+    ):
+        raise ValueError("Leaf labels must match exactly when --taxon-mode exact.")
     shared_taxa_before_alignment = frozenset(
         str(name) for name in target.leaf_names()
     ).intersection(str(name) for name in source.leaf_names())
@@ -828,7 +1093,7 @@ def transfer_properties(target, source, property_specs, target_class='all',
         shared_taxa_before_alignment,
     )
     target_was_bifurcating = len(target.get_children()) == 2
-    if align_roots and target_class != 'leaf' and match_basis == 'clade':
+    if align_roots and target_class != "leaf" and match_basis == "clade":
         target, source = _try_align_roots(
             target=target,
             source=source,
@@ -837,8 +1102,8 @@ def transfer_properties(target, source, property_specs, target_class='all',
         )
     source_was_aligned_to_target_root = (
         align_roots
-        and target_class != 'leaf'
-        and match_basis == 'clade'
+        and target_class != "leaf"
+        and match_basis == "clade"
         and target_was_bifurcating
         and source_root_split_before_alignment != target_root_split_before_alignment
         and projected_root_split(source, shared_taxa_before_alignment)
@@ -851,7 +1116,7 @@ def transfer_properties(target, source, property_specs, target_class='all',
         match_basis=match_basis,
     )
     match_by_target_id = {id(match.target): match for match in mapping.matches}
-    if match_basis == 'split':
+    if match_basis == "split":
         target_physical_split_candidates = _physical_split_candidates(
             target,
             mapping.shared_taxa,
@@ -866,21 +1131,19 @@ def transfer_properties(target, source, property_specs, target_class='all',
     target_root_ratios = dict()
     target_root_children = target.get_children()
     if len(target_root_children) == 2:
-        target_root_ratios = _root_edge_ratio_records(
-            target_root_children
-        )
+        target_root_ratios = _root_edge_ratio_records(target_root_children)
     aligned_root_length_resolutions = dict()
     source_length_prop = next(
         (
             source_prop
             for source_prop, target_prop in property_specs
-            if target_prop == 'length'
+            if target_prop == "length"
         ),
         None,
     )
     if source_was_aligned_to_target_root and source_length_prop is not None:
-        length_root_edge_policy = _root_edge_policy_for('length', root_edge_policies)
-        _validate_root_edge_policy_for_property('length', length_root_edge_policy)
+        length_root_edge_policy = _root_edge_policy_for("length", root_edge_policies)
+        _validate_root_edge_policy_for_property("length", length_root_edge_policy)
         aligned_root_length_resolutions = _resolve_aligned_root_lengths(
             target=target,
             source=source,
@@ -893,7 +1156,7 @@ def transfer_properties(target, source, property_specs, target_class='all',
         target_nodes = [node for node in target_nodes if not node.is_root]
     traversal_ids = assign_branch_ids(target) if collect_report else None
     rows = list()
-    status_counts = dict()
+    status_counts: dict[str, int] = {}
     failed = False
     changed_node_ids = set()
     output_properties = set(get_tree_property_names(target))
@@ -904,191 +1167,81 @@ def transfer_properties(target, source, property_specs, target_class='all',
             target_prop,
             _root_edge_policy_for(target_prop, root_edge_policies),
         )
-        if target_prop not in SPECIAL_PROPERTIES or target_prop == 'support':
+        if target_prop not in SPECIAL_PROPERTIES or target_prop == "support":
             output_properties.add(target_prop)
     for target_node in target_nodes:
         match = match_by_target_id[id(target_node)]
-        projected_split = (
-            match.projected_split
-            if match_basis == 'split' or collect_report
-            else None
-        )
         for source_prop, target_prop in property_specs:
-            previous_value, _ = _get_property(target_node, target_prop)
-            source_value = None
-            output_value = previous_value
-            effective_match_status = match.status
-            effective_reason = match.reason
-            effective_source = match.source
-            effective_source_taxa = match.source_taxa
-            source_has_value = False
-            projected_value_allowed = ''
-            ambiguity_policy = ''
-            ambiguity_resolution = ''
-            target_candidate_count = ''
-            source_candidate_count = ''
-            source_candidate_values = ''
-            root_edge_policy = _root_edge_policy_for(target_prop, root_edge_policies)
-            if target_prop == 'length' and projected_split is not None:
-                target_root_edge_candidates = target_physical_split_candidates.get(
-                    projected_split,
-                    (),
-                )
-                source_root_edge_candidates = source_physical_split_candidates.get(
-                    projected_split,
-                    (),
-                )
-            else:
-                target_root_edge_candidates = match.target_candidates
-                source_root_edge_candidates = match.source_candidates
-            root_edge_resolution = _resolve_split_root_edge_property(
-                match=match,
-                mapping=mapping,
-                source_prop=source_prop,
-                target_prop=target_prop,
-                policy=root_edge_policy,
-                target_root_ratios=target_root_ratios,
-                target_candidates=target_root_edge_candidates,
-                source_candidates=source_root_edge_candidates,
+            state = _transfer_one_property(
+                target_node,
+                match,
+                source_prop,
+                target_prop,
+                mapping,
+                match_basis,
+                collect_report,
+                target_physical_split_candidates,
+                source_physical_split_candidates,
+                target_root_ratios,
+                aligned_root_length_resolutions,
+                root_edge_policies,
+                allow_projected_values,
+                policy,
+                fill,
             )
-            if (
-                root_edge_resolution is None
-                and target_prop == 'length'
-            ):
-                root_edge_resolution = aligned_root_length_resolutions.get(id(target_node))
-            if root_edge_resolution is not None:
-                ambiguity_policy = root_edge_resolution['ambiguity_policy']
-                ambiguity_resolution = root_edge_resolution['ambiguity_resolution']
-                target_candidate_count = root_edge_resolution['target_candidate_count']
-                source_candidate_count = root_edge_resolution['source_candidate_count']
-                source_candidate_values = root_edge_resolution['source_candidate_values']
-                effective_reason = root_edge_resolution['reason']
-                if root_edge_resolution['resolved']:
-                    effective_match_status = root_edge_resolution['status']
-                    effective_source = root_edge_resolution['source']
-                    effective_source_taxa = root_edge_resolution['source_taxa']
-                    source_value = root_edge_resolution['source_value']
-                    source_has_value = root_edge_resolution['source_has_value']
-                else:
-                    effective_match_status = 'ambiguous'
-            status = effective_match_status
-            reason = effective_reason
-            projection_only = effective_match_status == 'projected_match'
-            if (
-                effective_match_status in ('exact_match', 'projected_match')
-                and root_edge_resolution is None
-            ):
-                source_value, source_has_value = _get_property(effective_source, source_prop)
-            if effective_match_status in ('exact_match', 'projected_match'):
-                projected_value_allowed = (
-                    not projection_only
-                    or (
-                        source_prop not in ('support', 'length')
-                        and target_prop not in ('support', 'length')
-                    )
-                    or bool(allow_projected_values)
-                )
-            if projection_only and policy == 'strict':
-                status = 'projected_match_rejected'
-                reason = 'strict_policy_requires_exact_match'
-                failed = True
-            elif projection_only and not projected_value_allowed:
-                status = 'projected_value_rejected'
-                reason = 'projected_support_or_length_requires_opt_in'
-                failed = True
-            elif effective_match_status in ('exact_match', 'projected_match'):
-                if source_has_value:
-                    _set_property(target_node, target_prop, source_value)
-                    output_value = source_value
-                    status = 'transferred'
-                    reason = effective_reason
-                    changed_node_ids.add(id(target_node))
-                elif (
-                    target_node.is_root
-                    and source_prop in ('support', 'length')
-                    and target_prop in ('support', 'length')
-                ):
-                    status = 'not_applicable'
-                    reason = 'root_value_missing_not_applicable'
-                elif fill is not None:
-                    output_value = _coerce_fill(fill, target_prop)
-                    _set_property(target_node, target_prop, output_value)
-                    status = 'filled'
-                    reason = 'source_property_missing'
-                    changed_node_ids.add(id(target_node))
-                    failed = True
-                else:
-                    status = 'missing_source_value'
-                    reason = 'source_property_missing'
-                    failed = True
-            elif fill is not None:
-                output_value = _coerce_fill(fill, target_prop)
-                _set_property(target_node, target_prop, output_value)
-                status = 'filled'
+            failed = failed or state["failed"]
+            if state["changed"]:
                 changed_node_ids.add(id(target_node))
-                failed = True
-            else:
-                failed = True
+            status = state["status"]
             status_counts[status] = status_counts.get(status, 0) + 1
             if collect_report:
-                rows.append({
-                    'source_file': source_label,
-                    'target_branch_id': traversal_ids[target_node],
-                    'target_node_class': get_node_class(target_node),
-                    'target_taxa': _format_taxa(match.target_taxa),
-                    'shared_descendant_taxa': _format_taxa(match.projected_taxa),
-                    'shared_split': _format_split(projected_split),
-                    'source_taxa': _format_taxa(effective_source_taxa),
-                    'match_status': effective_match_status,
-                    'match_basis': match.match_basis,
-                    'projection_only': projection_only,
-                    'source_property': source_prop,
-                    'target_property': target_prop,
-                    'source_value': source_value,
-                    'previous_target_value': previous_value,
-                    'output_value': output_value,
-                    'status': status,
-                    'reason': reason,
-                    'ambiguity_policy': ambiguity_policy,
-                    'ambiguity_resolution': ambiguity_resolution,
-                    'target_candidate_count': target_candidate_count,
-                    'source_candidate_count': source_candidate_count,
-                    'source_candidate_values': source_candidate_values,
-                    'projected_value_allowed': projected_value_allowed,
-                    'taxon_mode': taxon_mode,
-                    'num_shared_taxa': len(mapping.shared_taxa),
-                    'num_target_only_taxa': len(mapping.target_only_taxa),
-                    'num_source_only_taxa': len(mapping.source_only_taxa),
-                })
-    if policy == 'strict' and failed:
-        error = ValueError('Strict transfer failed because at least one requested value was not transferable.')
+                assert traversal_ids is not None
+                rows.append(
+                    _transfer_report_row(
+                        state,
+                        source_label,
+                        traversal_ids[target_node],
+                        target_node,
+                        match,
+                        source_prop,
+                        target_prop,
+                        taxon_mode,
+                        mapping,
+                    )
+                )
+    if policy == "strict" and failed:
+        error = ValueError(
+            "Strict transfer failed because at least one requested value was not transferable."
+        )
     else:
         error = None
     return {
-        'tree': target,
-        'rows': rows,
-        'status_counts': status_counts,
-        'output_properties': output_properties,
-        'changed_node_count': len(changed_node_ids),
-        'target_node_count': len(target_nodes),
-        'mapping': mapping,
-        'error': error,
+        "tree": target,
+        "rows": rows,
+        "status_counts": status_counts,
+        "output_properties": output_properties,
+        "changed_node_count": len(changed_node_ids),
+        "target_node_count": len(target_nodes),
+        "mapping": mapping,
+        "error": error,
     }
 
 
 def transfer_main(args):
-    if args.infile2 in ('', None):
+    if args.infile2 in ("", None):
         raise ValueError("'--infile2' is required for 'transfer'.")
-    validate_distinct_output_paths([
-        ('--outfile', getattr(args, 'outfile', None)),
-        ('--report', getattr(args, 'report', None)),
-    ])
+    validate_distinct_output_paths(
+        [
+            ("--outfile", getattr(args, "outfile", None)),
+            ("--report", getattr(args, "report", None)),
+        ]
+    )
     property_specs = parse_property_specs(
-        properties=getattr(args, 'property', None),
-        property_maps=getattr(args, 'property_map', None),
-        include_name=bool(getattr(args, 'name', False)),
-        include_support=bool(getattr(args, 'support', False)),
-        include_length=bool(getattr(args, 'length', False)),
+        properties=getattr(args, "property", None),
+        property_maps=getattr(args, "property_map", None),
+        include_name=bool(getattr(args, "name", False)),
+        include_support=bool(getattr(args, "support", False)),
+        include_length=bool(getattr(args, "length", False)),
     )
     target = read_tree(args.infile, args.format, args.quoted_node_names)
     source = read_tree(args.infile2, args.format2, args.quoted_node_names)
@@ -1097,33 +1250,35 @@ def transfer_main(args):
         source=source,
         property_specs=property_specs,
         target_class=args.target,
-        taxon_mode=getattr(args, 'taxon_mode', 'exact'),
-        fill=getattr(args, 'fill', None),
-        policy=getattr(args, 'policy', 'compatible-only'),
+        taxon_mode=getattr(args, "taxon_mode", "exact"),
+        fill=getattr(args, "fill", None),
+        policy=getattr(args, "policy", "compatible-only"),
         align_roots=True,
         source_label=str(args.infile2),
-        match_basis=getattr(args, 'match_basis', 'clade'),
-        allow_projected_values=bool(getattr(args, 'allow_projected_values', False)),
+        match_basis=getattr(args, "match_basis", "clade"),
+        allow_projected_values=bool(getattr(args, "allow_projected_values", False)),
         root_edge_policies=parse_root_edge_policies(
-            getattr(args, 'root_edge_policy', None)
+            getattr(args, "root_edge_policy", None)
         ),
-        collect_report=getattr(args, 'report', None) not in (None, ''),
+        collect_report=getattr(args, "report", None) not in (None, ""),
     )
-    _write_report(result['rows'], getattr(args, 'report', None))
+    _write_report(result["rows"], getattr(args, "report", None))
     sys.stderr.write(
-        'Transferred {} nodes out of {} target nodes.\n'.format(
-            result['changed_node_count'],
-            result['target_node_count'],
+        "Transferred {} nodes out of {} target nodes.\n".format(
+            result["changed_node_count"],
+            result["target_node_count"],
         )
     )
-    if result['error'] is not None:
-        raise result['error']
+    if result["error"] is not None:
+        raise result["error"]
     outformat = args.outformat
-    if outformat == 'auto' and any(target_prop == 'name' for _, target_prop in property_specs):
+    if outformat == "auto" and any(
+        target_prop == "name" for _, target_prop in property_specs
+    ):
         outformat = 1
     write_tree(
-        result['tree'],
+        result["tree"],
         args,
         format=outformat,
-        props=result['output_properties'],
+        props=result["output_properties"],
     )

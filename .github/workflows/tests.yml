@@ -9,9 +9,14 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: tests-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
     env:
       MPLBACKEND: Agg
     strategy:
@@ -29,9 +34,6 @@ jobs:
             extras: test,image
           - os: ubuntu-latest
             python-version: '3.13'
-            extras: test,image
-          - os: ubuntu-latest
-            python-version: '3.14'
             extras: test,image
           - os: macos-latest
             python-version: '3.14'
@@ -75,16 +77,19 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          python -m pip install -e ".[${{ matrix.extras }}]"
+          python -m pip install -c constraints-dev.txt -e ".[${{ matrix.extras }}]"
 
       - name: Run tests
-        run: python -m pytest tests/ -q --durations=20 --durations-min=0.05
+        run: python tools/check.py test
 
   quality:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+        with:
+          fetch-depth: 0
 
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -95,95 +100,19 @@ jobs:
       - name: Install quality and build dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[dev,image]'
+          python -m pip install -c constraints-dev.txt -e '.[dev,image]'
 
-      - name: Run Ruff
-        run: python -m ruff check nwkit tests setup.py
+      - name: Run full source checks
+        run: python tools/check.py full
 
-      - name: Run type checks
-        run: python -m mypy --no-incremental
-
-      - name: Run tests with branch coverage
+      - name: Require coverage for changed lines
+        if: github.event_name == 'pull_request'
         run: |
-          python -m coverage run -m pytest tests/ -q
-          python -m coverage report
-
-      - name: Audit security and dependency vulnerabilities
-        run: |
-          python -m pip check
-          python -m bandit -r nwkit -ll -ii -q
-          python -m pip_audit .
-
-      - name: Guard the maintainability baseline
-        run: |
-          python -m radon cc nwkit --json > radon.json
-          python - <<'PY'
-          import json
-
-          with open('radon.json') as handle:
-              results = json.load(handle)
-          blocks = [block for file_blocks in results.values() for block in file_blocks]
-          grade_f = [block for block in blocks if block['rank'] == 'F']
-          average = sum(block['complexity'] for block in blocks) / len(blocks)
-          assert len(grade_f) <= 5, 'Grade-F block count exceeded the baseline: {}'.format(len(grade_f))
-          assert max(block['complexity'] for block in blocks) <= 99
-          assert average <= 7.0
-          print('Radon baseline: {:.2f} average, {} grade-F blocks.'.format(average, len(grade_f)))
-          PY
-
-      - name: Set reproducible build timestamp
-        shell: bash
-        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
+          python -m coverage xml
+          diff-cover coverage.xml --compare-branch="origin/${{ github.base_ref }}" --fail-under=80
 
       - name: Build and inspect distributions
-        run: |
-          mkdir -p build/lib/nwkit
-          printf 'raise RuntimeError("stale build artifact")\n' > build/lib/nwkit/_mad.py
-          python -m build --wheel --outdir direct-dist
-          python -m build
-          cmp direct-dist/*.whl dist/*.whl
-          python -m twine check dist/*
-          check-wheel-contents dist/*.whl
-          python - <<'PY'
-          import glob
-          import tarfile
-          import zipfile
-
-          direct_wheel_path, = glob.glob('direct-dist/*.whl')
-          wheel_path, = glob.glob('dist/*.whl')
-          sdist_path, = glob.glob('dist/*.tar.gz')
-          forbidden_suffixes = ('/nwkit/_mad.py', '/THIRD_PARTY_NOTICES')
-          required_wheel = {
-              'nwkit/__init__.py',
-              'nwkit/root.py',
-              'nwkit/data_tree/apgiv.nwk',
-          }
-          for candidate_wheel in (direct_wheel_path, wheel_path):
-              with zipfile.ZipFile(candidate_wheel) as wheel:
-                  wheel_members = set(wheel.namelist())
-              assert required_wheel <= wheel_members
-              assert not any(
-                  member == 'nwkit/_mad.py'
-                  or member == 'THIRD_PARTY_NOTICES'
-                  or member.endswith('/THIRD_PARTY_NOTICES')
-                  for member in wheel_members
-              )
-          with tarfile.open(sdist_path, 'r:gz') as sdist:
-              sdist_members = set(sdist.getnames())
-          assert all(
-              any(member.endswith(suffix) for member in sdist_members)
-              for suffix in (
-                  '/nwkit/__init__.py',
-                  '/nwkit/root.py',
-                  '/nwkit/data_tree/apgiv.nwk',
-                  '/setup.py',
-              )
-          )
-          assert not any(
-              member.endswith(forbidden_suffixes)
-              for member in sdist_members
-          )
-          PY
+        run: python tools/check.py dist
 
       - name: Test the source distribution in a clean tree
         run: |

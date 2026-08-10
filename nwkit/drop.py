@@ -1,5 +1,6 @@
 from nwkit.util import get_target_nodes, read_tree, write_tree
 
+
 def drop_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     nodes = get_target_nodes(tree=tree, target=args.target)
@@ -12,12 +13,22 @@ def drop_main(args):
         try:
             numeric_placeholder = float(args.fill)
         except ValueError as exc:
-            raise ValueError("'--fill' must be numeric when '--support' or '--length' is enabled.") from exc
+            raise ValueError(
+                "'--fill' must be numeric when '--support' or '--length' is enabled."
+            ) from exc
     for node in nodes:
-        if (args.name):
+        if args.name:
             node.name = placeholder
-        if (args.support):
-            node.support = numeric_placeholder if (numeric_placeholder is not None) else placeholder
-        if (args.length):
-            node.dist = numeric_placeholder if (numeric_placeholder is not None) else placeholder
+        if args.support:
+            node.support = (
+                numeric_placeholder
+                if (numeric_placeholder is not None)
+                else placeholder
+            )
+        if args.length:
+            node.dist = (
+                numeric_placeholder
+                if (numeric_placeholder is not None)
+                else placeholder
+            )
     write_tree(tree, args, format=args.outformat)

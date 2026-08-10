@@ -2,6 +2,7 @@ import sys
 
 from nwkit.util import get_target_nodes, read_tree, write_tree
 
+
 def label_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     nodes = get_target_nodes(tree=tree, target=args.target)
@@ -16,8 +17,8 @@ def label_main(args):
         if flag_label:
             node.name = args.prefix + str(counter)
             counter += 1
-    sys.stderr.write(f'Number of labeled target nodes: {counter}/{len(nodes)}\n')
+    sys.stderr.write(f"Number of labeled target nodes: {counter}/{len(nodes)}\n")
     outformat = args.outformat
-    if outformat == 'auto':
+    if outformat == "auto":
         outformat = 1
     write_tree(tree, args, format=outformat)

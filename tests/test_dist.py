@@ -9,128 +9,160 @@ from tests.helpers import make_args
 
 
 def _read_tsv(path):
-    with open(path, newline='') as handle:
-        return list(csv.DictReader(handle, delimiter='\t'))
+    with open(path, newline="") as handle:
+        return list(csv.DictReader(handle, delimiter="\t"))
 
 
 class TestDistMain:
     def test_identical_trees(self, tmp_nwk, tmp_outfile):
-        nwk = '((A:1,B:1):1,(C:1,D:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
-        path2 = tmp_nwk(nwk, 'tree2.nwk')
+        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
+        path2 = tmp_nwk(nwk, "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile=tmp_outfile,
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile=tmp_outfile,
+            dist="RF",
+            format2="auto",
         )
         dist_main(args)
         with open(tmp_outfile) as f:
             content = f.read()
-        assert '0' in content
+        assert "0" in content
 
-    def test_file_output_has_header_and_data_on_separate_lines(self, tmp_nwk, tmp_outfile):
-        nwk = '((A:1,B:1):1,(C:1,D:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
-        path2 = tmp_nwk(nwk, 'tree2.nwk')
+    def test_file_output_has_header_and_data_on_separate_lines(
+        self, tmp_nwk, tmp_outfile
+    ):
+        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
+        path2 = tmp_nwk(nwk, "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile=tmp_outfile,
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile=tmp_outfile,
+            dist="RF",
+            format2="auto",
         )
         dist_main(args)
         with open(tmp_outfile) as f:
             lines = f.read().splitlines()
-        assert lines[0] == 'rf_dist\tmax_rf_dist'
-        assert lines[1] == '0\t4'
+        assert lines[0] == "rf_dist\tmax_rf_dist"
+        assert lines[1] == "0\t4"
 
     def test_different_trees(self, tmp_nwk, capsys):
-        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:1,C:1):1,(B:1,D:1):1);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:1,C:1):1,(B:1,D:1):1);", "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
         dist_main(args)
         captured = capsys.readouterr()
-        assert 'rf_dist' in captured.out
+        assert "rf_dist" in captured.out
         # These trees have different topologies, RF > 0
-        lines = captured.out.strip().split('\n')
-        vals = lines[1].split('\t')
+        lines = captured.out.strip().split("\n")
+        vals = lines[1].split("\t")
         rf_dist = int(vals[0])
         assert rf_dist > 0
 
     def test_mismatched_leaves_raises(self, tmp_nwk):
-        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:1,B:1):1,(C:1,E:1):1);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:1,B:1):1,(C:1,E:1):1);", "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
-        with pytest.raises(ValueError, match='Leaf name'):
+        with pytest.raises(ValueError, match="Leaf name"):
             dist_main(args)
 
     def test_unsupported_dist_raises(self, tmp_nwk):
-        nwk = '((A:1,B:1):1,(C:1,D:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
-        path2 = tmp_nwk(nwk, 'tree2.nwk')
+        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
+        path2 = tmp_nwk(nwk, "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='NJ', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="NJ",
+            format2="auto",
         )
         with pytest.raises(ValueError):
             dist_main(args)
 
     def test_missing_infile2_raises(self, tmp_nwk):
-        nwk = '((A:1,B:1):1,(C:1,D:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
+        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
         args = make_args(
-            infile=path1, infile2='', outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2="",
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
-        with pytest.raises(ValueError, match='infile2'):
+        with pytest.raises(ValueError, match="infile2"):
             dist_main(args)
 
     def test_duplicate_leaf_names_raise_clear_error(self, tmp_nwk):
-        path1 = tmp_nwk('((A:1,A:1):1,B:1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:1,B:1):1,B:1);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,A:1):1,B:1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:1,B:1):1,B:1);", "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
-        with pytest.raises(ValueError, match='Duplicated leaf labels'):
+        with pytest.raises(ValueError, match="Duplicated leaf labels"):
             dist_main(args)
 
     def test_empty_leaf_labels_raise_clear_error(self, tmp_nwk):
-        path1 = tmp_nwk('((A:1,:1):1,B:1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:1,B:1):1,:1);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,:1):1,B:1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:1,B:1):1,:1);", "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
-        with pytest.raises(ValueError, match='Empty leaf labels'):
+        with pytest.raises(ValueError, match="Empty leaf labels"):
             dist_main(args)
 
     def test_rf_dist_zero_for_identical(self, tmp_nwk, capsys):
         """RF distance should be 0 for identical trees."""
-        nwk = '(((A:1,B:1):1,C:1):1,(D:1,E:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
-        path2 = tmp_nwk(nwk, 'tree2.nwk')
+        nwk = "(((A:1,B:1):1,C:1):1,(D:1,E:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
+        path2 = tmp_nwk(nwk, "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
         dist_main(args)
         captured = capsys.readouterr()
-        lines = captured.out.strip().split('\n')
-        vals = lines[1].split('\t')
+        lines = captured.out.strip().split("\n")
+        vals = lines[1].split("\t")
         assert int(vals[0]) == 0
 
     def test_unrooted_tree_raises_clear_error(self, tmp_nwk):
-        path1 = tmp_nwk('(A:1,B:1,C:1);', 'tree1.nwk')
-        path2 = tmp_nwk('(A:1,B:1,C:1);', 'tree2.nwk')
+        path1 = tmp_nwk("(A:1,B:1,C:1);", "tree1.nwk")
+        path2 = tmp_nwk("(A:1,B:1,C:1);", "tree2.nwk")
         args = make_args(
-            infile=path1, infile2=path2, outfile='-',
-            dist='RF', format2='auto',
+            infile=path1,
+            infile2=path2,
+            outfile="-",
+            dist="RF",
+            format2="auto",
         )
-        with pytest.raises(ValueError, match='requires rooted trees'):
+        with pytest.raises(ValueError, match="requires rooted trees"):
             dist_main(args)
 
 
@@ -138,19 +170,19 @@ class TestDistanceMetrics:
     def test_path_length_falls_back_for_nearly_identical_distance_matrices(self):
         def balanced_newick(names):
             if len(names) == 1:
-                return '{}:1'.format(names[0])
+                return "{}:1".format(names[0])
             midpoint = len(names) // 2
-            return '({},{}):1'.format(
+            return "({},{}):1".format(
                 balanced_newick(names[:midpoint]),
                 balanced_newick(names[midpoint:]),
             )
 
-        leaf_names = ['T{}'.format(index) for index in range(100)]
-        newick = balanced_newick(leaf_names).rsplit(':', 1)[0] + ';'
+        leaf_names = ["T{}".format(index) for index in range(100)]
+        newick = balanced_newick(leaf_names).rsplit(":", 1)[0] + ";"
         tree1 = Tree(newick, parser=1)
         tree2 = Tree(newick, parser=1)
-        tree2['T0'].dist = 1.0 + 10 ** -15
-        stored_difference = float(tree2['T0'].dist) - 1.0
+        tree2["T0"].dist = 1.0 + 10**-15
+        stored_difference = float(tree2["T0"].dist) - 1.0
 
         distance = _path_distance(
             tree1,
@@ -161,51 +193,67 @@ class TestDistanceMetrics:
 
         assert distance == pytest.approx(
             math.sqrt(len(leaf_names) - 1) * stored_difference,
-            rel=10 ** -12,
+            rel=10**-12,
             abs=0.0,
         )
 
     def test_all_is_default_and_uses_stable_long_form_rows(self, tmp_nwk, tmp_outfile):
-        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:1,C:1):1,(B:1,D:1):1);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:1,C:1):1,(B:1,D:1):1);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
+            format2="auto",
             metric=None,
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         dist_main(args)
 
         rows = _read_tsv(tmp_outfile)
         assert list(rows[0]) == [
-            'metric', 'comparison', 'num_taxa', 'distance', 'max_distance',
+            "metric",
+            "comparison",
+            "num_taxa",
+            "distance",
+            "max_distance",
         ]
-        assert [row['metric'] for row in rows] == [
-            'rf',
-            'normalized-rf',
-            'weighted-rf',
-            'branch-score',
-            'path-topological',
-            'path-length',
+        assert [row["metric"] for row in rows] == [
+            "rf",
+            "normalized-rf",
+            "weighted-rf",
+            "branch-score",
+            "path-topological",
+            "path-length",
         ]
-        assert [float(row['distance']) for row in rows] == pytest.approx([
-            4.0, 1.0, 4.0, 2.0, 2.0, 4.0,
-        ])
-        assert [row['comparison'] for row in rows] == [
-            'rooted',
-            'rooted',
-            'rooted',
-            'rooted',
-            'root-independent',
-            'root-independent',
+        assert [float(row["distance"]) for row in rows] == pytest.approx(
+            [
+                4.0,
+                1.0,
+                4.0,
+                2.0,
+                2.0,
+                4.0,
+            ]
+        )
+        assert [row["comparison"] for row in rows] == [
+            "rooted",
+            "rooted",
+            "rooted",
+            "rooted",
+            "root-independent",
+            "root-independent",
         ]
-        assert {row['num_taxa'] for row in rows} == {'4'}
-        assert [row['max_distance'] for row in rows] == [
-            '4', '1.0', '', '', '', '',
+        assert {row["num_taxa"] for row in rows} == {"4"}
+        assert [row["max_distance"] for row in rows] == [
+            "4",
+            "1.0",
+            "",
+            "",
+            "",
+            "",
         ]
 
     def test_branch_length_metrics_match_l1_l2_and_path_definitions(
@@ -213,82 +261,91 @@ class TestDistanceMetrics:
         tmp_nwk,
         tmp_outfile,
     ):
-        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:2,B:3):4,(C:5,D:6):7);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:2,B:3):4,(C:5,D:6):7);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['all'],
+            format2="auto",
+            metric=["all"],
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         dist_main(args)
 
-        rows = {row['metric']: row for row in _read_tsv(tmp_outfile)}
-        assert float(rows['rf']['distance']) == 0.0
-        assert float(rows['normalized-rf']['distance']) == 0.0
-        assert float(rows['weighted-rf']['distance']) == pytest.approx(21.0)
-        assert float(rows['branch-score']['distance']) == pytest.approx(math.sqrt(91))
-        assert float(rows['path-topological']['distance']) == 0.0
-        assert float(rows['path-length']['distance']) == pytest.approx(math.sqrt(992))
+        rows = {row["metric"]: row for row in _read_tsv(tmp_outfile)}
+        assert float(rows["rf"]["distance"]) == 0.0
+        assert float(rows["normalized-rf"]["distance"]) == 0.0
+        assert float(rows["weighted-rf"]["distance"]) == pytest.approx(21.0)
+        assert float(rows["branch-score"]["distance"]) == pytest.approx(math.sqrt(91))
+        assert float(rows["path-topological"]["distance"]) == 0.0
+        assert float(rows["path-length"]["distance"]) == pytest.approx(math.sqrt(992))
 
     def test_unrooted_comparison_suppresses_the_binary_root_edge(
         self,
         tmp_nwk,
         tmp_outfile,
     ):
-        path1 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree1.nwk')
-        path2 = tmp_nwk('((A:1,C:1):1,(B:1,D:1):1);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
+        path2 = tmp_nwk("((A:1,C:1):1,(B:1,D:1):1);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['rf,normalized-rf,weighted-rf,branch-score'],
+            format2="auto",
+            metric=["rf,normalized-rf,weighted-rf,branch-score"],
             dist=None,
-            comparison='unrooted',
+            comparison="unrooted",
         )
 
         dist_main(args)
 
-        rows = {row['metric']: row for row in _read_tsv(tmp_outfile)}
-        assert float(rows['rf']['distance']) == 2.0
-        assert float(rows['rf']['max_distance']) == 2.0
-        assert float(rows['normalized-rf']['distance']) == 1.0
-        assert float(rows['weighted-rf']['distance']) == 4.0
-        assert float(rows['branch-score']['distance']) == pytest.approx(math.sqrt(8))
+        rows = {row["metric"]: row for row in _read_tsv(tmp_outfile)}
+        assert float(rows["rf"]["distance"]) == 2.0
+        assert float(rows["rf"]["max_distance"]) == 2.0
+        assert float(rows["normalized-rf"]["distance"]) == 1.0
+        assert float(rows["weighted-rf"]["distance"]) == 4.0
+        assert float(rows["branch-score"]["distance"]) == pytest.approx(math.sqrt(8))
 
     def test_unrooted_branch_metrics_are_invariant_to_root_position(
         self,
         tmp_nwk,
         tmp_outfile,
     ):
-        path1 = tmp_nwk('((A:1,B:1):2,(C:1,D:1):3);', 'tree1.nwk')
-        path2 = tmp_nwk('(A:0.4,(B:1,(C:1,D:1):5):0.6);', 'tree2.nwk')
+        path1 = tmp_nwk("((A:1,B:1):2,(C:1,D:1):3);", "tree1.nwk")
+        path2 = tmp_nwk("(A:0.4,(B:1,(C:1,D:1):5):0.6);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['all'],
+            format2="auto",
+            metric=["all"],
             dist=None,
-            comparison='unrooted',
+            comparison="unrooted",
         )
 
         dist_main(args)
 
-        assert [float(row['distance']) for row in _read_tsv(tmp_outfile)] == pytest.approx([
-            0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
-        ])
+        assert [
+            float(row["distance"]) for row in _read_tsv(tmp_outfile)
+        ] == pytest.approx(
+            [
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+                0.0,
+            ]
+        )
 
     @pytest.mark.parametrize(
-        ('source_length', 'expected_distance'),
+        ("source_length", "expected_distance"),
         [
-            ('1e308', 0.0),
-            ('1.5e308', 1e308),
+            ("1e308", 0.0),
+            ("1.5e308", 1e308),
         ],
     )
     def test_unrooted_branch_metrics_stably_compare_huge_root_halves(
@@ -299,46 +356,44 @@ class TestDistanceMetrics:
         expected_distance,
     ):
         path1 = tmp_nwk(
-            '((A:1,B:1):1e308,(C:1,D:1):1e308);',
-            'tree1.nwk',
+            "((A:1,B:1):1e308,(C:1,D:1):1e308);",
+            "tree1.nwk",
         )
         path2 = tmp_nwk(
-            '((A:1,B:1):{0},(C:1,D:1):{0});'.format(
-                source_length
-            ),
-            'tree2.nwk',
+            "((A:1,B:1):{0},(C:1,D:1):{0});".format(source_length),
+            "tree2.nwk",
         )
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['weighted-rf,branch-score'],
+            format2="auto",
+            metric=["weighted-rf,branch-score"],
             dist=None,
-            comparison='unrooted',
+            comparison="unrooted",
         )
 
         dist_main(args)
 
-        rows = {row['metric']: row for row in _read_tsv(tmp_outfile)}
-        assert float(rows['weighted-rf']['distance']) == pytest.approx(
+        rows = {row["metric"]: row for row in _read_tsv(tmp_outfile)}
+        assert float(rows["weighted-rf"]["distance"]) == pytest.approx(
             expected_distance
         )
-        assert float(rows['branch-score']['distance']) == pytest.approx(
+        assert float(rows["branch-score"]["distance"]) == pytest.approx(
             expected_distance
         )
 
     @pytest.mark.parametrize(
-        ('tree1', 'tree2', 'expected_distance'),
+        ("tree1", "tree2", "expected_distance"),
         [
             (
-                '((A:1,B:1):1e308,(C:1,D:1):1e308);',
-                '((A:1,B:1):1e308,(C:1,D:1):1e308);',
+                "((A:1,B:1):1e308,(C:1,D:1):1e308);",
+                "((A:1,B:1):1e308,(C:1,D:1):1e308);",
                 0.0,
             ),
             (
-                '(A:5e307,B:5e307);',
-                '(A:7.5e307,B:7.5e307);',
+                "(A:5e307,B:5e307);",
+                "(A:7.5e307,B:7.5e307);",
                 5e307,
             ),
         ],
@@ -351,63 +406,62 @@ class TestDistanceMetrics:
         tree2,
         expected_distance,
     ):
-        path1 = tmp_nwk(tree1, 'tree1.nwk')
-        path2 = tmp_nwk(tree2, 'tree2.nwk')
+        path1 = tmp_nwk(tree1, "tree1.nwk")
+        path2 = tmp_nwk(tree2, "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['path-length'],
+            format2="auto",
+            metric=["path-length"],
             dist=None,
-            comparison='unrooted',
+            comparison="unrooted",
         )
 
         dist_main(args)
 
-        row, = _read_tsv(tmp_outfile)
-        assert float(row['distance']) == pytest.approx(
-            expected_distance
-        )
+        (row,) = _read_tsv(tmp_outfile)
+        assert float(row["distance"]) == pytest.approx(expected_distance)
 
     def test_single_taxon_rf_maximum_is_zero(self, tmp_nwk, tmp_outfile):
-        path1 = tmp_nwk('A;', 'tree1.nwk')
-        path2 = tmp_nwk('A;', 'tree2.nwk')
+        path1 = tmp_nwk("A;", "tree1.nwk")
+        path2 = tmp_nwk("A;", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['rf,normalized-rf,path-topological'],
+            format2="auto",
+            metric=["rf,normalized-rf,path-topological"],
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         dist_main(args)
 
-        rows = {row['metric']: row for row in _read_tsv(tmp_outfile)}
-        assert rows['rf']['distance'] == '0'
-        assert rows['rf']['max_distance'] == '0'
-        assert rows['normalized-rf']['distance'] == '0.0'
+        rows = {row["metric"]: row for row in _read_tsv(tmp_outfile)}
+        assert rows["rf"]["distance"] == "0"
+        assert rows["rf"]["max_distance"] == "0"
+        assert rows["normalized-rf"]["distance"] == "0.0"
 
     def test_repeatable_metrics_are_deduplicated(self, tmp_nwk, tmp_outfile):
-        nwk = '((A:1,B:1):1,(C:1,D:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
-        path2 = tmp_nwk(nwk, 'tree2.nwk')
+        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
+        path2 = tmp_nwk(nwk, "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['rf,path-topological', 'rf'],
+            format2="auto",
+            metric=["rf,path-topological", "rf"],
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         dist_main(args)
 
-        assert [row['metric'] for row in _read_tsv(tmp_outfile)] == [
-            'rf', 'path-topological',
+        assert [row["metric"] for row in _read_tsv(tmp_outfile)] == [
+            "rf",
+            "path-topological",
         ]
 
     def test_path_topological_accepts_unrooted_trees_without_lengths(
@@ -415,46 +469,46 @@ class TestDistanceMetrics:
         tmp_nwk,
         tmp_outfile,
     ):
-        path1 = tmp_nwk('(A,B,C,D);', 'tree1.nwk')
-        path2 = tmp_nwk('(A,B,C,D);', 'tree2.nwk')
+        path1 = tmp_nwk("(A,B,C,D);", "tree1.nwk")
+        path2 = tmp_nwk("(A,B,C,D);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
             outfile=tmp_outfile,
-            format2='auto',
-            metric=['path-topological'],
+            format2="auto",
+            metric=["path-topological"],
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         dist_main(args)
 
         rows = _read_tsv(tmp_outfile)
-        assert rows[0]['comparison'] == 'root-independent'
-        assert float(rows[0]['distance']) == 0.0
+        assert rows[0]["comparison"] == "root-independent"
+        assert float(rows[0]["distance"]) == 0.0
 
     def test_default_all_rejects_missing_branch_lengths(self, tmp_nwk):
-        path1 = tmp_nwk('((A,B),C);', 'tree1.nwk')
-        path2 = tmp_nwk('((A,B),C);', 'tree2.nwk')
+        path1 = tmp_nwk("((A,B),C);", "tree1.nwk")
+        path2 = tmp_nwk("((A,B),C);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
-            outfile='-',
-            format2='auto',
+            outfile="-",
+            format2="auto",
             metric=None,
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
-        with pytest.raises(ValueError, match='branch length on every non-root edge'):
+        with pytest.raises(ValueError, match="branch length on every non-root edge"):
             dist_main(args)
 
     @pytest.mark.parametrize(
-        ('length', 'error_pattern'),
+        ("length", "error_pattern"),
         [
-            ('-1', 'finite, nonnegative branch lengths'),
-            ('nan', 'branch lengths must be finite'),
-            ('inf', 'branch lengths must be finite'),
+            ("-1", "finite, nonnegative branch lengths"),
+            ("nan", "branch lengths must be finite"),
+            ("inf", "branch lengths must be finite"),
         ],
     )
     def test_branch_metrics_reject_invalid_lengths(
@@ -464,41 +518,41 @@ class TestDistanceMetrics:
         error_pattern,
     ):
         path1 = tmp_nwk(
-            '((A:{0},B:1):1,(C:1,D:1):1);'.format(length),
-            'tree1.nwk',
+            "((A:{0},B:1):1,(C:1,D:1):1);".format(length),
+            "tree1.nwk",
         )
-        path2 = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);', 'tree2.nwk')
+        path2 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
-            outfile='-',
-            format2='auto',
-            metric=['path-length'],
+            outfile="-",
+            format2="auto",
+            metric=["path-length"],
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         with pytest.raises(ValueError, match=error_pattern):
             dist_main(args)
 
     def test_unsupported_metric_raises_clear_error(self, tmp_nwk):
-        nwk = '((A:1,B:1):1,(C:1,D:1):1);'
-        path1 = tmp_nwk(nwk, 'tree1.nwk')
-        path2 = tmp_nwk(nwk, 'tree2.nwk')
+        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
+        path1 = tmp_nwk(nwk, "tree1.nwk")
+        path2 = tmp_nwk(nwk, "tree2.nwk")
         args = make_args(
             infile=path1,
             infile2=path2,
-            outfile='-',
-            format2='auto',
-            metric=['quartet'],
+            outfile="-",
+            format2="auto",
+            metric=["quartet"],
             dist=None,
-            comparison='rooted',
+            comparison="rooted",
         )
 
         with pytest.raises(ValueError, match="Unsupported metric 'quartet'"):
             dist_main(args)
 
     def test_metric_and_deprecated_dist_cannot_be_combined(self):
-        args = make_args(metric=['rf'], dist='RF')
-        with pytest.raises(ValueError, match='either'):
+        args = make_args(metric=["rf"], dist="RF")
+        with pytest.raises(ValueError, match="either"):
             dist_main(args)

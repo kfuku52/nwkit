@@ -1,3 +1,5 @@
 include CLI_TSV_CONVENTIONS.md
+include constraints-dev.txt
 graft tests
+graft tools
 global-exclude __pycache__ *.py[cod]

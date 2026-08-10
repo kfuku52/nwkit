@@ -20,6 +20,7 @@ permissions:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -40,70 +41,10 @@ jobs:
       - name: Install release dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e '.[dev,image]'
+          python -m pip install -c constraints-dev.txt -e '.[dev,image]'
 
-      - name: Set reproducible build timestamp
-        shell: bash
-        run: echo "SOURCE_DATE_EPOCH=$(git log -1 --pretty=%ct)" >> "$GITHUB_ENV"
-
-      - name: Verify source and tests
-        run: |
-          ruff check nwkit tests setup.py
-          mypy --no-incremental
-          python -m pip check
-          bandit -r nwkit -ll -ii -q
-          python -m pip_audit .
-          pytest tests/ -q --durations=20 --durations-min=0.05
-
-      - name: Build and inspect distributions
-        run: |
-          mkdir -p build/lib/nwkit
-          printf 'raise RuntimeError("stale build artifact")\n' > build/lib/nwkit/_mad.py
-          python -m build --wheel --outdir direct-dist
-          python -m build
-          cmp direct-dist/*.whl dist/*.whl
-          python -m twine check dist/*
-          check-wheel-contents dist/*.whl
-          python - <<'PY'
-          import glob
-          import tarfile
-          import zipfile
-
-          direct_wheel_path, = glob.glob('direct-dist/*.whl')
-          wheel_path, = glob.glob('dist/*.whl')
-          sdist_path, = glob.glob('dist/*.tar.gz')
-          forbidden_suffixes = ('/nwkit/_mad.py', '/THIRD_PARTY_NOTICES')
-          required_wheel = {
-              'nwkit/__init__.py',
-              'nwkit/root.py',
-              'nwkit/data_tree/apgiv.nwk',
-          }
-          for candidate_wheel in (direct_wheel_path, wheel_path):
-              with zipfile.ZipFile(candidate_wheel) as wheel:
-                  wheel_members = set(wheel.namelist())
-              assert required_wheel <= wheel_members
-              assert not any(
-                  member == 'nwkit/_mad.py'
-                  or member == 'THIRD_PARTY_NOTICES'
-                  or member.endswith('/THIRD_PARTY_NOTICES')
-                  for member in wheel_members
-              )
-          with tarfile.open(sdist_path, 'r:gz') as sdist:
-              sdist_members = set(sdist.getnames())
-          assert all(
-              any(member.endswith(suffix) for member in sdist_members)
-              for suffix in (
-                  '/nwkit/__init__.py',
-                  '/nwkit/root.py',
-                  '/nwkit/data_tree/apgiv.nwk',
-                  '/setup.py',
-              )
-          )
-          assert not any(
-              member.endswith(forbidden_suffixes)
-              for member in sdist_members
-          )
-          PY
+      - name: Verify source, tests, and distributions
+        run: python tools/check.py release
 
       - name: Test the source distribution in a clean tree
         run: |
@@ -136,6 +77,7 @@ jobs:
   publish-github-release:
     needs: verify
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
 

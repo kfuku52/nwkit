@@ -1,44 +1,45 @@
 import os
-import pytest
 from argparse import Namespace
-from ete4 import Tree
+
+import pytest
 import requests
+from ete4 import Tree
 
 import nwkit.mcmctree as mcmctree_mod
 from nwkit.mcmctree import (
-    mcmctree_main,
     add_common_anc_constraint,
     add_timetree_constraint,
-    is_mrca_clade_root,
-    are_two_lineage_rank_differentiated,
-    remove_constraint_equal_upper,
     apply_min_clade_prop,
+    are_two_lineage_rank_differentiated,
+    is_mrca_clade_root,
+    mcmctree_main,
+    remove_constraint_equal_upper,
 )
 
 
 def make_mcmctree_args(**kwargs):
     defaults = {
-        'infile': '-',
-        'outfile': '-',
-        'format': 'auto',
-        'outformat': 'auto',
-        'quoted_node_names': True,
-        'download_dir': 'auto',
-        'species_parser': 'legacy',
-        'species_regex': r'^([^_]+_[^_]+)(?:_|$)',
-        'species_map_tsv': None,
-        'timetree': 'no',
-        'left_species': None,
-        'right_species': None,
-        'lower_bound': None,
-        'upper_bound': None,
-        'lower_tail_prob': '0.025',
-        'upper_tail_prob': '0.025',
-        'lower_offset': '0.1',
-        'lower_scale': '1',
-        'add_header': False,
-        'min_clade_prop': 0,
-        'higher_rank_search': True,
+        "infile": "-",
+        "outfile": "-",
+        "format": "auto",
+        "outformat": "auto",
+        "quoted_node_names": True,
+        "download_dir": "auto",
+        "species_parser": "legacy",
+        "species_regex": r"^([^_]+_[^_]+)(?:_|$)",
+        "species_map_tsv": None,
+        "timetree": "no",
+        "left_species": None,
+        "right_species": None,
+        "lower_bound": None,
+        "upper_bound": None,
+        "lower_tail_prob": "0.025",
+        "upper_tail_prob": "0.025",
+        "lower_offset": "0.1",
+        "lower_scale": "1",
+        "add_header": False,
+        "min_clade_prop": 0,
+        "higher_rank_search": True,
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -49,17 +50,17 @@ def test_timetree_response_is_streamed_without_accessing_text(monkeypatch):
 
     class FakeResponse:
         status_code = 200
-        encoding = 'utf-8'
+        encoding = "utf-8"
         closed = False
 
         @property
         def text(self):
-            raise AssertionError('streaming path must not access response.text')
+            raise AssertionError("streaming path must not access response.text")
 
         def iter_content(self, chunk_size):
-            observed['chunk_size'] = chunk_size
-            yield b'precomputed_median,precomputed_age\n'
-            yield b'10,10\n'
+            observed["chunk_size"] = chunk_size
+            yield b"precomputed_median,precomputed_age\n"
+            yield b"10,10\n"
 
         def close(self):
             self.closed = True
@@ -70,132 +71,149 @@ def test_timetree_response_is_streamed_without_accessing_text(monkeypatch):
         observed.update(kwargs)
         return response
 
-    monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
-    record = mcmctree_mod._fetch_timetree_url('https://example.test/api/1+2')
+    monkeypatch.setattr(mcmctree_mod.requests, "get", fake_get)
+    record = mcmctree_mod._fetch_timetree_url("https://example.test/api/1+2")
 
-    assert observed['stream'] is True
-    assert observed['chunk_size'] == 64 * 1024
-    assert record['status_code'] == 200
-    assert record['text'].endswith('10,10\n')
+    assert observed["stream"] is True
+    assert observed["chunk_size"] == 64 * 1024
+    assert record["status_code"] == 200
+    assert record["text"].endswith("10,10\n")
     assert response.closed is True
 
 
 def test_timetree_stream_enforces_decompressed_size_limit(monkeypatch):
     class FakeResponse:
-        encoding = 'utf-8'
+        encoding = "utf-8"
 
         @property
         def text(self):
-            raise AssertionError('streaming path must not access response.text')
+            raise AssertionError("streaming path must not access response.text")
 
         def iter_content(self, chunk_size):
-            yield b'1234'
-            yield b'5678'
+            yield b"1234"
+            yield b"5678"
 
-    monkeypatch.setattr(mcmctree_mod, 'TIMETREE_RESPONSE_MAX_BYTES', 7)
-    with pytest.raises(ValueError, match='size limit'):
+    monkeypatch.setattr(mcmctree_mod, "TIMETREE_RESPONSE_MAX_BYTES", 7)
+    with pytest.raises(ValueError, match="size limit"):
         mcmctree_mod._read_limited_response_text(FakeResponse())
 
 
 def test_timetree_stream_rejects_unknown_response_encoding():
     class FakeResponse:
-        encoding = 'definitely-not-a-codec'
+        encoding = "definitely-not-a-codec"
 
         def iter_content(self, chunk_size):
-            yield b'ok'
+            yield b"ok"
 
-    with pytest.raises(ValueError, match='invalid text encoding'):
+    with pytest.raises(ValueError, match="invalid text encoding"):
         mcmctree_mod._read_limited_response_text(FakeResponse())
 
 
 class TestAddCommonAncConstraint:
-    @pytest.mark.parametrize('value', ['not-a-number', 'nan', 'inf'])
+    @pytest.mark.parametrize("value", ["not-a-number", "nan", "inf"])
     def test_rejects_non_finite_or_non_numeric_bounds(self, value):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         args = make_mcmctree_args(
-            left_species='a', right_species='b',
-            lower_bound=value, upper_bound=value,
+            left_species="a",
+            right_species="b",
+            lower_bound=value,
+            upper_bound=value,
         )
         with pytest.raises(ValueError):
             add_common_anc_constraint(tree, args)
 
     def test_rejects_inverted_bounds_and_invalid_probabilities(self):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         inverted = make_mcmctree_args(
-            left_species='a', right_species='b',
-            lower_bound='20', upper_bound='10',
+            left_species="a",
+            right_species="b",
+            lower_bound="20",
+            upper_bound="10",
         )
-        with pytest.raises(ValueError, match='must be <='):
+        with pytest.raises(ValueError, match="must be <="):
             add_common_anc_constraint(tree, inverted)
         invalid_probability = make_mcmctree_args(
-            left_species='a', right_species='b',
-            lower_bound='10', upper_bound='20', lower_tail_prob='1.5',
+            left_species="a",
+            right_species="b",
+            lower_bound="10",
+            upper_bound="20",
+            lower_tail_prob="1.5",
         )
-        with pytest.raises(ValueError, match='tail-prob'):
+        with pytest.raises(ValueError, match="tail-prob"):
             add_common_anc_constraint(tree, invalid_probability)
 
     def test_bound_constraint(self):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         args = make_mcmctree_args(
-            left_species='a', right_species='b',
-            lower_bound='10.0', upper_bound='20.0',
+            left_species="a",
+            right_species="b",
+            lower_bound="10.0",
+            upper_bound="20.0",
         )
         tree = add_common_anc_constraint(tree, args)
-        common_anc = tree.common_ancestor('a', 'b')
-        assert 'B(10.0, 20.0' in common_anc.name
+        common_anc = tree.common_ancestor("a", "b")
+        assert "B(10.0, 20.0" in common_anc.name
 
     def test_point_constraint(self):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         args = make_mcmctree_args(
-            left_species='a', right_species='b',
-            lower_bound='15.0', upper_bound='15.0',
+            left_species="a",
+            right_species="b",
+            lower_bound="15.0",
+            upper_bound="15.0",
         )
         tree = add_common_anc_constraint(tree, args)
-        common_anc = tree.common_ancestor('a', 'b')
-        assert '@15.0' in common_anc.name
+        common_anc = tree.common_ancestor("a", "b")
+        assert "@15.0" in common_anc.name
 
     def test_point_constraint_with_equivalent_numeric_strings(self):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         args = make_mcmctree_args(
-            left_species='a', right_species='b',
-            lower_bound='15', upper_bound='15.0',
+            left_species="a",
+            right_species="b",
+            lower_bound="15",
+            upper_bound="15.0",
         )
         tree = add_common_anc_constraint(tree, args)
-        common_anc = tree.common_ancestor('a', 'b')
-        assert '@15' in common_anc.name
+        common_anc = tree.common_ancestor("a", "b")
+        assert "@15" in common_anc.name
 
     def test_species_not_found_raises(self):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         args = make_mcmctree_args(
-            left_species='a', right_species='x',
-            lower_bound='10.0', upper_bound='20.0',
+            left_species="a",
+            right_species="x",
+            lower_bound="10.0",
+            upper_bound="20.0",
         )
-        with pytest.raises(ValueError, match='Species not found'):
+        with pytest.raises(ValueError, match="Species not found"):
             add_common_anc_constraint(tree, args)
 
     def test_same_left_and_right_species_raises(self):
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
         args = make_mcmctree_args(
-            left_species='a', right_species='a',
-            lower_bound='10.0', upper_bound='20.0',
+            left_species="a",
+            right_species="a",
+            lower_bound="10.0",
+            upper_bound="20.0",
         )
-        with pytest.raises(ValueError, match='must be different'):
+        with pytest.raises(ValueError, match="must be different"):
             add_common_anc_constraint(tree, args)
 
 
 class TestIsMrcaCladeRoot:
     def test_no_missing_ids_in_result(self):
         """If 'missing_ids' not in result, should return True."""
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
-        node = tree.common_ancestor('a', 'b')
-        result = 'some_api_response_data'
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
+        node = tree.common_ancestor("a", "b")
+        result = "some_api_response_data"
         assert is_mrca_clade_root(node, result, ncbi=None) is True
 
     def test_empty_missing_ids(self):
         """If missing_ids list is empty, should return True."""
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
-        node = tree.common_ancestor('a', 'b')
-        result = 'missing_ids:[]'
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
+        node = tree.common_ancestor("a", "b")
+        result = "missing_ids:[]"
         assert is_mrca_clade_root(node, result, ncbi=None) is True
 
     def test_issue11_null_missing_ids_is_handled(self):
@@ -203,49 +221,49 @@ class TestIsMrcaCladeRoot:
 
         'missing_ids:[null]' should not crash even when this helper is called directly.
         """
-        tree = Tree('((a:1,b:1):1,(c:1,d:1):1);', parser=1)
-        node = tree.common_ancestor('a', 'b')
-        result = 'missing_ids:[null]'
+        tree = Tree("((a:1,b:1):1,(c:1,d:1):1);", parser=1)
+        node = tree.common_ancestor("a", "b")
+        result = "missing_ids:[null]"
         assert is_mrca_clade_root(node, result, ncbi=None) is True
 
 
 class TestAreTwoLineageRankDifferentiated:
     def test_non_bifurcating_node_returns_false(self):
-        tree = Tree('(a:1,b:1,c:1);', parser=1)
+        tree = Tree("(a:1,b:1,c:1);", parser=1)
         node = tree
         taxids = [1, 2, 3]
-        leaf_names = ['a', 'b', 'c']
+        leaf_names = ["a", "b", "c"]
         assert are_two_lineage_rank_differentiated(node, taxids, leaf_names) is False
 
 
 class TestRemoveConstraintEqualUpper:
     def test_removes_duplicate_constraints(self):
-        tree = Tree('(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', parser=1)
+        tree = Tree("(((a:1,b:1):1,c:1):1,(d:1,e:1):1);", parser=1)
         # Set same constraint on parent and child
-        ab_node = tree.common_ancestor('a', 'b')
-        abc_node = tree.common_ancestor('a', 'b', 'c')
+        ab_node = tree.common_ancestor("a", "b")
+        abc_node = tree.common_ancestor("a", "b", "c")
         ab_node.name = "'B(10.0, 20.0, 0.025, 0.025)'"
         abc_node.name = "'B(10.0, 20.0, 0.025, 0.025)'"
         tree = remove_constraint_equal_upper(tree)
         # Child constraint should be removed (it matches parent)
-        assert ab_node.name == 'NoName'
+        assert ab_node.name == "NoName"
         # Parent constraint should remain
         assert abc_node.name == "'B(10.0, 20.0, 0.025, 0.025)'"
 
 
 class TestApplyMinCladeProp:
     def test_removes_small_clades(self):
-        tree = Tree('(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', parser=1)
-        ab_node = tree.common_ancestor('a', 'b')
+        tree = Tree("(((a:1,b:1):1,c:1):1,(d:1,e:1):1);", parser=1)
+        ab_node = tree.common_ancestor("a", "b")
         ab_node.name = "'B(10.0, 20.0)'"
         # min_clade_prop=0.5 means clade must have >= 2.5 leaves (50% of 5)
         tree = apply_min_clade_prop(tree, min_clade_prop=0.5)
         # ab_node has only 2 leaves (< 2.5), so its constraint should be removed
-        assert ab_node.name == 'NoName'
+        assert ab_node.name == "NoName"
 
     def test_keeps_large_clades(self):
-        tree = Tree('(((a:1,b:1):1,c:1):1,(d:1,e:1):1);', parser=1)
-        abc_node = tree.common_ancestor('a', 'b', 'c')
+        tree = Tree("(((a:1,b:1):1,c:1):1,(d:1,e:1):1);", parser=1)
+        abc_node = tree.common_ancestor("a", "b", "c")
         abc_node.name = "'B(10.0, 20.0)'"
         # min_clade_prop=0.5 means clade must have >= 2.5 leaves
         tree = apply_min_clade_prop(tree, min_clade_prop=0.5)
@@ -256,46 +274,55 @@ class TestApplyMinCladeProp:
 class TestMcmctreeMain:
     def test_basic_constraint(self, tmp_nwk, tmp_outfile):
         """Test mcmctree_main with --timetree no and manual bounds."""
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species='a', right_species='b',
-            lower_bound='10.0', upper_bound='20.0',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species="a",
+            right_species="b",
+            lower_bound="10.0",
+            upper_bound="20.0",
         )
         mcmctree_main(args)
         with open(tmp_outfile) as f:
             content = f.read()
-        assert 'B(10.0, 20.0' in content
-        assert content.strip().endswith(';')
+        assert "B(10.0, 20.0" in content
+        assert content.strip().endswith(";")
 
     def test_point_estimate(self, tmp_nwk, tmp_outfile):
         """Test mcmctree_main with point estimate (lower == upper)."""
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species='a', right_species='b',
-            lower_bound='15.0', upper_bound='15.0',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species="a",
+            right_species="b",
+            lower_bound="15.0",
+            upper_bound="15.0",
         )
         mcmctree_main(args)
         with open(tmp_outfile) as f:
             content = f.read()
-        assert '@15.0' in content
+        assert "@15.0" in content
 
     def test_add_header(self, tmp_nwk, tmp_outfile):
         """Test mcmctree_main with --add-header."""
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species='a', right_species='b',
-            lower_bound='10.0', upper_bound='20.0',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species="a",
+            right_species="b",
+            lower_bound="10.0",
+            upper_bound="20.0",
             add_header=True,
         )
         mcmctree_main(args)
         with open(tmp_outfile) as f:
             content = f.read()
-        lines = content.strip().split('\n')
+        lines = content.strip().split("\n")
         # First line should be "4 1" (4 leaves, 1 tree)
-        assert lines[0].strip() == '4 1'
+        assert lines[0].strip() == "4 1"
 
     def test_timetree_uses_download_dir_for_ncbi_cache(self, monkeypatch, tmp_path):
         observed = dict()
@@ -305,7 +332,7 @@ class TestMcmctreeMain:
                 self.db = None
 
             def get_name_translator(self, names):
-                return {name.replace('_', ' '): [i + 1] for i, name in enumerate(names)}
+                return {name.replace("_", " "): [i + 1] for i, name in enumerate(names)}
 
             def get_lineage(self, taxid):
                 return [1, int(taxid)]
@@ -314,35 +341,35 @@ class TestMcmctreeMain:
                 out = {}
                 for t in lineages:
                     t = int(t)
-                    out[t] = 'species' if t != 1 else 'superkingdom'
+                    out[t] = "species" if t != 1 else "superkingdom"
                 return out
 
             def get_taxid_translator(self, taxids):
-                return {int(t): 'sp{}'.format(int(t)) for t in taxids}
+                return {int(t): "sp{}".format(int(t)) for t in taxids}
 
         class FakeResponse:
             status_code = 500
-            text = '<html>server error</html>'
+            text = "<html>server error</html>"
 
         def fake_get_ete_ncbitaxa(args=None):
-            observed['download_dir'] = getattr(args, 'download_dir', None)
+            observed["download_dir"] = getattr(args, "download_dir", None)
             return FakeNCBI()
 
         def fake_get(*args, **kwargs):
             return FakeResponse()
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', fake_get_ete_ncbitaxa)
-        monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+        monkeypatch.setattr(mcmctree_mod, "get_ete_ncbitaxa", fake_get_ete_ncbitaxa)
+        monkeypatch.setattr(mcmctree_mod.requests, "get", fake_get)
 
-        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
+        tree = Tree("((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);", parser=1)
         args = make_mcmctree_args(
-            timetree='point',
+            timetree="point",
             higher_rank_search=True,
-            download_dir=str(tmp_path / 'cache'),
+            download_dir=str(tmp_path / "cache"),
         )
         out = add_timetree_constraint(tree, args)
-        assert observed['download_dir'] == str(tmp_path / 'cache')
-        assert out.name == 'NoName'
+        assert observed["download_dir"] == str(tmp_path / "cache")
+        assert out.name == "NoName"
 
     def test_timetree_allows_monophyletic_duplicate_species_labels(self, monkeypatch):
         observed = dict()
@@ -352,7 +379,7 @@ class TestMcmctreeMain:
                 self.db = None
 
             def get_name_translator(self, names):
-                observed.setdefault('queries', []).append(tuple(names))
+                observed.setdefault("queries", []).append(tuple(names))
                 mapping = {}
                 for i, name in enumerate(names, start=1):
                     mapping[name] = [i]
@@ -365,27 +392,34 @@ class TestMcmctreeMain:
                 out = {}
                 for t in lineages:
                     t = int(t)
-                    out[t] = 'species' if t != 1 else 'superkingdom'
+                    out[t] = "species" if t != 1 else "superkingdom"
                 return out
 
             def get_taxid_translator(self, taxids):
-                return {int(t): 'sp{}'.format(int(t)) for t in taxids}
+                return {int(t): "sp{}".format(int(t)) for t in taxids}
 
         class FakeResponse:
             status_code = 500
-            text = '<html>server error</html>'
+            text = "<html>server error</html>"
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
-        monkeypatch.setattr(mcmctree_mod.requests, 'get', lambda *args, **kwargs: FakeResponse())
+        monkeypatch.setattr(
+            mcmctree_mod, "get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        monkeypatch.setattr(
+            mcmctree_mod.requests, "get", lambda *args, **kwargs: FakeResponse()
+        )
 
-        tree = Tree('(((Homo_sapiens_gene1:1,Homo_sapiens_gene2:1):1,Pan_troglodytes_gene1:1):1);', parser=1)
-        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        tree = Tree(
+            "(((Homo_sapiens_gene1:1,Homo_sapiens_gene2:1):1,Pan_troglodytes_gene1:1):1);",
+            parser=1,
+        )
+        args = make_mcmctree_args(timetree="point", higher_rank_search=True)
         out = add_timetree_constraint(tree, args)
-        assert out.name == 'NoName'
-        flattened_queries = {name for query in observed['queries'] for name in query}
-        assert 'Homo sapiens' in flattened_queries
-        assert 'Pan troglodytes' in flattened_queries
-        assert all('gene' not in name.lower() for name in flattened_queries)
+        assert out.name == "NoName"
+        flattened_queries = {name for query in observed["queries"] for name in query}
+        assert "Homo sapiens" in flattened_queries
+        assert "Pan troglodytes" in flattened_queries
+        assert all("gene" not in name.lower() for name in flattened_queries)
 
     def test_timetree_taxonomic_uses_taxonomy_query_fallbacks(self, monkeypatch):
         observed = dict()
@@ -395,16 +429,16 @@ class TestMcmctreeMain:
                 self.db = None
 
             def get_name_translator(self, names):
-                observed.setdefault('queries', []).append(tuple(names))
+                observed.setdefault("queries", []).append(tuple(names))
                 mapping = dict()
                 for name in names:
-                    if name == 'Dictyostelium discoideum':
+                    if name == "Dictyostelium discoideum":
                         mapping[name] = [101]
-                    elif name == 'Amoeba':
+                    elif name == "Amoeba":
                         mapping[name] = [102]
-                    elif name == 'Homo sapiens':
+                    elif name == "Homo sapiens":
                         mapping[name] = [201]
-                    elif name == 'Pan troglodytes':
+                    elif name == "Pan troglodytes":
                         mapping[name] = [202]
                 return mapping
 
@@ -416,39 +450,47 @@ class TestMcmctreeMain:
                 for taxid in lineages:
                     taxid = int(taxid)
                     if taxid == 1:
-                        out[taxid] = 'superkingdom'
+                        out[taxid] = "superkingdom"
                     elif taxid == 102:
-                        out[taxid] = 'genus'
+                        out[taxid] = "genus"
                     else:
-                        out[taxid] = 'species'
+                        out[taxid] = "species"
                 return out
 
             def get_taxid_translator(self, taxids):
-                return {int(taxid): 'sp{}'.format(int(taxid)) for taxid in taxids}
+                return {int(taxid): "sp{}".format(int(taxid)) for taxid in taxids}
 
         class FakeResponse:
             status_code = 500
-            text = '<html>server error</html>'
+            text = "<html>server error</html>"
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
-        monkeypatch.setattr(mcmctree_mod.requests, 'get', lambda *args, **kwargs: FakeResponse())
+        monkeypatch.setattr(
+            mcmctree_mod, "get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        monkeypatch.setattr(
+            mcmctree_mod.requests, "get", lambda *args, **kwargs: FakeResponse()
+        )
 
         tree = Tree(
-            '((Dictyostelium_cf_discoideum:1,Amoeba_sp_JDSRuffled:1):1,(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);',
+            "((Dictyostelium_cf_discoideum:1,Amoeba_sp_JDSRuffled:1):1,(Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);",
             parser=1,
         )
-        args = make_mcmctree_args(timetree='point', higher_rank_search=True, species_parser='taxonomic')
+        args = make_mcmctree_args(
+            timetree="point", higher_rank_search=True, species_parser="taxonomic"
+        )
         out = add_timetree_constraint(tree, args)
-        assert out.name == 'NoName'
-        flattened_queries = {name for query in observed['queries'] for name in query}
-        assert 'Dictyostelium discoideum' in flattened_queries
-        assert 'Amoeba' in flattened_queries
-        assert 'Homo sapiens' in flattened_queries
-        assert 'Pan troglodytes' in flattened_queries
-        assert 'Dictyostelium cf discoideum' not in flattened_queries
-        assert 'Amoeba sp JDSRuffled' not in flattened_queries
+        assert out.name == "NoName"
+        flattened_queries = {name for query in observed["queries"] for name in query}
+        assert "Dictyostelium discoideum" in flattened_queries
+        assert "Amoeba" in flattened_queries
+        assert "Homo sapiens" in flattened_queries
+        assert "Pan troglodytes" in flattened_queries
+        assert "Dictyostelium cf discoideum" not in flattened_queries
+        assert "Amoeba sp JDSRuffled" not in flattened_queries
 
-    def test_timetree_threads_do_not_prefetch_higher_rank_after_species_success(self, monkeypatch):
+    def test_timetree_threads_do_not_prefetch_higher_rank_after_species_success(
+        self, monkeypatch
+    ):
         called_urls = []
 
         class FakeNCBI:
@@ -458,9 +500,9 @@ class TestMcmctreeMain:
             def get_name_translator(self, names):
                 mapping = dict()
                 for name in names:
-                    if name == 'Homo sapiens':
+                    if name == "Homo sapiens":
                         mapping[name] = [101]
-                    elif name == 'Pan troglodytes':
+                    elif name == "Pan troglodytes":
                         mapping[name] = [102]
                 return mapping
 
@@ -476,45 +518,52 @@ class TestMcmctreeMain:
                 for taxid in lineages:
                     taxid = int(taxid)
                     if taxid in (101, 102):
-                        out[taxid] = 'species'
+                        out[taxid] = "species"
                     elif taxid in (11, 12):
-                        out[taxid] = 'genus'
+                        out[taxid] = "genus"
                     else:
-                        out[taxid] = 'superkingdom'
+                        out[taxid] = "superkingdom"
                 return out
 
             def get_taxid_translator(self, taxids):
-                return {int(taxid): 'taxon{}'.format(int(taxid)) for taxid in taxids}
+                return {int(taxid): "taxon{}".format(int(taxid)) for taxid in taxids}
 
         class FakeResponse:
             status_code = 200
-            text = 'precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\r\n87.2,87.2,81.3,91'
+            text = "precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\r\n87.2,87.2,81.3,91"
 
         def fake_get(url, timeout, stream):
             assert stream is True
             called_urls.append(url)
             return FakeResponse()
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
-        monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+        monkeypatch.setattr(
+            mcmctree_mod, "get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        monkeypatch.setattr(mcmctree_mod.requests, "get", fake_get)
 
-        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
-        args = make_mcmctree_args(timetree='point', higher_rank_search=True, threads=2)
+        tree = Tree("((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);", parser=1)
+        args = make_mcmctree_args(timetree="point", higher_rank_search=True, threads=2)
         out = add_timetree_constraint(tree, args)
 
         assert any(node.name == "'@87.2'" for node in out.traverse())
-        assert any(url.endswith('/101+102') for url in called_urls)
-        assert not any(url.endswith('/11+12') for url in called_urls)
+        assert any(url.endswith("/101+102") for url in called_urls)
+        assert not any(url.endswith("/11+12") for url in called_urls)
 
     def test_timetree_split_duplicate_species_raise(self, monkeypatch):
         class FakeNCBI:
             def __init__(self):
                 self.db = None
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
-        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1,(Homo_sapiens_gene2:1,Mus_musculus_gene1:1):1);', parser=1)
-        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
-        with pytest.raises(ValueError, match='not monophyletic'):
+        monkeypatch.setattr(
+            mcmctree_mod, "get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        tree = Tree(
+            "((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1,(Homo_sapiens_gene2:1,Mus_musculus_gene1:1):1);",
+            parser=1,
+        )
+        args = make_mcmctree_args(timetree="point", higher_rank_search=True)
+        with pytest.raises(ValueError, match="not monophyletic"):
             add_timetree_constraint(tree, args)
 
     def test_issue7_quoted_node_names_in_output(self, tmp_nwk, tmp_outfile):
@@ -524,22 +573,28 @@ class TestMcmctreeMain:
         the output must be valid and parseable. The quoted node names must
         be properly handled.
         """
-        path = tmp_nwk('((((agl:1,(cma:1,dvi:1):1):1,sor:1):1,((tmo:1,zmo:1):1,tca:1):1):1,ota:1);')
+        path = tmp_nwk(
+            "((((agl:1,(cma:1,dvi:1):1):1,sor:1):1,((tmo:1,zmo:1):1,tca:1):1):1,ota:1);"
+        )
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species='tca', right_species='sor',
-            lower_bound='152.3', upper_bound='236.2',
-            lower_tail_prob='1e-300', upper_tail_prob='1e-300',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species="tca",
+            right_species="sor",
+            lower_bound="152.3",
+            upper_bound="236.2",
+            lower_tail_prob="1e-300",
+            upper_tail_prob="1e-300",
         )
         mcmctree_main(args)
         with open(tmp_outfile) as f:
             content = f.read().strip()
         # Output should contain the constraint
-        assert 'B(152.3, 236.2, 1e-300, 1e-300)' in content
+        assert "B(152.3, 236.2, 1e-300, 1e-300)" in content
         # Output should be valid (end with ;)
-        assert content.endswith(';')
+        assert content.endswith(";")
         # Output should not contain 'NoName' (these should be cleaned up)
-        assert 'NoName' not in content
+        assert "NoName" not in content
 
     def test_issue7_chained_constraints(self, tmp_nwk, tmp_outfile):
         """Regression test for GitHub issue #7 (chained mcmctree commands).
@@ -548,25 +603,35 @@ class TestMcmctreeMain:
         the output and add another constraint. Both should be present.
         """
         import tempfile
-        path = tmp_nwk('((((agl:1,(cma:1,dvi:1):1):1,sor:1):1,((tmo:1,zmo:1):1,tca:1):1):1,ota:1);')
+
+        path = tmp_nwk(
+            "((((agl:1,(cma:1,dvi:1):1):1,sor:1):1,((tmo:1,zmo:1):1,tca:1):1):1,ota:1);"
+        )
 
         # First constraint
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.nwk', delete=False) as f:
+        with tempfile.NamedTemporaryFile(mode="w", suffix=".nwk", delete=False) as f:
             intermediate = f.name
         try:
             args1 = make_mcmctree_args(
-                infile=path, outfile=intermediate,
-                left_species='tca', right_species='sor',
-                lower_bound='152.3', upper_bound='236.2',
-                lower_tail_prob='1e-300', upper_tail_prob='1e-300',
+                infile=path,
+                outfile=intermediate,
+                left_species="tca",
+                right_species="sor",
+                lower_bound="152.3",
+                upper_bound="236.2",
+                lower_tail_prob="1e-300",
+                upper_tail_prob="1e-300",
             )
             mcmctree_main(args1)
 
             # Second constraint on the intermediate output
             args2 = make_mcmctree_args(
-                infile=intermediate, outfile=tmp_outfile,
-                left_species='sor', right_species='agl',
-                lower_bound='154.0', upper_bound='245.8',
+                infile=intermediate,
+                outfile=tmp_outfile,
+                left_species="sor",
+                right_species="agl",
+                lower_bound="154.0",
+                upper_bound="245.8",
             )
             mcmctree_main(args2)
         finally:
@@ -574,73 +639,90 @@ class TestMcmctreeMain:
 
         with open(tmp_outfile) as f:
             content = f.read().strip()
-        assert content.endswith(';')
+        assert content.endswith(";")
         # Both constraints should be present
-        assert 'B(152.3, 236.2, 1e-300, 1e-300)' in content
-        assert 'B(154.0, 245.8, 0.025, 0.025)' in content
+        assert "B(152.3, 236.2, 1e-300, 1e-300)" in content
+        assert "B(154.0, 245.8, 0.025, 0.025)" in content
 
     def test_unrooted_tree_raises(self, tmp_nwk):
         """mcmctree requires a rooted tree (2 children at root)."""
-        path = tmp_nwk('(a:1,b:1,c:1);')
+        path = tmp_nwk("(a:1,b:1,c:1);")
         args = make_mcmctree_args(
-            infile=path, outfile='-',
-            left_species='a', right_species='b',
-            lower_bound='10.0', upper_bound='20.0',
+            infile=path,
+            outfile="-",
+            left_species="a",
+            right_species="b",
+            lower_bound="10.0",
+            upper_bound="20.0",
         )
-        with pytest.raises(ValueError, match='rooted'):
+        with pytest.raises(ValueError, match="rooted"):
             mcmctree_main(args)
 
     def test_timetree_no_requires_left_and_right_species(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species=None, right_species=None,
-            lower_bound='10.0', upper_bound='20.0',
-            timetree='no',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species=None,
+            right_species=None,
+            lower_bound="10.0",
+            upper_bound="20.0",
+            timetree="no",
         )
-        with pytest.raises(ValueError, match='left-species'):
+        with pytest.raises(ValueError, match="left-species"):
             mcmctree_main(args)
 
     def test_timetree_no_requires_at_least_one_bound(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species='a', right_species='b',
-            lower_bound=None, upper_bound=None,
-            timetree='no',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species="a",
+            right_species="b",
+            lower_bound=None,
+            upper_bound=None,
+            timetree="no",
         )
-        with pytest.raises(ValueError, match='lower-bound'):
+        with pytest.raises(ValueError, match="lower-bound"):
             mcmctree_main(args)
 
-    @pytest.mark.parametrize('min_clade_prop', [-0.1, 1.1])
-    def test_min_clade_prop_out_of_range_raises(self, tmp_nwk, tmp_outfile, min_clade_prop):
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+    @pytest.mark.parametrize("min_clade_prop", [-0.1, 1.1])
+    def test_min_clade_prop_out_of_range_raises(
+        self, tmp_nwk, tmp_outfile, min_clade_prop
+    ):
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            left_species='a', right_species='b',
-            lower_bound='10.0', upper_bound='20.0',
+            infile=path,
+            outfile=tmp_outfile,
+            left_species="a",
+            right_species="b",
+            lower_bound="10.0",
+            upper_bound="20.0",
             min_clade_prop=min_clade_prop,
         )
-        with pytest.raises(ValueError, match='min-clade-prop'):
+        with pytest.raises(ValueError, match="min-clade-prop"):
             mcmctree_main(args)
 
     def test_timetree_requires_named_leaves(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            timetree='point',
+            infile=path,
+            outfile=tmp_outfile,
+            timetree="point",
         )
-        with pytest.raises(ValueError, match='non-empty names'):
+        with pytest.raises(ValueError, match="non-empty names"):
             mcmctree_main(args)
 
     def test_unknown_timetree_mode_raises(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((a:1,b:1):1,(c:1,d:1):1);')
+        path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_mcmctree_args(
-            infile=path, outfile=tmp_outfile,
-            timetree='unknown',
+            infile=path,
+            outfile=tmp_outfile,
+            timetree="unknown",
         )
-        with pytest.raises(ValueError, match='Unknown'):
+        with pytest.raises(ValueError, match="Unknown"):
             mcmctree_main(args)
+
 
 class TestIssue12EndpointUrl:
     """Regression tests for GitHub issue #12: timetree.org API change.
@@ -652,9 +734,10 @@ class TestIssue12EndpointUrl:
     def test_endpoint_url_is_timetree_org(self):
         """Verify the endpoint URL points to timetree.org, not temple.edu."""
         import inspect
+
         source = inspect.getsource(add_timetree_constraint)
-        assert 'https://timetree.org/api' in source
-        assert 'timetree.temple.edu' not in source
+        assert "https://timetree.org/api" in source
+        assert "timetree.temple.edu" not in source
 
     def test_csv_response_parsing(self):
         """Verify that a CSV response from timetree.org is parsed correctly.
@@ -664,17 +747,22 @@ class TestIssue12EndpointUrl:
         87.2,87.2,81.33807,91
         """
         import re
+
         csv_response = "precomputed_median,precomputed_age,precomputed_ci_low,precomputed_ci_high\r\n87.2,87.2,81.33807,91"
         # Simulate the parsing logic from add_timetree_constraint
-        timetree_result = re.sub('.*;</script>', '', csv_response)
-        timetree_keys = re.sub('\r\n.*', '', re.sub('<br>.*', '', timetree_result)).split(',')
-        timetree_values = re.sub('.*\r\n', '', re.sub('.*<br>', '', timetree_result)).split(',')
+        timetree_result = re.sub(".*;</script>", "", csv_response)
+        timetree_keys = re.sub(
+            "\r\n.*", "", re.sub("<br>.*", "", timetree_result)
+        ).split(",")
+        timetree_values = re.sub(
+            ".*\r\n", "", re.sub(".*<br>", "", timetree_result)
+        ).split(",")
         timetree_dict = dict()
-        for key, value in zip(timetree_keys, timetree_values):
+        for key, value in zip(timetree_keys, timetree_values, strict=True):
             timetree_dict[key] = value
-        assert timetree_dict['precomputed_age'] == '87.2'
-        assert timetree_dict['precomputed_ci_low'] == '81.33807'
-        assert timetree_dict['precomputed_ci_high'] == '91'
+        assert timetree_dict["precomputed_age"] == "87.2"
+        assert timetree_dict["precomputed_ci_low"] == "81.33807"
+        assert timetree_dict["precomputed_ci_high"] == "91"
 
     def test_temple_edu_json_error_is_skipped(self):
         """The old temple.edu JSON error response should be handled gracefully."""
@@ -698,22 +786,24 @@ class TestIssue12EndpointUrl:
                 out = {}
                 for t in lineages:
                     t = int(t)
-                    out[t] = 'species' if t != 1 else 'superkingdom'
+                    out[t] = "species" if t != 1 else "superkingdom"
                 return out
 
             def get_taxid_translator(self, taxids):
-                return {int(t): f'sp{int(t)}' for t in taxids}
+                return {int(t): f"sp{int(t)}" for t in taxids}
 
         def raise_network_error(*args, **kwargs):
-            raise requests.RequestException('network down')
+            raise requests.RequestException("network down")
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
-        monkeypatch.setattr(mcmctree_mod.requests, 'get', raise_network_error)
+        monkeypatch.setattr(
+            mcmctree_mod, "get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        monkeypatch.setattr(mcmctree_mod.requests, "get", raise_network_error)
 
-        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
-        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        tree = Tree("((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);", parser=1)
+        args = make_mcmctree_args(timetree="point", higher_rank_search=True)
         out = add_timetree_constraint(tree, args)
-        assert out.name == 'NoName'
+        assert out.name == "NoName"
 
     def test_non_200_response_is_skipped_without_crash(self, monkeypatch):
         class FakeNCBI:
@@ -727,23 +817,25 @@ class TestIssue12EndpointUrl:
                 out = {}
                 for t in lineages:
                     t = int(t)
-                    out[t] = 'species' if t != 1 else 'superkingdom'
+                    out[t] = "species" if t != 1 else "superkingdom"
                 return out
 
             def get_taxid_translator(self, taxids):
-                return {int(t): f'sp{int(t)}' for t in taxids}
+                return {int(t): f"sp{int(t)}" for t in taxids}
 
         class FakeResponse:
             status_code = 500
-            text = '<html>server error</html>'
+            text = "<html>server error</html>"
 
         def fake_get(*args, **kwargs):
             return FakeResponse()
 
-        monkeypatch.setattr(mcmctree_mod, 'get_ete_ncbitaxa', lambda args=None: FakeNCBI())
-        monkeypatch.setattr(mcmctree_mod.requests, 'get', fake_get)
+        monkeypatch.setattr(
+            mcmctree_mod, "get_ete_ncbitaxa", lambda args=None: FakeNCBI()
+        )
+        monkeypatch.setattr(mcmctree_mod.requests, "get", fake_get)
 
-        tree = Tree('((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);', parser=1)
-        args = make_mcmctree_args(timetree='point', higher_rank_search=True)
+        tree = Tree("((Homo_sapiens_gene1:1,Pan_troglodytes_gene1:1):1);", parser=1)
+        args = make_mcmctree_args(timetree="point", higher_rank_search=True)
         out = add_timetree_constraint(tree, args)
-        assert out.name == 'NoName'
+        assert out.name == "NoName"

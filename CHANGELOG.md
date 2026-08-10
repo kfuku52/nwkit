@@ -4,11 +4,38 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.35.2] - 2026-08-10
+
+### Added
+
+- Added one local/CI validation entry point with quick, full, distribution,
+  and release modes, plus an exact development-tool constraints file.
+- Added Hypothesis checks for FASTA preservation, chunked Newick parsing, and
+  portable filenames, and an 80% changed-line coverage gate for pull requests.
+- Added grouped monthly Dependabot updates for Python and GitHub Actions.
+
+### Changed
+
+- Enabled Ruff import and bugbear rules and type-checked function bodies across
+  the package, with full annotation enforcement starting in the FASTA and CLI
+  convention modules.
+- Removed every grade-F cyclomatic-complexity block by splitting MAD rooting,
+  rendering, annotation, validation, and property transfer into focused helpers;
+  the maintainability gate now prevents grade-F regressions.
+- Split pure image metadata, license, search, and media-type logic from the image
+  orchestration module while preserving its public imports.
+- Deduplicated CI work, added cancellation and job timeouts, and made local,
+  test, build, and release validation use the same constrained commands.
+
 ### Fixed
 
 - Explicitly dispatch the release workflow after an automated tag is created,
   because tags pushed with the GitHub Actions token do not emit another
   workflow-triggering push event.
+- Removed process-global input-format state from tree serialization so one read
+  cannot change the inferred output format of another tree.
+- Expanded ignored generated artifacts and made distribution checks reject
+  stale modules while verifying reproducible wheel contents.
 
 ## [0.35.0] - 2026-08-09
 

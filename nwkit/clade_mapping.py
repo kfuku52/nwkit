@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any
 
 from nwkit.util import (
     get_node_class,
@@ -6,9 +7,8 @@ from nwkit.util import (
     validate_unique_named_leaves,
 )
 
-
-SUPPORTED_TAXON_MODES = ('exact', 'intersection')
-SUPPORTED_MATCH_BASES = ('clade', 'split')
+SUPPORTED_TAXON_MODES = ("exact", "intersection")
+SUPPORTED_MATCH_BASES = ("clade", "split")
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ def _node_taxon_sets(tree):
 
 
 def _format_taxa(taxa):
-    return ','.join(sorted(str(taxon) for taxon in taxa))
+    return ",".join(sorted(str(taxon) for taxon in taxa))
 
 
 def _projected_split_from_taxa(taxa, shared_taxa):
@@ -62,14 +62,14 @@ def _projected_split_from_taxa(taxa, shared_taxa):
 
 def _mapping_key(node_class, taxa, shared_taxa, match_basis):
     projected_taxa = frozenset(taxa & shared_taxa)
-    if node_class in ('root', 'leaf') or match_basis == 'clade':
+    if node_class in ("root", "leaf") or match_basis == "clade":
         return projected_taxa
     return _projected_split_from_taxa(taxa, shared_taxa)
 
 
 def _projected_masks(tree, taxon_to_bit):
     masks = dict()
-    for node in tree.traverse(strategy='postorder'):
+    for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             masks[node] = taxon_to_bit.get(str(node.name), 0)
         else:
@@ -81,7 +81,7 @@ def _projected_masks(tree, taxon_to_bit):
 
 
 def _mask_mapping_key(node_class, mask, all_mask, match_basis):
-    if node_class in ('root', 'leaf') or match_basis == 'clade':
+    if node_class in ("root", "leaf") or match_basis == "clade":
         return mask
     complement = all_mask ^ mask
     if mask == 0 or complement == 0:
@@ -89,66 +89,73 @@ def _mask_mapping_key(node_class, mask, all_mask, match_basis):
     return (min(mask, complement), max(mask, complement))
 
 
-def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade'):
+def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade"):
     if taxon_mode not in SUPPORTED_TAXON_MODES:
         raise ValueError(
             "Unsupported taxon mode '{}'. Choose from: {}.".format(
                 taxon_mode,
-                ', '.join(SUPPORTED_TAXON_MODES),
+                ", ".join(SUPPORTED_TAXON_MODES),
             )
         )
     if match_basis not in SUPPORTED_MATCH_BASES:
         raise ValueError(
             "Unsupported match basis '{}'. Choose from: {}.".format(
                 match_basis,
-                ', '.join(SUPPORTED_MATCH_BASES),
+                ", ".join(SUPPORTED_MATCH_BASES),
             )
         )
-    validate_unique_named_leaves(target, option_name='--infile', context=' for clade mapping')
-    validate_unique_named_leaves(source, option_name='--infile2', context=' for clade mapping')
+    validate_unique_named_leaves(
+        target, option_name="--infile", context=" for clade mapping"
+    )
+    validate_unique_named_leaves(
+        source, option_name="--infile2", context=" for clade mapping"
+    )
     target_leaf_set = _leaf_set(target)
     source_leaf_set = _leaf_set(source)
-    if taxon_mode == 'exact' and target_leaf_set != source_leaf_set:
+    if taxon_mode == "exact" and target_leaf_set != source_leaf_set:
         target_only = target_leaf_set - source_leaf_set
         source_only = source_leaf_set - target_leaf_set
         details = list()
         if target_only:
-            details.append('target-only={}'.format(_format_taxa(target_only)))
+            details.append("target-only={}".format(_format_taxa(target_only)))
         if source_only:
-            details.append('source-only={}'.format(_format_taxa(source_only)))
+            details.append("source-only={}".format(_format_taxa(source_only)))
         raise ValueError(
-            'Leaf labels must match exactly when --taxon-mode exact ({})'.format(
-                '; '.join(details)
+            "Leaf labels must match exactly when --taxon-mode exact ({})".format(
+                "; ".join(details)
             )
         )
     shared_taxa = target_leaf_set & source_leaf_set
     if not shared_taxa:
-        raise ValueError('The input trees do not share any uniquely named tips.')
+        raise ValueError("The input trees do not share any uniquely named tips.")
 
     target_taxa_by_node = _node_taxon_sets(target)
     source_taxa_by_node = _node_taxon_sets(source)
     same_leaf_set = target_leaf_set == source_leaf_set
     taxon_to_bit = {
-        taxon: 1 << index
-        for index, taxon in enumerate(sorted(shared_taxa))
+        taxon: 1 << index for index, taxon in enumerate(sorted(shared_taxa))
     }
     all_shared_mask = (1 << len(taxon_to_bit)) - 1
     target_masks = _projected_masks(target, taxon_to_bit)
     source_masks = _projected_masks(source, taxon_to_bit)
-    target_groups = dict()
-    source_groups = dict()
-    for node, taxa in target_taxa_by_node.items():
+    target_groups: dict[Any, list[Any]] = {}
+    source_groups: dict[Any, list[Any]] = {}
+    for node, _taxa in target_taxa_by_node.items():
         node_class = get_node_class(node)
         key = (
             node_class,
-            _mask_mapping_key(node_class, target_masks[node], all_shared_mask, match_basis),
+            _mask_mapping_key(
+                node_class, target_masks[node], all_shared_mask, match_basis
+            ),
         )
         target_groups.setdefault(key, list()).append(node)
-    for node, taxa in source_taxa_by_node.items():
+    for node, _taxa in source_taxa_by_node.items():
         node_class = get_node_class(node)
         key = (
             node_class,
-            _mask_mapping_key(node_class, source_masks[node], all_shared_mask, match_basis),
+            _mask_mapping_key(
+                node_class, source_masks[node], all_shared_mask, match_basis
+            ),
         )
         source_groups.setdefault(key, list()).append(node)
 
@@ -158,55 +165,56 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
         node_class = get_node_class(target_node)
         target_taxa = target_taxa_by_node[target_node]
         projected_mask = target_masks[target_node]
-        projected_taxa = target_taxa if same_leaf_set else frozenset(target_taxa & shared_taxa)
-        match_key = _mask_mapping_key(node_class, projected_mask, all_shared_mask, match_basis)
+        projected_taxa = (
+            target_taxa if same_leaf_set else frozenset(target_taxa & shared_taxa)
+        )
+        match_key = _mask_mapping_key(
+            node_class, projected_mask, all_shared_mask, match_basis
+        )
         key = (node_class, match_key)
         target_candidates = target_groups.get(key, [])
         source_candidates = source_groups.get(key, [])
         source_node = None
-        if node_class == 'root':
+        if node_class == "root":
             source_node = source
-            status = 'exact_match' if same_leaf_set else 'projected_match'
-            reason = 'root_to_root'
+            status = "exact_match" if same_leaf_set else "projected_match"
+            reason = "root_to_root"
         elif projected_mask == 0:
-            status = 'unmatched'
-            reason = 'no_shared_descendant_taxa'
-        elif taxon_mode == 'intersection' and node_class == 'intnode' and projected_mask.bit_count() < 2:
-            status = 'ambiguous'
-            reason = 'fewer_than_two_shared_descendant_taxa'
+            status = "unmatched"
+            reason = "no_shared_descendant_taxa"
         elif (
-            node_class == 'intnode'
-            and (
-                match_key is None
-                or (match_basis == 'clade' and projected_mask == all_shared_mask)
-            )
+            taxon_mode == "intersection"
+            and node_class == "intnode"
+            and projected_mask.bit_count() < 2
         ):
-            status = 'ambiguous'
+            status = "ambiguous"
+            reason = "fewer_than_two_shared_descendant_taxa"
+        elif node_class == "intnode" and (
+            match_key is None
+            or (match_basis == "clade" and projected_mask == all_shared_mask)
+        ):
+            status = "ambiguous"
             reason = (
-                'projection_contains_all_shared_taxa'
-                if match_basis == 'clade'
-                else 'projection_does_not_define_usable_split'
+                "projection_contains_all_shared_taxa"
+                if match_basis == "clade"
+                else "projection_does_not_define_usable_split"
             )
         elif len(target_candidates) > 1:
-            status = 'ambiguous'
-            reason = 'target_projection_not_unique'
+            status = "ambiguous"
+            reason = "target_projection_not_unique"
         elif len(source_candidates) == 0:
-            status = 'unmatched'
-            reason = 'clade_absent_from_source'
+            status = "unmatched"
+            reason = "clade_absent_from_source"
         elif len(source_candidates) > 1:
-            status = 'ambiguous'
-            reason = 'source_projection_not_unique'
+            status = "ambiguous"
+            reason = "source_projection_not_unique"
         else:
             source_node = source_candidates[0]
-            status = (
-                'exact_match'
-                if same_leaf_set
-                else 'projected_match'
-            )
+            status = "exact_match" if same_leaf_set else "projected_match"
             reason = (
-                'matching_descendant_taxa'
-                if match_basis == 'clade'
-                else 'matching_canonical_split'
+                "matching_descendant_taxa"
+                if match_basis == "clade"
+                else "matching_canonical_split"
             )
         source_taxa = None
         if source_node is not None:
@@ -228,8 +236,7 @@ def build_clade_mapping(target, source, taxon_mode='exact', match_basis='clade')
             )
         )
     unmatched_source_nodes = tuple(
-        node for node in source.traverse()
-        if id(node) not in matched_source_ids
+        node for node in source.traverse() if id(node) not in matched_source_ids
     )
     return CladeMapping(
         matches=tuple(matches),
@@ -281,17 +288,19 @@ def node_projected_split(node, shared_taxa, taxon_sets=None):
     return canonical_split(side, complement)
 
 
-def find_root_split_candidates(target, source, taxon_mode='exact'):
+def find_root_split_candidates(target, source, taxon_mode="exact"):
     target_leaf_set = _leaf_set(target)
     source_leaf_set = _leaf_set(source)
-    if taxon_mode == 'exact' and target_leaf_set != source_leaf_set:
-        raise ValueError('Leaf labels must match exactly when --taxon-mode exact.')
+    if taxon_mode == "exact" and target_leaf_set != source_leaf_set:
+        raise ValueError("Leaf labels must match exactly when --taxon-mode exact.")
     shared_taxa = target_leaf_set & source_leaf_set
     if len(shared_taxa) < 2:
-        raise ValueError('Root transfer requires at least two shared tips.')
+        raise ValueError("Root transfer requires at least two shared tips.")
     source_split = projected_root_split(source, shared_taxa)
     if source_split is None:
-        raise ValueError('The source root does not define a usable bipartition on shared tips.')
+        raise ValueError(
+            "The source root does not define a usable bipartition on shared tips."
+        )
     target_taxa_by_node = _node_taxon_sets(target)
     candidates = list()
     for node in target.traverse():

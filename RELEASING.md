@@ -6,21 +6,16 @@
 2. Run the local release checks:
 
    ```sh
-   export SOURCE_DATE_EPOCH="$(git log -1 --pretty=%ct)"
-   ruff check nwkit tests
-   mypy --no-incremental
-   python -m pip check
-   bandit -r nwkit -ll -ii -q
-   python -m pip_audit .
-   pytest tests/ -q
-   coverage run -m pytest tests/ -q
-   coverage report
-   python -m build --wheel --outdir direct-dist
-   python -m build
-   cmp direct-dist/*.whl dist/*.whl
-   python -m twine check dist/*
-   check-wheel-contents dist/*.whl
+   python -m venv .venv
+   . .venv/bin/activate
+   python -m pip install -U pip
+   python -m pip install -c constraints-dev.txt -e ".[dev,image]"
+   python tools/check.py release
    ```
+
+   The release runner derives `SOURCE_DATE_EPOCH` from the current commit when
+   it is not already set, runs all quality and security gates, builds both
+   wheel paths, and compares their bytes and contents.
 
 3. Commit the version and changelog changes and merge them into `master`. The
    `Tests` workflow validates the push, after which the release-tag workflow

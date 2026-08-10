@@ -6,10 +6,9 @@ from pathlib import Path
 from setuptools import setup
 from setuptools.command.build_py import build_py as _build_py
 
-
 PROJECT_ROOT = Path(__file__).resolve().parent
-SOURCE_PACKAGE_DIR = (PROJECT_ROOT / 'nwkit').resolve()
-PROJECT_BUILD_DIR = (PROJECT_ROOT / 'build').resolve()
+SOURCE_PACKAGE_DIR = (PROJECT_ROOT / "nwkit").resolve()
+PROJECT_BUILD_DIR = (PROJECT_ROOT / "build").resolve()
 
 
 class CleanBuildPy(_build_py):
@@ -17,7 +16,7 @@ class CleanBuildPy(_build_py):
 
     def run(self):
         build_root = Path(self.build_lib).resolve()
-        package_dir = build_root / 'nwkit'
+        package_dir = build_root / "nwkit"
         try:
             resolved_package_dir = package_dir.resolve()
         except RuntimeError as exc:
@@ -28,7 +27,7 @@ class CleanBuildPy(_build_py):
             ) from exc
         if (
             resolved_package_dir.parent != build_root
-            or resolved_package_dir.name != 'nwkit'
+            or resolved_package_dir.name != "nwkit"
         ):
             raise RuntimeError(
                 "Refusing to clean a package path outside build_lib: '{}'.".format(
@@ -43,9 +42,8 @@ class CleanBuildPy(_build_py):
             resolved_package_dir == PROJECT_BUILD_DIR
             or PROJECT_BUILD_DIR in resolved_package_dir.parents
         )
-        if (
-            resolved_package_dir == SOURCE_PACKAGE_DIR
-            or (is_inside_project and not is_inside_project_build)
+        if resolved_package_dir == SOURCE_PACKAGE_DIR or (
+            is_inside_project and not is_inside_project_build
         ):
             raise RuntimeError(
                 "Refusing to clean the source tree as build output: '{}'.".format(
@@ -65,12 +63,10 @@ class CleanBuildPy(_build_py):
                 )
             if not stat.S_ISDIR(package_stat.st_mode):
                 raise RuntimeError(
-                    "Build package path is not a directory: '{}'.".format(
-                        package_dir
-                    )
+                    "Build package path is not a directory: '{}'.".format(package_dir)
                 )
             shutil.rmtree(package_dir)
         super().run()
 
 
-setup(cmdclass={'build_py': CleanBuildPy})
+setup(cmdclass={"build_py": CleanBuildPy})

@@ -17,13 +17,13 @@ from tests.helpers import make_args
 
 def make_sample_args(**kwargs):
     defaults = {
-        'trait': None,
-        'n': 1,
-        'method': 'max-pd',
-        'filter': [],
-        'rank': [],
-        'allow_fewer': False,
-        'report': None,
+        "trait": None,
+        "n": 1,
+        "method": "max-pd",
+        "filter": [],
+        "rank": [],
+        "allow_fewer": False,
+        "report": None,
     }
     defaults.update(kwargs)
     return make_args(**defaults)
@@ -31,49 +31,49 @@ def make_sample_args(**kwargs):
 
 class TestFilterAndRankParsing:
     def test_parse_filter_spec_accepts_threshold_expression(self):
-        assert parse_filter_spec('busco_complete_pct:ge:80') == (
-            'busco_complete_pct',
-            'ge',
-            '80',
+        assert parse_filter_spec("busco_complete_pct:ge:80") == (
+            "busco_complete_pct",
+            "ge",
+            "80",
         )
 
     def test_parse_filter_spec_rejects_invalid_operator(self):
-        with pytest.raises(ValueError, match='Invalid --filter operator'):
-            parse_filter_spec('busco_complete_pct:min:80')
+        with pytest.raises(ValueError, match="Invalid --filter operator"):
+            parse_filter_spec("busco_complete_pct:min:80")
 
     def test_apply_filters_supports_numeric_bounds(self):
         dataframe = pd.DataFrame(
             {
-                'leaf_name': ['A', 'B', 'C'],
-                'busco_complete_pct': [90, 75, 85],
-                'num_seq': [50000, 10000, 300000],
+                "leaf_name": ["A", "B", "C"],
+                "busco_complete_pct": [90, 75, 85],
+                "num_seq": [50000, 10000, 300000],
             }
         )
         filtered = apply_filters(
             dataframe,
-            ['busco_complete_pct:ge:80', 'num_seq:le:200000'],
+            ["busco_complete_pct:ge:80", "num_seq:le:200000"],
         )
-        assert filtered['leaf_name'].tolist() == ['A']
+        assert filtered["leaf_name"].tolist() == ["A"]
 
     def test_sort_candidates_uses_multiple_rank_columns(self):
         dataframe = pd.DataFrame(
             {
-                'leaf_name': ['A', 'B', 'C'],
-                'busco_complete_pct': [90, 95, 95],
-                'num_seq': [50000, 100000, 75000],
+                "leaf_name": ["A", "B", "C"],
+                "busco_complete_pct": [90, 95, 95],
+                "num_seq": [50000, 100000, 75000],
             }
         )
         ranked = sort_candidates(
             dataframe,
-            ['busco_complete_pct:desc', 'num_seq:asc'],
+            ["busco_complete_pct:desc", "num_seq:asc"],
         )
-        assert ranked['leaf_name'].tolist() == ['C', 'B', 'A']
+        assert ranked["leaf_name"].tolist() == ["C", "B", "A"]
 
 
 class TestSampleMain:
     def test_select_max_pd_matches_reference_greedy_order(self):
-        tree = Tree('(((A:1.5,B:0.5):2,C:1):1,(D:3,(E:1,F:1):2):1);', parser=1)
-        candidate_order = ['C', 'E', 'A', 'F', 'D', 'B']
+        tree = Tree("(((A:1.5,B:0.5):2,C:1):1,(D:3,(E:1,F:1):2):1);", parser=1)
+        candidate_order = ["C", "E", "A", "F", "D", "B"]
         leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
         path_edges_by_leaf = {
             leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
@@ -87,7 +87,7 @@ class TestSampleMain:
             best_leaf = None
             best_gain = None
             for leaf_name in candidate_order:
-                if any(row['leaf_name'] == leaf_name for row in expected):
+                if any(row["leaf_name"] == leaf_name for row in expected):
                     continue
                 gain = _path_gain(path_edges_by_leaf[leaf_name], covered_edges)
                 if best_leaf is None or gain > best_gain:
@@ -96,13 +96,15 @@ class TestSampleMain:
             for edge, _length in path_edges_by_leaf[best_leaf]:
                 covered_edges.add(edge)
             pd_total += best_gain
-            expected.append({'leaf_name': best_leaf, 'pd_gain': best_gain, 'pd_total': pd_total})
+            expected.append(
+                {"leaf_name": best_leaf, "pd_gain": best_gain, "pd_total": pd_total}
+            )
 
         assert select_max_pd(candidate_order, path_edges_by_leaf, 4) == expected
 
     def test_max_pd_retains_small_differences_below_a_large_shared_edge(self):
-        tree = Tree('((A:1,B:2):1e308,C:3);', parser=1)
-        candidate_order = ['A', 'B']
+        tree = Tree("((A:1,B:2):1e308,C:3);", parser=1)
+        candidate_order = ["A", "B"]
         leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
         path_edges_by_leaf = {
             leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
@@ -111,12 +113,12 @@ class TestSampleMain:
 
         selected = select_max_pd(candidate_order, path_edges_by_leaf, 2)
 
-        assert [row['leaf_name'] for row in selected] == ['B', 'A']
-        assert selected[1]['pd_gain'] == pytest.approx(1.0)
+        assert [row["leaf_name"] for row in selected] == ["B", "A"]
+        assert selected[1]["pd_gain"] == pytest.approx(1.0)
 
     def test_ranked_pd_retains_uncovered_small_edge_after_large_path(self):
-        tree = Tree('((A:1,B:2):1e308,C:3);', parser=1)
-        candidate_order = ['A', 'B']
+        tree = Tree("((A:1,B:2):1e308,C:3);", parser=1)
+        candidate_order = ["A", "B"]
         leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
         path_edges_by_leaf = {
             leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
@@ -125,23 +127,24 @@ class TestSampleMain:
 
         selected = select_ranked(candidate_order, path_edges_by_leaf, 2)
 
-        assert [row['leaf_name'] for row in selected] == ['A', 'B']
-        assert selected[1]['pd_gain'] == pytest.approx(2.0)
+        assert [row["leaf_name"] for row in selected] == ["A", "B"]
+        assert selected[1]["pd_gain"] == pytest.approx(2.0)
 
-    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
+    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
     @pytest.mark.parametrize(
-        'bad_length',
-        ['-1', 'inf', 'nan'],
-        ids=('negative', 'infinite', 'nan'),
+        "bad_length",
+        ["-1", "inf", "nan"],
+        ids=("negative", "infinite", "nan"),
     )
     def test_rejects_invalid_branch_lengths_before_outputs(
-            self, tmp_path, method, bad_length):
-        tree_path = tmp_path / 'tree.nwk'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
+        self, tmp_path, method, bad_length
+    ):
+        tree_path = tmp_path / "tree.nwk"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
         tree_path.write_text(
-            '(A:{},B:1,C:1);'.format(bad_length),
-            encoding='utf-8',
+            "(A:{},B:1,C:1);".format(bad_length),
+            encoding="utf-8",
         )
         args = make_sample_args(
             infile=str(tree_path),
@@ -150,21 +153,20 @@ class TestSampleMain:
             method=method,
         )
 
-        with pytest.raises(ValueError, match='finite'):
+        with pytest.raises(ValueError, match="finite"):
             sample_main(args)
 
         assert not out_tree.exists()
         assert not out_table.exists()
 
-    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
-    def test_rejects_unrepresentable_path_gain_before_outputs(
-            self, tmp_path, method):
-        tree_path = tmp_path / 'tree.nwk'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
+    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
+    def test_rejects_unrepresentable_path_gain_before_outputs(self, tmp_path, method):
+        tree_path = tmp_path / "tree.nwk"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
         tree_path.write_text(
-            '((A:1e308,B:1):1e308,C:1);',
-            encoding='utf-8',
+            "((A:1e308,B:1):1e308,C:1);",
+            encoding="utf-8",
         )
         args = make_sample_args(
             infile=str(tree_path),
@@ -175,22 +177,21 @@ class TestSampleMain:
 
         with pytest.raises(
             ValueError,
-            match='gain exceeds the finite floating-point range',
+            match="gain exceeds the finite floating-point range",
         ):
             sample_main(args)
 
         assert not out_tree.exists()
         assert not out_table.exists()
 
-    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
-    def test_rejects_unrepresentable_pd_total_before_outputs(
-            self, tmp_path, method):
-        tree_path = tmp_path / 'tree.nwk'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
+    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
+    def test_rejects_unrepresentable_pd_total_before_outputs(self, tmp_path, method):
+        tree_path = tmp_path / "tree.nwk"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
         tree_path.write_text(
-            '(A:1e308,B:1e308,C:1);',
-            encoding='utf-8',
+            "(A:1e308,B:1e308,C:1);",
+            encoding="utf-8",
         )
         args = make_sample_args(
             infile=str(tree_path),
@@ -202,23 +203,22 @@ class TestSampleMain:
 
         with pytest.raises(
             ValueError,
-            match='total exceeds the finite floating-point range',
+            match="total exceeds the finite floating-point range",
         ):
             sample_main(args)
 
         assert not out_tree.exists()
         assert not out_table.exists()
 
-    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
-    def test_rejects_total_just_above_maximum_float(
-            self, tmp_path, method):
-        tree_path = tmp_path / 'tree.nwk'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
-        maximum_float = float.fromhex('0x1.fffffffffffffp+1023')
+    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
+    def test_rejects_total_just_above_maximum_float(self, tmp_path, method):
+        tree_path = tmp_path / "tree.nwk"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
+        maximum_float = float.fromhex("0x1.fffffffffffffp+1023")
         tree_path.write_text(
-            '(A:{},B:1,C:0);'.format(maximum_float),
-            encoding='utf-8',
+            "(A:{},B:1,C:0);".format(maximum_float),
+            encoding="utf-8",
         )
         args = make_sample_args(
             infile=str(tree_path),
@@ -230,20 +230,19 @@ class TestSampleMain:
 
         with pytest.raises(
             ValueError,
-            match='total exceeds the finite floating-point range',
+            match="total exceeds the finite floating-point range",
         ):
             sample_main(args)
 
         assert not out_tree.exists()
         assert not out_table.exists()
 
-    @pytest.mark.parametrize('method', ['max-pd', 'ranked'])
-    def test_missing_branch_lengths_use_unit_pd_edges(
-            self, tmp_path, method):
-        tree_path = tmp_path / 'tree.nwk'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
-        tree_path.write_text('(A,B,C);', encoding='utf-8')
+    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
+    def test_missing_branch_lengths_use_unit_pd_edges(self, tmp_path, method):
+        tree_path = tmp_path / "tree.nwk"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
+        tree_path.write_text("(A,B,C);", encoding="utf-8")
         args = make_sample_args(
             infile=str(tree_path),
             outfile=str(out_tree),
@@ -253,14 +252,14 @@ class TestSampleMain:
 
         sample_main(args)
 
-        selected = pd.read_csv(out_table, sep='\t')
-        assert selected.loc[0, 'pd_gain'] == pytest.approx(1.0)
+        selected = pd.read_csv(out_table, sep="\t")
+        assert selected.loc[0, "pd_gain"] == pytest.approx(1.0)
 
     def test_sample_without_trait_uses_tree_only_max_pd(self, tmp_path):
-        tree_path = tmp_path / 'tree.nwk'
-        tree_path.write_text('(((A:1,B:1):1,C:1):1,(D:1,E:1):1);', encoding='utf-8')
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
+        tree_path = tmp_path / "tree.nwk"
+        tree_path.write_text("(((A:1,B:1):1,C:1):1,(D:1,E:1):1);", encoding="utf-8")
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
 
         args = make_sample_args(
             infile=str(tree_path),
@@ -270,91 +269,91 @@ class TestSampleMain:
         )
         sample_main(args)
 
-        selected = pd.read_csv(out_table, sep='\t')
-        assert selected['leaf_name'].tolist() == ['A', 'D']
-        out_text = out_tree.read_text(encoding='utf-8')
-        assert 'A' in out_text
-        assert 'D' in out_text
-        for excluded in ['B', 'C', 'E']:
+        selected = pd.read_csv(out_table, sep="\t")
+        assert selected["leaf_name"].tolist() == ["A", "D"]
+        out_text = out_tree.read_text(encoding="utf-8")
+        assert "A" in out_text
+        assert "D" in out_text
+        for excluded in ["B", "C", "E"]:
             assert excluded not in out_text
 
     def test_sample_filters_quality_size_and_uses_rank_as_pd_tiebreaker(self, tmp_path):
-        tree_path = tmp_path / 'tree.nwk'
-        trait_path = tmp_path / 'trait.tsv'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
-        tree_path.write_text('((A:1,B:1):1,(C:1,D:1):1,E:1);', encoding='utf-8')
+        tree_path = tmp_path / "tree.nwk"
+        trait_path = tmp_path / "trait.tsv"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
+        tree_path.write_text("((A:1,B:1):1,(C:1,D:1):1,E:1);", encoding="utf-8")
         pd.DataFrame(
             {
-                'leaf_name': ['A', 'B', 'C', 'D', 'E'],
-                'busco_complete_pct': [90, 79, 95, 95, 85],
-                'num_seq': [50000, 10000, 150000, 300000, 100000],
+                "leaf_name": ["A", "B", "C", "D", "E"],
+                "busco_complete_pct": [90, 79, 95, 95, 85],
+                "num_seq": [50000, 10000, 150000, 300000, 100000],
             }
-        ).to_csv(trait_path, sep='\t', index=False)
+        ).to_csv(trait_path, sep="\t", index=False)
 
         args = make_sample_args(
             infile=str(tree_path),
             outfile=str(out_tree),
             trait=str(trait_path),
             n=2,
-            filter=['busco_complete_pct:ge:80', 'num_seq:le:200000'],
-            rank=['num_seq:asc', 'busco_complete_pct:desc'],
+            filter=["busco_complete_pct:ge:80", "num_seq:le:200000"],
+            rank=["num_seq:asc", "busco_complete_pct:desc"],
             report=str(out_table),
         )
         sample_main(args)
 
-        selected = pd.read_csv(out_table, sep='\t')
-        assert selected['leaf_name'].tolist() == ['A', 'C']
-        assert selected['num_seq'].tolist() == [50000, 150000]
-        assert 'B' not in selected['leaf_name'].tolist()
-        assert 'D' not in selected['leaf_name'].tolist()
+        selected = pd.read_csv(out_table, sep="\t")
+        assert selected["leaf_name"].tolist() == ["A", "C"]
+        assert selected["num_seq"].tolist() == [50000, 150000]
+        assert "B" not in selected["leaf_name"].tolist()
+        assert "D" not in selected["leaf_name"].tolist()
 
     def test_ranked_method_selects_ranked_candidates_after_filters(self, tmp_path):
-        tree_path = tmp_path / 'tree.nwk'
-        trait_path = tmp_path / 'trait.tsv'
-        out_tree = tmp_path / 'sampled.nwk'
-        out_table = tmp_path / 'sampled.tsv'
-        tree_path.write_text('((A:1,B:1):1,(C:1,D:1):1,E:1);', encoding='utf-8')
+        tree_path = tmp_path / "tree.nwk"
+        trait_path = tmp_path / "trait.tsv"
+        out_tree = tmp_path / "sampled.nwk"
+        out_table = tmp_path / "sampled.tsv"
+        tree_path.write_text("((A:1,B:1):1,(C:1,D:1):1,E:1);", encoding="utf-8")
         pd.DataFrame(
             {
-                'leaf_name': ['A', 'B', 'C', 'D', 'E'],
-                'busco_complete_pct': [90, 79, 95, 95, 85],
-                'num_seq': [50000, 10000, 150000, 300000, 100000],
+                "leaf_name": ["A", "B", "C", "D", "E"],
+                "busco_complete_pct": [90, 79, 95, 95, 85],
+                "num_seq": [50000, 10000, 150000, 300000, 100000],
             }
-        ).to_csv(trait_path, sep='\t', index=False)
+        ).to_csv(trait_path, sep="\t", index=False)
 
         args = make_sample_args(
             infile=str(tree_path),
             outfile=str(out_tree),
             trait=str(trait_path),
             n=2,
-            method='ranked',
-            filter=['busco_complete_pct:ge:80', 'num_seq:le:200000'],
-            rank=['num_seq:asc'],
+            method="ranked",
+            filter=["busco_complete_pct:ge:80", "num_seq:le:200000"],
+            rank=["num_seq:asc"],
             report=str(out_table),
         )
         sample_main(args)
 
-        selected = pd.read_csv(out_table, sep='\t')
-        assert selected['leaf_name'].tolist() == ['A', 'E']
+        selected = pd.read_csv(out_table, sep="\t")
+        assert selected["leaf_name"].tolist() == ["A", "E"]
 
     def test_sample_requires_enough_filtered_candidates_by_default(self, tmp_path):
-        tree_path = tmp_path / 'tree.nwk'
-        trait_path = tmp_path / 'trait.tsv'
-        tree_path.write_text('(A:1,B:1,C:1);', encoding='utf-8')
+        tree_path = tmp_path / "tree.nwk"
+        trait_path = tmp_path / "trait.tsv"
+        tree_path.write_text("(A:1,B:1,C:1);", encoding="utf-8")
         pd.DataFrame(
             {
-                'leaf_name': ['A', 'B', 'C'],
-                'busco_complete_pct': [90, 70, 60],
+                "leaf_name": ["A", "B", "C"],
+                "busco_complete_pct": [90, 70, 60],
             }
-        ).to_csv(trait_path, sep='\t', index=False)
+        ).to_csv(trait_path, sep="\t", index=False)
 
         args = make_sample_args(
             infile=str(tree_path),
-            outfile=str(tmp_path / 'sampled.nwk'),
+            outfile=str(tmp_path / "sampled.nwk"),
             trait=str(trait_path),
             n=2,
-            filter=['busco_complete_pct:ge:80'],
+            filter=["busco_complete_pct:ge:80"],
         )
-        with pytest.raises(ValueError, match='fewer than --n'):
+        with pytest.raises(ValueError, match="fewer than --n"):
             sample_main(args)

@@ -7,60 +7,70 @@ from tests.helpers import make_args
 
 class TestPruneMain:
     def test_prune_by_exact_name(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
+        path = tmp_nwk("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;")
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='B1', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="B1",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
-        assert 'B1' not in leaf_names
-        assert 'A1' in leaf_names
+        assert "B1" not in leaf_names
+        assert "A1" in leaf_names
 
     def test_prune_by_regex(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
+        path = tmp_nwk("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;")
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='B.*', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="B.*",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
-        assert 'B1' not in leaf_names
-        assert 'B2' not in leaf_names
-        assert 'A1' in leaf_names
+        assert "B1" not in leaf_names
+        assert "B2" not in leaf_names
+        assert "A1" in leaf_names
 
     def test_prune_invert_match(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;')
+        path = tmp_nwk("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;")
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='A.*', invert_match=True,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="A.*",
+            invert_match=True,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
         # Invert match: keep only A-matching leaves, prune everything else
-        assert all(name.startswith('A') for name in leaf_names)
+        assert all(name.startswith("A") for name in leaf_names)
 
     def test_prune_preserves_remaining(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='A', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="A",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
-        assert leaf_names == {'B', 'C', 'D'}
+        assert leaf_names == {"B", "C", "D"}
 
     def test_prune_all_leaves_raises(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((A:1,B:1):1,(C:1,D:1):1);')
+        path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='.*', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern=".*",
+            invert_match=False,
         )
-        with pytest.raises(ValueError, match='All leaves would be pruned'):
+        with pytest.raises(ValueError, match="All leaves would be pruned"):
             prune_main(args)
 
     def test_wiki_pipe_separated_pattern(self, tmp_nwk, tmp_outfile):
@@ -69,17 +79,21 @@ class TestPruneMain:
         Input:  (((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;
         Output: (((A1:2,B2:2)1:1,(A2:1,C1:1)1:2)1:1)1:0.25;
         """
-        path = tmp_nwk('(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;')
+        path = tmp_nwk(
+            "(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;"
+        )
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='B1|C2', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="B1|C2",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
-        assert leaf_names == {'A1', 'B2', 'A2', 'C1'}
-        assert 'B1' not in leaf_names
-        assert 'C2' not in leaf_names
+        assert leaf_names == {"A1", "B2", "A2", "C1"}
+        assert "B1" not in leaf_names
+        assert "C2" not in leaf_names
 
     def test_wiki_prune_branch_length_after_removal(self, tmp_nwk, tmp_outfile):
         """Wiki: when B1 is pruned, B2 absorbs the dissolved parent's branch length.
@@ -91,18 +105,22 @@ class TestPruneMain:
         B2 dist = 1.0 (original) + 1.0 (dissolved parent) = 2.0
         A1 dist = 2.0 (unchanged)
         """
-        path = tmp_nwk('(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;')
+        path = tmp_nwk(
+            "(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;"
+        )
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='B1|C2', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="B1|C2",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaves = {l.name: l.dist for l in tree.leaves()}
-        assert abs(leaves['B2'] - 2.0) < 1e-6
-        assert abs(leaves['A1'] - 2.0) < 1e-6
-        assert abs(leaves['A2'] - 1.0) < 1e-6
-        assert abs(leaves['C1'] - 1.0) < 1e-6
+        assert abs(leaves["B2"] - 2.0) < 1e-6
+        assert abs(leaves["A1"] - 2.0) < 1e-6
+        assert abs(leaves["A2"] - 1.0) < 1e-6
+        assert abs(leaves["C1"] - 1.0) < 1e-6
 
     def test_wiki_invert_match_exact(self, tmp_nwk, tmp_outfile):
         """Wiki invert_match example: keep only A.* and B.* tips.
@@ -112,37 +130,50 @@ class TestPruneMain:
 
         A2 absorbs C1's dissolved parent: dist = 1.0 + 2.0 = 3.0
         """
-        path = tmp_nwk('(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;')
+        path = tmp_nwk(
+            "(((A1:2.0,(B1:1.0,B2:1.0):1.0):1.0,(A2:1.0,C1:1.0):2.0):1.0,C2:4.0):0.25;"
+        )
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='A.*|B.*', invert_match=True,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="A.*|B.*",
+            invert_match=True,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
-        assert leaf_names == {'A1', 'A2', 'B1', 'B2'}
+        assert leaf_names == {"A1", "A2", "B1", "B2"}
         leaves = {l.name: l.dist for l in tree.leaves()}
-        assert abs(leaves['A1'] - 2.0) < 1e-6
-        assert abs(leaves['B1'] - 1.0) < 1e-6
-        assert abs(leaves['B2'] - 1.0) < 1e-6
-        assert abs(leaves['A2'] - 3.0) < 1e-6
+        assert abs(leaves["A1"] - 2.0) < 1e-6
+        assert abs(leaves["B1"] - 1.0) < 1e-6
+        assert abs(leaves["B2"] - 1.0) < 1e-6
+        assert abs(leaves["A2"] - 3.0) < 1e-6
 
     def test_unnamed_leaf_does_not_raise(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('(:1,B:1);')
+        path = tmp_nwk("(:1,B:1);")
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='B', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="B",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         assert set(tree.leaf_names()) == {None}
 
     def test_taxonomic_species_like_labels_remain_exact(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk('((Dictyostelium_discoideum:1,Dictyostelium_cf_discoideum:1):1,Amoeba_sp_JDSRuffled:1);')
+        path = tmp_nwk(
+            "((Dictyostelium_discoideum:1,Dictyostelium_cf_discoideum:1):1,Amoeba_sp_JDSRuffled:1);"
+        )
         args = make_args(
-            infile=path, outfile=tmp_outfile,
-            pattern='^Dictyostelium_discoideum$', invert_match=False,
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="^Dictyostelium_discoideum$",
+            invert_match=False,
         )
         prune_main(args)
-        tree = read_tree(tmp_outfile, format='auto', quoted_node_names=True, quiet=True)
-        assert set(tree.leaf_names()) == {'Dictyostelium_cf_discoideum', 'Amoeba_sp_JDSRuffled'}
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert set(tree.leaf_names()) == {
+            "Dictyostelium_cf_discoideum",
+            "Amoeba_sp_JDSRuffled",
+        }

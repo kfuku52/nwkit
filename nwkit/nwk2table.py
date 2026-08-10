@@ -9,9 +9,9 @@ from nwkit.util import (
 
 
 def _support_value_or_empty(node):
-    support = getattr(node, 'support', None)
-    if support_is_missing(support):
-        return ''
+    support = getattr(node, "support", None)
+    if support is None or support_is_missing(support):
+        return ""
     return float(support)
 
 
@@ -40,19 +40,20 @@ def nwk2table_main(args):
     rows = list()
     for node in tree.traverse():
         row = {
-            'branch_id': node_to_branch_id[node],
-            'parent': -1 if node.is_root else node_to_branch_id[node.up],
-            'name': '' if node.name in [None, ''] else str(node.name),
-            'dist': '' if node.dist is None else float(node.dist),
-            'support': _support_value_or_empty(node),
+            "branch_id": node_to_branch_id[node],
+            "parent": -1 if node.is_root else node_to_branch_id[node.up],
+            "name": "" if node.name in [None, ""] else str(node.name),
+            "dist": "" if node.dist is None else float(node.dist),
+            "support": _support_value_or_empty(node),
         }
         if args.sister:
-            row['sister'] = _sister_branch_id(node, node_to_branch_id)
+            row["sister"] = _sister_branch_id(node, node_to_branch_id)
         if args.age:
-            row['age'] = age_by_node[node]
+            assert age_by_node is not None
+            row["age"] = age_by_node[node]
         rows.append(row)
-    table = pd.DataFrame(rows).sort_values('branch_id').reset_index(drop=True)
-    if args.outfile == '-':
-        print(table.to_csv(sep='\t', index=False), end='')
+    table = pd.DataFrame(rows).sort_values("branch_id").reset_index(drop=True)
+    if args.outfile == "-":
+        print(table.to_csv(sep="\t", index=False), end="")
     else:
-        table.to_csv(args.outfile, sep='\t', index=False)
+        table.to_csv(args.outfile, sep="\t", index=False)

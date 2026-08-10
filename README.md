@@ -249,14 +249,22 @@ There is no published paper on NWKIT itself, but we used and cited NWKIT in seve
 
 ## Development
 
-Install the development and optional image dependencies, then run the same checks used by CI:
+Create an isolated environment, install the development and optional image
+dependencies with the reproducible tool constraints, then use the same check
+runner as CI:
 
+```sh
+python -m venv .venv
+. .venv/bin/activate
+python -m pip install -U pip
+python -m pip install -c constraints-dev.txt -e ".[dev,image]"
+python tools/check.py quick
 ```
-pip install -e ".[dev,image]"
-ruff check nwkit tests setup.py
-pytest -q --durations=20
-python -m build
-```
+
+`quick` runs formatting, linting, type checks, and tests. Use `full` for the
+security, dependency, coverage, and maintainability gates; `dist` for
+reproducible package validation; or `release` for the complete pre-release
+suite.
 
 See [CHANGELOG.md](https://github.com/kfuku52/nwkit/blob/master/CHANGELOG.md) for changes and
 [RELEASING.md](https://github.com/kfuku52/nwkit/blob/master/RELEASING.md) for the release checklist.

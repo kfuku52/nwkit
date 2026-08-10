@@ -9,8 +9,8 @@ from nwkit.util import (
 
 
 def _get_support_value(node):
-    support = getattr(node, 'support', None)
-    if support_is_missing(support):
+    support = getattr(node, "support", None)
+    if support is None or support_is_missing(support):
         return None
     return float(support)
 
@@ -18,11 +18,15 @@ def _get_support_value(node):
 def _should_collapse(node, args):
     if node.is_root or node.is_leaf:
         return False
-    if (args.min_support is not None):
+    if args.min_support is not None:
         support = _get_support_value(node)
         if (support is not None) and (support < args.min_support):
             return True
-    if (args.max_dist is not None) and (node.dist is not None) and (float(node.dist) <= args.max_dist):
+    if (
+        (args.max_dist is not None)
+        and (node.dist is not None)
+        and (float(node.dist) <= args.max_dist)
+    ):
         return True
     return False
 
@@ -48,9 +52,11 @@ def collapse_main(args):
         ]
         support_values = [support for support in support_values if support is not None]
         if len(support_values) == 0:
-            raise ValueError("No meaningful support values were found for '--min-support'.")
+            raise ValueError(
+                "No meaningful support values were found for '--min-support'."
+            )
     collapsed_count = 0
-    for node in list(tree.traverse(strategy='postorder')):
+    for node in list(tree.traverse(strategy="postorder")):
         if not _should_collapse(node, args):
             continue
         if args.preserve_branch_length:
@@ -61,5 +67,5 @@ def collapse_main(args):
         )
         collapsed_count += 1
     remove_singleton(tree, preserve_branch_length=args.preserve_branch_length)
-    sys.stderr.write('Collapsed {} internal node(s).\n'.format(collapsed_count))
+    sys.stderr.write("Collapsed {} internal node(s).\n".format(collapsed_count))
     write_tree(tree, args, format=args.outformat)

@@ -7,47 +7,54 @@ from nwkit.util import (
     validate_unique_named_leaves,
 )
 
-
 MONOPHYLY_COLUMNS = (
-    'group', 'status', 'is_monophyletic', 'num_target_taxa', 'num_mrca_taxa',
-    'num_intruder_taxa', 'target_taxa', 'intruder_taxa',
+    "group",
+    "status",
+    "is_monophyletic",
+    "num_target_taxa",
+    "num_mrca_taxa",
+    "num_intruder_taxa",
+    "target_taxa",
+    "intruder_taxa",
 )
 
 
-def _read_trait_groups(path, tree_leaf_name_set, group_by, unmatched='warn', missing_values=None):
+def _read_trait_groups(
+    path, tree_leaf_name_set, group_by, unmatched="warn", missing_values=None
+):
     trait_df, _, _ = read_tip_table(
         path,
-        option_name='--trait',
+        option_name="--trait",
         tree_leaf_names=tree_leaf_name_set,
         required_columns=(group_by,),
         unmatched=unmatched,
         missing_values=missing_values,
     )
-    trait_df = trait_df[trait_df['leaf_name'].isin(set(tree_leaf_name_set))].copy()
+    trait_df = trait_df[trait_df["leaf_name"].isin(set(tree_leaf_name_set))].copy()
     trait_df = trait_df[~trait_df[group_by].isna()].copy()
     trait_df[group_by] = trait_df[group_by].astype(str)
     group_to_leaf_names = dict()
     for group_name, group_df in trait_df.groupby(group_by, sort=True):
-        leaf_names = sorted(group_df['leaf_name'].astype(str).tolist())
+        leaf_names = sorted(group_df["leaf_name"].astype(str).tolist())
         if len(leaf_names) > 0:
             group_to_leaf_names[str(group_name)] = leaf_names
     return group_to_leaf_names
 
 
 def _get_groups(tree, args):
-    if args.trait not in ['', None]:
-        if args.group_by in ['', None]:
+    if args.trait not in ["", None]:
+        if args.group_by in ["", None]:
             raise ValueError("'--group-by' is required when '--trait' is specified.")
         return _read_trait_groups(
             path=args.trait,
             tree_leaf_name_set=set(tree.leaf_names()),
             group_by=args.group_by,
-            unmatched=getattr(args, 'unmatched', 'warn'),
-            missing_values=getattr(args, 'missing_values', None),
+            unmatched=getattr(args, "unmatched", "warn"),
+            missing_values=getattr(args, "missing_values", None),
         )
     _, species_to_leaf_names, _ = get_species_group_records(
         tree,
-        option_name='--infile',
+        option_name="--infile",
         context=" for 'monophyly'",
         args=args,
         require_monophyly=False,
@@ -57,7 +64,9 @@ def _get_groups(tree, args):
 
 def monophyly_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    validate_unique_named_leaves(tree, option_name='--infile', context=" for 'monophyly'")
+    validate_unique_named_leaves(
+        tree, option_name="--infile", context=" for 'monophyly'"
+    )
     group_to_leaf_names = _get_groups(tree, args)
     rows = list()
     non_monophyletic_groups = list()
@@ -67,7 +76,7 @@ def monophyly_main(args):
             continue
         is_monophyletic, status, foreign_leaves = tree.check_monophyly(
             values=leaf_names,
-            prop='name',
+            prop="name",
             unrooted=args.unrooted,
         )
         intruder_leaf_names = sorted(
@@ -78,24 +87,26 @@ def monophyly_main(args):
             }
         )
         row = {
-            'group': group_name,
-            'status': status,
-            'is_monophyletic': bool(is_monophyletic),
-            'num_target_taxa': len(leaf_names),
-            'num_mrca_taxa': len(leaf_names) + len(intruder_leaf_names),
-            'num_intruder_taxa': len(intruder_leaf_names),
-            'target_taxa': ','.join(leaf_names),
-            'intruder_taxa': ','.join(intruder_leaf_names),
+            "group": group_name,
+            "status": status,
+            "is_monophyletic": bool(is_monophyletic),
+            "num_target_taxa": len(leaf_names),
+            "num_mrca_taxa": len(leaf_names) + len(intruder_leaf_names),
+            "num_intruder_taxa": len(intruder_leaf_names),
+            "target_taxa": ",".join(leaf_names),
+            "intruder_taxa": ",".join(intruder_leaf_names),
         }
         rows.append(row)
         if not is_monophyletic:
             non_monophyletic_groups.append(group_name)
     out = pd.DataFrame(rows, columns=MONOPHYLY_COLUMNS)
-    if args.outfile == '-':
-        print(out.to_csv(sep='\t', index=False), end='')
+    if args.outfile == "-":
+        print(out.to_csv(sep="\t", index=False), end="")
     else:
-        out.to_csv(args.outfile, sep='\t', index=False)
-    if getattr(args, 'fail_on_non_monophyly', False) and non_monophyletic_groups:
+        out.to_csv(args.outfile, sep="\t", index=False)
+    if getattr(args, "fail_on_non_monophyly", False) and non_monophyletic_groups:
         raise ValueError(
-            'Non-monophyletic group(s): {}'.format(', '.join(sorted(non_monophyletic_groups)))
+            "Non-monophyletic group(s): {}".format(
+                ", ".join(sorted(non_monophyletic_groups))
+            )
         )
