@@ -154,6 +154,124 @@ def test_audit_records_skim_group_table_outputs(tmp_path):
     assert str((tmp_path / "groups.sampled.tsv").resolve()) in output_paths
 
 
+def test_audit_records_replicate_contrast_inputs_and_auxiliary_outputs(tmp_path):
+    infile = tmp_path / "gene.nwk"
+    trait = tmp_path / "expression.tsv"
+    outfile = tmp_path / "contrasts.tsv"
+    covariance = tmp_path / "sampling-covariance.tsv"
+    summary = tmp_path / "tip-summary.tsv"
+    audit = tmp_path / "audit.jsonl"
+    infile.write_text("((A:1,B:1):1,C:2);")
+    trait.write_text(
+        "leaf_name\tsample\texpression\n"
+        "A\ta1\t1\nA\ta2\t3\n"
+        "B\tb1\t4\nB\tb2\t6\n"
+        "C\tc1\t7\nC\tc2\t9\n"
+    )
+
+    main(
+        [
+            "contrast",
+            "--infile",
+            str(infile),
+            "--trait",
+            str(trait),
+            "--columns",
+            "expression",
+            "--biological-id",
+            "sample",
+            "--sampling-covariance-out",
+            str(covariance),
+            "--tip-summary-out",
+            str(summary),
+            "--outfile",
+            str(outfile),
+            "--audit",
+            str(audit),
+        ]
+    )
+
+    record = json.loads(audit.read_text())
+    input_paths = {item["path"] for item in record["inputs"]}
+    output_paths = {item["path"] for item in record["outputs"]}
+    assert input_paths == {str(infile.resolve()), str(trait.resolve())}
+    assert output_paths == {
+        str(outfile.resolve()),
+        str(covariance.resolve()),
+        str(summary.resolve()),
+    }
+
+
+def test_audit_records_pgls_sampling_covariance_and_random_effect_output(tmp_path):
+    response = tmp_path / "response.tsv"
+    predictor = tmp_path / "predictor.tsv"
+    covariance = tmp_path / "sampling-covariance.tsv"
+    outfile = tmp_path / "pgls.tsv"
+    random_effects = tmp_path / "random-effects.tsv"
+    audit = tmp_path / "audit.jsonl"
+    response.write_text(
+        "tree_id\tgene_clade_id\tlineage_clade_id\tevent_type\teligible\t"
+        "coverage_status\tspecies_event_id\tspecies_event_taxa\t"
+        "species_numerator_event_id\tspecies_denominator_event_id\ttrait\t"
+        "evolution_model\tevolution_parameter_name\tevolution_parameter\t"
+        "branch_length_mode\t"
+        "raw_contrast\tcontrast_variance\tsampling_variance\n"
+        "OG1\tg1\tl1\tspeciation\tyes\tcomplete\te1\tt1\tn1\td1\texpression\tbrownian\t\t\toriginal\t2\t1\t0.1\n"
+        "OG1\tg2\tl1\tspeciation\tyes\tcomplete\te2\tt2\tn2\td2\texpression\tbrownian\t\t\toriginal\t4\t1\t0.1\n"
+        "OG1\tg3\tl1\tspeciation\tyes\tcomplete\te3\tt3\tn3\td3\texpression\tbrownian\t\t\toriginal\t6\t1\t0.1\n"
+    )
+    predictor.write_text(
+        "tree_id\tbranch_clade_id\tdescendant_taxa\tnumerator_clade_id\t"
+        "denominator_clade_id\ttrait\tevolution_model\t"
+        "evolution_parameter_name\tevolution_parameter\tbranch_length_mode\t"
+        "raw_contrast\n"
+        "species\te1\tt1\tn1\td1\tbody_size\tbrownian\t\t\toriginal\t1\n"
+        "species\te2\tt2\tn2\td2\tbody_size\tbrownian\t\t\toriginal\t2\n"
+        "species\te3\tt3\tn3\td3\tbody_size\tbrownian\t\t\toriginal\t3\n"
+    )
+    covariance.write_text(
+        "tree_id\ttrait\tcontrast_id_1\tcontrast_id_2\tsampling_covariance\n"
+        "OG1\texpression\tg1\tg1\t0.1\n"
+        "OG1\texpression\tg1\tg2\t0\n"
+        "OG1\texpression\tg1\tg3\t0\n"
+        "OG1\texpression\tg2\tg2\t0.1\n"
+        "OG1\texpression\tg2\tg3\t0\n"
+        "OG1\texpression\tg3\tg3\t0.1\n"
+    )
+
+    main(
+        [
+            "pgls",
+            "--infile",
+            str(response),
+            "--predictor-contrasts",
+            str(predictor),
+            "--response-sampling-covariance",
+            str(covariance),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--random-effects-out",
+            str(random_effects),
+            "--outfile",
+            str(outfile),
+            "--audit",
+            str(audit),
+        ]
+    )
+
+    record = json.loads(audit.read_text())
+    input_paths = {item["path"] for item in record["inputs"]}
+    output_paths = {item["path"] for item in record["outputs"]}
+    assert input_paths == {
+        str(response.resolve()),
+        str(predictor.resolve()),
+        str(covariance.resolve()),
+    }
+    assert output_paths == {str(outfile.resolve()), str(random_effects.resolve())}
+
+
 def test_audit_records_compose_manifest_dependencies_and_all_roles(tmp_path):
     target = tmp_path / "target.nwk"
     source = tmp_path / "source.nwk"

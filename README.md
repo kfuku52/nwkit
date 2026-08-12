@@ -59,6 +59,9 @@ See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.
 Shared option naming, standard-input rules, TSV schemas, missing-value policy,
 and output-column vocabulary are defined in
 [CLI and TSV conventions](https://github.com/kfuku52/nwkit/blob/master/CLI_TSV_CONVENTIONS.md).
+The reconciled speciation-contrast calculation is derived step by step, with a
+minimal worked example, in
+[the mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).
 
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
 - [`asr`](https://github.com/kfuku52/nwkit/wiki/nwkit-asr): Inferring categorical ancestral states and imputing missing tip states under an Mk model
@@ -67,6 +70,7 @@ and output-column vocabulary are defined in
 - [`compose`](https://github.com/kfuku52/nwkit/wiki/nwkit-compose): Assembling compatible roots, values, and annotations from multiple trees
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
+- [`contrast`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Calculating continuous-trait phylogenetic independent contrasts, with biological/technical replicates, batch adjustment, propagated sampling covariance, and reconciled gene-tree event mappings
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with aligned species images, support, categorical or missing-value badges, filtered node-probability pies, and property labels
@@ -80,9 +84,11 @@ and output-column vocabulary are defined in
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
+- [`pgls`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Fitting conventional tip-level Brownian, Pagel-lambda, OU, kappa, delta, early-burst/ACDC, independent, or custom-covariance PGLS with ML model comparison, or running reconciled-contrast PGLS end to end with response and predictor biological replicates, latent-predictor measurement error, and automatic shape-parameter estimation
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
+- [`reconcile`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Mapping rooted gene-tree nodes and events onto a rooted species tree
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
 - [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing or transferring the tree root
 - [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
@@ -236,8 +242,10 @@ nwkit annotate -i tree.nwk --table traits.tsv \
 
 Every functional command accepts `--audit PATH`. Each invocation appends one
 JSON Lines record containing NWKIT version and arguments, input and output
-SHA-256 hashes, input interpretation, random seeds, external-data settings,
-warnings, runtime status, and captured command messages:
+SHA-256 hashes, planned output paths, input interpretation, random seeds,
+external-data settings, warnings, runtime status, and captured command
+messages. Planned paths remain available when a command fails before producing
+an output:
 
 ```sh
 nwkit sanitize -i raw.nwk --audit workflow.audit.jsonl |

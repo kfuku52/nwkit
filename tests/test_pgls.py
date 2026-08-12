@@ -1,0 +1,1719 @@
+import hashlib
+import io
+import json
+import sys
+import warnings
+
+import numpy as np
+import pandas as pd
+import pytest
+from ete4 import Tree
+
+from nwkit import pgls as pgls_mod
+from nwkit import pgls_pipeline as pgls_pipeline_mod
+from nwkit.cli import main
+from nwkit.contrast import build_contrast_table
+from nwkit.pgls import fit_reconciled_pgls
+from nwkit.pgls_pipeline import PglsPipelineArtifacts, write_pgls_bundle
+from nwkit.reconcile import build_reconciliation_table
+
+
+def _write_raw_pgls_inputs(tmp_path, *, biological_replicates=False):
+    gene_tree = tmp_path / "gene.nwk"
+    species_tree = tmp_path / "species.nwk"
+    expression = tmp_path / "expression.tsv"
+    species_traits = tmp_path / "species-traits.tsv"
+    gene_names = ["Genus_{}_g1".format(letter) for letter in "abcde"]
+    species_names = ["Genus_{}".format(letter) for letter in "abcde"]
+    gene_tree.write_text("((({}:1,{}:1):1,{}:2):1,({}:1,{}:1):2);".format(*gene_names))
+    species_tree.write_text(
+        "((({}:1,{}:1):1,{}:2):1,({}:1,{}:1):2);".format(*species_names)
+    )
+    expression_values = [2.0, 5.0, 7.0, 8.0, 12.0]
+    if biological_replicates:
+        rows = []
+        for leaf_name, value in zip(gene_names, expression_values, strict=True):
+            rows.extend(
+                [
+                    {
+                        "leaf_name": leaf_name,
+                        "sample_id": "{}_1".format(leaf_name),
+                        "expression": value - 0.5,
+                    },
+                    {
+                        "leaf_name": leaf_name,
+                        "sample_id": "{}_2".format(leaf_name),
+                        "expression": value + 0.5,
+                    },
+                ]
+            )
+    else:
+        rows = [
+            {"leaf_name": leaf_name, "expression": value}
+            for leaf_name, value in zip(gene_names, expression_values, strict=True)
+        ]
+    pd.DataFrame(rows).to_csv(expression, sep="\t", index=False)
+    pd.DataFrame(
+        {
+            "leaf_name": species_names,
+            "body_size": [1.0, 2.0, 4.0, 3.0, 7.0],
+        }
+    ).to_csv(species_traits, sep="\t", index=False)
+    return gene_tree, species_tree, expression, species_traits
+
+
+def _predictor_table(values=(1.0, 2.0, 3.0)):
+    rows = []
+    for index, value in enumerate(values, start=1):
+        rows.append(
+            {
+                "tree_id": "species",
+                "branch_clade_id": "event{}".format(index),
+                "descendant_taxa": "taxa{}".format(index),
+                "numerator_clade_id": "num{}".format(index),
+                "denominator_clade_id": "den{}".format(index),
+                "trait": "body_size",
+                "evolution_model": "brownian",
+                "evolution_parameter_name": "",
+                "evolution_parameter": "",
+                "branch_length_mode": "original",
+                "raw_contrast": value,
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def _response_row(event_index, value, *, gene_index=1, tree_id="OG1"):
+    return {
+        "tree_id": tree_id,
+        "gene_clade_id": "gene{}_{}".format(event_index, gene_index),
+        "lineage_clade_id": "lineage{}".format(gene_index),
+        "event_type": "speciation",
+        "eligible": "yes",
+        "coverage_status": "complete",
+        "species_event_id": "event{}".format(event_index),
+        "species_event_taxa": "taxa{}".format(event_index),
+        "species_numerator_event_id": "num{}".format(event_index),
+        "species_denominator_event_id": "den{}".format(event_index),
+        "trait": "expression",
+        "evolution_model": "brownian",
+        "evolution_parameter_name": "",
+        "evolution_parameter": "",
+        "branch_length_mode": "original",
+        "raw_contrast": value,
+        "contrast_variance": 1.0,
+    }
+
+
+def _sampling_covariance_table(response, matrix):
+    ids = response["gene_clade_id"].tolist()
+    rows = []
+    for first in range(len(ids)):
+        for second in range(first, len(ids)):
+            rows.append(
+                {
+                    "tree_id": response.iloc[first]["tree_id"],
+                    "trait": response.iloc[first]["trait"],
+                    "contrast_id_1": ids[first],
+                    "contrast_id_2": ids[second],
+                    "sampling_covariance": matrix[first, second],
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
+    species_tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
+    gene_tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
+    mapping = {name: name for name in ["A", "B", "C", "D", "E"]}
+    reconciliation = build_reconciliation_table(
+        gene_tree, species_tree, mapping, tree_id="OG1"
+    )
+    reconciliation_by_id = {
+        row["gene_clade_id"]: row for row in reconciliation.to_dict("records")
+    }
+    predictor = build_contrast_table(
+        species_tree,
+        {"body_size": {"A": 1, "B": 2, "C": 4, "D": 3, "E": 7}},
+        tree_id="species",
+    )
+    response = build_contrast_table(
+        gene_tree,
+        {"expression": {"A": 2, "B": 5, "C": 7, "D": 8, "E": 12}},
+        reconciliation_by_id=reconciliation_by_id,
+        event_type="speciation",
+        tree_id="OG1",
+    )
+
+    result = fit_reconciled_pgls(response, predictor, ["expression"], ["body_size"])
+
+    joined = response.merge(
+        predictor[predictor["trait"] == "body_size"],
+        left_on="species_event_id",
+        right_on="branch_clade_id",
+        suffixes=("_response", "_predictor"),
+    )
+    scale = np.sqrt(joined["contrast_variance_response"].to_numpy(float))
+    y = joined["raw_contrast_response"].to_numpy(float) / scale
+    x = joined["raw_contrast_predictor"].to_numpy(float) / scale
+    expected = float((x @ y) / (x @ x))
+    assert result.iloc[0]["coefficient"] == pytest.approx(expected)
+    tip_x = np.asarray([1, 2, 4, 3, 7], dtype=float)
+    tip_y = np.asarray([2, 5, 7, 8, 12], dtype=float)
+    covariance = np.asarray(
+        [
+            [3, 2, 1, 0, 0],
+            [2, 3, 1, 0, 0],
+            [1, 1, 3, 0, 0],
+            [0, 0, 0, 3, 2],
+            [0, 0, 0, 2, 3],
+        ],
+        dtype=float,
+    )
+    inverse_covariance = np.linalg.inv(covariance)
+    tip_design = np.column_stack([np.ones(len(tip_x)), tip_x])
+    direct_gls = np.linalg.solve(
+        tip_design.T @ inverse_covariance @ tip_design,
+        tip_design.T @ inverse_covariance @ tip_y,
+    )
+    assert result.iloc[0]["coefficient"] == pytest.approx(direct_gls[1])
+    assert result.iloc[0]["n_gene_contrasts"] == 4
+    assert result.iloc[0]["n_species_events"] == 4
+    assert result.iloc[0]["degrees_of_freedom"] == 3
+    assert result.iloc[0]["intercept"] == "no"
+
+
+def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
+    base = pd.DataFrame([_response_row(1, 1.0), _response_row(2, 6.0)])
+    repeated_rows = [_response_row(1, 1.0, gene_index=index) for index in range(1, 11)]
+    repeated = pd.DataFrame(repeated_rows + [_response_row(2, 6.0)])
+    predictors = _predictor_table(values=(1.0, 2.0))
+
+    base_result = fit_reconciled_pgls(base, predictors, ["expression"], ["body_size"])
+    equal_result = fit_reconciled_pgls(
+        repeated, predictors, ["expression"], ["body_size"]
+    )
+    observation_result = fit_reconciled_pgls(
+        repeated,
+        predictors,
+        ["expression"],
+        ["body_size"],
+        event_weighting="observation",
+    )
+
+    assert equal_result.iloc[0]["coefficient"] == pytest.approx(
+        base_result.iloc[0]["coefficient"]
+    )
+    assert equal_result.iloc[0]["coefficient"] == pytest.approx(2.6)
+    assert observation_result.iloc[0]["coefficient"] == pytest.approx(22.0 / 14.0)
+    assert equal_result.iloc[0]["n_gene_contrasts"] == 11
+    assert equal_result.iloc[0]["n_species_events"] == 2
+    assert equal_result.iloc[0]["degrees_of_freedom"] == 1
+
+
+def test_species_event_cluster_hc1_standard_error_matches_reference_formula():
+    predictor_values = np.asarray([1.0, 2.0, 3.0])
+    response_values = np.asarray([2.0, 3.5, 7.0])
+    response = pd.DataFrame(
+        [
+            _response_row(index, value)
+            for index, value in enumerate(response_values, start=1)
+        ]
+    )
+
+    result = fit_reconciled_pgls(
+        response,
+        _predictor_table(values=tuple(predictor_values)),
+        ["expression"],
+        ["body_size"],
+        model="legacy",
+    ).iloc[0]
+
+    coefficient = float(
+        (predictor_values @ response_values) / (predictor_values @ predictor_values)
+    )
+    residuals = response_values - coefficient * predictor_values
+    event_count = len(predictor_values)
+    degrees_of_freedom = event_count - 1
+    variance = (
+        (event_count / degrees_of_freedom)
+        * np.sum((predictor_values * residuals) ** 2)
+        / np.sum(predictor_values**2) ** 2
+    )
+    assert result["coefficient"] == pytest.approx(coefficient)
+    assert result["standard_error"] == pytest.approx(np.sqrt(variance))
+    assert result["statistic"] == pytest.approx(coefficient / np.sqrt(variance))
+    assert result["degrees_of_freedom"] == degrees_of_freedom
+
+
+def test_pgls_fits_each_tree_and_response_separately():
+    rows = []
+    for tree_id, multiplier in [("OG1", 2.0), ("OG2", -1.0)]:
+        for event_index, predictor in enumerate((1.0, 2.0, 3.0), start=1):
+            rows.append(
+                _response_row(
+                    event_index,
+                    multiplier * predictor,
+                    tree_id=tree_id,
+                )
+            )
+    result = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        _predictor_table(),
+        ["expression"],
+        ["body_size"],
+    ).set_index("tree_id")
+
+    assert result.loc["OG1", "coefficient"] == pytest.approx(2.0)
+    assert result.loc["OG2", "coefficient"] == pytest.approx(-1.0)
+    assert set(result["model_id"]) == {"OG1:expression", "OG2:expression"}
+
+
+def test_pgls_supports_multiple_predictors():
+    predictor = _predictor_table(values=(1.0, 2.0, 3.0, 4.0))
+    second = predictor.copy()
+    second["trait"] = "temperature"
+    second["raw_contrast"] = [0.0, 1.0, 0.0, 1.0]
+    predictor = pd.concat([predictor, second], ignore_index=True)
+    rows = []
+    for event_index, (x1, x2) in enumerate(
+        zip((1.0, 2.0, 3.0, 4.0), (0.0, 1.0, 0.0, 1.0), strict=True),
+        start=1,
+    ):
+        rows.append(_response_row(event_index, 2.0 * x1 - 3.0 * x2))
+
+    result = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        predictor,
+        ["expression"],
+        ["body_size", "temperature"],
+    ).set_index("term")
+
+    assert result.loc["body_size", "coefficient"] == pytest.approx(2.0)
+    assert result.loc["temperature", "coefficient"] == pytest.approx(-3.0)
+    assert set(result["matrix_rank"]) == {2}
+
+
+def test_precomputed_pgls_validates_and_reports_both_evolutionary_transforms():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    response["evolution_model"] = "kappa"
+    response["evolution_parameter_name"] = "kappa"
+    response["evolution_parameter"] = 0.7
+    predictor = _predictor_table()
+    predictor["tree_id"] = "species-tree-1"
+    predictor["evolution_model"] = "delta"
+    predictor["evolution_parameter_name"] = "delta"
+    predictor["evolution_parameter"] = 1.4
+
+    result = fit_reconciled_pgls(
+        response,
+        predictor,
+        ["expression"],
+        ["body_size"],
+    ).iloc[0]
+
+    assert result["predictor_tree_id"] == "species-tree-1"
+    assert result["response_evolution_model"] == "kappa"
+    assert result["response_evolution_parameter"] == pytest.approx(0.7)
+    assert result["response_evolution_parameter_status"] == "recorded"
+    assert result["response_evolution_parameter_bootstrap_refit"] == "no"
+    assert result["predictor_evolution_model"] == "delta"
+    assert result["predictor_evolution_parameter"] == pytest.approx(1.4)
+    assert result["predictor_evolution_parameter_status"] == "recorded"
+
+
+def test_precomputed_pgls_rejects_mixed_or_invalid_evolutionary_metadata():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    response.loc[0, "evolution_model"] = "kappa"
+    response.loc[0, "evolution_parameter_name"] = "kappa"
+    response.loc[0, "evolution_parameter"] = "0.7"
+    with pytest.raises(ValueError, match="mixes evolutionary transforms"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            ["expression"],
+            ["body_size"],
+        )
+
+    predictor = _predictor_table()
+    predictor.loc[0, "branch_length_mode"] = "not-applicable"
+    with pytest.raises(ValueError, match="branch_length_mode is inconsistent"):
+        fit_reconciled_pgls(
+            pd.DataFrame(
+                [
+                    _response_row(1, 2.0),
+                    _response_row(2, 4.0),
+                    _response_row(3, 6.0),
+                ]
+            ),
+            predictor,
+            ["expression"],
+            ["body_size"],
+        )
+
+
+def test_precomputed_pgls_rejects_predictors_combined_from_multiple_trees():
+    predictor = _predictor_table()
+    predictor.loc[0, "tree_id"] = "another-species-tree"
+    with pytest.raises(ValueError, match="exactly one tree_id"):
+        fit_reconciled_pgls(
+            pd.DataFrame(
+                [
+                    _response_row(1, 2.0),
+                    _response_row(2, 4.0),
+                    _response_row(3, 6.0),
+                ]
+            ),
+            predictor,
+            ["expression"],
+            ["body_size"],
+        )
+
+
+def test_pgls_filters_ineligible_and_partial_rows_with_reported_counts():
+    rows = [
+        _response_row(1, 2.0),
+        _response_row(2, 3.0),
+        _response_row(3, 4.0),
+        _response_row(3, 5.0, gene_index=2),
+    ]
+    rows[2]["coverage_status"] = "partial"
+    rows[3].update(
+        {
+            "eligible": "no",
+            "coverage_status": "not-applicable",
+            "species_event_id": "",
+            "species_event_taxa": "",
+            "species_numerator_event_id": "",
+            "species_denominator_event_id": "",
+        }
+    )
+
+    result = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        _predictor_table(),
+        ["expression"],
+        ["body_size"],
+    )
+
+    assert result.iloc[0]["n_species_events"] == 2
+    assert result.iloc[0]["n_excluded_coverage"] == 1
+    assert result.iloc[0]["n_excluded_ineligible"] == 1
+
+
+def test_pgls_rejects_species_event_orientation_mismatch():
+    response = pd.DataFrame([_response_row(1, 1.0), _response_row(2, 2.0)])
+    response.loc[0, "species_numerator_event_id"] = "wrong"
+    with pytest.raises(ValueError, match="orientation disagrees"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(values=(1.0, 2.0)),
+            ["expression"],
+            ["body_size"],
+        )
+
+
+def test_pgls_requires_more_species_events_than_predictors():
+    response = pd.DataFrame([_response_row(1, 1.0)])
+    with pytest.raises(ValueError, match="more unique species events"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(values=(1.0,)),
+            ["expression"],
+            ["body_size"],
+        )
+
+
+def test_pgls_rejects_inconsistent_eligibility_and_coverage():
+    response = pd.DataFrame([_response_row(1, 1.0), _response_row(2, 2.0)])
+    response.loc[0, "eligible"] = "no"
+    with pytest.raises(ValueError, match="eligible and coverage_status"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(values=(1.0, 2.0)),
+            ["expression"],
+            ["body_size"],
+        )
+
+
+def test_pgls_cli_writes_coefficient_table(tmp_path):
+    response_path = tmp_path / "gene-contrasts.tsv"
+    predictor_path = tmp_path / "species-contrasts.tsv"
+    output_path = tmp_path / "pgls.tsv"
+    pd.DataFrame(
+        [
+            _response_row(1, 2.0),
+            _response_row(2, 3.5),
+            _response_row(3, 7.0),
+        ]
+    ).to_csv(response_path, sep="\t", index=False)
+    _predictor_table().to_csv(predictor_path, sep="\t", index=False)
+
+    assert (
+        main(
+            [
+                "pgls",
+                "--infile",
+                str(response_path),
+                "--predictor-contrasts",
+                str(predictor_path),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--outfile",
+                str(output_path),
+            ]
+        )
+        is None
+    )
+    output = pd.read_csv(output_path, sep="\t")
+    assert output.iloc[0]["term"] == "body_size"
+    assert output.iloc[0]["model"] == "hierarchical"
+    assert output.iloc[0]["covariance_estimator"] == "gaussian-REML"
+    assert output.iloc[0]["n_species_events"] == 3
+
+
+def test_precomputed_pgls_output_cannot_overwrite_an_input(tmp_path):
+    response_path = tmp_path / "gene-contrasts.tsv"
+    predictor_path = tmp_path / "species-contrasts.tsv"
+    pd.DataFrame(
+        [
+            _response_row(1, 2.0),
+            _response_row(2, 4.0),
+            _response_row(3, 6.0),
+        ]
+    ).to_csv(response_path, sep="\t", index=False)
+    _predictor_table().to_csv(predictor_path, sep="\t", index=False)
+    original = response_path.read_text()
+
+    with pytest.raises(ValueError, match="must not overwrite an input"):
+        main(
+            [
+                "pgls",
+                "--infile",
+                str(response_path),
+                "--predictor-contrasts",
+                str(predictor_path),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--outfile",
+                str(response_path),
+            ]
+        )
+    assert response_path.read_text() == original
+
+
+def test_replicate_reml_matches_gls_with_evolutionary_and_sampling_covariance():
+    response = pd.DataFrame(
+        [
+            _response_row(1, 1.8),
+            _response_row(2, 4.5),
+            _response_row(3, 5.7),
+            _response_row(4, 9.0),
+        ]
+    )
+    response["contrast_variance"] = [1.0, 2.0, 1.5, 0.8]
+    sampling = np.asarray(
+        [
+            [0.20, 0.05, 0.00, 0.00],
+            [0.05, 0.30, 0.02, 0.00],
+            [0.00, 0.02, 0.10, -0.01],
+            [0.00, 0.00, -0.01, 0.25],
+        ]
+    )
+    sidecar = _sampling_covariance_table(response, sampling)
+
+    result = fit_reconciled_pgls(
+        response,
+        _predictor_table(values=(1.0, 2.0, 3.0, 4.0)),
+        ["expression"],
+        ["body_size"],
+        model="replicate-reml",
+        response_sampling_covariance=sidecar,
+    ).iloc[0]
+
+    covariance = (
+        float(result["evolutionary_rate"])
+        * np.diag(response["contrast_variance"].to_numpy(float))
+        + sampling
+    )
+    inverse = np.linalg.inv(covariance)
+    x = np.arange(1.0, 5.0)
+    y = response["raw_contrast"].to_numpy(float)
+    expected = float((x @ inverse @ y) / (x @ inverse @ x))
+    assert result["coefficient"] == pytest.approx(expected)
+    assert result["mean_sampling_variance"] == pytest.approx(np.diag(sampling).mean())
+    assert result["event_random_effect"] == "no"
+    assert result["lineage_random_slope"] == "no"
+
+
+def test_replicate_response_columns_require_full_covariance_sidecar():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    response["sampling_variance"] = 0.2
+    with pytest.raises(ValueError, match="full.*sampling-covariance"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            ["expression"],
+            ["body_size"],
+        )
+
+
+def test_sampling_covariance_must_be_complete_and_positive_semidefinite():
+    response = pd.DataFrame([_response_row(1, 2.0), _response_row(2, 4.0)])
+    incomplete = pd.DataFrame(
+        [
+            {
+                "tree_id": "OG1",
+                "trait": "expression",
+                "contrast_id_1": "gene1_1",
+                "contrast_id_2": "gene1_1",
+                "sampling_covariance": 1.0,
+            },
+            {
+                "tree_id": "OG1",
+                "trait": "expression",
+                "contrast_id_1": "gene2_1",
+                "contrast_id_2": "gene2_1",
+                "sampling_covariance": 1.0,
+            },
+        ]
+    )
+    with pytest.raises(ValueError, match="incomplete"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(values=(1.0, 2.0)),
+            ["expression"],
+            ["body_size"],
+            model="replicate-reml",
+            response_sampling_covariance=incomplete,
+        )
+
+    invalid = _sampling_covariance_table(response, np.asarray([[1.0, 2.0], [2.0, 1.0]]))
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(values=(1.0, 2.0)),
+            ["expression"],
+            ["body_size"],
+            model="replicate-reml",
+            response_sampling_covariance=invalid,
+        )
+
+
+def test_hierarchical_model_partially_pools_lineage_slopes():
+    rows = []
+    residuals = [0.1, -0.1, 0.2, -0.2, 0.1, -0.1]
+    for event_index in range(1, 7):
+        for gene_index, slope, sign in [(1, 1.5, 1.0), (2, 2.5, -1.0)]:
+            row = _response_row(
+                event_index,
+                slope * event_index + sign * residuals[event_index - 1],
+                gene_index=gene_index,
+            )
+            rows.append(row)
+    result, random_effects = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        _predictor_table(values=tuple(float(value) for value in range(1, 7))),
+        ["expression"],
+        ["body_size"],
+        event_random_effect="no",
+        lineage_random_slope="yes",
+        return_random_effects=True,
+    )
+
+    assert result.iloc[0]["coefficient"] == pytest.approx(2.0, abs=0.02)
+    assert result.iloc[0]["lineage_slope_variance"] > 0.1
+    assert result.iloc[0]["lineage_random_slope"] == "yes"
+    assert set(random_effects["effect_type"]) == {"lineage_slope"}
+    assert set(random_effects["group_id"]) == {"lineage1", "lineage2"}
+
+
+def test_hierarchical_model_estimates_shared_species_event_effects():
+    offsets = [-1.0, 1.0, -0.7, 0.7, -1.2, 1.2]
+    rows = []
+    for event_index, offset in enumerate(offsets, start=1):
+        for copy, residual in [(1, 0.05), (2, -0.05)]:
+            row = _response_row(event_index, 2.0 * event_index + offset + residual)
+            row["gene_clade_id"] = "gene{}_{}".format(event_index, copy)
+            row["lineage_clade_id"] = "single{}_{}".format(event_index, copy)
+            rows.append(row)
+    result, random_effects = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        _predictor_table(values=tuple(float(value) for value in range(1, 7))),
+        ["expression"],
+        ["body_size"],
+        event_random_effect="yes",
+        lineage_random_slope="no",
+        return_random_effects=True,
+    )
+
+    assert result.iloc[0]["species_event_variance"] > 0.1
+    assert result.iloc[0]["event_random_effect"] == "yes"
+    assert set(random_effects["effect_type"]) == {"species_event"}
+    assert len(random_effects) == 6
+    assert set(random_effects["n_observations"]) == {2}
+
+
+def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
+    response = pd.DataFrame(
+        [
+            _response_row(1, 1.8),
+            _response_row(2, 4.3),
+            _response_row(3, 5.6),
+            _response_row(4, 8.5),
+        ]
+    )
+    predictor = _predictor_table(values=(1.0, 2.0, 3.0, 4.0))
+    predictor["contrast_variance"] = [1.0, 1.0, 1.0, 1.0]
+    predictor_sampling = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.eye(4) * 0.05,
+    )
+    arguments = dict(
+        response_contrasts=response,
+        predictor_contrasts=predictor,
+        responses=["expression"],
+        predictors=["body_size"],
+        predictor_sampling_covariance=predictor_sampling,
+        model="replicate-reml",
+        inference="parametric-bootstrap",
+        bootstrap_replicates=12,
+        seed=19,
+    )
+    first = fit_reconciled_pgls(**arguments).iloc[0]
+    second = fit_reconciled_pgls(**arguments).iloc[0]
+
+    for column in [
+        "coefficient",
+        "standard_error",
+        "p_value",
+        "confidence_interval_lower",
+        "confidence_interval_upper",
+    ]:
+        assert first[column] == pytest.approx(second[column])
+    assert first["inference_method"] == "parametric-bootstrap"
+    assert first["measurement_error_model"] == "latent-predictor"
+    assert 0.0 < first["p_value"] <= 1.0
+
+
+def test_model_specific_options_are_validated_instead_of_ignored():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    with pytest.raises(ValueError, match="unavailable for legacy"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            ["expression"],
+            ["body_size"],
+            model="legacy",
+            inference="parametric-bootstrap",
+            bootstrap_replicates=2,
+        )
+    with pytest.raises(ValueError, match="require the hierarchical"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            ["expression"],
+            ["body_size"],
+            model="replicate-reml",
+            event_random_effect="yes",
+        )
+    with pytest.raises(ValueError, match="sequences of names"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            "expression",
+            ["body_size"],
+        )
+
+
+def test_pgls_rejects_empty_tree_ids_to_prevent_family_pooling():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    response["tree_id"] = ""
+    with pytest.raises(ValueError, match="non-empty tree_id"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            ["expression"],
+            ["body_size"],
+        )
+
+
+@pytest.mark.integration
+def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path,
+        biological_replicates=True,
+    )
+    prefix = tmp_path / "analysis"
+    audit = tmp_path / "analysis.audit.jsonl"
+
+    assert (
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                str(gene_tree),
+                "--species-tree",
+                str(species_tree),
+                "--expression",
+                str(expression),
+                "--species-traits",
+                str(species_traits),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG000001",
+                "--biological-id",
+                "sample_id",
+                "--out-prefix",
+                str(prefix),
+                "--audit",
+                str(audit),
+            ]
+        )
+        is None
+    )
+
+    expected_paths = {
+        tmp_path / "analysis.reconciliation.tsv",
+        tmp_path / "analysis.gene-contrasts.tsv",
+        tmp_path / "analysis.species-contrasts.tsv",
+        tmp_path / "analysis.response-sampling-covariance.tsv",
+        tmp_path / "analysis.response-tip-summary.tsv",
+        tmp_path / "analysis.random-effects.tsv",
+        tmp_path / "analysis.pgls.tsv",
+    }
+    assert all(path.is_file() for path in expected_paths)
+    reconciliation = pd.read_csv(tmp_path / "analysis.reconciliation.tsv", sep="\t")
+    gene_contrasts = pd.read_csv(tmp_path / "analysis.gene-contrasts.tsv", sep="\t")
+    covariance = pd.read_csv(
+        tmp_path / "analysis.response-sampling-covariance.tsv", sep="\t"
+    )
+    tip_summary = pd.read_csv(tmp_path / "analysis.response-tip-summary.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "analysis.pgls.tsv", sep="\t")
+    assert set(reconciliation["tree_id"]) == {"OG000001"}
+    assert set(gene_contrasts["tree_id"]) == {"OG000001"}
+    assert set(gene_contrasts["replicate_model"]) == {"pooled"}
+    assert len(covariance) == 10
+    assert set(tip_summary["n_biological"]) == {2}
+    assert result.iloc[0]["term"] == "body_size"
+    assert result.iloc[0]["response"] == "expression"
+    assert result.iloc[0]["model"] == "hierarchical"
+    assert result.iloc[0]["response_evolution_parameter_status"] == "not-applicable"
+    assert result.iloc[0]["response_evolution_optimizer_converged"] == "not-applicable"
+    record = json.loads(audit.read_text())
+    assert {item["path"] for item in record["inputs"]} == {
+        str(path.resolve())
+        for path in [gene_tree, species_tree, expression, species_traits]
+    }
+    assert {item["path"] for item in record["outputs"]} == {
+        str(path.resolve()) for path in expected_paths
+    }
+
+
+@pytest.mark.integration
+def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
+    tmp_path,
+):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path,
+        biological_replicates=True,
+    )
+    original = pd.read_csv(species_traits, sep="\t")
+    rows = []
+    for record in original.to_dict("records"):
+        for replicate, offset in [("r1", -0.2), ("r2", 0.2)]:
+            rows.append(
+                {
+                    "leaf_name": record["leaf_name"],
+                    "predictor_sample": "{}_{}".format(record["leaf_name"], replicate),
+                    "body_size": float(record["body_size"]) + offset,
+                }
+            )
+    pd.DataFrame(rows).to_csv(species_traits, sep="\t", index=False)
+    prefix = tmp_path / "predictor-replicates"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--biological-id",
+            "sample_id",
+            "--predictor-biological-id",
+            "predictor_sample",
+            "--gene-evolution-model",
+            "lambda",
+            "--species-evolution-model",
+            "lambda",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    covariance = pd.read_csv(
+        tmp_path / "predictor-replicates.predictor-sampling-covariance.tsv",
+        sep="\t",
+    )
+    response_covariance = pd.read_csv(
+        tmp_path / "predictor-replicates.response-sampling-covariance.tsv",
+        sep="\t",
+    )
+    summary = pd.read_csv(
+        tmp_path / "predictor-replicates.predictor-tip-summary.tsv",
+        sep="\t",
+    )
+    response_summary = pd.read_csv(
+        tmp_path / "predictor-replicates.response-tip-summary.tsv",
+        sep="\t",
+    )
+    result = pd.read_csv(tmp_path / "predictor-replicates.pgls.tsv", sep="\t")
+    assert len(covariance) == 10
+    assert len(response_covariance) == 10
+    assert set(summary["n_biological"]) == {2}
+    assert set(response_summary["n_biological"]) == {2}
+    assert set(result["measurement_error_model"]) == {"latent-predictor"}
+    assert result.iloc[0]["mean_sampling_variance"] > 0.0
+    assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
+    assert set(result["response_evolution_parameter_status"]) == {"estimated"}
+    assert set(result["predictor_evolution_parameter_status"]) == {"estimated"}
+
+
+def test_precomputed_reconciled_pgls_accepts_predictor_sampling_covariance():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    predictor = _predictor_table()
+    predictor["contrast_variance"] = [1.0, 1.5, 2.0]
+    covariance = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.diag([0.05, 0.05, 0.05]),
+    )
+
+    result = fit_reconciled_pgls(
+        response,
+        predictor,
+        ["expression"],
+        ["body_size"],
+        predictor_sampling_covariance=covariance,
+        event_random_effect="no",
+        lineage_random_slope="no",
+    )
+
+    assert result.iloc[0]["measurement_error_model"] == "latent-predictor"
+    assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
+    assert result.iloc[0]["predictor_evolutionary_rate"] > 0.0
+    assert result.iloc[0]["standard_error"] > 0.0
+
+
+def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
+    predictor = _predictor_table()
+    predictor["contrast_variance"] = [1.0, 1.5, 2.0]
+    covariance = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.diag([0.05, 0.10, 0.15]),
+    )
+    prepared_predictor = pgls_mod._prepare_predictors(predictor, ["body_size"])
+    prepared_covariance = pgls_mod._prepare_sampling_covariance(
+        covariance,
+        option_name="--predictor-sampling-covariance",
+    )
+    posteriors = pgls_mod._prepare_predictor_posteriors(
+        prepared_predictor,
+        ["body_size"],
+        prepared_covariance,
+    )
+    repeated = pd.DataFrame(
+        [
+            _response_row(1, 2.0, gene_index=1),
+            _response_row(1, 2.2, gene_index=2),
+            _response_row(2, 4.0),
+            _response_row(3, 6.0),
+        ]
+    )
+
+    uncertainty = pgls_mod._predictor_uncertainties_for_rows(
+        repeated,
+        ["body_size"],
+        posteriors,
+    )[0]
+
+    np.testing.assert_allclose(uncertainty[0], uncertainty[1])
+    np.testing.assert_allclose(uncertainty[:, 0], uncertainty[:, 1])
+
+
+def test_zero_predictor_sampling_covariance_recovers_exact_reconciled_pgls():
+    response = pd.DataFrame(
+        [
+            _response_row(1, 2.0),
+            _response_row(2, 4.1),
+            _response_row(3, 5.8),
+            _response_row(4, 8.2),
+        ]
+    )
+    predictor = _predictor_table(values=(1.0, 2.0, 3.0, 4.0))
+    predictor["contrast_variance"] = [1.0, 1.0, 1.0, 1.0]
+    common = dict(
+        response_contrasts=response,
+        predictor_contrasts=predictor,
+        responses=["expression"],
+        predictors=["body_size"],
+        model="replicate-reml",
+        reml=False,
+    )
+    exact = fit_reconciled_pgls(**common)
+    zero_sampling = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.zeros((4, 4)),
+    )
+    latent = fit_reconciled_pgls(
+        **common,
+        predictor_sampling_covariance=zero_sampling,
+    )
+
+    assert latent.iloc[0]["coefficient"] == pytest.approx(
+        exact.iloc[0]["coefficient"], rel=1e-6
+    )
+    assert latent.iloc[0]["standard_error"] == pytest.approx(
+        exact.iloc[0]["standard_error"], rel=5e-4
+    )
+
+
+def test_legacy_reconciled_pgls_rejects_predictor_sampling_covariance():
+    with pytest.raises(ValueError, match="likelihood-based"):
+        fit_reconciled_pgls(
+            pd.DataFrame([_response_row(1, 2.0)]),
+            _predictor_table(values=(1.0,)),
+            ["expression"],
+            ["body_size"],
+            model="legacy",
+            predictor_sampling_covariance=pd.DataFrame({"unused": [1]}),
+        )
+
+
+def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
+    common = [
+        "pgls",
+        "--responses",
+        "expression",
+        "--predictors",
+        "body_size",
+    ]
+    with pytest.raises(ValueError, match="require '--gene-tree'"):
+        main(common + ["--expression", "expression.tsv"])
+    with pytest.raises(ValueError, match="Precomputed-contrast PGLS requires"):
+        main(common)
+    with pytest.raises(ValueError, match="cannot be combined with precomputed"):
+        main(
+            common
+            + [
+                "--gene-tree",
+                "gene.nwk",
+                "--species-tree",
+                "species.nwk",
+                "--expression",
+                "expression.tsv",
+                "--species-traits",
+                "traits.tsv",
+                "--tree-id",
+                "OG1",
+                "--infile",
+                "gene-contrasts.tsv",
+            ]
+        )
+
+
+def test_pgls_raw_mode_rejects_mismatched_reconciliation_topology(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    reconciliation_tree = tmp_path / "reconciliation.nwk"
+    reconciliation_tree.write_text(
+        "(((Genus_a_g1:1,Genus_c_g1:1):1,Genus_b_g1:2):1,"
+        "(Genus_d_g1:1,Genus_e_g1:1):2);"
+    )
+    with pytest.raises(ValueError, match="identical rooted topologies"):
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                str(gene_tree),
+                "--reconciliation-tree",
+                str(reconciliation_tree),
+                "--species-tree",
+                str(species_tree),
+                "--expression",
+                str(expression),
+                "--species-traits",
+                str(species_traits),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG1",
+            ]
+        )
+
+
+@pytest.mark.integration
+def test_pgls_raw_mode_without_prefix_writes_only_requested_primary_output(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    outfile = tmp_path / "result.tsv"
+    assert (
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                str(gene_tree),
+                "--species-tree",
+                str(species_tree),
+                "--expression",
+                str(expression),
+                "--species-traits",
+                str(species_traits),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG1",
+                "--outfile",
+                str(outfile),
+            ]
+        )
+        is None
+    )
+    result = pd.read_csv(outfile, sep="\t")
+    assert result.iloc[0]["term"] == "body_size"
+    assert not list(tmp_path.glob("result.*.tsv"))
+
+
+@pytest.mark.integration
+def test_pgls_raw_mode_applies_gene_and_species_evolution_models(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    prefix = tmp_path / "transformed"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--gene-evolution-model",
+            "kappa",
+            "--gene-evolution-parameter",
+            "0.7",
+            "--species-evolution-model",
+            "delta",
+            "--species-evolution-parameter",
+            "1.4",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    gene_contrasts = pd.read_csv(tmp_path / "transformed.gene-contrasts.tsv", sep="\t")
+    species_contrasts = pd.read_csv(
+        tmp_path / "transformed.species-contrasts.tsv", sep="\t"
+    )
+    result = pd.read_csv(tmp_path / "transformed.pgls.tsv", sep="\t")
+    assert set(gene_contrasts["evolution_model"]) == {"kappa"}
+    assert set(gene_contrasts["evolution_parameter"]) == {0.7}
+    assert set(species_contrasts["evolution_model"]) == {"delta"}
+    assert set(species_contrasts["evolution_parameter"]) == {1.4}
+    assert set(result["response_evolution_model"]) == {"kappa"}
+    assert set(result["response_evolution_parameter_name"]) == {"kappa"}
+    assert set(result["response_evolution_parameter_status"]) == {"fixed"}
+    assert set(result["response_branch_length_mode"]) == {"original"}
+    assert set(result["predictor_evolution_model"]) == {"delta"}
+    assert set(result["predictor_evolution_parameter_name"]) == {"delta"}
+    assert set(result["predictor_evolution_parameter_status"]) == {"fixed"}
+    assert set(result["predictor_branch_length_mode"]) == {"original"}
+
+
+@pytest.mark.integration
+def test_pgls_raw_parameterized_models_are_automatically_estimated(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    prefix = tmp_path / "estimated"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--gene-evolution-model",
+            "kappa",
+            "--gene-evolution-parameter",
+            "auto",
+            "--species-evolution-model",
+            "lambda",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    gene_contrasts = pd.read_csv(tmp_path / "estimated.gene-contrasts.tsv", sep="\t")
+    species_contrasts = pd.read_csv(
+        tmp_path / "estimated.species-contrasts.tsv", sep="\t"
+    )
+    result = pd.read_csv(tmp_path / "estimated.pgls.tsv", sep="\t")
+    gene_parameter = float(gene_contrasts["evolution_parameter"].iloc[0])
+    species_parameter = float(species_contrasts["evolution_parameter"].iloc[0])
+    assert 0.0 <= gene_parameter <= 3.0
+    assert 0.0 <= species_parameter <= 1.0
+    assert gene_contrasts["evolution_parameter"].eq(gene_parameter).all()
+    assert species_contrasts["evolution_parameter"].eq(species_parameter).all()
+    assert set(result["response_evolution_parameter_status"]) == {"estimated"}
+    assert set(result["predictor_evolution_parameter_status"]) == {"estimated"}
+    assert np.isfinite(result["predictor_evolution_log_likelihood"]).all()
+
+    identity_out = tmp_path / "identity.tsv"
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--gene-evolution-model",
+            "kappa",
+            "--gene-evolution-parameter",
+            "1",
+            "--species-evolution-model",
+            "lambda",
+            "--species-evolution-parameter",
+            str(species_parameter),
+            "--outfile",
+            str(identity_out),
+        ]
+    )
+    identity = pd.read_csv(identity_out, sep="\t")
+    assert result.iloc[0]["log_likelihood"] >= identity.iloc[0]["log_likelihood"] - 1e-8
+
+
+def test_pgls_raw_auto_parameter_is_rejected_for_parameterless_model():
+    with pytest.raises(ValueError, match="no shape parameter"):
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                "gene.nwk",
+                "--species-tree",
+                "species.nwk",
+                "--expression",
+                "expression.tsv",
+                "--species-traits",
+                "traits.tsv",
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG1",
+                "--gene-evolution-parameter",
+                "auto",
+            ]
+        )
+
+
+def test_pgls_raw_auto_gene_parameter_rejects_legacy_model_before_io():
+    with pytest.raises(ValueError, match="likelihood-based"):
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                "gene.nwk",
+                "--species-tree",
+                "species.nwk",
+                "--expression",
+                "expression.tsv",
+                "--species-traits",
+                "traits.tsv",
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG1",
+                "--gene-evolution-model",
+                "lambda",
+                "--model",
+                "legacy",
+            ]
+        )
+
+
+@pytest.mark.integration
+def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path, biological_replicates=True
+    )
+    outfile = tmp_path / "bootstrap.tsv"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--biological-id",
+            "sample_id",
+            "--gene-evolution-model",
+            "lambda",
+            "--inference",
+            "parametric-bootstrap",
+            "--bootstrap-replicates",
+            "2",
+            "--seed",
+            "7",
+            "--outfile",
+            str(outfile),
+        ]
+    )
+
+    result = pd.read_csv(outfile, sep="\t")
+    assert result.iloc[0]["response_evolution_parameter_status"] == "estimated"
+    assert result.iloc[0]["response_evolution_parameter_bootstrap_refit"] == "yes"
+    assert result.iloc[0]["inference_method"] == "parametric-bootstrap"
+    assert np.isfinite(result.iloc[0]["standard_error"])
+
+
+@pytest.mark.parametrize("suffix", [".pgls.tsv", ".pgls-bundle.lock"])
+def test_pgls_bundle_audit_path_cannot_collide_with_generated_output(tmp_path, suffix):
+    prefix = tmp_path / "analysis"
+    with pytest.raises(ValueError, match="Output paths must be distinct"):
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                "gene.nwk",
+                "--species-tree",
+                "species.nwk",
+                "--expression",
+                "expression.tsv",
+                "--species-traits",
+                "traits.tsv",
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG1",
+                "--out-prefix",
+                str(prefix),
+                "--audit",
+                str(tmp_path / "analysis{}".format(suffix)),
+            ]
+        )
+
+
+def _minimal_pipeline_artifacts(*, replicate_aware=False):
+    frame = pd.DataFrame({"value": [1.0]})
+    return PglsPipelineArtifacts(
+        reconciliation=frame.copy(),
+        gene_contrasts=frame.copy(),
+        species_contrasts=frame.copy(),
+        response_sampling_covariance=frame.copy() if replicate_aware else None,
+        response_tip_summary=frame.copy() if replicate_aware else None,
+        results=frame.copy(),
+        random_effects=frame.copy(),
+    )
+
+
+def test_pgls_bundle_rejects_nonregular_target_before_writing_any_file(tmp_path):
+    prefix = tmp_path / "analysis"
+    blocked = tmp_path / "analysis.response-sampling-covariance.tsv"
+    blocked.mkdir()
+
+    with pytest.raises(ValueError, match="must be a regular file"):
+        write_pgls_bundle(
+            str(prefix),
+            _minimal_pipeline_artifacts(replicate_aware=True),
+        )
+
+    generated = [
+        path
+        for path in tmp_path.glob("analysis.*")
+        if path != blocked and path.is_file()
+    ]
+    assert generated == []
+
+
+def test_pgls_bundle_commit_failure_restores_every_existing_output(
+    monkeypatch, tmp_path
+):
+    prefix = tmp_path / "analysis"
+    paths = {
+        name: path
+        for name, path in pgls_pipeline_mod.pgls_bundle_paths(str(prefix)).items()
+        if name not in {"response_sampling_covariance_out", "response_tip_summary_out"}
+    }
+    for path in paths.values():
+        with open(path, "w") as handle:
+            handle.write("original\n")
+    real_replace = pgls_pipeline_mod._replace_output
+    replace_calls = 0
+
+    def fail_second_replace(source, target):
+        nonlocal replace_calls
+        replace_calls += 1
+        if replace_calls == 2:
+            raise OSError("simulated bundle commit failure")
+        real_replace(source, target)
+
+    monkeypatch.setattr(pgls_pipeline_mod, "_replace_output", fail_second_replace)
+    with pytest.raises(OSError, match="bundle commit failure"):
+        write_pgls_bundle(str(prefix), _minimal_pipeline_artifacts())
+
+    assert all(open(path).read() == "original\n" for path in paths.values())
+    assert not [
+        path for path in tmp_path.iterdir() if path.name.startswith(".analysis.")
+    ]
+
+
+@pytest.mark.integration
+def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
+    monkeypatch, tmp_path
+):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path,
+        biological_replicates=True,
+    )
+    prefix = tmp_path / "analysis"
+    audit = tmp_path / "analysis.audit.jsonl"
+    real_replace = pgls_pipeline_mod._replace_output
+    replace_calls = 0
+
+    def fail_second_replace(source, target):
+        nonlocal replace_calls
+        replace_calls += 1
+        if replace_calls == 2:
+            raise OSError("simulated bundle commit failure")
+        real_replace(source, target)
+
+    monkeypatch.setattr(pgls_pipeline_mod, "_replace_output", fail_second_replace)
+    with pytest.raises(OSError, match="bundle commit failure"):
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                str(gene_tree),
+                "--species-tree",
+                str(species_tree),
+                "--expression",
+                str(expression),
+                "--species-traits",
+                str(species_traits),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OG1",
+                "--biological-id",
+                "sample_id",
+                "--out-prefix",
+                str(prefix),
+                "--audit",
+                str(audit),
+            ]
+        )
+
+    expected = {str(path.resolve()) for path in tmp_path.glob("analysis.*.tsv")}
+    assert expected == set()
+    record = json.loads(audit.read_text())
+    assert record["status"] == "error"
+    assert record["outputs"] == []
+    assert {item["path"] for item in record["planned_outputs"]} == {
+        str(path.resolve())
+        for path in [
+            tmp_path / "analysis.reconciliation.tsv",
+            tmp_path / "analysis.gene-contrasts.tsv",
+            tmp_path / "analysis.species-contrasts.tsv",
+            tmp_path / "analysis.response-sampling-covariance.tsv",
+            tmp_path / "analysis.response-tip-summary.tsv",
+            tmp_path / "analysis.random-effects.tsv",
+            tmp_path / "analysis.pgls.tsv",
+        ]
+    }
+
+
+@pytest.mark.integration
+def test_pgls_raw_mode_accepts_separate_nhx_reconciliation_tree(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    reconciliation_tree = tmp_path / "gene-reconciled.nhx"
+    reconciliation_tree.write_text(
+        "(((Genus_a_g1:9,Genus_b_g1:9):9[&&NHX:D=N],Genus_c_g1:9)"
+        ":9[&&NHX:D=N],(Genus_d_g1:9,Genus_e_g1:9):9[&&NHX:D=N])"
+        ":0[&&NHX:D=N];"
+    )
+    prefix = tmp_path / "analysis"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--reconciliation-tree",
+            str(reconciliation_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--event-source",
+            "nhx",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    reconciliation = pd.read_csv(tmp_path / "analysis.reconciliation.tsv", sep="\t")
+    internal = reconciliation[reconciliation["node_class"].isin(["root", "intnode"])]
+    assert set(internal["event_source"]) == {"nhx"}
+    assert set(internal["event_type"]) == {"speciation"}
+    contrasts = pd.read_csv(tmp_path / "analysis.gene-contrasts.tsv", sep="\t")
+    assert len(contrasts) == 4
+
+
+@pytest.mark.integration
+def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    expression_table = pd.read_csv(expression, sep="\t")
+    expression_table["expression_se"] = [0.2, 0.3, 0.2, 0.4, 0.3]
+    expression_table["expression_alt"] = [11.0, 8.0, 10.0, 4.0, 2.0]
+    expression_table["expression_alt_se"] = [0.4, 0.2, 0.3, 0.2, 0.4]
+    expression_table["expression_n"] = [4, 5, 6, 4, 5]
+    expression_table["expression_alt_n"] = [5, 4, 5, 6, 4]
+    expression_table.to_csv(expression, sep="\t", index=False)
+    species_table = pd.read_csv(species_traits, sep="\t")
+    species_table["temperature"] = [5.0, 3.0, 6.0, 2.0, 8.0]
+    species_table["body_size_se"] = [0.2, 0.3, 0.2, 0.4, 0.3]
+    species_table["temperature_se"] = [0.3, 0.2, 0.4, 0.2, 0.3]
+    species_table.to_csv(species_traits, sep="\t", index=False)
+    prefix = tmp_path / "analysis"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression,expression_alt",
+            "--predictors",
+            "body_size,temperature",
+            "--tree-id",
+            "OG1",
+            "--within-variance",
+            "known-se",
+            "--standard-error-columns",
+            "expression_se,expression_alt_se",
+            "--sample-size-columns",
+            "expression_n,expression_alt_n",
+            "--predictor-within-variance",
+            "known-se",
+            "--predictor-standard-error-columns",
+            "body_size_se,temperature_se",
+            "--gene-evolution-model",
+            "lambda",
+            "--species-evolution-model",
+            "kappa",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "analysis.pgls.tsv", sep="\t")
+    assert set(result["response"]) == {"expression", "expression_alt"}
+    assert set(result["term"]) == {"body_size", "temperature"}
+    assert len(result) == 4
+    assert set(result["response_evolution_parameter_status"]) == {"estimated"}
+    assert set(result["predictor_evolution_parameter_status"]) == {"estimated"}
+    assert set(result["measurement_error_model"]) == {"latent-predictor"}
+    assert (
+        result.groupby("response")["response_evolution_parameter"].nunique().eq(1).all()
+    )
+    assert result.groupby("term")["predictor_evolution_parameter"].nunique().eq(1).all()
+    covariance = pd.read_csv(
+        tmp_path / "analysis.response-sampling-covariance.tsv", sep="\t"
+    )
+    assert set(covariance["trait"]) == {"expression", "expression_alt"}
+    assert len(covariance) == 20
+    tip_summary = pd.read_csv(tmp_path / "analysis.response-tip-summary.tsv", sep="\t")
+    assert set(tip_summary["variance_method"]) == {"known-se"}
+    assert len(tip_summary) == 10
+    predictor_covariance = pd.read_csv(
+        tmp_path / "analysis.predictor-sampling-covariance.tsv", sep="\t"
+    )
+    assert set(predictor_covariance["trait"]) == {"body_size", "temperature"}
+    assert len(predictor_covariance) == 20
+    predictor_summary = pd.read_csv(
+        tmp_path / "analysis.predictor-tip-summary.tsv", sep="\t"
+    )
+    assert set(predictor_summary["variance_method"]) == {"known-se"}
+    assert len(predictor_summary) == 10
+
+
+@pytest.mark.integration
+def test_pgls_raw_gene_tree_stdin_has_primary_input_summary_and_hash(
+    monkeypatch, tmp_path
+):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    gene_tree_text = gene_tree.read_text()
+    monkeypatch.setattr(sys, "stdin", io.StringIO(gene_tree_text))
+    audit = tmp_path / "analysis.audit.jsonl"
+    outfile = tmp_path / "analysis.pgls.tsv"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            "-",
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OG1",
+            "--outfile",
+            str(outfile),
+            "--audit",
+            str(audit),
+        ]
+    )
+
+    record = json.loads(audit.read_text())
+    assert record["stdin"] == {
+        "argument": "gene_tree",
+        "sha256": hashlib.sha256(gene_tree_text.encode()).hexdigest(),
+        "bytes": len(gene_tree_text.encode()),
+    }
+    assert record["primary_input"]["kind"] == "newick"
+    assert record["primary_input"]["first_tree_tip_count"] == 5
+
+
+def test_expected_scipy_numdiff_warning_is_suppressed_without_hiding_others(
+    monkeypatch,
+):
+    sentinel = object()
+
+    def noisy_minimize(*args, **kwargs):
+        warnings.warn_explicit(
+            "invalid value encountered in subtract",
+            RuntimeWarning,
+            filename="scipy/optimize/_numdiff.py",
+            lineno=615,
+            module="scipy.optimize._numdiff",
+        )
+        warnings.warn("independent numerical warning", RuntimeWarning, stacklevel=2)
+        return sentinel
+
+    monkeypatch.setattr(pgls_mod, "minimize", noisy_minimize)
+    with pytest.warns(RuntimeWarning, match="independent numerical warning") as caught:
+        result = pgls_mod._minimize_variance_components(object())
+    assert result is sentinel
+    assert len(caught) == 1

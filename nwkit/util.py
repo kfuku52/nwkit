@@ -186,7 +186,7 @@ def read_tip_table(
         .unique()
         .tolist()
     )
-    if duplicate_leaf_names not in ("error", "first"):
+    if duplicate_leaf_names not in ("allow", "error", "first"):
         raise ValueError(
             "Unsupported duplicate leaf-name policy: {}".format(duplicate_leaf_names)
         )
@@ -197,7 +197,7 @@ def read_tip_table(
                 ", ".join(sorted(str(name) for name in duplicated)),
             )
         )
-    if duplicated:
+    if duplicated and duplicate_leaf_names == "first":
         dataframe = dataframe.drop_duplicates(subset="leaf_name", keep="first").copy()
     table_only = list()
     tree_only = list()

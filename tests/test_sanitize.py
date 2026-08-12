@@ -72,6 +72,27 @@ class TestSanitizeMain:
             if not node.is_leaf:
                 assert len(node.get_children()) != 1
 
+    def test_preserve_properties_propagates_boundary_through_singleton_chain(
+        self, tmp_nwk, tmp_outfile
+    ):
+        path = tmp_nwk(
+            "((((A:1,B:1)kept:1[&&NHX:D=N:H=N])"
+            "middle:1[&&NHX:D=N:H=N])dup:1[&&NHX:D=Y:H=N],"
+            "C:4)root[&&NHX:D=N:H=N];"
+        )
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            remove_singleton=True,
+            resolve_polytomy=False,
+            name_quote="none",
+            preserve_properties=True,
+        )
+        sanitize_main(args)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        ab = tree.common_ancestor(["A", "B"])
+        assert ab.props["NWKIT_COLLAPSED_EVENT_BOUNDARY"] == "Y"
+
     def test_add_single_quote(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk("((a:1,b:1):1,(c:1,d:1):1);")
         args = make_args(

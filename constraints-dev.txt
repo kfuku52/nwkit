@@ -9,7 +9,7 @@ diff-cover==10.5.0
 hypothesis==6.165.2
 mypy==2.3.0
 pip-audit==2.10.1
-pytest==9.0.2
+pytest==9.1.1
 radon==6.0.1
 ruff==0.15.22
 twine==7.0.0

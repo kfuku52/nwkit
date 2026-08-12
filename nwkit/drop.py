@@ -1,4 +1,4 @@
-from nwkit.util import get_target_nodes, read_tree, write_tree
+from nwkit.util import get_target_nodes, get_tree_property_names, read_tree, write_tree
 
 
 def drop_main(args):
@@ -31,4 +31,9 @@ def drop_main(args):
                 if (numeric_placeholder is not None)
                 else placeholder
             )
-    write_tree(tree, args, format=args.outformat)
+    output_properties = (
+        get_tree_property_names(tree)
+        if getattr(args, "preserve_properties", False)
+        else None
+    )
+    write_tree(tree, args, format=args.outformat, props=output_properties)

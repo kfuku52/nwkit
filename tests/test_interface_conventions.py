@@ -128,6 +128,7 @@ def test_non_newick_outputs_do_not_expose_outformat():
     for command in (
         "asr",
         "cladefreq",
+        "contrast",
         "diff",
         "dist",
         "draw",
@@ -135,10 +136,20 @@ def test_non_newick_outputs_do_not_expose_outformat():
         "mcmctree",
         "monophyly",
         "nwk2table",
+        "pgls",
         "printlabel",
+        "reconcile",
         "validate",
     ):
         assert "--outformat" not in commands[command]._option_string_actions
+
+
+def test_preserve_properties_is_only_exposed_by_commands_that_implement_it():
+    commands = _command_parsers()
+    supported = {"drop", "prune", "sanitize"}
+    for command, command_parser in commands.items():
+        has_option = "--preserve-properties" in command_parser._option_string_actions
+        assert has_option == (command in supported), command
 
 
 def test_compatibility_aliases_resolve_to_canonical_destinations():

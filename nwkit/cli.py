@@ -4,6 +4,7 @@ import sys
 
 from nwkit import __version__
 from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES_CSV, get_stdin_input_options
+from nwkit.evolution import CONTRAST_EVOLUTION_MODELS, EVOLUTION_MODELS
 from nwkit.species_parser import (
     DEFAULT_SPECIES_PARSER,
     DEFAULT_SPECIES_REGEX,
@@ -62,6 +63,12 @@ def strtobool(val):
         raise ValueError(f"Invalid truth value: {val}")
 
 
+def strtoautobool(val):
+    if val.lower() == "auto":
+        return None
+    return strtobool(val)
+
+
 def finite_float(value):
     try:
         number = float(value)
@@ -72,6 +79,12 @@ def finite_float(value):
     if not math.isfinite(number):
         raise argparse.ArgumentTypeError("Floating-point values must be finite.")
     return number
+
+
+def auto_or_finite_float(value):
+    if isinstance(value, str) and value.lower() == "auto":
+        return "auto"
+    return finite_float(value)
 
 
 def unit_interval_float(value):
@@ -167,6 +180,18 @@ p_parent.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Whether node names are quoted in the input file.",
+)
+p_preserve_properties = NwkitArgumentParser(add_help=False)
+p_preserve_properties.add_argument(
+    "--preserve-properties",
+    "--preserve_properties",
+    dest="preserve_properties",
+    metavar="yes|no",
+    default="no",
+    type=strtobool,
+    required=False,
+    action="store",
+    help="default=%(default)s: Preserve custom node properties such as NHX D/H/S annotations in output.",
 )
 
 p_download = NwkitArgumentParser(add_help=False)
@@ -495,7 +520,7 @@ pasr.add_argument(
     "--root_prior",
     dest="root_prior",
     metavar="equal|empirical",
-    default="equal",
+    default=None,
     type=str,
     required=False,
     action="store",
@@ -1083,6 +1108,223 @@ pconsensus.add_argument(
 pconsensus.set_defaults(handler=command_consensus)
 
 
+def command_contrast(args):
+    from nwkit.contrast import contrast_main
+
+    contrast_main(args)
+
+
+pcontrast = subparsers.add_parser(
+    "contrast",
+    help="Calculate continuous-trait phylogenetic independent contrasts",
+    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+)
+pcontrast.add_argument(
+    "--trait",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=True,
+    action="store",
+    help='TSV file containing a "leaf_name" column and numeric trait columns.',
+)
+pcontrast.add_argument(
+    "--columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    required=True,
+    action="store",
+    help="Comma-separated numeric columns in --trait for which contrasts are calculated.",
+)
+pcontrast.add_argument(
+    "--reconciliation",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional TSV from 'nwkit reconcile'. It supplies event annotations, species-branch mappings, lineage IDs, and contrast orientation.",
+)
+pcontrast.add_argument(
+    "--tree-id",
+    "--tree_id",
+    dest="tree_id",
+    metavar="TEXT",
+    default="",
+    type=str,
+    required=False,
+    action="store",
+    help="default=empty: Stable gene-family/tree identifier. Required for unambiguous multi-tree aggregation.",
+)
+pcontrast.add_argument(
+    "--event-type",
+    "--event_type",
+    dest="event_type",
+    metavar="all|speciation|duplication|transfer|unresolved",
+    default="all",
+    type=str,
+    required=False,
+    action="store",
+    choices=["all", "speciation", "duplication", "transfer", "unresolved"],
+    help="default=%(default)s: With --reconciliation, report only this event type.",
+)
+pcontrast.add_argument(
+    "--eligible-only",
+    "--eligible_only",
+    dest="eligible_only",
+    metavar="auto|yes|no",
+    default=None,
+    type=strtoautobool,
+    required=False,
+    action="store",
+    help="default=auto: With --reconciliation, retain only eligible rows. Auto means yes for --event-type speciation and no for all other event selections.",
+)
+pcontrast.add_argument(
+    "--speciation-coverage",
+    "--speciation_coverage",
+    dest="speciation_coverage",
+    metavar="complete|any",
+    default="complete",
+    type=str,
+    required=False,
+    action="store",
+    choices=["complete", "any"],
+    help="default=%(default)s: When eligible rows are requested, require complete sampling of both species-tree daughter clades or allow explicitly reported partial coverage.",
+)
+pcontrast.add_argument(
+    "--branch-length",
+    "--branch_length",
+    dest="branch_length",
+    metavar="original|unit",
+    default="original",
+    type=str,
+    required=False,
+    action="store",
+    choices=["original", "unit"],
+    help="default=%(default)s: Use positive input branch lengths or replace every non-root branch length with one.",
+)
+pcontrast.add_argument(
+    "--evolution-model",
+    "--evolution_model",
+    dest="evolution_model",
+    metavar="MODEL",
+    default="brownian",
+    type=str,
+    choices=list(CONTRAST_EVOLUTION_MODELS),
+    help="default=%(default)s: Evolutionary model represented as Brownian motion on a transformed tree.",
+)
+pcontrast.add_argument(
+    "--evolution-parameter",
+    "--evolution_parameter",
+    dest="evolution_parameter",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="Fixed shape parameter required by parameterized contrast evolution models.",
+)
+pcontrast.add_argument(
+    "--biological-id",
+    "--biological_id",
+    dest="biological_id",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Column identifying independent biological observations. Its presence enables replicate-aware contrasts.",
+)
+pcontrast.add_argument(
+    "--technical-id",
+    "--technical_id",
+    dest="technical_id",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional technical-replicate identifier nested within leaf and biological observation.",
+)
+pcontrast.add_argument(
+    "--technical-aggregation",
+    "--technical_aggregation",
+    dest="technical_aggregation",
+    metavar="error|mean",
+    default="error",
+    type=str,
+    required=False,
+    action="store",
+    choices=["error", "mean"],
+    help="default=%(default)s: Reject technical replicates or explicitly average already transformed continuous values within each biological observation.",
+)
+pcontrast.add_argument(
+    "--batch",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional categorical batch column fitted as a fixed observation-level effect; confounded designs are rejected.",
+)
+pcontrast.add_argument(
+    "--within-variance",
+    "--within_variance",
+    dest="within_variance",
+    metavar="pooled|leaf|known-se",
+    default="pooled",
+    type=str,
+    required=False,
+    action="store",
+    choices=["pooled", "leaf", "known-se"],
+    help="default=%(default)s: Estimate a pooled or leaf-specific biological variance, or read known standard errors.",
+)
+pcontrast.add_argument(
+    "--standard-error-columns",
+    "--standard_error_columns",
+    dest="standard_error_columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=<TRAIT>_se: Comma-separated known-SE columns matching --columns when --within-variance known-se is selected.",
+)
+pcontrast.add_argument(
+    "--sample-size-columns",
+    "--sample_size_columns",
+    dest="sample_size_columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional positive-integer sample-size columns matching --columns for known-SE input and audit output.",
+)
+pcontrast.add_argument(
+    "--sampling-covariance-out",
+    "--sampling_covariance_out",
+    dest="sampling_covariance_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Required replicate-aware long-form TSV containing propagated contrast sampling covariance.",
+)
+pcontrast.add_argument(
+    "--tip-summary-out",
+    "--tip_summary_out",
+    dest="tip_summary_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional audit TSV of leaf means, biological sample sizes, within-leaf SDs, and standard errors.",
+)
+pcontrast.set_defaults(handler=command_contrast, unmatched="error")
+
+
 def command_diff(args):
     from nwkit.diff import diff_main
 
@@ -1663,7 +1905,9 @@ def command_drop(args):
 
 
 pdrop = subparsers.add_parser(
-    "drop", help="Remove node and branch information", parents=[p_parent]
+    "drop",
+    help="Remove node and branch information",
+    parents=[p_parent, p_preserve_properties],
 )
 pdrop.add_argument(
     "-t",
@@ -2186,6 +2430,765 @@ prename.add_argument(
 prename.set_defaults(handler=command_rename)
 
 
+def command_reconcile(args):
+    from nwkit.reconcile import reconcile_main
+
+    reconcile_main(args)
+
+
+preconcile = subparsers.add_parser(
+    "reconcile",
+    help="Map a rooted gene tree onto a rooted species tree and annotate events",
+    parents=[p_tree_input, p_table_output, p_species],
+)
+preconcile.add_argument(
+    "--species-tree",
+    "--species_tree",
+    dest="species_tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=True,
+    action="store",
+    help="Rooted, strictly bifurcating species tree whose tip labels match parsed gene-tip species labels.",
+)
+preconcile.add_argument(
+    "--tree-id",
+    "--tree_id",
+    dest="tree_id",
+    metavar="TEXT",
+    default="",
+    type=str,
+    required=False,
+    action="store",
+    help="default=empty: Stable gene-family/tree identifier. Required for unambiguous multi-tree aggregation.",
+)
+preconcile.add_argument(
+    "--species-tree-format",
+    "--species_tree_format",
+    dest="species_tree_format",
+    metavar="auto|auto-strict|INT",
+    default="auto",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: ETE tree format for --species-tree.",
+)
+preconcile.add_argument(
+    "--event-source",
+    "--event_source",
+    dest="event_source",
+    metavar="lca|nhx|species-overlap",
+    default="lca",
+    type=str,
+    required=False,
+    action="store",
+    choices=["lca", "nhx", "species-overlap"],
+    help="default=%(default)s: Infer events by LCA reconciliation, read GeneRax-style NHX S/D/H properties, or use the species-overlap heuristic. Valid S placements are authoritative; invalid NHX annotations are never silently replaced.",
+)
+preconcile.add_argument(
+    "--unmatched",
+    metavar="error|warn|ignore",
+    default="error",
+    type=str,
+    required=False,
+    action="store",
+    choices=["error", "warn", "ignore"],
+    help="default=%(default)s: Policy for gene tips whose species label cannot be parsed or is absent from --species-tree.",
+)
+preconcile.set_defaults(handler=command_reconcile)
+
+
+def command_pgls(args):
+    from nwkit.pgls import pgls_main
+
+    pgls_main(args)
+
+
+ppgls = subparsers.add_parser(
+    "pgls",
+    help="Fit conventional tip-level or reconciled-contrast phylogenetic generalized least-squares models",
+    parents=[p_audit, p_table_output],
+)
+ppgls.add_argument(
+    "-i",
+    "--infile",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help='Precomputed mode: reconciled gene-contrast TSV from "nwkit contrast". Use "-" for STDIN.',
+)
+ppgls.add_argument(
+    "--predictor-contrasts",
+    "--predictor_contrasts",
+    dest="predictor_contrasts",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Precomputed mode: species-tree contrast TSV from 'nwkit contrast'.",
+)
+ppgls.add_argument(
+    "--responses",
+    metavar="TRAIT1,TRAIT2,...",
+    default=None,
+    type=str,
+    required=True,
+    action="store",
+    help="Comma-separated response columns in --data/--expression or trait names in --infile. One model is fitted per response and applicable tree_id.",
+)
+ppgls.add_argument(
+    "--predictors",
+    metavar="TRAIT1,TRAIT2,...",
+    default=None,
+    type=str,
+    required=True,
+    action="store",
+    help="Comma-separated predictor columns in --data/--species-traits or trait names in --predictor-contrasts.",
+)
+ppgls_ordinary = ppgls.add_argument_group("conventional tip-level PGLS mode")
+ppgls_ordinary.add_argument(
+    "--tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Rooted species tree whose branch lengths define the tip covariance. Its presence selects conventional PGLS mode.",
+)
+ppgls_ordinary.add_argument(
+    "--data",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help='Tip-level TSV with "leaf_name", --responses, --predictors, and optional replicate columns.',
+)
+ppgls_ordinary.add_argument(
+    "--tree-format",
+    "--tree_format",
+    dest="tree_format",
+    metavar="auto|auto-strict|INT",
+    default=None,
+    type=str,
+    help="default=auto: ETE tree format for --tree.",
+)
+ppgls_ordinary.add_argument(
+    "--branch-length",
+    "--branch_length",
+    dest="branch_length",
+    metavar="original|unit",
+    default=None,
+    type=str,
+    choices=["original", "unit"],
+    help="default=original: Use positive tree branch lengths or unit lengths for conventional PGLS.",
+)
+ppgls_ordinary.add_argument(
+    "--evolution-model",
+    "--evolution_model",
+    dest="evolution_model",
+    metavar="MODEL",
+    default=None,
+    type=str,
+    choices=list(EVOLUTION_MODELS),
+    help="default=brownian: Evolutionary residual covariance model. Shape parameters are estimated unless fixed below.",
+)
+ppgls_ordinary.add_argument(
+    "--evolution-parameter",
+    "--evolution_parameter",
+    dest="evolution_parameter",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="Fix the selected model's shape parameter; otherwise parameterized models estimate it.",
+)
+ppgls_ordinary.add_argument(
+    "--evolution-covariance",
+    "--evolution_covariance",
+    dest="evolution_covariance",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Wide named covariance TSV required by --evolution-model custom and optionally used in model comparison.",
+)
+ppgls_ordinary.add_argument(
+    "--compare-evolution-models",
+    "--compare_evolution_models",
+    dest="compare_evolution_models",
+    metavar="MODEL1,MODEL2,...",
+    default=None,
+    type=str,
+    help="Fit the listed evolutionary models by ML and calculate AIC, AICc, BIC, and both information-criterion weights.",
+)
+ppgls_ordinary.add_argument(
+    "--model-comparison-out",
+    "--model_comparison_out",
+    dest="model_comparison_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Model-comparison TSV; required with --compare-evolution-models.",
+)
+ppgls_ordinary.add_argument(
+    "--intercept",
+    metavar="yes|no",
+    default=None,
+    type=strtobool,
+    help="default=yes: Include an intercept in conventional tip-level PGLS.",
+)
+ppgls_ordinary.add_argument(
+    "--sampling-covariance-out",
+    "--sampling_covariance_out",
+    dest="sampling_covariance_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Optional long-form species-mean response sampling covariance for replicate-aware conventional PGLS.",
+)
+ppgls_ordinary.add_argument(
+    "--tip-summary-out",
+    "--tip_summary_out",
+    dest="tip_summary_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Optional per-species response mean, sample size, and uncertainty audit for conventional PGLS.",
+)
+ppgls_ordinary.add_argument(
+    "--predictor-evolution-model",
+    "--predictor_evolution_model",
+    dest="predictor_evolution_model",
+    metavar="MODEL",
+    default=None,
+    type=str,
+    choices=list(EVOLUTION_MODELS),
+    help="default=--evolution-model: Evolutionary covariance model for latent conventional-PGLS predictors.",
+)
+ppgls_ordinary.add_argument(
+    "--predictor-evolution-parameter",
+    "--predictor_evolution_parameter",
+    dest="predictor_evolution_parameter",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="Fix the latent predictor model's shape parameter; otherwise parameterized models estimate it.",
+)
+ppgls_ordinary.add_argument(
+    "--predictor-branch-length",
+    "--predictor_branch_length",
+    dest="predictor_branch_length",
+    metavar="original|unit",
+    default=None,
+    type=str,
+    choices=["original", "unit"],
+    help="default=--branch-length: Branch-length mode for latent conventional-PGLS predictors.",
+)
+ppgls_ordinary.add_argument(
+    "--predictor-sampling-covariance-out",
+    "--predictor_sampling_covariance_out",
+    dest="predictor_sampling_covariance_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Optional long-form species-mean predictor sampling covariance.",
+)
+ppgls_ordinary.add_argument(
+    "--predictor-tip-summary-out",
+    "--predictor_tip_summary_out",
+    dest="predictor_tip_summary_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Optional per-species predictor replicate and uncertainty audit.",
+)
+ppgls_raw = ppgls.add_argument_group("end-to-end raw-input mode")
+ppgls_raw.add_argument(
+    "--gene-tree",
+    "--gene_tree",
+    dest="gene_tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Dated rooted gene tree used for expression contrasts. Its presence selects end-to-end raw-input mode.",
+)
+ppgls_raw.add_argument(
+    "--reconciliation-tree",
+    "--reconciliation_tree",
+    dest="reconciliation_tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Optional annotation-bearing gene tree used only for reconciliation; defaults to --gene-tree and must have the same rooted topology.",
+)
+ppgls_raw.add_argument(
+    "--species-tree",
+    "--species_tree",
+    dest="species_tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Rooted species tree used for reconciliation and predictor contrasts.",
+)
+ppgls_raw.add_argument(
+    "--expression",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help='Expression TSV with "leaf_name" and the --responses columns.',
+)
+ppgls_raw.add_argument(
+    "--species-traits",
+    "--species_traits",
+    dest="species_traits",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help='Species-trait TSV with "leaf_name" and the --predictors columns.',
+)
+ppgls_raw.add_argument(
+    "--tree-id",
+    "--tree_id",
+    dest="tree_id",
+    metavar="TEXT",
+    default=None,
+    type=str,
+    help="Required non-empty gene-family identifier recorded throughout the output bundle.",
+)
+ppgls_raw.add_argument(
+    "--out-prefix",
+    "--out_prefix",
+    dest="out_prefix",
+    metavar="PREFIX",
+    default=None,
+    type=str,
+    help="Write the final model and all inspectable intermediate tables under this prefix instead of --outfile.",
+)
+ppgls_raw.add_argument(
+    "--gene-tree-format",
+    "--gene_tree_format",
+    dest="gene_tree_format",
+    metavar="auto|auto-strict|INT",
+    default=None,
+    type=str,
+    help="default=auto: ETE tree format for --gene-tree.",
+)
+ppgls_raw.add_argument(
+    "--reconciliation-tree-format",
+    "--reconciliation_tree_format",
+    dest="reconciliation_tree_format",
+    metavar="auto|auto-strict|INT",
+    default=None,
+    type=str,
+    help="default=--gene-tree-format: ETE tree format for --reconciliation-tree.",
+)
+ppgls_raw.add_argument(
+    "--species-tree-format",
+    "--species_tree_format",
+    dest="species_tree_format",
+    metavar="auto|auto-strict|INT",
+    default=None,
+    type=str,
+    help="default=auto: ETE tree format for --species-tree.",
+)
+ppgls_raw.add_argument(
+    "--quoted-node-names",
+    "--quoted_node_names",
+    dest="quoted_node_names",
+    metavar="yes|no",
+    default=None,
+    type=strtobool,
+    help="default=yes: Whether node names are quoted in raw-input trees.",
+)
+ppgls_raw.add_argument(
+    "--event-source",
+    "--event_source",
+    dest="event_source",
+    metavar="lca|nhx|species-overlap",
+    default=None,
+    type=str,
+    choices=["lca", "nhx", "species-overlap"],
+    help="default=lca: Reconciliation event source; NHX reads GeneRax S/D/H properties.",
+)
+ppgls_raw.add_argument(
+    "--species-parser",
+    "--species_parser",
+    dest="species_parser",
+    metavar="PRESET",
+    default=None,
+    type=str,
+    choices=list(SUPPORTED_SPECIES_PARSERS),
+    help="default=legacy: Species parser preset for mapping gene tips.",
+)
+ppgls_raw.add_argument(
+    "--species-regex",
+    "--species_regex",
+    dest="species_regex",
+    metavar="REGEX",
+    default=None,
+    type=str,
+    help="default=the legacy species regex: Extraction regex for gene-tip species IDs.",
+)
+ppgls_raw.add_argument(
+    "--species-map-tsv",
+    "--species_map_tsv",
+    dest="species_map_tsv",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help='Optional mapping TSV with "leaf_name" and "species_label" columns.',
+)
+ppgls_tip_tables = ppgls.add_argument_group("tip-table matching options")
+ppgls_tip_tables.add_argument(
+    "--unmatched",
+    metavar="error|warn|ignore",
+    default=None,
+    type=str,
+    choices=["error", "warn", "ignore"],
+    help="default=error: Policy for rows and tree tips that do not match in raw or conventional input.",
+)
+ppgls_tip_tables.add_argument(
+    "--missing-values",
+    "--missing_values",
+    dest="missing_values",
+    metavar="CSV",
+    default=None,
+    type=str,
+    help="default=the NWKIT missing-value set: Values treated as missing in raw or conventional trait tables.",
+)
+ppgls_replicates = ppgls.add_argument_group("response replicate and known-SE options")
+ppgls_predictor_replicates = ppgls.add_argument_group(
+    "predictor replicate and known-SE options"
+)
+ppgls_raw.add_argument(
+    "--gene-branch-length",
+    "--gene_branch_length",
+    dest="gene_branch_length",
+    metavar="original|unit",
+    default=None,
+    type=str,
+    choices=["original", "unit"],
+    help="default=original: Branch lengths used for expression PICs.",
+)
+ppgls_raw.add_argument(
+    "--species-branch-length",
+    "--species_branch_length",
+    dest="species_branch_length",
+    metavar="original|unit",
+    default=None,
+    type=str,
+    choices=["original", "unit"],
+    help="default=original: Branch lengths used for species-trait PICs.",
+)
+ppgls_raw.add_argument(
+    "--gene-evolution-model",
+    "--gene_evolution_model",
+    dest="gene_evolution_model",
+    metavar="MODEL",
+    default=None,
+    type=str,
+    choices=list(CONTRAST_EVOLUTION_MODELS),
+    help="default=brownian: Evolutionary model used for gene-expression contrasts.",
+)
+ppgls_raw.add_argument(
+    "--gene-evolution-parameter",
+    "--gene_evolution_parameter",
+    dest="gene_evolution_parameter",
+    metavar="auto|FLOAT",
+    default=None,
+    type=auto_or_finite_float,
+    help="default=auto: Estimate each response's shape parameter, or fix it to FLOAT.",
+)
+ppgls_raw.add_argument(
+    "--species-evolution-model",
+    "--species_evolution_model",
+    dest="species_evolution_model",
+    metavar="MODEL",
+    default=None,
+    type=str,
+    choices=list(CONTRAST_EVOLUTION_MODELS),
+    help="default=brownian: Evolutionary model used for species-trait contrasts.",
+)
+ppgls_raw.add_argument(
+    "--species-evolution-parameter",
+    "--species_evolution_parameter",
+    dest="species_evolution_parameter",
+    metavar="auto|FLOAT",
+    default=None,
+    type=auto_or_finite_float,
+    help="default=auto: Estimate each predictor's shape parameter by marginal ML, or fix it to FLOAT.",
+)
+ppgls_replicates.add_argument(
+    "--biological-id",
+    "--biological_id",
+    dest="biological_id",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Response-table column identifying independent biological observations in --data or --expression.",
+)
+ppgls_replicates.add_argument(
+    "--technical-id",
+    "--technical_id",
+    dest="technical_id",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Optional technical-replicate identifier nested within a biological observation.",
+)
+ppgls_replicates.add_argument(
+    "--technical-aggregation",
+    "--technical_aggregation",
+    dest="technical_aggregation",
+    metavar="error|mean",
+    default=None,
+    type=str,
+    choices=["error", "mean"],
+    help="default=error: Reject or explicitly average technical replicates.",
+)
+ppgls_replicates.add_argument(
+    "--batch",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Optional categorical response-table batch column fitted as a fixed effect.",
+)
+ppgls_replicates.add_argument(
+    "--within-variance",
+    "--within_variance",
+    dest="within_variance",
+    metavar="pooled|leaf|known-se",
+    default=None,
+    type=str,
+    choices=["pooled", "leaf", "known-se"],
+    help="default=pooled: Biological replicate variance model or known-SE input.",
+)
+ppgls_replicates.add_argument(
+    "--standard-error-columns",
+    "--standard_error_columns",
+    dest="standard_error_columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    help="Known-SE columns corresponding to --responses.",
+)
+ppgls_replicates.add_argument(
+    "--sample-size-columns",
+    "--sample_size_columns",
+    dest="sample_size_columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    help="Optional known-SE sample-size columns corresponding to --responses.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-biological-id",
+    "--predictor_biological_id",
+    dest="predictor_biological_id",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Predictor-table column identifying independent biological observations.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-technical-id",
+    "--predictor_technical_id",
+    dest="predictor_technical_id",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Optional technical-replicate identifier for predictor observations.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-technical-aggregation",
+    "--predictor_technical_aggregation",
+    dest="predictor_technical_aggregation",
+    metavar="error|mean",
+    default=None,
+    type=str,
+    choices=["error", "mean"],
+    help="default=error: Reject or explicitly average predictor technical replicates.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-batch",
+    "--predictor_batch",
+    dest="predictor_batch",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Optional categorical predictor-table batch column fitted as a fixed effect.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-within-variance",
+    "--predictor_within_variance",
+    dest="predictor_within_variance",
+    metavar="pooled|leaf|known-se",
+    default=None,
+    type=str,
+    choices=["pooled", "leaf", "known-se"],
+    help="default=pooled: Predictor biological-replicate variance model or known-SE input.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-standard-error-columns",
+    "--predictor_standard_error_columns",
+    dest="predictor_standard_error_columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    help="Known-SE columns corresponding to --predictors.",
+)
+ppgls_predictor_replicates.add_argument(
+    "--predictor-sample-size-columns",
+    "--predictor_sample_size_columns",
+    dest="predictor_sample_size_columns",
+    metavar="COLUMN1,COLUMN2,...",
+    default=None,
+    type=str,
+    help="Optional known-SE sample-size columns corresponding to --predictors.",
+)
+ppgls.add_argument(
+    "--event-weighting",
+    "--event_weighting",
+    dest="event_weighting",
+    metavar="equal|observation",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["equal", "observation"],
+    help="default=equal: Give each species event equal total weight, or count each gene contrast equally. Equal prevents copy-rich events from dominating.",
+)
+ppgls.add_argument(
+    "--speciation-coverage",
+    "--speciation_coverage",
+    dest="speciation_coverage",
+    metavar="complete|any",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["complete", "any"],
+    help="default=complete: Require complete daughter-clade sampling or include explicitly reported partial coverage.",
+)
+ppgls.add_argument(
+    "--confidence-level",
+    "--confidence_level",
+    dest="confidence_level",
+    metavar="FLOAT",
+    default=0.95,
+    type=unit_interval_float,
+    required=False,
+    action="store",
+    help="default=%(default)s: Two-sided confidence-interval level strictly between zero and one.",
+)
+ppgls.add_argument(
+    "--model",
+    metavar="hierarchical|replicate-reml|legacy",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["hierarchical", "replicate-reml", "legacy"],
+    help="default=hierarchical: Fit the replicate-aware hierarchical model, omit random effects, or run the earlier cluster-HC1 estimator for sensitivity analysis.",
+)
+ppgls.add_argument(
+    "--response-sampling-covariance",
+    "--response_sampling_covariance",
+    dest="response_sampling_covariance",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Long-form response-contrast sampling covariance from replicate-aware 'nwkit contrast'. A zero matrix is used when the response has no sampling-variance columns.",
+)
+ppgls.add_argument(
+    "--predictor-sampling-covariance",
+    "--predictor_sampling_covariance",
+    dest="predictor_sampling_covariance",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Precomputed mode: long-form predictor-contrast sampling covariance from replicate-aware 'nwkit contrast'.",
+)
+ppgls.add_argument(
+    "--inference",
+    metavar="wald|parametric-bootstrap",
+    default="wald",
+    type=str,
+    required=False,
+    action="store",
+    choices=["wald", "parametric-bootstrap"],
+    help="default=%(default)s: Model-based Wald inference or a variance-component-refitted parametric bootstrap.",
+)
+ppgls.add_argument(
+    "--bootstrap-replicates",
+    "--bootstrap_replicates",
+    dest="bootstrap_replicates",
+    metavar="INT",
+    default=1000,
+    type=int,
+    required=False,
+    action="store",
+    help="default=%(default)s: Number of simulations for parametric-bootstrap inference.",
+)
+ppgls.add_argument(
+    "--seed",
+    metavar="INT",
+    default=1,
+    type=int,
+    required=False,
+    action="store",
+    help="default=%(default)s: Non-negative parametric-bootstrap random seed.",
+)
+ppgls.add_argument(
+    "--reml",
+    metavar="yes|no",
+    default="yes",
+    type=strtobool,
+    required=False,
+    action="store",
+    help="default=%(default)s: Use restricted maximum likelihood for Gaussian variance components.",
+)
+ppgls.add_argument(
+    "--event-random-effect",
+    "--event_random_effect",
+    dest="event_random_effect",
+    metavar="auto|yes|no",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["auto", "yes", "no"],
+    help="default=auto: Include a shared species-event response when identifiable.",
+)
+ppgls.add_argument(
+    "--lineage-random-slope",
+    "--lineage_random_slope",
+    dest="lineage_random_slope",
+    metavar="auto|yes|no",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["auto", "yes", "no"],
+    help="default=auto: Include partially pooled lineage-specific trait slopes when identifiable.",
+)
+ppgls.add_argument(
+    "--random-effects-out",
+    "--random_effects_out",
+    dest="random_effects_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional TSV of species-event and lineage conditional modes.",
+)
+ppgls.set_defaults(handler=command_pgls)
+
+
 def command_mark(args):
     from nwkit.mark import mark_main
 
@@ -2593,7 +3596,9 @@ def command_prune(args):
     prune_main(args)
 
 
-pprune = subparsers.add_parser("prune", help="Prune leaves", parents=[p_parent])
+pprune = subparsers.add_parser(
+    "prune", help="Prune leaves", parents=[p_parent, p_preserve_properties]
+)
 pprune.add_argument(
     "-p",
     "--pattern",
@@ -2777,7 +3782,9 @@ def command_sanitize(args):
 
 
 psanitize = subparsers.add_parser(
-    "sanitize", help="Eliminate non-standard Newick flavors", parents=[p_parent]
+    "sanitize",
+    help="Eliminate non-standard Newick flavors",
+    parents=[p_parent, p_preserve_properties],
 )
 psanitize.add_argument(
     "--remove-singleton",

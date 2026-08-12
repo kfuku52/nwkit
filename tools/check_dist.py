@@ -29,7 +29,15 @@ def main() -> int:
 
     required_wheel = {
         "nwkit/__init__.py",
+        "nwkit/contrast.py",
+        "nwkit/evolution.py",
         "nwkit/image_metadata.py",
+        "nwkit/measurement_error.py",
+        "nwkit/ordinary_pgls.py",
+        "nwkit/pgls.py",
+        "nwkit/pgls_pipeline.py",
+        "nwkit/reconcile.py",
+        "nwkit/replicates.py",
         "nwkit/root.py",
         "nwkit/data_tree/apgiv.nwk",
     }
@@ -49,12 +57,24 @@ def main() -> int:
         sdist_members = set(archive.getnames())
     for suffix in (
         "/nwkit/__init__.py",
+        "/nwkit/contrast.py",
+        "/nwkit/evolution.py",
         "/nwkit/image_metadata.py",
+        "/nwkit/measurement_error.py",
+        "/nwkit/ordinary_pgls.py",
+        "/nwkit/pgls.py",
+        "/nwkit/pgls_pipeline.py",
+        "/nwkit/reconcile.py",
+        "/nwkit/replicates.py",
         "/nwkit/root.py",
+        "/CLI_TSV_CONVENTIONS.md",
+        "/RECONCILED_CONTRASTS.md",
+        "/RECONCILED_SPECIATION_CONTRAST_MATH.md",
         "/nwkit/data_tree/apgiv.nwk",
         "/constraints-dev.txt",
         "/setup.py",
         "/tests/test_properties.py",
+        "/tests/test_measurement_error.py",
         "/tools/check_dist.py",
     ):
         if not any(member.endswith(suffix) for member in sdist_members):

@@ -4,6 +4,103 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.36.0] - 2026-08-12
+
+### Added
+
+- Added `reconcile` and `contrast` commands for auditable reconciled
+  speciation contrasts, stable clade identifiers, explicit sampling coverage,
+  GeneRax transfer metadata, and multi-family lineage clustering.
+- Added `pgls` for regression on reconciled phylogenetic contrasts, with equal
+  species-event weighting and species-event-clustered uncertainty so additional
+  paralogs cannot inflate the effective sample size.
+- Added opt-in preservation of custom NHX properties during pruning, dropping,
+  and sanitization, including lineage-boundary markers for collapsed
+  duplication and transfer events.
+- Added biological/technical replicate handling, batch adjustment, known
+  standard errors, and exact propagation of tip-mean uncertainty through PIC
+  transforms and conventional PGLS.
+- Added REML/ML reconciled-contrast models with identifiable species-event
+  random effects, partially pooled lineage-specific slopes, conditional modes,
+  boundary diagnostics, and variance-component-refitted bootstrap inference.
+- Added an end-to-end raw-input PGLS mode with optional separate
+  annotation-bearing and dated gene trees, transactional inspectable output
+  bundles, and in-memory stage reuse.
+- Added conventional tip-level PGLS with an intercept, ML/REML fitting, Wald or
+  parameter-refitted bootstrap inference, sampling covariance, and per-tip
+  estimation audits.
+- Added one shared evolutionary-model layer for Brownian, Pagel lambda,
+  fixed-root OU, Pagel kappa and delta, early-burst/ACDC, independent, and
+  named custom covariance models.
+- Added fixed or estimated generic shape parameters to conventional PGLS,
+  including parameter-refitted bootstrap inference and generic model metadata.
+- Added conventional ML evolutionary-model comparison with log likelihood,
+  AIC, AICc, BIC, both AIC and AICc weights, parameter counts, convergence,
+  and boundary diagnostics.
+- Added model-aware transformed-tree contrasts and independently selectable
+  gene-expression and species-trait models in end-to-end reconciled PGLS.
+- Added automatic reconciled-PGLS shape-parameter estimation: response-specific
+  gene parameters maximize the reconciled likelihood, predictor-specific
+  parameters use species-trait marginal ML, and parametric bootstrap refits
+  automatically estimated gene parameters from simulated tip values.
+- Added a mathematical guide to reconciled speciation contrasts, including the
+  reconciliation criterion, PIC recursion, covariance propagation, repeated-
+  paralog weighting, and a hand-calculated minimal example.
+- Added biological/technical replicates, batch adjustment, and known standard
+  errors for PGLS predictors as well as responses. Conventional and reconciled
+  PGLS now condition on a phylogenetic latent predictor and propagate its
+  posterior covariance through the regression instead of treating noisy
+  species means as exact.
+
+### Changed
+
+- Made complete daughter-clade sampling the safe default for reconciled
+  speciation contrasts while retaining an explicit partial-coverage sensitivity
+  mode, and use child-order-independent clade IDs for cross-file joins.
+- Made the hierarchical Gaussian REML model the PGLS default, with the earlier
+  cluster-HC1 estimator retained as an explicit sensitivity model.
+- Require non-empty gene-family IDs and complete replicate covariance inputs,
+  and record replicate, covariance, random-effect, planned-path, and raw-tree
+  provenance in the audit trail.
+- Made PGLS a strict three-mode command: conventional tip-level data,
+  end-to-end reconciled raw input, or precomputed reconciled contrasts.
+- Retained `reconcile` and `contrast` as inspectable low-level commands while
+  allowing the raw-input PGLS command to run the complete workflow.
+- Replaced model-specific conventional PGLS correlation options with
+  `--evolution-model` and `--evolution-parameter` without compatibility aliases.
+- Record the exact evolutionary model, parameter, and branch-length mode in
+  contrast tables and both model choices in all reconciled PGLS results;
+  precomputed mode now requires and validates this metadata and one predictor
+  tree ID instead of silently accepting mixed transforms.
+
+### Fixed
+
+- Parse and validate GeneRax `S`, `D`, and `H=Y@source@destination`
+  annotations, preserving transfer placement instead of silently replacing it
+  with descendant-species LCA.
+- Reject non-finite contrasts, invalid reconciliation joins, incomplete or
+  non-positive-semidefinite sampling covariance, confounded replicate designs,
+  and non-identifiable requested random effects.
+- Keep technical replicates out of biological sample-size counts and reject
+  technical observations spanning batches.
+- Stage and commit complete output bundles under a per-prefix lock, restoring
+  pre-existing outputs after a failed commit instead of leaving mixed results.
+- Retain unexpected numerical warnings while suppressing only the known SciPy
+  finite-difference warning from non-finite variance-component trial points.
+- Validate custom covariance names, dimensions, numeric values, symmetry, and
+  positive definiteness before fitting, and prevent any PGLS output from
+  replacing that input.
+- Reject non-ultrametric trees for delta and contrast-based OU transforms,
+  invalid fixed parameter domains, and
+  information-criterion calculations with insufficient sample size.
+- Search multiple deterministic parameter basins before local refinement when
+  estimating conventional PGLS evolutionary parameters, and reject raw-only
+  options in conventional mode even when their explicitly supplied value equals
+  the reconciled default.
+- Reject ambiguous replicate-column roles, colliding or incomplete gene-tip
+  species mappings, mixed precomputed transform metadata, and output/input path
+  aliasing before analysis begins.
+
 ## [0.35.2] - 2026-08-10
 
 ### Added

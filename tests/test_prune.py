@@ -177,3 +177,47 @@ class TestPruneMain:
             "Dictyostelium_cf_discoideum",
             "Amoeba_sp_JDSRuffled",
         }
+
+    def test_preserve_properties_keeps_nhx_and_marks_collapsed_event_boundary(
+        self, tmp_nwk, tmp_outfile
+    ):
+        path = tmp_nwk(
+            "(((A:1,B:1)n1:1[&&NHX:D=N:H=N],"
+            "(C:1,D:1)n2:1[&&NHX:D=N:H=N])dup:1[&&NHX:D=Y:H=N],"
+            "E:2)root[&&NHX:D=N:H=N];"
+        )
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="A|B",
+            invert_match=False,
+            preserve_properties=True,
+        )
+        prune_main(args)
+        output = open(tmp_outfile).read()
+        assert "D=N" in output
+        assert "NWKIT_COLLAPSED_EVENT_BOUNDARY=Y" in output
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        cd = tree.common_ancestor(["C", "D"])
+        assert cd.props["NWKIT_COLLAPSED_EVENT_BOUNDARY"] == "Y"
+
+    def test_preserve_properties_propagates_boundary_through_pruned_chain(
+        self, tmp_nwk, tmp_outfile
+    ):
+        path = tmp_nwk(
+            "((((A:1,B:1)kept:1[&&NHX:D=N:H=N],"
+            "(C:1,D:1)lost1:1[&&NHX:D=N:H=N])middle:1[&&NHX:D=N:H=N],"
+            "(E:1,F:1)lost2:1[&&NHX:D=N:H=N])dup:1[&&NHX:D=Y:H=N],"
+            "G:3)root[&&NHX:D=N:H=N];"
+        )
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="C|D|E|F",
+            invert_match=False,
+            preserve_properties=True,
+        )
+        prune_main(args)
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        ab = tree.common_ancestor(["A", "B"])
+        assert ab.props["NWKIT_COLLAPSED_EVENT_BOUNDARY"] == "Y"

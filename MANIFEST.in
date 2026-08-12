@@ -1,4 +1,6 @@
 include CLI_TSV_CONVENTIONS.md
+include RECONCILED_CONTRASTS.md
+include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt
 graft tests
 graft tools

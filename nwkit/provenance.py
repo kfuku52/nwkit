@@ -28,7 +28,18 @@ OUTPUT_ARGUMENTS = frozenset(
         "report",
         "tree_out",
         "model_out",
+        "model_comparison_out",
+        "gene_contrasts_out",
+        "random_effects_out",
+        "reconciliation_out",
+        "response_sampling_covariance_out",
+        "response_tip_summary_out",
+        "predictor_sampling_covariance_out",
+        "predictor_tip_summary_out",
+        "sampling_covariance_out",
+        "species_contrasts_out",
         "stochastic_map_out",
+        "tip_summary_out",
         "output_table",
         "seqout",
         "out_dir",
@@ -43,22 +54,34 @@ INPUT_PATH_ARGUMENTS = frozenset(
     (
         "infile",
         "infile2",
+        "data",
+        "expression",
+        "evolution_covariance",
+        "gene_tree",
         "length_source",
         "manifest",
         "name_source",
         "name_tsv",
         "property_source",
+        "predictor_contrasts",
+        "predictor_sampling_covariance",
+        "reconciliation",
+        "reconciliation_tree",
         "reference",
+        "response_sampling_covariance",
         "root_source",
         "seqin",
         "species_list",
         "species_map_tsv",
         "species_name_tsv",
+        "species_tree",
+        "species_traits",
         "support_source",
         "table",
         "taxid_tsv",
         "tip_image_manifest",
         "trait",
+        "tree",
         "weight_tsv",
     )
 )
@@ -448,18 +471,60 @@ def _output_file_records(args):
     return sorted(records, key=lambda record: (record["argument"], record["path"]))
 
 
+def _planned_output_records(args):
+    records_by_path: dict[str, dict[str, Any]] = {}
+    for argument in OUTPUT_ARGUMENTS:
+        if argument == "audit":
+            continue
+        value = getattr(args, argument, None)
+        candidates = _path_candidates_from_value(value)
+        if argument == "group_table_prefix":
+            candidates = [
+                "{}.{}".format(candidate, suffix)
+                for candidate in candidates
+                for suffix in ("all.tsv", "sampled.tsv")
+            ]
+        for candidate in candidates:
+            if candidate in ("", "-"):
+                continue
+            realpath = os.path.realpath(candidate)
+            record = records_by_path.setdefault(
+                realpath,
+                {"path": realpath, "arguments": set()},
+            )
+            record["arguments"].add(argument)
+    records = []
+    for record in records_by_path.values():
+        arguments = sorted(record.pop("arguments"))
+        record["argument"] = arguments[0]
+        record["arguments"] = arguments
+        records.append(record)
+    return sorted(records, key=lambda record: (record["argument"], record["path"]))
+
+
 def _primary_input_text(args, stdin_text):
     infile = getattr(args, "infile", None)
-    if infile == "-":
+    gene_tree = getattr(args, "gene_tree", None)
+    ordinary_tree = getattr(args, "tree", None)
+    primary_input = (
+        ordinary_tree
+        if getattr(args, "command", None) == "pgls" and ordinary_tree not in (None, "")
+        else (
+            gene_tree
+            if getattr(args, "command", None) == "pgls" and gene_tree not in (None, "")
+            else infile
+        )
+    )
+    if primary_input == "-":
         return stdin_text
-    if isinstance(infile, str) and os.path.isfile(infile):
+    if isinstance(primary_input, str) and os.path.isfile(primary_input):
         try:
-            with open(infile, errors="replace") as handle:
+            with open(primary_input, errors="replace") as handle:
                 return handle.read(INPUT_SUMMARY_MAX_CHARS + 1)
         except UnicodeDecodeError:
             return None
-    if isinstance(infile, str):
-        return infile[: INPUT_SUMMARY_MAX_CHARS + 1]
+    if isinstance(primary_input, str):
+        return primary_input[: INPUT_SUMMARY_MAX_CHARS + 1]
     return None
 
 
@@ -491,9 +556,15 @@ def _input_summary(text, args):
         if truncated:
             summary["truncated"] = True
         return summary
+    input_format = getattr(args, "format", "auto")
+    if getattr(args, "command", None) == "pgls":
+        if getattr(args, "tree", None) not in (None, ""):
+            input_format = getattr(args, "tree_format", "auto") or "auto"
+        elif getattr(args, "gene_tree", None) not in (None, ""):
+            input_format = getattr(args, "gene_tree_format", "auto") or "auto"
     inspection = inspect_tree_text(
         tree_strings[0],
-        format=getattr(args, "format", "auto"),
+        format=input_format,
         quoted_node_names=getattr(args, "quoted_node_names", True),
     )
     summary = {
@@ -660,6 +731,17 @@ def _audit_collision_candidates(args, audit_path):
                 candidates.append(
                     ("--{}".format(argument.replace("_", "-")), candidate)
                 )
+    out_prefix = getattr(args, "out_prefix", None)
+    if out_prefix not in (None, ""):
+        from nwkit.conventions import pgls_bundle_lock_path, pgls_bundle_paths
+
+        candidates.extend(
+            ("--out-prefix {}".format(argument), path)
+            for argument, path in pgls_bundle_paths(out_prefix).items()
+        )
+        candidates.append(
+            ("--out-prefix transaction lock", pgls_bundle_lock_path(out_prefix))
+        )
     candidates.extend(_image_output_collision_candidates(args))
     return candidates
 
@@ -867,6 +949,7 @@ def run_with_audit(args, argv, handler):
                         "sha256": stdin_sha256,
                         "bytes": stdin_bytes,
                     },
+                    "planned_outputs": _planned_output_records(args),
                     "outputs": _output_file_records(args),
                     "stdout": {
                         "sha256": stdout_tee.sha256,
