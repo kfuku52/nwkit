@@ -51,6 +51,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   PGLS now condition on a phylogenetic latent predictor and propagate its
   posterior covariance through the regression instead of treating noisy
   species means as exact.
+- Added typed categorical and ordered predictors and responses, including
+  replicate-aware factor uncertainty and shared species effects that prevent
+  paralog pseudoreplication in reconciled tip-level PGLMMs.
+- Added Poisson, negative-binomial, zero-inflated, hurdle, Gamma, lognormal,
+  beta, beta-binomial, and censored-Gaussian phylogenetic likelihoods, with
+  offsets/trials/censor bounds, likelihood-level biological replicates,
+  coefficient regularization, likelihood/profile inference, and
+  family-specific parametric bootstrap.
+- Added equally weighted gene-tree/reconciliation ensembles with Rubin
+  within/between-tree coefficient uncertainty and explicit support metadata.
+- Added ML/REML multivariate Gaussian PGLS for conventional and reconciled
+  tip-level models, full response covariance components, and observed-data
+  likelihoods for partially missing response vectors.
 
 ### Changed
 

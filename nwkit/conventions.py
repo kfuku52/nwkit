@@ -50,6 +50,7 @@ STDIN_INPUT_DESTS = (
     "predictor_contrasts",
     "expression",
     "gene_tree",
+    "gene_tree_ensemble",
     "reconciliation_tree",
     "response_sampling_covariance",
     "predictor_sampling_covariance",

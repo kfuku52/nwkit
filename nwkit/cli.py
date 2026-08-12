@@ -5,6 +5,7 @@ import sys
 from nwkit import __version__
 from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES_CSV, get_stdin_input_options
 from nwkit.evolution import CONTRAST_EVOLUTION_MODELS, EVOLUTION_MODELS
+from nwkit.model_matrix import RESPONSE_FAMILIES
 from nwkit.species_parser import (
     DEFAULT_SPECIES_PARSER,
     DEFAULT_SPECIES_REGEX,
@@ -2549,6 +2550,179 @@ ppgls.add_argument(
     action="store",
     help="Comma-separated predictor columns in --data/--species-traits or trait names in --predictor-contrasts.",
 )
+ppgls.add_argument(
+    "--categorical-responses",
+    "--categorical_responses",
+    dest="categorical_responses",
+    metavar="TRAIT1,TRAIT2,...",
+    default=None,
+    type=str,
+    help="Responses explicitly treated as unordered categories; non-numeric responses are also detected automatically. Two levels use a logit model and three or more use a multinomial-logit model.",
+)
+ppgls.add_argument(
+    "--ordered-responses",
+    "--ordered_responses",
+    dest="ordered_responses",
+    metavar="TRAIT=LOW|MIDDLE|HIGH,...",
+    default=None,
+    type=str,
+    help="Ordered responses and their complete low-to-high level order; a cumulative-logit phylogenetic mixed model is used.",
+)
+ppgls.add_argument(
+    "--response-reference",
+    "--response_reference",
+    dest="response_reference",
+    metavar="TRAIT=LEVEL,...",
+    default=None,
+    type=str,
+    help="Reference level for each unordered categorical response.",
+)
+ppgls.add_argument(
+    "--response-family",
+    "--response_family",
+    dest="response_family",
+    metavar="TRAIT=FAMILY,...",
+    default=None,
+    type=str,
+    help="Explicit response likelihood by trait. Supported families: {}.".format(
+        ", ".join(sorted(RESPONSE_FAMILIES))
+    ),
+)
+ppgls.add_argument(
+    "--response-offset",
+    "--response_offset",
+    dest="response_offset",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    type=str,
+    help="Log-offset column for count-response traits (for example log library size).",
+)
+ppgls.add_argument(
+    "--response-trials",
+    "--response_trials",
+    dest="response_trials",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    type=str,
+    help="Positive integer trial-count column required by beta-binomial responses.",
+)
+ppgls.add_argument(
+    "--response-censor-lower",
+    "--response_censor_lower",
+    dest="response_censor_lower",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    type=str,
+    help="Lower censor-bound column for censored-Gaussian responses; missing means no lower bound.",
+)
+ppgls.add_argument(
+    "--response-censor-upper",
+    "--response_censor_upper",
+    dest="response_censor_upper",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    type=str,
+    help="Upper censor-bound column for censored-Gaussian responses; missing means no upper bound.",
+)
+ppgls.add_argument(
+    "--response-dispersion",
+    "--response_dispersion",
+    dest="response_dispersion",
+    metavar="TRAIT=FLOAT,...",
+    default=None,
+    type=str,
+    help="Fix positive dispersion/shape/precision/SD parameters; omitted values are estimated.",
+)
+ppgls.add_argument(
+    "--response-zero-probability",
+    "--response_zero_probability",
+    dest="response_zero_probability",
+    metavar="TRAIT=FLOAT,...",
+    default=None,
+    type=str,
+    help="Fix structural-zero probability in (0,1); omitted zero components are estimated.",
+)
+ppgls.add_argument(
+    "--coefficient-penalty",
+    "--coefficient_penalty",
+    dest="coefficient_penalty",
+    metavar="none|gaussian|student-t",
+    default="student-t",
+    choices=["none", "gaussian", "student-t"],
+    help="default=%(default)s: Weak coefficient regularization for non-Gaussian models to stabilize sparse or separated data.",
+)
+ppgls.add_argument(
+    "--coefficient-prior-sd",
+    "--coefficient_prior_sd",
+    dest="coefficient_prior_sd",
+    metavar="FLOAT",
+    default=2.5,
+    type=finite_float,
+    help="default=%(default)s: Positive scale for Gaussian or Student-t coefficient regularization.",
+)
+ppgls.add_argument(
+    "--multivariate-responses",
+    "--multivariate_responses",
+    dest="multivariate_responses",
+    metavar="yes|no",
+    default="no",
+    type=strtobool,
+    help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance.",
+)
+ppgls.add_argument(
+    "--allow-missing-responses",
+    "--allow_missing_responses",
+    dest="allow_missing_responses",
+    metavar="yes|no",
+    default="no",
+    type=strtobool,
+    help="default=%(default)s: Retain partially observed tips in a multivariate Gaussian likelihood.",
+)
+ppgls.add_argument(
+    "--categorical-predictors",
+    "--categorical_predictors",
+    dest="categorical_predictors",
+    metavar="TRAIT1,TRAIT2,...",
+    default=None,
+    type=str,
+    help="Predictors explicitly treated as unordered factors; non-numeric predictors are also detected automatically.",
+)
+ppgls.add_argument(
+    "--ordered-predictors",
+    "--ordered_predictors",
+    dest="ordered_predictors",
+    metavar="TRAIT=LOW|MIDDLE|HIGH,...",
+    default=None,
+    type=str,
+    help="Ordered predictors and their complete low-to-high level order; polynomial factor contrasts are used.",
+)
+ppgls.add_argument(
+    "--factor-reference",
+    "--factor_reference",
+    dest="factor_reference",
+    metavar="TRAIT=LEVEL,...",
+    default=None,
+    type=str,
+    help="Reference level for each unordered categorical predictor.",
+)
+ppgls.add_argument(
+    "--factor-coding",
+    "--factor_coding",
+    dest="factor_coding",
+    metavar="treatment|sum",
+    default="treatment",
+    choices=["treatment", "sum"],
+    help="default=%(default)s: Coding used for unordered categorical predictors.",
+)
+ppgls.add_argument(
+    "--categorical-replicate-policy",
+    "--categorical_replicate_policy",
+    dest="categorical_replicate_policy",
+    metavar="error|latent",
+    default="error",
+    choices=["error", "latent"],
+    help="default=%(default)s: Require one state per tip or infer a latent state distribution from discordant biological replicates.",
+)
 ppgls_ordinary = ppgls.add_argument_group("conventional tip-level PGLS mode")
 ppgls_ordinary.add_argument(
     "--tree",
@@ -2710,6 +2884,15 @@ ppgls_raw.add_argument(
     default=None,
     type=str,
     help="Dated rooted gene tree used for expression contrasts. Its presence selects end-to-end raw-input mode.",
+)
+ppgls_raw.add_argument(
+    "--gene-tree-ensemble",
+    "--gene_tree_ensemble",
+    dest="gene_tree_ensemble",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Multi-Newick posterior/bootstrap gene-tree sample. Fits every tree and combines coefficient uncertainty across trees and reconciliations.",
 )
 ppgls_raw.add_argument(
     "--reconciliation-tree",
@@ -3114,13 +3297,18 @@ ppgls.add_argument(
 )
 ppgls.add_argument(
     "--inference",
-    metavar="wald|parametric-bootstrap",
+    metavar="wald|parametric-bootstrap|likelihood-ratio|profile-likelihood",
     default="wald",
     type=str,
     required=False,
     action="store",
-    choices=["wald", "parametric-bootstrap"],
-    help="default=%(default)s: Model-based Wald inference or a variance-component-refitted parametric bootstrap.",
+    choices=[
+        "wald",
+        "parametric-bootstrap",
+        "likelihood-ratio",
+        "profile-likelihood",
+    ],
+    help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference.",
 )
 ppgls.add_argument(
     "--bootstrap-replicates",

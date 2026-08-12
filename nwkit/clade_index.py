@@ -21,9 +21,13 @@ class CladeIndex:
         self._clade_id_by_node = dict()
 
     def names_for_mask(self, mask):
-        return tuple(
-            name for index, name in enumerate(self.names) if mask & (1 << index)
-        )
+        names = []
+        remaining = int(mask) & ((1 << len(self.names)) - 1)
+        while remaining:
+            lowest_bit = remaining & -remaining
+            names.append(self.names[lowest_bit.bit_length() - 1])
+            remaining ^= lowest_bit
+        return tuple(names)
 
     def names_for_node(self, node):
         return self.names_for_mask(self.mask_by_node[node])

@@ -7,6 +7,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import minimize, minimize_scalar
 
+from nwkit.gaussian import factor_covariance, factor_logdet, is_diagonal, solve_factor
+
 
 @dataclass(frozen=True)
 class LatentPredictorPosterior:
@@ -33,14 +35,17 @@ def _positive_semidefinite(matrix, label):
     tolerance = np.finfo(float).eps * scale * max(1, len(matrix)) * 100.0
     if matrix.size and float(np.max(np.abs(matrix - matrix.T))) > tolerance:
         raise ValueError("{} must be symmetric.".format(label))
-    if matrix.size and float(np.linalg.eigvalsh(symmetric).min()) < -tolerance:
+    eigenvalues = (
+        np.diag(symmetric) if is_diagonal(symmetric) else np.linalg.eigvalsh(symmetric)
+    )
+    if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
         raise ValueError("{} must be positive semidefinite.".format(label))
     symmetric[np.abs(symmetric) < tolerance] = 0.0
     return symmetric
 
 
 def _solve(cholesky, values):
-    return np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, values))
+    return solve_factor(cholesky, values)
 
 
 def _latent_predictor_likelihood(
@@ -55,7 +60,7 @@ def _latent_predictor_likelihood(
     covariance = rate * evolutionary_covariance + sampling_covariance
     covariance = (covariance + covariance.T) / 2.0
     try:
-        cholesky = np.linalg.cholesky(covariance)
+        cholesky = factor_covariance(covariance)
         inverse_observed = _solve(cholesky, observed)
         if include_intercept:
             ones = np.ones(len(observed), dtype=float)
@@ -68,7 +73,7 @@ def _latent_predictor_likelihood(
             prior_mean = 0.0
         residual = observed - prior_mean
         quadratic = float(residual @ _solve(cholesky, residual))
-        logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
+        logdet = factor_logdet(cholesky)
     except np.linalg.LinAlgError:
         return float("inf")
     objective = 0.5 * (len(observed) * math.log(2.0 * math.pi) + logdet + quadratic)
@@ -167,11 +172,20 @@ def fit_latent_predictor(
     _, prior_mean, observation_cholesky = details
     prior_covariance = rate * evolutionary_covariance
     residual = observed - prior_mean
-    gain_residual = prior_covariance @ _solve(observation_cholesky, residual)
-    posterior_mean = prior_mean + gain_residual
-    posterior_covariance = prior_covariance - (
-        prior_covariance @ _solve(observation_cholesky, prior_covariance.T)
-    )
+    if observation_cholesky.ndim == 1 and is_diagonal(prior_covariance):
+        prior_diagonal = np.diag(prior_covariance)
+        observation_diagonal = np.square(observation_cholesky)
+        gain = prior_diagonal / observation_diagonal
+        posterior_mean = prior_mean + gain * residual
+        posterior_covariance = np.diag(
+            prior_diagonal - np.square(prior_diagonal) / observation_diagonal
+        )
+    else:
+        gain_residual = prior_covariance @ _solve(observation_cholesky, residual)
+        posterior_mean = prior_mean + gain_residual
+        posterior_covariance = prior_covariance - (
+            prior_covariance @ _solve(observation_cholesky, prior_covariance.T)
+        )
     posterior_covariance = _positive_semidefinite(
         posterior_covariance, "Latent predictor posterior covariance"
     )
@@ -216,6 +230,39 @@ def _finite_difference_hessian(function, point):
     return (hessian + hessian.T) / 2.0
 
 
+def _predictor_error_covariance(beta, uncertainty, columns, n_observations):
+    """Project scalar or multicolumn predictor uncertainty onto the response."""
+    if isinstance(columns, (int, np.integer)):
+        matrix = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
+        if matrix.shape != (n_observations, n_observations):
+            raise ValueError("Predictor posterior covariance has the wrong dimensions.")
+        return float(beta[int(columns)]) ** 2 * matrix
+    columns = tuple(int(column) for column in columns)
+    coefficients = beta[np.asarray(columns, dtype=int)]
+    uncertainty = np.asarray(uncertainty, dtype=float)
+    if uncertainty.shape == (n_observations, len(columns), len(columns)):
+        diagonal = np.einsum(
+            "j,ijk,k->i", coefficients, uncertainty, coefficients, optimize=True
+        )
+        covariance = np.diag(diagonal)
+    elif uncertainty.shape == (
+        len(columns),
+        len(columns),
+        n_observations,
+        n_observations,
+    ):
+        covariance = np.einsum(
+            "j,jkil,k->il",
+            coefficients,
+            uncertainty,
+            coefficients,
+            optimize=True,
+        )
+    else:
+        raise ValueError("Grouped predictor uncertainty has the wrong dimensions.")
+    return _positive_semidefinite(covariance, "Grouped predictor covariance")
+
+
 def fit_conditional_eiv_gaussian(
     response,
     design,
@@ -231,16 +278,8 @@ def fit_conditional_eiv_gaussian(
     response = np.asarray(response, dtype=float)
     design = np.asarray(design, dtype=float)
     fixed_covariance = _positive_semidefinite(fixed_covariance, "Fixed covariance")
-    predictor_uncertainties = [
-        _positive_semidefinite(matrix, "Predictor posterior covariance")
-        for matrix in predictor_uncertainties
-    ]
     if len(predictor_uncertainties) != len(predictor_columns):
-        raise ValueError("Each uncertain predictor requires one coefficient column.")
-    if any(
-        matrix.shape != fixed_covariance.shape for matrix in predictor_uncertainties
-    ):
-        raise ValueError("Predictor posterior covariance has the wrong dimensions.")
+        raise ValueError("Each uncertain predictor requires coefficient columns.")
     normalized_components = []
     component_scales = []
     for name, matrix in components:
@@ -273,10 +312,12 @@ def fit_conditional_eiv_gaussian(
         beta = parameters[:num_coefficients]
         log_variances = parameters[num_coefficients:]
         covariance = fixed_covariance.copy()
-        for column, uncertainty in zip(
+        for columns, uncertainty in zip(
             predictor_columns, predictor_uncertainties, strict=True
         ):
-            covariance += float(beta[column]) ** 2 * uncertainty
+            covariance += _predictor_error_covariance(
+                beta, uncertainty, columns, len(response)
+            )
         variances = np.exp(log_variances)
         for variance, (_, component) in zip(
             variances, normalized_components, strict=True
@@ -285,10 +326,10 @@ def fit_conditional_eiv_gaussian(
         covariance = (covariance + covariance.T) / 2.0
         residual = response - design @ beta
         try:
-            cholesky = np.linalg.cholesky(covariance)
+            cholesky = factor_covariance(covariance)
             inverse_residual = _solve(cholesky, residual)
             quadratic = float(residual @ inverse_residual)
-            covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
+            covariance_logdet = factor_logdet(cholesky)
             if reml:
                 gram = design.T @ _solve(cholesky, design)
                 gram_sign, gram_logdet = np.linalg.slogdet(gram)

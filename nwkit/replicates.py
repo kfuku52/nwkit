@@ -4,6 +4,8 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
+
 TIP_SUMMARY_COLUMNS = [
     "tree_id",
     "leaf_name",
@@ -15,15 +17,258 @@ TIP_SUMMARY_COLUMNS = [
     "standard_error",
     "variance_method",
     "batch_adjusted",
+    "state",
+    "state_counts",
+    "state_probabilities",
+    "n_levels",
 ]
 
 
 @dataclass
 class ReplicateEstimates:
-    values_by_trait: dict[str, dict[str, float]]
+    values_by_trait: dict[str, dict[str, object]]
     sampling_covariance_by_trait: dict[str, pd.DataFrame]
     tip_summary: pd.DataFrame
     model_by_trait: dict[str, str]
+
+
+def _allowed_missing_trait_set(traits, allow_missing_traits):
+    allowed = set(allow_missing_traits)
+    if allowed - set(traits):
+        raise ValueError("Allowed-missing traits must be selected response traits.")
+    return allowed
+
+
+def _categorical_technical_observations(dataframe, traits, biological_id, technical_id):
+    key = ["leaf_name", biological_id]
+    duplicated = dataframe.duplicated(subset=key, keep=False)
+    if duplicated.any() and technical_id is None:
+        raise ValueError(
+            "Repeated categorical leaf/biological-ID rows require '--technical-id'."
+        )
+    if technical_id is not None:
+        _require_nonempty_ids(dataframe, technical_id, "--technical-id")
+        if dataframe.duplicated(subset=key + [technical_id], keep=False).any():
+            raise ValueError(
+                "Technical IDs must be unique within each leaf_name/biological ID."
+            )
+    rows = []
+    for group_key, group in dataframe.groupby(key, sort=False, dropna=False):
+        row: dict[str, object] = {
+            "leaf_name": str(group_key[0]),
+            biological_id: str(group_key[1]),
+        }
+        for trait in traits:
+            states = group[trait].dropna().astype(str)
+            unique = states.unique().tolist()
+            if len(unique) > 1:
+                raise ValueError(
+                    "Technical replicates disagree for categorical trait '{}' at "
+                    "tree tip '{}'.".format(trait, group_key[0])
+                )
+            row[trait] = None if not unique else unique[0]
+            row["_n_technical_{}".format(trait)] = len(states)
+        rows.append(row)
+    return pd.DataFrame(rows)
+
+
+def estimate_categorical_traits(
+    dataframe,
+    tree_leaf_names,
+    traits,
+    *,
+    biological_id,
+    technical_id=None,
+    policy="error",
+    tree_id="",
+):
+    """Aggregate categorical biological replicates without numeric averaging."""
+    if policy not in {"counts", "error", "latent"}:
+        raise ValueError("Unsupported categorical replicate policy: {}.".format(policy))
+    if biological_id is None:
+        raise ValueError("Categorical replicate input requires a biological ID.")
+    leaf_names = [str(name) for name in tree_leaf_names]
+    traits = list(traits)
+    required = ["leaf_name", biological_id]
+    for column in required:
+        _require_nonempty_ids(dataframe, column, "categorical replicate input")
+    dataframe = dataframe.copy()
+    dataframe["leaf_name"] = dataframe["leaf_name"].astype(str)
+    dataframe = dataframe[dataframe["leaf_name"].isin(set(leaf_names))]
+    observations = _categorical_technical_observations(
+        dataframe, traits, biological_id, technical_id
+    )
+    values_by_trait: dict[str, dict[str, object]] = {}
+    models = {}
+    summary_rows = []
+    for trait in traits:
+        levels = sorted(set(observations[trait].dropna().astype(str)))
+        if len(levels) < 2:
+            raise ValueError(
+                "Categorical trait '{}' needs at least two observed levels.".format(
+                    trait
+                )
+            )
+        values_by_leaf = {}
+        for leaf_name in leaf_names:
+            selected = observations.loc[
+                observations["leaf_name"] == leaf_name, trait
+            ].dropna()
+            if selected.empty:
+                raise ValueError(
+                    "Categorical trait '{}' has no observations for tree tip '{}'.".format(
+                        trait, leaf_name
+                    )
+                )
+            counts = selected.astype(str).value_counts().reindex(levels, fill_value=0)
+            observed_levels = counts[counts > 0].index.tolist()
+            if policy == "error" and len(observed_levels) != 1:
+                raise ValueError(
+                    "Biological replicates disagree for categorical trait '{}' at "
+                    "tree tip '{}'; use '--categorical-replicate-policy latent'.".format(
+                        trait, leaf_name
+                    )
+                )
+            probabilities = counts.to_numpy(dtype=float) / float(counts.sum())
+            values_by_leaf[leaf_name] = (
+                CategoricalObservation(
+                    dict(zip(levels, probabilities, strict=True)),
+                    int(counts.sum()),
+                )
+                if policy == "counts" or len(observed_levels) > 1
+                else observed_levels[0]
+            )
+            technical_count = int(
+                observations.loc[
+                    observations["leaf_name"] == leaf_name,
+                    "_n_technical_{}".format(trait),
+                ].sum()
+            )
+            summary_rows.append(
+                {
+                    "tree_id": tree_id,
+                    "leaf_name": leaf_name,
+                    "trait": trait,
+                    "n_biological": int(counts.sum()),
+                    "n_technical": technical_count,
+                    "mean": "",
+                    "within_sd": "",
+                    "standard_error": "",
+                    "variance_method": "categorical-{}".format(policy),
+                    "batch_adjusted": "no",
+                    "state": observed_levels[0] if len(observed_levels) == 1 else "",
+                    "state_counts": ";".join(
+                        "{}:{}".format(level, int(counts[level])) for level in levels
+                    ),
+                    "state_probabilities": ";".join(
+                        "{}:{:.17g}".format(level, probabilities[index])
+                        for index, level in enumerate(levels)
+                    ),
+                    "n_levels": len(levels),
+                }
+            )
+        values_by_trait[trait] = values_by_leaf
+        models[trait] = "categorical-{}".format(policy)
+    return ReplicateEstimates(
+        values_by_trait=values_by_trait,
+        sampling_covariance_by_trait={},
+        tip_summary=pd.DataFrame(summary_rows, columns=TIP_SUMMARY_COLUMNS),
+        model_by_trait=models,
+    )
+
+
+def estimate_likelihood_replicates(
+    dataframe,
+    tree_leaf_names,
+    traits,
+    *,
+    biological_id,
+    technical_id=None,
+    technical_aggregation="error",
+    allow_missing_traits=(),
+    tree_id="",
+):
+    """Retain numeric replicates, including permitted censored observations."""
+    if biological_id is None:
+        raise ValueError("Non-Gaussian replicate input requires a biological ID.")
+    if technical_aggregation not in {"error", "mean"}:
+        raise ValueError(
+            "Unsupported technical replicate aggregation: {}.".format(
+                technical_aggregation
+            )
+        )
+    leaf_names = [str(name) for name in tree_leaf_names]
+    traits = list(traits)
+    allow_missing_traits = _allowed_missing_trait_set(traits, allow_missing_traits)
+    dataframe = dataframe.copy()
+    _require_nonempty_ids(dataframe, "leaf_name", "non-Gaussian replicate input")
+    _require_nonempty_ids(dataframe, biological_id, "--biological-id")
+    dataframe["leaf_name"] = dataframe["leaf_name"].astype(str)
+    dataframe = dataframe[dataframe["leaf_name"].isin(set(leaf_names))]
+    for trait in traits:
+        dataframe[trait] = _numeric_trait(dataframe, trait)
+        if trait not in allow_missing_traits:
+            _validate_leaf_coverage(dataframe, leaf_names, trait)
+    observations = _aggregate_technical_replicates(
+        dataframe,
+        traits,
+        biological_id,
+        technical_id,
+        None,
+        technical_aggregation,
+    )
+    values_by_trait: dict[str, dict[str, object]] = {}
+    summary_rows = []
+    for trait in traits:
+        values_by_leaf: dict[str, object] = {}
+        for leaf_name in leaf_names:
+            selected = observations.loc[observations["leaf_name"] == leaf_name, trait]
+            if trait not in allow_missing_traits:
+                selected = selected.dropna()
+            values = tuple(float(value) for value in selected)
+            if not values:
+                raise ValueError(
+                    "Trait '{}' has no observations for tree tip '{}'.".format(
+                        trait, leaf_name
+                    )
+                )
+            values_by_leaf[leaf_name] = ReplicatedObservation(values)
+            technical_count = int(
+                observations.loc[
+                    observations["leaf_name"] == leaf_name,
+                    "_n_technical_{}".format(trait),
+                ].sum()
+            )
+            summary_rows.append(
+                _likelihood_summary_row(
+                    tree_id, leaf_name, trait, values, technical_count
+                )
+            )
+        values_by_trait[trait] = values_by_leaf
+    return ReplicateEstimates(
+        values_by_trait=values_by_trait,
+        sampling_covariance_by_trait={},
+        tip_summary=pd.DataFrame(summary_rows, columns=TIP_SUMMARY_COLUMNS),
+        model_by_trait={trait: "likelihood-replicates" for trait in traits},
+    )
+
+
+def _likelihood_summary_row(tree_id, leaf_name, trait, values, technical_count):
+    finite_values = np.asarray(values)[np.isfinite(values)]
+    return {
+        "tree_id": tree_id,
+        "leaf_name": leaf_name,
+        "trait": trait,
+        "n_biological": len(values),
+        "n_technical": technical_count,
+        "mean": float(np.mean(finite_values)) if finite_values.size else "",
+        "within_sd": (
+            float(np.std(finite_values, ddof=1)) if finite_values.size > 1 else 0.0
+        ),
+        "standard_error": "",
+        "variance_method": "likelihood-replicates",
+        "batch_adjusted": "no",
+    }
 
 
 def _require_nonempty_ids(dataframe, column, option_name):
@@ -129,6 +374,108 @@ def _aggregate_technical_replicates(
     return result
 
 
+def _known_se_trait_arrays(by_leaf, trait, se_column, allow_missing):
+    if se_column not in by_leaf.columns:
+        raise ValueError("Known-SE column '{}' is absent.".format(se_column))
+    values = pd.to_numeric(by_leaf[trait], errors="coerce")
+    ses = pd.to_numeric(by_leaf[se_column], errors="coerce")
+    if (values.isna() != ses.isna()).any() or (
+        not allow_missing and values.isna().any()
+    ):
+        raise ValueError(
+            "Known-SE input requires paired finite means and standard errors "
+            "for trait '{}'.".format(trait)
+        )
+    values_array = values.to_numpy(dtype=float)
+    se_array = ses.to_numpy(dtype=float)
+    observed = np.isfinite(values_array)
+    if not observed.any():
+        raise ValueError("Known-SE trait '{}' has no observations.".format(trait))
+    if np.any(np.isinf(values_array)) or np.any(np.isinf(se_array)):
+        raise ValueError(
+            "Known-SE input requires finite means and standard errors for trait '{}'.".format(
+                trait
+            )
+        )
+    if np.any(se_array < 0.0):
+        raise ValueError("Known standard errors must be non-negative.")
+    return values_array, se_array, observed
+
+
+def _known_sample_sizes(by_leaf, n_columns, index, observed):
+    if not n_columns:
+        return None
+    n_column = n_columns[index]
+    if n_column not in by_leaf.columns:
+        raise ValueError("Sample-size column '{}' is absent.".format(n_column))
+    n_array = pd.to_numeric(by_leaf[n_column], errors="coerce").to_numpy(float)
+    if np.any(np.isinf(n_array)) or np.any(np.isnan(n_array) != ~observed):
+        raise ValueError("Known sample sizes must be positive integers.")
+    if np.any(n_array[observed] <= 0.0) or np.any(
+        n_array[observed] != np.floor(n_array[observed])
+    ):
+        raise ValueError("Known sample sizes must be positive integers.")
+    return n_array
+
+
+def _known_se_summary_rows(
+    leaf_names, trait, values, ses, observed, sample_sizes, tree_id
+):
+    rows = []
+    for leaf_index, leaf_name in enumerate(leaf_names):
+        has_sample_size = sample_sizes is not None and observed[leaf_index]
+        rows.append(
+            {
+                "tree_id": tree_id,
+                "leaf_name": leaf_name,
+                "trait": trait,
+                "n_biological": (
+                    int(sample_sizes[leaf_index]) if has_sample_size else ""
+                ),
+                "n_technical": "",
+                "mean": values[leaf_index],
+                "within_sd": (
+                    ses[leaf_index] * math.sqrt(sample_sizes[leaf_index])
+                    if has_sample_size
+                    else ""
+                ),
+                "standard_error": ses[leaf_index] if observed[leaf_index] else "",
+                "variance_method": "known-se",
+                "batch_adjusted": "no",
+            }
+        )
+    return rows
+
+
+def _known_se_observation_rows(dataframe, traits, se_columns, n_columns):
+    for index, trait in enumerate(traits):
+        se_column = se_columns[index]
+        if se_column not in dataframe.columns:
+            raise ValueError("Known-SE column '{}' is absent.".format(se_column))
+        values = pd.to_numeric(dataframe[trait], errors="coerce")
+        ses = pd.to_numeric(dataframe[se_column], errors="coerce")
+        invalid_numeric = (dataframe[trait].notna() & values.isna()) | (
+            dataframe[se_column].notna() & ses.isna()
+        )
+        if invalid_numeric.any() or (values.isna() != ses.isna()).any():
+            raise ValueError(
+                "Known-SE input requires paired finite means and standard errors "
+                "for trait '{}'.".format(trait)
+            )
+        if n_columns:
+            n_column = n_columns[index]
+            if n_column not in dataframe.columns:
+                raise ValueError("Sample-size column '{}' is absent.".format(n_column))
+            sample_sizes = pd.to_numeric(dataframe[n_column], errors="coerce")
+            invalid_sample_size = dataframe[n_column].notna() & sample_sizes.isna()
+            if (
+                invalid_sample_size.any()
+                or (sample_sizes.isna() != values.isna()).any()
+            ):
+                raise ValueError("Known sample sizes must be positive integers.")
+    return dataframe[dataframe[traits].notna().any(axis=1)].copy()
+
+
 def _known_se_estimates(
     dataframe,
     leaf_names,
@@ -136,8 +483,9 @@ def _known_se_estimates(
     se_columns,
     n_columns,
     tree_id,
+    allow_missing_traits,
 ):
-    dataframe = dataframe[dataframe[traits].notna().any(axis=1)].copy()
+    dataframe = _known_se_observation_rows(dataframe, traits, se_columns, n_columns)
     if dataframe["leaf_name"].duplicated().any():
         raise ValueError("Known-SE input requires exactly one row per leaf_name.")
     by_leaf = dataframe.set_index("leaf_name").reindex(leaf_names)
@@ -146,67 +494,31 @@ def _known_se_estimates(
     models = {}
     rows = []
     for index, trait in enumerate(traits):
-        se_column = se_columns[index]
-        if se_column not in dataframe.columns:
-            raise ValueError("Known-SE column '{}' is absent.".format(se_column))
-        values = pd.to_numeric(by_leaf[trait], errors="coerce")
-        ses = pd.to_numeric(by_leaf[se_column], errors="coerce")
-        if values.isna().any() or ses.isna().any():
-            raise ValueError(
-                "Known-SE input requires finite means and standard errors for trait '{}'.".format(
-                    trait
-                )
-            )
-        values_array = values.to_numpy(dtype=float)
-        se_array = ses.to_numpy(dtype=float)
-        if not np.isfinite(values_array).all() or not np.isfinite(se_array).all():
-            raise ValueError(
-                "Known-SE input requires finite means and standard errors for trait '{}'.".format(
-                    trait
-                )
-            )
-        if np.any(se_array < 0.0):
-            raise ValueError("Known standard errors must be non-negative.")
-        if n_columns:
-            n_column = n_columns[index]
-            if n_column not in dataframe.columns:
-                raise ValueError("Sample-size column '{}' is absent.".format(n_column))
-            n_values = pd.to_numeric(by_leaf[n_column], errors="coerce")
-            if n_values.isna().any() or not np.isfinite(n_values.to_numpy(float)).all():
-                raise ValueError("Known sample sizes must be positive integers.")
-            n_array = n_values.to_numpy(dtype=float)
-            if np.any(n_array <= 0.0) or np.any(n_array != np.floor(n_array)):
-                raise ValueError("Known sample sizes must be positive integers.")
-            n_array = n_array.astype(int)
-        else:
-            n_array = None
-        covariance = pd.DataFrame(
-            np.diag(se_array**2), index=leaf_names, columns=leaf_names
+        values, ses, observed = _known_se_trait_arrays(
+            by_leaf,
+            trait,
+            se_columns[index],
+            trait in allow_missing_traits,
         )
-        values_by_trait[trait] = dict(zip(leaf_names, values_array, strict=True))
-        covariance_by_trait[trait] = covariance
+        sample_sizes = _known_sample_sizes(by_leaf, n_columns, index, observed)
+        covariance_diagonal = np.zeros(len(leaf_names), dtype=float)
+        covariance_diagonal[observed] = ses[observed] ** 2
+        covariance_by_trait[trait] = pd.DataFrame(
+            np.diag(covariance_diagonal), index=leaf_names, columns=leaf_names
+        )
+        values_by_trait[trait] = dict(zip(leaf_names, values, strict=True))
         models[trait] = "known-se"
-        for leaf_index, leaf_name in enumerate(leaf_names):
-            sample_size = "" if n_array is None else int(n_array[leaf_index])
-            within_sd = (
-                ""
-                if n_array is None
-                else se_array[leaf_index] * math.sqrt(n_array[leaf_index])
+        rows.extend(
+            _known_se_summary_rows(
+                leaf_names,
+                trait,
+                values,
+                ses,
+                observed,
+                sample_sizes,
+                tree_id,
             )
-            rows.append(
-                {
-                    "tree_id": tree_id,
-                    "leaf_name": leaf_name,
-                    "trait": trait,
-                    "n_biological": sample_size,
-                    "n_technical": "",
-                    "mean": values_array[leaf_index],
-                    "within_sd": within_sd,
-                    "standard_error": se_array[leaf_index],
-                    "variance_method": "known-se",
-                    "batch_adjusted": "no",
-                }
-            )
+        )
     return ReplicateEstimates(
         values_by_trait=values_by_trait,
         sampling_covariance_by_trait=covariance_by_trait,
@@ -405,6 +717,7 @@ def _prepare_raw_replicates(
     technical_aggregation,
     se_columns,
     n_columns,
+    allow_missing_traits,
 ):
     if se_columns or n_columns:
         raise ValueError(
@@ -447,30 +760,73 @@ def _prepare_raw_replicates(
         technical_aggregation,
     )
     for trait in traits:
-        _validate_leaf_coverage(dataframe, leaf_names, trait)
+        if trait not in allow_missing_traits:
+            _validate_leaf_coverage(dataframe, leaf_names, trait)
     return dataframe
 
 
-def _estimate_one_trait(dataframe, leaf_names, trait, batch, within_variance):
+def _estimate_one_trait(
+    dataframe, leaf_names, trait, batch, within_variance, *, allow_missing=False
+):
+    observed_leaf_names = [
+        leaf_name
+        for leaf_name in leaf_names
+        if dataframe.loc[dataframe["leaf_name"] == leaf_name, trait].notna().any()
+    ]
+    if not observed_leaf_names:
+        raise ValueError("Trait '{}' contains no observations.".format(trait))
+    fitted_leaf_names = observed_leaf_names if allow_missing else leaf_names
     if batch is not None:
-        estimates = _pooled_with_batch(dataframe, leaf_names, trait, batch)
+        estimates = _pooled_with_batch(dataframe, fitted_leaf_names, trait, batch)
         method = "pooled-batch-adjusted"
     elif within_variance == "leaf":
-        estimates = _leaf_specific_no_batch(dataframe, leaf_names, trait)
+        estimates = _leaf_specific_no_batch(dataframe, fitted_leaf_names, trait)
         method = "leaf"
     else:
-        estimates = _pooled_no_batch(dataframe, leaf_names, trait)
+        estimates = _pooled_no_batch(dataframe, fitted_leaf_names, trait)
         method = "pooled"
     means, covariance, counts, within_sd = estimates
+    if fitted_leaf_names != leaf_names:
+        means, covariance, counts, within_sd = _expand_trait_estimates(
+            leaf_names,
+            fitted_leaf_names,
+            means,
+            covariance,
+            counts,
+            within_sd,
+        )
+    covariance = _validated_sampling_covariance(covariance, means, allow_missing)
+    return means, covariance, counts, within_sd, method
+
+
+def _expand_trait_estimates(
+    leaf_names, fitted_leaf_names, means, covariance, counts, within_sd
+):
+    expanded_means = np.full(len(leaf_names), np.nan, dtype=float)
+    expanded_covariance = np.zeros((len(leaf_names), len(leaf_names)), dtype=float)
+    expanded_counts = np.zeros(len(leaf_names), dtype=int)
+    expanded_within_sd = np.full(len(leaf_names), np.nan, dtype=float)
+    selected = [leaf_names.index(name) for name in fitted_leaf_names]
+    expanded_means[selected] = means
+    expanded_covariance[np.ix_(selected, selected)] = covariance
+    expanded_counts[selected] = counts
+    expanded_within_sd[selected] = within_sd
+    return expanded_means, expanded_covariance, expanded_counts, expanded_within_sd
+
+
+def _validated_sampling_covariance(covariance, means, allow_missing):
     covariance = (np.asarray(covariance) + np.asarray(covariance).T) / 2.0
-    if not np.isfinite(means).all() or not np.isfinite(covariance).all():
+    invalid_means = np.isinf(means).any() or (
+        not allow_missing and not np.isfinite(means).all()
+    )
+    if invalid_means or not np.isfinite(covariance).all():
         raise ValueError("Replicate estimation produced non-finite values.")
     minimum_eigenvalue = float(np.linalg.eigvalsh(covariance).min())
     tolerance = np.finfo(float).eps * max(1.0, float(np.max(np.abs(covariance))))
     if minimum_eigenvalue < -tolerance:
         raise ValueError("Replicate estimation produced an invalid covariance matrix.")
     covariance[np.abs(covariance) < tolerance] = 0.0
-    return means, covariance, counts, within_sd, method
+    return covariance
 
 
 def _replicate_tip_rows(
@@ -490,11 +846,13 @@ def _replicate_tip_rows(
         selected.groupby("leaf_name", sort=False)["_n_technical_{}".format(trait)]
         .sum()
         .reindex(leaf_names)
+        .fillna(0)
         .to_numpy(int)
     )
     standard_errors = np.sqrt(np.maximum(np.diag(covariance), 0.0))
     rows = []
     for leaf_index, leaf_name in enumerate(leaf_names):
+        observed = counts[leaf_index] > 0
         rows.append(
             {
                 "tree_id": tree_id,
@@ -502,9 +860,11 @@ def _replicate_tip_rows(
                 "trait": trait,
                 "n_biological": int(counts[leaf_index]),
                 "n_technical": int(technical_counts[leaf_index]),
-                "mean": float(means[leaf_index]),
-                "within_sd": float(within_sd[leaf_index]),
-                "standard_error": float(standard_errors[leaf_index]),
+                "mean": float(means[leaf_index]) if observed else "",
+                "within_sd": float(within_sd[leaf_index]) if observed else "",
+                "standard_error": (
+                    float(standard_errors[leaf_index]) if observed else ""
+                ),
                 "variance_method": method,
                 "batch_adjusted": "yes" if batch is not None else "no",
             }
@@ -524,8 +884,10 @@ def estimate_replicate_traits(
     technical_aggregation="error",
     se_columns=(),
     n_columns=(),
+    allow_missing_traits=(),
     tree_id="",
 ):
+    """Estimate tip means and sampling covariance from response replicates."""
     leaf_names, traits = _validate_replicate_request(
         dataframe,
         tree_leaf_names,
@@ -536,6 +898,7 @@ def estimate_replicate_traits(
         within_variance,
     )
     dataframe = dataframe.copy()
+    allow_missing_traits = _allowed_missing_trait_set(traits, allow_missing_traits)
     _require_nonempty_ids(dataframe, "leaf_name", "replicate input")
     dataframe["leaf_name"] = dataframe["leaf_name"].astype(str)
     dataframe = dataframe[dataframe["leaf_name"].isin(set(leaf_names))].copy()
@@ -550,7 +913,13 @@ def estimate_replicate_traits(
             n_columns,
         )
         return _known_se_estimates(
-            dataframe, leaf_names, traits, list(se_columns), list(n_columns), tree_id
+            dataframe,
+            leaf_names,
+            traits,
+            list(se_columns),
+            list(n_columns),
+            tree_id,
+            allow_missing_traits,
         )
     dataframe = _prepare_raw_replicates(
         dataframe,
@@ -563,6 +932,7 @@ def estimate_replicate_traits(
         technical_aggregation,
         se_columns,
         n_columns,
+        allow_missing_traits,
     )
     values_by_trait = {}
     covariance_by_trait = {}
@@ -570,7 +940,12 @@ def estimate_replicate_traits(
     rows = []
     for trait in traits:
         means, covariance, counts, within_sd, method = _estimate_one_trait(
-            dataframe, leaf_names, trait, batch, within_variance
+            dataframe,
+            leaf_names,
+            trait,
+            batch,
+            within_variance,
+            allow_missing=trait in allow_missing_traits,
         )
         covariance_frame = pd.DataFrame(
             covariance, index=leaf_names, columns=leaf_names

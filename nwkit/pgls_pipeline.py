@@ -12,12 +12,13 @@ from typing import Any
 
 import numpy as np
 import pandas as pd
+from scipy.stats import chi2, norm, t
 
 from nwkit.clade_index import CladeIndex
 from nwkit.contrast import (
     _orient_children,
-    _read_numeric_traits,
-    _read_replicate_traits,
+    _read_mixed_replicate_traits,
+    _read_typed_traits,
     _validate_replicate_options,
     build_contrast_table,
     calculate_contrasts,
@@ -33,17 +34,39 @@ from nwkit.evolution import (
     optimization_parameterization,
     parameter_near_boundary,
 )
+from nwkit.model_matrix import (
+    PredictorTerm,
+    ReplicatedObservation,
+    encode_predictors,
+    parse_key_values,
+    parse_name_list,
+    parse_numeric_key_values,
+    parse_ordered_levels,
+    resolve_response_specs,
+    response_family_link,
+    validate_response_auxiliaries,
+)
+from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.ordinary_pgls import (
+    _categorical_shape_settings,
     _global_bounded_scalar_minimize,
     estimate_marginal_evolution_parameter,
 )
-from nwkit.pgls import fit_reconciled_pgls
+from nwkit.pgls import (
+    RANDOM_EFFECT_COLUMNS,
+    RESPONSE_REQUIRED_COLUMNS,
+    RESULT_COLUMNS,
+    fit_reconciled_pgls,
+)
+from nwkit.phylogenetic_glmm import SCALAR_RESPONSE_FAMILIES, fit_phylogenetic_glmm
 from nwkit.reconcile import _report_unmatched_species, build_reconciliation_table
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
     acquire_exclusive_lock,
     normalized_missing_path_key,
+    read_tip_table,
     read_tree,
+    read_tree_strings,
     validate_distinct_output_paths,
 )
 
@@ -63,7 +86,7 @@ class PglsPipelineArtifacts:
 
 @dataclass
 class _GeneResponseInputs:
-    values_by_trait: dict[str, dict[str, float]]
+    values_by_trait: dict[str, dict[str, Any]]
     sampling_covariance_by_trait: dict[str, pd.DataFrame] | None
     replicate_model_by_trait: dict[str, str] | None
     tip_summary: pd.DataFrame | None
@@ -71,10 +94,139 @@ class _GeneResponseInputs:
 
 @dataclass
 class _SpeciesPredictorInputs:
-    values_by_trait: dict[str, dict[str, float]]
+    values_by_trait: dict[str, dict[str, Any]]
     sampling_covariance_by_trait: dict[str, pd.DataFrame] | None
     replicate_model_by_trait: dict[str, str] | None
     tip_summary: pd.DataFrame | None
+
+
+def _ensemble_result_key_columns(results: pd.DataFrame) -> list[str]:
+    candidates = [
+        "response",
+        "response_family",
+        "response_level",
+        "term",
+        "source_term",
+        "predictor_type",
+        "predictor_level",
+        "predictor_reference",
+        "factor_coding",
+        "term_test",
+    ]
+    return [column for column in candidates if column in results.columns]
+
+
+def _combine_ensemble_results(
+    frames: list[pd.DataFrame], base_tree_id: str, confidence_level: float
+) -> pd.DataFrame:
+    combined = pd.concat(frames, ignore_index=True)
+    ensemble_size = len(frames)
+    key_columns = _ensemble_result_key_columns(combined)
+    rows = []
+    for _key, group in combined.groupby(key_columns, sort=False, dropna=False):
+        if group["tree_id"].duplicated().any():
+            raise RuntimeError(
+                "Tree-ensemble result keys are not unique within each tree."
+            )
+        row = group.iloc[0].to_dict()
+        row["tree_id"] = base_tree_id
+        row["model_id"] = "ensemble:{}:{}".format(base_tree_id, row.get("response", ""))
+        row["ensemble_size"] = ensemble_size
+        row["tree_support_fraction"] = group["tree_id"].nunique() / ensemble_size
+        coefficients = pd.to_numeric(group["coefficient"], errors="coerce")
+        standard_errors = pd.to_numeric(group["standard_error"], errors="coerce")
+        valid = coefficients.notna() & standard_errors.notna()
+        if valid.any():
+            estimates = coefficients[valid].to_numpy(float)
+            within_variance = float(
+                np.mean(standard_errors[valid].to_numpy(float) ** 2)
+            )
+            between_variance = (
+                0.0 if len(estimates) == 1 else float(np.var(estimates, ddof=1))
+            )
+            total_variance = (
+                within_variance + (1.0 + 1.0 / len(estimates)) * between_variance
+            )
+            estimate = float(np.mean(estimates))
+            standard_error = math.sqrt(max(total_variance, 0.0))
+            statistic = "" if standard_error == 0.0 else estimate / standard_error
+            extra_variance = (1.0 + 1.0 / len(estimates)) * between_variance
+            degrees_of_freedom = (
+                math.inf
+                if len(estimates) <= 1 or extra_variance <= 0.0
+                else (len(estimates) - 1)
+                * (1.0 + within_variance / extra_variance) ** 2
+            )
+            critical = float(
+                norm.ppf(0.5 + confidence_level / 2.0)
+                if math.isinf(degrees_of_freedom)
+                else t.ppf(0.5 + confidence_level / 2.0, degrees_of_freedom)
+            )
+            row.update(
+                {
+                    "coefficient": estimate,
+                    "standard_error": standard_error,
+                    "statistic": statistic,
+                    "p_value": (
+                        ""
+                        if standard_error == 0.0
+                        else float(
+                            2.0
+                            * (
+                                norm.sf(abs(float(statistic)))
+                                if math.isinf(degrees_of_freedom)
+                                else t.sf(abs(float(statistic)), degrees_of_freedom)
+                            )
+                        )
+                    ),
+                    "degrees_of_freedom": degrees_of_freedom,
+                    "confidence_interval_lower": estimate - critical * standard_error,
+                    "confidence_interval_upper": estimate + critical * standard_error,
+                    "between_tree_variance": between_variance,
+                    "inference_method": "tree-ensemble-rubin",
+                }
+            )
+        elif coefficients.notna().any():
+            estimates = coefficients.dropna().to_numpy(float)
+            row["coefficient"] = float(np.mean(estimates))
+            row["standard_error"] = ""
+            row["statistic"] = ""
+            row["p_value"] = ""
+            row["confidence_interval_lower"] = ""
+            row["confidence_interval_upper"] = ""
+            row["between_tree_variance"] = (
+                0.0 if len(estimates) == 1 else float(np.var(estimates, ddof=1))
+            )
+            row["inference_method"] = "tree-ensemble-descriptive"
+            row["inference_status"] = "no-within-tree-standard-error"
+        else:
+            row["statistic"] = ""
+            row["p_value"] = ""
+            row["between_tree_variance"] = ""
+            row["inference_method"] = "tree-ensemble-unpooled"
+            row["inference_status"] = "omnibus-requires-coefficient-covariance"
+        for column in [
+            "response_evolution_parameter",
+            "predictor_evolution_parameter",
+            "evolutionary_rate",
+            "species_event_variance",
+            "lineage_slope_variance",
+        ]:
+            numeric = pd.to_numeric(group[column], errors="coerce").dropna()
+            if len(numeric):
+                row[column] = float(numeric.mean())
+        optimizer_values = set(group["optimizer_converged"].astype(str))
+        row["optimizer_converged"] = "yes" if optimizer_values == {"yes"} else "no"
+        row["boundary_warning"] = (
+            "yes" if (group["boundary_warning"].astype(str) == "yes").any() else "no"
+        )
+        rows.append(row)
+    return pd.DataFrame(rows).reindex(columns=RESULT_COLUMNS)
+
+
+def _concat_optional_frames(frames):
+    available = [frame for frame in frames if frame is not None and not frame.empty]
+    return None if not available else pd.concat(available, ignore_index=True)
 
 
 def _active_pgls_bundle_paths(
@@ -84,29 +236,21 @@ def _active_pgls_bundle_paths(
     paths = pgls_bundle_paths(prefix)
     inactive = set()
     if artifacts.response_sampling_covariance is None:
-        if artifacts.response_tip_summary is not None:
-            raise RuntimeError(
-                "A response tip summary requires response sampling covariance."
-            )
-        inactive.update(
-            {"response_sampling_covariance_out", "response_tip_summary_out"}
-        )
+        inactive.add("response_sampling_covariance_out")
     elif artifacts.response_tip_summary is None:
         raise RuntimeError(
             "Replicate-aware covariance requires a response tip summary."
         )
+    if artifacts.response_tip_summary is None:
+        inactive.add("response_tip_summary_out")
     if artifacts.predictor_sampling_covariance is None:
-        if artifacts.predictor_tip_summary is not None:
-            raise RuntimeError(
-                "A predictor tip summary requires predictor sampling covariance."
-            )
-        inactive.update(
-            {"predictor_sampling_covariance_out", "predictor_tip_summary_out"}
-        )
+        inactive.add("predictor_sampling_covariance_out")
     elif artifacts.predictor_tip_summary is None:
         raise RuntimeError(
             "Replicate-aware predictor covariance requires a predictor tip summary."
         )
+    if artifacts.predictor_tip_summary is None:
+        inactive.add("predictor_tip_summary_out")
     return {name: path for name, path in paths.items() if name not in inactive}
 
 
@@ -381,6 +525,25 @@ def _effective_raw_args(args: Any) -> SimpleNamespace:
         "predictor_technical_aggregation": "error",
         "predictor_technical_id": None,
         "predictor_within_variance": "pooled",
+        "categorical_predictors": None,
+        "categorical_responses": None,
+        "categorical_replicate_policy": "error",
+        "factor_coding": "treatment",
+        "factor_reference": None,
+        "ordered_predictors": None,
+        "ordered_responses": None,
+        "response_reference": None,
+        "response_family": None,
+        "response_offset": None,
+        "response_trials": None,
+        "response_censor_lower": None,
+        "response_censor_upper": None,
+        "response_dispersion": None,
+        "response_zero_probability": None,
+        "coefficient_penalty": "student-t",
+        "coefficient_prior_sd": 2.5,
+        "multivariate_responses": False,
+        "allow_missing_responses": False,
         "sample_size_columns": None,
         "speciation_coverage": "complete",
         "species_branch_length": "original",
@@ -425,14 +588,41 @@ def _read_gene_response_inputs(
     args: Any,
     gene_tree,
     responses: list[str],
+    auxiliary_columns: list[str] | None = None,
 ) -> _GeneResponseInputs:
+    categorical_responses = parse_name_list(args.categorical_responses)
+    ordered_responses = parse_ordered_levels(
+        args.ordered_responses, "--ordered-responses"
+    )
+    response_families = parse_key_values(args.response_family, "--response-family")
+    auxiliary_columns = [] if auxiliary_columns is None else auxiliary_columns
+    selected_columns = list(dict.fromkeys(responses + auxiliary_columns))
     replicate_requested = _validate_replicate_options(args)
     replicate_estimates = (
-        _read_replicate_traits(
+        _read_mixed_replicate_traits(
             args,
             gene_tree,
-            responses,
+            selected_columns,
+            set(categorical_responses) | set(ordered_responses),
             args.tree_id,
+            categorical_policy="counts",
+            non_gaussian_columns={
+                response
+                for response, family in response_families.items()
+                if family in SCALAR_RESPONSE_FAMILIES
+            },
+            allow_missing_columns=(
+                (
+                    {response for response in responses}
+                    if args.multivariate_responses and args.allow_missing_responses
+                    else set()
+                )
+                | {
+                    response
+                    for response, family in response_families.items()
+                    if family == "censored-gaussian"
+                }
+            ),
             option_name="--expression",
         )
         if replicate_requested
@@ -441,10 +631,30 @@ def _read_gene_response_inputs(
     values_by_trait = (
         replicate_estimates.values_by_trait
         if replicate_estimates is not None
-        else _read_numeric_traits(
-            args, gene_tree, responses, option_name="--expression"
+        else _read_typed_traits(
+            args,
+            gene_tree,
+            selected_columns,
+            categorical=categorical_responses,
+            ordered=ordered_responses,
+            allow_missing={
+                response
+                for response, family in response_families.items()
+                if family == "censored-gaussian"
+            }
+            | (
+                set(responses)
+                if args.multivariate_responses and args.allow_missing_responses
+                else set()
+            ),
+            option_name="--expression",
         )
     )
+    tip_summary = (
+        None if replicate_estimates is None else replicate_estimates.tip_summary
+    )
+    if tip_summary is not None:
+        tip_summary = tip_summary[tip_summary["trait"].isin(responses)].copy()
     return _GeneResponseInputs(
         values_by_trait=values_by_trait,
         sampling_covariance_by_trait=(
@@ -455,10 +665,81 @@ def _read_gene_response_inputs(
         replicate_model_by_trait=(
             None if replicate_estimates is None else replicate_estimates.model_by_trait
         ),
-        tip_summary=(
-            None if replicate_estimates is None else replicate_estimates.tip_summary
-        ),
+        tip_summary=tip_summary,
     )
+
+
+def _read_gene_auxiliary_values(args, gene_tree, columns, *, allow_missing=False):
+    if not columns:
+        return {}
+    dataframe, _, _ = read_tip_table(
+        args.expression,
+        option_name="--expression",
+        tree_leaf_names=list(gene_tree.leaf_names()),
+        required_columns=columns,
+        unmatched=args.unmatched,
+        missing_values=args.missing_values,
+        duplicate_leaf_names="allow",
+    )
+    values_by_column = {}
+    for column in columns:
+        values_by_leaf = {}
+        for leaf_name in gene_tree.leaf_names():
+            selected_rows = dataframe.loc[dataframe["leaf_name"] == str(leaf_name)]
+            biological_id = getattr(args, "biological_id", None)
+            if biological_id is None:
+                numeric = pd.to_numeric(
+                    selected_rows[column], errors="coerce"
+                ).to_numpy(float)
+            else:
+                observations = []
+                for _identifier, group in selected_rows.groupby(
+                    biological_id, sort=False, dropna=False
+                ):
+                    group_values = pd.to_numeric(
+                        group[column], errors="coerce"
+                    ).to_numpy(float)
+                    finite_group = group_values[np.isfinite(group_values)]
+                    if len(finite_group) and np.any(finite_group != finite_group[0]):
+                        raise ValueError(
+                            "Auxiliary response column '{}' differs among technical "
+                            "rows for gene tip '{}'.".format(column, leaf_name)
+                        )
+                    observations.append(
+                        float("nan")
+                        if not len(finite_group)
+                        else float(finite_group[0])
+                    )
+                numeric = np.asarray(observations, dtype=float)
+            finite = numeric[np.isfinite(numeric)]
+            if not allow_missing and (not len(numeric) or len(finite) != len(numeric)):
+                raise ValueError(
+                    "Auxiliary response column '{}' must be finite for gene tip '{}'.".format(
+                        column, leaf_name
+                    )
+                )
+            if biological_id is None and len(finite) and np.any(finite != finite[0]):
+                raise ValueError(
+                    "Auxiliary response column '{}' differs among rows for gene tip '{}'.".format(
+                        column, leaf_name
+                    )
+                )
+            values_by_leaf[str(leaf_name)] = (
+                ReplicatedObservation(tuple(numeric))
+                if biological_id is not None
+                else float("nan")
+                if not len(finite)
+                else float(finite[0])
+            )
+        values_by_column[column] = values_by_leaf
+    return values_by_column
+
+
+def _map_response_auxiliary(column_by_response, values_by_column):
+    return {
+        response: values_by_column[column]
+        for response, column in column_by_response.items()
+    }
 
 
 def _read_species_predictor_inputs(
@@ -466,6 +747,8 @@ def _read_species_predictor_inputs(
     species_tree,
     predictors: list[str],
 ) -> _SpeciesPredictorInputs:
+    categorical_predictors = parse_name_list(args.categorical_predictors)
+    ordered_predictors = parse_ordered_levels(args.ordered_predictors)
     values = vars(args).copy()
     values.update(
         {
@@ -482,12 +765,15 @@ def _read_species_predictor_inputs(
     )
     predictor_args = SimpleNamespace(**values)
     replicate_requested = _validate_replicate_options(predictor_args)
+    discrete_predictors = set(categorical_predictors) | set(ordered_predictors)
     replicate_estimates = (
-        _read_replicate_traits(
+        _read_mixed_replicate_traits(
             predictor_args,
             species_tree,
             predictors,
+            discrete_predictors,
             "species",
+            categorical_policy=args.categorical_replicate_policy,
             option_name="--species-traits",
         )
         if replicate_requested
@@ -496,10 +782,12 @@ def _read_species_predictor_inputs(
     values_by_trait = (
         replicate_estimates.values_by_trait
         if replicate_estimates is not None
-        else _read_numeric_traits(
+        else _read_typed_traits(
             predictor_args,
             species_tree,
             predictors,
+            categorical=categorical_predictors,
+            ordered=ordered_predictors,
             option_name="--species-traits",
         )
     )
@@ -590,6 +878,7 @@ def _fit_candidate_reconciled_model(
     predictors: list[str],
     sampling_covariance: pd.DataFrame | None,
     predictor_sampling_covariance: pd.DataFrame | None,
+    predictor_group_uncertainties,
 ) -> pd.DataFrame:
     return fit_reconciled_pgls(
         gene_contrasts,
@@ -602,6 +891,7 @@ def _fit_candidate_reconciled_model(
         model=args.model,
         response_sampling_covariance=sampling_covariance,
         predictor_sampling_covariance=predictor_sampling_covariance,
+        predictor_group_uncertainties=predictor_group_uncertainties,
         inference="wald",
         bootstrap_replicates=2,
         seed=args.seed,
@@ -620,6 +910,7 @@ def _estimate_gene_response_parameter(
     species_contrasts: pd.DataFrame,
     predictor_sampling_covariance: pd.DataFrame | None,
     predictors: list[str],
+    predictor_group_uncertainties,
 ) -> tuple[pd.DataFrame, pd.DataFrame | None, dict[str, Any]]:
     bounds, decode = optimization_parameterization(
         gene_tree,
@@ -648,6 +939,7 @@ def _estimate_gene_response_parameter(
                     predictors,
                     covariance,
                     predictor_sampling_covariance,
+                    predictor_group_uncertainties,
                 )
                 likelihoods = pd.to_numeric(
                     result["log_likelihood"], errors="coerce"
@@ -714,6 +1006,7 @@ def _build_gene_contrasts(
     species_contrasts: pd.DataFrame,
     predictor_sampling_covariance: pd.DataFrame | None,
     predictors: list[str],
+    predictor_group_uncertainties=(),
 ) -> tuple[
     pd.DataFrame,
     pd.DataFrame | None,
@@ -750,6 +1043,7 @@ def _build_gene_contrasts(
                 species_contrasts,
                 predictor_sampling_covariance,
                 predictors,
+                predictor_group_uncertainties,
             )
         else:
             parameter = (
@@ -789,6 +1083,7 @@ def _build_species_contrasts(
     species_tree,
     predictor_inputs: _SpeciesPredictorInputs,
     predictors: list[str],
+    predictor_groups: dict[str, tuple[str, ...]] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame | None, dict[str, dict[str, Any]]]:
     spec = evolution_model_spec(args.species_evolution_model)
     auto_parameter = (
@@ -800,18 +1095,45 @@ def _build_species_contrasts(
     diagnostics_by_predictor = {}
     sampling_by_trait = predictor_inputs.sampling_covariance_by_trait
     replicate_models = predictor_inputs.replicate_model_by_trait
+    predictor_groups = (
+        {predictor: (predictor,) for predictor in predictors}
+        if predictor_groups is None
+        else predictor_groups
+    )
+    shared_diagnostics = {}
+    if auto_parameter:
+        for source, terms in predictor_groups.items():
+            if len(terms) == 1:
+                continue
+            shared_diagnostics[source] = _estimate_factor_evolution_parameter(
+                species_tree,
+                predictor_inputs.values_by_trait,
+                terms,
+                evolution_model=args.species_evolution_model,
+                branch_length=args.species_branch_length,
+            )
+    source_by_term = {
+        term: source for source, terms in predictor_groups.items() for term in terms
+    }
     for predictor in predictors:
+        predictor_sampling = (
+            None
+            if not sampling_by_trait or predictor not in sampling_by_trait
+            else sampling_by_trait[predictor]
+        )
         parameter: float | None
-        if auto_parameter:
+        source = source_by_term[predictor]
+        if source in shared_diagnostics:
+            diagnostics = shared_diagnostics[source]
+            parameter = float(diagnostics["parameter"])
+        elif auto_parameter:
             diagnostics = estimate_marginal_evolution_parameter(
                 species_tree,
                 predictor_inputs.values_by_trait[predictor],
                 predictor,
                 evolution_model=args.species_evolution_model,
                 branch_length=args.species_branch_length,
-                sampling_covariance=(
-                    None if sampling_by_trait is None else sampling_by_trait[predictor]
-                ),
+                sampling_covariance=predictor_sampling,
             )
             parameter = float(diagnostics["parameter"])
         else:
@@ -831,13 +1153,11 @@ def _build_species_contrasts(
             evolution_parameter=parameter,
             tree_id="species",
             sampling_covariance_by_trait=(
-                None
-                if sampling_by_trait is None
-                else {predictor: sampling_by_trait[predictor]}
+                None if predictor_sampling is None else {predictor: predictor_sampling}
             ),
             replicate_model_by_trait=(
                 None
-                if replicate_models is None
+                if predictor_sampling is None or replicate_models is None
                 else {predictor: replicate_models[predictor]}
             ),
             tip_summary=(
@@ -847,10 +1167,10 @@ def _build_species_contrasts(
                     predictor_inputs.tip_summary["trait"] == predictor
                 ].copy()
             ),
-            return_sampling_covariance=sampling_by_trait is not None,
+            return_sampling_covariance=predictor_sampling is not None,
             tree_option_name="--species-tree",
         )
-        if sampling_by_trait is None:
+        if predictor_sampling is None:
             frames.append(output)
         else:
             contrasts, covariance = output
@@ -859,7 +1179,7 @@ def _build_species_contrasts(
         diagnostics_by_predictor[predictor] = diagnostics
     covariance_table = (
         None
-        if sampling_by_trait is None
+        if not covariance_frames
         else pd.concat(covariance_frames, ignore_index=True)
     )
     return (
@@ -867,6 +1187,181 @@ def _build_species_contrasts(
         covariance_table,
         diagnostics_by_predictor,
     )
+
+
+def _estimate_factor_evolution_parameter(
+    tree,
+    values_by_trait,
+    terms,
+    *,
+    evolution_model,
+    branch_length,
+):
+    """Estimate one coding-invariant shape parameter for a factor's columns."""
+    leaf_names = [str(leaf.name) for leaf in tree.leaves()]
+    response = np.column_stack(
+        [[float(values_by_trait[term][name]) for name in leaf_names] for term in terms]
+    )
+    bounds, decode = optimization_parameterization(
+        tree, evolution_model, branch_length=branch_length
+    )
+
+    def objective(encoded_parameter):
+        try:
+            parameter = float(decode(float(encoded_parameter)))
+            covariance = build_evolutionary_covariance(
+                tree,
+                leaf_names,
+                model=evolution_model,
+                parameter=parameter,
+                branch_length=branch_length,
+            )
+            cholesky = np.linalg.cholesky(covariance)
+            inverse_response = np.linalg.solve(
+                cholesky.T, np.linalg.solve(cholesky, response)
+            )
+            ones = np.ones(len(leaf_names), dtype=float)
+            inverse_ones = np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, ones))
+            mean = (ones @ inverse_response) / float(ones @ inverse_ones)
+            residual = response - mean[None, :]
+            inverse_residual = np.linalg.solve(
+                cholesky.T, np.linalg.solve(cholesky, residual)
+            )
+            trait_covariance = residual.T @ inverse_residual / len(leaf_names)
+            trait_cholesky = np.linalg.cholesky(trait_covariance)
+            logdet_tree = 2.0 * float(np.sum(np.log(np.diag(cholesky))))
+            logdet_trait = 2.0 * float(np.sum(np.log(np.diag(trait_cholesky))))
+            return 0.5 * (
+                len(terms) * logdet_tree
+                + len(leaf_names) * logdet_trait
+                + len(leaf_names) * len(terms) * (1.0 + math.log(2.0 * math.pi))
+            )
+        except (ValueError, np.linalg.LinAlgError, FloatingPointError):
+            return float("inf")
+
+    optimized = _global_bounded_scalar_minimize(objective, bounds)
+    if not math.isfinite(float(optimized.fun)):
+        raise ValueError(
+            "Factor evolutionary shape optimization found no finite likelihood."
+        )
+    parameter = float(decode(float(optimized.x)))
+    return {
+        "parameter": parameter,
+        "parameter_status": "estimated",
+        "log_likelihood": -float(optimized.fun),
+        "optimizer_converged": bool(optimized.success),
+        "optimizer_message": str(optimized.message),
+        "boundary_warning": parameter_near_boundary(
+            tree,
+            evolution_model,
+            parameter,
+            branch_length=branch_length,
+        ),
+    }
+
+
+def _categorical_contrast_uncertainties(
+    species_tree,
+    species_contrasts,
+    encoded_predictors,
+    predictor_diagnostics,
+    *,
+    evolution_model,
+    branch_length,
+):
+    clades = CladeIndex(species_tree)
+    node_by_id = {
+        clades.clade_id_for_node(node): node for node in species_tree.traverse()
+    }
+    states = []
+    audit_rows = []
+    for uncertainty in encoded_predictors.uncertainties:
+        term_names = tuple(uncertainty.term_names)
+        event_ids = (
+            species_contrasts[species_contrasts["trait"] == term_names[0]][
+                "branch_clade_id"
+            ]
+            .astype(str)
+            .tolist()
+        )
+        coefficient_matrices = []
+        for term_name in term_names:
+            diagnostics = predictor_diagnostics[term_name]
+            parameter = diagnostics["parameter"]
+            _, coefficients_by_node, leaf_names = calculate_contrasts(
+                species_tree,
+                encoded_predictors.values_by_trait[term_name],
+                branch_length=branch_length,
+                evolution_model=evolution_model,
+                evolution_parameter=parameter,
+                return_coefficients=True,
+            )
+            if leaf_names != [str(leaf.name) for leaf in species_tree.leaves()]:
+                raise RuntimeError("Categorical contrast leaf ordering changed.")
+            coefficient_matrices.append(
+                np.vstack(
+                    [
+                        coefficients_by_node[node_by_id[event_id]]
+                        for event_id in event_ids
+                    ]
+                )
+            )
+        event_count = len(event_ids)
+        dimension = len(term_names)
+        covariance = np.zeros(
+            (dimension, dimension, event_count, event_count), dtype=float
+        )
+        for first in range(dimension):
+            for second in range(dimension):
+                tip_cross_covariance = np.diag(
+                    uncertainty.covariance_by_observation[:, first, second]
+                )
+                covariance[first, second] = (
+                    coefficient_matrices[first]
+                    @ tip_cross_covariance
+                    @ coefficient_matrices[second].T
+                )
+        covariance = (covariance + covariance.transpose(1, 0, 3, 2)) / 2.0
+        flattened = covariance.transpose(2, 0, 3, 1).reshape(
+            event_count * dimension, event_count * dimension
+        )
+        eigenvalues = np.linalg.eigvalsh(flattened)
+        tolerance = (
+            np.finfo(float).eps
+            * max(1.0, float(np.max(np.abs(flattened))))
+            * max(1, len(flattened))
+            * 100.0
+        )
+        if float(np.min(eigenvalues)) < -tolerance:
+            raise ValueError(
+                "Categorical predictor contrast covariance is not positive semidefinite."
+            )
+        covariance[np.abs(covariance) < tolerance] = 0.0
+        states.append(
+            {
+                "source": uncertainty.source,
+                "term_names": term_names,
+                "event_ids": event_ids,
+                "covariance": covariance,
+            }
+        )
+        for first, first_term in enumerate(term_names):
+            for second, second_term in enumerate(term_names):
+                for first_event, first_id in enumerate(event_ids):
+                    for second_event in range(first_event, event_count):
+                        audit_rows.append(
+                            {
+                                "tree_id": "species",
+                                "trait": first_term,
+                                "trait_2": second_term,
+                                "contrast_id_1": first_id,
+                                "contrast_id_2": event_ids[second_event],
+                                "sampling_covariance": covariance[
+                                    first, second, first_event, second_event
+                                ],
+                            }
+                        )
+    return states, pd.DataFrame(audit_rows)
 
 
 def _yes_no(value: bool) -> str:
@@ -881,6 +1376,7 @@ def _attach_evolution_diagnostics(
     results: pd.DataFrame,
     response_diagnostics: dict[str, dict[str, Any]],
     predictor_diagnostics: dict[str, dict[str, Any]],
+    predictor_groups: dict[str, tuple[str, ...]] | None = None,
 ) -> pd.DataFrame:
     updated = results.copy()
     diagnostic_columns = [
@@ -899,7 +1395,12 @@ def _attach_evolution_diagnostics(
         updated[column] = updated[column].astype(object)
     for row_index, row in updated.iterrows():
         response = response_diagnostics[str(row["response"])]
-        predictor = predictor_diagnostics[str(row["term"])]
+        predictor_term = str(row["term"])
+        if row.get("term_test", "coefficient") == "omnibus":
+            if predictor_groups is None:
+                raise ValueError("Omnibus predictor diagnostics require term groups.")
+            predictor_term = predictor_groups[str(row["source_term"])][0]
+        predictor = predictor_diagnostics[predictor_term]
         updated.loc[row_index, "response_evolution_parameter_status"] = response[
             "parameter_status"
         ]
@@ -1074,6 +1575,7 @@ def _bootstrap_shape_refitted_coefficients(
     species_contrasts: pd.DataFrame,
     predictor_sampling_covariance: pd.DataFrame | None,
     predictors: list[str],
+    predictor_group_uncertainties,
     diagnostics: dict[str, Any],
     fit_state: dict[str, Any],
     seed: int,
@@ -1129,6 +1631,7 @@ def _bootstrap_shape_refitted_coefficients(
                 species_contrasts,
                 predictor_sampling_covariance,
                 predictors,
+                predictor_group_uncertainties,
             )
             bootstrap_result = _fit_candidate_reconciled_model(
                 args,
@@ -1138,6 +1641,7 @@ def _bootstrap_shape_refitted_coefficients(
                 predictors,
                 covariance,
                 predictor_sampling_covariance,
+                predictor_group_uncertainties,
             ).set_index("term")
         except ValueError:
             continue
@@ -1164,6 +1668,7 @@ def _apply_shape_refitted_bootstrap(
     species_contrasts: pd.DataFrame,
     predictor_sampling_covariance: pd.DataFrame | None,
     predictors: list[str],
+    predictor_group_uncertainties,
     response_diagnostics: dict[str, dict[str, Any]],
     fit_states: dict[tuple[str, str], dict[str, Any]],
 ) -> pd.DataFrame:
@@ -1183,6 +1688,7 @@ def _apply_shape_refitted_bootstrap(
             species_contrasts,
             predictor_sampling_covariance,
             predictors,
+            predictor_group_uncertainties,
             diagnostics,
             fit_state,
             args.seed + response_index,
@@ -1218,6 +1724,1075 @@ def _apply_shape_refitted_bootstrap(
     return updated
 
 
+def _lift_predictor_uncertainties_to_gene_tips(
+    encoded_predictors,
+    predictor_inputs,
+    species_leaf_names,
+    gene_species_indices,
+    *,
+    coefficient_offset,
+):
+    uncertainties = []
+    columns: list[int | tuple[int, ...]] = []
+    term_index = {
+        term.name: index + coefficient_offset
+        for index, term in enumerate(encoded_predictors.terms)
+    }
+    sampling = predictor_inputs.sampling_covariance_by_trait or {}
+    for term in encoded_predictors.terms:
+        if term.kind != "continuous" or term.name not in sampling:
+            continue
+        covariance = sampling[term.name]
+        if isinstance(covariance, pd.DataFrame):
+            matrix = covariance.loc[species_leaf_names, species_leaf_names].to_numpy(
+                dtype=float
+            )
+        else:
+            matrix = np.asarray(covariance, dtype=float)
+        uncertainties.append(matrix[np.ix_(gene_species_indices, gene_species_indices)])
+        columns.append(term_index[term.name])
+    for uncertainty in encoded_predictors.uncertainties:
+        selected = np.asarray(gene_species_indices, dtype=int)
+        species_covariance = uncertainty.covariance_by_observation
+        dimension = len(uncertainty.term_names)
+        lifted = np.zeros(
+            (dimension, dimension, len(selected), len(selected)), dtype=float
+        )
+        for first, species_index in enumerate(selected):
+            same_species = np.flatnonzero(selected == species_index)
+            lifted[:, :, first, same_species] = species_covariance[species_index][
+                :, :, None
+            ]
+        uncertainties.append(lifted)
+        columns.append(tuple(term_index[name] for name in uncertainty.term_names))
+    return uncertainties, columns
+
+
+def _reconciled_pglmm_base_row(
+    args,
+    response,
+    response_spec,
+    fit,
+    *,
+    n_gene_tips,
+    n_species,
+    num_parameters,
+    matrix_rank,
+    predictor_uncertainties,
+):
+    evolution_spec = evolution_model_spec(args.gene_evolution_model)
+    parameter_status = (
+        "not-applicable"
+        if evolution_spec.parameter_name is None
+        else fit.evolution_parameter_status
+    )
+    return {
+        "model_id": "{}:{}".format(args.tree_id, response),
+        "tree_id": args.tree_id,
+        "predictor_tree_id": "species",
+        "response": response,
+        "response_type": response_spec.kind,
+        "response_family": response_spec.family,
+        "response_level": "",
+        "response_reference": fit.reference,
+        "link_function": response_family_link(response_spec.family),
+        "response_dispersion": "" if fit.dispersion is None else fit.dispersion,
+        "zero_probability": (
+            "" if fit.zero_probability is None else fit.zero_probability
+        ),
+        "coefficient_penalty": fit.coefficient_penalty,
+        "coefficient_prior_sd": (
+            "" if fit.coefficient_prior_sd is None else fit.coefficient_prior_sd
+        ),
+        "separation_warning": "yes" if fit.separation_warning else "no",
+        "degrees_of_freedom": 1,
+        "n_gene_contrasts": 0,
+        "n_species_events": n_species,
+        "n_repeated_gene_contrasts": n_gene_tips - n_species,
+        "n_lineages": n_gene_tips,
+        "n_excluded_ineligible": 0,
+        "n_excluded_coverage": 0,
+        "num_parameters": num_parameters,
+        "matrix_rank": matrix_rank,
+        "condition_number": float(np.linalg.cond(fit.coefficient_covariance)),
+        "weighted_residual_sum_squares": "",
+        "residual_scale": "",
+        "r_squared_uncentered": "",
+        "intercept": "no" if response_spec.family == "ordinal" else "yes",
+        "event_weighting": "not-applicable",
+        "covariance_estimator": "laplace-ML",
+        "contrast_transform": "not-applicable-tip-pglmm",
+        "response_evolution_model": args.gene_evolution_model,
+        "response_evolution_parameter_name": evolution_spec.parameter_name or "",
+        "response_evolution_parameter": (
+            "" if fit.evolution_parameter is None else fit.evolution_parameter
+        ),
+        "response_evolution_parameter_status": parameter_status,
+        "response_evolution_optimizer_converged": (
+            "yes" if fit.optimizer_converged else "no"
+        ),
+        "response_evolution_optimizer_message": fit.optimizer_message,
+        "response_evolution_boundary_warning": (
+            "yes" if fit.boundary_warning else "no"
+        ),
+        "response_evolution_parameter_bootstrap_refit": "no",
+        "response_branch_length_mode": args.gene_branch_length,
+        "coverage_policy": args.speciation_coverage,
+        "small_sample_warning": "yes" if n_species < 20 else "no",
+        "inference_status": "ok",
+        "model": "reconciled-tip-pglmm",
+        "inference_method": fit.coefficient_inference,
+        "reml": "no",
+        "evolutionary_rate": fit.component_variances["phylogenetic"],
+        "species_event_variance": fit.component_variances.get("group", 0.0),
+        "lineage_slope_variance": 0.0,
+        "mean_sampling_variance": "",
+        "sampling_variance_fraction": "",
+        "mean_predictor_sampling_variance": "",
+        "mean_latent_predictor_variance": "",
+        "predictor_uncertainty_fraction": "",
+        "predictor_evolutionary_rate": "",
+        "predictor_rate_optimizer_converged": "",
+        "predictor_rate_optimizer_message": "",
+        "predictor_rate_boundary_warning": "",
+        "measurement_error_model": (
+            "latent-predictor" if predictor_uncertainties else "none"
+        ),
+        "log_likelihood": fit.log_likelihood,
+        "optimizer_converged": "yes" if fit.optimizer_converged else "no",
+        "boundary_warning": "yes" if fit.boundary_warning else "no",
+        "event_random_effect": "species-tip"
+        if "group" in fit.component_variances
+        else "no",
+        "lineage_random_slope": "no",
+    }
+
+
+def _reconciled_pglmm_rows(
+    args,
+    response,
+    response_spec,
+    fit,
+    terms,
+    predictor_groups,
+    predictor_diagnostics,
+    *,
+    confidence_level,
+    n_gene_tips,
+    n_species,
+    matrix_rank,
+    predictor_uncertainties,
+):
+    coefficient_count = fit.coefficients.size
+    num_parameters = (
+        coefficient_count
+        + len(fit.thresholds)
+        + len(fit.component_variances)
+        + (1 if fit.evolution_parameter_status == "estimated" else 0)
+        + (1 if fit.dispersion is not None else 0)
+        + (1 if fit.zero_probability is not None else 0)
+    )
+    base = _reconciled_pglmm_base_row(
+        args,
+        response,
+        response_spec,
+        fit,
+        n_gene_tips=n_gene_tips,
+        n_species=n_species,
+        num_parameters=num_parameters,
+        matrix_rank=matrix_rank,
+        predictor_uncertainties=predictor_uncertainties,
+    )
+    critical = float(norm.ppf(0.5 + confidence_level / 2.0))
+    dimension = fit.coefficients.shape[1]
+    response_levels = (
+        [""]
+        if response_spec.family == "ordinal"
+        or response_spec.family in SCALAR_RESPONSE_FAMILIES
+        else list(fit.levels[:-1])
+    )
+    rows = []
+    row_by_flat_index = {}
+    for term_index, term in enumerate(terms):
+        for level_index, level in enumerate(response_levels):
+            flat_index = term_index * dimension + level_index
+            coefficient = float(fit.coefficients[term_index, level_index])
+            standard_error = math.sqrt(
+                max(float(fit.coefficient_covariance[flat_index, flat_index]), 0.0)
+            )
+            statistic = "" if standard_error == 0.0 else coefficient / standard_error
+            p_value = (
+                ""
+                if standard_error == 0.0
+                else float(2.0 * norm.sf(abs(float(statistic))))
+            )
+            lower = coefficient - critical * standard_error
+            upper = coefficient + critical * standard_error
+            if fit.coefficient_statistics is not None:
+                statistic = float(fit.coefficient_statistics[flat_index])
+                assert fit.coefficient_p_values is not None
+                p_value = float(fit.coefficient_p_values[flat_index])
+            if fit.coefficient_confidence_lower is not None and np.isfinite(
+                fit.coefficient_confidence_lower[flat_index]
+            ):
+                lower = float(fit.coefficient_confidence_lower[flat_index])
+            if fit.coefficient_confidence_upper is not None and np.isfinite(
+                fit.coefficient_confidence_upper[flat_index]
+            ):
+                upper = float(fit.coefficient_confidence_upper[flat_index])
+            row = base.copy()
+            row.update(
+                {
+                    "response_level": level,
+                    "term": term.name,
+                    "source_term": term.source,
+                    "predictor_type": term.kind,
+                    "predictor_level": term.level,
+                    "predictor_reference": term.reference,
+                    "factor_coding": term.coding,
+                    "term_test": "coefficient",
+                    "coefficient": coefficient,
+                    "standard_error": standard_error,
+                    "statistic": statistic,
+                    "p_value": p_value,
+                    "confidence_level": confidence_level,
+                    "confidence_interval_lower": lower,
+                    "confidence_interval_upper": upper,
+                    "inference_status": (
+                        "zero-model-variance" if standard_error == 0.0 else "ok"
+                    ),
+                }
+            )
+            if term.kind != "intercept":
+                diagnostics = predictor_diagnostics[term.name]
+                predictor_spec = evolution_model_spec(args.species_evolution_model)
+                row.update(
+                    {
+                        "predictor_evolution_model": args.species_evolution_model,
+                        "predictor_evolution_parameter_name": (
+                            predictor_spec.parameter_name or ""
+                        ),
+                        "predictor_evolution_parameter": diagnostics["parameter"],
+                        "predictor_evolution_parameter_status": diagnostics[
+                            "parameter_status"
+                        ],
+                        "predictor_evolution_optimizer_converged": (
+                            _diagnostic_flag(diagnostics["optimizer_converged"])
+                        ),
+                        "predictor_evolution_optimizer_message": diagnostics[
+                            "optimizer_message"
+                        ],
+                        "predictor_evolution_boundary_warning": (
+                            _diagnostic_flag(diagnostics["boundary_warning"])
+                        ),
+                        "predictor_evolution_log_likelihood": diagnostics[
+                            "log_likelihood"
+                        ],
+                        "predictor_branch_length_mode": args.species_branch_length,
+                    }
+                )
+            row_by_flat_index[flat_index] = row
+            rows.append(row)
+    flat_coefficients = fit.coefficients.reshape(-1)
+    term_index_by_name = {term.name: index for index, term in enumerate(terms)}
+    for source, names in predictor_groups.items():
+        if dimension == 1 and len(names) == 1:
+            continue
+        indices = [
+            term_index_by_name[name] * dimension + response_index
+            for name in names
+            for response_index in range(dimension)
+        ]
+        selected = flat_coefficients[indices]
+        covariance = fit.coefficient_covariance[np.ix_(indices, indices)]
+        statistic = float(selected @ np.linalg.pinv(covariance) @ selected)
+        row = row_by_flat_index[indices[0]].copy()
+        row.update(
+            {
+                "response_level": "",
+                "term": source,
+                "source_term": source,
+                "predictor_level": "",
+                "term_test": "omnibus",
+                "coefficient": "",
+                "standard_error": "",
+                "statistic": statistic,
+                "degrees_of_freedom": len(indices),
+                "p_value": float(chi2.sf(statistic, len(indices))),
+                "confidence_interval_lower": "",
+                "confidence_interval_upper": "",
+            }
+        )
+        rows.append(row)
+    for threshold_index, threshold in enumerate(fit.thresholds):
+        standard_error = math.sqrt(
+            max(
+                float(fit.threshold_covariance[threshold_index, threshold_index]),
+                0.0,
+            )
+        )
+        row = base.copy()
+        row.update(
+            {
+                "response_level": fit.levels[threshold_index],
+                "term": "threshold[{}]".format(fit.levels[threshold_index]),
+                "source_term": "(threshold)",
+                "predictor_type": "threshold",
+                "term_test": "threshold",
+                "coefficient": float(threshold),
+                "standard_error": standard_error,
+                "confidence_level": confidence_level,
+                "confidence_interval_lower": float(threshold)
+                - critical * standard_error,
+                "confidence_interval_upper": float(threshold)
+                + critical * standard_error,
+                "inference_status": "ok",
+            }
+        )
+        rows.append(row)
+    return rows
+
+
+def _reconciled_categorical_context(gene_tree, species_tree, species_labels):
+    gene_tip_names = [str(leaf.name) for leaf in gene_tree.leaves()]
+    species_leaf_names = [str(leaf.name) for leaf in species_tree.leaves()]
+    species_index = {name: index for index, name in enumerate(species_leaf_names)}
+    unmapped = [name for name in gene_tip_names if species_labels[name] is None]
+    if unmapped:
+        raise ValueError(
+            "Categorical reconciled responses require every gene tip to map to a "
+            "species (unmapped: {}).".format(", ".join(unmapped))
+        )
+    gene_species = [str(species_labels[name]) for name in gene_tip_names]
+    gene_species_indices = [species_index[name] for name in gene_species]
+    return gene_tip_names, species_leaf_names, gene_species, gene_species_indices
+
+
+def _reconciled_categorical_design(gene_tip_names, gene_species, encoded_predictors):
+    predictor_columns = [
+        [
+            encoded_predictors.values_by_trait[term.name][species]
+            for species in gene_species
+        ]
+        for term in encoded_predictors.terms
+    ]
+    design = np.column_stack(
+        [np.ones(len(gene_tip_names), dtype=float)] + predictor_columns
+    )
+    terms = [PredictorTerm("(intercept)", "(intercept)", "intercept")] + list(
+        encoded_predictors.terms
+    )
+    group_covariance = np.equal.outer(gene_species, gene_species).astype(float)
+    if len(set(gene_species)) == len(gene_species):
+        group_covariance = None
+    return design, terms, group_covariance
+
+
+def _gene_covariance_factory(args, gene_tree, gene_tip_names):
+    def covariance_factory(parameter):
+        return build_evolutionary_covariance(
+            gene_tree,
+            gene_tip_names,
+            model=args.gene_evolution_model,
+            parameter=parameter,
+            branch_length=args.gene_branch_length,
+        )
+
+    return covariance_factory
+
+
+def _categorical_random_row(
+    args,
+    response,
+    effect_type,
+    group_id,
+    level,
+    conditional_mode,
+    variance_component,
+    n_observations,
+):
+    return {
+        "model_id": "{}:{}".format(args.tree_id, response),
+        "tree_id": args.tree_id,
+        "response": response,
+        "effect_type": effect_type,
+        "group_id": group_id,
+        "term": level,
+        "conditional_mode": float(conditional_mode),
+        "variance_component": variance_component,
+        "n_observations": n_observations,
+    }
+
+
+def _categorical_tip_random_rows(
+    args, response, fit, gene_tip_names, level_names, effect_type
+):
+    modes = fit.component_random_modes["phylogenetic"]
+    return [
+        _categorical_random_row(
+            args,
+            response,
+            effect_type,
+            tip_name,
+            level,
+            modes[tip_index, level_index],
+            fit.component_variances["phylogenetic"],
+            1,
+        )
+        for tip_index, tip_name in enumerate(gene_tip_names)
+        for level_index, level in enumerate(level_names)
+    ]
+
+
+def _categorical_group_random_rows(
+    args, response, fit, gene_species, level_names, effect_type
+):
+    if "group" not in fit.component_random_modes:
+        return []
+    modes = fit.component_random_modes["group"]
+    rows = []
+    for species in sorted(set(gene_species)):
+        members = [
+            index for index, value in enumerate(gene_species) if value == species
+        ]
+        for level_index, level in enumerate(level_names):
+            rows.append(
+                _categorical_random_row(
+                    args,
+                    response,
+                    effect_type,
+                    species,
+                    level,
+                    np.mean(modes[members, level_index]),
+                    fit.component_variances["group"],
+                    len(members),
+                )
+            )
+    return rows
+
+
+def _categorical_random_rows(
+    args, response, response_spec, fit, gene_tip_names, gene_species
+):
+    scalar = response_spec.family in SCALAR_RESPONSE_FAMILIES
+    level_names = (
+        [""] if response_spec.family == "ordinal" or scalar else list(fit.levels[:-1])
+    )
+    tip_effect = (
+        "phylogenetic_tip_linear_predictor" if scalar else "phylogenetic_tip_logit"
+    )
+    group_effect = "species_linear_predictor" if scalar else "species_logit"
+    return _categorical_tip_random_rows(
+        args, response, fit, gene_tip_names, level_names, tip_effect
+    ) + _categorical_group_random_rows(
+        args, response, fit, gene_species, level_names, group_effect
+    )
+
+
+def _fit_one_reconciled_categorical_response(
+    args,
+    response,
+    response_spec,
+    response_inputs,
+    gene_tree,
+    gene_tip_names,
+    species_leaf_names,
+    gene_species_indices,
+    base_design,
+    base_terms,
+    group_covariance,
+    encoded_predictors,
+    predictor_inputs,
+    response_offsets,
+    response_trials,
+    response_censor_lower,
+    response_censor_upper,
+    response_dispersions,
+    response_zero_probabilities,
+):
+    ordinal = response_spec.family == "ordinal"
+    design = base_design[:, 1:] if ordinal else base_design
+    terms = base_terms[1:] if ordinal else base_terms
+    if (
+        len(design) <= design.shape[1]
+        or np.linalg.matrix_rank(design) < design.shape[1]
+    ):
+        raise ValueError(
+            "Reconciled categorical model '{}' has a rank-deficient or saturated "
+            "design.".format(response)
+        )
+    predictor_uncertainties, predictor_columns = (
+        _lift_predictor_uncertainties_to_gene_tips(
+            encoded_predictors,
+            predictor_inputs,
+            species_leaf_names,
+            gene_species_indices,
+            coefficient_offset=0 if ordinal else 1,
+        )
+    )
+    fixed_parameter = (
+        None
+        if args.gene_evolution_parameter in {None, "auto"}
+        else float(args.gene_evolution_parameter)
+    )
+    shape_bounds, shape_decoder, shape_initial = _categorical_shape_settings(
+        gene_tree,
+        args.gene_evolution_model,
+        fixed_parameter,
+        args.gene_branch_length,
+    )
+    fit = fit_phylogenetic_glmm(
+        [response_inputs.values_by_trait[response][name] for name in gene_tip_names],
+        design,
+        _gene_covariance_factory(args, gene_tree, gene_tip_names),
+        family=response_spec.family,
+        levels=response_spec.levels,
+        reference=response_spec.reference,
+        group_covariance=group_covariance,
+        evolution_parameter=fixed_parameter,
+        evolution_parameter_bounds=shape_bounds,
+        evolution_parameter_decoder=shape_decoder,
+        evolution_parameter_initial=shape_initial,
+        predictor_uncertainties=predictor_uncertainties,
+        predictor_columns=predictor_columns,
+        offset=(
+            None
+            if response not in response_offsets
+            else [response_offsets[response][name] for name in gene_tip_names]
+        ),
+        trials=(
+            None
+            if response not in response_trials
+            else [response_trials[response][name] for name in gene_tip_names]
+        ),
+        censor_lower=(
+            None
+            if response not in response_censor_lower
+            else [response_censor_lower[response][name] for name in gene_tip_names]
+        ),
+        censor_upper=(
+            None
+            if response not in response_censor_upper
+            else [response_censor_upper[response][name] for name in gene_tip_names]
+        ),
+        dispersion=response_dispersions.get(response),
+        zero_probability=response_zero_probabilities.get(response),
+        coefficient_penalty=args.coefficient_penalty,
+        coefficient_prior_sd=args.coefficient_prior_sd,
+        inference=args.inference,
+        confidence_level=args.confidence_level,
+        bootstrap_replicates=args.bootstrap_replicates,
+        seed=args.seed,
+    )
+    return fit, design, terms, predictor_uncertainties
+
+
+def _fit_reconciled_categorical_responses(
+    args,
+    gene_tree,
+    species_tree,
+    species_labels,
+    response_inputs,
+    response_specs,
+    responses,
+    encoded_predictors,
+    predictor_inputs,
+    predictor_diagnostics,
+    response_offsets,
+    response_trials,
+    response_censor_lower,
+    response_censor_upper,
+    response_dispersions,
+    response_zero_probabilities,
+):
+    gene_tip_names, species_leaf_names, gene_species, gene_species_indices = (
+        _reconciled_categorical_context(gene_tree, species_tree, species_labels)
+    )
+    base_design, base_terms, group_covariance = _reconciled_categorical_design(
+        gene_tip_names, gene_species, encoded_predictors
+    )
+    rows = []
+    random_rows = []
+    for response in responses:
+        response_spec = response_specs[response]
+        fit, design, terms, predictor_uncertainties = (
+            _fit_one_reconciled_categorical_response(
+                args,
+                response,
+                response_spec,
+                response_inputs,
+                gene_tree,
+                gene_tip_names,
+                species_leaf_names,
+                gene_species_indices,
+                base_design,
+                base_terms,
+                group_covariance,
+                encoded_predictors,
+                predictor_inputs,
+                response_offsets,
+                response_trials,
+                response_censor_lower,
+                response_censor_upper,
+                response_dispersions,
+                response_zero_probabilities,
+            )
+        )
+        rows.extend(
+            _reconciled_pglmm_rows(
+                args,
+                response,
+                response_spec,
+                fit,
+                terms,
+                encoded_predictors.groups,
+                predictor_diagnostics,
+                confidence_level=args.confidence_level,
+                n_gene_tips=len(gene_tip_names),
+                n_species=len(set(gene_species)),
+                matrix_rank=int(np.linalg.matrix_rank(design)),
+                predictor_uncertainties=predictor_uncertainties,
+            )
+        )
+        random_rows.extend(
+            _categorical_random_rows(
+                args, response, response_spec, fit, gene_tip_names, gene_species
+            )
+        )
+    return (
+        pd.DataFrame(rows, columns=RESULT_COLUMNS),
+        pd.DataFrame(random_rows, columns=RANDOM_EFFECT_COLUMNS),
+    )
+
+
+def _reconciled_multivariate_rows(
+    args,
+    responses,
+    fit,
+    terms,
+    predictor_diagnostics,
+    *,
+    n_gene_tips,
+    n_species,
+    matrix_rank,
+):
+    critical = float(norm.ppf(0.5 + args.confidence_level / 2.0))
+    evolution_spec = evolution_model_spec(args.gene_evolution_model)
+    phylogenetic_trait_covariance = fit.component_trait_covariances["phylogenetic"]
+    species_trait_covariance = fit.component_trait_covariances.get(
+        "species", np.zeros_like(phylogenetic_trait_covariance)
+    )
+    coefficient_count = len(terms)
+    num_parameters = (
+        fit.coefficients.size
+        + sum(
+            covariance.shape[0] * (covariance.shape[0] + 1) // 2
+            for covariance in fit.component_trait_covariances.values()
+        )
+        + (1 if fit.evolution_parameter_status == "estimated" else 0)
+    )
+    base = {
+        "model_id": "{}:multivariate".format(args.tree_id),
+        "tree_id": args.tree_id,
+        "predictor_tree_id": "species",
+        "response_type": "multivariate-continuous",
+        "response_family": "multivariate-gaussian",
+        "response_level": "",
+        "response_reference": "",
+        "link_function": "identity",
+        "response_dispersion": "",
+        "zero_probability": "",
+        "coefficient_penalty": "none",
+        "coefficient_prior_sd": "",
+        "separation_warning": "no",
+        "degrees_of_freedom": fit.n_observations - fit.coefficients.size,
+        "n_gene_contrasts": 0,
+        "n_species_events": n_species,
+        "n_repeated_gene_contrasts": n_gene_tips - n_species,
+        "n_lineages": n_gene_tips,
+        "n_excluded_ineligible": 0,
+        "n_excluded_coverage": 0,
+        "num_parameters": num_parameters,
+        "matrix_rank": matrix_rank,
+        "condition_number": float(np.linalg.cond(fit.coefficient_covariance)),
+        "intercept": "yes",
+        "event_weighting": "not-applicable",
+        "covariance_estimator": (
+            "multivariate-gaussian-REML" if fit.reml else "multivariate-gaussian-ML"
+        ),
+        "contrast_transform": "not-applicable-tip-multivariate-pgls",
+        "response_evolution_model": args.gene_evolution_model,
+        "response_evolution_parameter_name": evolution_spec.parameter_name or "",
+        "response_evolution_parameter": (
+            "" if fit.evolution_parameter is None else fit.evolution_parameter
+        ),
+        "response_evolution_parameter_status": (
+            "not-applicable"
+            if evolution_spec.parameter_name is None
+            else fit.evolution_parameter_status
+        ),
+        "response_evolution_optimizer_converged": (
+            "yes" if fit.optimizer_converged else "no"
+        ),
+        "response_evolution_optimizer_message": fit.optimizer_message,
+        "response_evolution_boundary_warning": (
+            "yes" if fit.boundary_warning else "no"
+        ),
+        "response_evolution_parameter_bootstrap_refit": "no",
+        "response_branch_length_mode": args.gene_branch_length,
+        "coverage_policy": args.speciation_coverage,
+        "small_sample_warning": "yes" if n_species < 20 else "no",
+        "inference_status": "ok",
+        "model": "reconciled-tip-multivariate-pgls",
+        "inference_method": "wald",
+        "reml": "yes" if fit.reml else "no",
+        "measurement_error_model": "response-covariance",
+        "log_likelihood": fit.log_likelihood,
+        "optimizer_converged": "yes" if fit.optimizer_converged else "no",
+        "boundary_warning": "yes" if fit.boundary_warning else "no",
+        "event_random_effect": "species-tip"
+        if "species" in fit.component_trait_covariances
+        else "no",
+        "lineage_random_slope": "no",
+    }
+    rows = []
+    for response_index, response in enumerate(responses):
+        for term_index, term in enumerate(terms):
+            flat_index = response_index * coefficient_count + term_index
+            coefficient = float(fit.coefficients[response_index, term_index])
+            standard_error = math.sqrt(
+                max(float(fit.coefficient_covariance[flat_index, flat_index]), 0.0)
+            )
+            statistic = "" if standard_error == 0.0 else coefficient / standard_error
+            row = base.copy()
+            row.update(
+                {
+                    "response": response,
+                    "term": term.name,
+                    "source_term": term.source,
+                    "predictor_type": term.kind,
+                    "predictor_level": term.level,
+                    "predictor_reference": term.reference,
+                    "factor_coding": term.coding,
+                    "term_test": "coefficient",
+                    "coefficient": coefficient,
+                    "standard_error": standard_error,
+                    "statistic": statistic,
+                    "p_value": (
+                        ""
+                        if standard_error == 0.0
+                        else float(2.0 * norm.sf(abs(float(statistic))))
+                    ),
+                    "confidence_level": args.confidence_level,
+                    "confidence_interval_lower": coefficient
+                    - critical * standard_error,
+                    "confidence_interval_upper": coefficient
+                    + critical * standard_error,
+                    "evolutionary_rate": phylogenetic_trait_covariance[
+                        response_index, response_index
+                    ],
+                    "species_event_variance": species_trait_covariance[
+                        response_index, response_index
+                    ],
+                }
+            )
+            if term.kind != "intercept":
+                diagnostics = predictor_diagnostics[term.name]
+                row["predictor_evolution_model"] = args.species_evolution_model
+                row["predictor_evolution_parameter"] = diagnostics["parameter"]
+            rows.append(row)
+    for component_name, covariance in fit.component_trait_covariances.items():
+        for first, first_response in enumerate(responses):
+            for second in range(first, len(responses)):
+                row = base.copy()
+                second_response = responses[second]
+                row.update(
+                    {
+                        "response": "{}|{}".format(first_response, second_response),
+                        "term": "{}-covariance[{},{}]".format(
+                            component_name, first_response, second_response
+                        ),
+                        "source_term": "(response-covariance)",
+                        "predictor_type": "response-covariance",
+                        "term_test": "response-covariance",
+                        "coefficient": covariance[first, second],
+                        "confidence_level": args.confidence_level,
+                    }
+                )
+                rows.append(row)
+    return pd.DataFrame(rows, columns=RESULT_COLUMNS)
+
+
+def _fit_reconciled_multivariate_responses(
+    args,
+    gene_tree,
+    species_tree,
+    species_labels,
+    response_inputs,
+    responses,
+    encoded_predictors,
+    predictor_diagnostics,
+):
+    gene_tip_names, _species_names, gene_species, _indices = (
+        _reconciled_categorical_context(gene_tree, species_tree, species_labels)
+    )
+    design, terms, group_covariance = _reconciled_categorical_design(
+        gene_tip_names, gene_species, encoded_predictors
+    )
+    if encoded_predictors.uncertainties:
+        raise ValueError(
+            "Reconciled multivariate PGLS does not yet combine categorical "
+            "predictor uncertainty."
+        )
+    response_matrix = np.asarray(
+        [
+            [response_inputs.values_by_trait[response][name] for response in responses]
+            for name in gene_tip_names
+        ],
+        dtype=float,
+    )
+    fixed_covariance = np.zeros((response_matrix.size,) * 2, dtype=float)
+    for response_index, response in enumerate(responses):
+        sampling = response_inputs.sampling_covariance_by_trait or {}
+        if response not in sampling:
+            continue
+        covariance = (
+            sampling[response].loc[gene_tip_names, gene_tip_names].to_numpy(float)
+        )
+        start = response_index * len(gene_tip_names)
+        fixed_covariance[
+            start : start + len(gene_tip_names), start : start + len(gene_tip_names)
+        ] = covariance
+    fixed_parameter = (
+        None
+        if args.gene_evolution_parameter in {None, "auto"}
+        else float(args.gene_evolution_parameter)
+    )
+    shape_bounds, shape_decoder, shape_initial = _categorical_shape_settings(
+        gene_tree,
+        args.gene_evolution_model,
+        fixed_parameter,
+        args.gene_branch_length,
+    )
+    components = {
+        "phylogenetic": _gene_covariance_factory(args, gene_tree, gene_tip_names)
+    }
+    if group_covariance is not None:
+        components["species"] = group_covariance
+    fit = fit_multivariate_pgls(
+        response_matrix,
+        design,
+        components,
+        fixed_covariance=fixed_covariance,
+        evolution_parameter=fixed_parameter,
+        evolution_parameter_bounds=shape_bounds,
+        evolution_parameter_decoder=shape_decoder,
+        evolution_parameter_initial=shape_initial,
+        reml=args.reml,
+    )
+    return _reconciled_multivariate_rows(
+        args,
+        responses,
+        fit,
+        terms,
+        predictor_diagnostics,
+        n_gene_tips=len(gene_tip_names),
+        n_species=len(set(gene_species)),
+        matrix_rank=int(np.linalg.matrix_rank(design)),
+    )
+
+
+def _validate_reconciled_response_modes(raw_args, responses, response_specs):
+    continuous = [
+        response
+        for response in responses
+        if response_specs[response].family == "gaussian"
+    ]
+    non_gaussian = [
+        response
+        for response in responses
+        if response_specs[response].family != "gaussian"
+    ]
+    if raw_args.multivariate_responses:
+        if len(responses) < 2:
+            raise ValueError("Multivariate PGLS requires at least two responses.")
+        if non_gaussian:
+            raise ValueError("Multivariate PGLS currently requires Gaussian responses.")
+        if raw_args.inference != "wald":
+            raise ValueError("Multivariate PGLS currently supports Wald inference.")
+        if raw_args.model != "hierarchical":
+            raise ValueError(
+                "Reconciled multivariate responses require '--model hierarchical'."
+            )
+    if non_gaussian and raw_args.model != "hierarchical":
+        raise ValueError(
+            "Non-Gaussian reconciled responses require '--model hierarchical'."
+        )
+    if continuous and raw_args.inference in {
+        "likelihood-ratio",
+        "profile-likelihood",
+    }:
+        raise ValueError(
+            "Gaussian reconciled PGLS supports Wald or parametric-bootstrap inference."
+        )
+    return continuous, non_gaussian
+
+
+def _merge_predictor_covariance_audit(
+    predictor_sampling_covariance, grouped_predictor_covariance_audit
+):
+    fit_covariance = predictor_sampling_covariance
+    if grouped_predictor_covariance_audit.empty:
+        return predictor_sampling_covariance, fit_covariance
+    if predictor_sampling_covariance is None:
+        return grouped_predictor_covariance_audit, fit_covariance
+    scalar_audit = predictor_sampling_covariance.copy()
+    scalar_audit["trait_2"] = scalar_audit["trait"]
+    audit = pd.concat(
+        [scalar_audit, grouped_predictor_covariance_audit],
+        ignore_index=True,
+        sort=False,
+    )
+    return audit, fit_covariance
+
+
+def _reconciled_multivariate_artifacts(
+    raw_args,
+    gene_tree,
+    species_tree,
+    species_labels,
+    reconciliation,
+    response_inputs,
+    responses,
+    encoded_predictors,
+    predictor_inputs,
+    predictor_diagnostics,
+    species_contrasts,
+    predictor_sampling_covariance,
+    predictor_sampling_covariance_for_fit,
+    predictor_group_uncertainties,
+):
+    if (
+        predictor_sampling_covariance_for_fit is not None
+        or predictor_group_uncertainties
+    ):
+        raise ValueError(
+            "Reconciled multivariate PGLS does not yet combine predictor "
+            "measurement error; fit separate response models for that combination."
+        )
+    results = _fit_reconciled_multivariate_responses(
+        raw_args,
+        gene_tree,
+        species_tree,
+        species_labels,
+        response_inputs,
+        responses,
+        encoded_predictors,
+        predictor_diagnostics,
+    )
+    return PglsPipelineArtifacts(
+        reconciliation=reconciliation,
+        gene_contrasts=pd.DataFrame(columns=sorted(RESPONSE_REQUIRED_COLUMNS)),
+        species_contrasts=species_contrasts,
+        response_sampling_covariance=None,
+        response_tip_summary=response_inputs.tip_summary,
+        predictor_sampling_covariance=predictor_sampling_covariance,
+        predictor_tip_summary=predictor_inputs.tip_summary,
+        results=results.reindex(columns=RESULT_COLUMNS),
+        random_effects=pd.DataFrame(columns=RANDOM_EFFECT_COLUMNS),
+    )
+
+
+def _fit_reconciled_gaussian_responses(
+    raw_args,
+    gene_tree,
+    reconciliation,
+    response_inputs,
+    continuous_responses,
+    species_contrasts,
+    predictor_sampling_covariance_for_fit,
+    encoded_predictor_names,
+    predictor_group_uncertainties,
+    encoded_predictors,
+    predictor_diagnostics,
+):
+    if not continuous_responses:
+        return (
+            pd.DataFrame(columns=sorted(RESPONSE_REQUIRED_COLUMNS)),
+            None,
+            {},
+            pd.DataFrame(columns=RESULT_COLUMNS),
+            pd.DataFrame(columns=RANDOM_EFFECT_COLUMNS),
+            {},
+            False,
+        )
+    gene_contrasts, sampling_covariance, response_diagnostics = _build_gene_contrasts(
+        raw_args,
+        gene_tree,
+        reconciliation,
+        response_inputs,
+        continuous_responses,
+        species_contrasts,
+        predictor_sampling_covariance_for_fit,
+        encoded_predictor_names,
+        predictor_group_uncertainties,
+    )
+    refit_shape = raw_args.inference == "parametric-bootstrap" and any(
+        diagnostics["parameter_status"] == "estimated"
+        for diagnostics in response_diagnostics.values()
+    )
+    fitted = fit_reconciled_pgls(
+        gene_contrasts,
+        species_contrasts,
+        continuous_responses,
+        encoded_predictor_names,
+        confidence_level=raw_args.confidence_level,
+        event_weighting=raw_args.event_weighting,
+        coverage_policy=raw_args.speciation_coverage,
+        model=raw_args.model,
+        response_sampling_covariance=sampling_covariance,
+        predictor_sampling_covariance=predictor_sampling_covariance_for_fit,
+        predictor_group_uncertainties=predictor_group_uncertainties,
+        inference="wald" if refit_shape else raw_args.inference,
+        bootstrap_replicates=raw_args.bootstrap_replicates,
+        seed=raw_args.seed,
+        reml=raw_args.reml,
+        event_random_effect=raw_args.event_random_effect,
+        lineage_random_slope=raw_args.lineage_random_slope,
+        return_random_effects=True,
+        return_fit_state=refit_shape,
+        predictor_metadata=encoded_predictors.metadata_by_term,
+        predictor_groups=encoded_predictors.groups,
+    )
+    if refit_shape:
+        results, random_effects, fit_states = fitted
+    else:
+        results, random_effects = fitted
+        fit_states = {}
+    results = _attach_evolution_diagnostics(
+        results,
+        response_diagnostics,
+        predictor_diagnostics,
+        encoded_predictors.groups,
+    )
+    return (
+        gene_contrasts,
+        sampling_covariance,
+        response_diagnostics,
+        results,
+        random_effects,
+        fit_states,
+        refit_shape,
+    )
+
+
+def _merge_reconciled_result_frames(continuous, non_gaussian, columns):
+    frames = [frame for frame in [continuous, non_gaussian] if not frame.empty]
+    if not frames:
+        return pd.DataFrame(columns=columns)
+    return pd.concat(frames, ignore_index=True).reindex(columns=columns)
+
+
 def build_pgls_pipeline(
     args: Any,
     responses: list[str],
@@ -1225,6 +2800,10 @@ def build_pgls_pipeline(
 ) -> PglsPipelineArtifacts:
     """Run reconciliation, both PIC transforms, and hierarchical PGLS in memory."""
     raw_args = _effective_raw_args(args)
+    if raw_args.allow_missing_responses and not raw_args.multivariate_responses:
+        raise ValueError(
+            "--allow-missing-responses requires '--multivariate-responses yes'."
+        )
     gene_tree = read_tree(
         raw_args.gene_tree,
         raw_args.gene_tree_format,
@@ -1257,11 +2836,92 @@ def build_pgls_pipeline(
         event_source=raw_args.event_source,
         tree_id=raw_args.tree_id,
     )
+    categorical_responses = parse_name_list(raw_args.categorical_responses)
+    ordered_responses = parse_ordered_levels(
+        raw_args.ordered_responses, "--ordered-responses"
+    )
+    response_references = parse_key_values(
+        raw_args.response_reference, "--response-reference"
+    )
+    response_families = parse_key_values(raw_args.response_family, "--response-family")
+    response_offset_columns = parse_key_values(
+        raw_args.response_offset, "--response-offset"
+    )
+    response_trial_columns = parse_key_values(
+        raw_args.response_trials, "--response-trials"
+    )
+    response_lower_columns = parse_key_values(
+        raw_args.response_censor_lower, "--response-censor-lower"
+    )
+    response_upper_columns = parse_key_values(
+        raw_args.response_censor_upper, "--response-censor-upper"
+    )
+    response_dispersions = parse_numeric_key_values(
+        raw_args.response_dispersion, "--response-dispersion", lower=0.0
+    )
+    response_zero_probabilities = parse_numeric_key_values(
+        raw_args.response_zero_probability,
+        "--response-zero-probability",
+        lower=0.0,
+        upper=1.0,
+    )
     raw_args.trait = raw_args.expression
     response_inputs = _read_gene_response_inputs(
         raw_args,
         gene_tree,
         responses,
+    )
+    regular_auxiliary = _read_gene_auxiliary_values(
+        raw_args,
+        gene_tree,
+        sorted(
+            set(response_offset_columns.values()) | set(response_trial_columns.values())
+        ),
+    )
+    censor_auxiliary = _read_gene_auxiliary_values(
+        raw_args,
+        gene_tree,
+        sorted(
+            set(response_lower_columns.values()) | set(response_upper_columns.values())
+        ),
+        allow_missing=True,
+    )
+    response_offsets = _map_response_auxiliary(
+        response_offset_columns, regular_auxiliary
+    )
+    response_trials = _map_response_auxiliary(response_trial_columns, regular_auxiliary)
+    response_censor_lower = _map_response_auxiliary(
+        response_lower_columns, censor_auxiliary
+    )
+    response_censor_upper = _map_response_auxiliary(
+        response_upper_columns, censor_auxiliary
+    )
+    response_specs = resolve_response_specs(
+        response_inputs.values_by_trait,
+        responses,
+        [str(leaf.name) for leaf in gene_tree.leaves()],
+        categorical=categorical_responses,
+        ordered_levels=ordered_responses,
+        references=response_references,
+        families=response_families,
+        allow_missing=(
+            raw_args.multivariate_responses and raw_args.allow_missing_responses
+        )
+        or any(family == "censored-gaussian" for family in response_families.values()),
+    )
+    validate_response_auxiliaries(
+        response_specs,
+        offsets=response_offset_columns,
+        trials=response_trial_columns,
+        censor_lower=response_lower_columns,
+        censor_upper=response_upper_columns,
+        dispersions=response_dispersions,
+        zero_probabilities=response_zero_probabilities,
+    )
+    if raw_args.coefficient_prior_sd <= 0.0:
+        raise ValueError("--coefficient-prior-sd must be positive.")
+    continuous_responses, non_gaussian_response_names = (
+        _validate_reconciled_response_modes(raw_args, responses, response_specs)
     )
     raw_args.trait = raw_args.species_traits
     predictor_inputs = _read_species_predictor_inputs(
@@ -1269,6 +2929,31 @@ def build_pgls_pipeline(
         species_tree,
         predictors,
     )
+    categorical_predictors = parse_name_list(raw_args.categorical_predictors)
+    ordered_predictors = parse_ordered_levels(raw_args.ordered_predictors)
+    factor_references = parse_key_values(
+        raw_args.factor_reference, "--factor-reference"
+    )
+    encoded_predictors = encode_predictors(
+        predictor_inputs.values_by_trait,
+        predictors,
+        [str(leaf.name) for leaf in species_tree.leaves()],
+        categorical=categorical_predictors,
+        ordered_levels=ordered_predictors,
+        factor_references=factor_references,
+        factor_coding=raw_args.factor_coding,
+    )
+    encoded_sampling_covariance = dict(
+        predictor_inputs.sampling_covariance_by_trait or {}
+    )
+    encoded_replicate_models = dict(predictor_inputs.replicate_model_by_trait or {})
+    predictor_inputs = _SpeciesPredictorInputs(
+        values_by_trait=encoded_predictors.values_by_trait,
+        sampling_covariance_by_trait=(encoded_sampling_covariance or None),
+        replicate_model_by_trait=encoded_replicate_models or None,
+        tip_summary=predictor_inputs.tip_summary,
+    )
+    encoded_predictor_names = encoded_predictors.term_names
     (
         species_contrasts,
         predictor_sampling_covariance,
@@ -1277,51 +2962,93 @@ def build_pgls_pipeline(
         raw_args,
         species_tree,
         predictor_inputs,
-        predictors,
+        encoded_predictor_names,
+        encoded_predictors.groups,
     )
-    gene_contrasts, sampling_covariance, response_diagnostics = _build_gene_contrasts(
+    predictor_group_uncertainties, grouped_predictor_covariance_audit = (
+        _categorical_contrast_uncertainties(
+            species_tree,
+            species_contrasts,
+            encoded_predictors,
+            predictor_diagnostics,
+            evolution_model=raw_args.species_evolution_model,
+            branch_length=raw_args.species_branch_length,
+        )
+    )
+    predictor_sampling_covariance, predictor_sampling_covariance_for_fit = (
+        _merge_predictor_covariance_audit(
+            predictor_sampling_covariance, grouped_predictor_covariance_audit
+        )
+    )
+    if raw_args.multivariate_responses:
+        return _reconciled_multivariate_artifacts(
+            raw_args,
+            gene_tree,
+            species_tree,
+            species_labels,
+            reconciliation,
+            response_inputs,
+            responses,
+            encoded_predictors,
+            predictor_inputs,
+            predictor_diagnostics,
+            species_contrasts,
+            predictor_sampling_covariance,
+            predictor_sampling_covariance_for_fit,
+            predictor_group_uncertainties,
+        )
+    (
+        gene_contrasts,
+        sampling_covariance,
+        response_diagnostics,
+        continuous_results,
+        continuous_random_effects,
+        fit_states,
+        refit_shape_in_bootstrap,
+    ) = _fit_reconciled_gaussian_responses(
         raw_args,
         gene_tree,
         reconciliation,
         response_inputs,
-        responses,
+        continuous_responses,
         species_contrasts,
-        predictor_sampling_covariance,
-        predictors,
-    )
-    refit_shape_in_bootstrap = raw_args.inference == "parametric-bootstrap" and any(
-        diagnostics["parameter_status"] == "estimated"
-        for diagnostics in response_diagnostics.values()
-    )
-    fitted = fit_reconciled_pgls(
-        gene_contrasts,
-        species_contrasts,
-        responses,
-        predictors,
-        confidence_level=raw_args.confidence_level,
-        event_weighting=raw_args.event_weighting,
-        coverage_policy=raw_args.speciation_coverage,
-        model=raw_args.model,
-        response_sampling_covariance=sampling_covariance,
-        predictor_sampling_covariance=predictor_sampling_covariance,
-        inference="wald" if refit_shape_in_bootstrap else raw_args.inference,
-        bootstrap_replicates=raw_args.bootstrap_replicates,
-        seed=raw_args.seed,
-        reml=raw_args.reml,
-        event_random_effect=raw_args.event_random_effect,
-        lineage_random_slope=raw_args.lineage_random_slope,
-        return_random_effects=True,
-        return_fit_state=refit_shape_in_bootstrap,
-    )
-    if refit_shape_in_bootstrap:
-        results, random_effects, fit_states = fitted
-    else:
-        results, random_effects = fitted
-        fit_states = {}
-    results = _attach_evolution_diagnostics(
-        results,
-        response_diagnostics,
+        predictor_sampling_covariance_for_fit,
+        encoded_predictor_names,
+        predictor_group_uncertainties,
+        encoded_predictors,
         predictor_diagnostics,
+    )
+    if non_gaussian_response_names:
+        categorical_results, categorical_random_effects = (
+            _fit_reconciled_categorical_responses(
+                raw_args,
+                gene_tree,
+                species_tree,
+                species_labels,
+                response_inputs,
+                response_specs,
+                non_gaussian_response_names,
+                encoded_predictors,
+                predictor_inputs,
+                predictor_diagnostics,
+                response_offsets,
+                response_trials,
+                response_censor_lower,
+                response_censor_upper,
+                response_dispersions,
+                response_zero_probabilities,
+            )
+        )
+    else:
+        categorical_results = pd.DataFrame(columns=RESULT_COLUMNS)
+        categorical_random_effects = pd.DataFrame(columns=RANDOM_EFFECT_COLUMNS)
+    results = _merge_reconciled_result_frames(
+        continuous_results, categorical_results, RESULT_COLUMNS
+    )
+    random_effects = _merge_reconciled_result_frames(
+        continuous_random_effects,
+        categorical_random_effects,
+        RANDOM_EFFECT_COLUMNS,
     )
     if refit_shape_in_bootstrap:
         results = _apply_shape_refitted_bootstrap(
@@ -1330,10 +3057,11 @@ def build_pgls_pipeline(
             gene_tree,
             reconciliation,
             response_inputs,
-            responses,
+            continuous_responses,
             species_contrasts,
-            predictor_sampling_covariance,
-            predictors,
+            predictor_sampling_covariance_for_fit,
+            encoded_predictor_names,
+            predictor_group_uncertainties,
             response_diagnostics,
             fit_states,
         )
@@ -1347,6 +3075,50 @@ def build_pgls_pipeline(
         predictor_tip_summary=predictor_inputs.tip_summary,
         results=results,
         random_effects=random_effects,
+    )
+
+
+def build_pgls_ensemble_pipeline(
+    args: Any,
+    responses: list[str],
+    predictors: list[str],
+) -> PglsPipelineArtifacts:
+    """Fit a Newick sample and combine within- and between-tree uncertainty."""
+    tree_strings = read_tree_strings(args.gene_tree_ensemble)
+    if len(tree_strings) < 2:
+        raise ValueError("--gene-tree-ensemble requires at least two Newick trees.")
+    artifacts = []
+    for tree_index, tree_string in enumerate(tree_strings, start=1):
+        values = vars(args).copy()
+        values["gene_tree"] = tree_string
+        values["gene_tree_ensemble"] = None
+        values["tree_id"] = "{}#{}".format(args.tree_id, tree_index)
+        artifacts.append(
+            build_pgls_pipeline(SimpleNamespace(**values), responses, predictors)
+        )
+    results = _combine_ensemble_results(
+        [artifact.results for artifact in artifacts],
+        str(args.tree_id),
+        args.confidence_level,
+    )
+    return PglsPipelineArtifacts(
+        reconciliation=pd.concat(
+            [artifact.reconciliation for artifact in artifacts], ignore_index=True
+        ),
+        gene_contrasts=pd.concat(
+            [artifact.gene_contrasts for artifact in artifacts], ignore_index=True
+        ),
+        species_contrasts=artifacts[0].species_contrasts,
+        response_sampling_covariance=_concat_optional_frames(
+            [artifact.response_sampling_covariance for artifact in artifacts]
+        ),
+        response_tip_summary=artifacts[0].response_tip_summary,
+        predictor_sampling_covariance=artifacts[0].predictor_sampling_covariance,
+        predictor_tip_summary=artifacts[0].predictor_tip_summary,
+        results=results,
+        random_effects=pd.concat(
+            [artifact.random_effects for artifact in artifacts], ignore_index=True
+        ),
     )
 
 

@@ -218,6 +218,76 @@ def _read_numeric_traits(args, tree, columns, option_name="--trait"):
     return values_by_trait
 
 
+def _read_typed_traits(
+    args,
+    tree,
+    columns,
+    *,
+    categorical=(),
+    ordered=(),
+    allow_missing=(),
+    option_name="--trait",
+):
+    """Read continuous or categorical tip traits with global type inference."""
+    dataframe, _, _ = read_tip_table(
+        args.trait,
+        option_name=option_name,
+        tree_leaf_names=list(tree.leaf_names()),
+        required_columns=columns,
+        unmatched=args.unmatched,
+        missing_values=args.missing_values,
+    )
+    dataframe = dataframe[dataframe["leaf_name"].isin(set(tree.leaf_names()))]
+    row_by_leaf = dataframe.set_index("leaf_name", drop=False).to_dict("index")
+    discrete = set(categorical) | set(ordered)
+    allow_missing = set(allow_missing)
+    values_by_trait = {}
+    for column in columns:
+        raw_values = [
+            None
+            if row_by_leaf.get(str(name)) is None
+            else row_by_leaf[str(name)][column]
+            for name in tree.leaf_names()
+        ]
+        missing = [
+            str(name)
+            for name, value in zip(tree.leaf_names(), raw_values, strict=True)
+            if value is None or pd.isna(value)
+        ]
+        if missing and column not in allow_missing:
+            raise ValueError(
+                "Trait column '{}' has missing values for tree tips: {}.".format(
+                    column, ", ".join(sorted(missing))
+                )
+            )
+        numeric = pd.to_numeric(pd.Series(raw_values), errors="coerce")
+        categorical_column = column in discrete or (
+            column not in allow_missing and numeric.isna().any()
+        )
+        if categorical_column and missing:
+            raise ValueError(
+                "Categorical trait '{}' cannot contain missing values.".format(column)
+            )
+        numeric_values = numeric.to_numpy(float)
+        if not categorical_column:
+            invalid = (
+                np.isinf(numeric_values)
+                if column in allow_missing
+                else ~np.isfinite(numeric_values)
+            )
+            if invalid.any():
+                raise ValueError(
+                    "Trait column '{}' has non-finite values.".format(column)
+                )
+        values_by_trait[column] = {
+            str(name): str(value) if categorical_column else float(number)
+            for name, value, number in zip(
+                tree.leaf_names(), raw_values, numeric, strict=True
+            )
+        }
+    return values_by_trait
+
+
 def _parse_optional_columns(value, option_name, expected_length):
     if value in (None, ""):
         return []
@@ -316,7 +386,15 @@ def _validate_replicate_options(args):
     return False
 
 
-def _read_replicate_traits(args, tree, columns, tree_id, option_name="--trait"):
+def _read_replicate_traits(
+    args,
+    tree,
+    columns,
+    tree_id,
+    option_name="--trait",
+    *,
+    allow_missing_columns=(),
+):
     from nwkit.replicates import estimate_replicate_traits
 
     se_columns = _parse_optional_columns(
@@ -360,7 +438,163 @@ def _read_replicate_traits(args, tree, columns, tree_id, option_name="--trait"):
         technical_aggregation=getattr(args, "technical_aggregation", "error"),
         se_columns=se_columns,
         n_columns=n_columns,
+        allow_missing_traits=allow_missing_columns,
         tree_id=tree_id,
+    )
+
+
+def _read_mixed_replicate_traits(
+    args,
+    tree,
+    columns,
+    categorical_columns,
+    tree_id,
+    *,
+    categorical_policy="error",
+    non_gaussian_columns=(),
+    allow_missing_columns=(),
+    option_name="--trait",
+):
+    """Read a mixture of continuous and categorical replicate traits."""
+    from nwkit.replicates import (
+        ReplicateEstimates,
+        estimate_categorical_traits,
+        estimate_likelihood_replicates,
+    )
+
+    categorical_columns = set(categorical_columns)
+    non_gaussian_columns = set(non_gaussian_columns)
+    allow_missing_columns = set(allow_missing_columns)
+    inspection, _, _ = read_tip_table(
+        args.trait,
+        option_name=option_name,
+        tree_leaf_names=list(tree.leaf_names()),
+        required_columns=list(columns),
+        unmatched=args.unmatched,
+        missing_values=args.missing_values,
+        duplicate_leaf_names="allow",
+    )
+    for column in columns:
+        observed = inspection[column].dropna()
+        numeric = pd.to_numeric(observed, errors="coerce")
+        if numeric.isna().any():
+            categorical_columns.add(column)
+    overlap = categorical_columns & non_gaussian_columns
+    if overlap:
+        raise ValueError(
+            "Traits cannot be both categorical and scalar non-Gaussian: {}.".format(
+                ", ".join(sorted(overlap))
+            )
+        )
+    continuous_columns = [
+        column
+        for column in columns
+        if column not in categorical_columns and column not in non_gaussian_columns
+    ]
+    estimates = []
+    if continuous_columns:
+        estimates.append(
+            _read_replicate_traits(
+                args,
+                tree,
+                continuous_columns,
+                tree_id,
+                option_name=option_name,
+                allow_missing_columns=allow_missing_columns & set(continuous_columns),
+            )
+        )
+    if categorical_columns:
+        if getattr(args, "within_variance", "pooled") == "known-se":
+            raise ValueError(
+                "Known standard errors do not apply to categorical traits."
+            )
+        if getattr(args, "batch", None) is not None:
+            raise ValueError(
+                "Batch adjustment for categorical traits is not supported."
+            )
+        biological_id = getattr(args, "biological_id", None)
+        if biological_id is None:
+            raise ValueError("Categorical replicate input requires '--biological-id'.")
+        required_columns = list(categorical_columns) + [biological_id]
+        technical_id = getattr(args, "technical_id", None)
+        if technical_id is not None:
+            required_columns.append(technical_id)
+        dataframe, _, _ = read_tip_table(
+            args.trait,
+            option_name=option_name,
+            tree_leaf_names=list(tree.leaf_names()),
+            required_columns=required_columns,
+            unmatched=args.unmatched,
+            missing_values=args.missing_values,
+            duplicate_leaf_names="allow",
+        )
+        estimates.append(
+            estimate_categorical_traits(
+                dataframe,
+                list(tree.leaf_names()),
+                [column for column in columns if column in categorical_columns],
+                biological_id=biological_id,
+                technical_id=technical_id,
+                policy=categorical_policy,
+                tree_id=tree_id,
+            )
+        )
+    if non_gaussian_columns:
+        if getattr(args, "within_variance", "pooled") == "known-se":
+            raise ValueError(
+                "Known standard errors do not apply to non-Gaussian likelihood replicates."
+            )
+        if getattr(args, "batch", None) is not None:
+            raise ValueError(
+                "Batch adjustment for non-Gaussian likelihood replicates is not yet supported."
+            )
+        biological_id = getattr(args, "biological_id", None)
+        if biological_id is None:
+            raise ValueError("Non-Gaussian replicate input requires '--biological-id'.")
+        required_columns = list(non_gaussian_columns) + [biological_id]
+        technical_id = getattr(args, "technical_id", None)
+        if technical_id is not None:
+            required_columns.append(technical_id)
+        dataframe, _, _ = read_tip_table(
+            args.trait,
+            option_name=option_name,
+            tree_leaf_names=list(tree.leaf_names()),
+            required_columns=required_columns,
+            unmatched=args.unmatched,
+            missing_values=args.missing_values,
+            duplicate_leaf_names="allow",
+        )
+        estimates.append(
+            estimate_likelihood_replicates(
+                dataframe,
+                list(tree.leaf_names()),
+                [column for column in columns if column in non_gaussian_columns],
+                biological_id=biological_id,
+                technical_id=technical_id,
+                technical_aggregation=getattr(args, "technical_aggregation", "error"),
+                allow_missing_traits=(allow_missing_columns & non_gaussian_columns),
+                tree_id=tree_id,
+            )
+        )
+    return ReplicateEstimates(
+        values_by_trait={
+            trait: values
+            for estimate in estimates
+            for trait, values in estimate.values_by_trait.items()
+        },
+        sampling_covariance_by_trait={
+            trait: covariance
+            for estimate in estimates
+            for trait, covariance in estimate.sampling_covariance_by_trait.items()
+        },
+        tip_summary=pd.concat(
+            [estimate.tip_summary for estimate in estimates], ignore_index=True
+        ),
+        model_by_trait={
+            trait: model
+            for estimate in estimates
+            for trait, model in estimate.model_by_trait.items()
+        },
     )
 
 

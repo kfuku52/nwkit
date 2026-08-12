@@ -84,7 +84,7 @@ minimal worked example, in
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
-- [`pgls`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Fitting conventional tip-level Brownian, Pagel-lambda, OU, kappa, delta, early-burst/ACDC, independent, or custom-covariance PGLS with ML model comparison, or running reconciled-contrast PGLS end to end with response and predictor biological replicates, latent-predictor measurement error, and automatic shape-parameter estimation
+- [`pgls`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression

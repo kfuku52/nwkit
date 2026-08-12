@@ -5,7 +5,7 @@ from ete4 import Tree
 
 from nwkit.cli import main
 from nwkit.contrast import build_contrast_table
-from nwkit.replicates import estimate_replicate_traits
+from nwkit.replicates import estimate_likelihood_replicates, estimate_replicate_traits
 
 
 def _raw_replicates():
@@ -363,3 +363,90 @@ def test_known_se_and_raw_replicate_options_are_mutually_exclusive(tmp_path):
                 str(tmp_path / "covariance.tsv"),
             ]
         )
+
+
+def test_multivariate_replicates_allow_trait_specific_missing_tips():
+    dataframe = _raw_replicates().rename(columns={"expression": "first"})
+    dataframe["second"] = dataframe["first"] * 2.0
+    dataframe.loc[dataframe["leaf_name"] == "B", "second"] = np.nan
+
+    estimates = estimate_replicate_traits(
+        dataframe,
+        ["A", "B", "C"],
+        ["first", "second"],
+        biological_id="sample",
+        allow_missing_traits={"first", "second"},
+    )
+
+    assert np.isnan(estimates.values_by_trait["second"]["B"])
+    covariance = estimates.sampling_covariance_by_trait["second"]
+    np.testing.assert_allclose(covariance.loc["B"].to_numpy(float), 0.0)
+    summary = estimates.tip_summary.set_index(["trait", "leaf_name"])
+    assert summary.loc[("second", "B"), "n_biological"] == 0
+
+
+def test_known_se_multivariate_missingness_requires_paired_mean_and_se():
+    dataframe = pd.DataFrame(
+        {
+            "leaf_name": ["A", "B", "C"],
+            "first": [1.0, 2.0, 3.0],
+            "first_se": [0.1, 0.1, 0.1],
+            "second": [2.0, np.nan, 6.0],
+            "second_se": [0.2, np.nan, 0.2],
+        }
+    )
+    estimates = estimate_replicate_traits(
+        dataframe,
+        ["A", "B", "C"],
+        ["first", "second"],
+        within_variance="known-se",
+        se_columns=["first_se", "second_se"],
+        allow_missing_traits={"first", "second"},
+    )
+
+    assert np.isnan(estimates.values_by_trait["second"]["B"])
+    assert estimates.sampling_covariance_by_trait["second"].loc["B", "B"] == 0.0
+
+    dataframe.loc[dataframe["leaf_name"] == "B", "second_se"] = 0.2
+    with pytest.raises(ValueError, match="paired finite means"):
+        estimate_replicate_traits(
+            dataframe,
+            ["A", "B", "C"],
+            ["first", "second"],
+            within_variance="known-se",
+            se_columns=["first_se", "second_se"],
+            allow_missing_traits={"first", "second"},
+        )
+
+    dataframe.loc[dataframe["leaf_name"] == "B", ["first", "first_se"]] = np.nan
+    with pytest.raises(ValueError, match="paired finite means"):
+        estimate_replicate_traits(
+            dataframe,
+            ["A", "B", "C"],
+            ["first", "second"],
+            within_variance="known-se",
+            se_columns=["first_se", "second_se"],
+            allow_missing_traits={"first", "second"},
+        )
+
+
+def test_censored_likelihood_replicates_preserve_missing_observations():
+    dataframe = pd.DataFrame(
+        {
+            "leaf_name": ["A", "A", "B", "B"],
+            "sample": ["a1", "a2", "b1", "b2"],
+            "expression": [1.0, np.nan, 2.0, np.nan],
+        }
+    )
+    estimates = estimate_likelihood_replicates(
+        dataframe,
+        ["A", "B"],
+        ["expression"],
+        biological_id="sample",
+        allow_missing_traits={"expression"},
+    )
+
+    a_values = estimates.values_by_trait["expression"]["A"].values
+    b_values = estimates.values_by_trait["expression"]["B"].values
+    assert a_values[0] == 1.0 and np.isnan(a_values[1])
+    assert b_values[0] == 2.0 and np.isnan(b_values[1])

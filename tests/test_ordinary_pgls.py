@@ -163,6 +163,60 @@ def test_ordinary_brownian_pgls_matches_direct_gls_with_intercept():
     assert set(result["evolution_model"]) == {"brownian"}
 
 
+def test_ordinary_pgls_encodes_categorical_predictor_and_reports_omnibus_test():
+    habitats = dict(
+        zip(
+            LEAF_NAMES,
+            ["aquatic", "terrestrial", "arboreal", "terrestrial", "arboreal"],
+            strict=True,
+        )
+    )
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"expression": _values([2.0, 4.0, 8.0, 5.0, 9.0])},
+        {"habitat": habitats},
+        ["expression"],
+        ["habitat"],
+        categorical_predictors=["habitat"],
+        factor_references={"habitat": "aquatic"},
+    )
+
+    coefficient_rows = result[result["term_test"] == "coefficient"].set_index("term")
+    assert set(coefficient_rows.index) == {
+        "(intercept)",
+        "habitat[arboreal]",
+        "habitat[terrestrial]",
+    }
+    assert coefficient_rows.loc["habitat[arboreal]", "source_term"] == "habitat"
+    assert coefficient_rows.loc["habitat[arboreal]", "predictor_type"] == "categorical"
+    omnibus = result[result["term_test"] == "omnibus"].iloc[0]
+    assert omnibus["term"] == "habitat"
+    assert omnibus["degrees_of_freedom"] == 2
+    assert 0.0 <= omnibus["p_value"] <= 1.0
+
+
+def test_ordinary_pgls_auto_detects_string_predictor_as_categorical():
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"expression": _values([2.0, 4.0, 8.0, 5.0, 9.0])},
+        {
+            "habitat": dict(
+                zip(
+                    LEAF_NAMES,
+                    ["water", "land", "water", "land", "water"],
+                    strict=True,
+                )
+            )
+        },
+        ["expression"],
+        ["habitat"],
+    )
+
+    factor = result[result["term"] == "habitat[water]"].iloc[0]
+    assert factor["predictor_reference"] == "land"
+    assert factor["factor_coding"] == "treatment"
+
+
 def test_predictor_measurement_error_reduces_attenuation_in_simulation():
     names = ["S{}".format(index) for index in range(32)]
     nodes = ["{}:1".format(name) for name in names]
@@ -1059,3 +1113,452 @@ def test_conventional_pgls_tree_stdin_is_summarized_in_audit(monkeypatch, tmp_pa
     }
     assert record["primary_input"]["kind"] == "newick"
     assert record["primary_input"]["first_tree_tip_count"] == 5
+
+
+@pytest.mark.parametrize(
+    ("response_values", "options", "family"),
+    [
+        (
+            ["absent", "present", "absent", "present", "present"],
+            {},
+            "binomial",
+        ),
+        (
+            ["low", "middle", "high", "low", "high"],
+            {"categorical_responses": ["state"]},
+            "multinomial",
+        ),
+        (
+            ["low", "middle", "high", "low", "high"],
+            {"ordered_responses": {"state": ("low", "middle", "high")}},
+            "ordinal",
+        ),
+    ],
+)
+def test_conventional_phylogenetic_glmm_response_families(
+    response_values, options, family
+):
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"state": _values(response_values)},
+        {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+        ["state"],
+        ["body_size"],
+        **options,
+    )
+
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["response_family"]) == {family}
+    assert set(coefficients["model"]) == {"ordinary-pglmm"}
+    assert np.isfinite(pd.to_numeric(coefficients["coefficient"])).all()
+    if family == "ordinal":
+        assert "(intercept)" not in set(coefficients["term"])
+        assert len(result[result["term_test"] == "threshold"]) == 2
+
+
+@pytest.mark.integration
+def test_conventional_categorical_response_and_predictor_replicates(tmp_path):
+    tree_path = tmp_path / "species.nwk"
+    data_path = tmp_path / "categorical-replicates.tsv"
+    output_path = tmp_path / "categorical-pglmm.tsv"
+    response_summary_path = tmp_path / "response-summary.tsv"
+    predictor_summary_path = tmp_path / "predictor-summary.tsv"
+    tree_path.write_text(TREE_TEXT)
+    rows = []
+    response_states = [
+        ("absent", "present"),
+        ("absent", "absent"),
+        ("present", "absent"),
+        ("present", "present"),
+        ("present", "absent"),
+    ]
+    habitats = [
+        ("water", "land"),
+        ("land", "land"),
+        ("water", "water"),
+        ("land", "land"),
+        ("water", "water"),
+    ]
+    for leaf, states, habitat_states in zip(
+        LEAF_NAMES, response_states, habitats, strict=True
+    ):
+        for replicate in range(2):
+            rows.append(
+                {
+                    "leaf_name": leaf,
+                    "sample": "{}_{}".format(leaf, replicate + 1),
+                    "state": states[replicate],
+                    "habitat": habitat_states[replicate],
+                }
+            )
+    pd.DataFrame(rows).to_csv(data_path, sep="\t", index=False)
+
+    main(
+        [
+            "pgls",
+            "--tree",
+            str(tree_path),
+            "--data",
+            str(data_path),
+            "--responses",
+            "state",
+            "--predictors",
+            "habitat",
+            "--categorical-responses",
+            "state",
+            "--categorical-predictors",
+            "habitat",
+            "--biological-id",
+            "sample",
+            "--predictor-biological-id",
+            "sample",
+            "--categorical-replicate-policy",
+            "latent",
+            "--tip-summary-out",
+            str(response_summary_path),
+            "--predictor-tip-summary-out",
+            str(predictor_summary_path),
+            "--outfile",
+            str(output_path),
+        ]
+    )
+
+    result = pd.read_csv(output_path, sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["response_family"]) == {"binomial"}
+    assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
+    response_summary = pd.read_csv(response_summary_path, sep="\t")
+    assert set(response_summary["variance_method"]) == {"categorical-counts"}
+    predictor_summary = pd.read_csv(predictor_summary_path, sep="\t")
+    assert "categorical-latent" in set(predictor_summary["variance_method"])
+
+
+@pytest.mark.parametrize(
+    ("family", "values", "extra"),
+    [
+        ("poisson", [1, 2, 2, 4, 5], {}),
+        ("negative-binomial", [0, 1, 3, 4, 8], {}),
+        ("zero-inflated-poisson", [0, 0, 1, 3, 6], {}),
+        ("zero-inflated-negative-binomial", [0, 0, 1, 4, 9], {}),
+        ("hurdle-poisson", [0, 1, 2, 3, 6], {}),
+        ("hurdle-negative-binomial", [0, 1, 2, 3, 7], {}),
+        ("gamma", [1.0, 1.5, 2.0, 3.0, 4.5], {}),
+        ("lognormal", [1.0, 1.5, 2.0, 3.0, 4.5], {}),
+        ("beta", [0.1, 0.2, 0.4, 0.6, 0.8], {}),
+        (
+            "beta-binomial",
+            [1, 2, 4, 6, 8],
+            {"response_trials": {"state": _values([10, 10, 10, 10, 10])}},
+        ),
+    ],
+)
+def test_conventional_scalar_non_gaussian_response_families(family, values, extra):
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"state": _values(values)},
+        {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+        ["state"],
+        ["body_size"],
+        response_families={"state": family},
+        **extra,
+    )
+
+    assert set(result["response_family"]) == {family}
+    assert set(result["term_test"]) == {"coefficient"}
+    assert np.isfinite(pd.to_numeric(result["coefficient"])).all()
+    assert set(result["coefficient_penalty"]) == {"student-t"}
+
+
+def test_conventional_censored_gaussian_uses_bounds_for_missing_observations():
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"state": _values([1.0, np.nan, 3.0, np.nan, 5.0])},
+        {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+        ["state"],
+        ["body_size"],
+        response_families={"state": "censored-gaussian"},
+        response_censor_lower={"state": _values([np.nan, np.nan, np.nan, 3.5, np.nan])},
+        response_censor_upper={"state": _values([np.nan, 2.5, np.nan, np.nan, np.nan])},
+    )
+
+    assert set(result["response_family"]) == {"censored-gaussian"}
+    assert set(result["link_function"]) == {"identity"}
+    assert np.isfinite(pd.to_numeric(result["response_dispersion"])).all()
+    assert np.isfinite(pd.to_numeric(result["coefficient"])).all()
+
+
+def test_response_family_configuration_rejects_contradictory_or_ignored_options():
+    tree = _tree()
+    predictors = {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])}
+    with pytest.raises(ValueError, match="unordered categorical"):
+        fit_ordinary_pgls(
+            tree,
+            {"state": _values([0, 1, 0, 1, 1])},
+            predictors,
+            ["state"],
+            ["body_size"],
+            categorical_responses=["state"],
+            response_families={"state": "gaussian"},
+        )
+    with pytest.raises(ValueError, match="offset"):
+        fit_ordinary_pgls(
+            tree,
+            {"state": _values([1.0, 1.5, 2.0, 3.0, 4.5])},
+            predictors,
+            ["state"],
+            ["body_size"],
+            response_families={"state": "gamma"},
+            response_offsets={"state": _values([0.0] * 5)},
+        )
+    with pytest.raises(ValueError, match="strictly in"):
+        fit_ordinary_pgls(
+            tree,
+            {"state": _values([0, 0, 1, 3, 6])},
+            predictors,
+            ["state"],
+            ["body_size"],
+            response_families={"state": "zero-inflated-poisson"},
+            response_zero_probabilities={"state": 1.0},
+        )
+    with pytest.raises(ValueError, match="finite or missing"):
+        fit_ordinary_pgls(
+            tree,
+            {"state": _values([1.0, 1.5, 2.0, 3.0, 4.5])},
+            predictors,
+            ["state"],
+            ["body_size"],
+            response_families={"state": "censored-gaussian"},
+            response_censor_lower={
+                "state": _values([np.inf, np.nan, np.nan, np.nan, np.nan])
+            },
+        )
+    with pytest.raises(ValueError, match="must have a missing response"):
+        fit_ordinary_pgls(
+            tree,
+            {"state": _values([1.0, 1.5, 2.0, 3.0, 4.5])},
+            predictors,
+            ["state"],
+            ["body_size"],
+            response_families={"state": "censored-gaussian"},
+            response_censor_lower={
+                "state": _values([0.5, np.nan, np.nan, np.nan, np.nan])
+            },
+        )
+    with pytest.raises(ValueError, match="positive finite coefficient prior SD"):
+        fit_ordinary_pgls(
+            tree,
+            {"state": _values([1, 1, 2, 3, 5])},
+            predictors,
+            ["state"],
+            ["body_size"],
+            response_families={"state": "poisson"},
+            coefficient_prior_sd=float("nan"),
+        )
+
+
+def test_categorical_separation_is_regularized_and_likelihood_tested():
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"state": _values(["no", "no", "no", "yes", "yes"])},
+        {"body_size": _values([1.0, 2.0, 3.0, 4.0, 5.0])},
+        ["state"],
+        ["body_size"],
+        inference="likelihood-ratio",
+    )
+
+    assert set(result["separation_warning"]) == {"yes"}
+    assert set(result["inference_method"]) == {"likelihood-ratio"}
+    assert np.isfinite(pd.to_numeric(result["coefficient"])).all()
+    assert np.isfinite(pd.to_numeric(result["p_value"])).all()
+
+
+def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"state": _values([1, 2, 2, 4, 5])},
+        {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+        ["state"],
+        ["body_size"],
+        response_families={"state": "poisson"},
+        inference="profile-likelihood",
+    )
+
+    assert set(result["inference_method"]) == {"profile-likelihood"}
+    lower = pd.to_numeric(result["confidence_interval_lower"])
+    upper = pd.to_numeric(result["confidence_interval_upper"])
+    estimates = pd.to_numeric(result["coefficient"])
+    assert np.isfinite(lower).all() and np.isfinite(upper).all()
+    assert (lower < estimates).all() and (estimates < upper).all()
+
+
+@pytest.mark.parametrize(
+    ("values", "response_families"),
+    [
+        (["no", "no", "yes", "yes", "yes"], None),
+        ([1, 2, 2, 4, 5], {"state": "poisson"}),
+    ],
+)
+def test_non_gaussian_parametric_bootstrap_refits_the_family(values, response_families):
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"state": _values(values)},
+        {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+        ["state"],
+        ["body_size"],
+        response_families=response_families,
+        inference="parametric-bootstrap",
+        bootstrap_replicates=4,
+        seed=17,
+    )
+
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["inference_method"]) == {"parametric-bootstrap"}
+    assert np.isfinite(pd.to_numeric(coefficients["standard_error"])).all()
+    assert pd.to_numeric(coefficients["p_value"]).between(0.0, 1.0).all()
+    assert np.isfinite(pd.to_numeric(coefficients["confidence_interval_lower"])).all()
+
+
+def test_multivariate_gaussian_pgls_retains_partially_observed_tips():
+    responses = {
+        "first": _values([1.0, 2.0, 3.0, 4.0, 5.0]),
+        "second": _values([2.0, 3.5, np.nan, 6.5, 8.0]),
+    }
+    result = fit_ordinary_pgls(
+        _tree(),
+        responses,
+        {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+        ["first", "second"],
+        ["body_size"],
+        multivariate_responses=True,
+        allow_missing_responses=True,
+    )
+
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["response"]) == {"first", "second"}
+    assert set(coefficients["model"]) == {"ordinary-multivariate-pgls"}
+    covariance_rows = result[result["term_test"] == "response-covariance"]
+    assert len(covariance_rows) == 3
+    assert set(result["reml"]) == {"yes"}
+
+
+def test_missing_response_flag_requires_multivariate_model():
+    with pytest.raises(ValueError, match="requires multivariate_responses"):
+        fit_ordinary_pgls(
+            _tree(),
+            {"state": _values([1.0, 2.0, 3.0, 4.0, 5.0])},
+            {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+            ["state"],
+            ["body_size"],
+            allow_missing_responses=True,
+        )
+
+
+def test_multivariate_cli_combines_biological_replicates_with_partial_missingness(
+    tmp_path,
+):
+    tree_path = tmp_path / "species.nwk"
+    data_path = tmp_path / "multivariate-replicates.tsv"
+    output_path = tmp_path / "multivariate.tsv"
+    tree_path.write_text(TREE_TEXT)
+    rows = []
+    for index, (leaf_name, predictor) in enumerate(
+        zip(LEAF_NAMES, [1.0, 2.0, 4.0, 3.0, 7.0], strict=True), start=1
+    ):
+        for replicate in range(2):
+            rows.append(
+                {
+                    "leaf_name": leaf_name,
+                    "sample": "{}{}".format(leaf_name, replicate),
+                    "first": index + replicate * 0.2,
+                    "second": (
+                        np.nan if leaf_name == "C" else 2.0 * index + replicate * 0.2
+                    ),
+                    "body_size": predictor,
+                }
+            )
+    pd.DataFrame(rows).to_csv(data_path, sep="\t", index=False)
+
+    main(
+        [
+            "pgls",
+            "--tree",
+            str(tree_path),
+            "--data",
+            str(data_path),
+            "--responses",
+            "first,second",
+            "--predictors",
+            "body_size",
+            "--biological-id",
+            "sample",
+            "--multivariate-responses",
+            "yes",
+            "--allow-missing-responses",
+            "yes",
+            "--outfile",
+            str(output_path),
+        ]
+    )
+
+    result = pd.read_csv(output_path, sep="\t")
+    assert set(result["model"]) == {"ordinary-multivariate-pgls"}
+    assert set(result.loc[result["term_test"] == "coefficient", "response"]) == {
+        "first",
+        "second",
+    }
+
+
+def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path):
+    tree_path = tmp_path / "species.nwk"
+    data_path = tmp_path / "censored-replicates.tsv"
+    output_path = tmp_path / "censored.tsv"
+    tree_path.write_text(TREE_TEXT)
+    rows = []
+    for index, (leaf_name, predictor) in enumerate(
+        zip(LEAF_NAMES, [1.0, 2.0, 4.0, 3.0, 7.0], strict=True), start=1
+    ):
+        rows.extend(
+            [
+                {
+                    "leaf_name": leaf_name,
+                    "sample": "{}-exact".format(leaf_name),
+                    "state": float(index),
+                    "upper": np.nan,
+                    "body_size": predictor,
+                },
+                {
+                    "leaf_name": leaf_name,
+                    "sample": "{}-left".format(leaf_name),
+                    "state": np.nan,
+                    "upper": float(index) + 0.5,
+                    "body_size": predictor,
+                },
+            ]
+        )
+    pd.DataFrame(rows).to_csv(data_path, sep="\t", index=False)
+
+    main(
+        [
+            "pgls",
+            "--tree",
+            str(tree_path),
+            "--data",
+            str(data_path),
+            "--responses",
+            "state",
+            "--predictors",
+            "body_size",
+            "--biological-id",
+            "sample",
+            "--response-family",
+            "state=censored-gaussian",
+            "--response-censor-upper",
+            "state=upper",
+            "--outfile",
+            str(output_path),
+        ]
+    )
+
+    result = pd.read_csv(output_path, sep="\t")
+    assert set(result["response_family"]) == {"censored-gaussian"}
+    assert np.isfinite(result["coefficient"]).all()

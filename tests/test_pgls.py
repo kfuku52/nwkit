@@ -13,7 +13,12 @@ from nwkit import pgls as pgls_mod
 from nwkit import pgls_pipeline as pgls_pipeline_mod
 from nwkit.cli import main
 from nwkit.contrast import build_contrast_table
-from nwkit.pgls import fit_reconciled_pgls
+from nwkit.gaussian import (
+    factor_diagonal_low_rank_updates,
+    factor_logdet,
+    solve_factor,
+)
+from nwkit.pgls import _profile_covariance_fit, fit_reconciled_pgls
 from nwkit.pgls_pipeline import PglsPipelineArtifacts, write_pgls_bundle
 from nwkit.reconcile import build_reconciliation_table
 
@@ -181,6 +186,82 @@ def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
     assert result.iloc[0]["n_species_events"] == 4
     assert result.iloc[0]["degrees_of_freedom"] == 3
     assert result.iloc[0]["intercept"] == "no"
+
+
+@pytest.mark.parametrize("reml", [True, False])
+def test_diagonal_profile_fit_matches_dense_reference(reml):
+    response = np.asarray([1.0, 2.5, 3.2, 5.0])
+    design = np.column_stack([np.ones(4), [0.5, 1.5, 2.0, 4.0]])
+    diagonal = np.asarray([0.8, 1.2, 0.7, 1.5])
+    optimized = _profile_covariance_fit(
+        response,
+        design,
+        np.zeros((4, 4)),
+        [("evolutionary_rate", np.diag(diagonal))],
+        reml=reml,
+    )
+    inverse = np.diag(1.0 / diagonal)
+    expected_beta = np.linalg.solve(
+        design.T @ inverse @ design,
+        design.T @ inverse @ response,
+    )
+    residual = response - design @ expected_beta
+    effective_n = len(response) - design.shape[1] if reml else len(response)
+    expected_rate = float(residual @ inverse @ residual) / effective_n
+    covariance = expected_rate * np.diag(diagonal)
+    cholesky = np.linalg.cholesky(covariance)
+    gram = design.T @ np.linalg.solve(covariance, design)
+    quadratic = float(residual @ np.linalg.solve(covariance, residual))
+    expected_objective = 0.5 * (
+        effective_n * np.log(2.0 * np.pi)
+        + 2.0 * np.log(np.diag(cholesky)).sum()
+        + quadratic
+        + (np.linalg.slogdet(gram)[1] if reml else 0.0)
+    )
+
+    np.testing.assert_allclose(optimized["beta"], expected_beta)
+    assert optimized["component_variances"]["evolutionary_rate"] == pytest.approx(
+        expected_rate
+    )
+    assert optimized["objective"] == pytest.approx(expected_objective)
+    assert optimized["cholesky"].ndim == 1
+
+
+def test_grouped_low_rank_factor_matches_dense_linear_algebra():
+    diagonal = np.asarray([0.8, 1.2, 0.7, 1.5, 0.9, 1.1])
+    group = np.asarray(
+        [
+            [1.0, 0.0, 0.0],
+            [0.5, 0.0, 0.0],
+            [0.0, 0.8, 0.0],
+            [0.0, 1.1, 0.0],
+            [0.0, 0.0, 0.7],
+            [0.0, 0.0, 1.2],
+        ]
+    )
+    low_rank = np.asarray(
+        [
+            [0.2, -0.1],
+            [0.3, 0.4],
+            [-0.2, 0.5],
+            [0.1, 0.2],
+            [0.4, -0.3],
+            [-0.1, 0.3],
+        ]
+    )
+    covariance = np.diag(diagonal) + group @ group.T + low_rank @ low_rank.T
+    factor = factor_diagonal_low_rank_updates(diagonal, [group, low_rank])
+    values = np.column_stack([np.arange(1.0, 7.0), np.linspace(-1.0, 1.0, 6)])
+
+    np.testing.assert_allclose(
+        solve_factor(factor, values),
+        np.linalg.solve(covariance, values),
+        rtol=1e-12,
+        atol=1e-12,
+    )
+    assert factor_logdet(factor) == pytest.approx(
+        np.linalg.slogdet(covariance)[1], rel=1e-12, abs=1e-12
+    )
 
 
 def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
@@ -828,6 +909,595 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
 
 
 @pytest.mark.integration
+def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    traits = pd.read_csv(species_traits, sep="\t")
+    traits["habitat"] = [
+        "aquatic",
+        "terrestrial",
+        "arboreal",
+        "terrestrial",
+        "arboreal",
+    ]
+    traits.to_csv(species_traits, sep="\t", index=False)
+    output = tmp_path / "categorical-pgls.tsv"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "habitat",
+            "--categorical-predictors",
+            "habitat",
+            "--factor-reference",
+            "habitat=aquatic",
+            "--tree-id",
+            "OGCAT",
+            "--outfile",
+            str(output),
+        ]
+    )
+
+    result = pd.read_csv(output, sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["term"]) == {
+        "habitat[arboreal]",
+        "habitat[terrestrial]",
+    }
+    assert set(coefficients["source_term"]) == {"habitat"}
+    assert set(coefficients["predictor_type"]) == {"categorical"}
+    omnibus = result[result["term_test"] == "omnibus"].iloc[0]
+    assert omnibus["term"] == "habitat"
+    assert omnibus["degrees_of_freedom"] == 2
+
+
+@pytest.mark.integration
+def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    traits = pd.read_csv(species_traits, sep="\t")
+    rows = []
+    states = ["water", "land", "water", "land", "water"]
+    for leaf_name, state in zip(traits["leaf_name"], states, strict=True):
+        rows.append(
+            {
+                "leaf_name": leaf_name,
+                "sample": "{}_1".format(leaf_name),
+                "habitat": state,
+            }
+        )
+        rows.append(
+            {
+                "leaf_name": leaf_name,
+                "sample": "{}_2".format(leaf_name),
+                "habitat": "land"
+                if leaf_name == traits.iloc[0]["leaf_name"]
+                else state,
+            }
+        )
+    pd.DataFrame(rows).to_csv(species_traits, sep="\t", index=False)
+    prefix = tmp_path / "latent-category"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "habitat",
+            "--categorical-predictors",
+            "habitat",
+            "--predictor-biological-id",
+            "sample",
+            "--categorical-replicate-policy",
+            "latent",
+            "--tree-id",
+            "OGLATENT",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "latent-category.pgls.tsv", sep="\t")
+    coefficient = result[result["term_test"] == "coefficient"].iloc[0]
+    assert coefficient["measurement_error_model"] == "latent-predictor"
+    summary = pd.read_csv(
+        tmp_path / "latent-category.predictor-tip-summary.tsv", sep="\t"
+    )
+    discordant = summary[summary["state"].isna()].iloc[0]
+    assert "land:1" in discordant["state_counts"]
+    assert "water:1" in discordant["state_counts"]
+
+
+@pytest.mark.integration
+def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    species_names = pd.read_csv(species_traits, sep="\t")["leaf_name"].tolist()
+    replicate_states = [
+        ("water", "land"),
+        ("land", "air"),
+        ("water", "water"),
+        ("air", "air"),
+        ("land", "land"),
+    ]
+    rows = []
+    for leaf, states in zip(species_names, replicate_states, strict=True):
+        for replicate, state in enumerate(states, start=1):
+            rows.append(
+                {
+                    "leaf_name": leaf,
+                    "sample": "{}_{}".format(leaf, replicate),
+                    "habitat": state,
+                }
+            )
+    pd.DataFrame(rows).to_csv(species_traits, sep="\t", index=False)
+    prefix = tmp_path / "multilevel-latent"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "habitat",
+            "--categorical-predictors",
+            "habitat",
+            "--predictor-biological-id",
+            "sample",
+            "--categorical-replicate-policy",
+            "latent",
+            "--species-evolution-model",
+            "lambda",
+            "--tree-id",
+            "OGMULTI",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "multilevel-latent.pgls.tsv", sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert len(coefficients) == 2
+    assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
+    assert coefficients["predictor_evolution_parameter"].nunique() == 1
+    covariance = pd.read_csv(
+        tmp_path / "multilevel-latent.predictor-sampling-covariance.tsv", sep="\t"
+    )
+    assert "trait_2" in covariance
+    cross_terms = covariance[covariance["trait"] != covariance["trait_2"]]
+    assert not cross_terms.empty
+    assert (cross_terms["sampling_covariance"].abs() > 0.0).any()
+
+
+@pytest.mark.integration
+def test_reconciled_categorical_response_uses_tip_pglmm(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    expression_table = pd.read_csv(expression, sep="\t")
+    expression_table["state"] = ["low", "middle", "high", "low", "high"]
+    expression_table.to_csv(expression, sep="\t", index=False)
+    traits = pd.read_csv(species_traits, sep="\t")
+    traits["habitat"] = ["water", "land", "water", "land", "water"]
+    traits.to_csv(species_traits, sep="\t", index=False)
+    prefix = tmp_path / "categorical-response"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "state",
+            "--ordered-responses",
+            "state=low|middle|high",
+            "--predictors",
+            "habitat",
+            "--categorical-predictors",
+            "habitat",
+            "--gene-evolution-model",
+            "lambda",
+            "--tree-id",
+            "OGSTATE",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "categorical-response.pgls.tsv", sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["response_family"]) == {"ordinal"}
+    assert set(coefficients["model"]) == {"reconciled-tip-pglmm"}
+    assert set(coefficients["contrast_transform"]) == {"not-applicable-tip-pglmm"}
+    assert set(coefficients["response_evolution_parameter_status"]) == {"estimated"}
+    assert coefficients["response_evolution_parameter"].between(0.0, 1.0).all()
+    assert len(result[result["term_test"] == "threshold"]) == 2
+    gene_contrasts = pd.read_csv(
+        tmp_path / "categorical-response.gene-contrasts.tsv", sep="\t"
+    )
+    assert gene_contrasts.empty
+    random_effects = pd.read_csv(
+        tmp_path / "categorical-response.random-effects.tsv", sep="\t"
+    )
+    assert set(random_effects["effect_type"]) == {"phylogenetic_tip_logit"}
+
+
+@pytest.mark.integration
+def test_reconciled_categorical_response_and_predictor_replicates_together(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    gene_names = pd.read_csv(expression, sep="\t")["leaf_name"].tolist()
+    response_states = [
+        ("absent", "present"),
+        ("absent", "absent"),
+        ("present", "absent"),
+        ("present", "present"),
+        ("absent", "present"),
+    ]
+    response_rows = [
+        {
+            "leaf_name": leaf,
+            "sample": "{}_{}".format(leaf, replicate),
+            "state": state,
+        }
+        for leaf, states in zip(gene_names, response_states, strict=True)
+        for replicate, state in enumerate(states, start=1)
+    ]
+    pd.DataFrame(response_rows).to_csv(expression, sep="\t", index=False)
+
+    species_names = pd.read_csv(species_traits, sep="\t")["leaf_name"].tolist()
+    predictor_states = [
+        ("water", "land"),
+        ("land", "land"),
+        ("water", "water"),
+        ("land", "water"),
+        ("water", "water"),
+    ]
+    predictor_rows = [
+        {
+            "leaf_name": leaf,
+            "sample": "{}_{}".format(leaf, replicate),
+            "habitat": state,
+        }
+        for leaf, states in zip(species_names, predictor_states, strict=True)
+        for replicate, state in enumerate(states, start=1)
+    ]
+    pd.DataFrame(predictor_rows).to_csv(species_traits, sep="\t", index=False)
+    prefix = tmp_path / "categorical-replicates"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "state",
+            "--predictors",
+            "habitat",
+            "--biological-id",
+            "sample",
+            "--predictor-biological-id",
+            "sample",
+            "--categorical-replicate-policy",
+            "latent",
+            "--tree-id",
+            "OGCATREP",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "categorical-replicates.pgls.tsv", sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["response_family"]) == {"binomial"}
+    assert set(coefficients["predictor_type"]) == {"categorical", "intercept"}
+    assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
+    response_summary = pd.read_csv(
+        tmp_path / "categorical-replicates.response-tip-summary.tsv", sep="\t"
+    )
+    predictor_summary = pd.read_csv(
+        tmp_path / "categorical-replicates.predictor-tip-summary.tsv", sep="\t"
+    )
+    assert set(response_summary["variance_method"]) == {"categorical-counts"}
+    assert "categorical-latent" in set(predictor_summary["variance_method"])
+
+
+@pytest.mark.integration
+def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    gene_names = pd.read_csv(expression, sep="\t")["leaf_name"].tolist()
+    rows = []
+    for index, leaf_name in enumerate(gene_names, start=1):
+        for replicate, count in enumerate((index, index + 2), start=1):
+            rows.append(
+                {
+                    "leaf_name": leaf_name,
+                    "sample": "{}_{}".format(leaf_name, replicate),
+                    "count": count,
+                    "log_library": np.log(1000.0 + 100.0 * replicate),
+                }
+            )
+    pd.DataFrame(rows).to_csv(expression, sep="\t", index=False)
+    prefix = tmp_path / "negative-binomial"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "count",
+            "--response-family",
+            "count=negative-binomial",
+            "--response-offset",
+            "count=log_library",
+            "--predictors",
+            "body_size",
+            "--biological-id",
+            "sample",
+            "--inference",
+            "parametric-bootstrap",
+            "--bootstrap-replicates",
+            "2",
+            "--seed",
+            "9",
+            "--tree-id",
+            "OGNB",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "negative-binomial.pgls.tsv", sep="\t")
+    assert set(result["response_family"]) == {"negative-binomial"}
+    assert set(result["link_function"]) == {"log"}
+    assert set(result["inference_method"]) == {"parametric-bootstrap"}
+    assert np.isfinite(result["response_dispersion"]).all()
+    replicate_summary = pd.read_csv(
+        tmp_path / "negative-binomial.response-tip-summary.tsv", sep="\t"
+    )
+    assert set(replicate_summary["variance_method"]) == {"likelihood-replicates"}
+    assert set(replicate_summary["n_biological"]) == {2}
+
+
+@pytest.mark.integration
+def test_reconciled_gene_tree_ensemble_combines_tree_uncertainty(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    original = gene_tree.read_text()
+    alternate = original.replace(
+        "Genus_a_g1:1,Genus_b_g1:1", "Genus_b_g1:1,Genus_a_g1:1"
+    )
+    ensemble = tmp_path / "gene-ensemble.nwk"
+    ensemble.write_text(original + "\n" + alternate + "\n")
+    output = tmp_path / "ensemble.tsv"
+    audit = tmp_path / "ensemble.audit.jsonl"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree-ensemble",
+            str(ensemble),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OGENS",
+            "--outfile",
+            str(output),
+            "--audit",
+            str(audit),
+        ]
+    )
+
+    result = pd.read_csv(output, sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["ensemble_size"]) == {2}
+    assert set(coefficients["tree_support_fraction"]) == {1.0}
+    assert np.isfinite(coefficients["between_tree_variance"]).all()
+    assert set(coefficients["inference_method"]) == {"tree-ensemble-rubin"}
+    audit_record = json.loads(audit.read_text())
+    assert audit_record["primary_input"]["tree_count"] == 2
+    assert any(
+        record["argument"] == "gene_tree_ensemble" for record in audit_record["inputs"]
+    )
+
+
+@pytest.mark.integration
+def test_reconciled_multivariate_pgls_retains_missing_paralog_responses(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    gene_names = [
+        "Genus_a_g1",
+        "Genus_a_g2",
+        "Genus_b_g1",
+        "Genus_c_g1",
+        "Genus_d_g1",
+        "Genus_e_g1",
+    ]
+    gene_tree.write_text(
+        "((((Genus_a_g1:1,Genus_a_g2:1):1,Genus_b_g1:2):1,"
+        "Genus_c_g1:3):1,(Genus_d_g1:1,Genus_e_g1:1):3);"
+    )
+    pd.DataFrame(
+        {
+            "leaf_name": gene_names,
+            "expression": [2.0, 2.5, 5.0, 7.0, 8.0, 12.0],
+            "expression_alt": [3.0, 3.4, 4.5, np.nan, 9.0, 11.0],
+        }
+    ).to_csv(expression, sep="\t", index=False)
+    output = tmp_path / "multivariate.tsv"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression,expression_alt",
+            "--predictors",
+            "body_size",
+            "--multivariate-responses",
+            "yes",
+            "--allow-missing-responses",
+            "yes",
+            "--tree-id",
+            "OGMULTIVAR",
+            "--outfile",
+            str(output),
+        ]
+    )
+
+    result = pd.read_csv(output, sep="\t")
+    coefficients = result[result["term_test"] == "coefficient"]
+    assert set(coefficients["response"]) == {"expression", "expression_alt"}
+    assert set(coefficients["model"]) == {"reconciled-tip-multivariate-pgls"}
+    assert set(coefficients["event_random_effect"]) == {"species-tip"}
+    covariance_rows = result[result["term_test"] == "response-covariance"]
+    assert set(covariance_rows["source_term"]) == {"(response-covariance)"}
+    assert len(covariance_rows) == 6
+
+
+@pytest.mark.integration
+def test_reconciled_categorical_response_shares_species_effect_across_paralogs(
+    tmp_path,
+):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    gene_names = [
+        "Genus_a_g1",
+        "Genus_a_g2",
+        "Genus_b_g1",
+        "Genus_c_g1",
+        "Genus_d_g1",
+        "Genus_e_g1",
+    ]
+    gene_tree.write_text(
+        "((((Genus_a_g1:1,Genus_a_g2:1):1,Genus_b_g1:2):1,"
+        "Genus_c_g1:3):1,(Genus_d_g1:1,Genus_e_g1:1):3);"
+    )
+    pd.DataFrame(
+        {
+            "leaf_name": gene_names,
+            "state": ["absent", "present", "absent", "present", "present", "absent"],
+        }
+    ).to_csv(expression, sep="\t", index=False)
+    output = tmp_path / "paralog-categorical.tsv"
+    random_output = tmp_path / "paralog-random.tsv"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "state",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OGPARA",
+            "--outfile",
+            str(output),
+            "--random-effects-out",
+            str(random_output),
+        ]
+    )
+
+    result = pd.read_csv(output, sep="\t")
+    assert set(result["response_family"]) == {"binomial"}
+    assert set(result["event_random_effect"]) == {"species-tip"}
+    random_effects = pd.read_csv(random_output, sep="\t")
+    species_effects = random_effects[random_effects["effect_type"] == "species_logit"]
+    assert set(species_effects["group_id"]) == {
+        "Genus_a",
+        "Genus_b",
+        "Genus_c",
+        "Genus_d",
+        "Genus_e",
+    }
+    assert (
+        species_effects.loc[
+            species_effects["group_id"] == "Genus_a", "n_observations"
+        ].item()
+        == 2
+    )
+
+
+@pytest.mark.integration
 def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
     tmp_path,
 ):
@@ -964,7 +1634,7 @@ def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
         repeated,
         ["body_size"],
         posteriors,
-    )[0]
+    )["body_size"]
 
     np.testing.assert_allclose(uncertainty[0], uncertainty[1])
     np.testing.assert_allclose(uncertainty[:, 0], uncertainty[:, 1])
@@ -1047,6 +1717,50 @@ def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
                 "OG1",
                 "--infile",
                 "gene-contrasts.tsv",
+            ]
+        )
+    with pytest.raises(ValueError, match="Typed response/predictor options"):
+        main(
+            common
+            + [
+                "--infile",
+                "gene-contrasts.tsv",
+                "--predictor-contrasts",
+                "species-contrasts.tsv",
+                "--response-family",
+                "expression=poisson",
+            ]
+        )
+    raw_required = [
+        "--species-tree",
+        "species.nwk",
+        "--expression",
+        "expression.tsv",
+        "--species-traits",
+        "traits.tsv",
+        "--tree-id",
+        "OG1",
+    ]
+    with pytest.raises(ValueError, match="exactly one"):
+        main(
+            common
+            + raw_required
+            + [
+                "--gene-tree",
+                "gene.nwk",
+                "--gene-tree-ensemble",
+                "trees.nwk",
+            ]
+        )
+    with pytest.raises(ValueError, match="one fixed --reconciliation-tree"):
+        main(
+            common
+            + raw_required
+            + [
+                "--gene-tree-ensemble",
+                "trees.nwk",
+                "--reconciliation-tree",
+                "reconciled.nwk",
             ]
         )
 

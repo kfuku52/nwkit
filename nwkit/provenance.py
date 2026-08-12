@@ -58,6 +58,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "expression",
         "evolution_covariance",
         "gene_tree",
+        "gene_tree_ensemble",
         "length_source",
         "manifest",
         "name_source",
@@ -505,6 +506,7 @@ def _planned_output_records(args):
 def _primary_input_text(args, stdin_text):
     infile = getattr(args, "infile", None)
     gene_tree = getattr(args, "gene_tree", None)
+    gene_tree_ensemble = getattr(args, "gene_tree_ensemble", None)
     ordinary_tree = getattr(args, "tree", None)
     primary_input = (
         ordinary_tree
@@ -512,7 +514,12 @@ def _primary_input_text(args, stdin_text):
         else (
             gene_tree
             if getattr(args, "command", None) == "pgls" and gene_tree not in (None, "")
-            else infile
+            else (
+                gene_tree_ensemble
+                if getattr(args, "command", None) == "pgls"
+                and gene_tree_ensemble not in (None, "")
+                else infile
+            )
         )
     )
     if primary_input == "-":
@@ -561,6 +568,8 @@ def _input_summary(text, args):
         if getattr(args, "tree", None) not in (None, ""):
             input_format = getattr(args, "tree_format", "auto") or "auto"
         elif getattr(args, "gene_tree", None) not in (None, ""):
+            input_format = getattr(args, "gene_tree_format", "auto") or "auto"
+        elif getattr(args, "gene_tree_ensemble", None) not in (None, ""):
             input_format = getattr(args, "gene_tree_format", "auto") or "auto"
     inspection = inspect_tree_text(
         tree_strings[0],
