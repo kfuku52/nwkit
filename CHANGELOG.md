@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed batch-adjusted response replicates in conventional PGLS, rejected
+  duplicated raw TSV headers, serialized overlapping explicit output sets, and
+  retained sparse factor-loading and posterior-precision representations
+  throughout reconciled errors-in-variables PGLS.
+
 ## [0.36.0] - 2026-08-12
 
 ### Added

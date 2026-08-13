@@ -26,11 +26,13 @@ from nwkit.gaussian import (
 from nwkit.measurement_error import (
     _predictor_error_variance_diagonal,
     fit_conditional_eiv_gaussian,
+    fit_factor_latent_predictor,
     fit_latent_predictor,
 )
 from nwkit.model_matrix import PredictorTerm
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
+    GmrfPredictorUncertainty,
     JointPredictorUncertainty,
 )
 from nwkit.util import (
@@ -927,30 +929,40 @@ def _prepare_predictor_posteriors(
             label="Predictor sampling covariance",
             model_label=predictor,
         )
-        conditioning_covariance = (
-            materialize_covariance(covariance)
-            if isinstance(covariance, DiagonalLowRankCovariance)
-            else covariance
-        )
-        posterior = fit_latent_predictor(
-            rows["raw_contrast"].to_numpy(dtype=float),
-            np.diag(rows["contrast_variance"].to_numpy(dtype=float)),
-            conditioning_covariance,
-            include_intercept=False,
-        )
-        prior_covariance = posterior.evolutionary_rate * np.diag(
-            rows["contrast_variance"].to_numpy(dtype=float)
-        )
-        posteriors[predictor] = {
+        contrast_variance = rows["contrast_variance"].to_numpy(dtype=float)
+        observed = rows["raw_contrast"].to_numpy(dtype=float)
+        if isinstance(covariance, DiagonalLowRankCovariance):
+            posterior = fit_factor_latent_predictor(
+                observed,
+                contrast_variance,
+                covariance,
+                include_intercept=False,
+            )
+            posterior_factor = None
+            posterior_model = posterior.covariance_model
+        else:
+            posterior = fit_latent_predictor(
+                observed,
+                np.diag(contrast_variance),
+                covariance,
+                include_intercept=False,
+            )
+            posterior_factor = _covariance_factor(posterior.covariance)
+            posterior_model = None
+        state = {
             "event_ids": event_ids,
             "event_index": {
                 event_id: index for index, event_id in enumerate(event_ids)
             },
             "posterior": posterior,
-            "posterior_factor": _covariance_factor(posterior.covariance),
-            "sampling_covariance": conditioning_covariance,
-            "prior_covariance": prior_covariance,
+            "posterior_factor": posterior_factor,
+            "posterior_model": posterior_model,
+            "mean_sampling_variance": float(np.mean(_covariance_diagonal(covariance))),
+            "mean_prior_variance": float(
+                posterior.evolutionary_rate * np.mean(contrast_variance)
+            ),
         }
+        posteriors[predictor] = state
     return posteriors
 
 
@@ -980,16 +992,22 @@ def _predictor_uncertainties_for_rows(rows, predictors, posteriors):
     if not posteriors:
         return {}
     event_ids = rows["species_event_id"].astype(str).tolist()
-    uncertainties = {}
+    uncertainties: dict[str, Any] = {}
     for predictor in predictors:
         if predictor not in posteriors:
             continue
         state = posteriors[predictor]
         indices = [state["event_index"][event_id] for event_id in event_ids]
-        uncertainties[predictor] = ContinuousPredictorUncertainty(
-            factor=state["posterior_factor"],
-            observation_index=np.asarray(indices, dtype=int),
-        )
+        if state["posterior_model"] is not None:
+            uncertainties[predictor] = GmrfPredictorUncertainty(
+                model=state["posterior_model"],
+                observation_index=np.asarray(indices, dtype=int),
+            )
+        else:
+            uncertainties[predictor] = ContinuousPredictorUncertainty(
+                factor=state["posterior_factor"],
+                observation_index=np.asarray(indices, dtype=int),
+            )
     return uncertainties
 
 
@@ -2292,13 +2310,22 @@ def _predictor_measurement_result_fields(
             mean_posterior_variance = float(
                 np.mean(np.sum(np.square(selected_factor), axis=1))
             )
+    elif isinstance(uncertainty, GmrfPredictorUncertainty):
+        mean_posterior_variance = float(
+            np.mean(
+                _predictor_error_variance_diagonal(
+                    np.asarray([1.0]),
+                    uncertainty,
+                    0,
+                    len(uncertainty.observation_index),
+                )
+            )
+        )
     else:
         mean_posterior_variance = float(np.mean(np.diag(uncertainty)))
-    mean_prior_variance = float(np.mean(np.diag(state["prior_covariance"])))
+    mean_prior_variance = state["mean_prior_variance"]
     return {
-        "mean_predictor_sampling_variance": float(
-            np.mean(np.diag(state["sampling_covariance"]))
-        ),
+        "mean_predictor_sampling_variance": state["mean_sampling_variance"],
         "mean_latent_predictor_variance": mean_posterior_variance,
         "predictor_uncertainty_fraction": (
             mean_posterior_variance / mean_prior_variance
@@ -2332,6 +2359,15 @@ def _weighted_predictor_uncertainties(
             weighted.append(
                 ContinuousPredictorUncertainty(
                     factor=uncertainty.factor,
+                    observation_index=uncertainty.observation_index,
+                    row_scale=balance,
+                )
+            )
+        elif isinstance(uncertainty, GmrfPredictorUncertainty):
+            raw.append(uncertainty)
+            weighted.append(
+                GmrfPredictorUncertainty(
+                    model=uncertainty.model,
                     observation_index=uncertainty.observation_index,
                     row_scale=balance,
                 )

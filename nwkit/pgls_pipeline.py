@@ -1,11 +1,13 @@
 """End-to-end reconciliation, contrast, and PGLS orchestration."""
 
+import hashlib
 import math
 import os
 import secrets
 import shutil
 import stat
 import tempfile
+from contextlib import ExitStack
 from dataclasses import dataclass
 from types import SimpleNamespace
 from typing import Any
@@ -464,9 +466,7 @@ def _commit_pgls_outputs(staged_outputs: list[tuple[str, str]]) -> None:
                 os.remove(staged_path)
 
 
-def _write_dataframes_transactionally(
-    outputs: list[tuple[str, pd.DataFrame]],
-) -> None:
+def _transaction_output_modes(outputs):
     output_modes: dict[str, int] = {}
     for path, _ in outputs:
         absolute_path = os.path.abspath(path)
@@ -475,26 +475,54 @@ def _write_dataframes_transactionally(
         output_modes[absolute_path] = (
             _new_output_mode(directory) if mode is None else mode
         )
-    staged_outputs: list[tuple[str, str]] = []
-    try:
-        for path, dataframe in outputs:
-            absolute_path = os.path.abspath(path)
-            staged_outputs.append(
-                (
-                    absolute_path,
-                    _stage_dataframe(
-                        absolute_path,
-                        dataframe,
-                        output_modes[absolute_path],
-                    ),
-                )
+    return output_modes
+
+
+def _transaction_output_lock_path(absolute_path):
+    directory = os.path.realpath(os.path.dirname(absolute_path))
+    identity = hashlib.sha256(
+        os.path.join(directory, os.path.basename(absolute_path)).encode("utf-8")
+    ).hexdigest()
+    return os.path.join(directory, ".nwkit-output-{}.lock".format(identity))
+
+
+def _transaction_output_lock_paths(output_modes):
+    return [
+        _transaction_output_lock_path(absolute_path)
+        for absolute_path in sorted(output_modes)
+    ]
+
+
+def _write_dataframes_transactionally(
+    outputs: list[tuple[str, pd.DataFrame]],
+) -> None:
+    output_modes = _transaction_output_modes(outputs)
+    lock_paths = _transaction_output_lock_paths(output_modes)
+    with ExitStack() as locks:
+        for lock_path in lock_paths:
+            locks.enter_context(
+                acquire_exclusive_lock(lock_path, lock_label="NWKIT output")
             )
-        _commit_pgls_outputs(staged_outputs)
-    except BaseException:
-        for _, staged_path in staged_outputs:
-            if os.path.lexists(staged_path):
-                os.remove(staged_path)
-        raise
+        staged_outputs: list[tuple[str, str]] = []
+        try:
+            for path, dataframe in outputs:
+                absolute_path = os.path.abspath(path)
+                staged_outputs.append(
+                    (
+                        absolute_path,
+                        _stage_dataframe(
+                            absolute_path,
+                            dataframe,
+                            output_modes[absolute_path],
+                        ),
+                    )
+                )
+            _commit_pgls_outputs(staged_outputs)
+        except BaseException:
+            for _, staged_path in staged_outputs:
+                if os.path.lexists(staged_path):
+                    os.remove(staged_path)
+            raise
 
 
 def validate_pgls_bundle_target(

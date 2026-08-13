@@ -106,10 +106,28 @@ def _read_raw_tsv_column_values(text, column_name):
     return values
 
 
+def _duplicated_tsv_headers(header):
+    return sorted(
+        name for name, count in Counter(header).items() if name != "" and count > 1
+    )
+
+
 def read_tsv_preserving_leaf_name(path):
     import pandas as pd
 
     text = read_input_text(path)
+    reader = csv.reader(StringIO(text), delimiter="\t")
+    try:
+        header = next(reader)
+    except StopIteration:
+        header = []
+    duplicates = _duplicated_tsv_headers(header)
+    if duplicates:
+        raise ValueError(
+            "TSV input contains duplicated column header(s): {}.".format(
+                ", ".join(duplicates)
+            )
+        )
     dataframe = pd.read_csv(StringIO(text), sep="\t", keep_default_na=False)
     if "leaf_name" not in dataframe.columns:
         return dataframe

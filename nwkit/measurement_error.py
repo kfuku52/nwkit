@@ -10,9 +10,11 @@ from scipy.optimize import minimize, minimize_scalar
 
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
+    DiagonalSparsePrecisionCovariance,
     effective_likelihood_settings,
     factor_covariance,
     factor_diagonal_low_rank_updates,
+    factor_diagonal_sparse_precision_updates,
     factor_logdet,
     is_diagonal,
     materialize_covariance,
@@ -20,6 +22,7 @@ from nwkit.gaussian import (
 )
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
+    GmrfPredictorUncertainty,
     GroupedPredictorUncertainty,
     JointPredictorUncertainty,
     SparseCovarianceModel,
@@ -243,6 +246,162 @@ def fit_latent_predictor(
     return LatentPredictorPosterior(
         mean=np.asarray(posterior_mean, dtype=float),
         covariance=posterior_covariance,
+        prior_mean=float(prior_mean),
+        evolutionary_rate=float(rate),
+        log_likelihood=-float(objective_value),
+        optimizer_converged=bool(optimized.success),
+        optimizer_message=message,
+        boundary_warning=boundary,
+    )
+
+
+def fit_factor_latent_predictor(
+    observed,
+    evolutionary_variance,
+    sampling_covariance: DiagonalLowRankCovariance,
+    *,
+    include_intercept,
+) -> SparseLatentPredictorPosterior:
+    """Condition independent evolutionary contrasts on sparse factor errors.
+
+    Reconciled predictor contrasts have a diagonal evolutionary covariance and
+    a sampling covariance supplied as ``U @ U.T``.  This routine retains ``U``
+    and the posterior latent precision instead of constructing either dense
+    covariance.  A nonzero sampling diagonal is intentionally handled by the
+    general sparse tree conditioner, not by this exact-factor specialization.
+    """
+    observed = np.asarray(observed, dtype=float)
+    evolutionary_variance = np.asarray(evolutionary_variance, dtype=float)
+    sampling_diagonal = np.asarray(sampling_covariance.diagonal, dtype=float)
+    loading = sparse.csr_matrix(sampling_covariance.low_rank, dtype=float)
+    if (
+        observed.ndim != 1
+        or not len(observed)
+        or observed.shape != evolutionary_variance.shape
+        or sampling_diagonal.shape != observed.shape
+        or loading.shape[0] != len(observed)
+        or not np.isfinite(observed).all()
+        or not np.isfinite(evolutionary_variance).all()
+        or not np.isfinite(sampling_diagonal).all()
+        or not np.isfinite(loading.data).all()
+        or np.any(evolutionary_variance <= 0.0)
+        or np.any(sampling_diagonal != 0.0)
+    ):
+        raise ValueError(
+            "Factor predictor conditioning requires positive evolutionary "
+            "variances and an exact zero-diagonal sampling factor."
+        )
+    loading.eliminate_zeros()
+    if loading.shape[1]:
+        nonzero_columns = np.asarray(loading.getnnz(axis=0)).reshape(-1) > 0
+        loading = loading[:, nonzero_columns]
+    centered = observed - (float(np.mean(observed)) if include_intercept else 0.0)
+    sampling_variance = np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
+    observed_scale = max(
+        float(np.mean(centered**2)),
+        float(np.mean(observed**2)),
+        float(np.mean(sampling_variance)),
+        np.finfo(float).tiny,
+    )
+    evolutionary_scale = float(np.mean(evolutionary_variance))
+    rate_scale = observed_scale / evolutionary_scale
+    lower_rate = max(rate_scale * 1e-12, np.finfo(float).tiny)
+    upper_rate = max(rate_scale * 1e6, lower_rate * 1e6)
+    log_bounds = (math.log(lower_rate), math.log(upper_rate))
+
+    def state(log_rate, *, return_details=False):
+        rate = math.exp(float(log_rate))
+        diagonal = rate * evolutionary_variance
+        try:
+            factor = factor_diagonal_low_rank_updates(diagonal, [loading])
+            inverse_observed = _solve(factor, observed)
+            if include_intercept:
+                ones = np.ones(len(observed), dtype=float)
+                inverse_ones = _solve(factor, ones)
+                denominator = float(ones @ inverse_ones)
+                if denominator <= 0.0:
+                    return float("inf")
+                prior_mean = float(ones @ inverse_observed / denominator)
+            else:
+                prior_mean = 0.0
+            residual = observed - prior_mean
+            inverse_residual = _solve(factor, residual)
+            quadratic = float(residual @ inverse_residual)
+            logdet = factor_logdet(factor)
+        except (ValueError, np.linalg.LinAlgError):
+            return float("inf")
+        objective = 0.5 * (len(observed) * math.log(2.0 * math.pi) + logdet + quadratic)
+        if not math.isfinite(objective):
+            return float("inf")
+        if not return_details:
+            return objective
+        posterior_mean = prior_mean + diagonal * inverse_residual
+        return objective, prior_mean, posterior_mean
+
+    grid = np.linspace(log_bounds[0], log_bounds[1], 21)
+    candidates = [(float(state(value)), float(value), "grid") for value in grid]
+    optimized = minimize_scalar(
+        state,
+        bounds=log_bounds,
+        method="bounded",
+        options={"xatol": 1e-8, "maxiter": 1000},
+    )
+    if math.isfinite(float(optimized.fun)):
+        candidates.append(
+            (float(optimized.fun), float(optimized.x), str(optimized.message))
+        )
+    finite = [candidate for candidate in candidates if math.isfinite(candidate[0])]
+    if not finite:
+        raise ValueError(
+            "Factor predictor evolutionary-rate optimization found no finite fit."
+        )
+    objective_value, log_rate, message = min(finite, key=lambda candidate: candidate[0])
+    details = state(log_rate, return_details=True)
+    if not isinstance(details, tuple):
+        raise ValueError("Factor predictor conditioning produced an invalid fit.")
+    _, prior_mean, posterior_mean = details
+    rate = math.exp(log_rate)
+    prior_diagonal = rate * evolutionary_variance
+    if loading.shape[1] == 0:
+        posterior_loading = sparse.csr_matrix((len(observed), 1), dtype=float)
+        posterior_precision = sparse.eye(1, format="csc")
+        posterior_precision_factor = sparse.eye(1, format="csr")
+        precision_logdet = 0.0
+    else:
+        weighted_loading = loading.multiply((1.0 / np.sqrt(prior_diagonal))[:, None])
+        posterior_precision = (
+            sparse.eye(loading.shape[1], format="csc")
+            + weighted_loading.T @ weighted_loading
+        ).tocsc()
+        precision_factor = factor_sparse_nonsingular(posterior_precision)
+        posterior_loading = loading
+        posterior_precision_factor = sparse.vstack(
+            [sparse.eye(loading.shape[1], format="csr"), weighted_loading],
+            format="csr",
+        )
+        precision_logdet = precision_factor.logdet
+    posterior_model = SparseCovarianceModel(
+        precision=posterior_precision,
+        tip_loading=posterior_loading,
+        logdet_covariance=-float(precision_logdet),
+        sampling_parent=np.empty(0, dtype=int),
+        sampling_transition=np.empty(0, dtype=float),
+        sampling_variance=np.empty(0, dtype=float),
+        sampling_precision_factor=posterior_precision_factor,
+    )
+    probe_count = min(64, max(16, int(math.ceil(math.log2(len(observed) + 1))) * 4))
+    rng = np.random.default_rng(0)
+    probes = rng.choice((-1.0, 1.0), size=(len(observed), probe_count))
+    factor = factor_sparse_nonsingular(posterior_precision)
+    projected = posterior_loading @ factor.solve(
+        np.asarray(posterior_loading.T @ probes)
+    )
+    mean_posterior_variance = max(0.0, float(np.mean(probes * projected)))
+    boundary = bool(rate <= lower_rate * 10.0 or rate >= upper_rate / 10.0)
+    return SparseLatentPredictorPosterior(
+        mean=np.asarray(posterior_mean, dtype=float),
+        covariance_model=posterior_model,
+        mean_posterior_variance=mean_posterior_variance,
         prior_mean=float(prior_mean),
         evolutionary_rate=float(rate),
         log_likelihood=-float(objective_value),
@@ -540,6 +699,16 @@ def _predictor_error_covariance(beta, uncertainty, columns, n_observations):
         selected = np.asarray(tuple(columns), dtype=int)
         loading = joint_predictor_loading(uncertainty, beta[selected])
         return np.asarray((loading @ loading.T).toarray())
+    if isinstance(uncertainty, GmrfPredictorUncertainty):
+        if not isinstance(columns, (int, np.integer)):
+            raise ValueError("GMRF predictor uncertainty requires one column.")
+        loading, precision, _ = _gmrf_uncertainty_update(
+            beta, int(columns), uncertainty
+        )
+        factor = factor_sparse_nonsingular(precision)
+        solved = factor.solve(loading.T.toarray())
+        covariance = np.asarray(loading @ solved)
+        return (covariance + covariance.T) / 2.0
     if isinstance(columns, (int, np.integer)):
         matrix = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
         if matrix.shape != (n_observations, n_observations):
@@ -589,6 +758,12 @@ def _predictor_error_variance_diagonal(beta, uncertainty, columns, n_observation
         selected = np.asarray(tuple(columns), dtype=int)
         loading = joint_predictor_loading(uncertainty, beta[selected])
         return np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
+    if isinstance(uncertainty, GmrfPredictorUncertainty):
+        assert isinstance(columns, (int, np.integer))
+        loading, precision, _ = _gmrf_uncertainty_update(
+            beta, int(columns), uncertainty
+        )
+        return _sparse_precision_marginal_diagonal(loading, precision)
     return np.diag(
         _predictor_error_covariance(beta, uncertainty, columns, n_observations)
     )
@@ -634,6 +809,7 @@ def _uses_structured_eiv_covariance(
                     ContinuousPredictorUncertainty,
                     GroupedPredictorUncertainty,
                     JointPredictorUncertainty,
+                    GmrfPredictorUncertainty,
                 ),
             )
             for uncertainty in predictor_uncertainties
@@ -764,6 +940,77 @@ def _structured_uncertainty_loading(beta, columns, uncertainty):
     return joint_predictor_loading(uncertainty, selected)
 
 
+def _gmrf_uncertainty_update(beta, column, uncertainty):
+    indices = np.asarray(uncertainty.observation_index, dtype=int)
+    model = uncertainty.model
+    if (
+        indices.ndim != 1
+        or np.any(indices < 0)
+        or np.any(indices >= model.n_tips)
+        or not np.isfinite(float(beta[column]))
+    ):
+        raise ValueError("GMRF predictor uncertainty is malformed.")
+    row_scale = (
+        np.ones(len(indices), dtype=float)
+        if uncertainty.row_scale is None
+        else np.asarray(uncertainty.row_scale, dtype=float)
+    )
+    if row_scale.shape != indices.shape or not np.isfinite(row_scale).all():
+        raise ValueError("GMRF predictor row scale is malformed.")
+    loading = sparse.csr_matrix(model.tip_loading[indices], dtype=float).multiply(
+        (float(beta[column]) * row_scale)[:, None]
+    )
+    return loading.tocsr(), model.precision, model.precision_factor()
+
+
+def _sparse_precision_marginal_diagonal(loading, precision):
+    loading = sparse.csr_matrix(loading, dtype=float)
+    factor = factor_sparse_nonsingular(precision)
+    if loading.shape[0] <= 512:
+        solved = factor.solve(loading.T.toarray())
+        return np.asarray(loading.multiply(solved.T).sum(axis=1)).reshape(-1)
+    probe_count = min(64, max(16, int(math.ceil(math.log2(loading.shape[0] + 1))) * 4))
+    rng = np.random.default_rng(0)
+    probes = rng.choice((-1.0, 1.0), size=(loading.shape[0], probe_count))
+    projected = loading @ factor.solve(np.asarray(loading.T @ probes))
+    return np.maximum(0.0, np.mean(probes * projected, axis=1))
+
+
+def _factor_sparse_precision_eiv(
+    diagonal, updates, precision_updates, *, compute_marginal
+):
+    latent_updates = list(precision_updates)
+    for update in updates:
+        loading = sparse.csr_matrix(update, dtype=float)
+        identity = sparse.eye(loading.shape[1], format="csc")
+        latent_updates.append((loading, identity, identity.tocsr()))
+    cholesky = factor_diagonal_sparse_precision_updates(diagonal, latent_updates)
+    loading = sparse.hstack(
+        [sparse.csr_matrix(update[0], dtype=float) for update in latent_updates],
+        format="csr",
+    )
+    precision = sparse.block_diag(
+        [sparse.csc_matrix(update[1], dtype=float) for update in latent_updates],
+        format="csc",
+    )
+    marginal_diagonal = np.asarray(diagonal, dtype=float).copy()
+    if compute_marginal:
+        start = 0
+        for loading_value, precision_value, _ in latent_updates:
+            width = loading_value.shape[1]
+            marginal_diagonal += _sparse_precision_marginal_diagonal(
+                loading[:, start : start + width], precision_value
+            )
+            start += width
+    covariance = DiagonalSparsePrecisionCovariance(
+        diagonal=np.asarray(diagonal, dtype=float),
+        loading=loading,
+        precision=precision,
+        marginal_diagonal=marginal_diagonal,
+    )
+    return covariance, cholesky
+
+
 def _add_structured_eiv_components(
     diagonal, updates, variances, normalized_components, component_factors
 ):
@@ -824,12 +1071,21 @@ def _conditional_eiv_covariance(
     predictor_columns,
     n_observations,
     structured,
+    *,
+    compute_marginal=False,
 ):
     if structured:
         diagonal, updates = _structured_eiv_base(fixed_covariance)
+        precision_updates = []
         for columns, uncertainty in zip(
             predictor_columns, predictor_uncertainties, strict=True
         ):
+            if isinstance(uncertainty, GmrfPredictorUncertainty):
+                assert isinstance(columns, (int, np.integer))
+                precision_updates.append(
+                    _gmrf_uncertainty_update(beta, int(columns), uncertainty)
+                )
+                continue
             if not (
                 isinstance(uncertainty, ContinuousPredictorUncertainty)
                 and _add_diagonal_continuous_uncertainty(
@@ -846,6 +1102,13 @@ def _conditional_eiv_covariance(
             normalized_components,
             component_factors,
         )
+        if precision_updates:
+            return _factor_sparse_precision_eiv(
+                diagonal,
+                updates,
+                precision_updates,
+                compute_marginal=compute_marginal,
+            )
         return _factor_structured_eiv(diagonal, updates, n_observations)
     covariance = _dense_eiv_covariance(
         beta,
@@ -956,6 +1219,7 @@ def fit_conditional_eiv_gaussian(
                 predictor_columns,
                 len(response),
                 structured,
+                compute_marginal=return_details,
             )
         except (ValueError, np.linalg.LinAlgError):
             return float("inf")

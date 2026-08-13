@@ -39,6 +39,16 @@ class DiagonalLowRankCovariance:
 
 
 @dataclass(frozen=True)
+class DiagonalSparsePrecisionCovariance:
+    """Unmaterialized ``diag(d) + L @ Q^-1 @ L.T`` covariance."""
+
+    diagonal: np.ndarray
+    loading: sparse.csr_matrix
+    precision: sparse.csc_matrix
+    marginal_diagonal: np.ndarray
+
+
+@dataclass(frozen=True)
 class SparseDiagonalLowRankFactor:
     """Sparse Woodbury factor for ``diag(d) + U @ U.T``."""
 
@@ -59,6 +69,19 @@ class SparseCovarianceFactor:
     diagonal: np.ndarray
     low_rank: sparse.csr_matrix
     covariance_factor: SuperLU
+    logdet: float
+
+
+@dataclass(frozen=True)
+class DiagonalSparsePrecisionFactor:
+    """Factor for ``diag(d) + L @ Q^-1 @ L.T`` with sparse ``L`` and ``Q``."""
+
+    diagonal: np.ndarray
+    loading: sparse.csr_matrix
+    prior_precision: sparse.csc_matrix
+    prior_precision_factor: sparse.csr_matrix
+    posterior_factor: SuperLU
+    prior_factor: SuperLU
     logdet: float
 
 
@@ -190,6 +213,78 @@ def factor_diagonal_sparse_low_rank(
         solver, "Sparse Woodbury matrix"
     )
     return SparseDiagonalLowRankFactor(diagonal, loading, solver, logdet)
+
+
+def factor_diagonal_sparse_precision_updates(
+    diagonal: np.ndarray,
+    updates: list[tuple[sparse.spmatrix, sparse.spmatrix, sparse.spmatrix]],
+) -> DiagonalSparsePrecisionFactor:
+    """Factor a positive diagonal plus sparse latent precision components.
+
+    Each update is ``(loading, precision, precision_factor)`` and represents
+    ``loading @ inv(precision) @ loading.T``.  The final element must satisfy
+    ``precision_factor.T @ precision_factor == precision``; retaining it also
+    permits exact structured Gaussian draws without a dense covariance.
+    """
+    diagonal = _positive_diagonal(diagonal)
+    if not updates:
+        raise ValueError("At least one sparse-precision update is required.")
+    loadings = []
+    precisions = []
+    precision_factors = []
+    for loading_value, precision_value, precision_factor_value in updates:
+        loading, precision, precision_factor = _validated_sparse_precision_update(
+            len(diagonal), loading_value, precision_value, precision_factor_value
+        )
+        loadings.append(loading)
+        precisions.append(precision)
+        precision_factors.append(precision_factor)
+    loading = sparse.hstack(loadings, format="csr")
+    prior_precision = sparse.block_diag(precisions, format="csc")
+    prior_precision_factor = sparse.block_diag(precision_factors, format="csr")
+    prior_factor = splu(prior_precision, permc_spec="COLAMD")
+    inverse_diagonal = 1.0 / diagonal
+    posterior_precision = (
+        prior_precision
+        + loading.T @ sparse.diags(inverse_diagonal, format="csc") @ loading
+    ).tocsc()
+    posterior_factor = splu(posterior_precision, permc_spec="COLAMD")
+    logdet = (
+        float(np.log(diagonal).sum())
+        + _sparse_lu_logdet(posterior_factor, "Sparse posterior precision")
+        - _sparse_lu_logdet(prior_factor, "Sparse prior precision")
+    )
+    return DiagonalSparsePrecisionFactor(
+        diagonal=diagonal,
+        loading=loading,
+        prior_precision=prior_precision,
+        prior_precision_factor=prior_precision_factor,
+        posterior_factor=posterior_factor,
+        prior_factor=prior_factor,
+        logdet=logdet,
+    )
+
+
+def _validated_sparse_precision_update(
+    observation_count,
+    loading_value,
+    precision_value,
+    precision_factor_value,
+):
+    loading = sparse.csr_matrix(loading_value, dtype=float)
+    precision = sparse.csc_matrix(precision_value, dtype=float)
+    precision_factor = sparse.csr_matrix(precision_factor_value, dtype=float)
+    if (
+        loading.shape[0] != observation_count
+        or precision.shape[0] != precision.shape[1]
+        or loading.shape[1] != precision.shape[0]
+        or precision_factor.shape[1] != precision.shape[0]
+        or not np.isfinite(loading.data).all()
+        or not np.isfinite(precision.data).all()
+        or not np.isfinite(precision_factor.data).all()
+    ):
+        raise ValueError("Sparse-precision covariance update is malformed.")
+    return loading, precision, precision_factor
 
 
 def _factor_nested_low_rank(base_factor, low_rank: sparse.spmatrix):
@@ -426,6 +521,7 @@ def solve_factor(
     | GroupedDiagonalLowRankFactor
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
+    | DiagonalSparsePrecisionFactor
     | NestedLowRankFactor,
     values: np.ndarray,
 ) -> np.ndarray:
@@ -467,6 +563,8 @@ def solve_factor(
         return np.asarray(
             factor.covariance_factor.solve(np.asarray(values, dtype=float))
         )
+    if isinstance(factor, DiagonalSparsePrecisionFactor):
+        return _solve_sparse_precision_factor(factor, values)
     if isinstance(factor, NestedLowRankFactor):
         inverse_values = solve_factor(factor.base_factor, values)
         correction_rhs = factor.low_rank.T @ inverse_values
@@ -485,12 +583,29 @@ def solve_factor(
     return np.linalg.solve(factor.T, np.linalg.solve(factor, values))
 
 
+def _solve_sparse_precision_factor(factor, values):
+    values = np.asarray(values, dtype=float)
+    inverse_values = (
+        values / factor.diagonal
+        if values.ndim == 1
+        else values / factor.diagonal[:, None]
+    )
+    correction = factor.posterior_factor.solve(factor.loading.T @ inverse_values)
+    projected = np.asarray(factor.loading @ correction)
+    return inverse_values - (
+        projected / factor.diagonal
+        if projected.ndim == 1
+        else projected / factor.diagonal[:, None]
+    )
+
+
 def factor_logdet(
     factor: np.ndarray
     | DiagonalLowRankFactor
     | GroupedDiagonalLowRankFactor
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
+    | DiagonalSparsePrecisionFactor
     | NestedLowRankFactor,
 ) -> float:
     """Return the covariance log determinant from its factor."""
@@ -504,7 +619,14 @@ def factor_logdet(
             + float(np.log(factor.group_denominator).sum())
             + 2.0 * float(np.log(np.diag(factor.woodbury_cholesky)).sum())
         )
-    if isinstance(factor, (SparseDiagonalLowRankFactor, SparseCovarianceFactor)):
+    if isinstance(
+        factor,
+        (
+            SparseDiagonalLowRankFactor,
+            SparseCovarianceFactor,
+            DiagonalSparsePrecisionFactor,
+        ),
+    ):
         return factor.logdet
     if isinstance(factor, NestedLowRankFactor):
         return factor_logdet(factor.base_factor) + 2.0 * float(
@@ -521,6 +643,7 @@ def draw_from_factor(
     | GroupedDiagonalLowRankFactor
     | SparseDiagonalLowRankFactor
     | SparseCovarianceFactor
+    | DiagonalSparsePrecisionFactor
     | NestedLowRankFactor,
     standard_normal: np.ndarray,
     *,
@@ -558,6 +681,8 @@ def draw_from_factor(
         return np.sqrt(factor.diagonal) * standard_normal + np.asarray(
             factor.low_rank @ rng.standard_normal(factor.low_rank.shape[1])
         ).reshape(-1)
+    if isinstance(factor, DiagonalSparsePrecisionFactor):
+        return _draw_sparse_precision_factor(factor, standard_normal, rng)
     if isinstance(factor, NestedLowRankFactor):
         if rng is None:
             raise ValueError("Structured covariance draws require a random generator.")
@@ -573,8 +698,25 @@ def draw_from_factor(
     return factor @ standard_normal
 
 
+def _draw_sparse_precision_factor(factor, standard_normal, rng):
+    standard_normal = np.asarray(standard_normal, dtype=float)
+    if standard_normal.ndim != 1 or rng is None:
+        raise ValueError(
+            "Structured covariance draws require a vector and random generator."
+        )
+    perturbation = factor.prior_precision_factor.T @ rng.standard_normal(
+        factor.prior_precision_factor.shape[0]
+    )
+    latent = factor.prior_factor.solve(np.asarray(perturbation).reshape(-1))
+    return np.sqrt(factor.diagonal) * standard_normal + np.asarray(
+        factor.loading @ latent
+    ).reshape(-1)
+
+
 def materialize_covariance(
-    covariance: np.ndarray | DiagonalLowRankCovariance,
+    covariance: (
+        np.ndarray | DiagonalLowRankCovariance | DiagonalSparsePrecisionCovariance
+    ),
 ) -> np.ndarray:
     """Materialize a diagonal-vector or dense covariance representation."""
     if isinstance(covariance, DiagonalLowRankCovariance):
@@ -582,5 +724,14 @@ def materialize_covariance(
         if sparse.issparse(update):
             update = update.toarray()
         return np.diag(covariance.diagonal) + np.asarray(update)
+    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        return _materialize_sparse_precision_covariance(covariance)
     covariance = np.asarray(covariance, dtype=float)
     return np.diag(covariance) if covariance.ndim == 1 else covariance
+
+
+def _materialize_sparse_precision_covariance(covariance):
+    solver = splu(covariance.precision, permc_spec="COLAMD")
+    solved = solver.solve(covariance.loading.T.toarray())
+    update = np.asarray(covariance.loading @ solved)
+    return np.diag(covariance.diagonal) + (update + update.T) / 2.0

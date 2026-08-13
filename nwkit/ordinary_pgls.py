@@ -21,6 +21,7 @@ from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES_CSV
 from nwkit.evolution import (
     EVOLUTION_MODELS,
     build_evolutionary_covariance,
+    build_sparse_evolutionary_model,
     encoded_evolution_parameter,
     evolution_model_spec,
     evolutionary_covariance_factory,
@@ -29,10 +30,15 @@ from nwkit.evolution import (
     read_custom_covariance,
     validate_evolution_parameter,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance, draw_from_factor
+from nwkit.gaussian import (
+    DiagonalLowRankCovariance,
+    DiagonalSparsePrecisionCovariance,
+    draw_from_factor,
+)
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
     fit_latent_predictor,
+    fit_sparse_latent_predictor,
 )
 from nwkit.model_matrix import (
     PredictorTerm,
@@ -56,6 +62,7 @@ from nwkit.phylogenetic_glmm import (
     summarize_glmm_threshold,
 )
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
+from nwkit.sparse_laplace import GmrfPredictorUncertainty
 from nwkit.util import (
     is_rooted,
     normalized_missing_path_key,
@@ -133,6 +140,8 @@ ORDINARY_RESULT_COLUMNS = [
     "inference_status",
     "model",
 ]
+
+MIN_SPARSE_PREDICTOR_TIPS = 500
 
 ORDINARY_MODEL_COMPARISON_COLUMNS = [
     "response",
@@ -859,12 +868,19 @@ def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
         else 1.0 - float(fit["quadratic"]) / total_quadratic
     )
     evolutionary_rate = float(fit["component_variances"]["evolutionary_rate"])
-    fixed_array = np.asarray(fixed_covariance, dtype=float)
-    mean_sampling_variance = float(
-        np.mean(fixed_array if fixed_array.ndim == 1 else np.diag(fixed_array))
-    )
+    if isinstance(fixed_covariance, DiagonalLowRankCovariance):
+        update = sparse.csr_matrix(fixed_covariance.low_rank, dtype=float)
+        fixed_diagonal = np.asarray(
+            fixed_covariance.diagonal, dtype=float
+        ) + np.asarray(update.multiply(update).sum(axis=1)).reshape(-1)
+    else:
+        fixed_array = np.asarray(fixed_covariance, dtype=float)
+        fixed_diagonal = fixed_array if fixed_array.ndim == 1 else np.diag(fixed_array)
+    mean_sampling_variance = float(np.mean(fixed_diagonal))
     fitted_covariance = fit["covariance"]
-    if isinstance(fitted_covariance, DiagonalLowRankCovariance):
+    if isinstance(fitted_covariance, DiagonalSparsePrecisionCovariance):
+        mean_fitted_variance = float(np.mean(fitted_covariance.marginal_diagonal))
+    elif isinstance(fitted_covariance, DiagonalLowRankCovariance):
         update = fitted_covariance.low_rank
         update_diagonal = (
             np.asarray(update.multiply(update).sum(axis=1)).reshape(-1)
@@ -1145,6 +1161,33 @@ def _ordinary_coefficient_rows(
     return rows + _ordinary_omnibus_rows(rows, fit, term_metadata)
 
 
+def _ordinary_sampling_diagonal(sampling):
+    if isinstance(sampling, DiagonalLowRankCovariance):
+        return np.asarray(sampling.diagonal, dtype=float)
+    sampling_array = np.asarray(sampling, dtype=float)
+    return sampling_array if sampling_array.ndim == 1 else np.diag(sampling_array)
+
+
+def _ordinary_sampling_is_sparse_compatible(sampling, sampling_diagonal):
+    if isinstance(sampling, DiagonalLowRankCovariance):
+        return True
+    sampling_array = np.asarray(sampling, dtype=float)
+    return sampling_array.ndim == 1 or np.array_equal(
+        sampling_array, np.diag(sampling_diagonal)
+    )
+
+
+def _ordinary_mean_sampling_variance(sampling):
+    if isinstance(sampling, DiagonalLowRankCovariance):
+        loading = sparse.csr_matrix(sampling.low_rank)
+        marginal = sampling.diagonal + np.asarray(
+            loading.multiply(loading).sum(axis=1)
+        ).reshape(-1)
+    else:
+        marginal = _ordinary_sampling_diagonal(sampling)
+    return float(np.mean(marginal))
+
+
 def _prepare_latent_ordinary_predictors(
     tree,
     predictor_values_by_trait,
@@ -1184,69 +1227,182 @@ def _prepare_latent_ordinary_predictors(
             leaf_names,
             label="Predictor sampling covariance",
         )
-        marginal_fit = _fit_ordinary_gaussian(
-            observed,
-            np.ones((len(leaf_names), 1), dtype=float),
-            sampling,
-            tree,
-            leaf_names,
-            evolution_model=evolution_model,
-            evolution_parameter=evolution_parameter,
-            branch_length=branch_length,
-            custom_covariance=(
-                custom_covariance if evolution_model == "custom" else None
-            ),
-            reml=False,
+        sampling_diagonal = _ordinary_sampling_diagonal(sampling)
+        use_sparse = (
+            len(leaf_names) > MIN_SPARSE_PREDICTOR_TIPS
+            and evolution_model != "custom"
+            and np.all(sampling_diagonal > 0.0)
+            and _ordinary_sampling_is_sparse_compatible(sampling, sampling_diagonal)
         )
-        posterior = fit_latent_predictor(
-            observed,
-            marginal_fit["phylogenetic_covariance"],
-            sampling,
-            include_intercept=True,
-        )
-        posterior_predictor_values[predictor] = dict(
-            zip(leaf_names, posterior.mean, strict=True)
-        )
-        predictor_uncertainties[predictor] = posterior.covariance
-        diagnostics[predictor] = {
-            "evolutionary_rate": posterior.evolutionary_rate,
-            "model": evolution_model,
-            "parameter": marginal_fit["evolution_parameter"],
-            "parameter_status": marginal_fit["evolution_parameter_status"],
-            "optimizer_converged": bool(
-                posterior.optimizer_converged and marginal_fit["optimizer_converged"]
-            ),
-            "optimizer_message": "{}; {}".format(
-                marginal_fit["optimizer_message"],
-                posterior.optimizer_message,
-            ),
-            "boundary_warning": bool(
-                posterior.boundary_warning or marginal_fit["boundary_warning"]
-            ),
-            "log_likelihood": posterior.log_likelihood,
-            "mean_sampling_variance": float(
-                np.mean(
-                    sampling.diagonal
-                    + np.asarray(
-                        sparse.csr_matrix(sampling.low_rank)
-                        .multiply(sparse.csr_matrix(sampling.low_rank))
-                        .sum(axis=1)
-                    ).reshape(-1)
-                    if isinstance(sampling, DiagonalLowRankCovariance)
-                    else sampling
-                    if sampling.ndim == 1
-                    else np.diag(sampling)
+        if use_sparse:
+            spec = evolution_model_spec(evolution_model)
+            sparse_sampling = (
+                sampling
+                if isinstance(sampling, DiagonalLowRankCovariance)
+                else sampling_diagonal
+            )
+
+            def sparse_fit_at(
+                parameter,
+                observed=observed,
+                sampling=sparse_sampling,
+            ):
+                model = build_sparse_evolutionary_model(
+                    tree,
+                    leaf_names,
+                    model=evolution_model,
+                    parameter=parameter,
+                    branch_length=branch_length,
                 )
-            ),
-            "mean_posterior_variance": float(np.mean(np.diag(posterior.covariance))),
-            "uncertainty_fraction": float(
-                np.mean(np.diag(posterior.covariance))
-                / np.mean(
+                return (
+                    fit_sparse_latent_predictor(
+                        observed,
+                        model,
+                        sampling,
+                        include_intercept=True,
+                    ),
+                    model,
+                    parameter,
+                )
+
+            if spec.parameter_name is None:
+                posterior, posterior_model, selected_parameter = sparse_fit_at(None)
+                parameter_status = "not-applicable"
+                outer_converged = True
+                outer_message = "fixed evolutionary model"
+            elif evolution_parameter is not None:
+                selected_parameter = validate_evolution_parameter(
+                    evolution_model, evolution_parameter
+                )
+                posterior, posterior_model, selected_parameter = sparse_fit_at(
+                    selected_parameter
+                )
+                parameter_status = "fixed"
+                outer_converged = True
+                outer_message = "fixed evolutionary parameter"
+            else:
+                bounds, decode = optimization_parameterization(
+                    tree, evolution_model, branch_length=branch_length
+                )
+                cache: dict[float, tuple | None] = {}
+
+                def cached_fit(
+                    value,
+                    decode=decode,
+                    cache=cache,
+                    sparse_fit_at=sparse_fit_at,
+                ):
+                    decoded = float(decode(value))
+                    if decoded not in cache:
+                        try:
+                            cache[decoded] = sparse_fit_at(decoded)
+                        except (ValueError, np.linalg.LinAlgError):
+                            cache[decoded] = None
+                    return cache[decoded]
+
+                def objective(value, cached_fit=cached_fit):
+                    candidate = cached_fit(value)
+                    return (
+                        float("inf")
+                        if candidate is None
+                        else -float(candidate[0].log_likelihood)
+                    )
+
+                optimized = _global_bounded_scalar_minimize(objective, bounds)
+                candidate_values = [bounds[0], bounds[1]]
+                if math.isfinite(float(optimized.fun)):
+                    candidate_values.append(float(optimized.x))
+                candidates = [cached_fit(value) for value in candidate_values]
+                candidates = [candidate for candidate in candidates if candidate]
+                if not candidates:
+                    raise ValueError(
+                        "Predictor evolution-parameter optimization found no finite fit."
+                    )
+                posterior, posterior_model, selected_parameter = max(
+                    candidates, key=lambda candidate: candidate[0].log_likelihood
+                )
+                parameter_status = "estimated"
+                outer_converged = bool(optimized.success)
+                outer_message = str(optimized.message)
+            marginal_parameter_boundary = bool(
+                parameter_status == "estimated"
+                and selected_parameter is not None
+                and parameter_near_boundary(
+                    tree,
+                    evolution_model,
+                    float(selected_parameter),
+                    branch_length=branch_length,
+                )
+            )
+            predictor_uncertainty = GmrfPredictorUncertainty(
+                posterior_model, np.arange(len(leaf_names), dtype=int)
+            )
+            mean_posterior_variance = posterior.mean_posterior_variance
+            mean_prior_variance = (
+                posterior.evolutionary_rate * posterior_model.covariance_scale
+            )
+            marginal_converged = outer_converged
+            marginal_message = outer_message
+        else:
+            marginal_fit = _fit_ordinary_gaussian(
+                observed,
+                np.ones((len(leaf_names), 1), dtype=float),
+                sampling,
+                tree,
+                leaf_names,
+                evolution_model=evolution_model,
+                evolution_parameter=evolution_parameter,
+                branch_length=branch_length,
+                custom_covariance=(
+                    custom_covariance if evolution_model == "custom" else None
+                ),
+                reml=False,
+            )
+            posterior = fit_latent_predictor(
+                observed,
+                marginal_fit["phylogenetic_covariance"],
+                sampling,
+                include_intercept=True,
+            )
+            predictor_uncertainty = posterior.covariance
+            selected_parameter = marginal_fit["evolution_parameter"]
+            parameter_status = marginal_fit["evolution_parameter_status"]
+            marginal_converged = marginal_fit["optimizer_converged"]
+            marginal_message = marginal_fit["optimizer_message"]
+            marginal_parameter_boundary = marginal_fit["boundary_warning"]
+            mean_posterior_variance = float(np.mean(np.diag(posterior.covariance)))
+            mean_prior_variance = float(
+                np.mean(
                     np.diag(
                         posterior.evolutionary_rate
                         * marginal_fit["phylogenetic_covariance"]
                     )
                 )
+            )
+        posterior_predictor_values[predictor] = dict(
+            zip(leaf_names, posterior.mean, strict=True)
+        )
+        predictor_uncertainties[predictor] = predictor_uncertainty
+        diagnostics[predictor] = {
+            "evolutionary_rate": posterior.evolutionary_rate,
+            "model": evolution_model,
+            "parameter": selected_parameter,
+            "parameter_status": parameter_status,
+            "optimizer_converged": bool(
+                posterior.optimizer_converged and marginal_converged
+            ),
+            "optimizer_message": "{}; {}".format(
+                marginal_message,
+                posterior.optimizer_message,
+            ),
+            "boundary_warning": bool(
+                posterior.boundary_warning or marginal_parameter_boundary
+            ),
+            "log_likelihood": posterior.log_likelihood,
+            "mean_sampling_variance": _ordinary_mean_sampling_variance(sampling),
+            "mean_posterior_variance": mean_posterior_variance,
+            "uncertainty_fraction": float(
+                mean_posterior_variance / max(mean_prior_variance, np.finfo(float).tiny)
             ),
         }
     return posterior_predictor_values, predictor_uncertainties, diagnostics

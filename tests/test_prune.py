@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from nwkit.prune import prune_main
@@ -194,7 +196,7 @@ class TestPruneMain:
             preserve_properties=True,
         )
         prune_main(args)
-        output = open(tmp_outfile).read()
+        output = Path(tmp_outfile).read_text()
         assert "D=N" in output
         assert "NWKIT_COLLAPSED_EVENT_BOUNDARY=Y" in output
         tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)

@@ -2,7 +2,9 @@ import hashlib
 import io
 import json
 import sys
+import threading
 import warnings
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -2104,7 +2106,7 @@ def test_precomputed_reconciled_pgls_accepts_predictor_sampling_covariance():
     assert result.iloc[0]["standard_error"] > 0.0
 
 
-def test_predictor_factor_loading_sidecar_matches_explicit_covariance():
+def test_predictor_factor_loading_sidecar_matches_explicit_covariance(monkeypatch):
     response = pd.DataFrame(
         [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
     )
@@ -2138,6 +2140,11 @@ def test_predictor_factor_loading_sidecar_matches_explicit_covariance():
     explicit_result = fit_reconciled_pgls(
         **common, predictor_sampling_covariance=explicit
     )
+
+    def reject_materialization(_covariance):
+        raise AssertionError("factor-loading covariance was materialized")
+
+    monkeypatch.setattr(pgls_mod, "materialize_covariance", reject_materialization)
     factor_result = fit_reconciled_pgls(
         **common, predictor_sampling_covariance=pd.DataFrame(factor_rows)
     )
@@ -2145,7 +2152,60 @@ def test_predictor_factor_loading_sidecar_matches_explicit_covariance():
     np.testing.assert_allclose(
         factor_result[["coefficient", "standard_error", "log_likelihood"]],
         explicit_result[["coefficient", "standard_error", "log_likelihood"]],
+        rtol=5e-5,
+        atol=1e-7,
     )
+    np.testing.assert_allclose(
+        factor_result[
+            ["mean_latent_predictor_variance", "predictor_uncertainty_fraction"]
+        ],
+        explicit_result[
+            ["mean_latent_predictor_variance", "predictor_uncertainty_fraction"]
+        ],
+        rtol=5e-5,
+        atol=1e-7,
+    )
+
+
+@pytest.mark.slow
+def test_large_predictor_factor_loading_remains_structured(monkeypatch):
+    size = pgls_mod.MAX_DENSE_GAUSSIAN_OBSERVATIONS + 1
+    predictor_values = np.linspace(-2.0, 2.0, size)
+    predictor = _predictor_table(predictor_values)
+    predictor["contrast_variance"] = 1.0
+    response = pd.DataFrame(
+        [
+            _response_row(index, 1.5 * value + 0.1 * np.sin(index))
+            for index, value in enumerate(predictor_values, start=1)
+        ]
+    )
+    factor = pd.DataFrame(
+        {
+            "tree_id": "species",
+            "trait": "body_size",
+            "contrast_id_1": predictor["branch_clade_id"],
+            "contrast_id_2": ["latent:{}".format(index) for index in range(size)],
+            "sampling_covariance": np.sqrt(0.05),
+            "covariance_representation": "factor-loading",
+        }
+    )
+
+    def reject_materialization(_covariance):
+        raise AssertionError("large factor-loading covariance was materialized")
+
+    monkeypatch.setattr(pgls_mod, "materialize_covariance", reject_materialization)
+    result = fit_reconciled_pgls(
+        response,
+        predictor,
+        ["expression"],
+        ["body_size"],
+        predictor_sampling_covariance=factor,
+        event_random_effect="no",
+        lineage_random_slope="no",
+    )
+
+    assert result.iloc[0]["coefficient"] == pytest.approx(1.5, rel=0.02)
+    assert result.iloc[0]["measurement_error_model"] == "latent-predictor"
 
 
 def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
@@ -2718,10 +2778,66 @@ def test_pgls_bundle_commit_failure_restores_every_existing_output(
     with pytest.raises(OSError, match="bundle commit failure"):
         write_pgls_bundle(str(prefix), _minimal_pipeline_artifacts())
 
-    assert all(open(path).read() == "original\n" for path in paths.values())
+    assert all(Path(path).read_text() == "original\n" for path in paths.values())
     assert not [
         path for path in tmp_path.iterdir() if path.name.startswith(".analysis.")
     ]
+
+
+def test_explicit_output_transactions_are_isolated_across_concurrent_writers(
+    monkeypatch, tmp_path
+):
+    result_path = tmp_path / "result.tsv"
+    sidecar_path = tmp_path / "sidecar.tsv"
+    first_entered = threading.Event()
+    release_first = threading.Event()
+    second_entered = threading.Event()
+    real_commit = pgls_pipeline_mod._commit_pgls_outputs
+    commit_count = 0
+    commit_guard = threading.Lock()
+
+    def controlled_commit(staged_outputs):
+        nonlocal commit_count
+        with commit_guard:
+            commit_count += 1
+            position = commit_count
+        if position == 1:
+            first_entered.set()
+            assert release_first.wait(5)
+        else:
+            second_entered.set()
+        real_commit(staged_outputs)
+
+    monkeypatch.setattr(pgls_pipeline_mod, "_commit_pgls_outputs", controlled_commit)
+    errors = []
+
+    def write(label):
+        try:
+            pgls_pipeline_mod._write_dataframes_transactionally(
+                [
+                    (str(result_path), pd.DataFrame({"run": [label]})),
+                    (str(sidecar_path), pd.DataFrame({"run": [label]})),
+                ]
+            )
+        except BaseException as exc:  # pragma: no cover - asserted below
+            errors.append(exc)
+
+    first = threading.Thread(target=write, args=("A",))
+    second = threading.Thread(target=write, args=("B",))
+    first.start()
+    assert first_entered.wait(5)
+    second.start()
+    assert not second_entered.wait(0.2)
+    release_first.set()
+    first.join(5)
+    second.join(5)
+
+    assert not first.is_alive()
+    assert not second.is_alive()
+    assert errors == []
+    assert pd.read_csv(result_path, sep="\t").iloc[0]["run"] == "B"
+    assert pd.read_csv(sidecar_path, sep="\t").iloc[0]["run"] == "B"
+    assert not list(tmp_path.glob(".nwkit-output-*.lock"))
 
 
 @pytest.mark.integration

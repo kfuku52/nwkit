@@ -169,6 +169,7 @@ class GmrfPredictorUncertainty:
 
     model: SparseCovarianceModel
     observation_index: np.ndarray
+    row_scale: np.ndarray | None = None
 
 
 def factor_sparse_positive_definite(

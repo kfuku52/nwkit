@@ -87,7 +87,8 @@ epsilons relative to a row's largest loading are discarded):
 `covariance_representation=factor-loading`,
 `contrast_id_1` names a contrast, `contrast_id_2` names a latent tip-error
 column, and `sampling_covariance` contains the loading rather than a covariance
-entry. NWKIT reconstructs $M=UU^T$ without materializing it.
+entry. NWKIT retains $U$ through latent-predictor conditioning and the final
+errors-in-variables likelihood; it does not materialize $M=UU^T$.
 
 ### Typed predictors and response likelihoods
 
@@ -469,6 +470,9 @@ NWKIT stages every applicable table before committing the bundle. A per-prefix
 lock serializes concurrent writers. If ordinary staging or commit fails, newly
 installed files are removed and pre-existing bundle members are restored. An
 audited run records the planned paths even when no new bundle is committed.
+Explicit multi-file output sets are also protected by per-target locks acquired
+in deterministic order, so concurrent successful runs cannot leave a mixture
+of result and sidecar files from different analyses.
 
 Without `--out-prefix`, only `--outfile` (or standard output) and explicitly
 requested `--random-effects-out`, `--sensitivity-out`, and
@@ -910,8 +914,12 @@ transfer no longer silently produces an empty table.
   multivariate sparse likelihood estimates the shared shape parameter of a
   categorical predictor, including its per-species replicate covariance,
   without constructing a dense tip-by-factor covariance.
+  For conventional PGLS with more than 500 tips, diagonal or diagonal-plus-
+  factor predictor sampling covariance is conditioned with the same sparse
+  tree precision backend; this changes only the linear-algebra backend, not the
+  likelihood.
   Conditional EIV Gaussian fits retain diagonal, event/group, response
-  factor-loading, and structured predictor components. They are validated
+  factor-loading, and predictor posterior-precision components. They are validated
   through 5,000 contrasts and attempt larger structured fits with a warning;
   a general dense covariance requires `--allow-large-dense yes` above 2,000.
   Shape-refitted Gaussian bootstrap simulates through tree recursions and

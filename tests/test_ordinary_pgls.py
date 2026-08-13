@@ -16,6 +16,7 @@ from nwkit.model_matrix import CategoricalObservation, encode_predictors
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.ordinary_pgls import (
     _global_bounded_scalar_minimize,
+    _prepare_latent_ordinary_predictors,
     build_phylogenetic_covariance,
     estimate_marginal_evolution_parameter,
     fit_ordinary_model_comparison,
@@ -78,6 +79,35 @@ def test_marginal_shape_estimation_uses_sparse_tree_likelihood(monkeypatch):
     assert 0.0 <= diagnostics["parameter"] <= 1.0
     assert diagnostics["parameter_status"] == "estimated"
     assert np.isfinite(diagnostics["log_likelihood"])
+
+
+@pytest.mark.slow
+def test_large_ordinary_predictor_conditioning_retains_sparse_posterior():
+    size = 512
+    names = ["S{}".format(index) for index in range(size)]
+    nodes = ["{}:1".format(name) for name in names]
+    while len(nodes) > 1:
+        nodes = [
+            "({},{}):1".format(nodes[index], nodes[index + 1])
+            for index in range(0, len(nodes), 2)
+        ]
+    tree = Tree(nodes[0] + ";", parser=1)
+    observed = np.linspace(-2.0, 2.0, size)
+
+    values, uncertainties, diagnostics = _prepare_latent_ordinary_predictors(
+        tree,
+        {"predictor": dict(zip(names, observed, strict=True))},
+        ["predictor"],
+        {"predictor": np.full(size, 0.1)},
+        evolution_model="independent",
+        evolution_parameter=None,
+        branch_length="original",
+        custom_covariance=None,
+    )
+
+    assert isinstance(uncertainties["predictor"], GmrfPredictorUncertainty)
+    assert len(values["predictor"]) == size
+    assert diagnostics["predictor"]["mean_posterior_variance"] > 0.0
 
 
 def _values(values):
@@ -561,6 +591,78 @@ def test_conventional_pgls_cli_propagates_biological_replicate_uncertainty(
     assert (covariance["leaf_name_1"] == covariance["leaf_name_2"]).all()
     assert set(summary["n_biological"]) == {2}
     assert set(summary["variance_method"]) == {"pooled"}
+
+
+@pytest.mark.integration
+def test_conventional_pgls_cli_supports_batch_adjusted_response_replicates(tmp_path):
+    tree_path, data_path = _write_inputs(tmp_path)
+    original = pd.read_csv(data_path, sep="\t")
+    rows = []
+    for record in original.to_dict("records"):
+        for batch, batch_shift in [("x", -0.4), ("y", 0.4)]:
+            for replicate, residual in [("1", -0.1), ("2", 0.1)]:
+                rows.append(
+                    {
+                        **record,
+                        "sample_id": "{}_{}_{}".format(
+                            record["leaf_name"], batch, replicate
+                        ),
+                        "batch": batch,
+                        "expression": record["expression"] + batch_shift + residual,
+                    }
+                )
+    pd.DataFrame(rows).to_csv(data_path, sep="\t", index=False)
+    output_path = tmp_path / "batch-pgls.tsv"
+
+    main(
+        [
+            "pgls",
+            "--tree",
+            str(tree_path),
+            "--data",
+            str(data_path),
+            "--responses",
+            "expression",
+            "--predictors",
+            "body_size",
+            "--biological-id",
+            "sample_id",
+            "--batch",
+            "batch",
+            "--outfile",
+            str(output_path),
+        ]
+    )
+
+    result = pd.read_csv(output_path, sep="\t")
+    assert set(result["measurement_error_model"]) == {"response-only"}
+    assert result.iloc[0]["mean_sampling_variance"] > 0.0
+
+
+@pytest.mark.integration
+def test_conventional_pgls_cli_rejects_duplicate_tsv_headers(tmp_path):
+    tree_path, data_path = _write_inputs(tmp_path)
+    data_path.write_text(
+        "leaf_name\texpression\texpression\tbody_size\n"
+        "A\t1\t2\t1\nB\t2\t3\t2\nC\t3\t4\t3\nD\t4\t5\t4\nE\t5\t6\t5\n"
+    )
+
+    with pytest.raises(ValueError, match="duplicated column header.*expression"):
+        main(
+            [
+                "pgls",
+                "--tree",
+                str(tree_path),
+                "--data",
+                str(data_path),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--outfile",
+                str(tmp_path / "duplicate.tsv"),
+            ]
+        )
 
 
 @pytest.mark.integration
