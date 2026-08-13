@@ -70,7 +70,7 @@ minimal worked example, in
 - [`compose`](https://github.com/kfuku52/nwkit/wiki/nwkit-compose): Assembling compatible roots, values, and annotations from multiple trees
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
-- [`contrast`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Calculating continuous-trait phylogenetic independent contrasts, with biological/technical replicates, batch adjustment, propagated sampling covariance, and reconciled gene-tree event mappings
+- [`contrast`](https://github.com/kfuku52/nwkit/wiki/nwkit-contrast): Calculating continuous-trait phylogenetic independent contrasts, with biological/technical replicates, batch adjustment, propagated sampling covariance, and reconciled gene-tree event mappings
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with aligned species images, support, categorical or missing-value badges, filtered node-probability pies, and property labels
@@ -84,11 +84,11 @@ minimal worked example, in
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
-- [`pgls`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
+- [`pgls`](https://github.com/kfuku52/nwkit/wiki/nwkit-pgls): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
-- [`reconcile`](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md): Mapping rooted gene-tree nodes and events onto a rooted species tree
+- [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
 - [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing or transferring the tree root
 - [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
@@ -99,6 +99,63 @@ minimal worked example, in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+
+## Reconciled speciation contrasts and PGLS
+
+Reconciled speciation contrasts (RSC) relate a gene-expression change on a
+gene-tree speciation node to the organismal-trait change at the corresponding
+species-tree split. An ancient duplication may place the same species event in
+several paralog lineages. NWKIT keeps those expression contrasts separate, but
+the default equal-event likelihood counts the species split only once instead
+of treating repeated paralogs as independent trait observations.
+
+The complete workflow can be run in one command:
+
+```sh
+nwkit pgls \
+  --gene-tree gene_tree.dated.nwk \
+  --species-tree species_tree.dated.nwk \
+  --expression expression.tsv \
+  --species-traits species_traits.tsv \
+  --responses expression \
+  --predictors body_size \
+  --biological-id sample_id \
+  --predictor-biological-id sample_id \
+  --tree-id OG000001 \
+  --model hierarchical \
+  --event-weighting equal \
+  --out-prefix OG000001
+```
+
+Alternatively, run [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile),
+[`contrast`](https://github.com/kfuku52/nwkit/wiki/nwkit-contrast), and
+[`pgls`](https://github.com/kfuku52/nwkit/wiki/nwkit-pgls) separately to inspect
+and reuse every intermediate table. LCA reconciliation, GeneRax-style NHX
+`S`/`D`/`H` annotations, and the species-overlap heuristic are explicit event
+sources.
+
+The reconciled model supports:
+
+- biological and technical replicates, batch effects, and known standard
+  errors for both responses and predictors;
+- latent-predictor errors-in-variables inference, so uncertain species-trait
+  means are not treated as exact;
+- a shared species-event response effect and partially pooled lineage slopes,
+  with separate, scale-invariant variance components for each predictor group;
+- continuous, categorical, ordered, count, zero-inflated, positive,
+  proportion, and censored responses;
+- Brownian, Pagel lambda, OU, kappa, delta, early-burst/ACDC, independent, and
+  custom evolutionary covariance models where applicable;
+- Wald, likelihood-ratio, profile-likelihood, and parameter-refitted bootstrap
+  inference, plus lineage and mapped trait-origin sensitivity analyses; and
+- sparse or diagonal-plus-low-rank covariance paths designed to keep
+  tree-structured analyses with thousands of tips feasible.
+
+The detailed statistical contract, limitations, and file schemas are in
+[Conventional PGLS and reconciled speciation contrasts](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md).
+The RSC recursion, covariance propagation, event-balanced pseudo-likelihood,
+and a hand-calculated example are in the
+[mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).
 
 ## Drawing trees with species images
 

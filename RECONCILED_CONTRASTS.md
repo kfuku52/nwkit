@@ -631,17 +631,22 @@ The default `--model hierarchical` fits the Gaussian covariance
 
 ```text
 V = sigma^2 G + M + tau_event^2 Z_event Z_event'
-    + tau_lineage^2 sum_j diag(x_j) Z_lineage Z_lineage' diag(x_j)
+    + sum_s tau_s^2 Z_s Z_s'
 ```
 
 `G` is the diagonal transformed-tree evolutionary variance of each selected
 gene-tree contrast and `M` is the fixed sampling covariance propagated from
 biological replicates.
 `Z_event` gives paralog contrasts at the same `species_event_id` a shared
-response deviation. The final term is a partially pooled lineage-specific
-random slope for each predictor; it uses `lineage_clade_id` and does not add an
-uninterpretable lineage intercept. Evolutionary, event, and lineage variances
-are estimated by REML by default. `--reml no` selects ML.
+response deviation. Each `s` is one source predictor group (all coding columns
+of one categorical predictor stay together). `Z_s` is its event-weighted,
+whitened predictor design crossed with `lineage_clade_id`. This gives every
+source its own partially pooled lineage-slope variance and makes the fitted
+likelihood invariant to continuous unit changes and invertible factor
+recodings. Results are transformed back to the supplied coefficient units.
+The model does not add an uninterpretable lineage intercept. Evolutionary,
+event, and lineage variances are estimated by REML by default. `--reml no`
+selects ML.
 
 With predictor replicates, the observed species contrast is modeled as
 
