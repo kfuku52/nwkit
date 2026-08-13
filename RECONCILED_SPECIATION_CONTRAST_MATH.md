@@ -186,10 +186,19 @@ $$
 \operatorname{Cov}(\boldsymbol\varepsilon)
 =\sigma^2G+M
 +\tau_{\mathrm{event}}^2Z_{\mathrm{event}}Z_{\mathrm{event}}^\mathsf T
-+\text{lineage random-slope component}
++\sum_s\tau_s^2Z_sZ_s^\mathsf T
 $$
 
 を推定する。
+
+$s$ は元の説明変数（カテゴリカルなら、そのfactorから生成された全coding列を
+まとめた群）を表す。各群のdesignのevent-weighted second momentを $S_s$ とし、
+$Z_s$ は $X_sS_s^{-1/2}$ をlineage indicatorへ掛けて作る。このwhiteningにより、
+連続変数の単位変更や同じカテゴリカルfactorの可逆なcoding変更で尤度が変わらない。
+また $\tau_s^2$ は群ごとに別々に推定するため、無関係な説明変数の単位や
+lineage heterogeneityが他の群の分散成分を変えない。出力時には
+$\tau_s^2S_s^{-1}$ を元の係数単位へ戻して、各termの
+`lineage_slope_variance` と区間を報告する。
 
 ### 3.1 説明変数にもreplicateがある場合
 
@@ -250,26 +259,45 @@ $e(i)$ を持つ。このとき $X$ の同じ種形質contrastが複数行に現
 種分化の反復が増えたわけではない。
 
 イベント $e$ に属する遺伝子contrast数を $k_e$ とすると、既定の
-`--event-weighting equal` は、対角だけの単純な場合には各行へ $1/k_e$ の情報重み
-を与えることに相当する。実装上は $B_{ii}=\sqrt{k_{e(i)}}$ としてworking
-covarianceを
+`--event-weighting equal` は、各イベントへ同じ総情報重みを与える。行固有の
+発現進化分散と発現sampling covarianceについては
+$B_{ii}=\sqrt{k_{e(i)}}$ としてworking covarianceを
 
 $$
-V_{\mathrm{work}}=BVB
+V_{\mathrm{work}}=B(\sigma^2G+M)B
++V_{\mathrm{shared}}
 $$
 
-へ変換する。Gaussian ML/REMLでは行数そのものを尤度の標本数にせず、イベント数
-$m$ を有効標本数とする。$n$ を遺伝子contrast行数として、共分散のlog determinant
-項は
+へ変換する。$V_{\mathrm{shared}}$ はspecies-event効果、lineage効果、同じspecies
+contrastを再利用する説明変数誤差であり、パラログ行を追加してもそのprior variance
+自体は増えない。
+
+Gaussian ML/REMLでは行数そのものを尤度の標本数にせず、イベント数 $m$ を
+有効標本数とする。$A_{ei}=1/k_e$（$i\in e$、それ以外0）をイベント平均行列と
+すると、`replicate-reml` およびspecies-event random effectを含まないモデルの
+pseudo-determinant項は
 
 $$
-\frac{m}{n}\left\{\log|V_{\mathrm{work}}|-2\log|B|\right\}
+\sum_{e=1}^m\log\left[(AV_{\mathrm{work}}A^\mathsf T)_{ee}\right]
 $$
 
-とする。$-2\log|B|$ は既知の行スケーリングのJacobianを相殺する項である。したがって
-同一のparalog行を何コピー追加しても、`replicate-reml` の係数、進化rate、標準誤差、
-log likelihoodは変わらない。parametric bootstrapとlineage likelihood-ratio検定も
-同じevent-level擬似尤度で再fitする。
+とする。したがって、行固有の発現誤差だけでなくspecies側の説明変数誤差がある場合も、
+同一のparalog行を何コピー追加しても `replicate-reml` の係数、進化rate、標準誤差、
+log likelihoodは変わらない。
+
+species-event random effectを推定するモデルでは、イベント内変動とイベント間変動を
+識別する情報を残す必要がある。この場合は各行のworking marginal varianceを
+$v_i=(V_{\mathrm{work}})_{ii}$ として
+
+$$
+\sum_{e=1}^m\frac{1}{k_e}\sum_{i\in e}
+\left(\log v_i-\log k_e\right)
+$$
+
+を用いる。これはイベントごとに正規化したcomposite pseudo-determinantであり、
+厳密な多変量Gaussian log determinantではない。二次形式はどちらも
+$\mathbf r^\mathsf TV_{\mathrm{work}}^{-1}\mathbf r$ を用いる。parametric bootstrapと
+lineage likelihood-ratio検定も、元のfitと同じevent-level目的関数で再fitする。
 
 さらに、識別可能なら同じ `species_event_id` を共有する行に
 species-event random effectを入れる。残差自由度も遺伝子contrast数ではなく

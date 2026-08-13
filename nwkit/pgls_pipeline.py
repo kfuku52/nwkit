@@ -1613,7 +1613,18 @@ def _categorical_contrast_uncertainties(
         full_audit = event_count * dimension <= 500
         for first, first_term in enumerate(term_names):
             for second, second_term in enumerate(term_names):
-                cross_covariance = factor_by_term[first] @ factor_by_term[second].T
+                if full_audit:
+                    cross_covariance = (
+                        factor_by_term[first] @ factor_by_term[second].T
+                    ).tocsr()
+                    marginal_covariance = np.empty(0, dtype=float)
+                else:
+                    cross_covariance = None
+                    marginal_covariance = np.asarray(
+                        factor_by_term[first]
+                        .multiply(factor_by_term[second])
+                        .sum(axis=1)
+                    ).reshape(-1)
                 for first_event, first_id in enumerate(event_ids):
                     second_events = (
                         range(first_event, event_count)
@@ -1630,6 +1641,8 @@ def _categorical_contrast_uncertainties(
                                 "contrast_id_2": event_ids[second_event],
                                 "sampling_covariance": float(
                                     cross_covariance[first_event, second_event]
+                                    if cross_covariance is not None
+                                    else marginal_covariance[first_event]
                                 ),
                                 "audit_scope": (
                                     "full" if full_audit else "marginal-only"
@@ -1674,11 +1687,7 @@ def _attach_evolution_diagnostics(
         if row.get("term_test", "coefficient") != "coefficient":
             if predictor_groups is None:
                 raise ValueError("Grouped predictor diagnostics require term groups.")
-            predictor_term = (
-                next(iter(predictor_groups.values()))[0]
-                if row["term_test"] == "lineage-heterogeneity"
-                else predictor_groups[str(row["source_term"])][0]
-            )
+            predictor_term = predictor_groups[str(row["source_term"])][0]
         predictor = predictor_diagnostics[predictor_term]
         updated.loc[row_index, "response_evolution_parameter_status"] = response[
             "parameter_status"

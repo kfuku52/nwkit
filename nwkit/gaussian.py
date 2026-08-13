@@ -730,6 +730,151 @@ def materialize_covariance(
     return np.diag(covariance) if covariance.ndim == 1 else covariance
 
 
+def _sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.ndarray:
+    loading = sparse.csr_matrix(loading, dtype=float)
+    solver = splu(precision, permc_spec="COLAMD") if solver is None else solver
+    n_rows = loading.shape[0]
+    if n_rows <= 512:
+        solved = solver.solve(loading.T.toarray())
+        return np.asarray(loading.multiply(solved.T).sum(axis=1)).reshape(-1)
+    probe_count = min(64, max(16, int(math.ceil(math.log2(n_rows + 1))) * 4))
+    probes = np.random.default_rng(0).choice((-1.0, 1.0), size=(n_rows, probe_count))
+    projected = loading @ solver.solve(np.asarray(loading.T @ probes))
+    return np.maximum(0.0, np.mean(probes * projected, axis=1))
+
+
+def covariance_marginal_diagonal(covariance, *, precision_factor=None) -> np.ndarray:
+    """Return marginal variances without materializing structured covariance."""
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        loading = covariance.low_rank
+        row_squares = (
+            np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
+            if sparse.issparse(loading)
+            else np.einsum("ij,ij->i", loading, loading, optimize=True)
+        )
+        return np.asarray(covariance.diagonal, dtype=float) + row_squares
+    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        return np.asarray(
+            covariance.diagonal, dtype=float
+        ) + _sparse_precision_update_diagonal(
+            covariance.loading,
+            covariance.precision,
+            solver=(
+                precision_factor.prior_factor
+                if isinstance(precision_factor, DiagonalSparsePrecisionFactor)
+                else None
+            ),
+        )
+    covariance = np.asarray(covariance, dtype=float)
+    return covariance if covariance.ndim == 1 else np.diag(covariance)
+
+
+def _covariance_observation_count(covariance) -> int:
+    if isinstance(
+        covariance, (DiagonalLowRankCovariance, DiagonalSparsePrecisionCovariance)
+    ):
+        return len(covariance.diagonal)
+    return len(np.asarray(covariance))
+
+
+def _normalized_covariance_groups(groups, n_observations):
+    groups = np.asarray(groups)
+    if (
+        groups.ndim != 1
+        or len(groups) != n_observations
+        or not np.issubdtype(groups.dtype, np.integer)
+        or np.any(groups < 0)
+    ):
+        raise ValueError("Likelihood groups are malformed.")
+    groups = groups.astype(int, copy=False)
+    n_groups = int(groups.max()) + 1 if len(groups) else 0
+    counts = np.bincount(groups, minlength=n_groups)
+    if n_groups == 0 or np.any(counts == 0):
+        raise ValueError("Likelihood groups must be non-empty and contiguous.")
+    return groups, counts
+
+
+def grouped_mean_covariance_diagonal(
+    covariance, groups, *, precision_factor=None
+) -> np.ndarray:
+    """Return marginal variances of equally weighted within-group means.
+
+    The calculation preserves diagonal-plus-low-rank and sparse-precision
+    representations, so event-level pseudo-likelihoods do not need to
+    materialize an observation-by-observation covariance matrix.
+    """
+    n_observations = _covariance_observation_count(covariance)
+    groups, counts = _normalized_covariance_groups(groups, n_observations)
+    n_groups = len(counts)
+    row_weights = 1.0 / counts[groups].astype(float)
+    aggregation = sparse.csr_matrix(
+        (row_weights, (groups, np.arange(n_observations))),
+        shape=(n_groups, n_observations),
+    )
+
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        diagonal = np.asarray(covariance.diagonal, dtype=float)
+        grouped_diagonal = np.bincount(
+            groups,
+            weights=np.square(row_weights) * diagonal,
+            minlength=n_groups,
+        )
+        grouped_loading = aggregation @ covariance.low_rank
+        return grouped_diagonal + np.asarray(
+            grouped_loading.multiply(grouped_loading).sum(axis=1)
+            if sparse.issparse(grouped_loading)
+            else np.einsum("ij,ij->i", grouped_loading, grouped_loading, optimize=True)
+        ).reshape(-1)
+
+    if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        grouped_diagonal = np.bincount(
+            groups,
+            weights=np.square(row_weights) * covariance.diagonal,
+            minlength=n_groups,
+        )
+        grouped_loading = sparse.csr_matrix(aggregation @ covariance.loading)
+        return grouped_diagonal + _sparse_precision_update_diagonal(
+            grouped_loading,
+            covariance.precision,
+            solver=(
+                precision_factor.prior_factor
+                if isinstance(precision_factor, DiagonalSparsePrecisionFactor)
+                else None
+            ),
+        )
+
+    covariance = np.asarray(covariance, dtype=float)
+    if covariance.ndim == 1:
+        return np.bincount(
+            groups,
+            weights=np.square(row_weights) * covariance,
+            minlength=n_groups,
+        )
+    if covariance.shape != (n_observations, n_observations):
+        raise ValueError("Covariance has the wrong dimensions.")
+    result = np.empty(n_groups, dtype=float)
+    for group in range(n_groups):
+        selected = np.flatnonzero(groups == group)
+        result[group] = float(
+            covariance[np.ix_(selected, selected)].sum() / np.square(len(selected))
+        )
+    return result
+
+
+def grouped_average_marginal_logdet(
+    covariance, groups, *, precision_factor=None
+) -> float:
+    """Average marginal log variance within each group, removing row scaling."""
+    marginal_variances = covariance_marginal_diagonal(
+        covariance, precision_factor=precision_factor
+    )
+    groups, counts = _normalized_covariance_groups(groups, len(marginal_variances))
+    if np.any(marginal_variances <= 0.0) or not np.isfinite(marginal_variances).all():
+        raise np.linalg.LinAlgError("Covariance marginal variance is not positive.")
+    row_weights = 1.0 / counts[groups].astype(float)
+    return float(row_weights @ (np.log(marginal_variances) - np.log(counts[groups])))
+
+
 def _materialize_sparse_precision_covariance(covariance):
     solver = splu(covariance.precision, permc_spec="COLAMD")
     solved = solver.solve(covariance.loading.T.toarray())

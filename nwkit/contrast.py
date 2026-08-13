@@ -1179,6 +1179,11 @@ def _tip_sampling_array(value, leaf_names, trait):
     covariance = np.asarray(value, dtype=float)
     if covariance.shape != (len(leaf_names),):
         raise ValueError("Tip sampling covariance diagonal is incomplete.")
+    if not np.isfinite(covariance).all() or np.any(covariance < 0.0):
+        raise ValueError(
+            "Tip sampling covariance diagonal for trait '{}' must contain "
+            "finite non-negative values.".format(trait)
+        )
     return covariance
 
 

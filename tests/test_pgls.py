@@ -27,7 +27,10 @@ from nwkit.model_matrix import PredictorTerm
 from nwkit.pgls import _profile_covariance_fit, fit_reconciled_pgls
 from nwkit.pgls_pipeline import PglsPipelineArtifacts, write_pgls_bundle
 from nwkit.reconcile import build_reconciliation_table
-from nwkit.sparse_laplace import continuous_predictor_loading
+from nwkit.sparse_laplace import (
+    JointPredictorUncertainty,
+    continuous_predictor_loading,
+)
 
 
 def _write_raw_pgls_inputs(tmp_path, *, biological_replicates=False):
@@ -501,6 +504,49 @@ def test_equal_event_pseudolikelihood_is_copy_invariant():
         "log_likelihood",
     ]:
         assert repeated[column] == pytest.approx(baseline[column], rel=1e-10)
+
+
+def test_equal_event_eiv_pseudolikelihood_is_uneven_copy_invariant():
+    values = (1.0, 6.0, 7.0, 11.0, 8.0, 13.0)
+    predictor = _predictor_table(values=tuple(float(i) for i in range(1, 7)))
+    predictor["contrast_variance"] = 1.0
+    predictor_sampling = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.eye(6) * 0.05,
+    )
+    base = pd.DataFrame(
+        [_response_row(index, value) for index, value in enumerate(values, start=1)]
+    )
+    repeated = pd.concat(
+        [
+            pd.DataFrame(
+                [_response_row(1, values[0], gene_index=index) for index in range(5)]
+            ),
+            base.iloc[1:],
+        ],
+        ignore_index=True,
+    )
+    common = dict(
+        predictor_contrasts=predictor,
+        responses=["expression"],
+        predictors=["body_size"],
+        predictor_sampling_covariance=predictor_sampling,
+        model="replicate-reml",
+        reml=False,
+        event_random_effect="no",
+        lineage_random_slope="no",
+    )
+
+    baseline = fit_reconciled_pgls(response_contrasts=base, **common).iloc[0]
+    duplicated = fit_reconciled_pgls(response_contrasts=repeated, **common).iloc[0]
+
+    for column in [
+        "coefficient",
+        "standard_error",
+        "evolutionary_rate",
+        "log_likelihood",
+    ]:
+        assert duplicated[column] == pytest.approx(baseline[column], rel=2e-6)
 
 
 def test_categorical_omnibus_row_reports_its_actual_wald_inference():
@@ -982,6 +1028,177 @@ def test_hierarchical_model_partially_pools_lineage_slopes():
         random_effects["total_coefficient"] <= random_effects["total_interval_upper"]
     ).all()
     assert random_effects["reliability"].between(0.0, 1.0).all()
+
+
+def test_lineage_slope_groups_are_invariant_to_predictor_units_and_basis():
+    event_values = np.arange(1.0, 9.0)
+    first_values = event_values
+    second_values = np.asarray([1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.0, -4.0])
+    rows = []
+    for event_index, (first, second) in enumerate(
+        zip(first_values, second_values, strict=True), start=1
+    ):
+        for gene_index, first_slope, second_slope in [
+            (1, 1.2, 0.4),
+            (2, 2.0, -0.3),
+        ]:
+            rows.append(
+                _response_row(
+                    event_index,
+                    first_slope * first
+                    + second_slope * second
+                    + 0.05 * (-1.0) ** (event_index + gene_index),
+                    gene_index=gene_index,
+                )
+            )
+
+    def predictor_table(first, second, first_name, second_name):
+        first_table = _predictor_table(values=tuple(first))
+        first_table["trait"] = first_name
+        second_table = _predictor_table(values=tuple(second))
+        second_table["trait"] = second_name
+        return pd.concat([first_table, second_table], ignore_index=True)
+
+    common = dict(
+        response_contrasts=pd.DataFrame(rows),
+        responses=["expression"],
+        event_random_effect="no",
+        lineage_random_slope="yes",
+        reml=False,
+    )
+    original = fit_reconciled_pgls(
+        predictor_contrasts=predictor_table(
+            first_values, second_values, "first", "second"
+        ),
+        predictors=["first", "second"],
+        predictor_groups={"basis": ("first", "second")},
+        **common,
+    )
+    rescaled = fit_reconciled_pgls(
+        predictor_contrasts=predictor_table(
+            first_values, 100.0 * second_values, "first", "second"
+        ),
+        predictors=["first", "second"],
+        predictor_groups={"basis": ("first", "second")},
+        **common,
+    )
+    transformed = fit_reconciled_pgls(
+        predictor_contrasts=predictor_table(
+            first_values + second_values,
+            first_values - second_values,
+            "sum",
+            "difference",
+        ),
+        predictors=["sum", "difference"],
+        predictor_groups={"basis": ("sum", "difference")},
+        **common,
+    )
+    separate_sources = fit_reconciled_pgls(
+        predictor_contrasts=predictor_table(
+            first_values, second_values, "first", "second"
+        ),
+        predictors=["first", "second"],
+        predictor_groups={"first": ("first",), "second": ("second",)},
+        **common,
+    )
+
+    by_term = original.set_index("term")
+    scaled_by_term = rescaled.set_index("term")
+    assert scaled_by_term.loc["first", "coefficient"] == pytest.approx(
+        by_term.loc["first", "coefficient"], rel=2e-5
+    )
+    assert scaled_by_term.loc["first", "standard_error"] == pytest.approx(
+        by_term.loc["first", "standard_error"], rel=2e-4
+    )
+    assert scaled_by_term.loc["second", "coefficient"] * 100.0 == pytest.approx(
+        by_term.loc["second", "coefficient"], rel=2e-5
+    )
+    assert scaled_by_term.loc["second", "standard_error"] * 100.0 == pytest.approx(
+        by_term.loc["second", "standard_error"], rel=2e-4
+    )
+    assert rescaled.iloc[0]["log_likelihood"] == pytest.approx(
+        original.iloc[0]["log_likelihood"], rel=2e-5
+    )
+    assert transformed.iloc[0]["log_likelihood"] == pytest.approx(
+        original.iloc[0]["log_likelihood"], rel=2e-5
+    )
+    separate_by_term = separate_sources.set_index("term")
+    assert separate_by_term.loc["first", "lineage_slope_variance"] != pytest.approx(
+        separate_by_term.loc["second", "lineage_slope_variance"], rel=1e-3
+    )
+
+
+def test_grouped_lineage_joint_test_uses_fixed_terms_plus_its_variance_df():
+    rows = []
+    first_values = np.arange(1.0, 9.0)
+    second_values = np.asarray([1.0, -1.0, 2.0, -2.0, 3.0, -3.0, 4.0, -4.0])
+    for event_index, (first, second) in enumerate(
+        zip(first_values, second_values, strict=True), start=1
+    ):
+        for gene_index, shift in [(1, -0.4), (2, 0.4)]:
+            rows.append(
+                _response_row(
+                    event_index,
+                    (1.5 + shift) * first + (0.2 - shift) * second,
+                    gene_index=gene_index,
+                )
+            )
+    first = _predictor_table(values=tuple(first_values))
+    first["trait"] = "state[a]"
+    second = _predictor_table(values=tuple(second_values))
+    second["trait"] = "state[b]"
+    terms = ["state[a]", "state[b]"]
+
+    result = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        pd.concat([first, second], ignore_index=True),
+        ["expression"],
+        terms,
+        predictor_groups={"state": tuple(terms)},
+        event_random_effect="no",
+        lineage_random_slope="yes",
+        lineage_inference="likelihood-ratio",
+    )
+
+    tests = result.set_index("term_test")
+    assert tests.loc["lineage-heterogeneity", "degrees_of_freedom"] == 1
+    assert tests.loc["average-and-lineage-joint", "degrees_of_freedom"] == 3
+
+
+def test_lineage_random_intervals_include_predictor_dependent_eiv_covariance():
+    rows = []
+    for event_index in range(1, 7):
+        for gene_index, slope in [(1, 1.4), (2, 2.6)]:
+            rows.append(
+                _response_row(
+                    event_index,
+                    slope * event_index + 0.03 * (-1.0) ** event_index,
+                    gene_index=gene_index,
+                )
+            )
+    predictor = _predictor_table(values=tuple(float(value) for value in range(1, 7)))
+    predictor["contrast_variance"] = 1.0
+    predictor_sampling = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.eye(6) * 0.05,
+    )
+
+    _, random_effects = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        predictor,
+        ["expression"],
+        ["body_size"],
+        predictor_sampling_covariance=predictor_sampling,
+        event_random_effect="no",
+        lineage_random_slope="yes",
+        return_random_effects=True,
+    )
+
+    assert set(random_effects["inference_status"]) == {
+        "empirical-bayes-delta-eiv-conditional-on-variance"
+    }
+    assert np.isfinite(random_effects["conditional_standard_error"]).all()
+    assert np.isfinite(random_effects["total_standard_error"]).all()
 
 
 def test_lineage_inference_and_leave_one_out_separate_average_and_subset_effects():
@@ -2104,6 +2321,78 @@ def test_precomputed_reconciled_pgls_accepts_predictor_sampling_covariance():
     assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
     assert result.iloc[0]["predictor_evolutionary_rate"] > 0.0
     assert result.iloc[0]["standard_error"] > 0.0
+
+
+def test_predictor_sampling_sidecar_must_cover_every_selected_trait():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    first = _predictor_table()
+    first["contrast_variance"] = 1.0
+    second = _predictor_table(values=(0.5, 1.5, 2.5))
+    second["trait"] = "temperature"
+    second["contrast_variance"] = 1.0
+    covariance = _sampling_covariance_table(
+        first.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.eye(3) * 0.05,
+    )
+
+    with pytest.raises(ValueError, match="missing selected trait.*temperature"):
+        fit_reconciled_pgls(
+            response,
+            pd.concat([first, second], ignore_index=True),
+            ["expression"],
+            ["body_size", "temperature"],
+            predictor_sampling_covariance=covariance,
+            event_random_effect="no",
+            lineage_random_slope="no",
+        )
+
+
+def test_grouped_predictor_uncertainty_validation_is_explicit_and_lossless():
+    factor_a = sparse.eye(2, format="csr")
+    factor_b = sparse.csr_matrix(np.asarray([[0.2, 0.0], [0.0, 0.3]]))
+    state = {
+        "term_names": ("state[a]", "state[b]"),
+        "event_ids": ("event1", "event2"),
+        "uncertainty": JointPredictorUncertainty(factors=(factor_a, factor_b)),
+    }
+    groups = {"state": ("state[a]", "state[b]")}
+    normalized = pgls_mod._normalize_grouped_uncertainties(
+        [state], ["state[a]", "state[b]"], "hierarchical", groups
+    )
+
+    with pytest.raises(ValueError, match="missing species event.*event3"):
+        pgls_mod._grouped_predictor_uncertainties_for_rows(
+            pd.DataFrame({"species_event_id": ["event1", "event3"]}), normalized
+        )
+    with pytest.raises(ValueError, match="assigns term.*more than once"):
+        pgls_mod._normalize_grouped_uncertainties(
+            [state, state], ["state[a]", "state[b]"], "hierarchical", groups
+        )
+    with pytest.raises(ValueError, match="must match one predictor group"):
+        pgls_mod._normalize_grouped_uncertainties(
+            [
+                {
+                    **state,
+                    "term_names": ("state[a]",),
+                    "uncertainty": JointPredictorUncertainty(factors=(factor_a,)),
+                }
+            ],
+            ["state[a]", "state[b]"],
+            "hierarchical",
+            groups,
+        )
+
+    row_scale = np.asarray([2.0, 3.0])
+    uncertainty = JointPredictorUncertainty(
+        factors=(factor_a, factor_b), row_scale=row_scale
+    )
+    selected, columns = pgls_mod._subset_predictor_uncertainties(
+        [uncertainty], [(0, 1)], [0]
+    )
+    assert columns == [0]
+    np.testing.assert_array_equal(selected[0].row_scale, row_scale)
 
 
 def test_predictor_factor_loading_sidecar_matches_explicit_covariance(monkeypatch):

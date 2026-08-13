@@ -16,6 +16,8 @@ from nwkit.gaussian import (
     factor_diagonal_low_rank_updates,
     factor_diagonal_sparse_precision_updates,
     factor_logdet,
+    grouped_average_marginal_logdet,
+    grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
     solve_factor,
@@ -1136,6 +1138,7 @@ def fit_conditional_eiv_gaussian(
     allow_large_dense=False,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
 ):
     """Fit y | x-hat when latent predictor uncertainty depends on beta."""
     if reml:
@@ -1154,6 +1157,18 @@ def fit_conditional_eiv_gaussian(
             likelihood_logdet_offset,
         )
     )
+    if likelihood_groups is not None:
+        likelihood_groups = np.asarray(likelihood_groups)
+        grouped_count = len(np.unique(likelihood_groups))
+        expected_count = (
+            len(response)
+            if likelihood_observations is None
+            else float(likelihood_observations)
+        )
+        if not math.isclose(
+            float(grouped_count), expected_count, rel_tol=1e-12, abs_tol=1e-12
+        ):
+            raise ValueError("Likelihood groups do not match likelihood_observations.")
     component_factors = {} if component_factors is None else dict(component_factors)
     structured = _uses_structured_eiv_covariance(
         fixed_covariance, components, component_factors, predictor_uncertainties
@@ -1237,9 +1252,33 @@ def fit_conditional_eiv_gaussian(
                 gram_logdet = 0.0
         except np.linalg.LinAlgError:
             return float("inf")
+        if likelihood_groups is None:
+            determinant_term = logdet_weight * (
+                covariance_logdet - likelihood_logdet_offset
+            )
+        else:
+            if any(name == "species_event_variance" for name, _ in components):
+                determinant_term = grouped_average_marginal_logdet(
+                    covariance,
+                    likelihood_groups,
+                    precision_factor=cholesky,
+                )
+            else:
+                grouped_variances = grouped_mean_covariance_diagonal(
+                    covariance,
+                    likelihood_groups,
+                    precision_factor=cholesky,
+                )
+                if (
+                    np.any(grouped_variances <= 0.0)
+                    or not np.isfinite(grouped_variances).all()
+                ):
+                    return float("inf")
+                determinant_term = float(np.log(grouped_variances).sum())
+            determinant_term -= likelihood_logdet_offset
         objective = 0.5 * (
             effective_likelihood_count * math.log(2.0 * math.pi)
-            + logdet_weight * (covariance_logdet - likelihood_logdet_offset)
+            + determinant_term
             + quadratic
             + gram_logdet
         )
@@ -1343,6 +1382,25 @@ def fit_conditional_eiv_gaussian(
         eigenvalues, eigenvectors = np.linalg.eigh(beta_covariance)
         beta_covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)) @ eigenvectors.T
     details["beta_covariance"] = beta_covariance
+    details["parameter_covariance"] = parameter_covariance
+
+    fitted_variances = np.exp(details["log_variances"])
+
+    def covariance_for_beta(beta):
+        return _conditional_eiv_covariance(
+            np.asarray(beta, dtype=float),
+            fitted_variances,
+            fixed_covariance,
+            normalized_components,
+            component_factors,
+            predictor_uncertainties,
+            predictor_columns,
+            len(response),
+            structured,
+            compute_marginal=False,
+        )
+
+    details["covariance_for_beta"] = covariance_for_beta
     details["optimizer_converged"] = bool(result.success)
     details["optimizer_message"] = str(result.message)
     details["reml"] = False

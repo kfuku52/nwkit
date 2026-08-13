@@ -723,13 +723,32 @@ event-cluster HC1 estimator only as a sensitivity analysis.
 Rows sharing a `species_event_id` have equal total working weight by default,
 so a species split represented by ten paralogs does not dominate a split
 represented once. `--event-weighting observation` is an explicit sensitivity
-analysis. Gaussian ML/REML also uses the number of species events as the
-effective likelihood sample size and removes the known row-scaling Jacobian
-from the determinant. Thus identical paralog copies leave the coefficient,
-evolutionary rate, standard error, and event-level log likelihood unchanged in
-`replicate-reml`; bootstrap and lineage likelihood refits use the same
-event-level objective. In every model, reported residual degrees of freedom are
+analysis. Gaussian ML/REML uses the number of species events as the effective
+likelihood sample size. For `replicate-reml` and models without a species-event
+random effect, its pseudo-determinant is the sum of the log marginal variances
+of the equally weighted event means. This includes shared species-predictor
+uncertainty without counting it once per paralog. Consequently, identical
+paralog copies leave the coefficient, evolutionary rate, standard error, and
+event-level log likelihood unchanged in `replicate-reml`.
+
+When a species-event random effect is fitted, the objective instead uses the
+within-event average of row-marginal log variances, corrected for the known row
+scaling. This composite pseudo-determinant retains the within-event information
+needed to distinguish evolutionary residual variance from event variance. It
+is deliberately an event-balanced composite objective, not the determinant of
+an ordinary observation-level multivariate Gaussian likelihood. Bootstrap and
+lineage likelihood refits always reuse the same objective as the fitted model.
+In every model, reported residual degrees of freedom are
 `n_species_events - num_parameters`, never the number of gene-tree rows.
+
+Lineage random slopes have a separate variance component for each source
+predictor group. Before fitting, the columns within a group are whitened by
+their event-weighted second moment. Continuous unit changes and invertible
+recodings of a categorical factor therefore leave the likelihood unchanged;
+reported slope variances and intervals are transformed back to the original
+coefficient units. Heterogeneity and joint fixed-plus-lineage tests are emitted
+per source group, with joint degrees of freedom equal to the number of fixed
+columns in that group plus one variance component.
 
 For Gaussian reconciled contrasts, Wald inference is the default.
 `--inference parametric-bootstrap` simulates

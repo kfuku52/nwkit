@@ -19,6 +19,8 @@ from nwkit.gaussian import (
     effective_likelihood_settings,
     factor_diagonal_low_rank_updates,
     factor_logdet,
+    grouped_average_marginal_logdet,
+    grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
     solve_factor,
@@ -74,6 +76,7 @@ RESPONSE_REQUIRED_COLUMNS = {
 }
 
 MAX_DENSE_GAUSSIAN_OBSERVATIONS = 2000
+LINEAGE_COMPONENT_PREFIX = "lineage_slope_variance:"
 
 PREDICTOR_REQUIRED_COLUMNS = {
     "tree_id",
@@ -912,9 +915,14 @@ def _prepare_predictor_posteriors(
     )
     posteriors = {}
     available_traits = set(sampling_covariance["trait"])
+    missing_traits = sorted(set(predictors) - available_traits)
+    if missing_traits:
+        raise ValueError(
+            "Predictor sampling covariance is missing selected trait(s): {}.".format(
+                ", ".join(missing_traits)
+            )
+        )
     for predictor in predictors:
-        if predictor not in available_traits:
-            continue
         rows = prepared[prepared["trait"] == predictor].copy()
         rows = rows.sort_values("branch_clade_id", kind="stable")
         tree_id = str(rows.iloc[0]["tree_id"])
@@ -1015,6 +1023,13 @@ def _grouped_predictor_uncertainties_for_rows(rows, states):
     event_ids = rows["species_event_id"].astype(str).tolist()
     selected = []
     for state in states or ():
+        missing = sorted(set(event_ids) - set(state["event_index"]))
+        if missing:
+            raise ValueError(
+                "Grouped predictor uncertainty is missing species event(s): {}.".format(
+                    ", ".join(missing[:10])
+                )
+            )
         indices = [state["event_index"][event_id] for event_id in event_ids]
         uncertainty = state["uncertainty"]
         selected.append(
@@ -1461,6 +1476,7 @@ def _profile_covariance_fit(
     allow_large_dense=False,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
 ):
     n_observations = len(y)
     num_parameters = design.shape[1]
@@ -1473,6 +1489,18 @@ def _profile_covariance_fit(
             likelihood_logdet_offset,
         )
     )
+    if likelihood_groups is not None:
+        likelihood_groups = np.asarray(likelihood_groups)
+        grouped_count = len(np.unique(likelihood_groups))
+        expected_count = (
+            n_observations
+            if likelihood_observations is None
+            else float(likelihood_observations)
+        )
+        if not math.isclose(
+            float(grouped_count), expected_count, rel_tol=1e-12, abs_tol=1e-12
+        ):
+            raise ValueError("Likelihood groups do not match likelihood_observations.")
     if n_observations > MAX_DENSE_GAUSSIAN_OBSERVATIONS and (
         _requires_dense_profile_covariance(
             fixed_covariance, components, component_factors
@@ -1593,9 +1621,29 @@ def _profile_covariance_fit(
                 covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
             except np.linalg.LinAlgError:
                 return float("inf")
+        if likelihood_groups is None:
+            determinant_term = logdet_weight * (
+                covariance_logdet - likelihood_logdet_offset
+            )
+        else:
+            if any(name == "species_event_variance" for name, _ in components):
+                determinant_term = grouped_average_marginal_logdet(
+                    covariance_representation, likelihood_groups
+                )
+            else:
+                grouped_variances = grouped_mean_covariance_diagonal(
+                    covariance_representation, likelihood_groups
+                )
+                if (
+                    np.any(grouped_variances <= 0.0)
+                    or not np.isfinite(grouped_variances).all()
+                ):
+                    return float("inf")
+                determinant_term = float(np.log(grouped_variances).sum())
+            determinant_term -= likelihood_logdet_offset
         objective = 0.5 * (
             effective_likelihood_count * math.log(2.0 * math.pi)
-            + logdet_weight * (covariance_logdet - likelihood_logdet_offset)
+            + determinant_term
             + quadratic
             + (gram_logdet if reml else 0.0)
         )
@@ -1771,6 +1819,7 @@ def _parametric_bootstrap_coefficients(
     allow_large_dense=False,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
 ):
     if replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
@@ -1796,6 +1845,7 @@ def _parametric_bootstrap_coefficients(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
             )
         except ValueError:
             continue
@@ -1826,6 +1876,7 @@ def _parametric_bootstrap_eiv_coefficients(
     allow_large_dense=False,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
 ):
     if replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
@@ -1854,6 +1905,7 @@ def _parametric_bootstrap_eiv_coefficients(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
             )
         except ValueError:
             continue
@@ -1881,6 +1933,7 @@ def _fit_profile_or_eiv(
     allow_large_dense,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
     starting_fit=None,
 ):
     if predictor_uncertainties:
@@ -1902,6 +1955,7 @@ def _fit_profile_or_eiv(
             allow_large_dense=allow_large_dense,
             likelihood_observations=likelihood_observations,
             likelihood_logdet_offset=likelihood_logdet_offset,
+            likelihood_groups=likelihood_groups,
         )
     return _profile_covariance_fit(
         response,
@@ -1916,19 +1970,20 @@ def _fit_profile_or_eiv(
         allow_large_dense=allow_large_dense,
         likelihood_observations=likelihood_observations,
         likelihood_logdet_offset=likelihood_logdet_offset,
+        likelihood_groups=likelihood_groups,
     )
 
 
-def _without_lineage_component(components, component_factors):
-    retained = [
-        component
-        for component in components
-        if component[0] != "lineage_slope_variance"
-    ]
+def _lineage_component_name(source):
+    return "{}{}".format(LINEAGE_COMPONENT_PREFIX, source)
+
+
+def _without_component(components, component_factors, omitted_name):
+    retained = [component for component in components if component[0] != omitted_name]
     factors = {
         name: factor
         for name, factor in component_factors.items()
-        if name != "lineage_slope_variance"
+        if name != omitted_name
     }
     return retained, factors
 
@@ -1970,6 +2025,20 @@ def _lineage_reliability(conditional_variance, lineage_variance):
     return max(0.0, min(1.0, 1.0 - conditional_variance / lineage_variance))
 
 
+def _lineage_variances_by_term(random_designs, component_variances):
+    by_term = {}
+    by_source = {}
+    for state in random_designs.get("lineage", ()):
+        latent_variance = float(component_variances[state["component_name"]])
+        whitening = np.asarray(state["whitening"], dtype=float)
+        covariance = latent_variance * whitening @ whitening.T
+        marginal = np.maximum(np.diag(covariance), 0.0)
+        by_source[state["source"]] = float(np.mean(marginal))
+        for term, value in zip(state["term_names"], marginal, strict=True):
+            by_term[term] = float(value)
+    return by_term, by_source
+
+
 def _subset_predictor_uncertainties(uncertainties, columns, retained_indices):
     retained_set = set(retained_indices)
     new_index = {old: new for new, old in enumerate(retained_indices)}
@@ -1992,7 +2061,10 @@ def _subset_predictor_uncertainties(uncertainties, columns, retained_indices):
             if not isinstance(uncertainty, JointPredictorUncertainty):
                 raise RuntimeError("Cannot partially subset predictor uncertainty.")
             uncertainty = JointPredictorUncertainty(
-                factors=tuple(uncertainty.factors[position] for position, _ in selected)
+                factors=tuple(
+                    uncertainty.factors[position] for position, _ in selected
+                ),
+                row_scale=uncertainty.row_scale,
             )
         remapped = tuple(new_index[column] for _, column in selected)
         selected_uncertainties.append(uncertainty)
@@ -2010,44 +2082,41 @@ def _lineage_test_models(
     predictor_uncertainties,
     predictor_columns,
 ):
-    null_components, null_factors = _without_lineage_component(
-        components, component_factors
-    )
-    models = [
-        {
-            "term_test": "lineage-heterogeneity",
-            "term": "(lineage-slope heterogeneity)",
-            "source_term": "(all predictors)",
-            "design": design,
-            "components": null_components,
-            "component_factors": null_factors,
-            "predictor_uncertainties": predictor_uncertainties,
-            "predictor_columns": predictor_columns,
-            "degrees_of_freedom": 1,
-        }
-    ]
+    models = []
     index_by_predictor = {
         predictor: index for index, predictor in enumerate(predictors)
     }
-    lineage_design_by_predictor = dict(random_designs.get("lineage", ()))
+    state_by_source = {
+        state["source"]: state for state in random_designs.get("lineage", ())
+    }
     for source, source_terms in predictor_groups.items():
+        if source not in state_by_source:
+            continue
+        component_name = state_by_source[source]["component_name"]
+        null_components, null_factors = _without_component(
+            components, component_factors, component_name
+        )
+        models.append(
+            {
+                "term_test": "lineage-heterogeneity",
+                "term": source,
+                "source_term": source,
+                "design": design,
+                "components": null_components,
+                "component_factors": null_factors,
+                "predictor_uncertainties": predictor_uncertainties,
+                "predictor_columns": predictor_columns,
+                "degrees_of_freedom": 1,
+                "lineage_component_name": component_name,
+            }
+        )
         omitted = {index_by_predictor[term] for term in source_terms}
         retained = [index for index in range(len(predictors)) if index not in omitted]
         selected_uncertainties, selected_columns = _subset_predictor_uncertainties(
             predictor_uncertainties, predictor_columns, retained
         )
-        retained_lineage = [
-            lineage_design_by_predictor[predictors[index]]
-            for index in retained
-            if predictors[index] in lineage_design_by_predictor
-        ]
         joint_components = list(null_components)
         joint_factors = dict(null_factors)
-        if retained_lineage:
-            joint_components.append(("lineage_slope_variance", None))
-            joint_factors["lineage_slope_variance"] = sparse.hstack(
-                retained_lineage, format="csr"
-            )
         models.append(
             {
                 "term_test": "average-and-lineage-joint",
@@ -2059,6 +2128,7 @@ def _lineage_test_models(
                 "predictor_uncertainties": selected_uncertainties,
                 "predictor_columns": selected_columns,
                 "degrees_of_freedom": len(source_terms) + 1,
+                "lineage_component_name": component_name,
             }
         )
     return models
@@ -2076,6 +2146,7 @@ def _parametric_bootstrap_likelihood_ratio(
     allow_large_dense,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
 ):
     rng = np.random.default_rng(seed)
     mean = null_model["design"] @ null_fit["beta"]
@@ -2100,6 +2171,7 @@ def _parametric_bootstrap_likelihood_ratio(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
                 starting_fit=null_fit,
             )
             bootstrap_full = _fit_profile_or_eiv(
@@ -2114,6 +2186,7 @@ def _parametric_bootstrap_likelihood_ratio(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
                 starting_fit=full_model["fit"],
             )
         except ValueError:
@@ -2146,6 +2219,7 @@ def _build_covariance_components(
     model,
     event_random_effect,
     lineage_random_slope,
+    predictor_groups=None,
 ):
     n_observations = len(design)
     balance = np.ones(n_observations, dtype=float)
@@ -2194,7 +2268,10 @@ def _build_covariance_components(
                 ),
                 shape=(n_observations, len(unique_events)),
             )
-            event_design = base_event_design.multiply(balance[:, None]).tocsr()
+            # This latent effect belongs to the species event, not to an
+            # individual gene-tree row.  Reusing the event for another
+            # paralog therefore must not increase its prior variance.
+            event_design = base_event_design
             event_identifiable = _component_adds_rank(
                 covariance_representations, ("factor", event_design)
             )
@@ -2205,38 +2282,90 @@ def _build_covariance_components(
         )
         if use_event:
             covariance_representations.append(("factor", event_design))
+        predictor_groups = (
+            {predictor: (predictor,) for predictor in predictors}
+            if predictor_groups is None
+            else predictor_groups
+        )
         repeated_lineages = lineage_counts >= 2
         lineage_may_be_identifiable = (
             int(np.sum(repeated_lineages)) >= 2
             and n_events > num_parameters
             and np.any(np.abs(design) > 0.0)
         )
-        lineage_designs = []
-        lineage_factor = sparse.csr_matrix((n_observations, 0), dtype=float)
+        lineage_states = []
         if lineage_may_be_identifiable:
             base_lineage_design = sparse.csr_matrix(
                 (
-                    balance,
+                    np.ones(n_observations),
                     (np.arange(n_observations), lineage_inverse),
                 ),
                 shape=(n_observations, len(unique_lineages)),
             )
-            for predictor_index, predictor in enumerate(predictors):
-                random_design = base_lineage_design.multiply(
-                    design[:, predictor_index, None]
-                ).tocsr()
-                lineage_designs.append((predictor, random_design))
-            lineage_factor = sparse.hstack(
-                [random_design for _, random_design in lineage_designs], format="csr"
+            information_weights = 1.0 / np.square(balance)
+            predictor_index = {
+                predictor: index for index, predictor in enumerate(predictors)
+            }
+            for source, terms in predictor_groups.items():
+                indices = [predictor_index[term] for term in terms]
+                group_design = design[:, indices]
+                second_moment = (
+                    group_design.T
+                    @ (information_weights[:, None] * group_design)
+                    / float(np.sum(information_weights))
+                )
+                eigenvalues, eigenvectors = np.linalg.eigh(
+                    (second_moment + second_moment.T) / 2.0
+                )
+                tolerance = (
+                    np.finfo(float).eps
+                    * max(1.0, float(np.max(np.abs(second_moment))))
+                    * max(1, len(indices))
+                    * 1000.0
+                )
+                if float(eigenvalues.min()) <= tolerance:
+                    identifiable = False
+                    whitening = None
+                    lineage_factor = sparse.csr_matrix((n_observations, 0))
+                else:
+                    whitening = (
+                        eigenvectors * (1.0 / np.sqrt(eigenvalues))
+                    ) @ eigenvectors.T
+                    normalized_design = group_design @ whitening
+                    latent_designs = [
+                        base_lineage_design.multiply(
+                            normalized_design[:, column, None]
+                        ).tocsr()
+                        for column in range(len(indices))
+                    ]
+                    lineage_factor = sparse.hstack(latent_designs, format="csr")
+                    identifiable = _component_adds_rank(
+                        covariance_representations, ("factor", lineage_factor)
+                    )
+                include = _random_effect_policy(
+                    lineage_random_slope,
+                    lineage_may_be_identifiable and identifiable,
+                    "lineage random slope for predictor group '{}'".format(source),
+                )
+                if not include:
+                    continue
+                component_name = _lineage_component_name(source)
+                lineage_states.append(
+                    {
+                        "source": source,
+                        "term_names": tuple(terms),
+                        "term_indices": tuple(indices),
+                        "whitening": whitening,
+                        "factor": lineage_factor,
+                        "component_name": component_name,
+                    }
+                )
+                covariance_representations.append(("factor", lineage_factor))
+        elif lineage_random_slope == "yes":
+            raise ValueError(
+                "Lineage random slopes were requested but not identifiable."
             )
-        lineage_identifiable = lineage_may_be_identifiable and _component_adds_rank(
-            covariance_representations, ("factor", lineage_factor)
-        )
-        use_lineage = _random_effect_policy(
-            lineage_random_slope,
-            lineage_identifiable,
-            "lineage random slope",
-        )
+        use_lineage = bool(lineage_states)
     if use_event:
         components.append(("species_event_variance", None))
         component_factors["species_event_variance"] = event_design
@@ -2245,13 +2374,15 @@ def _build_covariance_components(
         ).reshape(-1)
         random_designs["species_event"] = event_design
     if use_lineage:
-        components.append(("lineage_slope_variance", None))
-        component_factors["lineage_slope_variance"] = lineage_factor
-        unbalanced_lineage = lineage_factor.multiply((1.0 / balance)[:, None])
-        raw_components["lineage_slope_variance"] = np.asarray(
-            unbalanced_lineage.multiply(unbalanced_lineage).sum(axis=1)
-        ).reshape(-1)
-        random_designs["lineage"] = lineage_designs
+        for state in lineage_states:
+            component_name = state["component_name"]
+            lineage_factor = state["factor"]
+            components.append((component_name, None))
+            component_factors[component_name] = lineage_factor
+            raw_components[component_name] = np.asarray(
+                lineage_factor.multiply(lineage_factor).sum(axis=1)
+            ).reshape(-1)
+        random_designs["lineage"] = lineage_states
     return (
         fixed_covariance,
         components,
@@ -2346,13 +2477,15 @@ def _weighted_predictor_uncertainties(
     predictor_uncertainties,
     grouped_predictor_uncertainties,
     index_by_predictor,
-    balance,
 ):
+    # Predictor uncertainty is shared by every gene contrast mapped to the same
+    # species event.  Unlike row-specific response noise, it must not be
+    # multiplied by the event balance: the uncertainty of an event-level
+    # predictor does not grow when another paralog row reuses that predictor.
     raw: list[Any] = []
     weighted: list[Any] = []
     columns: list[int | tuple[int, ...]] = []
     grouped_by_term = {}
-    outer_balance = None
     for predictor, uncertainty in predictor_uncertainties.items():
         if isinstance(uncertainty, ContinuousPredictorUncertainty):
             raw.append(uncertainty)
@@ -2360,7 +2493,7 @@ def _weighted_predictor_uncertainties(
                 ContinuousPredictorUncertainty(
                     factor=uncertainty.factor,
                     observation_index=uncertainty.observation_index,
-                    row_scale=balance,
+                    row_scale=None,
                 )
             )
         elif isinstance(uncertainty, GmrfPredictorUncertainty):
@@ -2369,15 +2502,13 @@ def _weighted_predictor_uncertainties(
                 GmrfPredictorUncertainty(
                     model=uncertainty.model,
                     observation_index=uncertainty.observation_index,
-                    row_scale=balance,
+                    row_scale=None,
                 )
             )
         else:
-            if outer_balance is None:
-                outer_balance = np.outer(balance, balance)
             covariance = np.asarray(uncertainty, dtype=float)
             raw.append(covariance)
-            weighted.append(covariance * outer_balance)
+            weighted.append(covariance)
         columns.append(index_by_predictor[predictor])
     for state in grouped_predictor_uncertainties:
         uncertainty = state["uncertainty"]
@@ -2385,7 +2516,7 @@ def _weighted_predictor_uncertainties(
         weighted.append(
             JointPredictorUncertainty(
                 factors=uncertainty.factors,
-                row_scale=balance,
+                row_scale=None,
             )
         )
         term_names = tuple(state["term_names"])
@@ -2414,6 +2545,7 @@ def _append_lineage_inference_rows(
     allow_large_dense,
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
+    likelihood_groups=None,
 ):
     if lineage_inference == "none" or "lineage" not in random_designs:
         return
@@ -2436,6 +2568,7 @@ def _append_lineage_inference_rows(
         allow_large_dense=allow_large_dense,
         likelihood_observations=likelihood_observations,
         likelihood_logdet_offset=likelihood_logdet_offset,
+        likelihood_groups=likelihood_groups,
     )
     full_model["fit"] = full_fit
     test_models = _lineage_test_models(
@@ -2461,6 +2594,7 @@ def _append_lineage_inference_rows(
             allow_large_dense=allow_large_dense,
             likelihood_observations=likelihood_observations,
             likelihood_logdet_offset=likelihood_logdet_offset,
+            likelihood_groups=likelihood_groups,
         )
         statistic = _likelihood_ratio(null_fit, full_fit)
         if lineage_inference == "parametric-bootstrap":
@@ -2475,6 +2609,7 @@ def _append_lineage_inference_rows(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
             )
             status = "ok"
         else:
@@ -2483,6 +2618,9 @@ def _append_lineage_inference_rows(
             )
         template = rows[0].copy()
         full_variances = full_fit["component_variances"]
+        _, lineage_variance_by_source = _lineage_variances_by_term(
+            random_designs, full_variances
+        )
         template.update(
             {
                 "term": null_model["term"],
@@ -2515,8 +2653,8 @@ def _append_lineage_inference_rows(
                 "species_event_variance": full_variances.get(
                     "species_event_variance", 0.0
                 ),
-                "lineage_slope_variance": full_variances.get(
-                    "lineage_slope_variance", 0.0
+                "lineage_slope_variance": lineage_variance_by_source.get(
+                    null_model["source_term"], 0.0
                 ),
                 "log_likelihood": -float(full_fit["objective"]),
                 "optimizer_converged": (
@@ -2530,80 +2668,139 @@ def _append_lineage_inference_rows(
 
 def _lineage_random_effect_rows(
     fit,
+    response_values,
     design,
     random_designs,
     predictors,
     unique_lineages,
     lineage_counts,
+    component_variances,
     *,
     model_id,
     tree_id,
     response,
-    variance,
     confidence_level,
 ):
     rows = []
-    if variance <= 0.0:
-        critical = float("nan")
-    else:
-        critical = _normal_critical_value(confidence_level)
-    predictor_index = {predictor: index for index, predictor in enumerate(predictors)}
-    inverse_design = _solve_positive_definite(fit["cholesky"], design)
-    for predictor, random_design in random_designs["lineage"]:
-        fixed_index = predictor_index[predictor]
-        for start in range(0, random_design.shape[1], 64):
-            stop = min(start + 64, random_design.shape[1])
-            design_batch = np.asarray(
-                random_design[:, start:stop].toarray(), dtype=float
-            )
+    critical = _normal_critical_value(confidence_level)
+    beta = np.asarray(fit["beta"], dtype=float)
+    beta_covariance = np.asarray(fit["beta_covariance"], dtype=float)
+    response_values = np.asarray(response_values, dtype=float)
+    covariance_for_beta = fit.get("covariance_for_beta")
+
+    def inverse_residual_for_beta(candidate):
+        factor = (
+            fit["cholesky"]
+            if covariance_for_beta is None
+            else covariance_for_beta(candidate)[1]
+        )
+        return _solve_positive_definite(
+            factor, response_values - design @ np.asarray(candidate, dtype=float)
+        )
+
+    steps = np.finfo(float).eps ** 0.25 * np.maximum(1.0, np.abs(beta))
+    n_lineages = len(unique_lineages)
+    for state in random_designs["lineage"]:
+        component_name = state["component_name"]
+        variance = float(component_variances[component_name])
+        factor = sparse.csr_matrix(state["factor"], dtype=float)
+        whitening = np.asarray(state["whitening"], dtype=float)
+        term_names = state["term_names"]
+        term_indices = state["term_indices"]
+        dimension = len(term_names)
+        latent_modes = variance * np.asarray(
+            factor.T @ inverse_residual_for_beta(beta)
+        ).reshape(-1)
+        latent_jacobian = np.empty((factor.shape[1], len(beta)), dtype=float)
+        for column, step in enumerate(steps):
+            offset = np.zeros(len(beta), dtype=float)
+            offset[column] = step
+            plus = variance * np.asarray(
+                factor.T @ inverse_residual_for_beta(beta + offset)
+            ).reshape(-1)
+            minus = variance * np.asarray(
+                factor.T @ inverse_residual_for_beta(beta - offset)
+            ).reshape(-1)
+            latent_jacobian[:, column] = (plus - minus) / (2.0 * step)
+        prior_covariance = variance * whitening @ whitening.T
+        batch_size = max(1, 64 // dimension)
+        for start in range(0, n_lineages, batch_size):
+            lineage_batch = list(range(start, min(start + batch_size, n_lineages)))
+            column_indices = [
+                latent_index * n_lineages + lineage_index
+                for lineage_index in lineage_batch
+                for latent_index in range(dimension)
+            ]
+            design_batch = np.asarray(factor[:, column_indices].toarray(), dtype=float)
             inverse_batch = _solve_positive_definite(fit["cholesky"], design_batch)
-            modes = variance * (design_batch.T @ fit["inverse_residual"])
-            conditional_variance = variance - np.square(variance) * np.einsum(
-                "ij,ij->j", design_batch, inverse_batch
-            )
-            fixed_random_information = inverse_design.T @ design_batch
-            cross = fit["beta_covariance"] @ fixed_random_information
-            integrated_variance = conditional_variance + np.square(
-                variance
-            ) * np.einsum("ij,ij->j", fixed_random_information, cross)
-            covariance_fixed_random = -variance * cross[fixed_index]
-            total_variance = (
-                float(fit["beta_covariance"][fixed_index, fixed_index])
-                + integrated_variance
-                + 2.0 * covariance_fixed_random
-            )
-            for local_index, lineage_index in enumerate(range(start, stop)):
-                mode = float(modes[local_index])
-                conditional_se = math.sqrt(
-                    max(float(integrated_variance[local_index]), 0.0)
-                )
-                total = _total_lineage_slope(fit["beta"][fixed_index], mode)
-                total_se = math.sqrt(max(float(total_variance[local_index]), 0.0))
-                reliability = _lineage_reliability(
-                    float(conditional_variance[local_index]), variance
-                )
-                rows.append(
-                    {
-                        "model_id": model_id,
-                        "tree_id": tree_id,
-                        "response": response,
-                        "effect_type": "lineage_slope",
-                        "group_id": unique_lineages[lineage_index],
-                        "term": predictor,
-                        "conditional_mode": mode,
-                        "conditional_standard_error": conditional_se,
-                        "conditional_interval_lower": mode - critical * conditional_se,
-                        "conditional_interval_upper": mode + critical * conditional_se,
-                        "total_coefficient": total,
-                        "total_standard_error": total_se,
-                        "total_interval_lower": total - critical * total_se,
-                        "total_interval_upper": total + critical * total_se,
-                        "reliability": reliability,
-                        "variance_component": variance,
-                        "n_observations": int(lineage_counts[lineage_index]),
-                        "inference_status": "empirical-bayes-conditional-on-variance",
-                    }
-                )
+            for local_index, lineage_index in enumerate(lineage_batch):
+                selected = slice(local_index * dimension, (local_index + 1) * dimension)
+                lineage_design = design_batch[:, selected]
+                inverse_lineage = inverse_batch[:, selected]
+                conditional_latent = variance * np.eye(dimension) - np.square(
+                    variance
+                ) * (lineage_design.T @ inverse_lineage)
+                conditional_covariance = whitening @ conditional_latent @ whitening.T
+                latent_indices = [
+                    latent_index * n_lineages + lineage_index
+                    for latent_index in range(dimension)
+                ]
+                modes = whitening @ latent_modes[latent_indices]
+                mode_jacobian = whitening @ latent_jacobian[latent_indices]
+                for term_position, (term, fixed_index) in enumerate(
+                    zip(term_names, term_indices, strict=True)
+                ):
+                    mode = float(modes[term_position])
+                    mode_gradient = mode_jacobian[term_position]
+                    conditional_variance = max(
+                        float(conditional_covariance[term_position, term_position]),
+                        0.0,
+                    )
+                    integrated_variance = conditional_variance + float(
+                        mode_gradient @ beta_covariance @ mode_gradient
+                    )
+                    total_gradient = mode_gradient.copy()
+                    total_gradient[fixed_index] += 1.0
+                    total_variance = conditional_variance + float(
+                        total_gradient @ beta_covariance @ total_gradient
+                    )
+                    conditional_se = math.sqrt(max(integrated_variance, 0.0))
+                    total = _total_lineage_slope(beta[fixed_index], mode)
+                    total_se = math.sqrt(max(total_variance, 0.0))
+                    marginal_prior = float(
+                        prior_covariance[term_position, term_position]
+                    )
+                    reliability = _lineage_reliability(
+                        conditional_variance, marginal_prior
+                    )
+                    rows.append(
+                        {
+                            "model_id": model_id,
+                            "tree_id": tree_id,
+                            "response": response,
+                            "effect_type": "lineage_slope",
+                            "group_id": unique_lineages[lineage_index],
+                            "term": term,
+                            "conditional_mode": mode,
+                            "conditional_standard_error": conditional_se,
+                            "conditional_interval_lower": mode
+                            - critical * conditional_se,
+                            "conditional_interval_upper": mode
+                            + critical * conditional_se,
+                            "total_coefficient": total,
+                            "total_standard_error": total_se,
+                            "total_interval_lower": total - critical * total_se,
+                            "total_interval_upper": total + critical * total_se,
+                            "reliability": reliability,
+                            "variance_component": marginal_prior,
+                            "n_observations": int(lineage_counts[lineage_index]),
+                            "inference_status": (
+                                "empirical-bayes-delta-eiv-conditional-on-variance"
+                                if covariance_for_beta is not None
+                                else "empirical-bayes-conditional-on-variance"
+                            ),
+                        }
+                    )
     return rows
 
 
@@ -2687,19 +2884,16 @@ def _fit_covariance_model(
         model=model,
         event_random_effect=event_random_effect,
         lineage_random_slope=lineage_random_slope,
+        predictor_groups=predictor_groups,
     )
     if lineage_inference != "none" and not use_lineage:
         raise ValueError(
             "Lineage inference was requested but lineage random slopes are not "
             "identifiable for model '{}'.".format(model_id)
         )
-    balance = np.ones(n_observations, dtype=float)
-    if event_weighting == "equal":
-        balance = np.sqrt(event_counts[event_inverse].astype(float))
     likelihood_observations = n_events if event_weighting == "equal" else n_observations
-    likelihood_logdet_offset = (
-        float(np.log(np.square(balance)).sum()) if event_weighting == "equal" else 0.0
-    )
+    likelihood_groups = event_inverse if event_weighting == "equal" else None
+    likelihood_logdet_offset = 0.0
     index_by_predictor = {
         predictor: index for index, predictor in enumerate(predictors)
     }
@@ -2712,7 +2906,6 @@ def _fit_covariance_model(
         predictor_uncertainties,
         grouped_predictor_uncertainties,
         index_by_predictor,
-        balance,
     )
     if balanced_predictor_uncertainties:
         eiv_components = components
@@ -2729,6 +2922,7 @@ def _fit_covariance_model(
             allow_large_dense=allow_large_dense,
             likelihood_observations=likelihood_observations,
             likelihood_logdet_offset=likelihood_logdet_offset,
+            likelihood_groups=likelihood_groups,
         )
     else:
         fit = _profile_covariance_fit(
@@ -2741,6 +2935,7 @@ def _fit_covariance_model(
             allow_large_dense=allow_large_dense,
             likelihood_observations=likelihood_observations,
             likelihood_logdet_offset=likelihood_logdet_offset,
+            likelihood_groups=likelihood_groups,
         )
     effective_reml = bool(fit.get("reml", reml))
     beta = fit["beta"]
@@ -2762,6 +2957,7 @@ def _fit_covariance_model(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
             )
         else:
             bootstrap_coefficients = _parametric_bootstrap_coefficients(
@@ -2776,6 +2972,7 @@ def _fit_covariance_model(
                 allow_large_dense=allow_large_dense,
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
             )
         standard_errors = np.std(bootstrap_coefficients, axis=0, ddof=1)
     elif inference == "wald":
@@ -2794,7 +2991,9 @@ def _fit_covariance_model(
     component_variances = fit["component_variances"]
     evolutionary_rate = component_variances["evolutionary_rate"]
     event_variance = component_variances.get("species_event_variance", 0.0)
-    lineage_variance = component_variances.get("lineage_slope_variance", 0.0)
+    lineage_variance_by_term, _ = _lineage_variances_by_term(
+        random_designs, component_variances
+    )
     mean_sampling_variance = float(np.mean(_covariance_diagonal(sampling_covariance)))
     fitted_variance = mean_sampling_variance
     for uncertainty, columns in zip(
@@ -2896,7 +3095,7 @@ def _fit_covariance_model(
                 "reml": "yes" if effective_reml else "no",
                 "evolutionary_rate": evolutionary_rate,
                 "species_event_variance": event_variance,
-                "lineage_slope_variance": lineage_variance,
+                "lineage_slope_variance": lineage_variance_by_term.get(predictor, 0.0),
                 "mean_sampling_variance": mean_sampling_variance,
                 "sampling_variance_fraction": sampling_fraction,
                 **_predictor_measurement_result_fields(
@@ -2939,6 +3138,7 @@ def _fit_covariance_model(
         allow_large_dense=allow_large_dense,
         likelihood_observations=likelihood_observations,
         likelihood_logdet_offset=likelihood_logdet_offset,
+        likelihood_groups=likelihood_groups,
     )
     random_effect_rows = []
     if use_event:
@@ -2963,15 +3163,16 @@ def _fit_covariance_model(
         random_effect_rows.extend(
             _lineage_random_effect_rows(
                 fit,
+                response_values,
                 design,
                 random_designs,
                 predictors,
                 unique_lineages,
                 lineage_counts,
+                component_variances,
                 model_id=model_id,
                 tree_id=tree_id,
                 response=response,
-                variance=lineage_variance,
                 confidence_level=confidence_level,
             )
         )
@@ -3146,13 +3347,33 @@ def _normalize_one_grouped_uncertainty(state, predictors):
     return normalized
 
 
-def _normalize_grouped_uncertainties(states, predictors, model):
+def _normalize_grouped_uncertainties(states, predictors, model, predictor_groups):
     normalized = [
         _normalize_one_grouped_uncertainty(state, predictors) for state in states or ()
     ]
     if model == "legacy" and normalized:
         raise ValueError(
             "Grouped predictor uncertainty requires a likelihood-based PGLS model."
+        )
+    term_occurrences = [term for state in normalized for term in state["term_names"]]
+    duplicated_terms = sorted(
+        {term for term in term_occurrences if term_occurrences.count(term) > 1}
+    )
+    if duplicated_terms:
+        raise ValueError(
+            "Grouped predictor uncertainty assigns term(s) more than once: {}.".format(
+                ", ".join(duplicated_terms)
+            )
+        )
+    predictor_term_sets = {frozenset(terms) for terms in predictor_groups.values()}
+    invalid_groups = [
+        state["term_names"]
+        for state in normalized
+        if frozenset(state["term_names"]) not in predictor_term_sets
+    ]
+    if invalid_groups:
+        raise ValueError(
+            "Grouped predictor uncertainty terms must match one predictor group."
         )
     return normalized
 
@@ -3207,11 +3428,7 @@ def _attach_precomputed_transform_fields(
         evolution_term = (
             str(row["term"])
             if row["term_test"] == "coefficient"
-            else (
-                next(iter(predictor_groups.values()))[0]
-                if row["term_test"] == "lineage-heterogeneity"
-                else predictor_groups[str(row["source_term"])][0]
-            )
+            else predictor_groups[str(row["source_term"])][0]
         )
         row.update(
             _precomputed_transform_fields(
@@ -3483,7 +3700,7 @@ def fit_reconciled_pgls(
     predictor_metadata = _normalize_predictor_metadata(predictors, predictor_metadata)
     predictor_groups = _normalize_predictor_groups(predictors, predictor_groups)
     predictor_group_uncertainties = _normalize_grouped_uncertainties(
-        predictor_group_uncertainties, predictors, model
+        predictor_group_uncertainties, predictors, model, predictor_groups
     )
     prepared_responses = _prepare_responses(
         response_contrasts, responses, coverage_policy

@@ -10,6 +10,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   duplicated raw TSV headers, serialized overlapping explicit output sets, and
   retained sparse factor-loading and posterior-precision representations
   throughout reconciled errors-in-variables PGLS.
+- Made equal-event Gaussian pseudo-likelihood invariant to uneven identical
+  paralog copies, including shared predictor uncertainty; separated and
+  whitened lineage-slope variance components by predictor source; propagated
+  predictor-dependent covariance into lineage intervals; tightened sampling
+  covariance and grouped-uncertainty validation; and bounded categorical
+  covariance audits to marginal sparse products for large datasets.
 
 ## [0.36.0] - 2026-08-12
 

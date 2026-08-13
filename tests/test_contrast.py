@@ -57,6 +57,20 @@ def test_independent_contrasts_ignore_branch_lengths_and_report_not_applicable()
     assert set(table["branch_length_mode"]) == {"not-applicable"}
 
 
+@pytest.mark.parametrize("invalid", [-0.1, float("nan"), float("inf")])
+def test_tip_sampling_variance_diagonal_rejects_invalid_values(invalid):
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+
+    with pytest.raises(ValueError, match="finite non-negative"):
+        build_contrast_table(
+            tree,
+            {"value": {"A": 1.0, "B": 3.0, "C": 4.0}},
+            sampling_covariance_by_trait={"value": [0.1, invalid, 0.2]},
+            replicate_model_by_trait={"value": "pooled"},
+            return_sampling_covariance=True,
+        )
+
+
 def test_contrast_sign_is_invariant_to_newick_child_order():
     values = {"A": 1.0, "B": 3.0, "C": 4.0}
     tree1 = Tree("((A:1,B:1):1,C:2);", parser=1)
