@@ -139,7 +139,16 @@ $$
 
 と因子のまま保持できる。NWKITはcontrast数が500を超える場合、この $U$ の
 非ゼロ要素を `covariance_representation=factor-loading` として出力し、PGLSでも
-$M$ を密行列化せずに用いる。これは近似や対角化ではなく、上式と同じ共分散である。
+$M$ を密行列化せずに用いる。batch補正がある場合も、tip covarianceを
+
+$$
+D=\operatorname{diag}(\mathbf d)+HH^\mathsf T
+$$
+
+という「対角＋低ランク」形式で直接計算し、contrast側では
+$U=[L\operatorname{diag}(\sqrt{\mathbf d}),LH]$ とする。出力時には各行の最大loading
+の16 machine epsilon以下だけを除く。この丸め誤差水準の疎化を除けば上式と同じ
+共分散であり、tip数の二乗の行列は作らない。
 
 ## 3. 遺伝子contrastと種形質contrastの対応
 
@@ -249,7 +258,20 @@ $$
 V_{\mathrm{work}}=BVB
 $$
 
-へ変換する。さらに、識別可能なら同じ `species_event_id` を共有する行に
+へ変換する。Gaussian ML/REMLでは行数そのものを尤度の標本数にせず、イベント数
+$m$ を有効標本数とする。$n$ を遺伝子contrast行数として、共分散のlog determinant
+項は
+
+$$
+\frac{m}{n}\left\{\log|V_{\mathrm{work}}|-2\log|B|\right\}
+$$
+
+とする。$-2\log|B|$ は既知の行スケーリングのJacobianを相殺する項である。したがって
+同一のparalog行を何コピー追加しても、`replicate-reml` の係数、進化rate、標準誤差、
+log likelihoodは変わらない。parametric bootstrapとlineage likelihood-ratio検定も
+同じevent-level擬似尤度で再fitする。
+
+さらに、識別可能なら同じ `species_event_id` を共有する行に
 species-event random effectを入れる。残差自由度も遺伝子contrast数ではなく
 
 $$

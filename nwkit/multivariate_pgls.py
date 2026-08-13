@@ -216,8 +216,8 @@ def _validate_multivariate_inputs(
 ):
     responses = np.asarray(responses, dtype=float)
     design = np.asarray(design, dtype=float)
-    if responses.ndim != 2 or responses.shape[1] < 2:
-        raise ValueError("Multivariate PGLS requires at least two response traits.")
+    if responses.ndim != 2 or responses.shape[1] < 1:
+        raise ValueError("PGLS requires at least one response trait.")
     if design.ndim != 2 or len(design) != len(responses):
         raise ValueError("Multivariate response and design dimensions differ.")
     if not np.isfinite(design).all():

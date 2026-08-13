@@ -1,3 +1,4 @@
+import csv
 import math
 from io import StringIO
 
@@ -11,6 +12,7 @@ from nwkit.evolution import (
     transformed_edge_variances,
     validate_evolution_parameter,
 )
+from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.util import (
     assign_branch_ids,
     get_node_class,
@@ -19,6 +21,7 @@ from nwkit.util import (
     read_tip_table,
     read_tree,
     validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
 )
 
@@ -724,7 +727,12 @@ def _validate_reconciliation_domains(dataframe):
 def _csv_items(value):
     if value == "":
         return tuple()
-    return tuple(value.split(","))
+    try:
+        return tuple(next(csv.reader([value], strict=True)))
+    except csv.Error as exc:
+        raise ValueError(
+            "'--reconciliation' contains malformed descendant-taxon CSV."
+        ) from exc
 
 
 def _validated_int(value, column, *, positive=False):
@@ -1129,6 +1137,92 @@ def calculate_contrasts(
     return contrast_by_node
 
 
+def _structured_tip_sampling_factor(coefficients, leaf_names, covariance):
+    tip_diagonal = np.asarray(covariance.diagonal, dtype=float)
+    tip_low_rank = covariance.low_rank
+    finite_loading = (
+        np.isfinite(tip_low_rank.data).all()
+        if sparse.issparse(tip_low_rank)
+        else np.isfinite(np.asarray(tip_low_rank, dtype=float)).all()
+    )
+    if (
+        tip_diagonal.shape != (len(leaf_names),)
+        or np.any(tip_diagonal < 0.0)
+        or not np.isfinite(tip_diagonal).all()
+        or len(tip_low_rank.shape) != 2
+        or tip_low_rank.shape[0] != len(leaf_names)
+        or not finite_loading
+    ):
+        raise ValueError("Tip sampling covariance factor is incomplete.")
+    coefficient_matrix = sparse.csr_matrix(coefficients)
+    factor = sparse.hstack(
+        [
+            coefficient_matrix.multiply(np.sqrt(tip_diagonal)[None, :]),
+            coefficient_matrix @ sparse.csr_matrix(tip_low_rank),
+        ],
+        format="csr",
+    )
+    latent_ids = ["latent:tip:{}".format(name) for name in leaf_names] + [
+        "latent:low-rank:{}".format(index) for index in range(tip_low_rank.shape[1])
+    ]
+    return factor, latent_ids
+
+
+def _tip_sampling_array(value, leaf_names, trait):
+    if isinstance(value, pd.DataFrame):
+        covariance = value.reindex(index=leaf_names, columns=leaf_names)
+        if covariance.isna().any(axis=None):
+            raise ValueError(
+                "Tip sampling covariance is incomplete for trait '{}'.".format(trait)
+            )
+        return covariance.to_numpy(dtype=float)
+    covariance = np.asarray(value, dtype=float)
+    if covariance.shape != (len(leaf_names),):
+        raise ValueError("Tip sampling covariance diagonal is incomplete.")
+    return covariance
+
+
+def _dense_contrast_sampling_covariance(coefficients, tip_covariance):
+    dense_coefficients = (
+        coefficients.toarray() if sparse.issparse(coefficients) else coefficients
+    )
+    covariance = dense_coefficients @ tip_covariance @ dense_coefficients.T
+    covariance = (covariance + covariance.T) / 2.0
+    if not np.isfinite(covariance).all():
+        raise ValueError("Contrast sampling covariance contains non-finite values.")
+    eigenvalues = np.linalg.eigvalsh(covariance)
+    tolerance = (
+        np.finfo(float).eps
+        * max(1.0, float(np.max(np.abs(covariance))))
+        * max(1, len(covariance))
+    )
+    if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
+        raise ValueError("Contrast sampling covariance is not positive semidefinite.")
+    covariance[np.abs(covariance) < tolerance] = 0.0
+    return covariance
+
+
+def _contrast_sampling_representation(coefficients, leaf_names, value, trait):
+    if isinstance(value, DiagonalLowRankCovariance):
+        factor, latent_ids = _structured_tip_sampling_factor(
+            coefficients, leaf_names, value
+        )
+    else:
+        tip_covariance = _tip_sampling_array(value, leaf_names, trait)
+        if tip_covariance.ndim != 1:
+            covariance = _dense_contrast_sampling_covariance(
+                coefficients, tip_covariance
+            )
+            return False, None, None, np.diag(covariance), covariance
+        factor = sparse.csr_matrix(coefficients).multiply(
+            np.sqrt(tip_covariance)[None, :]
+        )
+        latent_ids = ["latent:{}".format(name) for name in leaf_names]
+    factor = _prune_sparse_factor_loadings(factor)
+    diagonal = np.asarray(factor.multiply(factor).sum(axis=1)).reshape(-1)
+    return True, factor, latent_ids, diagonal, None
+
+
 def _sampling_covariance_table(
     table,
     coefficient_by_trait_and_clade,
@@ -1169,57 +1263,18 @@ def _sampling_covariance_table(
             if any(sparse.issparse(value) for value in coefficient_values)
             else np.vstack(coefficient_values)
         )
-        tip_covariance_value = sampling_covariance_by_trait[trait]
-        if isinstance(tip_covariance_value, pd.DataFrame):
-            tip_covariance = tip_covariance_value.reindex(
-                index=leaf_names, columns=leaf_names
-            )
-            if tip_covariance.isna().any(axis=None):
-                raise ValueError(
-                    "Tip sampling covariance is incomplete for trait '{}'.".format(
-                        trait
-                    )
-                )
-            tip_covariance_array = tip_covariance.to_numpy(dtype=float)
-        else:
-            tip_covariance_array = np.asarray(tip_covariance_value, dtype=float)
-            if tip_covariance_array.shape != (len(leaf_names),):
-                raise ValueError("Tip sampling covariance diagonal is incomplete.")
-        diagonal_sampling = tip_covariance_array.ndim == 1
-        if diagonal_sampling:
-            contrast_factor = sparse.csr_matrix(coefficients).multiply(
-                np.sqrt(tip_covariance_array)[None, :]
-            )
-            sampling_diagonal = np.asarray(
-                contrast_factor.multiply(contrast_factor).sum(axis=1)
-            ).reshape(-1)
-            contrast_covariance = None
-        else:
-            dense_coefficients = (
-                coefficients.toarray()
-                if sparse.issparse(coefficients)
-                else coefficients
-            )
-            contrast_covariance = (
-                dense_coefficients @ tip_covariance_array @ dense_coefficients.T
-            )
-            contrast_covariance = (contrast_covariance + contrast_covariance.T) / 2.0
-            if not np.isfinite(contrast_covariance).all():
-                raise ValueError(
-                    "Contrast sampling covariance contains non-finite values."
-                )
-            eigenvalues = np.linalg.eigvalsh(contrast_covariance)
-            tolerance = (
-                np.finfo(float).eps
-                * max(1.0, float(np.max(np.abs(contrast_covariance))))
-                * max(1, len(contrast_covariance))
-            )
-            if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
-                raise ValueError(
-                    "Contrast sampling covariance is not positive semidefinite."
-                )
-            contrast_covariance[np.abs(contrast_covariance) < tolerance] = 0.0
-            sampling_diagonal = np.diag(contrast_covariance)
+        (
+            diagonal_sampling,
+            contrast_factor,
+            factor_latent_ids,
+            sampling_diagonal,
+            contrast_covariance,
+        ) = _contrast_sampling_representation(
+            coefficients,
+            leaf_names,
+            sampling_covariance_by_trait[trait],
+            trait,
+        )
         for position, row_index in enumerate(row_indices):
             coefficient = coefficients[position]
             if sparse.issparse(coefficient):
@@ -1252,6 +1307,7 @@ def _sampling_covariance_table(
             and diagonal_sampling
             and len(contrast_ids) > MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS
         ):
+            assert factor_latent_ids is not None
             coo = contrast_factor.tocoo()
             represented_rows = set(coo.row)
             for row, column, value in zip(coo.row, coo.col, coo.data, strict=True):
@@ -1260,7 +1316,7 @@ def _sampling_covariance_table(
                         "tree_id": str(table.loc[row_indices[row], "tree_id"]),
                         "trait": trait,
                         "contrast_id_1": contrast_ids[row],
-                        "contrast_id_2": "latent:{}".format(leaf_names[column]),
+                        "contrast_id_2": factor_latent_ids[column],
                         "sampling_covariance": float(value),
                         "covariance_representation": "factor-loading",
                     }
@@ -1296,6 +1352,21 @@ def _sampling_covariance_table(
                         }
                     )
     return table, pd.DataFrame(covariance_rows, columns=SAMPLING_COVARIANCE_COLUMNS)
+
+
+def _prune_sparse_factor_loadings(factor):
+    """Drop roundoff-scale loadings while retaining row covariance numerically."""
+    factor = sparse.csr_matrix(factor, dtype=float).copy()
+    relative_tolerance = np.finfo(float).eps * 16.0
+    for row in range(factor.shape[0]):
+        start, stop = factor.indptr[row : row + 2]
+        if start == stop:
+            continue
+        values = factor.data[start:stop]
+        tolerance = relative_tolerance * float(np.max(np.abs(values)))
+        values[np.abs(values) <= tolerance] = 0.0
+    factor.eliminate_zeros()
+    return factor
 
 
 def build_contrast_table(
@@ -1450,6 +1521,21 @@ def build_contrast_table(
 
 
 def contrast_main(args):
+    outputs = [
+        ("--outfile", args.outfile),
+        ("--sampling-covariance-out", getattr(args, "sampling_covariance_out", None)),
+        ("--tip-summary-out", getattr(args, "tip_summary_out", None)),
+    ]
+    validate_distinct_output_paths(outputs)
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--infile", args.infile),
+            ("--trait", args.trait),
+            ("--reconciliation", getattr(args, "reconciliation", None)),
+        ],
+        outputs,
+        label="Contrast output",
+    )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     columns = _parse_columns(args.columns)
     _validate_contrast_tree(tree, args.branch_length)
@@ -1477,13 +1563,6 @@ def contrast_main(args):
             )
         if covariance_out == "-":
             raise ValueError("'--sampling-covariance-out' cannot be STDOUT.")
-        validate_distinct_output_paths(
-            [
-                ("--outfile", args.outfile),
-                ("--sampling-covariance-out", covariance_out),
-                ("--tip-summary-out", getattr(args, "tip_summary_out", None)),
-            ]
-        )
         replicate_estimates = _read_replicate_traits(args, tree, columns, tree_id)
         values_by_trait = replicate_estimates.values_by_trait
     else:
@@ -1517,17 +1596,20 @@ def contrast_main(args):
     )
     if replicate_estimates is None:
         table = output
+        file_outputs = []
     else:
         table, covariance_table = output
-        covariance_table.to_csv(args.sampling_covariance_out, sep="\t", index=False)
+        file_outputs = [(args.sampling_covariance_out, covariance_table)]
         tip_summary_out = getattr(args, "tip_summary_out", None)
         if tip_summary_out is not None:
             if tip_summary_out == "-":
                 raise ValueError("'--tip-summary-out' cannot be STDOUT.")
-            replicate_estimates.tip_summary.to_csv(
-                tip_summary_out, sep="\t", index=False
-            )
+            file_outputs.append((tip_summary_out, replicate_estimates.tip_summary))
+    if args.outfile != "-":
+        file_outputs.append((args.outfile, table))
+    if file_outputs:
+        from nwkit.pgls_pipeline import _write_dataframes_transactionally
+
+        _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
-    else:
-        table.to_csv(args.outfile, sep="\t", index=False)

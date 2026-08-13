@@ -81,8 +81,9 @@ is requested; the result records `reml=no`. `--sampling-covariance-out` and
 the predictor calculation. For independent tip errors, ordinary PGLS writes
 only the nonzero diagonal rows instead of enumerating known-zero pairs.
 Reconciled scalar response and predictor contrasts write explicit covariance
-pairs through 500 contrasts. Above that size the same covariance is written
-exactly as sparse factor loadings:
+pairs through 500 contrasts. Above that size the covariance is written as
+numerically lossless sparse factor loadings (only values at most 16 machine
+epsilons relative to a row's largest loading are discarded):
 `covariance_representation=factor-loading`,
 `contrast_id_1` names a contrast, `contrast_id_2` names a latent tip-error
 column, and `sampling_covariance` contains the loading rather than a covariance
@@ -455,7 +456,7 @@ has no gene-contrast rows.
 | `OG000001.reconciliation.tsv` | Reconciliation decisions and event mappings |
 | `OG000001.gene-contrasts.tsv` | Expression contrasts with reconciliation context |
 | `OG000001.species-contrasts.tsv` | Species-trait predictor contrasts |
-| `OG000001.response-sampling-covariance.tsv` | Replicate-derived response covariance; explicit pairs for at most 500 contrasts and an exact sparse factor-loading table above that size |
+| `OG000001.response-sampling-covariance.tsv` | Replicate-derived response covariance; explicit pairs for at most 500 contrasts and a roundoff-pruned sparse factor-loading table above that size |
 | `OG000001.response-tip-summary.tsv` | Biological/technical replicate audit, when applicable |
 | `OG000001.predictor-sampling-covariance.tsv` | Predictor uncertainty after the species-tree PIC transform: explicit or sparse-factor scalar covariance plus `trait_2` cross-column factor covariance, when applicable |
 | `OG000001.predictor-tip-summary.tsv` | Predictor biological/technical replicate audit, when applicable |
@@ -718,7 +719,12 @@ event-cluster HC1 estimator only as a sensitivity analysis.
 Rows sharing a `species_event_id` have equal total working weight by default,
 so a species split represented by ten paralogs does not dominate a split
 represented once. `--event-weighting observation` is an explicit sensitivity
-analysis. In every model, reported residual degrees of freedom are
+analysis. Gaussian ML/REML also uses the number of species events as the
+effective likelihood sample size and removes the known row-scaling Jacobian
+from the determinant. Thus identical paralog copies leave the coefficient,
+evolutionary rate, standard error, and event-level log likelihood unchanged in
+`replicate-reml`; bootstrap and lineage likelihood refits use the same
+event-level objective. In every model, reported residual degrees of freedom are
 `n_species_events - num_parameters`, never the number of gene-tree rows.
 
 For Gaussian reconciled contrasts, Wald inference is the default.

@@ -163,6 +163,7 @@ ORDINARY_SAMPLING_COVARIANCE_COLUMNS = [
     "leaf_name_1",
     "leaf_name_2",
     "sampling_covariance",
+    "covariance_representation",
 ]
 
 
@@ -505,6 +506,7 @@ def estimate_marginal_evolution_parameter(
     evolution_parameter=None,
     branch_length="original",
     sampling_covariance=None,
+    allow_large_dense=False,
 ):
     """Estimate one trait's evolutionary shape parameter by marginal ML."""
     spec = evolution_model_spec(evolution_model)
@@ -522,7 +524,7 @@ def estimate_marginal_evolution_parameter(
     response = _ordered_values(values_by_leaf, leaf_names, trait)
     design = np.ones((len(leaf_names), 1), dtype=float)
     fixed_covariance = (
-        np.zeros((len(leaf_names), len(leaf_names)), dtype=float)
+        np.zeros(len(leaf_names), dtype=float)
         if sampling_covariance is None
         else _coerce_response_sampling_covariance(
             {trait: sampling_covariance},
@@ -531,25 +533,40 @@ def estimate_marginal_evolution_parameter(
             label="Predictor sampling covariance",
         )
     )
-    fit = _fit_ordinary_gaussian(
-        response,
-        design,
-        fixed_covariance,
+    parameter_bounds, parameter_decoder, parameter_initial = (
+        _categorical_shape_settings(
+            tree, evolution_model, evolution_parameter, branch_length
+        )
+    )
+    covariance_factory = evolutionary_covariance_factory(
         tree,
         leaf_names,
-        evolution_model=evolution_model,
-        evolution_parameter=evolution_parameter,
+        model=evolution_model,
         branch_length=branch_length,
-        custom_covariance=None,
+    )
+    fit = fit_multivariate_pgls(
+        response[:, None],
+        design,
+        {"phylogenetic": covariance_factory},
+        fixed_covariance=fixed_covariance,
+        evolution_parameter=evolution_parameter,
+        evolution_parameter_bounds=parameter_bounds,
+        evolution_parameter_decoder=parameter_decoder,
+        evolution_parameter_initial=parameter_initial,
         reml=False,
+        allow_large_dense=allow_large_dense,
     )
     return {
-        "parameter": fit["evolution_parameter"],
-        "parameter_status": fit["evolution_parameter_status"],
-        "log_likelihood": -float(fit["objective"]),
-        "optimizer_converged": bool(fit["optimizer_converged"]),
-        "optimizer_message": str(fit["optimizer_message"]),
-        "boundary_warning": bool(fit["boundary_warning"]),
+        "parameter": fit.evolution_parameter,
+        "parameter_status": (
+            "not-applicable"
+            if spec.parameter_name is None
+            else fit.evolution_parameter_status
+        ),
+        "log_likelihood": fit.log_likelihood,
+        "optimizer_converged": fit.optimizer_converged,
+        "optimizer_message": fit.optimizer_message,
+        "boundary_warning": fit.boundary_warning,
     }
 
 
@@ -739,7 +756,24 @@ def _coerce_response_sampling_covariance(
 ):
     covariance = covariance_by_trait.get(response)
     if covariance is None:
-        covariance = np.zeros((len(leaf_names), len(leaf_names)))
+        covariance = np.zeros(len(leaf_names), dtype=float)
+    elif isinstance(covariance, DiagonalLowRankCovariance):
+        diagonal = np.asarray(covariance.diagonal, dtype=float)
+        loading = covariance.low_rank
+        finite_loading = (
+            np.isfinite(loading.data).all()
+            if sparse.issparse(loading)
+            else np.isfinite(np.asarray(loading, dtype=float)).all()
+        )
+        if (
+            diagonal.shape != (len(leaf_names),)
+            or loading.shape[0] != len(leaf_names)
+            or np.any(diagonal < 0.0)
+            or not np.isfinite(diagonal).all()
+            or not finite_loading
+        ):
+            raise ValueError("{} factor is malformed.".format(label))
+        return DiagonalLowRankCovariance(diagonal, loading)
     elif isinstance(covariance, pd.DataFrame):
         covariance = covariance.copy()
         covariance.index = covariance.index.map(str)
@@ -1191,7 +1225,18 @@ def _prepare_latent_ordinary_predictors(
             ),
             "log_likelihood": posterior.log_likelihood,
             "mean_sampling_variance": float(
-                np.mean(sampling if sampling.ndim == 1 else np.diag(sampling))
+                np.mean(
+                    sampling.diagonal
+                    + np.asarray(
+                        sparse.csr_matrix(sampling.low_rank)
+                        .multiply(sparse.csr_matrix(sampling.low_rank))
+                        .sum(axis=1)
+                    ).reshape(-1)
+                    if isinstance(sampling, DiagonalLowRankCovariance)
+                    else sampling
+                    if sampling.ndim == 1
+                    else np.diag(sampling)
+                )
             ),
             "mean_posterior_variance": float(np.mean(np.diag(posterior.covariance))),
             "uncertainty_fraction": float(
@@ -1652,25 +1697,47 @@ def _fit_ordinary_multivariate_response(
         )
     fixed_diagonal = np.zeros(len(leaf_names) * len(responses), dtype=float)
     dense_sampling_blocks: list[tuple[int, np.ndarray]] = []
+    fixed_loading_blocks = []
     for response_index, response in enumerate(responses):
         covariance = _coerce_response_sampling_covariance(
             covariance_by_trait, response, leaf_names
         )
         start = response_index * len(leaf_names)
-        if covariance.ndim == 1 or np.array_equal(
+        if isinstance(covariance, DiagonalLowRankCovariance):
+            fixed_diagonal[start : start + len(leaf_names)] = covariance.diagonal
+            fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
+        elif covariance.ndim == 1 or np.array_equal(
             covariance, np.diag(np.diag(covariance))
         ):
             fixed_diagonal[start : start + len(leaf_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )
+            fixed_loading_blocks.append(
+                sparse.csr_matrix((len(leaf_names), 0), dtype=float)
+            )
         else:
             dense_sampling_blocks.append((start, covariance))
+            fixed_loading_blocks.append(None)
     if dense_sampling_blocks:
         fixed_covariance = np.diag(fixed_diagonal)
+        for response_index, loading in enumerate(fixed_loading_blocks):
+            if loading is not None and loading.shape[1]:
+                update = loading @ loading.T
+                fixed_covariance[
+                    response_index * len(leaf_names) : (response_index + 1)
+                    * len(leaf_names),
+                    response_index * len(leaf_names) : (response_index + 1)
+                    * len(leaf_names),
+                ] += update.toarray()
         for start, covariance in dense_sampling_blocks:
             fixed_covariance[
                 start : start + len(leaf_names), start : start + len(leaf_names)
             ] = covariance
+    elif any(loading.shape[1] for loading in fixed_loading_blocks):
+        fixed_covariance = DiagonalLowRankCovariance(
+            fixed_diagonal,
+            sparse.block_diag(fixed_loading_blocks, format="csr"),
+        )
     else:
         fixed_covariance = fixed_diagonal
     shape_bounds, shape_decoder, shape_initial = _categorical_shape_settings(
@@ -2698,6 +2765,33 @@ def _response_auxiliary_mapping(column_by_response, values_by_column):
 def _sampling_covariance_table(covariance_by_trait, leaf_names):
     rows = []
     for trait, covariance in covariance_by_trait.items():
+        if isinstance(covariance, DiagonalLowRankCovariance):
+            diagonal = np.asarray(covariance.diagonal, dtype=float)
+            loading = sparse.hstack(
+                [
+                    sparse.diags(np.sqrt(diagonal), format="csr"),
+                    sparse.csr_matrix(covariance.low_rank),
+                ],
+                format="csr",
+            ).tocoo()
+            latent_names = ["latent:tip:{}".format(name) for name in leaf_names] + [
+                "latent:low-rank:{}".format(index)
+                for index in range(covariance.low_rank.shape[1])
+            ]
+            for row, column, value in zip(
+                loading.row, loading.col, loading.data, strict=True
+            ):
+                rows.append(
+                    {
+                        "tree_id": "species",
+                        "trait": trait,
+                        "leaf_name_1": leaf_names[row],
+                        "leaf_name_2": latent_names[column],
+                        "sampling_covariance": float(value),
+                        "covariance_representation": "factor-loading",
+                    }
+                )
+            continue
         matrix = (
             covariance.loc[leaf_names, leaf_names].to_numpy(dtype=float)
             if isinstance(covariance, pd.DataFrame)
@@ -2719,6 +2813,7 @@ def _sampling_covariance_table(covariance_by_trait, leaf_names):
                         "sampling_covariance": (
                             matrix[first] if matrix.ndim == 1 else matrix[first, second]
                         ),
+                        "covariance_representation": "covariance",
                     }
                 )
     return pd.DataFrame(rows, columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)

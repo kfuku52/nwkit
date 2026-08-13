@@ -14,6 +14,8 @@ from nwkit.util import (
     get_node_class,
     is_rooted,
     read_tree,
+    validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
 )
 
@@ -729,6 +731,17 @@ def _report_unmatched_species(species_label_by_gene_leaf, species_tree, policy):
 
 
 def reconcile_main(args):
+    outputs = [("--outfile", args.outfile)]
+    validate_distinct_output_paths(outputs)
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--infile", args.infile),
+            ("--species-tree", args.species_tree),
+            ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+        ],
+        outputs,
+        label="Reconciliation output",
+    )
     gene_tree = read_tree(args.infile, args.format, args.quoted_node_names)
     species_tree = read_tree(
         args.species_tree,
@@ -749,4 +762,6 @@ def reconcile_main(args):
     if args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
     else:
-        table.to_csv(args.outfile, sep="\t", index=False)
+        from nwkit.pgls_pipeline import _write_dataframes_transactionally
+
+        _write_dataframes_transactionally([(args.outfile, table)])

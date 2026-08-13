@@ -66,6 +66,20 @@ def test_marginal_evolution_parameter_estimation_uses_trait_only_ml():
     assert isinstance(diagnostics["optimizer_converged"], bool)
 
 
+def test_marginal_shape_estimation_uses_sparse_tree_likelihood(monkeypatch):
+    monkeypatch.setattr("nwkit.multivariate_pgls.MAX_DENSE_MULTIVARIATE_DIMENSION", 3)
+    diagnostics = estimate_marginal_evolution_parameter(
+        _tree(),
+        _values([1.0, 1.2, 2.0, 4.0, 4.2]),
+        "body_size",
+        evolution_model="lambda",
+    )
+
+    assert 0.0 <= diagnostics["parameter"] <= 1.0
+    assert diagnostics["parameter_status"] == "estimated"
+    assert np.isfinite(diagnostics["log_likelihood"])
+
+
 def _values(values):
     return dict(zip(LEAF_NAMES, values, strict=True))
 

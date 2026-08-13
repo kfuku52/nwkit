@@ -21,6 +21,7 @@ from nwkit.gaussian import (
     factor_logdet,
     solve_factor,
 )
+from nwkit.model_matrix import PredictorTerm
 from nwkit.pgls import _profile_covariance_fit, fit_reconciled_pgls
 from nwkit.pgls_pipeline import PglsPipelineArtifacts, write_pgls_bundle
 from nwkit.reconcile import build_reconciliation_table
@@ -458,6 +459,91 @@ def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
     assert equal_result.iloc[0]["n_gene_contrasts"] == 11
     assert equal_result.iloc[0]["n_species_events"] == 2
     assert equal_result.iloc[0]["degrees_of_freedom"] == 1
+
+
+def test_equal_event_pseudolikelihood_is_copy_invariant():
+    base = pd.DataFrame(
+        [
+            _response_row(index, value)
+            for index, value in enumerate([1.0, 6.0, 7.0, 11.0, 8.0, 13.0], start=1)
+        ]
+    )
+    predictors = _predictor_table(values=(1.0, 2.0, 3.0, 4.0, 5.0, 6.0))
+    duplicated = []
+    for copy_index in range(5):
+        copy = base.copy()
+        copy["gene_clade_id"] = (
+            copy["gene_clade_id"].astype(str) + "_" + str(copy_index)
+        )
+        duplicated.append(copy)
+
+    baseline = fit_reconciled_pgls(
+        base,
+        predictors,
+        ["expression"],
+        ["body_size"],
+        model="replicate-reml",
+    ).iloc[0]
+    repeated = fit_reconciled_pgls(
+        pd.concat(duplicated, ignore_index=True),
+        predictors,
+        ["expression"],
+        ["body_size"],
+        model="replicate-reml",
+    ).iloc[0]
+
+    for column in [
+        "coefficient",
+        "standard_error",
+        "evolutionary_rate",
+        "log_likelihood",
+    ]:
+        assert repeated[column] == pytest.approx(baseline[column], rel=1e-10)
+
+
+def test_categorical_omnibus_row_reports_its_actual_wald_inference():
+    response = pd.DataFrame(
+        [
+            _response_row(index, value)
+            for index, value in enumerate([1.0, 4.0, 3.0, 7.0, 6.0, 9.0], start=1)
+        ]
+    )
+    first = _predictor_table(values=(0.0, 1.0, 0.0, 1.0, 0.0, 1.0))
+    first["trait"] = "habitat[a]"
+    second = _predictor_table(values=(0.0, 0.0, 1.0, 1.0, 0.0, 1.0))
+    second["trait"] = "habitat[b]"
+    terms = ["habitat[a]", "habitat[b]"]
+    metadata = {
+        term: PredictorTerm(
+            term,
+            "habitat",
+            "categorical",
+            level,
+            "reference",
+            "treatment",
+        )
+        for term, level in zip(terms, ["a", "b"], strict=True)
+    }
+
+    result = fit_reconciled_pgls(
+        response,
+        pd.concat([first, second], ignore_index=True),
+        ["expression"],
+        terms,
+        model="replicate-reml",
+        inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        predictor_metadata=metadata,
+        predictor_groups={"habitat": tuple(terms)},
+    )
+
+    assert set(
+        result.loc[result["term_test"] == "coefficient", "inference_method"]
+    ) == {"parametric-bootstrap"}
+    assert (
+        result.loc[result["term_test"] == "omnibus", "inference_method"].iloc[0]
+        == "wald"
+    )
 
 
 def test_species_event_cluster_hc1_standard_error_matches_reference_formula():
@@ -1434,6 +1520,7 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
     assert len(coefficients) == 2
     assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
     assert coefficients["predictor_evolution_parameter"].nunique() == 1
+    assert set(coefficients["covariance_estimator"]) == {"gaussian-eiv-ML"}
     covariance = pd.read_csv(
         tmp_path / "multilevel-latent.predictor-sampling-covariance.tsv", sep="\t"
     )

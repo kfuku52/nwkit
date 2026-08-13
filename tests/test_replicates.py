@@ -6,6 +6,7 @@ from ete4 import Tree
 from nwkit import contrast as contrast_mod
 from nwkit.cli import main
 from nwkit.contrast import build_contrast_table
+from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
 from nwkit.replicates import estimate_likelihood_replicates, estimate_replicate_traits
 
 
@@ -190,6 +191,22 @@ def test_batch_adjustment_is_fitted_and_confounding_is_rejected():
     }
     assert set(estimates.tip_summary["batch_adjusted"]) == {"yes"}
     assert estimates.model_by_trait["expression"] == "pooled-batch-adjusted"
+    covariance = estimates.sampling_covariance_by_trait["expression"]
+    assert isinstance(covariance, DiagonalLowRankCovariance)
+
+    selected = pd.DataFrame(rows)
+    leaf_design = np.column_stack(
+        [(selected["leaf_name"] == leaf).to_numpy(float) for leaf in ["A", "B"]]
+    )
+    batch_design = (selected["batch"] == "y").to_numpy(float)[:, None]
+    design = np.column_stack([leaf_design, batch_design])
+    response = selected["expression"].to_numpy(float)
+    gram = design.T @ design
+    residual = response - design @ np.linalg.solve(gram, design.T @ response)
+    variance = float(residual @ residual / (len(response) - design.shape[1]))
+    transform = np.column_stack([np.eye(2), np.repeat([[0.5]], 2, axis=0)])
+    expected = variance * transform @ np.linalg.inv(gram) @ transform.T
+    np.testing.assert_allclose(materialize_covariance(covariance), expected)
 
     confounded = pd.DataFrame(
         [
@@ -267,7 +284,9 @@ def test_known_standard_errors_propagate_through_the_pic_transform():
     assert pair.iloc[0]["sampling_covariance"] == pytest.approx(-0.015)
 
 
-def test_large_contrast_sampling_covariance_uses_exact_sparse_factor(monkeypatch):
+def test_large_contrast_sampling_covariance_uses_numerically_lossless_sparse_factor(
+    monkeypatch,
+):
     tree = Tree("((A:1,B:1):1,C:2);", parser=1)
     estimates = estimate_replicate_traits(
         pd.DataFrame(

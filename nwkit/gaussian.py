@@ -1,5 +1,6 @@
 """Small linear-algebra helpers for Gaussian covariance calculations."""
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
@@ -59,6 +60,44 @@ class SparseCovarianceFactor:
     low_rank: sparse.csr_matrix
     covariance_factor: SuperLU
     logdet: float
+
+
+def effective_likelihood_settings(
+    n_observations,
+    num_parameters,
+    reml,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
+):
+    """Validate and normalize event-level Gaussian pseudo-likelihood settings."""
+    if likelihood_observations is None:
+        likelihood_observations = n_observations
+    likelihood_observations = float(likelihood_observations)
+    if (
+        not math.isfinite(likelihood_observations)
+        or likelihood_observations <= 0.0
+        or likelihood_observations > n_observations
+    ):
+        raise ValueError(
+            "likelihood_observations must be positive and no larger than the "
+            "number of observations."
+        )
+    if reml and likelihood_observations <= num_parameters:
+        raise ValueError(
+            "REML requires more effective likelihood observations than fixed-effect "
+            "parameters."
+        )
+    likelihood_logdet_offset = float(likelihood_logdet_offset)
+    if not math.isfinite(likelihood_logdet_offset):
+        raise ValueError("likelihood_logdet_offset must be finite.")
+    effective_count = (
+        likelihood_observations - num_parameters if reml else likelihood_observations
+    )
+    return (
+        effective_count,
+        likelihood_observations / n_observations,
+        likelihood_logdet_offset,
+    )
 
 
 @dataclass(frozen=True)

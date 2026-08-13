@@ -3,7 +3,9 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 
+from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 
 TIP_SUMMARY_COLUMNS = [
@@ -27,7 +29,9 @@ TIP_SUMMARY_COLUMNS = [
 @dataclass
 class ReplicateEstimates:
     values_by_trait: dict[str, dict[str, object]]
-    sampling_covariance_by_trait: dict[str, pd.DataFrame | np.ndarray]
+    sampling_covariance_by_trait: dict[
+        str, pd.DataFrame | np.ndarray | DiagonalLowRankCovariance
+    ]
     tip_summary: pd.DataFrame
     model_by_trait: dict[str, str]
 
@@ -564,6 +568,133 @@ def _leaf_specific_no_batch(dataframe, leaf_names, trait):
     )
 
 
+def _batch_observation_indices(selected, leaf_levels, batch, batch_levels):
+    leaf_index = {leaf: index for index, leaf in enumerate(leaf_levels)}
+    observed_leaf = np.asarray(
+        [leaf_index[str(value)] for value in selected["leaf_name"]], dtype=int
+    )
+    nonreference_batches = batch_levels[1:]
+    batch_index = {level: index for index, level in enumerate(nonreference_batches)}
+    observed_batch = np.asarray(
+        [batch_index.get(str(value), -1) for value in selected[batch]], dtype=int
+    )
+    return observed_leaf, observed_batch, len(nonreference_batches)
+
+
+def _batch_sufficient_statistics(
+    observed_leaf, observed_batch, response, leaf_count, batch_count
+):
+    counts = np.bincount(observed_leaf, minlength=leaf_count).astype(float)
+    leaf_sums = np.bincount(observed_leaf, weights=response, minlength=leaf_count)
+    cross_counts = np.zeros((leaf_count, batch_count), dtype=float)
+    batch_sums = np.zeros(batch_count, dtype=float)
+    batch_counts = np.zeros(batch_count, dtype=float)
+    selected_nonreference = observed_batch >= 0
+    if batch_count:
+        np.add.at(
+            cross_counts,
+            (
+                observed_leaf[selected_nonreference],
+                observed_batch[selected_nonreference],
+            ),
+            1.0,
+        )
+        np.add.at(
+            batch_sums,
+            observed_batch[selected_nonreference],
+            response[selected_nonreference],
+        )
+        np.add.at(batch_counts, observed_batch[selected_nonreference], 1.0)
+    return (
+        counts,
+        leaf_sums,
+        cross_counts,
+        batch_sums,
+        batch_counts,
+        selected_nonreference,
+    )
+
+
+def _solve_batch_coefficients(
+    counts, leaf_sums, cross_counts, batch_sums, batch_counts, trait
+):
+    batch_count = len(batch_counts)
+    if not batch_count:
+        return np.empty(0, dtype=float), np.empty((0, 0), dtype=float)
+    schur = np.diag(batch_counts) - (cross_counts.T @ (cross_counts / counts[:, None]))
+    schur = (schur + schur.T) / 2.0
+    eigenvalues = np.linalg.eigvalsh(schur)
+    rank_tolerance = (
+        np.finfo(float).eps
+        * max(1.0, float(np.max(np.abs(schur))))
+        * max(1, batch_count)
+        * 100.0
+    )
+    if float(eigenvalues.min()) <= rank_tolerance:
+        raise ValueError(
+            "Batch and leaf effects are confounded for trait '{}'; the "
+            "observation design matrix is rank deficient.".format(trait)
+        )
+    try:
+        cholesky = np.linalg.cholesky(schur)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError(
+            "Batch and leaf effects are confounded for trait '{}'; the "
+            "observation design matrix is rank deficient.".format(trait)
+        ) from exc
+    rhs = batch_sums - cross_counts.T @ (leaf_sums / counts)
+    coefficients = np.linalg.solve(
+        cholesky.T,
+        np.linalg.solve(cholesky, rhs),
+    )
+    return coefficients, cholesky
+
+
+def _batch_adjusted_estimates(
+    observed_leaf,
+    observed_batch,
+    selected_nonreference,
+    response,
+    counts,
+    leaf_sums,
+    cross_counts,
+    batch_coefficients,
+):
+    batch_count = len(batch_coefficients)
+    leaf_coefficients = (leaf_sums - cross_counts @ batch_coefficients) / counts
+    average_batch = (
+        np.bincount(
+            observed_batch[selected_nonreference], minlength=batch_count
+        ).astype(float)
+        / len(response)
+        if batch_count
+        else np.empty(0, dtype=float)
+    )
+    adjusted_means = leaf_coefficients + float(average_batch @ batch_coefficients)
+    fitted = leaf_coefficients[observed_leaf]
+    if batch_count:
+        fitted = fitted + np.where(
+            selected_nonreference,
+            batch_coefficients[np.maximum(observed_batch, 0)],
+            0.0,
+        )
+    return adjusted_means, response - fitted, average_batch
+
+
+def _batch_mean_covariance(
+    variance, counts, cross_counts, average_batch, schur_cholesky
+):
+    if cross_counts.shape[1]:
+        batch_loading = cross_counts / counts[:, None] - average_batch[None, :]
+        low_rank = (
+            math.sqrt(max(variance, 0.0))
+            * np.linalg.solve(schur_cholesky, batch_loading.T).T
+        )
+    else:
+        low_rank = np.empty((len(counts), 0), dtype=float)
+    return DiagonalLowRankCovariance(variance / counts, low_rank)
+
+
 def _pooled_with_batch(dataframe, leaf_names, trait, batch):
     selected = dataframe[dataframe[trait].notna()].copy()
     if (
@@ -573,56 +704,57 @@ def _pooled_with_batch(dataframe, leaf_names, trait, batch):
         raise ValueError("Batch values must be present for every observed trait value.")
     leaf_levels = list(leaf_names)
     batch_levels = sorted(set(selected[batch].astype(str)))
-    leaf_design = np.column_stack(
-        [
-            (selected["leaf_name"].astype(str) == leaf).to_numpy(float)
-            for leaf in leaf_levels
-        ]
+    observed_leaf, observed_batch, batch_count = _batch_observation_indices(
+        selected, leaf_levels, batch, batch_levels
     )
-    if len(batch_levels) > 1:
-        batch_design = np.column_stack(
-            [
-                (selected[batch].astype(str) == level).to_numpy(float)
-                for level in batch_levels[1:]
-            ]
-        )
-        design = np.column_stack([leaf_design, batch_design])
-    else:
-        batch_design = np.empty((len(selected), 0), dtype=float)
-        design = leaf_design
-    rank = int(np.linalg.matrix_rank(design))
-    if rank != design.shape[1]:
-        raise ValueError(
-            "Batch and leaf effects are confounded for trait '{}'; the observation "
-            "design matrix is rank deficient.".format(trait)
-        )
+    response = selected[trait].to_numpy(float)
+    (
+        counts,
+        leaf_sums,
+        cross_counts,
+        batch_sums,
+        batch_counts,
+        selected_nonreference,
+    ) = _batch_sufficient_statistics(
+        observed_leaf,
+        observed_batch,
+        response,
+        len(leaf_levels),
+        batch_count,
+    )
+    if np.any(counts <= 0.0):
+        raise ValueError("Batch-adjusted traits require observations for every tip.")
+    batch_coefficients, schur_cholesky = _solve_batch_coefficients(
+        counts,
+        leaf_sums,
+        cross_counts,
+        batch_sums,
+        batch_counts,
+        trait,
+    )
+    adjusted_means, residuals, average_batch = _batch_adjusted_estimates(
+        observed_leaf,
+        observed_batch,
+        selected_nonreference,
+        response,
+        counts,
+        leaf_sums,
+        cross_counts,
+        batch_coefficients,
+    )
+    rank = len(leaf_levels) + batch_count
     degrees_of_freedom = len(selected) - rank
     if degrees_of_freedom <= 0:
         raise ValueError(
             "Batch-adjusted variance for trait '{}' needs positive residual degrees "
             "of freedom.".format(trait)
         )
-    response = selected[trait].to_numpy(float)
-    gram = design.T @ design
-    coefficients = np.linalg.solve(gram, design.T @ response)
-    residuals = response - design @ coefficients
     variance = float(np.dot(residuals, residuals) / degrees_of_freedom)
-    coefficient_covariance = variance * np.linalg.inv(gram)
-    transform = np.zeros((len(leaf_levels), design.shape[1]), dtype=float)
-    transform[:, : len(leaf_levels)] = np.eye(len(leaf_levels))
-    if batch_design.shape[1]:
-        average_batch = batch_design.mean(axis=0)
-        transform[:, len(leaf_levels) :] = average_batch
-    adjusted_means = transform @ coefficients
-    mean_covariance = transform @ coefficient_covariance @ transform.T
-    counts = (
-        selected.groupby("leaf_name", sort=False)
-        .size()
-        .reindex(leaf_levels)
-        .to_numpy(int)
+    mean_covariance = _batch_mean_covariance(
+        variance, counts, cross_counts, average_batch, schur_cholesky
     )
     within_sd = np.repeat(math.sqrt(max(variance, 0.0)), len(leaf_levels))
-    return adjusted_means, mean_covariance, counts, within_sd
+    return adjusted_means, mean_covariance, counts.astype(int), within_sd
 
 
 def _validate_replicate_request(
@@ -801,13 +933,44 @@ def _expand_trait_estimates(
     leaf_names, fitted_leaf_names, means, covariance, counts, within_sd
 ):
     expanded_means = np.full(len(leaf_names), np.nan, dtype=float)
+    expanded_counts = np.zeros(len(leaf_names), dtype=int)
+    expanded_within_sd = np.full(len(leaf_names), np.nan, dtype=float)
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        expanded_diagonal = np.zeros(len(leaf_names), dtype=float)
+        selected = [leaf_names.index(name) for name in fitted_leaf_names]
+        expanded_diagonal[selected] = covariance.diagonal
+        loading = covariance.low_rank
+        if sparse.issparse(loading):
+            selector = sparse.csr_matrix(
+                (
+                    np.ones(len(selected), dtype=float),
+                    (selected, np.arange(len(selected), dtype=int)),
+                ),
+                shape=(len(leaf_names), len(selected)),
+            )
+            expanded_loading = selector @ sparse.csr_matrix(loading)
+        else:
+            expanded_loading = np.zeros(
+                (len(leaf_names), loading.shape[1]), dtype=float
+            )
+            expanded_loading[selected] = loading
+        expanded_covariance = DiagonalLowRankCovariance(
+            expanded_diagonal, expanded_loading
+        )
+        expanded_means[selected] = means
+        expanded_counts[selected] = counts
+        expanded_within_sd[selected] = within_sd
+        return (
+            expanded_means,
+            expanded_covariance,
+            expanded_counts,
+            expanded_within_sd,
+        )
     covariance = np.asarray(covariance, dtype=float)
     expanded_covariance = np.zeros(
         len(leaf_names) if covariance.ndim == 1 else (len(leaf_names), len(leaf_names)),
         dtype=float,
     )
-    expanded_counts = np.zeros(len(leaf_names), dtype=int)
-    expanded_within_sd = np.full(len(leaf_names), np.nan, dtype=float)
     selected = [leaf_names.index(name) for name in fitted_leaf_names]
     expanded_means[selected] = means
     if covariance.ndim == 1:
@@ -820,6 +983,27 @@ def _expand_trait_estimates(
 
 
 def _validated_sampling_covariance(covariance, means, allow_missing):
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        diagonal = np.asarray(covariance.diagonal, dtype=float)
+        loading = covariance.low_rank
+        finite_loading = (
+            np.isfinite(loading.data).all()
+            if sparse.issparse(loading)
+            else np.isfinite(np.asarray(loading, dtype=float)).all()
+        )
+        invalid_means = np.isinf(means).any() or (
+            not allow_missing and not np.isfinite(means).all()
+        )
+        if (
+            diagonal.shape != means.shape
+            or loading.shape[0] != len(means)
+            or np.any(diagonal < 0.0)
+            or not np.isfinite(diagonal).all()
+            or not finite_loading
+            or invalid_means
+        ):
+            raise ValueError("Replicate estimation produced non-finite values.")
+        return DiagonalLowRankCovariance(diagonal, loading)
     covariance = np.asarray(covariance, dtype=float)
     if covariance.ndim == 1:
         if np.any(covariance < 0.0):
@@ -863,8 +1047,17 @@ def _replicate_tip_rows(
         .fillna(0)
         .to_numpy(int)
     )
-    covariance = np.asarray(covariance, dtype=float)
-    diagonal = covariance if covariance.ndim == 1 else np.diag(covariance)
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        loading = covariance.low_rank
+        loading_diagonal = (
+            np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
+            if sparse.issparse(loading)
+            else np.einsum("ij,ij->i", loading, loading)
+        )
+        diagonal = covariance.diagonal + loading_diagonal
+    else:
+        covariance = np.asarray(covariance, dtype=float)
+        diagonal = covariance if covariance.ndim == 1 else np.diag(covariance)
     standard_errors = np.sqrt(np.maximum(diagonal, 0.0))
     rows = []
     for leaf_index, leaf_name in enumerate(leaf_names):
@@ -963,11 +1156,13 @@ def estimate_replicate_traits(
             within_variance,
             allow_missing=trait in allow_missing_traits,
         )
-        covariance_frame = (
-            covariance
-            if np.asarray(covariance).ndim == 1
-            else pd.DataFrame(covariance, index=leaf_names, columns=leaf_names)
-        )
+        covariance_frame = covariance
+        if not isinstance(covariance, DiagonalLowRankCovariance):
+            covariance_frame = (
+                covariance
+                if np.asarray(covariance).ndim == 1
+                else pd.DataFrame(covariance, index=leaf_names, columns=leaf_names)
+            )
         values_by_trait[trait] = dict(zip(leaf_names, means, strict=True))
         covariance_by_trait[trait] = covariance_frame
         models[trait] = method

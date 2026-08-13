@@ -10,10 +10,12 @@ from scipy.optimize import minimize, minimize_scalar
 
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
+    effective_likelihood_settings,
     factor_covariance,
     factor_diagonal_low_rank_updates,
     factor_logdet,
     is_diagonal,
+    materialize_covariance,
     solve_factor,
 )
 from nwkit.sparse_laplace import (
@@ -21,7 +23,6 @@ from nwkit.sparse_laplace import (
     GroupedPredictorUncertainty,
     JointPredictorUncertainty,
     SparseCovarianceModel,
-    condition_sparse_tip_model,
     continuous_predictor_loading,
     factor_sparse_nonsingular,
     grouped_predictor_loading,
@@ -133,6 +134,8 @@ def fit_latent_predictor(
     evolutionary_covariance = _positive_semidefinite(
         evolutionary_covariance, "Predictor evolutionary covariance"
     )
+    if isinstance(sampling_covariance, DiagonalLowRankCovariance):
+        sampling_covariance = materialize_covariance(sampling_covariance)
     sampling_covariance = np.asarray(sampling_covariance, dtype=float)
     if sampling_covariance.ndim == 1:
         if (
@@ -249,16 +252,13 @@ def fit_latent_predictor(
     )
 
 
-def fit_sparse_latent_predictor(
-    observed,
-    evolutionary_model: SparseCovarianceModel,
-    sampling_variance,
-    *,
-    include_intercept,
-) -> SparseLatentPredictorPosterior:
-    """Fit and condition a predictor using sparse tree precision throughout."""
-    observed = np.asarray(observed, dtype=float)
-    sampling = np.asarray(sampling_variance, dtype=float)
+def _sparse_sampling_parts(observed, evolutionary_model, sampling_variance):
+    if isinstance(sampling_variance, DiagonalLowRankCovariance):
+        sampling = np.asarray(sampling_variance.diagonal, dtype=float)
+        sampling_loading = sparse.csr_matrix(sampling_variance.low_rank, dtype=float)
+    else:
+        sampling = np.asarray(sampling_variance, dtype=float)
+        sampling_loading = sparse.csr_matrix((len(observed), 0), dtype=float)
     if (
         observed.shape != (evolutionary_model.n_tips,)
         or not np.isfinite(observed).all()
@@ -268,14 +268,105 @@ def fit_sparse_latent_predictor(
         sampling.shape != observed.shape
         or not np.isfinite(sampling).all()
         or np.any(sampling <= 0.0)
+        or sampling_loading.shape[0] != len(observed)
+        or not np.isfinite(sampling_loading.data).all()
     ):
         raise ValueError(
             "Sparse predictor conditioning requires positive diagonal sampling "
             "variance."
         )
+    return sampling, sampling_loading
+
+
+def _sparse_predictor_precision(
+    evolutionary_model, variance, nuisance_count, observation_information
+):
+    prior_precision = sparse.block_diag(
+        [
+            evolutionary_model.precision / variance,
+            sparse.eye(nuisance_count, format="csc"),
+        ],
+        format="csc",
+    )
+    return (prior_precision + observation_information).tocsc()
+
+
+def _sparse_predictor_covariance_model(
+    evolutionary_model,
+    latent_variance,
+    sampling,
+    observation_loading,
+    observation_information,
+    posterior_factor,
+):
+    nuisance_count = observation_loading.shape[1] - evolutionary_model.n_states
+    posterior_precision = _sparse_predictor_precision(
+        evolutionary_model,
+        latent_variance,
+        nuisance_count,
+        observation_information,
+    )
+    augmented_loading = sparse.hstack(
+        [
+            evolutionary_model.tip_loading,
+            sparse.csr_matrix((evolutionary_model.n_tips, nuisance_count), dtype=float),
+        ],
+        format="csr",
+    )
+    prior_factor = sparse.hstack(
+        [
+            evolutionary_model.precision_factor() / math.sqrt(latent_variance),
+            sparse.csr_matrix(
+                (evolutionary_model.n_states, nuisance_count), dtype=float
+            ),
+        ],
+        format="csr",
+    )
+    nuisance_factor = sparse.hstack(
+        [
+            sparse.csr_matrix(
+                (nuisance_count, evolutionary_model.n_states), dtype=float
+            ),
+            sparse.eye(nuisance_count, format="csr"),
+        ],
+        format="csr",
+    )
+    observation_factor = (
+        sparse.diags(1.0 / np.sqrt(sampling), format="csr") @ observation_loading
+    )
+    covariance_model = SparseCovarianceModel(
+        precision=posterior_precision,
+        tip_loading=augmented_loading,
+        logdet_covariance=-posterior_factor.logdet,
+        sampling_parent=np.empty(0, dtype=int),
+        sampling_transition=np.empty(0, dtype=float),
+        sampling_variance=np.empty(0, dtype=float),
+        sampling_precision_factor=sparse.vstack(
+            [prior_factor, nuisance_factor, observation_factor], format="csr"
+        ),
+    )
+    return covariance_model, augmented_loading
+
+
+def fit_sparse_latent_predictor(
+    observed,
+    evolutionary_model: SparseCovarianceModel,
+    sampling_variance,
+    *,
+    include_intercept,
+) -> SparseLatentPredictorPosterior:
+    """Fit and condition a predictor using sparse tree precision throughout."""
+    observed = np.asarray(observed, dtype=float)
+    sampling, sampling_loading = _sparse_sampling_parts(
+        observed, evolutionary_model, sampling_variance
+    )
     loading = evolutionary_model.tip_loading
+    nuisance_count = sampling_loading.shape[1]
+    observation_loading = sparse.hstack([loading, sampling_loading], format="csr")
     inverse_sampling = 1.0 / sampling
-    observation_information = loading.T @ sparse.diags(inverse_sampling) @ loading
+    observation_information = (
+        observation_loading.T @ sparse.diags(inverse_sampling) @ observation_loading
+    )
     centered = observed - (float(np.mean(observed)) if include_intercept else 0.0)
     observed_scale = max(
         float(np.mean(centered**2)),
@@ -289,9 +380,12 @@ def fit_sparse_latent_predictor(
 
     def state(log_variance, *, return_details=False):
         variance = math.exp(float(log_variance))
-        posterior_precision = (
-            evolutionary_model.precision / variance + observation_information
-        ).tocsc()
+        posterior_precision = _sparse_predictor_precision(
+            evolutionary_model,
+            variance,
+            nuisance_count,
+            observation_information,
+        )
         try:
             factor = factor_sparse_nonsingular(posterior_precision)
         except (RuntimeError, np.linalg.LinAlgError):
@@ -300,8 +394,10 @@ def fit_sparse_latent_predictor(
         def inverse(values):
             values = np.asarray(values, dtype=float)
             weighted = inverse_sampling * values
-            latent_rhs = np.asarray(loading.T @ weighted).reshape(-1)
-            correction = np.asarray(loading @ factor.solve(latent_rhs)).reshape(-1)
+            latent_rhs = np.asarray(observation_loading.T @ weighted).reshape(-1)
+            correction = np.asarray(
+                observation_loading @ factor.solve(latent_rhs)
+            ).reshape(-1)
             return weighted - inverse_sampling * correction
 
         inverse_observed = inverse(observed)
@@ -327,9 +423,11 @@ def fit_sparse_latent_predictor(
             return float("inf")
         if not return_details:
             return objective
-        latent_rhs = np.asarray(loading.T @ (inverse_sampling * residual)).reshape(-1)
+        latent_rhs = np.asarray(
+            observation_loading.T @ (inverse_sampling * residual)
+        ).reshape(-1)
         posterior_mean = prior_mean + np.asarray(
-            loading @ factor.solve(latent_rhs)
+            loading @ factor.solve(latent_rhs)[: evolutionary_model.n_states]
         ).reshape(-1)
         return objective, prior_mean, posterior_mean, factor
 
@@ -358,8 +456,13 @@ def fit_sparse_latent_predictor(
         raise ValueError("Sparse predictor conditioning produced an invalid fit.")
     _, prior_mean, posterior_mean, posterior_factor = details
     latent_variance = math.exp(log_variance)
-    covariance_model = condition_sparse_tip_model(
-        evolutionary_model, latent_variance, sampling
+    covariance_model, augmented_loading = _sparse_predictor_covariance_model(
+        evolutionary_model,
+        latent_variance,
+        sampling,
+        observation_loading,
+        observation_information,
+        posterior_factor,
     )
     # Only the mean marginal posterior variance is needed for diagnostics.
     # A deterministic Hutchinson trace estimate avoids n sparse solves and an
@@ -367,8 +470,8 @@ def fit_sparse_latent_predictor(
     probe_count = min(64, max(16, int(math.ceil(math.log2(len(observed) + 1))) * 4))
     rng = np.random.default_rng(0)
     probes = rng.choice((-1.0, 1.0), size=(len(observed), probe_count))
-    latent_rhs = loading.T @ probes
-    projected = loading @ posterior_factor.solve(np.asarray(latent_rhs))
+    latent_rhs = augmented_loading.T @ probes
+    projected = augmented_loading @ posterior_factor.solve(np.asarray(latent_rhs))
     mean_posterior_variance = float(np.mean(probes * projected))
     mean_posterior_variance = max(0.0, mean_posterior_variance)
     boundary = bool(
@@ -768,6 +871,8 @@ def fit_conditional_eiv_gaussian(
     starting_parameters=None,
     component_factors=None,
     allow_large_dense=False,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
 ):
     """Fit y | x-hat when latent predictor uncertainty depends on beta."""
     if reml:
@@ -777,6 +882,15 @@ def fit_conditional_eiv_gaussian(
         )
     response = np.asarray(response, dtype=float)
     design = np.asarray(design, dtype=float)
+    effective_likelihood_count, logdet_weight, likelihood_logdet_offset = (
+        effective_likelihood_settings(
+            len(response),
+            design.shape[1],
+            reml,
+            likelihood_observations,
+            likelihood_logdet_offset,
+        )
+    )
     component_factors = {} if component_factors is None else dict(component_factors)
     structured = _uses_structured_eiv_covariance(
         fixed_covariance, components, component_factors, predictor_uncertainties
@@ -859,10 +973,9 @@ def fit_conditional_eiv_gaussian(
                 gram_logdet = 0.0
         except np.linalg.LinAlgError:
             return float("inf")
-        effective_n = len(response) - num_coefficients if reml else len(response)
         objective = 0.5 * (
-            effective_n * math.log(2.0 * math.pi)
-            + covariance_logdet
+            effective_likelihood_count * math.log(2.0 * math.pi)
+            + logdet_weight * (covariance_logdet - likelihood_logdet_offset)
             + quadratic
             + gram_logdet
         )

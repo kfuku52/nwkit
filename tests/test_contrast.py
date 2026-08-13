@@ -188,6 +188,79 @@ def test_reconcile_and_contrast_cli_end_to_end(tmp_path):
     assert duplication_output.iloc[0]["event_type"] == "duplication"
 
 
+def test_reconcile_and_contrast_outputs_cannot_replace_inputs(tmp_path):
+    species_tree = tmp_path / "species.nwk"
+    gene_tree = tmp_path / "gene.nwk"
+    trait = tmp_path / "trait.tsv"
+    reconciliation = tmp_path / "reconciliation.tsv"
+    species_tree.write_text("((A_a:1,B_b:1):1,C_c:2);")
+    original_gene_tree = "((A_a_g1:1,B_b_g1:1):1,C_c_g1:2);"
+    gene_tree.write_text(original_gene_tree)
+    trait.write_text("leaf_name\texpression\nA_a_g1\t1\nB_b_g1\t2\nC_c_g1\t4\n")
+
+    with pytest.raises(ValueError, match="must not overwrite input"):
+        main(
+            [
+                "reconcile",
+                "--infile",
+                str(gene_tree),
+                "--species-tree",
+                str(species_tree),
+                "--outfile",
+                str(gene_tree),
+            ]
+        )
+    assert gene_tree.read_text() == original_gene_tree
+
+    main(
+        [
+            "reconcile",
+            "--infile",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--outfile",
+            str(reconciliation),
+        ]
+    )
+    with pytest.raises(ValueError, match="must not overwrite input"):
+        main(
+            [
+                "contrast",
+                "--infile",
+                str(gene_tree),
+                "--trait",
+                str(trait),
+                "--columns",
+                "expression",
+                "--reconciliation",
+                str(reconciliation),
+                "--outfile",
+                str(trait),
+            ]
+        )
+
+
+def test_reconciliation_taxon_lists_round_trip_tip_names_with_commas(tmp_path):
+    gene_tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    species_tree = Tree("((X:1,Y:1):1,Z:2);", parser=1)
+    gene_tree["A"].name = "gene,A"
+    species_tree["X"].name = "species,X"
+    species_by_gene = {"gene,A": "species,X", "B": "Y", "C": "Z"}
+    reconciliation = build_reconciliation_table(
+        gene_tree, species_tree, species_by_gene, event_source="lca"
+    )
+    path = tmp_path / "reconciliation.tsv"
+    reconciliation.to_csv(path, sep="\t", index=False)
+
+    parsed, _ = _read_reconciliation(path, CladeIndex(gene_tree))
+
+    assert parsed is not None
+    assert len(parsed) == 5
+    root = max(parsed.values(), key=lambda record: int(record["num_taxa"]))
+    assert '"gene,A"' in root["descendant_taxa"]
+
+
 def test_contrast_rejects_nonpositive_branch_lengths():
     tree = Tree("((A:0,B:1):1,C:1);", parser=1)
     with pytest.raises(ValueError, match="positive finite branch lengths"):

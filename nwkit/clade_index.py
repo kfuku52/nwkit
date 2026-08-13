@@ -1,4 +1,6 @@
+import csv
 import hashlib
+from io import StringIO
 
 CLADE_ID_PREFIX = "clade-sha256:"
 
@@ -33,7 +35,9 @@ class CladeIndex:
         return self.names_for_mask(self.mask_by_node[node])
 
     def csv_for_mask(self, mask):
-        return ",".join(self.names_for_mask(mask))
+        output = StringIO()
+        csv.writer(output, lineterminator="").writerow(self.names_for_mask(mask))
+        return output.getvalue()
 
     def csv_for_node(self, node):
         return self.csv_for_mask(self.mask_by_node[node])

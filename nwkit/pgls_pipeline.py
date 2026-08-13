@@ -114,7 +114,9 @@ class PglsPipelineArtifacts:
 @dataclass
 class _GeneResponseInputs:
     values_by_trait: dict[str, dict[str, Any]]
-    sampling_covariance_by_trait: dict[str, pd.DataFrame | np.ndarray] | None
+    sampling_covariance_by_trait: (
+        dict[str, pd.DataFrame | np.ndarray | DiagonalLowRankCovariance] | None
+    )
     replicate_model_by_trait: dict[str, str] | None
     tip_summary: pd.DataFrame | None
 
@@ -122,7 +124,9 @@ class _GeneResponseInputs:
 @dataclass
 class _SpeciesPredictorInputs:
     values_by_trait: dict[str, dict[str, Any]]
-    sampling_covariance_by_trait: dict[str, pd.DataFrame | np.ndarray] | None
+    sampling_covariance_by_trait: (
+        dict[str, pd.DataFrame | np.ndarray | DiagonalLowRankCovariance] | None
+    )
     replicate_model_by_trait: dict[str, str] | None
     tip_summary: pd.DataFrame | None
     sparse_posterior_by_trait: dict[str, SparseCovarianceModel] | None = None
@@ -1181,6 +1185,7 @@ def _build_species_contrasts(
                 evolution_model=args.species_evolution_model,
                 branch_length=args.species_branch_length,
                 sampling_covariance=predictor_sampling,
+                allow_large_dense=args.allow_large_dense,
             )
             parameter = float(diagnostics["parameter"])
         else:
@@ -1265,16 +1270,27 @@ def _prepare_reconciled_tip_predictors(
             dtype=float,
         )
         sampling_value = sampling_by_trait[predictor]
-        sampling = (
-            sampling_value.loc[leaf_names, leaf_names].to_numpy(dtype=float)
-            if isinstance(sampling_value, pd.DataFrame)
-            else np.asarray(sampling_value, dtype=float)
-        )
+        if isinstance(sampling_value, DiagonalLowRankCovariance):
+            sampling = sampling_value
+        else:
+            sampling = (
+                sampling_value.loc[leaf_names, leaf_names].to_numpy(dtype=float)
+                if isinstance(sampling_value, pd.DataFrame)
+                else np.asarray(sampling_value, dtype=float)
+            )
         predictor_diagnostic = diagnostics[predictor]
         parameter = predictor_diagnostic.get("parameter")
-        sampling_diagonal = sampling if sampling.ndim == 1 else np.diag(sampling)
+        sampling_diagonal = (
+            sampling.diagonal
+            if isinstance(sampling, DiagonalLowRankCovariance)
+            else sampling
+            if sampling.ndim == 1
+            else np.diag(sampling)
+        )
         if np.all(sampling_diagonal > 0.0) and (
-            sampling.ndim == 1 or np.array_equal(sampling, np.diag(sampling_diagonal))
+            isinstance(sampling, DiagonalLowRankCovariance)
+            or sampling.ndim == 1
+            or np.array_equal(sampling, np.diag(sampling_diagonal))
         ):
             sparse_prior = build_sparse_evolutionary_model(
                 species_tree,
@@ -1286,7 +1302,7 @@ def _prepare_reconciled_tip_predictors(
             posterior = fit_sparse_latent_predictor(
                 observed,
                 sparse_prior,
-                sampling_diagonal,
+                sampling,
                 include_intercept=True,
             )
             values_by_trait[predictor] = dict(
@@ -1765,33 +1781,46 @@ def _prepare_response_tip_simulator(
     sampling_by_trait = response_inputs.sampling_covariance_by_trait or {}
     if response in sampling_by_trait:
         sampling_value = sampling_by_trait[response]
-        sampling_covariance = (
-            sampling_value.reindex(index=leaf_names, columns=leaf_names).to_numpy(
-                dtype=float
+        if isinstance(sampling_value, DiagonalLowRankCovariance):
+            diagonal_factor = sparse.diags(
+                np.sqrt(sampling_value.diagonal), format="csr"
             )
-            if isinstance(sampling_value, pd.DataFrame)
-            else np.asarray(sampling_value, dtype=float)
-        )
-        sampling_diagonal = (
-            sampling_covariance
-            if sampling_covariance.ndim == 1
-            else np.diag(sampling_covariance)
-        )
-        if sampling_covariance.ndim == 1 or np.array_equal(
-            sampling_covariance, np.diag(sampling_diagonal)
-        ):
-            if np.any(sampling_diagonal < 0.0):
-                raise ValueError("Bootstrap tip sampling covariance is not PSD.")
-            sampling_factor = np.sqrt(sampling_diagonal)
+            sampling_factor = sparse.hstack(
+                [diagonal_factor, sparse.csr_matrix(sampling_value.low_rank)],
+                format="csr",
+            )
+            sampling_covariance = None
         else:
-            if len(leaf_names) > 2000 and not args.allow_large_dense:
-                raise ValueError(
-                    "Shape-refitted bootstrap has dense tip sampling covariance; "
-                    "pass '--allow-large-dense yes' to attempt it."
+            sampling_covariance = (
+                sampling_value.reindex(index=leaf_names, columns=leaf_names).to_numpy(
+                    dtype=float
                 )
-            sampling_factor = _positive_semidefinite_factor(
-                sampling_covariance, "Bootstrap tip sampling covariance"
+                if isinstance(sampling_value, pd.DataFrame)
+                else np.asarray(sampling_value, dtype=float)
             )
+        if sampling_covariance is None:
+            pass
+        else:
+            sampling_diagonal = (
+                sampling_covariance
+                if sampling_covariance.ndim == 1
+                else np.diag(sampling_covariance)
+            )
+            if sampling_covariance.ndim == 1 or np.array_equal(
+                sampling_covariance, np.diag(sampling_diagonal)
+            ):
+                if np.any(sampling_diagonal < 0.0):
+                    raise ValueError("Bootstrap tip sampling covariance is not PSD.")
+                sampling_factor = np.sqrt(sampling_diagonal)
+            else:
+                if len(leaf_names) > 2000 and not args.allow_large_dense:
+                    raise ValueError(
+                        "Shape-refitted bootstrap has dense tip sampling covariance; "
+                        "pass '--allow-large-dense yes' to attempt it."
+                    )
+                sampling_factor = _positive_semidefinite_factor(
+                    sampling_covariance, "Bootstrap tip sampling covariance"
+                )
     return {
         "leaf_names": leaf_names,
         "orientation": orientation,
@@ -1817,7 +1846,11 @@ def _simulate_response_tip_values(
     )
     sampling_factor = simulator["sampling_factor"]
     if sampling_factor is not None:
-        if np.asarray(sampling_factor).ndim == 1:
+        if sparse.issparse(sampling_factor):
+            base += np.asarray(
+                sampling_factor @ rng.standard_normal(sampling_factor.shape[1])
+            ).reshape(-1)
+        elif np.asarray(sampling_factor).ndim == 1:
             base += sampling_factor * rng.standard_normal(len(leaf_names))
         else:
             base += sampling_factor @ rng.standard_normal(sampling_factor.shape[1])
@@ -2880,32 +2913,58 @@ def _fit_reconciled_multivariate_responses(
     )
     fixed_diagonal = np.zeros(response_matrix.size, dtype=float)
     dense_sampling_blocks: list[tuple[int, np.ndarray]] = []
+    fixed_loading_blocks = []
     for response_index, response in enumerate(responses):
         sampling = response_inputs.sampling_covariance_by_trait or {}
         if response not in sampling:
+            fixed_loading_blocks.append(
+                sparse.csr_matrix((len(gene_tip_names), 0), dtype=float)
+            )
             continue
         sampling_value = sampling[response]
         covariance = (
-            sampling_value.loc[gene_tip_names, gene_tip_names].to_numpy(float)
+            sampling_value
+            if isinstance(sampling_value, DiagonalLowRankCovariance)
+            else sampling_value.loc[gene_tip_names, gene_tip_names].to_numpy(float)
             if isinstance(sampling_value, pd.DataFrame)
             else np.asarray(sampling_value, dtype=float)
         )
         start = response_index * len(gene_tip_names)
-        if covariance.ndim == 1 or np.array_equal(
+        if isinstance(covariance, DiagonalLowRankCovariance):
+            fixed_diagonal[start : start + len(gene_tip_names)] = covariance.diagonal
+            fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
+        elif covariance.ndim == 1 or np.array_equal(
             covariance, np.diag(np.diag(covariance))
         ):
             fixed_diagonal[start : start + len(gene_tip_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )
+            fixed_loading_blocks.append(
+                sparse.csr_matrix((len(gene_tip_names), 0), dtype=float)
+            )
         else:
             dense_sampling_blocks.append((start, covariance))
+            fixed_loading_blocks.append(None)
     if dense_sampling_blocks:
         fixed_covariance = np.diag(fixed_diagonal)
+        for response_index, loading in enumerate(fixed_loading_blocks):
+            if loading is not None and loading.shape[1]:
+                update = loading @ loading.T
+                start = response_index * len(gene_tip_names)
+                fixed_covariance[
+                    start : start + len(gene_tip_names),
+                    start : start + len(gene_tip_names),
+                ] += update.toarray()
         for start, covariance in dense_sampling_blocks:
             fixed_covariance[
                 start : start + len(gene_tip_names),
                 start : start + len(gene_tip_names),
             ] = covariance
+    elif any(loading.shape[1] for loading in fixed_loading_blocks):
+        fixed_covariance = DiagonalLowRankCovariance(
+            fixed_diagonal,
+            sparse.block_diag(fixed_loading_blocks, format="csr"),
+        )
     else:
         fixed_covariance = fixed_diagonal
     fixed_parameter = (

@@ -8,6 +8,7 @@ from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
 )
+from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
     fit_latent_predictor,
@@ -76,6 +77,40 @@ def test_sparse_latent_predictor_matches_dense_conditioning():
         sparse_fit.covariance_model.materialize(),
         dense.covariance,
         rtol=1e-7,
+        atol=1e-7,
+    )
+
+
+def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance():
+    tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
+    names = ["A", "B", "C", "D", "E"]
+    observed = np.asarray([1.0, 1.2, 2.0, 3.0, 3.3])
+    sampling = DiagonalLowRankCovariance(
+        np.asarray([0.1, 0.2, 0.15, 0.3, 0.12]),
+        np.asarray([[0.1], [-0.1], [0.05], [0.2], [-0.2]]),
+    )
+    dense = fit_latent_predictor(
+        observed,
+        build_evolutionary_covariance(tree, names),
+        materialize_covariance(sampling),
+        include_intercept=True,
+    )
+    sparse_fit = fit_sparse_latent_predictor(
+        observed,
+        build_sparse_evolutionary_model(tree, names),
+        sampling,
+        include_intercept=True,
+    )
+
+    assert sparse_fit.evolutionary_rate == pytest.approx(
+        dense.evolutionary_rate, rel=1e-6
+    )
+    assert sparse_fit.log_likelihood == pytest.approx(dense.log_likelihood, rel=1e-8)
+    np.testing.assert_allclose(sparse_fit.mean, dense.mean, rtol=1e-6, atol=1e-7)
+    np.testing.assert_allclose(
+        sparse_fit.covariance_model.materialize(),
+        dense.covariance,
+        rtol=1e-6,
         atol=1e-7,
     )
 

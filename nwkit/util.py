@@ -307,6 +307,39 @@ def validate_distinct_output_paths(outputs):
         )
 
 
+def paths_identify_same_file(first_path, second_path):
+    """Return whether two existing or prospective paths identify one file."""
+    if normalized_missing_path_key(first_path) == normalized_missing_path_key(
+        second_path
+    ):
+        return True
+    if not os.path.exists(first_path) or not os.path.exists(second_path):
+        return False
+    try:
+        return os.path.samefile(first_path, second_path)
+    except OSError:
+        return False
+
+
+def validate_outputs_do_not_replace_inputs(inputs, outputs, *, label="Output"):
+    """Reject output paths that resolve to any protected input path."""
+    for input_name, input_path in inputs:
+        if input_path in (None, "", "-"):
+            continue
+        for output_name, output_path in outputs:
+            if output_path in (None, "", "-"):
+                continue
+            if paths_identify_same_file(input_path, output_path):
+                raise ValueError(
+                    "{} '{}' must not overwrite input {} '{}'.".format(
+                        label,
+                        output_name,
+                        input_name,
+                        os.path.realpath(os.fspath(output_path)),
+                    )
+                )
+
+
 def resolve_download_dir(args=None):
     raw_dir = getattr(args, "download_dir", "auto") if args is not None else "auto"
     if raw_dir is None:

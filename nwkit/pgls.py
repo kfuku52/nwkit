@@ -16,6 +16,7 @@ from nwkit.evolution import evolution_model_spec, validate_evolution_parameter
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     draw_from_factor,
+    effective_likelihood_settings,
     factor_diagonal_low_rank_updates,
     factor_logdet,
     is_diagonal,
@@ -1059,6 +1060,7 @@ def _append_predictor_omnibus_rows(
                 "confidence_interval_lower": "",
                 "confidence_interval_upper": "",
                 "inference_status": "ok",
+                "inference_method": "wald",
             }
         )
         rows.append(template)
@@ -1439,9 +1441,20 @@ def _profile_covariance_fit(
     starting_log_variances=None,
     component_factors=None,
     allow_large_dense=False,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
 ):
     n_observations = len(y)
     num_parameters = design.shape[1]
+    effective_likelihood_count, logdet_weight, likelihood_logdet_offset = (
+        effective_likelihood_settings(
+            n_observations,
+            num_parameters,
+            reml,
+            likelihood_observations,
+            likelihood_logdet_offset,
+        )
+    )
     if n_observations > MAX_DENSE_GAUSSIAN_OBSERVATIONS and (
         _requires_dense_profile_covariance(
             fixed_covariance, components, component_factors
@@ -1562,10 +1575,9 @@ def _profile_covariance_fit(
                 covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
             except np.linalg.LinAlgError:
                 return float("inf")
-        effective_n = n_observations - num_parameters if reml else n_observations
         objective = 0.5 * (
-            effective_n * math.log(2.0 * math.pi)
-            + covariance_logdet
+            effective_likelihood_count * math.log(2.0 * math.pi)
+            + logdet_weight * (covariance_logdet - likelihood_logdet_offset)
             + quadratic
             + (gram_logdet if reml else 0.0)
         )
@@ -1604,8 +1616,7 @@ def _profile_covariance_fit(
             raise ValueError(
                 "Variance-component closed-form fit produced an invalid covariance."
             )
-        effective_n = n_observations - num_parameters if reml else n_observations
-        optimum = float(unit_fit["quadratic"]) / effective_n
+        optimum = float(unit_fit["quadratic"]) / effective_likelihood_count
         optimum = float(np.clip(optimum, lower_variance, upper_variance))
         details = evaluate(np.log(np.asarray([optimum])), return_details=True)
         if not isinstance(details, dict):
@@ -1740,6 +1751,8 @@ def _parametric_bootstrap_coefficients(
     seed,
     component_factors=None,
     allow_large_dense=False,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
 ):
     if replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
@@ -1763,6 +1776,8 @@ def _parametric_bootstrap_coefficients(
                 starting_log_variances=fit["log_variances"],
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
             )
         except ValueError:
             continue
@@ -1791,6 +1806,8 @@ def _parametric_bootstrap_eiv_coefficients(
     seed,
     component_factors=None,
     allow_large_dense=False,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
 ):
     if replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
@@ -1817,6 +1834,8 @@ def _parametric_bootstrap_eiv_coefficients(
                 starting_parameters=starting,
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
             )
         except ValueError:
             continue
@@ -1842,6 +1861,8 @@ def _fit_profile_or_eiv(
     reml,
     component_factors,
     allow_large_dense,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
     starting_fit=None,
 ):
     if predictor_uncertainties:
@@ -1861,6 +1882,8 @@ def _fit_profile_or_eiv(
             starting_parameters=starting_parameters,
             component_factors=component_factors,
             allow_large_dense=allow_large_dense,
+            likelihood_observations=likelihood_observations,
+            likelihood_logdet_offset=likelihood_logdet_offset,
         )
     return _profile_covariance_fit(
         response,
@@ -1873,6 +1896,8 @@ def _fit_profile_or_eiv(
         ),
         component_factors=component_factors,
         allow_large_dense=allow_large_dense,
+        likelihood_observations=likelihood_observations,
+        likelihood_logdet_offset=likelihood_logdet_offset,
     )
 
 
@@ -2031,6 +2056,8 @@ def _parametric_bootstrap_likelihood_ratio(
     seed,
     fixed_covariance,
     allow_large_dense,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
 ):
     rng = np.random.default_rng(seed)
     mean = null_model["design"] @ null_fit["beta"]
@@ -2053,6 +2080,8 @@ def _parametric_bootstrap_likelihood_ratio(
                 reml=False,
                 component_factors=null_model["component_factors"],
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
                 starting_fit=null_fit,
             )
             bootstrap_full = _fit_profile_or_eiv(
@@ -2065,6 +2094,8 @@ def _parametric_bootstrap_likelihood_ratio(
                 reml=False,
                 component_factors=full_model["component_factors"],
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
                 starting_fit=full_model["fit"],
             )
         except ValueError:
@@ -2345,6 +2376,8 @@ def _append_lineage_inference_rows(
     bootstrap_replicates,
     seed,
     allow_large_dense,
+    likelihood_observations=None,
+    likelihood_logdet_offset=0.0,
 ):
     if lineage_inference == "none" or "lineage" not in random_designs:
         return
@@ -2365,6 +2398,8 @@ def _append_lineage_inference_rows(
         reml=False,
         component_factors=component_factors,
         allow_large_dense=allow_large_dense,
+        likelihood_observations=likelihood_observations,
+        likelihood_logdet_offset=likelihood_logdet_offset,
     )
     full_model["fit"] = full_fit
     test_models = _lineage_test_models(
@@ -2388,6 +2423,8 @@ def _append_lineage_inference_rows(
             reml=False,
             component_factors=null_model["component_factors"],
             allow_large_dense=allow_large_dense,
+            likelihood_observations=likelihood_observations,
+            likelihood_logdet_offset=likelihood_logdet_offset,
         )
         statistic = _likelihood_ratio(null_fit, full_fit)
         if lineage_inference == "parametric-bootstrap":
@@ -2400,6 +2437,8 @@ def _append_lineage_inference_rows(
                 seed=seed + test_index,
                 fixed_covariance=fixed_covariance,
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
             )
             status = "ok"
         else:
@@ -2621,6 +2660,10 @@ def _fit_covariance_model(
     balance = np.ones(n_observations, dtype=float)
     if event_weighting == "equal":
         balance = np.sqrt(event_counts[event_inverse].astype(float))
+    likelihood_observations = n_events if event_weighting == "equal" else n_observations
+    likelihood_logdet_offset = (
+        float(np.log(np.square(balance)).sum()) if event_weighting == "equal" else 0.0
+    )
     index_by_predictor = {
         predictor: index for index, predictor in enumerate(predictors)
     }
@@ -2648,6 +2691,8 @@ def _fit_covariance_model(
             reml=False,
             component_factors=component_factors,
             allow_large_dense=allow_large_dense,
+            likelihood_observations=likelihood_observations,
+            likelihood_logdet_offset=likelihood_logdet_offset,
         )
     else:
         fit = _profile_covariance_fit(
@@ -2658,6 +2703,8 @@ def _fit_covariance_model(
             reml=reml,
             component_factors=component_factors,
             allow_large_dense=allow_large_dense,
+            likelihood_observations=likelihood_observations,
+            likelihood_logdet_offset=likelihood_logdet_offset,
         )
     effective_reml = bool(fit.get("reml", reml))
     beta = fit["beta"]
@@ -2677,6 +2724,8 @@ def _fit_covariance_model(
                 seed=seed,
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
             )
         else:
             bootstrap_coefficients = _parametric_bootstrap_coefficients(
@@ -2689,6 +2738,8 @@ def _fit_covariance_model(
                 seed=seed,
                 component_factors=component_factors,
                 allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
             )
         standard_errors = np.std(bootstrap_coefficients, axis=0, ddof=1)
     elif inference == "wald":
@@ -2797,7 +2848,7 @@ def _fit_covariance_model(
                 "intercept": "no",
                 "event_weighting": event_weighting,
                 "covariance_estimator": "gaussian{}-{}".format(
-                    "-eiv" if predictor_uncertainties else "",
+                    "-eiv" if balanced_predictor_uncertainties else "",
                     "REML" if effective_reml else "ML",
                 ),
                 "contrast_transform": "gene-evolutionary-plus-sampling-covariance",
@@ -2850,6 +2901,8 @@ def _fit_covariance_model(
         bootstrap_replicates=bootstrap_replicates,
         seed=seed,
         allow_large_dense=allow_large_dense,
+        likelihood_observations=likelihood_observations,
+        likelihood_logdet_offset=likelihood_logdet_offset,
     )
     random_effect_rows = []
     if use_event:
