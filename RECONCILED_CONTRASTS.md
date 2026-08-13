@@ -73,10 +73,20 @@ Predictor uncertainty is not added to response covariance as though it were
 response noise. NWKIT fits a phylogenetic latent predictor and integrates its
 posterior covariance into the response likelihood; this is an
 errors-in-variables PGLS and avoids the usual attenuation from treating noisy
-predictor means as exact. `--sampling-covariance-out` and
+predictor means as exact. Because this covariance depends on the fitted slope,
+the errors-in-variables Gaussian model is fitted by ML even when `--reml yes`
+is requested; the result records `reml=no`. `--sampling-covariance-out` and
 `--tip-summary-out` audit the response calculation, while
 `--predictor-sampling-covariance-out` and `--predictor-tip-summary-out` audit
-the predictor calculation.
+the predictor calculation. For independent tip errors, ordinary PGLS writes
+only the nonzero diagonal rows instead of enumerating known-zero pairs.
+Reconciled scalar response and predictor contrasts write explicit covariance
+pairs through 500 contrasts. Above that size the same covariance is written
+exactly as sparse factor loadings:
+`covariance_representation=factor-loading`,
+`contrast_id_1` names a contrast, `contrast_id_2` names a latent tip-error
+column, and `sampling_covariance` contains the loading rather than a covariance
+entry. NWKIT reconstructs $M=UU^T$ without materializing it.
 
 ### Typed predictors and response likelihoods
 
@@ -147,12 +157,25 @@ result records the penalty and a separation/ill-conditioning warning. Because
 the scale is on the supplied linear-predictor coefficients, rescale continuous
 predictors when a common prior scale is scientifically intended.
 
+An optimizer result is emitted only when both the outer parameter optimization
+and every inner random-effect mode solve converge to a finite state. Failed
+profile and bootstrap refits are discarded. If the nuisance-adjusted Wald
+information is singular, coefficients and the fit are retained but Wald
+standard errors, intervals, and p-values are left missing with an explicit
+`inference_status`; likelihood-ratio or parametric-bootstrap inference can then
+be selected instead.
+
 Categorical biological replicates are not averaged. Response replicates enter
 the binomial/multinomial/ordinal likelihood as per-tip category counts.
 Predictor replicates must agree by default; with
 `--categorical-replicate-policy latent`, their empirical state probabilities
-are encoded as the expected factor columns and the full within-tip covariance
-among those columns is integrated into the likelihood. Technical replicates
+are encoded as the expected factor columns. The full covariance of the
+biological-replicate mean is divided by the biological sample size, so 20
+replicates carry one tenth the sampling covariance of two replicates with the
+same proportions. That covariance is propagated with all negative
+cross-column terms and enters the likelihood through a moment-matched Gaussian
+linear-predictor approximation; it is not exact enumeration of every discrete
+latent-state combination. Technical replicates
 must agree within a biological observation. Known SE and batch adjustment do
 not apply to categorical traits. Thus continuous and categorical replicates
 may coexist in either role in one input table.
@@ -432,11 +455,13 @@ has no gene-contrast rows.
 | `OG000001.reconciliation.tsv` | Reconciliation decisions and event mappings |
 | `OG000001.gene-contrasts.tsv` | Expression contrasts with reconciliation context |
 | `OG000001.species-contrasts.tsv` | Species-trait predictor contrasts |
-| `OG000001.response-sampling-covariance.tsv` | Full replicate-derived response covariance, when applicable |
+| `OG000001.response-sampling-covariance.tsv` | Replicate-derived response covariance; explicit pairs for at most 500 contrasts and an exact sparse factor-loading table above that size |
 | `OG000001.response-tip-summary.tsv` | Biological/technical replicate audit, when applicable |
-| `OG000001.predictor-sampling-covariance.tsv` | Full predictor covariance after the species-tree PIC transform, including `trait_2` for cross-column factor covariance, when applicable |
+| `OG000001.predictor-sampling-covariance.tsv` | Predictor uncertainty after the species-tree PIC transform: explicit or sparse-factor scalar covariance plus `trait_2` cross-column factor covariance, when applicable |
 | `OG000001.predictor-tip-summary.tsv` | Predictor biological/technical replicate audit, when applicable |
 | `OG000001.random-effects.tsv` | Conditional event and lineage effects; header-only when none are fitted |
+| `OG000001.sensitivity.tsv` | Lineage and mapped trait-origin leave-one-out refits, when requested |
+| `OG000001.trait-origins.tsv` | Mk stochastic-map transition support on species-tree branches, when requested |
 | `OG000001.pgls.tsv` | Final coefficient and variance-component results |
 
 NWKIT stages every applicable table before committing the bundle. A per-prefix
@@ -444,8 +469,9 @@ lock serializes concurrent writers. If ordinary staging or commit fails, newly
 installed files are removed and pre-existing bundle members are restored. An
 audited run records the planned paths even when no new bundle is committed.
 
-Without `--out-prefix`, only `--outfile` (or standard output) and an explicitly
-requested `--random-effects-out` are written. This is useful for scripted runs
+Without `--out-prefix`, only `--outfile` (or standard output) and explicitly
+requested `--random-effects-out`, `--sensitivity-out`, and
+`--trait-origins-out` sidecars are written. This is useful for scripted runs
 that do not need retained intermediates.
 
 ### Inspecting or reusing individual stages
@@ -579,11 +605,14 @@ internally inconsistent transforms within a response or predictor contrast
 group, and all selected predictor rows must come from one non-empty species-tree
 ID. The coefficient table records that predictor-tree ID and the exact response
 and predictor transforms on every row.
-When `--predictor-sampling-covariance` is supplied, every selected predictor
-contrast pair must be present and the species-contrast table must retain its
-positive `contrast_variance` column. The legacy clustered estimator rejects
-both response and predictor covariance sidecars; use `hierarchical` or
-`replicate-reml`.
+When `--predictor-sampling-covariance` is supplied, the species-contrast table
+must retain its positive `contrast_variance` column. An explicit covariance
+table must contain every selected predictor-contrast pair; a factor-loading
+table must contain every selected contrast. The legacy clustered estimator
+rejects both response and predictor covariance sidecars; use `hierarchical` or
+`replicate-reml`. Both response and predictor sidecars accept NWKIT's sparse
+`factor-loading` representation. A model cannot mix explicit covariance and
+factor-loading rows.
 
 ## PGLS model and pseudoreplication control
 
@@ -637,12 +666,16 @@ For conventional tip-level PGLS, the same calculation is performed in tip
 space with `R = I` and an estimated predictor ancestral mean.
 
 For a categorical predictor expanded to a vector `z` of factor columns, the
-same principle is multivariate. If biological replicates imply a within-tip
-covariance `Omega_i`, the species-tree contrast transforms give the full block
-covariance `S_ab = L_a diag(Omega[:,a,b]) L_b'`. The response likelihood adds
+same principle is multivariate. If a biological observation has covariance
+`Omega_i` and there are `n_i` independent biological replicates, the covariance
+of the encoded mean is `barOmega_i = Omega_i / n_i`. The species-tree contrast
+transforms give the full block
+covariance `S_ab = L_a diag(barOmega[:,a,b]) L_b'`. The response likelihood adds
 `B S B'`, including negative cross-column covariance; it does not pretend that
-the dummy variables are independent measurements. Repeated paralog rows map
-the same species-event block into every occurrence.
+the dummy variables are independent measurements. This is a Gaussian
+moment-matching approximation to uncertainty in the encoded predictor, not an
+exact discrete-state likelihood. Repeated paralog rows map the same
+species-event block into every occurrence.
 
 For a non-Gaussian response at gene tips, the reconciled raw-input model is
 
@@ -659,6 +692,11 @@ shares the unexplained species deviation among paralogs. The gene-tree effect
 models residual phylogenetic dependence. This is not a reconciled
 speciation-contrast estimator, so non-Gaussian and Gaussian responses in the
 same command deliberately use different, scale-correct likelihood branches.
+When a continuous species predictor has replicates, `X_species(g)` contains
+its species-tree posterior mean rather than its raw replicate mean, and the
+lifted posterior covariance is included in the Laplace likelihood. Changing
+the selected species evolutionary model therefore changes both its latent
+mean and its remaining uncertainty.
 
 For two or more Gaussian responses, the multivariate tip model replaces each
 scalar component variance by a trait covariance matrix:
@@ -691,6 +729,65 @@ p-value. `--bootstrap-replicates` and `--seed` make it reproducible. Models
 with fewer than 20 unique species events and fits at a variance boundary are
 flagged. Conditional event deviations and lineage slopes can be written with
 `--random-effects-out`.
+
+### Delayed trait acquisition and paralog-specific responses
+
+The ordinary reconciled contrast associates the expression contrast and trait
+contrast at the same species split. It does **not** assert that the molecular
+change happened at the instant of speciation, but those two contrasts alone
+cannot identify their within-branch order. A trait gained later on a descendant
+branch can therefore be diluted when only one duplicated lineage responds.
+
+NWKIT provides three complementary diagnostics for this case:
+
+1. `--random-effects-out` reports each lineage's empirical-Bayes slope
+   deviation, conditional interval, total slope (fixed average plus deviation),
+   total interval, and reliability (the data-supported fraction of lineage
+   variance). These distinguish an average
+   gene-family association from a response concentrated in one paralog lineage.
+2. `--lineage-inference likelihood-ratio` tests whether the lineage-slope
+   variance is nonzero using the 50:50 boundary mixture approximation. It also
+   reports the average-plus-lineage joint likelihood ratio, but deliberately
+   leaves its P-value blank because that mixed fixed/boundary null is not a
+   regular chi-square problem. `--lineage-inference parametric-bootstrap`
+   supplies calibrated empirical P-values for both tests.
+3. `--lineage-leave-one-out yes` removes each `lineage_clade_id`, refits the
+   model, and writes coefficient changes to `--sensitivity-out` or the bundle.
+
+For a categorical species predictor, raw-input mode can estimate plausible
+gain/loss branches rather than assigning a single observed tip state to one
+speciation event:
+
+```sh
+nwkit pgls \
+  --gene-tree gene.nwk \
+  --species-tree species.nwk \
+  --expression expression.tsv \
+  --species-traits traits.tsv \
+  --responses expression \
+  --predictors habitat \
+  --categorical-predictors habitat \
+  --tree-id OG000001 \
+  --categorical-origin-diagnostics stochastic-map \
+  --origin-map-replicates 1000 \
+  --origin-min-posterior 0.5 \
+  --origin-leave-one-out yes \
+  --out-prefix OG000001
+```
+
+This fits an equal-rates Mk model, propagates categorical replicate proportions
+as tip likelihoods, and samples transition histories. For each transition whose
+posterior frequency reaches `--origin-min-posterior`, origin leave-one-out
+removes reconciled species events nested below that branch. The origin table
+retains all sampled branch/direction combinations, their posterior frequencies,
+the estimated Mk rate, descendant taxa, and the exact omitted event IDs.
+
+These are sensitivity analyses, not a claim that stochastic mapping identifies
+the causal time of expression change. A terminal gain with no later sampled
+speciation has no descendant speciation contrast to remove. Likewise, a wide
+lineage interval or an unstable leave-one-out coefficient is evidence that the
+average slope is weakly localized, not proof that a particular paralog caused
+the trait.
 
 The command fits one model per non-empty `tree_id` and response trait;
 accidental pooling of unnamed gene families is rejected. Multiple predictor
@@ -786,6 +883,37 @@ transfer no longer silently produces an empty table.
   Separate source traits otherwise assume zero measurement-error covariance;
   cross-column covariance created by encoding one categorical predictor is
   fitted.
+- Tree-supported non-Gaussian phylogenetic GLMMs use a sparse GMRF over all
+  non-root tree nodes and are validated through 5,000 gene tips. Same-species
+  paralog effects and diagonal-sampling continuous/categorical predictor
+  replicate uncertainty remain structured in that calculation. Fits above
+  5,000 tips are attempted with a validation warning rather than rejected.
+  Non-Gaussian parametric bootstrap draws directly from the same sparse latent
+  model, including group effects and structured predictor uncertainty, and
+  streams one simulated response/refit at a time. A custom dense covariance or
+  unsupported dense uncertainty term above 500 tips reports its estimated
+  working-memory requirement and requires `--allow-large-dense yes` before
+  allocation. Multinomial models above 20,000
+  tip-by-non-reference-level linear predictors are attempted with a validation
+  warning. Multivariate Gaussian PGLS uses
+  a sparse KKT solve for tree-supported components and diagonal or sparse-factor
+  fixed sampling covariance and is likewise validated through 5,000 tips and
+  20,000 total tip-trait cells. Larger sparse fits are attempted with a
+  validation warning. Its general dense fallback requires
+  `--allow-large-dense yes` above 2,000 observed tip-trait cells. The same
+  multivariate sparse likelihood estimates the shared shape parameter of a
+  categorical predictor, including its per-species replicate covariance,
+  without constructing a dense tip-by-factor covariance.
+  Conditional EIV Gaussian fits retain diagonal, event/group, response
+  factor-loading, and structured predictor components. They are validated
+  through 5,000 contrasts and attempt larger structured fits with a warning;
+  a general dense covariance requires `--allow-large-dense yes` above 2,000.
+  Shape-refitted Gaussian bootstrap simulates through tree recursions and
+  structured factors rather than an eigendecomposition of the full tip
+  covariance. Wald, parametric-bootstrap,
+  likelihood-ratio, and profile-likelihood inference all use the same selected
+  likelihood backend; they differ only in how coefficient uncertainty is
+  calculated.
 - Tree ensembles are equally weighted. They propagate the supplied tree and
   reconciliation sample but do not infer a tree distribution or model
   incomplete lineage sorting internally.
@@ -813,6 +941,9 @@ References:
   phylogenetic comparative methods to gene trees with speciation and
   duplication nodes. *Molecular Biology and Evolution* 38:1614–1626.
   https://doi.org/10.1093/molbev/msaa288
+- Huelsenbeck JP, Nielsen R, Bollback JP. 2003. Stochastic mapping of
+  morphological characters. *Systematic Biology* 52:131–158.
+  https://doi.org/10.1080/10635150390192780
 - Ives AR, Midford PE, Garland T Jr. 2007. Within-species variation and
   measurement error in phylogenetic comparative methods. *Systematic Biology*
   56:252–270. https://doi.org/10.1080/10635150701313830

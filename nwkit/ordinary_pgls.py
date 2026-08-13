@@ -8,6 +8,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 from scipy.optimize import minimize_scalar
 from scipy.stats import chi2, norm
 from scipy.stats import t as student_t
@@ -22,12 +23,13 @@ from nwkit.evolution import (
     build_evolutionary_covariance,
     encoded_evolution_parameter,
     evolution_model_spec,
+    evolutionary_covariance_factory,
     optimization_parameterization,
     parameter_near_boundary,
     read_custom_covariance,
     validate_evolution_parameter,
 )
-from nwkit.gaussian import draw_from_factor
+from nwkit.gaussian import DiagonalLowRankCovariance, draw_from_factor
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
     fit_latent_predictor,
@@ -46,7 +48,13 @@ from nwkit.model_matrix import (
 )
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.pgls import _profile_covariance_fit, _solve_positive_definite
-from nwkit.phylogenetic_glmm import SCALAR_RESPONSE_FAMILIES, fit_phylogenetic_glmm
+from nwkit.phylogenetic_glmm import (
+    SCALAR_RESPONSE_FAMILIES,
+    fit_phylogenetic_glmm,
+    summarize_glmm_coefficient,
+    summarize_glmm_omnibus,
+    summarize_glmm_threshold,
+)
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
 from nwkit.util import (
     is_rooted,
@@ -311,6 +319,7 @@ def _fit_ordinary_gaussian(
     reml,
     predictor_uncertainties=(),
     predictor_columns=(),
+    allow_large_dense=False,
 ):
     parameter_status = "not-applicable"
     outer_converged = True
@@ -335,7 +344,8 @@ def _fit_ordinary_gaussian(
                 predictor_columns,
                 fixed_covariance,
                 components,
-                reml=reml,
+                reml=False,
+                allow_large_dense=allow_large_dense,
             )
         else:
             fit = _profile_covariance_fit(
@@ -344,6 +354,7 @@ def _fit_ordinary_gaussian(
                 fixed_covariance,
                 components,
                 reml=reml,
+                allow_large_dense=allow_large_dense,
             )
         fit["phylogenetic_covariance"] = phylogenetic_covariance
         fit["evolution_parameter"] = parameter
@@ -426,6 +437,7 @@ def _ordinary_bootstrap_coefficients(
     seed,
     predictor_uncertainties=(),
     predictor_columns=(),
+    allow_large_dense=False,
 ):
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
@@ -451,8 +463,11 @@ def _ordinary_bootstrap_coefficients(
                 reml=reml,
                 predictor_uncertainties=predictor_uncertainties,
                 predictor_columns=predictor_columns,
+                allow_large_dense=allow_large_dense,
             )
         except ValueError:
+            continue
+        if not bootstrap_fit["optimizer_converged"]:
             continue
         coefficients.append(bootstrap_fit["beta"])
     if len(coefficients) < replicates:
@@ -740,7 +755,10 @@ def _coerce_response_sampling_covariance(
         covariance = covariance.loc[leaf_names, leaf_names].to_numpy(dtype=float)
     else:
         covariance = np.asarray(covariance, dtype=float)
-    if covariance.shape != (len(leaf_names), len(leaf_names)):
+    if covariance.shape not in {
+        (len(leaf_names),),
+        (len(leaf_names), len(leaf_names)),
+    }:
         raise ValueError("{} has the wrong dimensions.".format(label))
     return covariance
 
@@ -762,6 +780,7 @@ def _ordinary_inference_samples(
     reml,
     predictor_uncertainties=(),
     predictor_columns=(),
+    allow_large_dense=False,
 ):
     if inference != "parametric-bootstrap":
         standard_errors = np.sqrt(np.maximum(np.diag(fit["beta_covariance"]), 0.0))
@@ -781,6 +800,7 @@ def _ordinary_inference_samples(
         seed=seed,
         predictor_uncertainties=predictor_uncertainties,
         predictor_columns=predictor_columns,
+        allow_large_dense=allow_large_dense,
     )
     return coefficients, np.std(coefficients, axis=0, ddof=1)
 
@@ -805,8 +825,26 @@ def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
         else 1.0 - float(fit["quadratic"]) / total_quadratic
     )
     evolutionary_rate = float(fit["component_variances"]["evolutionary_rate"])
-    mean_sampling_variance = float(np.mean(np.diag(fixed_covariance)))
-    mean_fitted_variance = float(np.mean(np.diag(fit["covariance"])))
+    fixed_array = np.asarray(fixed_covariance, dtype=float)
+    mean_sampling_variance = float(
+        np.mean(fixed_array if fixed_array.ndim == 1 else np.diag(fixed_array))
+    )
+    fitted_covariance = fit["covariance"]
+    if isinstance(fitted_covariance, DiagonalLowRankCovariance):
+        update = fitted_covariance.low_rank
+        update_diagonal = (
+            np.asarray(update.multiply(update).sum(axis=1)).reshape(-1)
+            if sparse.issparse(update)
+            else np.sum(np.square(update), axis=1)
+        )
+        mean_fitted_variance = float(
+            np.mean(fitted_covariance.diagonal + update_diagonal)
+        )
+    else:
+        fitted_array = np.asarray(fitted_covariance, dtype=float)
+        mean_fitted_variance = float(
+            np.mean(fitted_array if fitted_array.ndim == 1 else np.diag(fitted_array))
+        )
     sampling_fraction = (
         0.0
         if mean_fitted_variance == 0.0
@@ -891,6 +929,7 @@ def _ordinary_omnibus_rows(rows, fit, term_metadata):
                 "confidence_interval_lower": "",
                 "confidence_interval_upper": "",
                 "inference_status": "ok",
+                "inference_method": "wald",
             }
         )
         omnibus_rows.append(omnibus)
@@ -1151,7 +1190,9 @@ def _prepare_latent_ordinary_predictors(
                 posterior.boundary_warning or marginal_fit["boundary_warning"]
             ),
             "log_likelihood": posterior.log_likelihood,
-            "mean_sampling_variance": float(np.mean(np.diag(sampling))),
+            "mean_sampling_variance": float(
+                np.mean(sampling if sampling.ndim == 1 else np.diag(sampling))
+            ),
             "mean_posterior_variance": float(np.mean(np.diag(posterior.covariance))),
             "uncertainty_fraction": float(
                 np.mean(np.diag(posterior.covariance))
@@ -1228,7 +1269,11 @@ def _categorical_common_row(
         "n_predictors": n_predictors,
         "num_parameters": num_parameters,
         "matrix_rank": matrix_rank,
-        "condition_number": float(np.linalg.cond(fit.coefficient_covariance)),
+        "condition_number": (
+            float(np.linalg.cond(fit.coefficient_covariance))
+            if np.isfinite(fit.coefficient_covariance).all()
+            else ""
+        ),
         "generalized_residual_sum_squares": "",
         "evolutionary_rate": fit.component_variances["phylogenetic"],
         "r_squared": "",
@@ -1316,29 +1361,14 @@ def _categorical_coefficient_rows(
         for level_index, level in enumerate(response_levels):
             flat_index = term_index * dimension + level_index
             coefficient = float(fit.coefficients[term_index, level_index])
-            standard_error = math.sqrt(
-                max(float(fit.coefficient_covariance[flat_index, flat_index]), 0.0)
-            )
-            statistic = "" if standard_error == 0.0 else coefficient / standard_error
-            p_value = (
-                ""
-                if standard_error == 0.0
-                else float(2.0 * norm.sf(abs(float(statistic))))
-            )
-            lower = coefficient - critical * standard_error
-            upper = coefficient + critical * standard_error
-            if fit.coefficient_statistics is not None:
-                statistic = float(fit.coefficient_statistics[flat_index])
-                assert fit.coefficient_p_values is not None
-                p_value = float(fit.coefficient_p_values[flat_index])
-            if fit.coefficient_confidence_lower is not None and np.isfinite(
-                fit.coefficient_confidence_lower[flat_index]
-            ):
-                lower = float(fit.coefficient_confidence_lower[flat_index])
-            if fit.coefficient_confidence_upper is not None and np.isfinite(
-                fit.coefficient_confidence_upper[flat_index]
-            ):
-                upper = float(fit.coefficient_confidence_upper[flat_index])
+            (
+                standard_error,
+                statistic,
+                p_value,
+                lower,
+                upper,
+                inference_status,
+            ) = summarize_glmm_coefficient(fit, flat_index, coefficient, critical)
             row = common.copy()
             row.update(
                 {
@@ -1357,9 +1387,7 @@ def _categorical_coefficient_rows(
                     "confidence_level": confidence_level,
                     "confidence_interval_lower": lower,
                     "confidence_interval_upper": upper,
-                    "inference_status": (
-                        "zero-model-variance" if standard_error == 0.0 else "ok"
-                    ),
+                    "inference_status": inference_status,
                 }
             )
             if metadata.kind != "intercept":
@@ -1373,11 +1401,10 @@ def _categorical_coefficient_rows(
                 coefficient_indices_by_source.setdefault(metadata.source, []).append(
                     flat_index
                 )
-    flat_coefficients = fit.coefficients.reshape(-1)
     for source, indices in coefficient_indices_by_source.items():
-        selected = flat_coefficients[indices]
-        covariance = fit.coefficient_covariance[np.ix_(indices, indices)]
-        statistic = float(selected @ np.linalg.pinv(covariance) @ selected)
+        omnibus_statistic, omnibus_p_value, omnibus_status = summarize_glmm_omnibus(
+            fit, indices
+        )
         template_index = (
             next(
                 index
@@ -1396,22 +1423,23 @@ def _categorical_coefficient_rows(
                 "term_test": "omnibus",
                 "coefficient": "",
                 "standard_error": "",
-                "statistic": statistic,
+                "statistic": omnibus_statistic,
                 "degrees_of_freedom": len(indices),
-                "p_value": float(chi2.sf(statistic, len(indices))),
+                "p_value": omnibus_p_value,
                 "confidence_interval_lower": "",
                 "confidence_interval_upper": "",
-                "inference_status": "ok",
+                "inference_status": omnibus_status,
+                "inference_method": "wald",
             }
         )
         rows.append(template_row)
     for threshold_index, threshold in enumerate(fit.thresholds):
-        standard_error = math.sqrt(
-            max(
-                float(fit.threshold_covariance[threshold_index, threshold_index]),
-                0.0,
-            )
-        )
+        (
+            threshold_standard_error,
+            lower,
+            upper,
+            threshold_status,
+        ) = summarize_glmm_threshold(fit, threshold_index, critical)
         row = common.copy()
         row.update(
             {
@@ -1421,15 +1449,13 @@ def _categorical_coefficient_rows(
                 "predictor_type": "threshold",
                 "term_test": "threshold",
                 "coefficient": float(threshold),
-                "standard_error": standard_error,
+                "standard_error": threshold_standard_error,
                 "statistic": "",
                 "p_value": "",
                 "confidence_level": confidence_level,
-                "confidence_interval_lower": float(threshold)
-                - critical * standard_error,
-                "confidence_interval_upper": float(threshold)
-                + critical * standard_error,
-                "inference_status": "ok",
+                "confidence_interval_lower": lower,
+                "confidence_interval_upper": upper,
+                "inference_status": threshold_status,
             }
         )
         rows.append(row)
@@ -1600,6 +1626,7 @@ def _fit_ordinary_multivariate_response(
     reml,
     confidence_level,
     intercept,
+    allow_large_dense,
 ):
     if len(responses) < 2:
         raise ValueError("Multivariate PGLS requires at least two responses.")
@@ -1623,28 +1650,40 @@ def _fit_ordinary_multivariate_response(
         raise ValueError(
             "Missing multivariate responses require allow_missing_responses=True."
         )
-    fixed_covariance = np.zeros((len(leaf_names) * len(responses),) * 2, dtype=float)
+    fixed_diagonal = np.zeros(len(leaf_names) * len(responses), dtype=float)
+    dense_sampling_blocks: list[tuple[int, np.ndarray]] = []
     for response_index, response in enumerate(responses):
         covariance = _coerce_response_sampling_covariance(
             covariance_by_trait, response, leaf_names
         )
         start = response_index * len(leaf_names)
-        fixed_covariance[
-            start : start + len(leaf_names), start : start + len(leaf_names)
-        ] = covariance
+        if covariance.ndim == 1 or np.array_equal(
+            covariance, np.diag(np.diag(covariance))
+        ):
+            fixed_diagonal[start : start + len(leaf_names)] = (
+                covariance if covariance.ndim == 1 else np.diag(covariance)
+            )
+        else:
+            dense_sampling_blocks.append((start, covariance))
+    if dense_sampling_blocks:
+        fixed_covariance = np.diag(fixed_diagonal)
+        for start, covariance in dense_sampling_blocks:
+            fixed_covariance[
+                start : start + len(leaf_names), start : start + len(leaf_names)
+            ] = covariance
+    else:
+        fixed_covariance = fixed_diagonal
     shape_bounds, shape_decoder, shape_initial = _categorical_shape_settings(
         tree, evolution_model, evolution_parameter, branch_length
     )
 
-    def covariance_factory(parameter):
-        return build_phylogenetic_covariance(
-            tree,
-            leaf_names,
-            evolution_model=evolution_model,
-            parameter=parameter,
-            branch_length=branch_length,
-            custom_covariance=custom_covariance,
-        )
+    covariance_factory = evolutionary_covariance_factory(
+        tree,
+        leaf_names,
+        model=evolution_model,
+        branch_length=branch_length,
+        custom_covariance=custom_covariance,
+    )
 
     multivariate_fit = fit_multivariate_pgls(
         response_matrix,
@@ -1656,6 +1695,7 @@ def _fit_ordinary_multivariate_response(
         evolution_parameter_decoder=shape_decoder,
         evolution_parameter_initial=shape_initial,
         reml=reml,
+        allow_large_dense=allow_large_dense,
     )
     return pd.DataFrame(
         _ordinary_multivariate_rows(
@@ -1728,6 +1768,7 @@ def _fit_ordinary_non_gaussian_response(
     bootstrap_replicates,
     seed,
     intercept,
+    allow_large_dense,
 ):
     if response in covariance_by_trait:
         raise ValueError(
@@ -1752,15 +1793,13 @@ def _fit_ordinary_non_gaussian_response(
         intercept,
     )
 
-    def covariance_factory(parameter):
-        return build_phylogenetic_covariance(
-            tree,
-            leaf_names,
-            evolution_model=evolution_model,
-            parameter=parameter,
-            branch_length=branch_length,
-            custom_covariance=custom_covariance,
-        )
+    covariance_factory = evolutionary_covariance_factory(
+        tree,
+        leaf_names,
+        model=evolution_model,
+        branch_length=branch_length,
+        custom_covariance=custom_covariance,
+    )
 
     fitted = fit_phylogenetic_glmm(
         [response_values_by_trait[response][name] for name in leaf_names],
@@ -1791,6 +1830,7 @@ def _fit_ordinary_non_gaussian_response(
         confidence_level=confidence_level,
         bootstrap_replicates=bootstrap_replicates,
         seed=seed + response_index,
+        allow_large_dense=allow_large_dense,
     )
     return _categorical_coefficient_rows(
         response,
@@ -1838,6 +1878,7 @@ def _fit_ordinary_gaussian_response(
     confidence_level,
     num_parameters,
     matrix_rank,
+    allow_large_dense,
 ):
     if inference in {"likelihood-ratio", "profile-likelihood"}:
         raise ValueError(
@@ -1860,7 +1901,9 @@ def _fit_ordinary_gaussian_response(
         reml=reml,
         predictor_uncertainties=predictor_uncertainty_values,
         predictor_columns=predictor_columns,
+        allow_large_dense=allow_large_dense,
     )
+    effective_reml = bool(fitted.get("reml", reml))
     bootstrap_coefficients, standard_errors = _ordinary_inference_samples(
         fitted,
         design,
@@ -1874,9 +1917,10 @@ def _fit_ordinary_gaussian_response(
         inference=inference,
         bootstrap_replicates=bootstrap_replicates,
         seed=seed + response_index,
-        reml=reml,
+        reml=effective_reml,
         predictor_uncertainties=predictor_uncertainty_values,
         predictor_columns=predictor_columns,
+        allow_large_dense=allow_large_dense,
     )
     statistics = _ordinary_response_statistics(
         y, fitted, fixed_covariance, intercept=intercept
@@ -1899,7 +1943,7 @@ def _fit_ordinary_gaussian_response(
         evolution_model=evolution_model,
         branch_length=branch_length,
         inference=inference,
-        reml=reml,
+        reml=effective_reml,
         predictor_diagnostics=predictor_diagnostics,
         mean_predictor_sampling_variance=mean_predictor_sampling_variance,
         has_predictor_uncertainty=bool(predictor_uncertainty_values),
@@ -1946,6 +1990,7 @@ def fit_ordinary_pgls(
     coefficient_prior_sd=2.5,
     multivariate_responses=False,
     allow_missing_responses=False,
+    allow_large_dense=False,
 ):
     """Fit conventional tip-level PGLS models, one per response trait."""
     if allow_missing_responses and not multivariate_responses:
@@ -2100,6 +2145,7 @@ def fit_ordinary_pgls(
             reml=reml,
             confidence_level=confidence_level,
             intercept=intercept,
+            allow_large_dense=allow_large_dense,
         )
 
     rows = []
@@ -2141,6 +2187,7 @@ def fit_ordinary_pgls(
                     bootstrap_replicates=bootstrap_replicates,
                     seed=seed,
                     intercept=intercept,
+                    allow_large_dense=allow_large_dense,
                 )
             )
             continue
@@ -2172,6 +2219,7 @@ def fit_ordinary_pgls(
                 confidence_level=confidence_level,
                 num_parameters=num_parameters,
                 matrix_rank=matrix_rank,
+                allow_large_dense=allow_large_dense,
             )
         )
     return pd.DataFrame(rows, columns=ORDINARY_RESULT_COLUMNS)
@@ -2444,6 +2492,7 @@ def _effective_ordinary_args(args) -> SimpleNamespace:
         "coefficient_prior_sd": 2.5,
         "multivariate_responses": False,
         "allow_missing_responses": False,
+        "allow_large_dense": False,
         "quoted_node_names": True,
         "sample_size_columns": None,
         "standard_error_columns": None,
@@ -2649,16 +2698,27 @@ def _response_auxiliary_mapping(column_by_response, values_by_column):
 def _sampling_covariance_table(covariance_by_trait, leaf_names):
     rows = []
     for trait, covariance in covariance_by_trait.items():
-        matrix = covariance.loc[leaf_names, leaf_names].to_numpy(dtype=float)
+        matrix = (
+            covariance.loc[leaf_names, leaf_names].to_numpy(dtype=float)
+            if isinstance(covariance, pd.DataFrame)
+            else np.asarray(covariance, dtype=float)
+        )
         for first, first_name in enumerate(leaf_names):
-            for second in range(first, len(leaf_names)):
+            second_indices = (
+                range(first, first + 1)
+                if matrix.ndim == 1
+                else range(first, len(leaf_names))
+            )
+            for second in second_indices:
                 rows.append(
                     {
                         "tree_id": "species",
                         "trait": trait,
                         "leaf_name_1": first_name,
                         "leaf_name_2": leaf_names[second],
-                        "sampling_covariance": matrix[first, second],
+                        "sampling_covariance": (
+                            matrix[first] if matrix.ndim == 1 else matrix[first, second]
+                        ),
                     }
                 )
     return pd.DataFrame(rows, columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)
@@ -2933,6 +2993,7 @@ def build_ordinary_pgls(args, responses, predictors) -> OrdinaryPglsArtifacts:
         coefficient_prior_sd=effective.coefficient_prior_sd,
         multivariate_responses=effective.multivariate_responses,
         allow_missing_responses=effective.allow_missing_responses,
+        allow_large_dense=effective.allow_large_dense,
     )
     comparison = (
         fit_ordinary_model_comparison(

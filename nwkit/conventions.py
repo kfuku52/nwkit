@@ -12,6 +12,8 @@ PGLS_BUNDLE_SUFFIXES = {
     "predictor_sampling_covariance_out": ".predictor-sampling-covariance.tsv",
     "predictor_tip_summary_out": ".predictor-tip-summary.tsv",
     "random_effects_out": ".random-effects.tsv",
+    "sensitivity_out": ".sensitivity.tsv",
+    "trait_origins_out": ".trait-origins.tsv",
     "outfile": ".pgls.tsv",
 }
 PGLS_BUNDLE_LOCK_SUFFIX = ".pgls-bundle.lock"

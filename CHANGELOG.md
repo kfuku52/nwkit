@@ -64,6 +64,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Added ML/REML multivariate Gaussian PGLS for conventional and reconciled
   tip-level models, full response covariance components, and observed-data
   likelihoods for partially missing response vectors.
+- Added lineage-slope intervals and reliability, likelihood-ratio/bootstrap
+  tests for heterogeneous or jointly nonzero lineage effects, lineage
+  leave-one-out refits, and Mk stochastic-map trait-origin sensitivity
+  diagnostics for categorical predictors.
 
 ### Changed
 

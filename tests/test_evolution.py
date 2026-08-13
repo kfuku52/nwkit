@@ -6,12 +6,18 @@ from ete4 import Tree
 from nwkit.contrast import calculate_contrasts
 from nwkit.evolution import (
     build_evolutionary_covariance,
+    build_sparse_evolutionary_model,
     read_custom_covariance,
     transformed_edge_variances,
     validate_custom_covariance,
     validate_evolution_parameter,
 )
 from nwkit.ordinary_pgls import fit_ordinary_pgls
+from nwkit.sparse_laplace import (
+    combine_sparse_covariance_models,
+    condition_sparse_tip_model,
+    prepare_sparse_latent_sampler,
+)
 
 TREE_TEXT = "(((A:1,B:1):1,C:2):1,(D:1,E:1):2);"
 LEAF_NAMES = ["A", "B", "C", "D", "E"]
@@ -23,6 +29,82 @@ def _tree(text=TREE_TEXT):
 
 def _values(values):
     return dict(zip(LEAF_NAMES, values, strict=True))
+
+
+@pytest.mark.parametrize(
+    "model,parameter",
+    [
+        ("brownian", None),
+        ("lambda", 0.6),
+        ("ou", 0.4),
+        ("kappa", 1.4),
+        ("delta", 1.3),
+        ("eb", -0.2),
+        ("acdc", 0.1),
+        ("independent", None),
+    ],
+)
+def test_sparse_evolutionary_model_matches_normalized_dense_covariance(
+    model, parameter
+):
+    dense = build_evolutionary_covariance(
+        _tree(), LEAF_NAMES, model=model, parameter=parameter
+    )
+    sparse_model = build_sparse_evolutionary_model(
+        _tree(), LEAF_NAMES, model=model, parameter=parameter
+    )
+    precision_factor = sparse_model.precision_factor()
+    np.testing.assert_allclose(
+        (precision_factor.T @ precision_factor).toarray(),
+        sparse_model.precision.toarray(),
+        rtol=2e-10,
+        atol=2e-10,
+    )
+    np.testing.assert_allclose(
+        sparse_model.materialize(),
+        dense / np.mean(np.diag(dense)),
+        rtol=2e-10,
+        atol=2e-10,
+    )
+
+
+def test_sparse_predictor_conditioning_matches_dense_gaussian_posterior():
+    dense = build_evolutionary_covariance(_tree(), LEAF_NAMES)
+    sparse_prior = build_sparse_evolutionary_model(_tree(), LEAF_NAMES)
+    prior_variance = 1.7 * float(np.mean(np.diag(dense)))
+    sampling = np.asarray([0.2, 0.3, 0.4, 0.5, 0.6])
+    conditioned = condition_sparse_tip_model(sparse_prior, prior_variance, sampling)
+    prior = 1.7 * dense
+    expected = prior - prior @ np.linalg.solve(prior + np.diag(sampling), prior)
+    np.testing.assert_allclose(
+        conditioned.materialize(), expected, rtol=2e-10, atol=2e-10
+    )
+
+
+def test_conditioned_sparse_model_supports_exact_reusable_sampling():
+    sparse_prior = build_sparse_evolutionary_model(_tree(), LEAF_NAMES)
+    conditioned = condition_sparse_tip_model(
+        sparse_prior,
+        1.7,
+        np.asarray([0.2, 0.3, 0.4, 0.5, 0.6]),
+    )
+    precision_factor = conditioned.precision_factor()
+    np.testing.assert_allclose(
+        (precision_factor.T @ precision_factor).toarray(),
+        conditioned.precision.toarray(),
+        rtol=2e-12,
+        atol=2e-12,
+    )
+    latent = combine_sparse_covariance_models({"posterior": (1.0, conditioned)})
+    sampler = prepare_sparse_latent_sampler(latent)
+    rng = np.random.default_rng(17)
+    draws = np.asarray([sampler.sample(rng) for _ in range(30_000)])
+    np.testing.assert_allclose(
+        np.cov(draws, rowvar=False),
+        conditioned.materialize(),
+        rtol=0.06,
+        atol=0.01,
+    )
 
 
 def test_kappa_covariance_raises_each_branch_length_to_power():

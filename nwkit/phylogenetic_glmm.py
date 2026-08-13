@@ -1,10 +1,12 @@
 """Laplace-approximated phylogenetic generalized linear mixed models."""
 
 import math
+import warnings
 from dataclasses import dataclass, replace
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
+from scipy import sparse
 from scipy.optimize import brentq, linprog, minimize
 from scipy.special import (
     betaln,
@@ -21,6 +23,24 @@ from scipy.stats import poisson as poisson_distribution
 
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
+from nwkit.sparse_laplace import (
+    ContinuousPredictorUncertainty,
+    GmrfPredictorUncertainty,
+    GroupedPredictorUncertainty,
+    JointPredictorUncertainty,
+    SparseCovarianceModel,
+    SparseLatentModel,
+    append_identity_latent_components,
+    append_latent_component,
+    combine_sparse_covariance_models,
+    continuous_predictor_loading,
+    factor_sparse_nonsingular,
+    factor_sparse_positive_definite,
+    gmrf_predictor_loading,
+    grouped_predictor_loading,
+    joint_predictor_loading,
+    prepare_sparse_latent_sampler,
+)
 
 
 @dataclass(frozen=True)
@@ -53,6 +73,7 @@ class PhylogeneticGlmmFit:
     coefficient_confidence_lower: np.ndarray | None = None
     coefficient_confidence_upper: np.ndarray | None = None
     coefficient_inference: str = "wald"
+    coefficient_covariance_status: str = "ok"
 
 
 SCALAR_RESPONSE_FAMILIES = {
@@ -86,6 +107,133 @@ ZERO_COMPONENT_FAMILIES = {
     "hurdle-poisson",
     "hurdle-negative-binomial",
 }
+
+MAX_DENSE_GLMM_TIPS = 500
+MAX_SPARSE_GLMM_TIPS = 5000
+MAX_SPARSE_GLMM_LINEAR_PREDICTORS = 20000
+
+
+def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
+    """Conservative working-memory estimate for dense GLMM factorizations."""
+    dimension = int(n_tips) * int(random_dimension)
+    return 8.0 * 8.0 * dimension * dimension / 1024.0**3
+
+
+def _select_sparse_glmm_backend(
+    n_tips: int,
+    random_dimension: int,
+    sparse_capable: bool,
+    allow_large_dense: bool,
+) -> bool:
+    """Select only the numerical backend; both paths use the same likelihood."""
+    if n_tips <= MAX_DENSE_GLMM_TIPS:
+        return False
+    if sparse_capable:
+        if n_tips > MAX_SPARSE_GLMM_TIPS:
+            warnings.warn(
+                "Sparse phylogenetic GLMM fitting above {} tips is not yet "
+                "included in the routine validation suite (received {}); "
+                "attempting the fit with the same sparse likelihood backend.".format(
+                    MAX_SPARSE_GLMM_TIPS, n_tips
+                ),
+                RuntimeWarning,
+                stacklevel=3,
+            )
+        return True
+    estimated_gib = _estimated_dense_glmm_gib(n_tips, random_dimension)
+    message = (
+        "This GLMM cannot use the sparse backend and its dense latent dimension "
+        "is {}. Dense fitting is estimated to need about {:.2f} GiB of working "
+        "memory plus cubic-time factorizations."
+    ).format(n_tips * random_dimension, estimated_gib)
+    if not allow_large_dense:
+        raise ValueError(
+            message
+            + " Pass allow_large_dense=True (CLI: '--allow-large-dense yes') to "
+            "attempt the allocation."
+        )
+    warnings.warn(
+        message + " Large dense allocation was explicitly enabled; attempting it.",
+        RuntimeWarning,
+        stacklevel=3,
+    )
+    return False
+
+
+def _dense_glmm_memory_error(n_tips: int, random_dimension: int) -> MemoryError:
+    estimated_gib = _estimated_dense_glmm_gib(n_tips, random_dimension)
+    return MemoryError(
+        "Dense phylogenetic GLMM allocation failed for latent dimension {}. "
+        "The estimated working-memory requirement was about {:.2f} GiB; actual "
+        "requirements depend on the numerical library and model components.".format(
+            n_tips * random_dimension, estimated_gib
+        )
+    )
+
+
+def _wald_coefficient_summary(fit, flat_index, coefficient, critical):
+    variance = float(fit.coefficient_covariance[flat_index, flat_index])
+    available = np.isfinite(variance) and variance >= 0.0
+    if available and variance > 0.0:
+        standard_error: float | str = math.sqrt(variance)
+        statistic_value = coefficient / standard_error
+        statistic: float | str = statistic_value
+        p_value: float | str = float(chi2.sf(statistic_value**2, 1))
+        lower: float | str = coefficient - critical * standard_error
+        upper: float | str = coefficient + critical * standard_error
+        status = "ok"
+    else:
+        standard_error = 0.0 if available else ""
+        statistic = p_value = lower = upper = ""
+        status = (
+            "zero-model-variance" if available else fit.coefficient_covariance_status
+        )
+    return standard_error, statistic, p_value, lower, upper, status
+
+
+def summarize_glmm_coefficient(fit, flat_index, coefficient, critical):
+    """Return one coefficient's inference fields with singularity propagation."""
+    standard_error, statistic, p_value, lower, upper, status = (
+        _wald_coefficient_summary(fit, flat_index, coefficient, critical)
+    )
+    if fit.coefficient_statistics is not None:
+        statistic = float(fit.coefficient_statistics[flat_index])
+        assert fit.coefficient_p_values is not None
+        p_value = float(fit.coefficient_p_values[flat_index])
+    if fit.coefficient_confidence_lower is not None and np.isfinite(
+        fit.coefficient_confidence_lower[flat_index]
+    ):
+        lower = float(fit.coefficient_confidence_lower[flat_index])
+    if fit.coefficient_confidence_upper is not None and np.isfinite(
+        fit.coefficient_confidence_upper[flat_index]
+    ):
+        upper = float(fit.coefficient_confidence_upper[flat_index])
+    return standard_error, statistic, p_value, lower, upper, status
+
+
+def summarize_glmm_omnibus(fit, indices):
+    """Return a Wald omnibus result or an explicit unavailable status."""
+    selected = fit.coefficients.reshape(-1)[indices]
+    covariance = fit.coefficient_covariance[np.ix_(indices, indices)]
+    if not np.isfinite(covariance).all():
+        return "", "", fit.coefficient_covariance_status
+    statistic = float(selected @ np.linalg.pinv(covariance) @ selected)
+    return statistic, float(chi2.sf(statistic, len(indices))), "ok"
+
+
+def summarize_glmm_threshold(fit, threshold_index, critical):
+    """Return one ordinal threshold's uncertainty fields."""
+    threshold = float(fit.thresholds[threshold_index])
+    variance = float(fit.threshold_covariance[threshold_index, threshold_index])
+    if not np.isfinite(variance) or variance < 0.0:
+        return "", "", "", fit.coefficient_covariance_status
+    standard_error = math.sqrt(variance)
+    return (
+        standard_error,
+        threshold - critical * standard_error,
+        threshold + critical * standard_error,
+        "ok",
+    )
 
 
 def observed_response_levels(values: Sequence[object]) -> list[str]:
@@ -148,6 +296,119 @@ def _positive_definite_cholesky(matrix: np.ndarray) -> np.ndarray:
     raise np.linalg.LinAlgError("Matrix is not positive definite.")
 
 
+def _valid_optimizer_result(result) -> bool:
+    return bool(result.success and np.isfinite(result.fun) and float(result.fun) < 1e99)
+
+
+def _bounded_perturbed_starts(initial, first, bounds):
+    starts = [np.asarray(initial, dtype=float), np.asarray(first.x, dtype=float)]
+    for direction in (-1.0, 1.0):
+        perturbed = np.asarray(initial, dtype=float).copy()
+        perturbed += direction * 0.25 * np.maximum(1.0, np.abs(perturbed))
+        for index, (lower, upper) in enumerate(bounds):
+            if lower is not None:
+                perturbed[index] = max(perturbed[index], float(lower))
+            if upper is not None:
+                perturbed[index] = min(perturbed[index], float(upper))
+        starts.append(perturbed)
+    return starts
+
+
+def _powell_fallback_candidates(objective, starts, bounds, maxiter):
+    results = [
+        minimize(
+            objective,
+            start,
+            method="Powell",
+            bounds=bounds,
+            options={"maxiter": maxiter * 2, "xtol": 1e-7, "ftol": 1e-9},
+        )
+        for start in starts
+    ]
+    return results, [result for result in results if _valid_optimizer_result(result)]
+
+
+def _lbfgs_multistart_candidates(objective, starts, bounds, maxiter):
+    results = [
+        minimize(
+            objective,
+            start,
+            method="L-BFGS-B",
+            bounds=bounds,
+            options={"maxiter": maxiter, "ftol": 1e-10, "gtol": 1e-6},
+        )
+        for start in starts
+    ]
+    return results, [result for result in results if _valid_optimizer_result(result)]
+
+
+def _robust_minimize(
+    objective: Callable[[np.ndarray], float],
+    initial: np.ndarray,
+    bounds: Sequence[tuple[float | None, float | None]],
+    *,
+    label: str,
+    maxiter: int = 700,
+    force_multistart: bool = False,
+):
+    """Minimize a Laplace objective and never return a failed optimization."""
+    candidates = []
+    fallback_results = []
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message="invalid value encountered in subtract",
+            category=RuntimeWarning,
+            module=r"scipy\.optimize\._numdiff",
+        )
+        first = minimize(
+            objective,
+            np.asarray(initial, dtype=float),
+            method="L-BFGS-B",
+            bounds=bounds,
+            options={"maxiter": maxiter, "ftol": 1e-10, "gtol": 1e-6},
+        )
+        initial_value = float(objective(np.asarray(initial, dtype=float)))
+        if _valid_optimizer_result(first) and first.fun <= initial_value + 1e-8 * max(
+            1.0, abs(initial_value)
+        ):
+            candidates.append(first)
+        if force_multistart:
+            multistart_results, multistart_candidates = _lbfgs_multistart_candidates(
+                objective,
+                _bounded_perturbed_starts(initial, first, bounds)[2:],
+                bounds,
+                maxiter,
+            )
+            fallback_results.extend(multistart_results)
+            candidates.extend(multistart_candidates)
+        if not candidates:
+            fallback_results, fallback_candidates = _powell_fallback_candidates(
+                objective,
+                _bounded_perturbed_starts(initial, first, bounds),
+                bounds,
+                maxiter,
+            )
+            candidates.extend(fallback_candidates)
+            if fallback_candidates:
+                fallback = min(candidates, key=lambda candidate: float(candidate.fun))
+                refined = minimize(
+                    objective,
+                    fallback.x,
+                    method="L-BFGS-B",
+                    bounds=bounds,
+                    options={"maxiter": maxiter, "ftol": 1e-10, "gtol": 1e-6},
+                )
+                if _valid_optimizer_result(refined):
+                    candidates.append(refined)
+    if not candidates:
+        messages = "; ".join(
+            str(result.message) for result in [first, *fallback_results]
+        )
+        raise RuntimeError("{} optimization failed: {}".format(label, messages))
+    return min(candidates, key=lambda candidate: float(candidate.fun))
+
+
 def _normalize_covariance(
     matrix: np.ndarray, size: int, label: str, *, allow_semidefinite: bool = False
 ) -> np.ndarray:
@@ -185,13 +446,12 @@ def _multinomial_terms(
     )
     gradient = totals[:, None] * probabilities[:, :-1] - counts[:, :-1]
     dimension = linear.shape[1]
-    weights = np.zeros((len(linear) * dimension,) * 2, dtype=float)
+    weights = np.empty((len(linear), dimension, dimension), dtype=float)
     for row, (total, probability) in enumerate(
         zip(totals, probabilities[:, :-1], strict=True)
     ):
         block = total * (np.diag(probability) - np.outer(probability, probability))
-        start = row * dimension
-        weights[start : start + dimension, start : start + dimension] = block
+        weights[row] = block
     return log_likelihood, gradient.reshape(-1), weights
 
 
@@ -226,7 +486,202 @@ def _ordinal_terms(
     )
     curvature = np.maximum(curvature, 1e-9)
     log_likelihood = float(np.sum(counts * np.log(probabilities)))
-    return log_likelihood, gradient, np.diag(curvature)
+    return log_likelihood, gradient, curvature
+
+
+def _dense_weight_matrix(weights: np.ndarray) -> np.ndarray:
+    if weights.ndim == 1:
+        return np.diag(weights)
+    dimension = weights.shape[1]
+    matrix = np.zeros((len(weights) * dimension,) * 2, dtype=float)
+    for row, block in enumerate(weights):
+        start = row * dimension
+        matrix[start : start + dimension, start : start + dimension] = block
+    return matrix
+
+
+def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
+    if weights.ndim == 1:
+        return sparse.diags(weights, format="csr")
+    n_blocks, dimension, _ = weights.shape
+    block_offsets = np.arange(n_blocks, dtype=int) * dimension
+    local_rows = np.repeat(np.arange(dimension, dtype=int), dimension)
+    local_columns = np.tile(np.arange(dimension, dtype=int), dimension)
+    rows = (block_offsets[:, None] + local_rows[None, :]).reshape(-1)
+    columns = (block_offsets[:, None] + local_columns[None, :]).reshape(-1)
+    matrix = sparse.csr_matrix(
+        (weights.reshape(-1), (rows, columns)),
+        shape=(n_blocks * dimension, n_blocks * dimension),
+    )
+    matrix.eliminate_zeros()
+    return matrix
+
+
+def _sparse_covariance_from_factory(factory, parameter):
+    builder = getattr(factory, "sparse_model", None)
+    return None if not callable(builder) else builder(parameter)
+
+
+def _sparse_glmm_latent_model(
+    phylogenetic_covariance,
+    parameter,
+    component_variances,
+    group_covariance,
+    random_dimension,
+    predictor_uncertainties=(),
+    predictor_columns=(),
+    coefficients=None,
+):
+    phylogenetic = _sparse_covariance_from_factory(phylogenetic_covariance, parameter)
+    if phylogenetic is None:
+        return None
+    components = {"phylogenetic": (component_variances["phylogenetic"], phylogenetic)}
+    if group_covariance is not None:
+        if not isinstance(group_covariance, SparseCovarianceModel):
+            return None
+        components["group"] = (component_variances["group"], group_covariance)
+    latent = combine_sparse_covariance_models(
+        components, random_dimension=random_dimension
+    )
+    if predictor_uncertainties:
+        if coefficients is None:
+            raise ValueError("Sparse predictor uncertainty requires coefficients.")
+        for index, (uncertainty, selected_columns) in enumerate(
+            zip(predictor_uncertainties, predictor_columns, strict=True)
+        ):
+            name = "predictor_uncertainty_{}".format(index)
+            loading = _structured_predictor_loading(
+                uncertainty, selected_columns, coefficients
+            )
+            if isinstance(uncertainty, GmrfPredictorUncertainty):
+                latent = append_latent_component(
+                    latent,
+                    name,
+                    uncertainty.model.precision,
+                    loading,
+                    uncertainty.model.logdet_covariance,
+                    uncertainty.model.precision_factor(),
+                )
+            else:
+                latent = append_identity_latent_components(latent, {name: loading})
+    return latent
+
+
+def _sparse_latent_mode(
+    fixed_linear,
+    loading,
+    precision,
+    likelihood_terms,
+    *,
+    label,
+):
+    mode = np.zeros(precision.shape[0], dtype=float)
+
+    def terms(candidate):
+        linear = fixed_linear + np.asarray(loading @ candidate).reshape(-1)
+        return likelihood_terms(linear)
+
+    def state(candidate):
+        log_likelihood, likelihood_gradient, weights = terms(candidate)
+        gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
+        gradient += precision @ candidate
+        weight_matrix = _sparse_weight_matrix(weights)
+        hessian = precision + loading.T @ weight_matrix @ loading
+        if weights.ndim == 1:
+            likelihood_hessian_psd = bool(np.all(weights >= -1e-12))
+        else:
+            likelihood_hessian_psd = all(
+                float(np.min(np.linalg.eigvalsh((block + block.T) / 2.0))) >= -1e-12
+                for block in weights
+            )
+        factor = (
+            factor_sparse_nonsingular(hessian)
+            if likelihood_hessian_psd
+            else factor_sparse_positive_definite(hessian)
+        )
+        value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
+        return value, gradient, weights, factor
+
+    converged = False
+    for _iteration in range(80):
+        value, gradient, _weights, factor = state(mode)
+        if not np.isfinite(gradient).all():
+            break
+        if float(np.max(np.abs(gradient))) < 1e-7:
+            converged = True
+            break
+        step = factor.solve(gradient)
+        accepted = False
+        step_scale = 1.0
+        for _backtrack in range(24):
+            candidate = mode - step_scale * step
+            candidate_log_likelihood, _, _ = terms(candidate)
+            candidate_value = -candidate_log_likelihood + 0.5 * float(
+                candidate @ (precision @ candidate)
+            )
+            if np.isfinite(candidate_value) and candidate_value <= value:
+                mode = candidate
+                accepted = True
+                break
+            step_scale *= 0.5
+        if not accepted:
+            break
+        if float(np.max(np.abs(step_scale * step))) < 1e-8:
+            converged = True
+            break
+    if not converged:
+
+        def value_and_gradient(candidate):
+            log_likelihood, likelihood_gradient, _weights = terms(candidate)
+            gradient = np.asarray(loading.T @ likelihood_gradient).reshape(-1)
+            gradient += precision @ candidate
+            value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
+            return value, gradient
+
+        fallback = minimize(
+            value_and_gradient,
+            mode,
+            method="L-BFGS-B",
+            jac=True,
+            options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-7},
+        )
+        if not _valid_optimizer_result(fallback):
+            raise RuntimeError(
+                "{} random-effect mode optimization failed: {}".format(
+                    label, fallback.message
+                )
+            )
+        mode = np.asarray(fallback.x, dtype=float)
+    value, gradient, weights, factor = state(mode)
+    if not np.isfinite(value) or float(np.max(np.abs(gradient))) >= 1e-5:
+        raise RuntimeError("{} random-effect mode did not converge.".format(label))
+    return mode, value, weights, factor
+
+
+def _sparse_marginal_coefficient_covariance(design, weights, loading, posterior_factor):
+    weight_matrix = _sparse_weight_matrix(weights)
+    weighted_design = weight_matrix @ design
+    joint_fixed = design.T @ weighted_design
+    fixed_random = np.asarray(design.T @ weight_matrix @ loading)
+    adjustment = fixed_random @ posterior_factor.solve(fixed_random.T)
+    information = np.asarray(joint_fixed - adjustment, dtype=float)
+    information = (information + information.T) / 2.0
+    return np.linalg.pinv(information, hermitian=True)
+
+
+def _sparse_component_modes(
+    latent: SparseLatentModel,
+    state: np.ndarray,
+    n_tips: int,
+    random_dimension: int,
+    component_names,
+):
+    modes = {}
+    for name in component_names:
+        selected = latent.component_slices[name]
+        values = latent.component_loadings[name] @ state[selected]
+        modes[name] = np.asarray(values).reshape(n_tips, random_dimension)
+    return modes
 
 
 def _random_mode(
@@ -252,12 +707,20 @@ def _random_mode(
             counts, fixed_linear + candidate.reshape(len(counts), dimension)
         )
 
-    objective = float("inf")
+    converged = False
     for _iteration in range(80):
         log_likelihood, likelihood_gradient, weights = terms(mode)
         gradient = likelihood_gradient + precision @ mode
-        hessian = weights + precision
-        cholesky = _positive_definite_cholesky(hessian)
+        if not np.isfinite(gradient).all():
+            break
+        if float(np.max(np.abs(gradient))) < 1e-7:
+            converged = True
+            break
+        hessian = _dense_weight_matrix(weights) + precision
+        try:
+            cholesky = _positive_definite_cholesky(hessian)
+        except np.linalg.LinAlgError:
+            break
         step = np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, gradient))
         current = -log_likelihood + 0.5 * float(mode @ precision @ mode)
         step_scale = 1.0
@@ -270,17 +733,51 @@ def _random_mode(
             )
             if np.isfinite(candidate_objective) and candidate_objective <= current:
                 mode = candidate
-                objective = candidate_objective
                 accepted = True
                 break
             step_scale *= 0.5
         if not accepted:
-            objective = current
             break
         if float(np.max(np.abs(step_scale * step))) < 1e-8:
+            converged = True
             break
+    if converged:
+        _log_likelihood, likelihood_gradient, _weights = terms(mode)
+        converged = bool(
+            np.isfinite(likelihood_gradient).all()
+            and float(np.max(np.abs(likelihood_gradient + precision @ mode))) < 1e-5
+        )
+    if not converged:
+
+        def value_and_gradient(candidate: np.ndarray):
+            log_likelihood, likelihood_gradient, _weights = terms(candidate)
+            value = -log_likelihood + 0.5 * float(candidate @ precision @ candidate)
+            gradient = likelihood_gradient + precision @ candidate
+            return value, gradient
+
+        fallback = minimize(
+            value_and_gradient,
+            mode,
+            method="L-BFGS-B",
+            jac=True,
+            options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-7},
+        )
+        if (
+            not fallback.success
+            or not np.isfinite(fallback.fun)
+            or float(fallback.fun) >= 1e99
+        ):
+            raise RuntimeError(
+                "Categorical random-effect mode optimization failed: {}".format(
+                    fallback.message
+                )
+            )
+        mode = np.asarray(fallback.x, dtype=float)
     log_likelihood, _, weights = terms(mode)
     objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
+    _positive_definite_cholesky(_dense_weight_matrix(weights) + precision)
+    if not np.isfinite(objective):
+        raise RuntimeError("Categorical random-effect mode is non-finite.")
     return mode, objective, weights
 
 
@@ -324,6 +821,24 @@ def _project_predictor_uncertainty(
     if len(uncertainties) != len(columns):
         raise ValueError("Predictor uncertainty and coefficient-column counts differ.")
     for uncertainty, selected_columns in zip(uncertainties, columns, strict=True):
+        if isinstance(
+            uncertainty,
+            (
+                ContinuousPredictorUncertainty,
+                GmrfPredictorUncertainty,
+                GroupedPredictorUncertainty,
+                JointPredictorUncertainty,
+            ),
+        ):
+            loading = _structured_predictor_loading(
+                uncertainty, selected_columns, coefficients
+            )
+            if isinstance(uncertainty, GmrfPredictorUncertainty):
+                factor = factor_sparse_positive_definite(uncertainty.model.precision)
+                projected += np.asarray(loading @ factor.solve(loading.T.toarray()))
+            else:
+                projected += np.asarray((loading @ loading.T).toarray())
+            continue
         covariance = np.asarray(uncertainty, dtype=float)
         if isinstance(selected_columns, int):
             if covariance.shape != (n_observations, n_observations):
@@ -359,6 +874,43 @@ def _project_predictor_uncertainty(
                     second_start : second_start + dimension,
                 ] += block
     return (projected + projected.T) / 2.0
+
+
+def _structured_predictor_loading(uncertainty, selected_columns, coefficients):
+    if isinstance(uncertainty, ContinuousPredictorUncertainty):
+        if not isinstance(selected_columns, int):
+            raise ValueError("Continuous predictor uncertainty requires one column.")
+        return continuous_predictor_loading(uncertainty, coefficients[selected_columns])
+    if isinstance(uncertainty, GmrfPredictorUncertainty):
+        if not isinstance(selected_columns, int):
+            raise ValueError("GMRF predictor uncertainty requires one column.")
+        return gmrf_predictor_loading(uncertainty, coefficients[selected_columns])
+    if isinstance(uncertainty, GroupedPredictorUncertainty):
+        if isinstance(selected_columns, int):
+            raise ValueError("Grouped predictor uncertainty requires column indices.")
+        selected = np.asarray(tuple(selected_columns), dtype=int)
+        return grouped_predictor_loading(uncertainty, coefficients[selected])
+    if isinstance(uncertainty, JointPredictorUncertainty):
+        if isinstance(selected_columns, int):
+            raise ValueError("Joint predictor uncertainty requires column indices.")
+        selected = np.asarray(tuple(selected_columns), dtype=int)
+        return joint_predictor_loading(uncertainty, coefficients[selected])
+    raise TypeError("Unsupported structured predictor uncertainty.")
+
+
+def _sparse_predictor_uncertainties(uncertainties):
+    return all(
+        isinstance(
+            uncertainty,
+            (
+                ContinuousPredictorUncertainty,
+                GmrfPredictorUncertainty,
+                GroupedPredictorUncertainty,
+                JointPredictorUncertainty,
+            ),
+        )
+        for uncertainty in uncertainties
+    )
 
 
 def _coefficient_penalty_value(
@@ -415,8 +967,26 @@ def _count_log_pmf(
 
 
 def _count_log_likelihood(values, linear, family, dispersion, zero_probability, offset):
-    means = np.exp(np.clip(linear + offset, -30.0, 30.0))
-    log_pmf, log_zero = _count_log_pmf(values, means, family, dispersion)
+    log_means = linear + offset
+    with np.errstate(over="ignore", invalid="ignore"):
+        means = np.exp(log_means)
+    if "negative-binomial" not in family:
+        log_pmf = values * log_means - means - gammaln(values + 1.0)
+        log_zero = -means
+    else:
+        if dispersion is None or dispersion <= 0.0:
+            raise ValueError("Negative-binomial dispersion must be positive.")
+        size = 1.0 / dispersion
+        log_size = math.log(size)
+        log_denominator = np.logaddexp(log_size, log_means)
+        log_pmf = (
+            gammaln(values + size)
+            - gammaln(size)
+            - gammaln(values + 1.0)
+            + size * (log_size - log_denominator)
+            + values * (log_means - log_denominator)
+        )
+        log_zero = size * (log_size - log_denominator)
     if family in {"poisson", "negative-binomial"}:
         return log_pmf
     if zero_probability is None or not 0.0 < zero_probability < 1.0:
@@ -441,14 +1011,15 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
 def _gamma_log_likelihood(values, linear, dispersion):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("Gamma shape must be positive.")
-    means = np.exp(np.clip(linear, -30.0, 30.0))
-    return (
-        dispersion * np.log(dispersion)
-        - gammaln(dispersion)
-        + (dispersion - 1.0) * np.log(values)
-        - dispersion * np.log(means)
-        - dispersion * values / means
-    )
+    with np.errstate(over="ignore", invalid="ignore"):
+        inverse_means = np.exp(-linear)
+        return (
+            dispersion * np.log(dispersion)
+            - gammaln(dispersion)
+            + (dispersion - 1.0) * np.log(values)
+            - dispersion * linear
+            - dispersion * values * inverse_means
+        )
 
 
 def _lognormal_log_likelihood(values, linear, dispersion):
@@ -513,10 +1084,33 @@ def _censored_gaussian_log_likelihood(
     result[left] = log_ndtr((upper[left] - linear[left]) / dispersion)
     result[right] = log_ndtr((linear[right] - lower[right]) / dispersion)
     if np.any(interval):
-        upper_log_cdf = log_ndtr((upper[interval] - linear[interval]) / dispersion)
-        lower_log_cdf = log_ndtr((lower[interval] - linear[interval]) / dispersion)
-        ratio = np.exp(np.minimum(lower_log_cdf - upper_log_cdf, 0.0))
-        result[interval] = upper_log_cdf + np.log1p(-ratio)
+        standardized_lower = (lower[interval] - linear[interval]) / dispersion
+        standardized_upper = (upper[interval] - linear[interval]) / dispersion
+        interval_result = np.empty(len(standardized_lower), dtype=float)
+        negative = standardized_upper <= 0.0
+        positive = standardized_lower >= 0.0
+        central = ~(negative | positive)
+
+        def log_difference(larger: np.ndarray, smaller: np.ndarray) -> np.ndarray:
+            ratio = np.exp(np.minimum(smaller - larger, 0.0))
+            return larger + np.log1p(-ratio)
+
+        if np.any(negative):
+            interval_result[negative] = log_difference(
+                log_ndtr(standardized_upper[negative]),
+                log_ndtr(standardized_lower[negative]),
+            )
+        if np.any(positive):
+            interval_result[positive] = log_difference(
+                log_ndtr(-standardized_lower[positive]),
+                log_ndtr(-standardized_upper[positive]),
+            )
+        if np.any(central):
+            interval_result[central] = log_difference(
+                log_ndtr(standardized_upper[central]),
+                log_ndtr(standardized_lower[central]),
+            )
+        result[interval] = interval_result
     return result
 
 
@@ -559,29 +1153,134 @@ def _scalar_log_likelihood_contributions(
 
 
 def _poisson_scalar_terms(values, linear, offset):
-    means = np.exp(np.clip(linear + offset, -30.0, 30.0))
-    return means - values, np.diag(means)
+    with np.errstate(over="ignore"):
+        means = np.exp(linear + offset)
+    return means - values, means
 
 
 def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     assert dispersion is not None
-    means = np.exp(np.clip(linear + offset, -30.0, 30.0))
     size = 1.0 / dispersion
-    gradient = size * (means - values) / (size + means)
-    curvature = size * means * (size + values) / (size + means) ** 2
-    return gradient, np.diag(curvature)
+    log_means = linear + offset
+    log_denominator = np.logaddexp(math.log(size), log_means)
+    mean_fraction = expit(log_means - math.log(size))
+    inverse_denominator = np.exp(-log_denominator)
+    gradient = size * (mean_fraction - values * inverse_denominator)
+    curvature = size * mean_fraction * (size + values) * inverse_denominator
+    return gradient, curvature
+
+
+def _zero_component_count_scalar_terms(
+    values,
+    linear,
+    offset,
+    dispersion,
+    zero_probability,
+    *,
+    hurdle,
+):
+    """Exact score and curvature for zero-modified Poisson/NB responses."""
+    assert zero_probability is not None
+    eta = np.asarray(linear + offset, dtype=float)
+    negative_binomial = dispersion is not None
+    if negative_binomial:
+        size = float(1.0 / dispersion)
+        fraction = expit(eta - math.log(size))
+        zero_log_probability = -size * np.logaddexp(0.0, eta - math.log(size))
+        zero_score = -size * fraction
+        zero_second = -size * fraction * (1.0 - fraction)
+        base_gradient, base_curvature = _negative_binomial_scalar_terms(
+            values, linear, offset, dispersion
+        )
+    else:
+        with np.errstate(over="ignore"):
+            means = np.exp(eta)
+        zero_log_probability = -means
+        zero_score = -means
+        zero_second = -means
+        base_gradient, base_curvature = _poisson_scalar_terms(values, linear, offset)
+
+    zeros = values == 0.0
+    gradient = np.asarray(base_gradient, dtype=float).copy()
+    curvature = np.asarray(base_curvature, dtype=float).copy()
+    if hurdle:
+        gradient[zeros] = 0.0
+        curvature[zeros] = 0.0
+        positive = ~zeros
+        if np.any(positive):
+            # If t = -p0'/(1-p0), the truncated likelihood has gradient
+            # base_gradient + t and curvature base_curvature + t'.  This form
+            # and extended precision avoid subtracting two order-one terms
+            # when the mean approaches zero.
+            selected_eta = np.asarray(eta[positive], dtype=np.longdouble)
+            with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+                selected_mean = np.exp(selected_eta)
+            if negative_binomial:
+                size_long = np.longdouble(1.0 / dispersion)
+                fraction = selected_mean / (size_long + selected_mean)
+                q = size_long * fraction
+                zero_exponent = size_long * np.log1p(selected_mean / size_long)
+                denominator = np.expm1(zero_exponent)
+                t = np.divide(
+                    q,
+                    denominator,
+                    out=np.ones_like(q),
+                    where=denominator != 0.0,
+                )
+                t_derivative = t * ((1.0 - fraction) - q - t)
+            else:
+                denominator = np.expm1(selected_mean)
+                t = np.divide(
+                    selected_mean,
+                    denominator,
+                    out=np.ones_like(selected_mean),
+                    where=denominator != 0.0,
+                )
+                t = np.where(np.isposinf(selected_mean), 0.0, t)
+                t_derivative = t * (1.0 - selected_mean - t)
+            selected_gradient = (
+                np.asarray(base_gradient[positive], dtype=np.longdouble) + t
+            )
+            selected_curvature = (
+                np.asarray(base_curvature[positive], dtype=np.longdouble) + t_derivative
+            )
+            gradient[positive] = np.asarray(selected_gradient, dtype=float)
+            curvature[positive] = np.asarray(selected_curvature, dtype=float)
+            # A zero-truncated Poisson likelihood is convex in its natural
+            # parameter.  Roundoff in the limiting eta -> -inf cancellation
+            # must not manufacture a negative Hessian.
+            if not negative_binomial:
+                curvature[positive] = np.maximum(curvature[positive], 0.0)
+        return gradient, curvature
+
+    log_odds = math.log1p(-zero_probability) - math.log(zero_probability)
+    selected_log_zero = zero_log_probability[zeros]
+    posterior_count_zero = expit(log_odds + selected_log_zero)
+    score_zero = zero_score[zeros]
+    second_zero = zero_second[zeros]
+    with np.errstate(over="ignore", invalid="ignore"):
+        selected_gradient = -posterior_count_zero * score_zero
+        selected_curvature = -(
+            posterior_count_zero * second_zero
+            + posterior_count_zero * (1.0 - posterior_count_zero) * score_zero**2
+        )
+    infinite_tail = np.isneginf(selected_log_zero)
+    gradient[zeros] = np.where(infinite_tail, 0.0, selected_gradient)
+    curvature[zeros] = np.where(infinite_tail, 0.0, selected_curvature)
+    return gradient, curvature
 
 
 def _gamma_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
-    means = np.exp(np.clip(linear, -30.0, 30.0))
-    return dispersion * (1.0 - values / means), np.diag(dispersion * values / means)
+    with np.errstate(over="ignore"):
+        scaled = values * np.exp(-linear)
+    return dispersion * (1.0 - scaled), dispersion * scaled
 
 
 def _lognormal_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
     variance = dispersion**2
-    return (linear - np.log(values)) / variance, np.eye(len(values)) / variance
+    return (linear - np.log(values)) / variance, np.full(len(values), 1.0 / variance)
 
 
 def _beta_scalar_terms(values, linear, dispersion):
@@ -597,17 +1296,44 @@ def _beta_scalar_terms(values, linear, dispersion):
     second = first * (1.0 - 2.0 * means)
     gradient = -likelihood_derivative * first
     curvature = -(likelihood_second * first**2 + likelihood_derivative * second)
-    return gradient, np.diag(np.maximum(curvature, 1e-8))
+    return gradient, curvature
+
+
+def _beta_binomial_scalar_terms(values, linear, dispersion, trials):
+    assert dispersion is not None
+    assert trials is not None
+    means = np.clip(expit(linear), 1e-10, 1.0 - 1e-10)
+    alpha = means * dispersion
+    beta = (1.0 - means) * dispersion
+    likelihood_mean_derivative = dispersion * (
+        digamma(values + alpha)
+        - digamma(alpha)
+        - digamma(trials - values + beta)
+        + digamma(beta)
+    )
+    likelihood_mean_second = dispersion**2 * (
+        polygamma(1, values + alpha)
+        - polygamma(1, alpha)
+        + polygamma(1, trials - values + beta)
+        - polygamma(1, beta)
+    )
+    first = means * (1.0 - means)
+    second = first * (1.0 - 2.0 * means)
+    gradient = -likelihood_mean_derivative * first
+    curvature = -(
+        likelihood_mean_second * first**2 + likelihood_mean_derivative * second
+    )
+    return gradient, curvature
 
 
 def _numerical_scalar_terms(contributions, current, linear):
     step = 1e-5 * np.maximum(1.0, np.abs(linear))
     plus = contributions(linear + step)
     minus = contributions(linear - step)
-    gradient = -(plus - minus) / (2.0 * step)
-    curvature = -(plus - 2.0 * current + minus) / (step**2)
-    curvature = np.maximum(curvature, 1e-8)
-    return gradient, np.diag(curvature)
+    with np.errstate(invalid="ignore", over="ignore", divide="ignore"):
+        gradient = -(plus - minus) / (2.0 * step)
+        curvature = -(plus - 2.0 * current + minus) / (step**2)
+    return gradient, curvature
 
 
 def _scalar_terms(
@@ -640,12 +1366,23 @@ def _scalar_terms(
         derivative = _poisson_scalar_terms(values, linear, offset)
     elif family == "negative-binomial":
         derivative = _negative_binomial_scalar_terms(values, linear, offset, dispersion)
+    elif family in ZERO_COMPONENT_FAMILIES:
+        derivative = _zero_component_count_scalar_terms(
+            values,
+            linear,
+            offset,
+            dispersion if "negative-binomial" in family else None,
+            zero_probability,
+            hurdle=family.startswith("hurdle"),
+        )
     elif family == "gamma":
         derivative = _gamma_scalar_terms(values, linear, dispersion)
     elif family == "lognormal":
         derivative = _lognormal_scalar_terms(values, linear, dispersion)
     elif family == "beta":
         derivative = _beta_scalar_terms(values, linear, dispersion)
+    elif family == "beta-binomial":
+        derivative = _beta_binomial_scalar_terms(values, linear, dispersion, trials)
     else:
         derivative = _numerical_scalar_terms(contributions, current, linear)
     gradient, curvature = derivative
@@ -903,9 +1640,10 @@ def _marginal_coefficient_covariance(
     precision: np.ndarray,
 ) -> np.ndarray:
     expanded_design = np.kron(design, np.eye(random_dimension))
-    joint_fixed = expanded_design.T @ weights @ expanded_design
-    fixed_random = expanded_design.T @ weights
-    posterior_cholesky = _positive_definite_cholesky(weights + precision)
+    weight_matrix = _dense_weight_matrix(weights)
+    joint_fixed = expanded_design.T @ weight_matrix @ expanded_design
+    fixed_random = expanded_design.T @ weight_matrix
+    posterior_cholesky = _positive_definite_cholesky(weight_matrix + precision)
     adjustment = fixed_random @ np.linalg.solve(
         posterior_cholesky.T,
         np.linalg.solve(posterior_cholesky, fixed_random.T),
@@ -923,25 +1661,54 @@ def _fixed_parameter_covariances(
     coefficient_covariance: np.ndarray,
     *,
     numerical: bool,
-) -> tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, str]:
     if not numerical:
-        return coefficient_covariance, np.empty((0, 0), dtype=float)
+        return coefficient_covariance, np.empty((0, 0), dtype=float), "conditional"
+    full_hessian = _finite_difference_hessian(objective, optimized_parameters)
+    full_hessian = (full_hessian + full_hessian.T) / 2.0
+    if not np.isfinite(full_hessian).all():
+        return (
+            np.full((coefficient_count, coefficient_count), np.nan),
+            np.full((threshold_count, threshold_count), np.nan),
+            "joint-information-non-finite",
+        )
     fixed_parameter_count = coefficient_count + threshold_count
-
-    def fixed_objective(fixed_parameters: np.ndarray) -> float:
-        parameters = optimized_parameters.copy()
-        parameters[:fixed_parameter_count] = fixed_parameters
-        return objective(parameters)
-
-    fixed_hessian = _finite_difference_hessian(
-        fixed_objective, optimized_parameters[:fixed_parameter_count]
+    fixed_information = full_hessian[:fixed_parameter_count, :fixed_parameter_count]
+    if fixed_parameter_count < len(full_hessian):
+        cross_information = full_hessian[:fixed_parameter_count, fixed_parameter_count:]
+        nuisance_information = full_hessian[
+            fixed_parameter_count:, fixed_parameter_count:
+        ]
+        fixed_information = (
+            fixed_information
+            - cross_information
+            @ np.linalg.pinv(nuisance_information, hermitian=True)
+            @ cross_information.T
+        )
+    fixed_information = (fixed_information + fixed_information.T) / 2.0
+    eigenvalues = np.linalg.eigvalsh(fixed_information)
+    tolerance = (
+        np.finfo(float).eps
+        * max(1.0, float(np.max(np.abs(eigenvalues))))
+        * max(1, fixed_parameter_count)
+        * 1000.0
     )
-    fixed_covariance = np.linalg.pinv(fixed_hessian, hermitian=True)
+    if float(np.min(eigenvalues)) <= tolerance:
+        return (
+            np.full((coefficient_count, coefficient_count), np.nan),
+            np.full((threshold_count, threshold_count), np.nan),
+            "nuisance-information-singular",
+        )
+    fixed_covariance = np.linalg.inv(fixed_information)
     if not np.isfinite(fixed_covariance).all():
-        return coefficient_covariance, np.empty((0, 0), dtype=float)
+        return (
+            np.full((coefficient_count, coefficient_count), np.nan),
+            np.full((threshold_count, threshold_count), np.nan),
+            "joint-covariance-non-finite",
+        )
     coefficient_covariance = fixed_covariance[:coefficient_count, :coefficient_count]
     if not threshold_count:
-        return coefficient_covariance, np.empty((0, 0), dtype=float)
+        return coefficient_covariance, np.empty((0, 0), dtype=float), "ok"
     threshold_parameter_covariance = fixed_covariance[
         coefficient_count:, coefficient_count:
     ]
@@ -953,6 +1720,7 @@ def _fixed_parameter_covariances(
     return (
         coefficient_covariance,
         jacobian @ threshold_parameter_covariance @ jacobian.T,
+        "ok",
     )
 
 
@@ -1033,12 +1801,12 @@ def _optimize_with_fixed_coefficient(
         parameters[free_indices] = free
         return objective(parameters)
 
-    result = minimize(
+    result = _robust_minimize(
         reduced_objective,
         optimized[free_indices],
-        method="L-BFGS-B",
         bounds=[bounds[index] for index in free_indices],
-        options={"maxiter": 500, "ftol": 1e-9, "gtol": 1e-6},
+        label="Fixed-coefficient profile",
+        maxiter=500,
     )
     return float(result.fun)
 
@@ -1138,8 +1906,13 @@ def _fitted_random_covariance(
     random_dimension = fit.coefficients.shape[1]
     tip_covariance = fit.component_variances["phylogenetic"] * phylogenetic_base
     if group_covariance is not None:
+        group_value = (
+            group_covariance.materialize()
+            if isinstance(group_covariance, SparseCovarianceModel)
+            else group_covariance
+        )
         group_base = _normalize_covariance(
-            group_covariance,
+            group_value,
             n_tips,
             "Grouping random-effect",
             allow_semidefinite=True,
@@ -1408,6 +2181,7 @@ def _bootstrap_coefficient_inference(
         coefficient_confidence_lower=lower,
         coefficient_confidence_upper=upper,
         coefficient_inference="parametric-bootstrap",
+        coefficient_covariance_status="ok",
     )
 
 
@@ -1440,18 +2214,27 @@ def _scalar_random_mode(
             censor_upper=censor_upper,
         )
 
+    converged = False
     for _iteration in range(80):
         log_likelihood, likelihood_gradient, weights = terms(mode)
         mapped_gradient = np.zeros(len(mode), dtype=float)
         np.add.at(mapped_gradient, observation_to_tip, likelihood_gradient)
         mapped_weights = np.bincount(
             observation_to_tip,
-            weights=np.diag(weights),
+            weights=weights,
             minlength=len(mode),
         )
         gradient = mapped_gradient + precision @ mode
+        if not np.isfinite(gradient).all():
+            break
+        if float(np.max(np.abs(gradient))) < 1e-7:
+            converged = True
+            break
         hessian = np.diag(mapped_weights) + precision
-        cholesky = _positive_definite_cholesky(hessian)
+        try:
+            cholesky = _positive_definite_cholesky(hessian)
+        except np.linalg.LinAlgError:
+            break
         step = np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, gradient))
         current = -log_likelihood + 0.5 * float(mode @ precision @ mode)
         accepted = False
@@ -1467,10 +2250,57 @@ def _scalar_random_mode(
                 accepted = True
                 break
             step_scale *= 0.5
-        if not accepted or float(np.max(np.abs(step_scale * step))) < 1e-8:
+        if not accepted:
             break
+        if float(np.max(np.abs(step_scale * step))) < 1e-8:
+            converged = True
+            break
+    if converged:
+        _log_likelihood, likelihood_gradient, _weights = terms(mode)
+        mapped_gradient = np.zeros(len(mode), dtype=float)
+        np.add.at(mapped_gradient, observation_to_tip, likelihood_gradient)
+        final_gradient = mapped_gradient + precision @ mode
+        converged = bool(
+            np.isfinite(final_gradient).all()
+            and float(np.max(np.abs(final_gradient))) < 1e-5
+        )
+    if not converged:
+
+        def value_and_gradient(candidate: np.ndarray):
+            log_likelihood, likelihood_gradient, _weights = terms(candidate)
+            mapped_gradient = np.zeros(len(candidate), dtype=float)
+            np.add.at(mapped_gradient, observation_to_tip, likelihood_gradient)
+            value = -log_likelihood + 0.5 * float(candidate @ precision @ candidate)
+            return value, mapped_gradient + precision @ candidate
+
+        fallback = minimize(
+            value_and_gradient,
+            mode,
+            method="L-BFGS-B",
+            jac=True,
+            options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-7},
+        )
+        if (
+            not fallback.success
+            or not np.isfinite(fallback.fun)
+            or float(fallback.fun) >= 1e99
+        ):
+            raise RuntimeError(
+                "Scalar random-effect mode optimization failed: {}".format(
+                    fallback.message
+                )
+            )
+        mode = np.asarray(fallback.x, dtype=float)
     log_likelihood, _, weights = terms(mode)
     objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
+    mapped_weights = np.bincount(
+        observation_to_tip,
+        weights=weights,
+        minlength=len(mode),
+    )
+    _positive_definite_cholesky(np.diag(mapped_weights) + precision)
+    if not np.isfinite(objective):
+        raise RuntimeError("Scalar random-effect mode is non-finite.")
     return mode, objective, weights
 
 
@@ -1480,7 +2310,7 @@ def _marginal_scalar_coefficient_covariance(
     weights: np.ndarray,
     precision: np.ndarray,
 ) -> np.ndarray:
-    diagonal_weights = np.diag(weights)
+    diagonal_weights = weights
     weighted_design = diagonal_weights[:, None] * design
     joint_fixed = design.T @ weighted_design
     fixed_random = np.zeros((design.shape[1], len(precision)), dtype=float)
@@ -1572,11 +2402,24 @@ def _fit_scalar_phylogenetic_glmm(
     coefficient_prior_sd: float | None,
     inference: str,
     confidence_level: float,
+    allow_large_dense: bool,
 ) -> PhylogeneticGlmmFit:
     tip_design = np.asarray(design, dtype=float)
     if tip_design.ndim != 2 or not np.isfinite(tip_design).all():
         raise ValueError("Phylogenetic GLMM design must be a finite matrix.")
     n_tips = len(response_values)
+    sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
+    sparse_capable = (
+        callable(sparse_builder)
+        and (
+            group_covariance is None
+            or isinstance(group_covariance, SparseCovarianceModel)
+        )
+        and _sparse_predictor_uncertainties(predictor_uncertainties)
+    )
+    use_sparse = _select_sparse_glmm_backend(
+        n_tips, 1, sparse_capable, allow_large_dense
+    )
     if n_tips != len(tip_design):
         raise ValueError("Response and design lengths differ.")
     (
@@ -1606,12 +2449,21 @@ def _fit_scalar_phylogenetic_glmm(
     group_base = None
     component_names = ["phylogenetic"]
     if group_covariance is not None:
-        group_base = _normalize_covariance(
-            group_covariance,
-            n_tips,
-            "Grouping random-effect",
-            allow_semidefinite=True,
-        )
+        if isinstance(group_covariance, SparseCovarianceModel):
+            if not use_sparse:
+                group_base = _normalize_covariance(
+                    group_covariance.materialize(),
+                    n_tips,
+                    "Grouping random-effect",
+                    allow_semidefinite=True,
+                )
+        else:
+            group_base = _normalize_covariance(
+                group_covariance,
+                n_tips,
+                "Grouping random-effect",
+                allow_semidefinite=True,
+            )
         component_names.append("group")
     coefficient_count = design.shape[1]
     estimate_dispersion = family in DISPERSION_FAMILIES and dispersion is None
@@ -1676,6 +2528,58 @@ def _fit_scalar_phylogenetic_glmm(
         coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
             parameters
         )
+        components = dict(zip(component_names, np.exp(log_variances), strict=True))
+        if use_sparse:
+            latent = _sparse_glmm_latent_model(
+                phylogenetic_covariance,
+                decoded,
+                components,
+                group_covariance,
+                1,
+                predictor_uncertainties,
+                predictor_columns,
+                coefficients,
+            )
+            if latent is None:
+                raise ValueError("Sparse phylogenetic covariance is unavailable.")
+            observation_loading = latent.loading[observation_to_tip]
+
+            def likelihood_terms(linear):
+                return _scalar_terms(
+                    values,
+                    linear,
+                    family=family,
+                    dispersion=fitted_dispersion,
+                    zero_probability=fitted_zero,
+                    offset=offsets,
+                    trials=trial_values,
+                    censor_lower=lower,
+                    censor_upper=upper,
+                )
+
+            mode, posterior_objective, weights, posterior_factor = _sparse_latent_mode(
+                (design @ coefficients)[:, 0],
+                observation_loading,
+                latent.precision,
+                likelihood_terms,
+                label="Scalar",
+            )
+            objective_value = (
+                posterior_objective
+                + 0.5 * latent.prior_logdet
+                + 0.5 * posterior_factor.logdet
+                + _coefficient_penalty_value(
+                    coefficients, coefficient_penalty, coefficient_prior_sd
+                )
+            )
+            return (
+                objective_value,
+                mode,
+                weights,
+                latent,
+                observation_loading,
+                posterior_factor,
+            )
         phylo_base = _normalize_covariance(
             phylogenetic_covariance(decoded), n_tips, "Phylogenetic"
         )
@@ -1708,7 +2612,7 @@ def _fit_scalar_phylogenetic_glmm(
         )
         mapped_weights = np.bincount(
             observation_to_tip,
-            weights=np.diag(weights),
+            weights=weights,
             minlength=n_tips,
         )
         hessian_cholesky = _positive_definite_cholesky(
@@ -1724,30 +2628,47 @@ def _fit_scalar_phylogenetic_glmm(
                 coefficients, coefficient_penalty, coefficient_prior_sd
             )
         )
-        return objective, mode, weights, precision, phylo_base
+        return objective, mode, weights, precision, phylo_base, None
 
     def objective(parameters: np.ndarray) -> float:
         try:
             value = float(state(parameters)[0])
-        except (ValueError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
+        except MemoryError as exc:
+            raise _dense_glmm_memory_error(n_tips, 1) from exc
+        except (
+            ValueError,
+            RuntimeError,
+            np.linalg.LinAlgError,
+            FloatingPointError,
+            OverflowError,
+        ):
             return 1e100
         return value if np.isfinite(value) else 1e100
 
-    result = minimize(
+    result = _robust_minimize(
         objective,
         initial,
-        method="L-BFGS-B",
         bounds=bounds,
-        options={"maxiter": 700, "ftol": 1e-10, "gtol": 1e-6},
+        label="Scalar phylogenetic GLMM",
+        force_multistart=family
+        in ZERO_COMPONENT_FAMILIES | {"beta-binomial", "censored-gaussian"},
     )
     coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
         result.x
     )
-    fitted_objective, mode, weights, precision, phylo_base = state(result.x)
-    approximate_covariance = _marginal_scalar_coefficient_covariance(
-        design, observation_to_tip, weights, precision
-    )
-    coefficient_covariance, _unused = _fixed_parameter_covariances(
+    fitted_state = state(result.x)
+    fitted_objective, mode, weights = fitted_state[:3]
+    if use_sparse:
+        latent, observation_loading, posterior_factor = fitted_state[3:]
+        approximate_covariance = _sparse_marginal_coefficient_covariance(
+            design, weights, observation_loading, posterior_factor
+        )
+    else:
+        precision, _phylo_base, _unused = fitted_state[3:]
+        approximate_covariance = _marginal_scalar_coefficient_covariance(
+            design, observation_to_tip, weights, precision
+        )
+    coefficient_covariance, _unused, covariance_status = _fixed_parameter_covariances(
         objective,
         result.x,
         coefficient_count,
@@ -1756,10 +2677,21 @@ def _fit_scalar_phylogenetic_glmm(
         numerical=True,
     )
     components = dict(zip(component_names, np.exp(log_variances), strict=True))
-    component_modes = _glmm_component_modes(
-        components, phylo_base, group_base, precision, mode, 1
+    if use_sparse:
+        tip_mode = np.asarray(latent.loading @ mode).reshape(n_tips, 1)
+        component_modes = _sparse_component_modes(
+            latent, mode, n_tips, 1, component_names
+        )
+    else:
+        tip_mode = mode.reshape(n_tips, 1)
+        component_modes = _glmm_component_modes(
+            components, _phylo_base, group_base, precision, mode, 1
+        )
+    condition = (
+        float(np.linalg.cond(coefficient_covariance))
+        if np.isfinite(coefficient_covariance).all()
+        else float("inf")
     )
-    condition = float(np.linalg.cond(coefficient_covariance))
     separation = bool(
         np.max(np.abs(coefficients)) > 10.0
         or not np.isfinite(condition)
@@ -1784,7 +2716,7 @@ def _fit_scalar_phylogenetic_glmm(
         coefficient_covariance=coefficient_covariance,
         thresholds=np.empty(0, dtype=float),
         threshold_covariance=np.empty((0, 0), dtype=float),
-        random_modes=mode.reshape(n_tips, 1),
+        random_modes=tip_mode,
         component_random_modes=component_modes,
         component_variances=components,
         evolution_parameter=decoded,
@@ -1795,7 +2727,7 @@ def _fit_scalar_phylogenetic_glmm(
             coefficient_penalty,
             coefficient_prior_sd,
         ),
-        optimizer_converged=bool(result.success),
+        optimizer_converged=True,
         optimizer_message=str(result.message),
         boundary_warning=_glmm_boundary_warning(
             log_variances, result.x, evolution_parameter_bounds
@@ -1810,6 +2742,7 @@ def _fit_scalar_phylogenetic_glmm(
         coefficient_confidence_lower=lower_limits,
         coefficient_confidence_upper=upper_limits,
         coefficient_inference=inference,
+        coefficient_covariance_status=covariance_status,
     )
 
 
@@ -1837,6 +2770,7 @@ class _GlmmCallOptions:
     confidence_level: float
     bootstrap_replicates: int
     seed: int
+    allow_large_dense: bool
 
 
 def _validate_fixed_dispersion(value: float | None) -> None:
@@ -1857,6 +2791,8 @@ def _validate_coefficient_prior(penalty: str, prior_sd: float | None) -> None:
 
 
 def _validate_glmm_call_options(options: _GlmmCallOptions) -> None:
+    if not isinstance(options.allow_large_dense, (bool, np.bool_)):
+        raise ValueError("allow_large_dense must be boolean.")
     count_families = {
         "poisson",
         "negative-binomial",
@@ -1952,6 +2888,7 @@ def _call_phylogenetic_glmm(
         confidence_level=options.confidence_level,
         bootstrap_replicates=options.bootstrap_replicates,
         seed=options.seed,
+        allow_large_dense=options.allow_large_dense,
     )
 
 
@@ -1989,15 +2926,46 @@ def _fit_parametric_bootstrap_glmm(
         response_values, design, phylogenetic_covariance, wald_options
     )
     design_array = np.asarray(design, dtype=float)
-    random_covariance = _fitted_random_covariance(
-        fit,
-        design_array,
-        phylogenetic_covariance,
-        options.group_covariance,
-        options.predictor_uncertainties,
-        options.predictor_columns,
+    sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
+    sparse_capable = (
+        callable(sparse_builder)
+        and (
+            options.group_covariance is None
+            or isinstance(options.group_covariance, SparseCovarianceModel)
+        )
+        and _sparse_predictor_uncertainties(options.predictor_uncertainties)
     )
-    random_cholesky = _positive_definite_cholesky(random_covariance)
+    sparse_sampler = None
+    random_cholesky = None
+    if sparse_capable:
+        latent_model = _sparse_glmm_latent_model(
+            phylogenetic_covariance,
+            fit.evolution_parameter,
+            fit.component_variances,
+            options.group_covariance,
+            fit.coefficients.shape[1],
+            options.predictor_uncertainties,
+            options.predictor_columns,
+            fit.coefficients,
+        )
+        if latent_model is None:
+            raise ValueError("Sparse phylogenetic covariance is unavailable.")
+        sparse_sampler = prepare_sparse_latent_sampler(latent_model)
+    else:
+        try:
+            random_covariance = _fitted_random_covariance(
+                fit,
+                design_array,
+                phylogenetic_covariance,
+                options.group_covariance,
+                options.predictor_uncertainties,
+                options.predictor_columns,
+            )
+            random_cholesky = _positive_definite_cholesky(random_covariance)
+        except MemoryError as exc:
+            raise _dense_glmm_memory_error(
+                len(design_array), fit.coefficients.shape[1]
+            ) from exc
     rng = np.random.default_rng(options.seed)
     samples: list[np.ndarray] = []
     maximum_attempts = max(
@@ -2011,7 +2979,11 @@ def _fit_parametric_bootstrap_glmm(
     )
     while len(samples) < options.bootstrap_replicates and attempts < maximum_attempts:
         attempts += 1
-        latent = random_cholesky @ rng.normal(size=len(random_cholesky))
+        if sparse_sampler is not None:
+            latent = sparse_sampler.sample(rng)
+        else:
+            assert random_cholesky is not None
+            latent = random_cholesky @ rng.normal(size=len(random_cholesky))
         simulated = _draw_bootstrap_responses(
             rng, response_values, design_array, fit, latent, options
         )
@@ -2020,6 +2992,8 @@ def _fit_parametric_bootstrap_glmm(
                 simulated, design_array, phylogenetic_covariance, refit_options
             )
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
+            continue
+        if not refit.optimizer_converged or not np.isfinite(refit.log_likelihood):
             continue
         coefficients = refit.coefficients.reshape(-1)
         if np.isfinite(coefficients).all():
@@ -2063,6 +3037,7 @@ def fit_phylogenetic_glmm(
     confidence_level: float = 0.95,
     bootstrap_replicates: int = 1000,
     seed: int = 1,
+    allow_large_dense: bool = False,
 ) -> PhylogeneticGlmmFit:
     """Fit a categorical, count, positive, or proportion phylogenetic GLMM."""
     options = _GlmmCallOptions(
@@ -2088,6 +3063,7 @@ def fit_phylogenetic_glmm(
         confidence_level=confidence_level,
         bootstrap_replicates=bootstrap_replicates,
         seed=seed,
+        allow_large_dense=allow_large_dense,
     )
     _validate_glmm_call_options(options)
     if inference == "parametric-bootstrap":
@@ -2117,24 +3093,60 @@ def fit_phylogenetic_glmm(
             coefficient_prior_sd=coefficient_prior_sd,
             inference=inference,
             confidence_level=confidence_level,
+            allow_large_dense=allow_large_dense,
         )
     values, design = _validate_glmm_inputs(response_values, design, family)
+    sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
+    sparse_capable = (
+        callable(sparse_builder)
+        and (
+            group_covariance is None
+            or isinstance(group_covariance, SparseCovarianceModel)
+        )
+        and _sparse_predictor_uncertainties(predictor_uncertainties)
+    )
     ordered_levels, resolved_reference = _resolve_glmm_levels(
         values, family, levels, reference
     )
     counts = response_count_matrix(values, ordered_levels)
     random_dimension = 1 if family == "ordinal" else len(ordered_levels) - 1
+    use_sparse = _select_sparse_glmm_backend(
+        len(design), random_dimension, sparse_capable, allow_large_dense
+    )
+    if (
+        use_sparse
+        and len(design) * random_dimension > MAX_SPARSE_GLMM_LINEAR_PREDICTORS
+    ):
+        warnings.warn(
+            "Sparse categorical phylogenetic GLMM fitting above {} tip-level "
+            "linear predictors is not yet included in the routine validation "
+            "suite (received {}); attempting the fit.".format(
+                MAX_SPARSE_GLMM_LINEAR_PREDICTORS,
+                len(design) * random_dimension,
+            ),
+            RuntimeWarning,
+            stacklevel=2,
+        )
     coefficient_count = design.shape[1] * random_dimension
     threshold_count = len(ordered_levels) - 1 if family == "ordinal" else 0
     component_names = ["phylogenetic"]
     group_base = None
     if group_covariance is not None:
-        group_base = _normalize_covariance(
-            group_covariance,
-            len(design),
-            "Grouping random-effect",
-            allow_semidefinite=True,
-        )
+        if isinstance(group_covariance, SparseCovarianceModel):
+            if not use_sparse:
+                group_base = _normalize_covariance(
+                    group_covariance.materialize(),
+                    len(design),
+                    "Grouping random-effect",
+                    allow_semidefinite=True,
+                )
+        else:
+            group_base = _normalize_covariance(
+                group_covariance,
+                len(design),
+                "Grouping random-effect",
+                allow_semidefinite=True,
+            )
         component_names.append("group")
     component_count = len(component_names)
     estimate_shape = evolution_parameter_bounds is not None
@@ -2172,6 +3184,57 @@ def fit_phylogenetic_glmm(
 
     def state(parameters: np.ndarray):
         coefficients, thresholds, log_variances, decoded_parameter = unpack(parameters)
+        components = dict(zip(component_names, np.exp(log_variances), strict=True))
+        if use_sparse:
+            latent = _sparse_glmm_latent_model(
+                phylogenetic_covariance,
+                decoded_parameter,
+                components,
+                group_covariance,
+                random_dimension,
+                predictor_uncertainties,
+                predictor_columns,
+                coefficients,
+            )
+            if latent is None:
+                raise ValueError("Sparse phylogenetic covariance is unavailable.")
+            fixed_linear = design @ coefficients
+            expanded_design = (
+                design
+                if family == "ordinal"
+                else np.kron(design, np.eye(random_dimension))
+            )
+
+            def likelihood_terms(linear):
+                if family == "ordinal":
+                    return _ordinal_terms(counts, linear, thresholds)
+                return _multinomial_terms(
+                    counts, linear.reshape(len(design), random_dimension)
+                )
+
+            mode, posterior_objective, weights, posterior_factor = _sparse_latent_mode(
+                fixed_linear.reshape(-1),
+                latent.loading,
+                latent.precision,
+                likelihood_terms,
+                label="Categorical",
+            )
+            objective_value = (
+                posterior_objective
+                + 0.5 * latent.prior_logdet
+                + 0.5 * posterior_factor.logdet
+                + _coefficient_penalty_value(
+                    coefficients, coefficient_penalty, coefficient_prior_sd
+                )
+            )
+            return (
+                objective_value,
+                mode,
+                weights,
+                latent,
+                expanded_design,
+                posterior_factor,
+            )
         phylo_base = _normalize_covariance(
             phylogenetic_covariance(decoded_parameter),
             len(design),
@@ -2207,7 +3270,7 @@ def fit_phylogenetic_glmm(
             family=family,
             thresholds=thresholds,
         )
-        posterior_hessian = weights + precision
+        posterior_hessian = _dense_weight_matrix(weights) + precision
         hessian_cholesky = _positive_definite_cholesky(posterior_hessian)
         logdet_random = 2.0 * float(np.sum(np.log(np.diag(covariance_cholesky))))
         logdet_hessian = 2.0 * float(np.sum(np.log(np.diag(hessian_cholesky))))
@@ -2219,53 +3282,83 @@ def fit_phylogenetic_glmm(
                 coefficients, coefficient_penalty, coefficient_prior_sd
             )
         )
-        return objective, mode, weights, precision, random_covariance
+        return objective, mode, weights, precision, random_covariance, None
 
     def objective(parameters: np.ndarray) -> float:
         try:
             value = float(state(parameters)[0])
-        except (ValueError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
+        except MemoryError as exc:
+            raise _dense_glmm_memory_error(len(design), random_dimension) from exc
+        except (
+            ValueError,
+            RuntimeError,
+            np.linalg.LinAlgError,
+            FloatingPointError,
+            OverflowError,
+        ):
             return 1e100
         return value if np.isfinite(value) else 1e100
 
-    result = minimize(
+    result = _robust_minimize(
         objective,
         initial,
-        method="L-BFGS-B",
         bounds=bounds,
-        options={"maxiter": 700, "ftol": 1e-10, "gtol": 1e-6},
+        label="Categorical phylogenetic GLMM",
     )
     coefficients, thresholds, log_variances, decoded_parameter = unpack(result.x)
-    fitted_objective, mode, weights, precision, _ = state(result.x)
-    coefficient_covariance = _marginal_coefficient_covariance(
-        design, random_dimension, weights, precision
-    )
-    coefficient_covariance, threshold_covariance = _fixed_parameter_covariances(
+    fitted_state = state(result.x)
+    fitted_objective, mode, weights = fitted_state[:3]
+    if use_sparse:
+        latent, expanded_design, posterior_factor = fitted_state[3:]
+        coefficient_covariance = _sparse_marginal_coefficient_covariance(
+            expanded_design, weights, latent.loading, posterior_factor
+        )
+    else:
+        precision, _random_covariance, _unused = fitted_state[3:]
+        coefficient_covariance = _marginal_coefficient_covariance(
+            design, random_dimension, weights, precision
+        )
+    (
+        coefficient_covariance,
+        threshold_covariance,
+        covariance_status,
+    ) = _fixed_parameter_covariances(
         objective,
         result.x,
         coefficient_count,
         threshold_count,
         coefficient_covariance,
-        numerical=bool(
-            threshold_count or predictor_uncertainties or coefficient_penalty != "none"
-        ),
+        numerical=True,
     )
     variance_values = np.exp(log_variances)
     components = dict(zip(component_names, variance_values, strict=True))
-    fitted_phylogenetic = _normalize_covariance(
-        phylogenetic_covariance(decoded_parameter),
-        len(design),
-        "Phylogenetic",
+    if use_sparse:
+        tip_mode = np.asarray(latent.loading @ mode).reshape(
+            len(design), random_dimension
+        )
+        component_random_modes = _sparse_component_modes(
+            latent, mode, len(design), random_dimension, component_names
+        )
+    else:
+        tip_mode = mode.reshape(len(design), random_dimension)
+        fitted_phylogenetic = _normalize_covariance(
+            phylogenetic_covariance(decoded_parameter),
+            len(design),
+            "Phylogenetic",
+        )
+        component_random_modes = _glmm_component_modes(
+            components,
+            fitted_phylogenetic,
+            group_base,
+            precision,
+            mode,
+            random_dimension,
+        )
+    condition = (
+        float(np.linalg.cond(coefficient_covariance))
+        if np.isfinite(coefficient_covariance).all()
+        else float("inf")
     )
-    component_random_modes = _glmm_component_modes(
-        components,
-        fitted_phylogenetic,
-        group_base,
-        precision,
-        mode,
-        random_dimension,
-    )
-    condition = float(np.linalg.cond(coefficient_covariance))
     separation = bool(
         np.max(np.abs(coefficients)) > 10.0
         or not np.isfinite(condition)
@@ -2291,7 +3384,7 @@ def fit_phylogenetic_glmm(
         coefficient_covariance=coefficient_covariance,
         thresholds=thresholds,
         threshold_covariance=threshold_covariance,
-        random_modes=mode.reshape(len(design), random_dimension),
+        random_modes=tip_mode,
         component_random_modes=component_random_modes,
         component_variances=components,
         evolution_parameter=decoded_parameter,
@@ -2302,7 +3395,7 @@ def fit_phylogenetic_glmm(
             coefficient_penalty,
             coefficient_prior_sd,
         ),
-        optimizer_converged=bool(result.success),
+        optimizer_converged=True,
         optimizer_message=str(result.message),
         boundary_warning=_glmm_boundary_warning(
             log_variances, result.x, evolution_parameter_bounds
@@ -2315,4 +3408,5 @@ def fit_phylogenetic_glmm(
         coefficient_confidence_lower=lower_limits,
         coefficient_confidence_upper=upper_limits,
         coefficient_inference=inference,
+        coefficient_covariance_status=covariance_status,
     )

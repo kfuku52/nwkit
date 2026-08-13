@@ -2584,9 +2584,17 @@ ppgls.add_argument(
     metavar="TRAIT=FAMILY,...",
     default=None,
     type=str,
-    help="Explicit response likelihood by trait. Supported families: {}.".format(
-        ", ".join(sorted(RESPONSE_FAMILIES))
-    ),
+    help=(
+        "Explicit response likelihood by trait. Tree-structured non-Gaussian "
+        "GLMMs use sparse Laplace calculations and are routinely validated "
+        "through 5,000 tips; larger fits are attempted with a warning. Dense/"
+        "custom covariance fallbacks above 500 tips require "
+        "'--allow-large-dense yes'. Sparse multinomial fits above 20,000 "
+        "tip-by-level linear predictors are likewise attempted with a warning. "
+        "Gaussian fits with general dense covariance accept at most 2,000 "
+        "observations; diagonal plus low-rank Gaussian fits remain scalable. "
+        "Supported families: {}."
+    ).format(", ".join(sorted(RESPONSE_FAMILIES))),
 )
 ppgls.add_argument(
     "--response-offset",
@@ -2667,7 +2675,7 @@ ppgls.add_argument(
     metavar="yes|no",
     default="no",
     type=strtobool,
-    help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance.",
+    help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance (tree-structured sparse fits support 5,000 tips and 20,000 tip-trait cells; dense fallback supports 2,000 observed cells).",
 )
 ppgls.add_argument(
     "--allow-missing-responses",
@@ -2721,7 +2729,7 @@ ppgls.add_argument(
     metavar="error|latent",
     default="error",
     choices=["error", "latent"],
-    help="default=%(default)s: Require one state per tip or infer a latent state distribution from discordant biological replicates.",
+    help="default=%(default)s: Require one state per tip or propagate the empirical category mean with sample-size-scaled moment uncertainty.",
 )
 ppgls_ordinary = ppgls.add_argument_group("conventional tip-level PGLS mode")
 ppgls_ordinary.add_argument(
@@ -3308,7 +3316,18 @@ ppgls.add_argument(
         "likelihood-ratio",
         "profile-likelihood",
     ],
-    help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference.",
+    help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
+)
+ppgls.add_argument(
+    "--allow-large-dense",
+    "--allow_large_dense",
+    dest="allow_large_dense",
+    metavar="yes|no",
+    default=False,
+    type=strtobool,
+    required=False,
+    action="store",
+    help="default=%(default)s: Explicitly permit large non-Gaussian fits that cannot use a sparse covariance representation; nwkit reports an estimated dense working-memory requirement before attempting them.",
 )
 ppgls.add_argument(
     "--bootstrap-replicates",
@@ -3337,7 +3356,7 @@ ppgls.add_argument(
     type=strtobool,
     required=False,
     action="store",
-    help="default=%(default)s: Use restricted maximum likelihood for Gaussian variance components.",
+    help="default=%(default)s: Use restricted maximum likelihood for Gaussian variance components; predictor-dependent errors-in-variables covariance is always fitted by ML.",
 )
 ppgls.add_argument(
     "--event-random-effect",
@@ -3364,6 +3383,85 @@ ppgls.add_argument(
     help="default=auto: Include partially pooled lineage-specific trait slopes when identifiable.",
 )
 ppgls.add_argument(
+    "--lineage-inference",
+    "--lineage_inference",
+    dest="lineage_inference",
+    metavar="none|likelihood-ratio|parametric-bootstrap",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["none", "likelihood-ratio", "parametric-bootstrap"],
+    help="default=none: Test lineage-slope heterogeneity and average-plus-lineage joint effects; bootstrap gives calibrated joint-null P-values.",
+)
+ppgls.add_argument(
+    "--lineage-leave-one-out",
+    "--lineage_leave_one_out",
+    dest="lineage_leave_one_out",
+    metavar="yes|no",
+    default=None,
+    type=strtobool,
+    required=False,
+    action="store",
+    help="default=no: Refit after removing each reconciled gene lineage and report coefficient sensitivity.",
+)
+ppgls.add_argument(
+    "--categorical-origin-diagnostics",
+    "--categorical_origin_diagnostics",
+    dest="categorical_origin_diagnostics",
+    metavar="none|stochastic-map",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    choices=["none", "stochastic-map"],
+    help="default=none: Estimate categorical predictor gains/losses on species-tree branches with an ER Mk stochastic map.",
+)
+ppgls.add_argument(
+    "--origin-map-replicates",
+    "--origin_map_replicates",
+    dest="origin_map_replicates",
+    metavar="INT",
+    default=None,
+    type=int,
+    required=False,
+    action="store",
+    help="default=200: Number of stochastic maps for categorical trait-origin diagnostics.",
+)
+ppgls.add_argument(
+    "--origin-map-threads",
+    "--origin_map_threads",
+    dest="origin_map_threads",
+    metavar="INT",
+    default=None,
+    type=int,
+    required=False,
+    action="store",
+    help="default=1: Parallel workers for categorical stochastic maps.",
+)
+ppgls.add_argument(
+    "--origin-min-posterior",
+    "--origin_min_posterior",
+    dest="origin_min_posterior",
+    metavar="FLOAT",
+    default=None,
+    type=float,
+    required=False,
+    action="store",
+    help="default=0.5: Minimum transition posterior frequency used for origin leave-one-out.",
+)
+ppgls.add_argument(
+    "--origin-leave-one-out",
+    "--origin_leave_one_out",
+    dest="origin_leave_one_out",
+    metavar="yes|no",
+    default=None,
+    type=strtobool,
+    required=False,
+    action="store",
+    help="default=no: Refit after omitting events descended from each credible mapped trait origin.",
+)
+ppgls.add_argument(
     "--random-effects-out",
     "--random_effects_out",
     dest="random_effects_out",
@@ -3372,7 +3470,29 @@ ppgls.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Optional TSV of species-event and lineage conditional modes.",
+    help="default=%(default)s: Optional TSV of species-event modes plus lineage deviations, total slopes, intervals, and reliability.",
+)
+ppgls.add_argument(
+    "--sensitivity-out",
+    "--sensitivity_out",
+    dest="sensitivity_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional TSV of lineage/origin leave-one-out diagnostics.",
+)
+ppgls.add_argument(
+    "--trait-origins-out",
+    "--trait_origins_out",
+    dest="trait_origins_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Optional TSV of categorical predictor transition-origin diagnostics.",
 )
 ppgls.set_defaults(handler=command_pgls)
 

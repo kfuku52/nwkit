@@ -8,12 +8,15 @@ import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
+from scipy import sparse
 
 from nwkit import pgls as pgls_mod
 from nwkit import pgls_pipeline as pgls_pipeline_mod
 from nwkit.cli import main
 from nwkit.contrast import build_contrast_table
 from nwkit.gaussian import (
+    NestedLowRankFactor,
+    SparseCovarianceFactor,
     factor_diagonal_low_rank_updates,
     factor_logdet,
     solve_factor,
@@ -21,6 +24,7 @@ from nwkit.gaussian import (
 from nwkit.pgls import _profile_covariance_fit, fit_reconciled_pgls
 from nwkit.pgls_pipeline import PglsPipelineArtifacts, write_pgls_bundle
 from nwkit.reconcile import build_reconciliation_table
+from nwkit.sparse_laplace import continuous_predictor_loading
 
 
 def _write_raw_pgls_inputs(tmp_path, *, biological_replicates=False):
@@ -125,6 +129,110 @@ def _sampling_covariance_table(response, matrix):
                 }
             )
     return pd.DataFrame(rows)
+
+
+def test_hierarchical_gaussian_components_remain_unmaterialized():
+    design = np.asarray([[1.0], [1.5], [2.0], [2.5], [3.0], [3.5]])
+    event_inverse = np.asarray([0, 0, 1, 1, 2, 2])
+    lineage_inverse = np.arange(6)
+    output = pgls_mod._build_covariance_components(
+        design,
+        np.ones(6),
+        np.zeros(6),
+        event_inverse,
+        np.asarray([2, 2, 2]),
+        lineage_inverse,
+        np.ones(6, dtype=int),
+        np.asarray(["e1", "e2", "e3"]),
+        np.asarray(["l1", "l2", "l3", "l4", "l5", "l6"]),
+        ["body_size"],
+        n_events=3,
+        num_parameters=1,
+        event_weighting="none",
+        model="hierarchical",
+        event_random_effect="auto",
+        lineage_random_slope="no",
+    )
+    fixed, components, factors, raw_components, _designs, use_event, _use_lineage = (
+        output
+    )
+    assert fixed.ndim == 1
+    assert components[0][1].ndim == 1
+    assert dict(components)["species_event_variance"] is None
+    assert factors["species_event_variance"].shape == (6, 3)
+    assert raw_components["species_event_variance"].ndim == 1
+    assert use_event
+
+
+def test_collinear_hierarchical_covariance_components_are_not_both_fitted():
+    design = np.ones((6, 1))
+    grouping = np.asarray([0, 0, 1, 1, 2, 2])
+    counts = np.asarray([2, 2, 2])
+    labels = np.asarray(["a", "b", "c"])
+    output = pgls_mod._build_covariance_components(
+        design,
+        np.ones(6),
+        np.zeros(6),
+        grouping,
+        counts,
+        grouping,
+        counts,
+        labels,
+        labels,
+        ["intercept"],
+        n_events=3,
+        num_parameters=1,
+        event_weighting="none",
+        model="hierarchical",
+        event_random_effect="auto",
+        lineage_random_slope="auto",
+    )
+    assert output[-2:] == (True, False)
+    with pytest.raises(ValueError, match="lineage random slope.*not identifiable"):
+        pgls_mod._build_covariance_components(
+            design,
+            np.ones(6),
+            np.zeros(6),
+            grouping,
+            counts,
+            grouping,
+            counts,
+            labels,
+            labels,
+            ["intercept"],
+            n_events=3,
+            num_parameters=1,
+            event_weighting="none",
+            model="hierarchical",
+            event_random_effect="yes",
+            lineage_random_slope="yes",
+        )
+
+
+def test_large_dense_gaussian_fit_is_rejected_before_optimization(monkeypatch):
+    monkeypatch.setattr(pgls_mod, "MAX_DENSE_GAUSSIAN_OBSERVATIONS", 3)
+    dense_covariance = np.eye(4)
+    dense_covariance[0, 1] = dense_covariance[1, 0] = 0.1
+    with pytest.raises(ValueError, match="Dense Gaussian covariance fitting"):
+        _profile_covariance_fit(
+            np.arange(4.0),
+            np.ones((4, 1)),
+            dense_covariance,
+            [("evolutionary_rate", np.ones(4))],
+            reml=False,
+        )
+
+
+def test_large_structured_gaussian_fit_remains_available(monkeypatch):
+    monkeypatch.setattr(pgls_mod, "MAX_DENSE_GAUSSIAN_OBSERVATIONS", 3)
+    result = _profile_covariance_fit(
+        np.asarray([1.0, 2.0, 4.0, 8.0]),
+        np.ones((4, 1)),
+        np.zeros(4),
+        [("evolutionary_rate", np.ones(4))],
+        reml=False,
+    )
+    assert np.isfinite(result["objective"])
 
 
 def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
@@ -262,6 +370,66 @@ def test_grouped_low_rank_factor_matches_dense_linear_algebra():
     assert factor_logdet(factor) == pytest.approx(
         np.linalg.slogdet(covariance)[1], rel=1e-12, abs=1e-12
     )
+
+
+def test_wide_sparse_loading_uses_observation_space_factorization():
+    diagonal = np.asarray([0.8, 1.2, 0.7, 1.5])
+    loading = sparse.csr_matrix(
+        np.asarray(
+            [
+                [0.2, 0.0, 0.1, 0.0, 0.3, 0.0],
+                [0.0, 0.4, 0.1, 0.0, 0.0, 0.2],
+                [0.3, 0.0, 0.0, 0.5, 0.0, 0.1],
+                [0.0, 0.2, 0.0, 0.1, 0.4, 0.0],
+            ]
+        )
+    )
+    covariance = np.diag(diagonal) + (loading @ loading.T).toarray()
+    factor = factor_diagonal_low_rank_updates(diagonal, [loading])
+    values = np.column_stack([np.arange(1.0, 5.0), np.linspace(-1.0, 1.0, 4)])
+
+    assert isinstance(factor, SparseCovarianceFactor)
+    np.testing.assert_allclose(
+        solve_factor(factor, values), np.linalg.solve(covariance, values)
+    )
+    assert factor_logdet(factor) == pytest.approx(np.linalg.slogdet(covariance)[1])
+
+
+def test_sparse_base_and_dense_update_use_nested_factorization():
+    size = 40
+    diagonal = np.linspace(0.8, 1.2, size)
+    groups = sparse.csr_matrix(
+        (
+            np.ones(size),
+            (np.arange(size), np.repeat(np.arange(8), 5)),
+        ),
+        shape=(size, 8),
+    )
+    dense_update = sparse.csr_matrix(
+        np.column_stack(
+            [
+                np.sin(np.arange(size) * 0.17),
+                np.cos(np.arange(size) * 0.11),
+                np.linspace(-0.5, 0.5, size),
+            ]
+        )
+    )
+    covariance = (
+        np.diag(diagonal)
+        + (groups @ groups.T).toarray()
+        + (dense_update @ dense_update.T).toarray()
+    )
+    factor = factor_diagonal_low_rank_updates(diagonal, [groups, dense_update])
+    values = np.column_stack([np.arange(1.0, size + 1.0), np.ones(size)])
+
+    assert isinstance(factor, NestedLowRankFactor)
+    np.testing.assert_allclose(
+        solve_factor(factor, values),
+        np.linalg.solve(covariance, values),
+        rtol=1e-11,
+        atol=1e-11,
+    )
+    assert factor_logdet(factor) == pytest.approx(np.linalg.slogdet(covariance)[1])
 
 
 def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
@@ -717,6 +885,78 @@ def test_hierarchical_model_partially_pools_lineage_slopes():
     assert result.iloc[0]["lineage_random_slope"] == "yes"
     assert set(random_effects["effect_type"]) == {"lineage_slope"}
     assert set(random_effects["group_id"]) == {"lineage1", "lineage2"}
+    assert np.isfinite(random_effects["conditional_standard_error"]).all()
+    assert np.isfinite(random_effects["total_standard_error"]).all()
+    assert (
+        random_effects["total_interval_lower"] <= random_effects["total_coefficient"]
+    ).all()
+    assert (
+        random_effects["total_coefficient"] <= random_effects["total_interval_upper"]
+    ).all()
+    assert random_effects["reliability"].between(0.0, 1.0).all()
+
+
+def test_lineage_inference_and_leave_one_out_separate_average_and_subset_effects():
+    rows = []
+    for event_index in range(1, 7):
+        for gene_index, slope in [(1, 1.5), (2, 2.5)]:
+            rows.append(
+                _response_row(
+                    event_index,
+                    slope * event_index + (0.05 if gene_index == 1 else -0.05),
+                    gene_index=gene_index,
+                )
+            )
+    result, sensitivity = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        _predictor_table(values=tuple(float(value) for value in range(1, 7))),
+        ["expression"],
+        ["body_size"],
+        event_random_effect="no",
+        lineage_random_slope="yes",
+        lineage_inference="likelihood-ratio",
+        lineage_leave_one_out=True,
+        return_sensitivity=True,
+    )
+
+    by_test = result.set_index("term_test")
+    assert by_test.loc["lineage-heterogeneity", "statistic"] > 0.0
+    assert 0.0 <= by_test.loc["lineage-heterogeneity", "p_value"] <= 1.0
+    assert (
+        by_test.loc["average-and-lineage-joint", "inference_status"]
+        == "parametric-bootstrap-required-for-joint-null"
+    )
+    assert set(sensitivity["group_id"]) == {"lineage1", "lineage2"}
+    assert set(sensitivity["inference_status"]) == {"ok"}
+    assert set(np.sign(sensitivity["coefficient_change"])) == {-1.0, 1.0}
+
+
+def test_lineage_joint_parametric_bootstrap_reports_calibrated_p_values():
+    rows = []
+    for event_index in range(1, 7):
+        for gene_index, slope in [(1, 1.5), (2, 2.5)]:
+            rows.append(
+                _response_row(
+                    event_index,
+                    slope * event_index + 0.01 * gene_index,
+                    gene_index=gene_index,
+                )
+            )
+    result = fit_reconciled_pgls(
+        pd.DataFrame(rows),
+        _predictor_table(values=tuple(float(value) for value in range(1, 7))),
+        ["expression"],
+        ["body_size"],
+        event_random_effect="no",
+        lineage_random_slope="yes",
+        lineage_inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        seed=4,
+    )
+
+    tests = result[result["term_test"].str.contains("lineage")]
+    assert set(tests["inference_status"]) == {"ok"}
+    assert tests["p_value"].between(0.0, 1.0).all()
 
 
 def test_hierarchical_model_estimates_shared_species_event_effects():
@@ -809,6 +1049,15 @@ def test_model_specific_options_are_validated_instead_of_ignored():
             ["body_size"],
             model="replicate-reml",
             event_random_effect="yes",
+        )
+    with pytest.raises(ValueError, match="requires lineage random slopes"):
+        fit_reconciled_pgls(
+            response,
+            _predictor_table(),
+            ["expression"],
+            ["body_size"],
+            lineage_random_slope="no",
+            lineage_inference="likelihood-ratio",
         )
     with pytest.raises(ValueError, match="sequences of names"):
         fit_reconciled_pgls(
@@ -964,6 +1213,93 @@ def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
 
 
 @pytest.mark.integration
+def test_categorical_origin_mapping_and_origin_leave_one_out_are_auditable(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    traits = pd.read_csv(species_traits, sep="\t")
+    traits["habitat"] = ["land", "land", "water", "water", "water"]
+    traits.to_csv(species_traits, sep="\t", index=False)
+    result_path = tmp_path / "origin-pgls.tsv"
+    origin_path = tmp_path / "origins.tsv"
+    sensitivity_path = tmp_path / "origin-sensitivity.tsv"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression",
+            "--predictors",
+            "habitat",
+            "--categorical-predictors",
+            "habitat",
+            "--tree-id",
+            "OGORIGIN",
+            "--categorical-origin-diagnostics",
+            "stochastic-map",
+            "--origin-map-replicates",
+            "10",
+            "--origin-min-posterior",
+            "0.1",
+            "--origin-leave-one-out",
+            "yes",
+            "--trait-origins-out",
+            str(origin_path),
+            "--sensitivity-out",
+            str(sensitivity_path),
+            "--outfile",
+            str(result_path),
+        ]
+    )
+
+    origins = pd.read_csv(origin_path, sep="\t")
+    assert set(origins["trait"]) == {"habitat"}
+    assert set(origins["mk_model"]) == {"ER"}
+    assert set(origins["from_state"]) == {"land", "water"}
+    assert origins["posterior_frequency"].between(0.0, 1.0).all()
+    sensitivity = pd.read_csv(sensitivity_path, sep="\t")
+    assert set(sensitivity["analysis_type"]) == {"trait-origin-leave-one-out"}
+    assert (sensitivity["n_omitted_gene_contrasts"] > 0).all()
+    assert set(sensitivity["term"]) == {"habitat[water]"}
+
+
+def test_origin_specific_options_require_stochastic_mapping_mode(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    with pytest.raises(ValueError, match="Categorical origin option.*require"):
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                str(gene_tree),
+                "--species-tree",
+                str(species_tree),
+                "--expression",
+                str(expression),
+                "--species-traits",
+                str(species_traits),
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--tree-id",
+                "OGINVALID",
+                "--origin-map-replicates",
+                "10",
+            ]
+        )
+
+
+@pytest.mark.integration
 def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_path):
     gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
         tmp_path
@@ -1012,6 +1348,10 @@ def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_
             "sample",
             "--categorical-replicate-policy",
             "latent",
+            "--categorical-origin-diagnostics",
+            "stochastic-map",
+            "--origin-map-replicates",
+            "10",
             "--tree-id",
             "OGLATENT",
             "--out-prefix",
@@ -1028,6 +1368,9 @@ def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_
     discordant = summary[summary["state"].isna()].iloc[0]
     assert "land:1" in discordant["state_counts"]
     assert "water:1" in discordant["state_counts"]
+    origins = pd.read_csv(tmp_path / "latent-category.trait-origins.tsv", sep="\t")
+    assert set(origins["trait"]) == {"habitat"}
+    assert origins["posterior_frequency"].between(0.0, 1.0).all()
 
 
 @pytest.mark.integration
@@ -1571,10 +1914,80 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
     assert set(summary["n_biological"]) == {2}
     assert set(response_summary["n_biological"]) == {2}
     assert set(result["measurement_error_model"]) == {"latent-predictor"}
+    assert set(result["reml"]) == {"no"}
+    assert set(result["covariance_estimator"]) == {"gaussian-eiv-ML"}
     assert result.iloc[0]["mean_sampling_variance"] > 0.0
     assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
     assert set(result["response_evolution_parameter_status"]) == {"estimated"}
     assert set(result["predictor_evolution_parameter_status"]) == {"estimated"}
+
+
+@pytest.mark.integration
+def test_reconciled_poisson_conditions_replicated_predictor_on_species_model(
+    tmp_path,
+):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path
+    )
+    expression_frame = pd.read_csv(expression, sep="\t").rename(
+        columns={"expression": "count"}
+    )
+    expression_frame["count"] = expression_frame["count"].astype(int)
+    expression_frame.to_csv(expression, sep="\t", index=False)
+    original = pd.read_csv(species_traits, sep="\t")
+    rows = []
+    for record in original.to_dict("records"):
+        for replicate, offset in (("r1", -0.5), ("r2", 0.5)):
+            rows.append(
+                {
+                    "leaf_name": record["leaf_name"],
+                    "sample": "{}_{}".format(record["leaf_name"], replicate),
+                    "body_size": float(record["body_size"]) + offset,
+                }
+            )
+    pd.DataFrame(rows).to_csv(species_traits, sep="\t", index=False)
+
+    coefficients = {}
+    for model in ("brownian", "independent"):
+        prefix = tmp_path / "tip-latent-{}".format(model)
+        main(
+            [
+                "pgls",
+                "--gene-tree",
+                str(gene_tree),
+                "--species-tree",
+                str(species_tree),
+                "--expression",
+                str(expression),
+                "--species-traits",
+                str(species_traits),
+                "--responses",
+                "count",
+                "--response-family",
+                "count=poisson",
+                "--predictors",
+                "body_size",
+                "--predictor-biological-id",
+                "sample",
+                "--species-evolution-model",
+                model,
+                "--tree-id",
+                "OGLATENT",
+                "--out-prefix",
+                str(prefix),
+            ]
+        )
+        result = pd.read_csv(str(prefix) + ".pgls.tsv", sep="\t")
+        coefficient = result[
+            (result["term"] == "body_size") & (result["term_test"] == "coefficient")
+        ].iloc[0]
+        coefficients[model] = float(coefficient["coefficient"])
+        assert coefficient["measurement_error_model"] == "latent-predictor"
+        assert coefficient["mean_predictor_sampling_variance"] > 0.0
+        assert coefficient["mean_latent_predictor_variance"] > 0.0
+        assert coefficient["predictor_evolutionary_rate"] > 0.0
+
+    assert coefficients["brownian"] != pytest.approx(coefficients["independent"])
 
 
 def test_precomputed_reconciled_pgls_accepts_predictor_sampling_covariance():
@@ -1602,6 +2015,50 @@ def test_precomputed_reconciled_pgls_accepts_predictor_sampling_covariance():
     assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
     assert result.iloc[0]["predictor_evolutionary_rate"] > 0.0
     assert result.iloc[0]["standard_error"] > 0.0
+
+
+def test_predictor_factor_loading_sidecar_matches_explicit_covariance():
+    response = pd.DataFrame(
+        [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
+    )
+    predictor = _predictor_table()
+    predictor["contrast_variance"] = [1.0, 1.5, 2.0]
+    diagonal = np.asarray([0.05, 0.10, 0.15])
+    explicit = _sampling_covariance_table(
+        predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
+        np.diag(diagonal),
+    )
+    factor_rows = []
+    for index, row in predictor.iterrows():
+        factor_rows.append(
+            {
+                "tree_id": row["tree_id"],
+                "trait": row["trait"],
+                "contrast_id_1": row["branch_clade_id"],
+                "contrast_id_2": "latent:{}".format(index),
+                "sampling_covariance": np.sqrt(diagonal[index]),
+                "covariance_representation": "factor-loading",
+            }
+        )
+    common = dict(
+        response_contrasts=response,
+        predictor_contrasts=predictor,
+        responses=["expression"],
+        predictors=["body_size"],
+        event_random_effect="no",
+        lineage_random_slope="no",
+    )
+    explicit_result = fit_reconciled_pgls(
+        **common, predictor_sampling_covariance=explicit
+    )
+    factor_result = fit_reconciled_pgls(
+        **common, predictor_sampling_covariance=pd.DataFrame(factor_rows)
+    )
+
+    np.testing.assert_allclose(
+        factor_result[["coefficient", "standard_error", "log_likelihood"]],
+        explicit_result[["coefficient", "standard_error", "log_likelihood"]],
+    )
 
 
 def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
@@ -1635,9 +2092,25 @@ def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
         ["body_size"],
         posteriors,
     )["body_size"]
+    loading = continuous_predictor_loading(uncertainty, np.asarray([1.0]))
+    covariance = (loading @ loading.T).toarray()
 
-    np.testing.assert_allclose(uncertainty[0], uncertainty[1])
-    np.testing.assert_allclose(uncertainty[:, 0], uncertainty[:, 1])
+    np.testing.assert_allclose(covariance[0], covariance[1])
+    np.testing.assert_allclose(covariance[:, 0], covariance[:, 1])
+
+
+def test_compatible_grouped_covariance_updates_are_combined_exactly():
+    diagonal = np.asarray([0.5, 0.7, 0.9, 1.1])
+    first = np.asarray([[1.0, 0.0], [2.0, 0.0], [0.0, 1.5], [0.0, 3.0]])
+    second = np.asarray([[0.5, 0.0], [1.0, 0.0], [0.0, -3.0], [0.0, -6.0]])
+    factor = factor_diagonal_low_rank_updates(diagonal, [first, second])
+    expected = np.diag(diagonal) + first @ first.T + second @ second.T
+    values = np.asarray([1.0, -2.0, 3.0, 0.5])
+
+    np.testing.assert_allclose(
+        solve_factor(factor, values), np.linalg.solve(expected, values)
+    )
+    assert factor_logdet(factor) == pytest.approx(np.linalg.slogdet(expected)[1])
 
 
 def test_zero_predictor_sampling_covariance_recovers_exact_reconciled_pgls():

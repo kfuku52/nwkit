@@ -3,6 +3,7 @@ from io import StringIO
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 
 from nwkit.clade_index import CladeIndex
 from nwkit.evolution import (
@@ -115,7 +116,10 @@ SAMPLING_COVARIANCE_COLUMNS = [
     "contrast_id_1",
     "contrast_id_2",
     "sampling_covariance",
+    "covariance_representation",
 ]
+
+MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS = 500
 
 
 def _parse_columns(value):
@@ -1023,6 +1027,7 @@ def calculate_contrasts(
     evolution_parameter=None,
     orientation_by_node=None,
     return_coefficients=False,
+    sparse_coefficients=False,
 ):
     if branch_length not in {"original", "unit"}:
         raise ValueError("Unsupported contrast branch-length mode.")
@@ -1052,9 +1057,19 @@ def calculate_contrasts(
         if node.is_leaf:
             estimate_by_node[node] = values_by_leaf[str(node.name)]
             variance_by_node[node] = _edge_variance(node, edge_variances)
-            coefficients = np.zeros(len(leaf_names), dtype=float)
-            coefficients[leaf_index[str(node.name)]] = 1.0
-            coefficient_by_node[node] = coefficients
+            if return_coefficients:
+                if sparse_coefficients:
+                    coefficients = sparse.csr_matrix(
+                        (
+                            [1.0],
+                            ([0], [leaf_index[str(node.name)]]),
+                        ),
+                        shape=(1, len(leaf_names)),
+                    )
+                else:
+                    coefficients = np.zeros(len(leaf_names), dtype=float)
+                    coefficients[leaf_index[str(node.name)]] = 1.0
+                coefficient_by_node[node] = coefficients
             continue
         numerator, denominator = orientation_by_node[node]
         numerator_variance = variance_by_node[numerator]
@@ -1079,13 +1094,14 @@ def calculate_contrasts(
         weight1, weight2 = _stable_ancestral_weights(
             numerator_variance, denominator_variance
         )
-        contrast_coefficients = (
-            coefficient_by_node[numerator] - coefficient_by_node[denominator]
-        )
-        ancestral_coefficients = (
-            weight1 * coefficient_by_node[numerator]
-            + weight2 * coefficient_by_node[denominator]
-        )
+        if return_coefficients:
+            contrast_coefficients = (
+                coefficient_by_node[numerator] - coefficient_by_node[denominator]
+            )
+            ancestral_coefficients = (
+                weight1 * coefficient_by_node[numerator]
+                + weight2 * coefficient_by_node[denominator]
+            )
         adjusted_variance = _stable_adjusted_variance(
             numerator_variance, denominator_variance
         )
@@ -1099,8 +1115,9 @@ def calculate_contrasts(
         )
         estimate_by_node[node] = ancestral_estimate
         variance_by_node[node] = node_variance
-        coefficient_by_node[node] = ancestral_coefficients
-        contrast_coefficient_by_node[node] = contrast_coefficients
+        if return_coefficients:
+            coefficient_by_node[node] = ancestral_coefficients
+            contrast_coefficient_by_node[node] = contrast_coefficients
         contrast_by_node[node] = {
             "raw_contrast": raw_contrast,
             "contrast_variance": contrast_variance,
@@ -1119,6 +1136,7 @@ def _sampling_covariance_table(
     sampling_covariance_by_trait,
     replicate_model_by_trait,
     tip_summary,
+    compact_sampling_covariance,
 ):
     covariance_rows = []
     table = table.copy()
@@ -1142,49 +1160,85 @@ def _sampling_covariance_table(
             str(table.loc[index, "branch_clade_id"]) for index in row_indices
         ]
         leaf_names = leaf_names_by_trait[trait]
-        coefficients = np.vstack(
-            [
-                coefficient_by_trait_and_clade[(trait, contrast_id)]
-                for contrast_id in contrast_ids
-            ]
+        coefficient_values = [
+            coefficient_by_trait_and_clade[(trait, contrast_id)]
+            for contrast_id in contrast_ids
+        ]
+        coefficients = (
+            sparse.vstack(coefficient_values, format="csr")
+            if any(sparse.issparse(value) for value in coefficient_values)
+            else np.vstack(coefficient_values)
         )
-        tip_covariance = sampling_covariance_by_trait[trait].reindex(
-            index=leaf_names, columns=leaf_names
-        )
-        if tip_covariance.isna().any(axis=None):
-            raise ValueError(
-                "Tip sampling covariance is incomplete for trait '{}'.".format(trait)
+        tip_covariance_value = sampling_covariance_by_trait[trait]
+        if isinstance(tip_covariance_value, pd.DataFrame):
+            tip_covariance = tip_covariance_value.reindex(
+                index=leaf_names, columns=leaf_names
             )
-        tip_covariance_array = tip_covariance.to_numpy(dtype=float)
-        contrast_covariance = coefficients @ tip_covariance_array @ coefficients.T
-        contrast_covariance = (contrast_covariance + contrast_covariance.T) / 2.0
-        if not np.isfinite(contrast_covariance).all():
-            raise ValueError("Contrast sampling covariance contains non-finite values.")
-        eigenvalues = np.linalg.eigvalsh(contrast_covariance)
-        tolerance = (
-            np.finfo(float).eps
-            * max(1.0, float(np.max(np.abs(contrast_covariance))))
-            * max(1, len(contrast_covariance))
-        )
-        if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
-            raise ValueError(
-                "Contrast sampling covariance is not positive semidefinite."
+            if tip_covariance.isna().any(axis=None):
+                raise ValueError(
+                    "Tip sampling covariance is incomplete for trait '{}'.".format(
+                        trait
+                    )
+                )
+            tip_covariance_array = tip_covariance.to_numpy(dtype=float)
+        else:
+            tip_covariance_array = np.asarray(tip_covariance_value, dtype=float)
+            if tip_covariance_array.shape != (len(leaf_names),):
+                raise ValueError("Tip sampling covariance diagonal is incomplete.")
+        diagonal_sampling = tip_covariance_array.ndim == 1
+        if diagonal_sampling:
+            contrast_factor = sparse.csr_matrix(coefficients).multiply(
+                np.sqrt(tip_covariance_array)[None, :]
             )
-        contrast_covariance[np.abs(contrast_covariance) < tolerance] = 0.0
+            sampling_diagonal = np.asarray(
+                contrast_factor.multiply(contrast_factor).sum(axis=1)
+            ).reshape(-1)
+            contrast_covariance = None
+        else:
+            dense_coefficients = (
+                coefficients.toarray()
+                if sparse.issparse(coefficients)
+                else coefficients
+            )
+            contrast_covariance = (
+                dense_coefficients @ tip_covariance_array @ dense_coefficients.T
+            )
+            contrast_covariance = (contrast_covariance + contrast_covariance.T) / 2.0
+            if not np.isfinite(contrast_covariance).all():
+                raise ValueError(
+                    "Contrast sampling covariance contains non-finite values."
+                )
+            eigenvalues = np.linalg.eigvalsh(contrast_covariance)
+            tolerance = (
+                np.finfo(float).eps
+                * max(1.0, float(np.max(np.abs(contrast_covariance))))
+                * max(1, len(contrast_covariance))
+            )
+            if eigenvalues.size and float(eigenvalues.min()) < -tolerance:
+                raise ValueError(
+                    "Contrast sampling covariance is not positive semidefinite."
+                )
+            contrast_covariance[np.abs(contrast_covariance) < tolerance] = 0.0
+            sampling_diagonal = np.diag(contrast_covariance)
         for position, row_index in enumerate(row_indices):
             coefficient = coefficients[position]
-            supported_leaves = [
-                leaf_names[index]
-                for index, value in enumerate(coefficient)
-                if abs(value) > np.finfo(float).eps
-            ]
+            if sparse.issparse(coefficient):
+                coefficient = coefficient.tocsr()
+                supported_indices = coefficient.indices[
+                    np.abs(coefficient.data) > np.finfo(float).eps
+                ]
+            else:
+                supported_indices = np.flatnonzero(
+                    np.abs(coefficient) > np.finfo(float).eps
+                )
+            supported_leaves = [leaf_names[index] for index in supported_indices]
             sample_sizes = [
                 n_by_trait_and_leaf[(trait, leaf)]
                 for leaf in supported_leaves
                 if (trait, leaf) in n_by_trait_and_leaf
             ]
             table.loc[row_index, "sampling_variance"] = float(
-                max(contrast_covariance[position, position], 0.0)
+                max(sampling_diagonal[position], 0.0)
             )
             table.loc[row_index, "evolutionary_variance"] = float(
                 table.loc[row_index, "contrast_variance"]
@@ -1193,17 +1247,54 @@ def _sampling_covariance_table(
             table.loc[row_index, "min_n_biological"] = (
                 min(sample_sizes) if sample_sizes else ""
             )
-        for row1, contrast_id_1 in enumerate(contrast_ids):
-            for row2 in range(row1, len(contrast_ids)):
+        if (
+            compact_sampling_covariance
+            and diagonal_sampling
+            and len(contrast_ids) > MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS
+        ):
+            coo = contrast_factor.tocoo()
+            represented_rows = set(coo.row)
+            for row, column, value in zip(coo.row, coo.col, coo.data, strict=True):
                 covariance_rows.append(
                     {
-                        "tree_id": str(table.loc[row_indices[row1], "tree_id"]),
+                        "tree_id": str(table.loc[row_indices[row], "tree_id"]),
                         "trait": trait,
-                        "contrast_id_1": contrast_id_1,
-                        "contrast_id_2": contrast_ids[row2],
-                        "sampling_covariance": float(contrast_covariance[row1, row2]),
+                        "contrast_id_1": contrast_ids[row],
+                        "contrast_id_2": "latent:{}".format(leaf_names[column]),
+                        "sampling_covariance": float(value),
+                        "covariance_representation": "factor-loading",
                     }
                 )
+            for row in sorted(set(range(len(contrast_ids))) - represented_rows):
+                covariance_rows.append(
+                    {
+                        "tree_id": str(table.loc[row_indices[row], "tree_id"]),
+                        "trait": trait,
+                        "contrast_id_1": contrast_ids[row],
+                        "contrast_id_2": "latent:zero",
+                        "sampling_covariance": 0.0,
+                        "covariance_representation": "factor-loading",
+                    }
+                )
+        else:
+            if contrast_covariance is None:
+                contrast_covariance = np.asarray(
+                    (contrast_factor @ contrast_factor.T).toarray()
+                )
+            for row1, contrast_id_1 in enumerate(contrast_ids):
+                for row2 in range(row1, len(contrast_ids)):
+                    covariance_rows.append(
+                        {
+                            "tree_id": str(table.loc[row_indices[row1], "tree_id"]),
+                            "trait": trait,
+                            "contrast_id_1": contrast_id_1,
+                            "contrast_id_2": contrast_ids[row2],
+                            "sampling_covariance": float(
+                                contrast_covariance[row1, row2]
+                            ),
+                            "covariance_representation": "covariance",
+                        }
+                    )
     return table, pd.DataFrame(covariance_rows, columns=SAMPLING_COVARIANCE_COLUMNS)
 
 
@@ -1222,6 +1313,7 @@ def build_contrast_table(
     replicate_model_by_trait=None,
     tip_summary=None,
     return_sampling_covariance=False,
+    compact_sampling_covariance=True,
     tree_option_name="--infile",
 ):
     if branch_length not in {"original", "unit"}:
@@ -1262,6 +1354,10 @@ def build_contrast_table(
             evolution_parameter=evolution_parameter,
             orientation_by_node=orientation_by_node,
             return_coefficients=sampling_covariance_by_trait is not None,
+            sparse_coefficients=(
+                sampling_covariance_by_trait is not None
+                and len(list(tree.leaves())) > MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS
+            ),
         )
         if sampling_covariance_by_trait is None:
             contrasts = contrast_result
@@ -1346,6 +1442,7 @@ def build_contrast_table(
             sampling_covariance_by_trait,
             replicate_model_by_trait,
             tip_summary,
+            compact_sampling_covariance,
         )
     if return_sampling_covariance:
         return table, covariance_table

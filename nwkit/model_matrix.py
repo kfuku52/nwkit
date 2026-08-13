@@ -8,7 +8,7 @@ import numpy as np
 
 @dataclass(frozen=True)
 class CategoricalObservation:
-    """Posterior probabilities for one latent categorical state."""
+    """Categorical replicate proportions and their biological sample size."""
 
     probabilities: Mapping[str, float]
     n_observations: int
@@ -615,6 +615,13 @@ def _encode_discrete_predictor(
         expected = probabilities @ contrast
         second_moment = contrast.T @ (probabilities[:, None] * contrast)
         covariance = second_moment - np.outer(expected, expected)
+        observation = values_by_sample[sample]
+        if isinstance(observation, CategoricalObservation):
+            if observation.n_observations <= 0:
+                raise ValueError(
+                    "Categorical biological replicate count must be positive."
+                )
+            covariance /= float(observation.n_observations)
         covariance_by_observation[sample_index] = (covariance + covariance.T) / 2.0
         uncertain = uncertain or bool(np.max(np.abs(covariance)) > 1e-15)
         for column, term_name in enumerate(term_names):

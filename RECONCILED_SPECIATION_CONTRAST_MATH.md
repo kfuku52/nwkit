@@ -129,7 +129,17 @@ M=LDL^\mathsf T
 $$
 
 である。NWKITは対角成分だけでなく、共有tipやbatch補正によって生じる非対角成分
-も保持する。
+も保持する。tip誤差が独立で
+$D=\operatorname{diag}(d_1,\ldots,d_n)$ のときは
+
+$$
+U=L\operatorname{diag}(\sqrt{d_1},\ldots,\sqrt{d_n}),
+\qquad M=UU^\mathsf T
+$$
+
+と因子のまま保持できる。NWKITはcontrast数が500を超える場合、この $U$ の
+非ゼロ要素を `covariance_representation=factor-loading` として出力し、PGLSでも
+$M$ を密行列化せずに用いる。これは近似や対角化ではなく、上式と同じ共分散である。
 
 ## 3. 遺伝子contrastと種形質contrastの対応
 
@@ -216,6 +226,13 @@ $$
 同じ種分化を通るパラログは同一の潜在値と共分散を共有するため、ここでも
 pseudoreplicateにはならない。説明変数にsampling covarianceがない場合は
 $M_{x,j}=0,\ \mathbf m_j=\hat{\mathbf x}_j,\ S_j=0$ となり、従来の式へ戻る。
+
+この条件付きcovarianceは $\beta_j$ に依存するため、標準的なREMLの導出条件を
+満たさない。したがって説明変数誤差を含むモデルはMLで当てはめる。カテゴリカル
+説明変数のbiological replicatesについては、factor coding後の一観測の共分散を
+$\Omega_i$、独立なreplicate数を $n_i$ として、平均coding値の共分散
+$\Omega_i/n_i$ を全cross-column項ごと伝播する。これは離散状態の全組合せを
+厳密に周辺化するものではなく、linear predictor上のGaussian moment近似である。
 
 ## 4. 同じ種分化を通る複数パラログ
 
@@ -411,3 +428,60 @@ nwkit contrast \
 
 この構成により、パラログごとの発現差を潰さずに保持しつつ、同じ種分化contrastを
 繰り返し割り当てたことによるpseudoreplicationを最終モデルで明示的に扱える。
+
+## 8. 種分化後に形質を獲得し、片方のパラログだけが応答する場合
+
+固定効果だけの式 $y_i=x_{e(i)}\beta+\epsilon_i$ は、同じ種分化イベントを通る
+すべてのパラログに共通の平均傾き $\beta$ を推定する。NWKITのhierarchical modelは
+これを
+
+$$
+y_i=x_{e(i)}\{\beta+b_{\ell(i)}\}+a_{e(i)}+\epsilon_i,
+\qquad b_\ell\sim N(0,\tau_{\mathrm{lineage}}^2)
+$$
+
+へ拡張する。$b_\ell$ は `lineage_clade_id` ごとの傾き偏差、$a_e$ は同じ
+`species_event_id` に共有される応答偏差である。したがって、古い重複で生じた
+copy 1だけが形質と同方向に発現変動しても、共通の $\beta$ へ完全に平均化せず、
+copy 1のtotal slope $\beta+b_1$ とcopy 2のtotal slope $\beta+b_2$ を別々に出せる。
+
+たとえば4個の独立な種イベントで $x=(-1,-1,1,1)$、copy 1の発現contrastが
+$y_1=(-2,-2,2,2)$、copy 2が $y_2=(0,0,0,0)$ なら、概念的には
+
+$$
+\hat\beta\approx1,\qquad
+\hat b_1\approx+1,\qquad
+\hat b_2\approx-1,
+$$
+
+ゆえにtotal slopeはcopy 1で約2、copy 2で約0となる。実際の推定値は進化分散、
+sampling covariance、event weightingと部分プールにより0へ縮小される。
+`random-effects.tsv` の `conditional_mode` が $\hat b_\ell$、
+`total_coefficient` が $\hat\beta+\hat b_\ell$、`reliability` がデータから
+得た系統別情報の強さを表す。区間は推定済み分散成分を条件とする
+empirical-Bayes区間なので、分散成分そのものの不確実性までは含めない。
+
+平均効果が0でも正負の系統別応答が相殺している可能性がある。このため
+`--lineage-inference` は次の2帰無仮説を分ける。
+
+$$
+H_{0,\mathrm{het}}:\tau_{\mathrm{lineage}}^2=0
+$$
+
+と、説明変数群 $g$ について
+
+$$
+H_{0,\mathrm{joint}}:\beta_g=0
+\quad\text{かつ}\quad
+\text{その群のlineage slopeを持たない}.
+$$
+
+前者だけなら分散境界の50:50混合カイ二乗近似を使用できる。後者は通常の
+カイ二乗分布にならないため、P-valueにはparametric bootstrapを使う。
+
+なお、この拡張でも形質獲得と発現変化の枝内の時間順序は直接推定しない。
+カテゴリカル形質についてはraw-input modeのMk stochastic mappingが各枝の
+`from_state -> to_state` posterior frequencyを推定し、その枝より下の種分化
+イベントをまとめて除くorigin leave-one-outを提供する。これは
+「その起源に依存して結論が出ているか」を調べる診断であり、発現変化の時刻を
+同定する因果モデルではない。

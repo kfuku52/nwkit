@@ -7,8 +7,10 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
+from scipy import sparse
 
 from nwkit.clade_index import LcaIndex
+from nwkit.sparse_laplace import SparseCovarianceModel
 from nwkit.util import read_input_text
 
 
@@ -18,6 +20,38 @@ class EvolutionModelSpec:
     parameter_name: str | None
     contrast_supported: bool = True
     branch_lengths_used: bool = True
+
+
+@dataclass(frozen=True)
+class EvolutionaryCovarianceFactory:
+    """Dense and sparse views of one tree-based evolutionary covariance."""
+
+    tree: Any
+    leaf_names: tuple[str, ...]
+    model: str = "brownian"
+    branch_length: str = "original"
+    custom_covariance: Any = None
+
+    def __call__(self, parameter: float | None) -> np.ndarray:
+        return build_evolutionary_covariance(
+            self.tree,
+            self.leaf_names,
+            model=self.model,
+            parameter=parameter,
+            branch_length=self.branch_length,
+            custom_covariance=self.custom_covariance,
+        )
+
+    def sparse_model(self, parameter: float | None) -> SparseCovarianceModel | None:
+        if self.model == "custom":
+            return None
+        return build_sparse_evolutionary_model(
+            self.tree,
+            self.leaf_names,
+            model=self.model,
+            parameter=parameter,
+            branch_length=self.branch_length,
+        )
 
 
 EVOLUTION_MODEL_SPECS = {
@@ -446,6 +480,180 @@ def build_evolutionary_covariance(
             )
         ) from exc
     return covariance
+
+
+def evolutionary_covariance_factory(
+    tree,
+    leaf_names,
+    *,
+    model: str = "brownian",
+    branch_length: str = "original",
+    custom_covariance=None,
+) -> EvolutionaryCovarianceFactory:
+    """Return a covariance factory exposing dense and sparse representations."""
+    return EvolutionaryCovarianceFactory(
+        tree=tree,
+        leaf_names=tuple(str(name) for name in leaf_names),
+        model=model,
+        branch_length=branch_length,
+        custom_covariance=custom_covariance,
+    )
+
+
+def _sparse_edge_process(tree, model, parameter, branch_length):
+    if model != "ou":
+        variances = transformed_edge_variances(
+            tree,
+            model=model,
+            parameter=parameter,
+            branch_length=branch_length,
+        )
+        transitions = {node: 1.0 for node in tree.traverse()}
+        return transitions, variances
+    assert parameter is not None
+    lengths = _base_edge_lengths(tree, branch_length)
+    transitions = {}
+    variances = {}
+    for node in tree.traverse():
+        if node.is_root:
+            transitions[node] = 0.0
+            variances[node] = 0.0
+            continue
+        length = lengths[node]
+        transitions[node] = math.exp(-parameter * length)
+        variances[node] = -math.expm1(-2.0 * parameter * length) / (2.0 * parameter)
+    return transitions, variances
+
+
+def _required_tree_nodes(leaves) -> set[Any]:
+    required = set()
+    for leaf in leaves:
+        node = leaf
+        while node is not None and node not in required:
+            required.add(node)
+            node = node.up
+    return required
+
+
+def _independent_sparse_covariance(size: int) -> SparseCovarianceModel:
+    identity = sparse.eye(size, format="csc")
+    return SparseCovarianceModel(
+        precision=identity,
+        tip_loading=identity.tocsr(),
+        logdet_covariance=0.0,
+        sampling_parent=np.full(size, -1, dtype=int),
+        sampling_transition=np.zeros(size, dtype=float),
+        sampling_variance=np.ones(size, dtype=float),
+    )
+
+
+def build_sparse_evolutionary_model(
+    tree,
+    leaf_names,
+    *,
+    model: str = "brownian",
+    parameter: float | None = None,
+    branch_length: str = "original",
+) -> SparseCovarianceModel:
+    """Build an O(nodes)-storage latent GMRF for a tip covariance."""
+    if model == "custom":
+        raise ValueError("Custom evolutionary covariance has no sparse tree model.")
+    parameter = validate_evolution_parameter(model, parameter)
+    names = tuple(str(name) for name in leaf_names)
+    leaf_by_name = {str(leaf.name): leaf for leaf in tree.leaves()}
+    missing = sorted(set(names) - set(leaf_by_name))
+    if missing:
+        raise ValueError(
+            "Sparse evolutionary covariance requested absent tree tips: {}.".format(
+                ", ".join(missing)
+            )
+        )
+    if model == "independent":
+        return _independent_sparse_covariance(len(names))
+    leaves = [leaf_by_name[name] for name in names]
+    required = _required_tree_nodes(leaves)
+    transitions, innovations = _sparse_edge_process(
+        tree, model, parameter, branch_length
+    )
+    state_by_node = {tree: -1}
+    marginal_variance = {tree: 0.0}
+    state_parent: list[int] = []
+    state_transition: list[float] = []
+    state_innovation: list[float] = []
+    for node in tree.traverse(strategy="preorder"):
+        if node.is_root or node not in required:
+            continue
+        parent_state = state_by_node[node.up]
+        transition = float(transitions[node])
+        innovation = float(innovations[node])
+        parent_variance = marginal_variance[node.up]
+        marginal_variance[node] = transition**2 * parent_variance + innovation
+        if innovation == 0.0:
+            if transition != 1.0:
+                raise ValueError(
+                    "A zero-variance evolutionary edge has a non-unit transition."
+                )
+            state_by_node[node] = parent_state
+            continue
+        if not np.isfinite(innovation) or innovation < 0.0:
+            raise ValueError("Sparse evolutionary innovations must be non-negative.")
+        state_by_node[node] = len(state_parent)
+        state_parent.append(parent_state)
+        state_transition.append(transition)
+        state_innovation.append(innovation)
+    tip_variances = np.asarray([marginal_variance[leaf] for leaf in leaves])
+    normalization = float(np.mean(tip_variances))
+    if not np.isfinite(normalization) or normalization <= 0.0:
+        raise ValueError("Sparse evolutionary covariance has zero tip variance.")
+    normalized_innovation = np.asarray(state_innovation, dtype=float) / normalization
+    rows = []
+    columns = []
+    values = []
+
+    def add(row, column, value):
+        rows.append(row)
+        columns.append(column)
+        values.append(value)
+
+    for child, (parent, transition, innovation) in enumerate(
+        zip(
+            state_parent,
+            state_transition,
+            normalized_innovation,
+            strict=True,
+        )
+    ):
+        inverse = 1.0 / innovation
+        add(child, child, inverse)
+        if parent >= 0:
+            add(parent, parent, transition**2 * inverse)
+            add(child, parent, -transition * inverse)
+            add(parent, child, -transition * inverse)
+    n_states = len(state_parent)
+    precision = sparse.coo_matrix(
+        (values, (rows, columns)), shape=(n_states, n_states)
+    ).tocsc()
+    tip_states = np.asarray([state_by_node[leaf] for leaf in leaves], dtype=int)
+    if np.any(tip_states < 0):
+        raise ValueError(
+            "Every requested tip must have positive evolutionary variance."
+        )
+    tip_loading = sparse.csr_matrix(
+        (
+            np.ones(len(names), dtype=float),
+            (np.arange(len(names), dtype=int), tip_states),
+        ),
+        shape=(len(names), n_states),
+    )
+    return SparseCovarianceModel(
+        precision=precision,
+        tip_loading=tip_loading,
+        logdet_covariance=float(np.sum(np.log(normalized_innovation))),
+        sampling_parent=np.asarray(state_parent, dtype=int),
+        sampling_transition=np.asarray(state_transition, dtype=float),
+        sampling_variance=normalized_innovation,
+        covariance_scale=normalization,
+    )
 
 
 def optimization_parameterization(

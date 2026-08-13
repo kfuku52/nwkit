@@ -7,14 +7,30 @@ import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
+from scipy import sparse
 
 from nwkit.cli import main
+from nwkit.evolution import evolutionary_covariance_factory
+from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.model_matrix import CategoricalObservation, encode_predictors
+from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.ordinary_pgls import (
     _global_bounded_scalar_minimize,
     build_phylogenetic_covariance,
     estimate_marginal_evolution_parameter,
     fit_ordinary_model_comparison,
     fit_ordinary_pgls,
+)
+from nwkit.phylogenetic_glmm import (
+    MAX_DENSE_GLMM_TIPS,
+    _censored_gaussian_log_likelihood,
+    fit_phylogenetic_glmm,
+)
+from nwkit.sparse_laplace import (
+    GmrfPredictorUncertainty,
+    GroupedPredictorUncertainty,
+    condition_sparse_tip_model,
+    sparse_group_covariance,
 )
 
 TREE_TEXT = "(((A:1,B:1):1,C:2):1,(D:1,E:1):2);"
@@ -527,7 +543,8 @@ def test_conventional_pgls_cli_propagates_biological_replicate_uncertainty(
     covariance = pd.read_csv(covariance_path, sep="\t")
     summary = pd.read_csv(summary_path, sep="\t")
     assert result.iloc[0]["mean_sampling_variance"] > 0.0
-    assert len(covariance) == 15
+    assert len(covariance) == 5
+    assert (covariance["leaf_name_1"] == covariance["leaf_name_2"]).all()
     assert set(summary["n_biological"]) == {2}
     assert set(summary["variance_method"]) == {"pooled"}
 
@@ -622,8 +639,8 @@ def test_conventional_pgls_supports_response_and_predictor_known_se(tmp_path):
     assert set(result["measurement_error_model"]) == {"latent-predictor"}
     assert slope["standard_error"] > 0
     assert slope["mean_predictor_sampling_variance"] > 0
-    assert len(pd.read_csv(response_covariance, sep="\t")) == 15
-    assert len(pd.read_csv(predictor_covariance, sep="\t")) == 15
+    assert len(pd.read_csv(response_covariance, sep="\t")) == 5
+    assert len(pd.read_csv(predictor_covariance, sep="\t")) == 5
     assert set(pd.read_csv(response_summary, sep="\t")["trait"]) == {"expression"}
     assert set(pd.read_csv(predictor_summary, sep="\t")["trait"]) == {"body_size"}
     assert set(pd.read_csv(model_comparison, sep="\t")["evolution_model"]) == {
@@ -683,6 +700,8 @@ def test_conventional_pgls_supports_unpaired_replicate_rows_for_both_roles(tmp_p
 
     result = pd.read_csv(output_path, sep="\t")
     assert set(result["measurement_error_model"]) == {"latent-predictor"}
+    assert set(result["reml"]) == {"no"}
+    assert set(result["covariance_estimator"]) == {"gaussian-eiv-ML"}
     assert result[result["term"] == "body_size"].iloc[0]["standard_error"] > 0.0
 
 
@@ -1267,6 +1286,586 @@ def test_conventional_scalar_non_gaussian_response_families(family, values, extr
     assert set(result["term_test"]) == {"coefficient"}
     assert np.isfinite(pd.to_numeric(result["coefficient"])).all()
     assert set(result["coefficient_penalty"]) == {"student-t"}
+    assert set(result["optimizer_converged"]) == {"yes"}
+    assert np.isfinite(pd.to_numeric(result["log_likelihood"])).all()
+    unavailable = result[
+        ~result["inference_status"].isin(["ok", "zero-model-variance"])
+    ]
+    if not unavailable.empty:
+        assert all(
+            value == "" or pd.isna(value) for value in unavailable["standard_error"]
+        )
+        assert all(value == "" or pd.isna(value) for value in unavailable["p_value"])
+
+
+def test_categorical_predictor_uncertainty_decreases_with_replicate_count():
+    def variance(sample_size):
+        encoded = encode_predictors(
+            {
+                "habitat": {
+                    "A": CategoricalObservation(
+                        {"land": 0.5, "water": 0.5}, sample_size
+                    )
+                }
+            },
+            ["habitat"],
+            ["A"],
+            categorical=["habitat"],
+        )
+        return float(encoded.uncertainties[0].covariance_by_observation[0, 0, 0])
+
+    assert variance(2) == pytest.approx(0.125)
+    assert variance(20) == pytest.approx(0.0125)
+    assert variance(200) == pytest.approx(0.00125)
+
+
+def test_censored_gaussian_interval_probability_is_stable_in_both_tails():
+    for linear in (-100.0, -40.0, -20.0, 20.0, 40.0, 100.0):
+        value = _censored_gaussian_log_likelihood(
+            np.asarray([np.nan]),
+            np.asarray([linear]),
+            1.0,
+            np.asarray([0.0]),
+            np.asarray([1.0]),
+        )[0]
+        assert np.isfinite(value)
+
+
+def test_censored_gaussian_never_reports_a_nonfinite_successful_fit():
+    try:
+        result = fit_ordinary_pgls(
+            _tree(),
+            {"state": _values([np.nan] * 5)},
+            {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
+            ["state"],
+            ["body_size"],
+            response_families={"state": "censored-gaussian"},
+            response_censor_lower={"state": _values([100.0] * 5)},
+            response_censor_upper={"state": _values([101.0] * 5)},
+        )
+    except RuntimeError as error:
+        assert "optimization failed" in str(error)
+    else:
+        assert set(result["optimizer_converged"]) == {"yes"}
+        assert np.isfinite(pd.to_numeric(result["log_likelihood"])).all()
+
+
+def test_dense_phylogenetic_glmm_has_an_explicit_tip_limit():
+    size = MAX_DENSE_GLMM_TIPS + 1
+    with pytest.raises(ValueError, match="allow_large_dense=True"):
+        fit_phylogenetic_glmm(
+            np.ones(size),
+            np.ones((size, 1)),
+            lambda _parameter: np.eye(size),
+            family="poisson",
+        )
+
+
+def test_large_dense_phylogenetic_glmm_can_be_explicitly_attempted(monkeypatch):
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    with pytest.warns(RuntimeWarning, match="estimated to need"):
+        fit = fit_phylogenetic_glmm(
+            np.asarray([1.0, 2.0, 3.0, 2.0, 5.0]),
+            np.ones((5, 1)),
+            lambda _parameter: np.eye(5),
+            family="poisson",
+            allow_large_dense=True,
+        )
+    assert fit.optimizer_converged
+
+
+def test_sparse_phylogenetic_glmm_warns_above_validated_tip_limit(monkeypatch):
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_SPARSE_GLMM_TIPS", 4)
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    with pytest.warns(RuntimeWarning, match="above 4 tips"):
+        fit = fit_phylogenetic_glmm(
+            np.ones(5),
+            np.ones((5, 1)),
+            covariance,
+            family="poisson",
+        )
+    assert fit.optimizer_converged
+
+
+def test_sparse_phylogenetic_glmm_supports_parametric_bootstrap(monkeypatch):
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    first = fit_phylogenetic_glmm(
+        np.asarray([1.0, 2.0, 3.0, 2.0, 5.0]),
+        np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)]),
+        covariance,
+        family="poisson",
+        inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        seed=7,
+    )
+    second = fit_phylogenetic_glmm(
+        np.asarray([1.0, 2.0, 3.0, 2.0, 5.0]),
+        np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)]),
+        covariance,
+        family="poisson",
+        inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        seed=7,
+    )
+    assert first.coefficient_inference == "parametric-bootstrap"
+    np.testing.assert_array_equal(
+        first.coefficient_covariance, second.coefficient_covariance
+    )
+
+
+def test_parametric_bootstrap_crosses_500_tip_backend_boundary():
+    size = MAX_DENSE_GLMM_TIPS + 1
+    names = ["t{}".format(index) for index in range(size)]
+    tree = Tree("(" + ",".join("{}:1".format(name) for name in names) + ");", parser=1)
+    fit = fit_phylogenetic_glmm(
+        np.ones(size),
+        np.ones((size, 1)),
+        evolutionary_covariance_factory(tree, names),
+        family="poisson",
+        inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        seed=3,
+    )
+    assert fit.coefficient_inference == "parametric-bootstrap"
+    assert fit.optimizer_converged
+
+
+def test_small_parametric_bootstrap_accepts_sparse_group_effect():
+    result = fit_phylogenetic_glmm(
+        np.asarray([1.0, 2.0, 3.0, 2.0, 5.0]),
+        np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)]),
+        evolutionary_covariance_factory(_tree(), LEAF_NAMES),
+        family="poisson",
+        group_covariance=sparse_group_covariance(["A", "A", "B", "C", "C"]),
+        inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        seed=3,
+    )
+    assert result.coefficient_inference == "parametric-bootstrap"
+
+
+def test_sparse_poisson_glmm_matches_dense_fit(monkeypatch):
+    values = np.asarray([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES, model="brownian")
+    dense = fit_phylogenetic_glmm(values, design, covariance, family="poisson")
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(values, design, covariance, family="poisson")
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=2e-4, atol=2e-4
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=2e-5)
+
+
+@pytest.mark.parametrize(
+    ("family", "values", "options", "tolerance"),
+    [
+        (
+            "zero-inflated-poisson",
+            [0, 0, 1, 3, 6],
+            {"zero_probability": 0.3},
+            5e-4,
+        ),
+        (
+            "zero-inflated-negative-binomial",
+            [0, 0, 1, 4, 9],
+            {"zero_probability": 0.3, "dispersion": 0.7},
+            2e-3,
+        ),
+        (
+            "hurdle-poisson",
+            [0, 1, 2, 3, 6],
+            {"zero_probability": 0.2},
+            5e-4,
+        ),
+        (
+            "hurdle-negative-binomial",
+            [0, 1, 2, 3, 7],
+            {"zero_probability": 0.2, "dispersion": 0.7},
+            1e-2,
+        ),
+        (
+            "beta-binomial",
+            [1, 2, 4, 6, 8],
+            {"dispersion": 8.0, "trials": np.full(5, 10.0)},
+            2e-3,
+        ),
+    ],
+)
+def test_sparse_zero_modified_and_beta_binomial_match_dense(
+    monkeypatch, family, values, options, tolerance
+):
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    dense = fit_phylogenetic_glmm(
+        np.asarray(values, dtype=float), design, covariance, family=family, **options
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        np.asarray(values, dtype=float), design, covariance, family=family, **options
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=tolerance, atol=tolerance
+    )
+    assert sparse.log_likelihood == pytest.approx(
+        dense.log_likelihood, rel=tolerance, abs=tolerance
+    )
+
+
+def test_sparse_binomial_glmm_matches_dense_fit(monkeypatch):
+    values = ["yes", "no", "yes", "yes", "no"]
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES, model="brownian")
+    dense = fit_phylogenetic_glmm(
+        values, design, covariance, family="binomial", reference="no"
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        values, design, covariance, family="binomial", reference="no"
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=3e-4, atol=3e-4
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=3e-5)
+
+
+@pytest.mark.parametrize("family", ["multinomial", "ordinal"])
+def test_sparse_multilevel_glmm_matches_dense_fit(monkeypatch, family):
+    values = ["low", "middle", "high", "middle", "high"]
+    predictor = np.linspace(-1.0, 1.0, 5)
+    design = (
+        predictor[:, None]
+        if family == "ordinal"
+        else np.column_stack([np.ones(5), predictor])
+    )
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    dense = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family=family,
+        levels=["low", "middle", "high"],
+        reference="low" if family == "multinomial" else None,
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family=family,
+        levels=["low", "middle", "high"],
+        reference="low" if family == "multinomial" else None,
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=2e-3, atol=2e-3
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=2e-4)
+
+
+def test_sparse_multinomial_glmm_warns_above_validated_linear_predictors(monkeypatch):
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_SPARSE_GLMM_LINEAR_PREDICTORS", 9)
+    with pytest.warns(RuntimeWarning, match="above 9 tip-level"):
+        fit = fit_phylogenetic_glmm(
+            ["low", "middle", "high", "middle", "high"],
+            np.ones((5, 1)),
+            evolutionary_covariance_factory(_tree(), LEAF_NAMES),
+            family="multinomial",
+            levels=["low", "middle", "high"],
+            reference="low",
+        )
+    assert fit.optimizer_converged
+
+
+def test_sparse_glmm_with_group_effect_matches_dense_fit(monkeypatch):
+    values = np.asarray([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    labels = np.asarray(["A", "A", "B", "C", "C"])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    dense = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        group_covariance=np.equal.outer(labels, labels).astype(float),
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        group_covariance=sparse_group_covariance(labels),
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=2e-3, atol=2e-3
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=2e-4)
+
+
+def test_sparse_glmm_with_grouped_predictor_uncertainty_matches_dense(monkeypatch):
+    values = np.asarray([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack(
+        [np.ones(5), np.linspace(-1.0, 1.0, 5), np.linspace(1.0, -1.0, 5)]
+    )
+    factors = tuple(np.diag([0.1 + index * 0.01, 0.15]) for index in range(5))
+    dense_uncertainty = np.zeros((2, 2, 5, 5), dtype=float)
+    for index, factor in enumerate(factors):
+        dense_uncertainty[:, :, index, index] = factor @ factor.T
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    dense = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        predictor_uncertainties=[dense_uncertainty],
+        predictor_columns=[(1, 2)],
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        predictor_uncertainties=[GroupedPredictorUncertainty(factors, np.arange(5))],
+        predictor_columns=[(1, 2)],
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=3e-3, atol=3e-3
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=3e-4)
+
+
+def test_sparse_glmm_estimates_evolutionary_shape(monkeypatch):
+    values = np.asarray([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES, model="lambda")
+    dense = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        evolution_parameter_bounds=(0.05, 1.0),
+        evolution_parameter_initial=0.5,
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        evolution_parameter_bounds=(0.05, 1.0),
+        evolution_parameter_initial=0.5,
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=2e-3, atol=2e-3
+    )
+    assert 0.05 <= sparse.evolution_parameter <= 1.0
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=2e-5)
+
+
+def test_sparse_glmm_with_predictor_posterior_matches_dense_fit(monkeypatch):
+    values = np.asarray([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES, model="brownian")
+    sparse_prior = covariance.sparse_model(None)
+    assert sparse_prior is not None
+    predictor_posterior = condition_sparse_tip_model(sparse_prior, 1.2, np.full(5, 0.2))
+    dense_uncertainty = predictor_posterior.materialize()
+    dense = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        predictor_uncertainties=[dense_uncertainty],
+        predictor_columns=[1],
+    )
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    sparse = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        predictor_uncertainties=[
+            GmrfPredictorUncertainty(predictor_posterior, np.arange(5))
+        ],
+        predictor_columns=[1],
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=4e-4, atol=4e-4
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=4e-5)
+
+
+def test_sparse_bootstrap_samples_gmrf_predictor_uncertainty(monkeypatch):
+    values = np.asarray([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    sparse_prior = covariance.sparse_model(None)
+    assert sparse_prior is not None
+    predictor_posterior = condition_sparse_tip_model(sparse_prior, 1.2, np.full(5, 0.2))
+    monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
+    fit = fit_phylogenetic_glmm(
+        values,
+        design,
+        covariance,
+        family="poisson",
+        predictor_uncertainties=[
+            GmrfPredictorUncertainty(predictor_posterior, np.arange(5))
+        ],
+        predictor_columns=[1],
+        inference="parametric-bootstrap",
+        bootstrap_replicates=2,
+        seed=11,
+    )
+    assert fit.coefficient_inference == "parametric-bootstrap"
+    assert np.isfinite(fit.coefficient_covariance).all()
+
+
+def test_dense_multivariate_pgls_has_an_explicit_dimension_limit():
+    size = 1001
+    with pytest.raises(ValueError, match="dense joint covariance"):
+        fit_multivariate_pgls(
+            np.ones((size, 2)),
+            np.ones((size, 1)),
+            {"phylogenetic": lambda _parameter: np.eye(size)},
+        )
+
+
+def test_sparse_multivariate_pgls_matches_dense_fit(monkeypatch):
+    responses = np.asarray([[1.0, 2.0], [2.0, 1.5], [3.0, 4.0], [4.0, 3.0], [5.0, 6.0]])
+    design = np.column_stack([np.ones(5), np.arange(5.0)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    fixed = np.full(responses.size, 0.1)
+    dense = fit_multivariate_pgls(
+        responses,
+        design,
+        {"phylogenetic": covariance},
+        fixed_covariance=fixed,
+        reml=False,
+    )
+    monkeypatch.setattr("nwkit.multivariate_pgls.MAX_DENSE_MULTIVARIATE_DIMENSION", 1)
+    sparse = fit_multivariate_pgls(
+        responses,
+        design,
+        {"phylogenetic": covariance},
+        fixed_covariance=fixed,
+        reml=False,
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=5e-5, atol=5e-5
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=5e-6)
+    assert sparse.fitted_covariance.shape == dense.fitted_covariance.shape
+    expected_sparse_covariance = np.kron(
+        sparse.component_trait_covariances["phylogenetic"], covariance(None)
+    ) + np.diag(fixed)
+    np.testing.assert_allclose(
+        sparse.fitted_covariance.materialize(),
+        expected_sparse_covariance,
+        rtol=1e-10,
+        atol=1e-10,
+    )
+
+
+def test_sparse_multivariate_pgls_matches_dense_fixed_factor(monkeypatch):
+    responses = np.asarray([[1.0, 2.0], [2.0, 1.5], [3.0, 4.0], [4.0, 3.0], [5.0, 6.0]])
+    design = np.column_stack([np.ones(5), np.arange(5.0)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    rows = np.concatenate([np.arange(5), np.arange(5) + 5])
+    columns = np.concatenate([np.arange(5), np.arange(5)])
+    values = np.concatenate([np.full(5, 0.2), np.full(5, 0.3)])
+    loading = sparse.csr_matrix((values, (rows, columns)), shape=(10, 5))
+    fixed_factor = DiagonalLowRankCovariance(np.zeros(10), loading)
+    fixed_dense = (loading @ loading.T).toarray()
+    dense = fit_multivariate_pgls(
+        responses,
+        design,
+        {"phylogenetic": covariance},
+        fixed_covariance=fixed_dense,
+        reml=False,
+    )
+    monkeypatch.setattr("nwkit.multivariate_pgls.MAX_DENSE_MULTIVARIATE_DIMENSION", 1)
+    fitted = fit_multivariate_pgls(
+        responses,
+        design,
+        {"phylogenetic": covariance},
+        fixed_covariance=fixed_factor,
+        reml=False,
+    )
+
+    np.testing.assert_allclose(
+        fitted.coefficients, dense.coefficients, rtol=5e-5, atol=5e-5
+    )
+    assert fitted.log_likelihood == pytest.approx(dense.log_likelihood, rel=5e-6)
+    expected = (
+        np.kron(fitted.component_trait_covariances["phylogenetic"], covariance(None))
+        + fixed_dense
+    )
+    np.testing.assert_allclose(fitted.fitted_covariance.materialize(), expected)
+
+
+def test_sparse_multivariate_pgls_matches_dense_with_missing_response(monkeypatch):
+    responses = np.asarray(
+        [[1.0, 2.0], [2.0, np.nan], [3.0, 4.0], [4.0, 3.0], [5.0, 6.0]]
+    )
+    design = np.column_stack([np.ones(5), np.arange(5.0)])
+    covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
+    dense = fit_multivariate_pgls(
+        responses,
+        design,
+        {"phylogenetic": covariance},
+        fixed_covariance=np.full(responses.size, 0.1),
+        reml=False,
+    )
+    monkeypatch.setattr("nwkit.multivariate_pgls.MAX_DENSE_MULTIVARIATE_DIMENSION", 1)
+    sparse = fit_multivariate_pgls(
+        responses,
+        design,
+        {"phylogenetic": covariance},
+        fixed_covariance=np.full(responses.size, 0.1),
+        reml=False,
+    )
+    np.testing.assert_allclose(
+        sparse.coefficients, dense.coefficients, rtol=5e-5, atol=5e-5
+    )
+    assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=5e-6)
+
+
+def test_sparse_multivariate_pgls_warns_and_attempts_above_cell_limit(monkeypatch):
+    monkeypatch.setattr("nwkit.multivariate_pgls.MAX_DENSE_MULTIVARIATE_DIMENSION", 1)
+    monkeypatch.setattr("nwkit.multivariate_pgls.MAX_SPARSE_MULTIVARIATE_DIMENSION", 9)
+    with pytest.warns(RuntimeWarning, match="outside the routine validation range"):
+        fit = fit_multivariate_pgls(
+            np.ones((5, 2)),
+            np.ones((5, 1)),
+            {"phylogenetic": evolutionary_covariance_factory(_tree(), LEAF_NAMES)},
+        )
+    assert fit.optimizer_converged
+
+
+def test_multivariate_pgls_rejects_invalid_component_covariance():
+    responses = np.column_stack([np.arange(4.0), np.arange(4.0) + 1.0])
+    design = np.ones((4, 1))
+    asymmetric = np.eye(4)
+    asymmetric[0, 1] = 0.5
+    with pytest.raises(ValueError, match="must be symmetric"):
+        fit_multivariate_pgls(
+            responses,
+            design,
+            {"phylogenetic": asymmetric},
+        )
+
+    indefinite = np.eye(4)
+    indefinite[0, 1] = indefinite[1, 0] = 2.0
+    with pytest.raises(ValueError, match="positive semidefinite"):
+        fit_multivariate_pgls(
+            responses,
+            design,
+            {"phylogenetic": indefinite},
+        )
 
 
 def test_conventional_censored_gaussian_uses_bounds_for_missing_observations():
@@ -1370,6 +1969,24 @@ def test_categorical_separation_is_regularized_and_likelihood_tested():
     assert set(result["inference_method"]) == {"likelihood-ratio"}
     assert np.isfinite(pd.to_numeric(result["coefficient"])).all()
     assert np.isfinite(pd.to_numeric(result["p_value"])).all()
+
+
+def test_non_gaussian_factor_omnibus_is_explicitly_labeled_wald():
+    result = fit_ordinary_pgls(
+        _tree(),
+        {"count": _values([1, 2, 3, 5, 8])},
+        {"habitat": _values(["a", "b", "c", "a", "b"])},
+        ["count"],
+        ["habitat"],
+        categorical_predictors=["habitat"],
+        response_families={"count": "poisson"},
+        inference="likelihood-ratio",
+    )
+
+    coefficients = result[result["term_test"] == "coefficient"]
+    omnibus = result[result["term_test"] == "omnibus"].iloc[0]
+    assert set(coefficients["inference_method"]) == {"likelihood-ratio"}
+    assert omnibus["inference_method"] == "wald"
 
 
 def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():

@@ -3,6 +3,7 @@ import pandas as pd
 import pytest
 from ete4 import Tree
 
+from nwkit import contrast as contrast_mod
 from nwkit.cli import main
 from nwkit.contrast import build_contrast_table
 from nwkit.replicates import estimate_likelihood_replicates, estimate_replicate_traits
@@ -36,7 +37,7 @@ def test_pooled_biological_replicates_estimate_tip_sampling_variance():
         "C": pytest.approx(8.0),
     }
     np.testing.assert_allclose(
-        estimates.sampling_covariance_by_trait["expression"], np.eye(3)
+        estimates.sampling_covariance_by_trait["expression"], np.ones(3)
     )
     summary = estimates.tip_summary.set_index("leaf_name")
     assert set(summary["n_biological"]) == {2}
@@ -266,6 +267,65 @@ def test_known_standard_errors_propagate_through_the_pic_transform():
     assert pair.iloc[0]["sampling_covariance"] == pytest.approx(-0.015)
 
 
+def test_large_contrast_sampling_covariance_uses_exact_sparse_factor(monkeypatch):
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    estimates = estimate_replicate_traits(
+        pd.DataFrame(
+            {
+                "leaf_name": ["A", "B", "C"],
+                "expression": [1.0, 2.0, 4.0],
+                "expression_se": [0.2, 0.3, 0.4],
+            }
+        ),
+        ["A", "B", "C"],
+        ["expression"],
+        within_variance="known-se",
+        se_columns=["expression_se"],
+        tree_id="OG1",
+    )
+    _, full = build_contrast_table(
+        tree,
+        estimates.values_by_trait,
+        tree_id="OG1",
+        sampling_covariance_by_trait=estimates.sampling_covariance_by_trait,
+        replicate_model_by_trait=estimates.model_by_trait,
+        tip_summary=estimates.tip_summary,
+        return_sampling_covariance=True,
+        compact_sampling_covariance=False,
+    )
+    monkeypatch.setattr(contrast_mod, "MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS", 1)
+    contrasts, compact = build_contrast_table(
+        tree,
+        estimates.values_by_trait,
+        tree_id="OG1",
+        sampling_covariance_by_trait=estimates.sampling_covariance_by_trait,
+        replicate_model_by_trait=estimates.model_by_trait,
+        tip_summary=estimates.tip_summary,
+        return_sampling_covariance=True,
+    )
+
+    contrast_ids = contrasts["branch_clade_id"].astype(str).tolist()
+    index = {contrast_id: position for position, contrast_id in enumerate(contrast_ids)}
+    latent_ids = list(dict.fromkeys(compact["contrast_id_2"].astype(str)))
+    latent_index = {
+        latent_id: position for position, latent_id in enumerate(latent_ids)
+    }
+    loading = np.zeros((len(contrast_ids), len(latent_ids)))
+    for row in compact.to_dict("records"):
+        loading[
+            index[str(row["contrast_id_1"])],
+            latent_index[str(row["contrast_id_2"])],
+        ] = row["sampling_covariance"]
+    expected = np.zeros((len(contrast_ids), len(contrast_ids)))
+    for row in full.to_dict("records"):
+        first = index[str(row["contrast_id_1"])]
+        second = index[str(row["contrast_id_2"])]
+        expected[first, second] = expected[second, first] = row["sampling_covariance"]
+
+    assert set(compact["covariance_representation"]) == {"factor-loading"}
+    np.testing.assert_allclose(loading @ loading.T, expected)
+
+
 def test_replicate_aware_contrast_cli_writes_all_three_outputs(tmp_path):
     tree_path = tmp_path / "gene.nwk"
     trait_path = tmp_path / "expression.tsv"
@@ -380,7 +440,7 @@ def test_multivariate_replicates_allow_trait_specific_missing_tips():
 
     assert np.isnan(estimates.values_by_trait["second"]["B"])
     covariance = estimates.sampling_covariance_by_trait["second"]
-    np.testing.assert_allclose(covariance.loc["B"].to_numpy(float), 0.0)
+    assert covariance[1] == 0.0
     summary = estimates.tip_summary.set_index(["trait", "leaf_name"])
     assert summary.loc[("second", "B"), "n_biological"] == 0
 
@@ -405,7 +465,7 @@ def test_known_se_multivariate_missingness_requires_paired_mean_and_se():
     )
 
     assert np.isnan(estimates.values_by_trait["second"]["B"])
-    assert estimates.sampling_covariance_by_trait["second"].loc["B", "B"] == 0.0
+    assert estimates.sampling_covariance_by_trait["second"][1] == 0.0
 
     dataframe.loc[dataframe["leaf_name"] == "B", "second_se"] = 0.2
     with pytest.raises(ValueError, match="paired finite means"):

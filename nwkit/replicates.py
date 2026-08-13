@@ -27,7 +27,7 @@ TIP_SUMMARY_COLUMNS = [
 @dataclass
 class ReplicateEstimates:
     values_by_trait: dict[str, dict[str, object]]
-    sampling_covariance_by_trait: dict[str, pd.DataFrame]
+    sampling_covariance_by_trait: dict[str, pd.DataFrame | np.ndarray]
     tip_summary: pd.DataFrame
     model_by_trait: dict[str, str]
 
@@ -503,9 +503,7 @@ def _known_se_estimates(
         sample_sizes = _known_sample_sizes(by_leaf, n_columns, index, observed)
         covariance_diagonal = np.zeros(len(leaf_names), dtype=float)
         covariance_diagonal[observed] = ses[observed] ** 2
-        covariance_by_trait[trait] = pd.DataFrame(
-            np.diag(covariance_diagonal), index=leaf_names, columns=leaf_names
-        )
+        covariance_by_trait[trait] = covariance_diagonal
         values_by_trait[trait] = dict(zip(leaf_names, values, strict=True))
         models[trait] = "known-se"
         rows.extend(
@@ -540,7 +538,7 @@ def _pooled_no_batch(dataframe, leaf_names, trait):
             "residual biological-replicate degree of freedom.".format(trait)
         )
     variance = float(np.dot(residuals, residuals) / degrees_of_freedom)
-    covariance = np.diag(variance / counts.to_numpy(dtype=float))
+    covariance = variance / counts.to_numpy(dtype=float)
     within_sd = np.repeat(math.sqrt(max(variance, 0.0)), len(leaf_names))
     return means.to_numpy(float), covariance, counts.to_numpy(int), within_sd
 
@@ -557,7 +555,7 @@ def _leaf_specific_no_batch(dataframe, leaf_names, trait):
             "replicates per leaf (insufficient: {}).".format(trait, ", ".join(missing))
         )
     variances = grouped.var(ddof=1).reindex(leaf_names).to_numpy(float)
-    covariance = np.diag(variances / counts.to_numpy(dtype=float))
+    covariance = variances / counts.to_numpy(dtype=float)
     return (
         means.to_numpy(float),
         covariance,
@@ -803,30 +801,46 @@ def _expand_trait_estimates(
     leaf_names, fitted_leaf_names, means, covariance, counts, within_sd
 ):
     expanded_means = np.full(len(leaf_names), np.nan, dtype=float)
-    expanded_covariance = np.zeros((len(leaf_names), len(leaf_names)), dtype=float)
+    covariance = np.asarray(covariance, dtype=float)
+    expanded_covariance = np.zeros(
+        len(leaf_names) if covariance.ndim == 1 else (len(leaf_names), len(leaf_names)),
+        dtype=float,
+    )
     expanded_counts = np.zeros(len(leaf_names), dtype=int)
     expanded_within_sd = np.full(len(leaf_names), np.nan, dtype=float)
     selected = [leaf_names.index(name) for name in fitted_leaf_names]
     expanded_means[selected] = means
-    expanded_covariance[np.ix_(selected, selected)] = covariance
+    if covariance.ndim == 1:
+        expanded_covariance[selected] = covariance
+    else:
+        expanded_covariance[np.ix_(selected, selected)] = covariance
     expanded_counts[selected] = counts
     expanded_within_sd[selected] = within_sd
     return expanded_means, expanded_covariance, expanded_counts, expanded_within_sd
 
 
 def _validated_sampling_covariance(covariance, means, allow_missing):
-    covariance = (np.asarray(covariance) + np.asarray(covariance).T) / 2.0
+    covariance = np.asarray(covariance, dtype=float)
+    if covariance.ndim == 1:
+        if np.any(covariance < 0.0):
+            raise ValueError(
+                "Replicate estimation produced an invalid covariance diagonal."
+            )
+        symmetric = covariance.copy()
+        minimum_eigenvalue = float(covariance.min())
+    else:
+        symmetric = (covariance + covariance.T) / 2.0
+        minimum_eigenvalue = float(np.linalg.eigvalsh(symmetric).min())
     invalid_means = np.isinf(means).any() or (
         not allow_missing and not np.isfinite(means).all()
     )
-    if invalid_means or not np.isfinite(covariance).all():
+    if invalid_means or not np.isfinite(symmetric).all():
         raise ValueError("Replicate estimation produced non-finite values.")
-    minimum_eigenvalue = float(np.linalg.eigvalsh(covariance).min())
-    tolerance = np.finfo(float).eps * max(1.0, float(np.max(np.abs(covariance))))
+    tolerance = np.finfo(float).eps * max(1.0, float(np.max(np.abs(symmetric))))
     if minimum_eigenvalue < -tolerance:
         raise ValueError("Replicate estimation produced an invalid covariance matrix.")
-    covariance[np.abs(covariance) < tolerance] = 0.0
-    return covariance
+    symmetric[np.abs(symmetric) < tolerance] = 0.0
+    return symmetric
 
 
 def _replicate_tip_rows(
@@ -849,7 +863,9 @@ def _replicate_tip_rows(
         .fillna(0)
         .to_numpy(int)
     )
-    standard_errors = np.sqrt(np.maximum(np.diag(covariance), 0.0))
+    covariance = np.asarray(covariance, dtype=float)
+    diagonal = covariance if covariance.ndim == 1 else np.diag(covariance)
+    standard_errors = np.sqrt(np.maximum(diagonal, 0.0))
     rows = []
     for leaf_index, leaf_name in enumerate(leaf_names):
         observed = counts[leaf_index] > 0
@@ -947,8 +963,10 @@ def estimate_replicate_traits(
             within_variance,
             allow_missing=trait in allow_missing_traits,
         )
-        covariance_frame = pd.DataFrame(
-            covariance, index=leaf_names, columns=leaf_names
+        covariance_frame = (
+            covariance
+            if np.asarray(covariance).ndim == 1
+            else pd.DataFrame(covariance, index=leaf_names, columns=leaf_names)
         )
         values_by_trait[trait] = dict(zip(leaf_names, means, strict=True))
         covariance_by_trait[trait] = covariance_frame
