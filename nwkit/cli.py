@@ -137,7 +137,7 @@ p_parent.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=%(default)s: Input newick file. Use "-" for STDIN.',
+    help='default=%(default)s: Input Newick/NHX or supported PAML/MCMCtree tree container. Use "-" for STDIN.',
 )
 p_parent.add_argument(
     "-o",
@@ -237,7 +237,7 @@ p_tree_input.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=%(default)s: Input newick file. Use "-" for STDIN.',
+    help='default=%(default)s: Input Newick/NHX or supported PAML/MCMCtree tree container. Use "-" for STDIN.',
 )
 p_tree_input.add_argument(
     "-f",
@@ -359,6 +359,7 @@ p_species.add_argument(
     'The file must contain a "leaf_name" column and at least one of "species_label" or "taxonomy_query". '
     "Mapped rows override the selected parser preset and regex.",
 )
+
 
 def _tip_table_policy_parent(*, unmatched_default="warn"):
     parent = NwkitArgumentParser(add_help=False)
@@ -1519,6 +1520,107 @@ pdraw.add_argument(
     help='default=%(default)s: Output image format. "auto" infers from --outfile and otherwise falls back to pdf.',
 )
 pdraw.add_argument(
+    "--layout",
+    metavar="LAYOUT",
+    default="rectangular",
+    type=str,
+    choices=[
+        "rectangular",
+        "slanted",
+        "cladogram",
+        "circular",
+        "radial",
+        "unrooted",
+        "spiral",
+        "fractal",
+    ],
+    help="default=%(default)s: Tree geometry; subtree placement and label-aware spacing are controlled independently.",
+)
+pdraw.add_argument(
+    "--subtree-packing",
+    "--subtree_packing",
+    dest="subtree_packing",
+    metavar="standard|tidy",
+    default="standard",
+    type=str,
+    choices=["standard", "tidy"],
+    help='default=%(default)s: Subtree placement strategy. "tidy" compacts rectangular, circular, and spiral layouts while preserving tip order.',
+)
+pdraw.add_argument(
+    "--spiral-turns",
+    "--spiral_turns",
+    dest="spiral_turns",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="default=auto: Number of turns used by --layout spiral.",
+)
+pdraw.add_argument(
+    "--angular-span",
+    "--angular_span",
+    dest="angular_span",
+    metavar="DEGREES",
+    default=360.0,
+    type=finite_float,
+    help="default=%(default)s: Angular span occupied by circular or radial geometry; 180 uses a semicircle.",
+)
+pdraw.add_argument(
+    "--angular-center",
+    "--angular_center",
+    dest="angular_center",
+    metavar="DEGREES",
+    default=90.0,
+    type=finite_float,
+    help="default=%(default)s: Direction at the center of a circular or radial sector; 90 centers a 180-degree sector on the upper half-plane.",
+)
+pdraw.add_argument(
+    "--unrooted-method",
+    "--unrooted_method",
+    dest="unrooted_method",
+    metavar="equal-angle|equal-daylight",
+    default="equal-angle",
+    type=str,
+    choices=["equal-angle", "equal-daylight"],
+    help="default=%(default)s: Angular optimization used by --layout unrooted.",
+)
+pdraw.add_argument(
+    "--daylight-iterations",
+    "--daylight_iterations",
+    dest="daylight_iterations",
+    metavar="INT",
+    default=5,
+    type=int,
+    help="default=%(default)s: Maximum equal-daylight refinement passes.",
+)
+pdraw.add_argument(
+    "--max-visible-tips",
+    "--max_visible_tips",
+    dest="max_visible_tips",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=None: Automatically collapse clades in a drawing-only copy until no more than INT tips remain visible.",
+)
+pdraw.add_argument(
+    "--collapse-label",
+    "--collapse_label",
+    dest="collapse_label",
+    metavar="TEXT",
+    default=None,
+    type=str,
+    help='default="{first}…{last} (n={tips})": Label template for automatically collapsed clades; fields are clade, first, last, and tips.',
+)
+pdraw.add_argument(
+    "--collapse-property-aggregation",
+    "--collapse_property_aggregation",
+    dest="collapse_property_aggregation",
+    metavar="none|mean",
+    default="none",
+    type=str,
+    choices=["none", "mean"],
+    help="default=%(default)s: Preserve only complete constant properties on collapsed clades; mean explicitly averages complete numeric properties.",
+)
+pdraw.add_argument(
     "--species-overlap-node-plot",
     "--species_overlap_node_plot",
     dest="species_overlap_node_plot",
@@ -1707,6 +1809,15 @@ pdraw.add_argument(
     help="default=%(default)s: Matplotlib color for branches.",
 )
 pdraw.add_argument(
+    "--branch-width",
+    "--branch_width",
+    dest="branch_width",
+    metavar="FLOAT",
+    default=0.8,
+    type=finite_float,
+    help="default=%(default)s: Base branch width in points.",
+)
+pdraw.add_argument(
     "--terminal-branch-color",
     "--terminal_branch_color",
     dest="terminal_branch_color",
@@ -1718,16 +1829,284 @@ pdraw.add_argument(
     help="default=None: Optional color applied to terminal branches.",
 )
 pdraw.add_argument(
+    "--branch-color-property",
+    "--branch_color_property",
+    dest="branch_color_property",
+    metavar="PROPERTY",
+    default=None,
+    type=str,
+    help="default=None: Map a categorical Newick/NHX branch property to color.",
+)
+pdraw.add_argument(
+    "--branch-width-property",
+    "--branch_width_property",
+    dest="branch_width_property",
+    metavar="PROPERTY",
+    default=None,
+    type=str,
+    help="default=None: Map a numeric Newick/NHX branch property to width.",
+)
+pdraw.add_argument(
+    "--branch-width-range",
+    "--branch_width_range",
+    dest="branch_width_range",
+    metavar="MIN,MAX",
+    default="0.4,2.5",
+    type=str,
+    help="default=%(default)s: Output width range for --branch-width-property.",
+)
+pdraw.add_argument(
+    "--scale-bar",
+    "--scale_bar",
+    dest="scale_bar",
+    metavar="none|auto|FLOAT",
+    default="none",
+    type=str,
+    help="default=%(default)s: Add an exact scale to a layout with directly measurable branch-length segments.",
+)
+pdraw.add_argument(
+    "--depth-guide",
+    "--depth_guide",
+    dest="depth_guide",
+    metavar="none|auto|FLOAT",
+    default="none",
+    type=str,
+    help="default=%(default)s: Add root-to-node depth guides to slanted, radial, or spiral; FLOAT sets the tick interval.",
+)
+pdraw.add_argument(
+    "--branch-length-unit",
+    "--branch_length_unit",
+    dest="branch_length_unit",
+    metavar="TEXT",
+    default="",
+    type=str,
+    help='default="": Unit appended to scale-bar and depth-guide labels, for example substitutions/site or Ma.',
+)
+pdraw.add_argument(
+    "--time-constraints",
+    "--time_constraints",
+    dest="time_constraints",
+    metavar="auto|yes|no",
+    default="auto",
+    type=str,
+    choices=["auto", "yes", "no"],
+    help="default=%(default)s: Draw MCMCtree point, bounded, lower, and upper calibration glyphs when present.",
+)
+pdraw.add_argument(
+    "--time-credible-intervals",
+    "--time_credible_intervals",
+    dest="time_credible_intervals",
+    metavar="auto|yes|no",
+    default="auto",
+    type=str,
+    choices=["auto", "yes", "no"],
+    help="default=%(default)s: Draw node-age credible-interval whiskers from MCMCtree/FigTree annotations.",
+)
+pdraw.add_argument(
+    "--mcmctree-posterior",
+    "--mcmctree_posterior",
+    dest="mcmctree_posterior",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="default=None: Read MCMCtree mcmc.txt ages on the input topology for dated-tree and DensiTree rendering.",
+)
+pdraw.add_argument(
+    "--densitree-trees",
+    "--densitree_trees",
+    dest="densitree_trees",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="default=None: Overlay a posterior or bootstrap multi-Newick tree collection, including topology variation, against the input reference tree.",
+)
+pdraw.add_argument(
+    "--posterior-point",
+    "--posterior_point",
+    dest="posterior_point",
+    metavar="mean|median",
+    default="mean",
+    type=str,
+    choices=["mean", "median"],
+    help="default=%(default)s: Posterior point age used by --mcmctree-posterior.",
+)
+pdraw.add_argument(
+    "--posterior-ci",
+    "--posterior_ci",
+    dest="posterior_ci",
+    metavar="hpd|equal-tail",
+    default="hpd",
+    type=str,
+    choices=["hpd", "equal-tail"],
+    help="default=%(default)s: Node-age interval used by --mcmctree-posterior.",
+)
+pdraw.add_argument(
+    "--posterior-ci-level",
+    "--posterior_ci_level",
+    dest="posterior_ci_level",
+    metavar="0<FLOAT<1",
+    default=0.95,
+    type=finite_float,
+    help="default=%(default)s: Credible mass for dated-tree node intervals.",
+)
+pdraw.add_argument(
+    "--posterior-burnin",
+    "--posterior_burnin",
+    dest="posterior_burnin",
+    metavar="INT",
+    default=0,
+    type=int,
+    help="default=%(default)s: Leading MCMC rows or sampled trees to discard.",
+)
+pdraw.add_argument(
+    "--posterior-thin",
+    "--posterior_thin",
+    dest="posterior_thin",
+    metavar="INT",
+    default=1,
+    type=int,
+    help="default=%(default)s: Keep every INT-th MCMC row or sampled tree.",
+)
+pdraw.add_argument(
+    "--densitree",
+    metavar="none|all|ci|both",
+    default="none",
+    type=str,
+    choices=["none", "all", "ci", "both"],
+    help="default=%(default)s: Draw retained trees, branchwise empirical path envelopes, or both from an MCMCtree age table or a multi-Newick tree collection; topology-varying samples are stratified before envelopes are calculated.",
+)
+pdraw.add_argument(
+    "--densitree-alpha",
+    "--densitree_alpha",
+    dest="densitree_alpha",
+    metavar="0<FLOAT<=1",
+    default=0.035,
+    type=finite_float,
+    help="default=%(default)s: Opacity of each posterior tree in all/both mode.",
+)
+pdraw.add_argument(
+    "--densitree-color",
+    "--densitree_color",
+    dest="densitree_color",
+    metavar="COLOR",
+    default="#0072B2",
+    type=str,
+    help="default=%(default)s: Color of posterior trees in all/both mode.",
+)
+pdraw.add_argument(
+    "--densitree-ci-level",
+    "--densitree_ci_level",
+    dest="densitree_ci_level",
+    metavar="0<FLOAT<1",
+    default=0.95,
+    type=finite_float,
+    help="default=%(default)s: Central fraction of whole sampled paths retained in each within-topology branch envelope.",
+)
+pdraw.add_argument(
+    "--densitree-ci-alpha",
+    "--densitree_ci_alpha",
+    dest="densitree_ci_alpha",
+    metavar="0<FLOAT<=1",
+    default=0.18,
+    type=finite_float,
+    help="default=%(default)s: Maximum opacity of branch-envelope polygons; topology groups are scaled by relative sample frequency.",
+)
+pdraw.add_argument(
+    "--densitree-ci-color",
+    "--densitree_ci_color",
+    dest="densitree_ci_color",
+    metavar="COLOR",
+    default="#56B4E9",
+    type=str,
+    help="default=%(default)s: Color of branch-envelope polygons.",
+)
+pdraw.add_argument(
+    "--tip-labels",
+    "--tip_labels",
+    dest="tip_labels",
+    metavar="yes|no",
+    default="yes",
+    type=strtobool,
+    help="default=%(default)s: Whether to draw tip labels. Disabling them is useful for dense overview layouts.",
+)
+pdraw.add_argument(
     "--tip-label-position",
     "--tip_label_position",
     dest="tip_label_position",
-    metavar="aligned|branch-end",
-    default="aligned",
+    metavar="auto|aligned|branch-end",
+    default="auto",
     type=str,
     required=False,
     action="store",
-    choices=["aligned", "branch-end"],
-    help="default=%(default)s: Align tip labels at the right edge or place each label beside its branch endpoint.",
+    choices=["auto", "aligned", "branch-end"],
+    help="default=%(default)s: Align labels at the right edge for rectangular layout and place them beside branch endpoints otherwise.",
+)
+pdraw.add_argument(
+    "--tip-label-wrap",
+    "--tip_label_wrap",
+    dest="tip_label_wrap",
+    metavar="none|auto|taxonomy|INT",
+    default="none",
+    type=str,
+    help="default=%(default)s: Display-only wrapping; taxonomy preserves an underscore-delimited genus_species binomial on one line.",
+)
+pdraw.add_argument(
+    "--tip-spacing",
+    "--tip_spacing",
+    dest="tip_spacing",
+    metavar="uniform|label-aware",
+    default="uniform",
+    type=str,
+    choices=["uniform", "label-aware"],
+    help="default=%(default)s: Allocate tip rows or angular sectors uniformly, or from measured label and annotation heights.",
+)
+pdraw.add_argument(
+    "--tip-label-font-style",
+    "--tip_label_font_style",
+    dest="tip_label_font_style",
+    metavar="plain|italic|taxonomy",
+    default="plain",
+    type=str,
+    choices=["plain", "italic", "taxonomy"],
+    help="default=%(default)s: Typography for tip labels; taxonomy italicizes exact genus_species binomials conservatively.",
+)
+pdraw.add_argument(
+    "--tip-track",
+    "--tip_track",
+    dest="tip_track",
+    metavar="PROPERTY",
+    default=[],
+    type=str,
+    action="append",
+    help="default=[]: Add a categorical or continuous tip annotation track. May be repeated.",
+)
+pdraw.add_argument(
+    "--tip-track-type",
+    "--tip_track_type",
+    dest="tip_track_type",
+    metavar="auto|categorical|continuous",
+    default="auto",
+    type=str,
+    choices=["auto", "categorical", "continuous"],
+    help="default=%(default)s: Shared interpretation of values in --tip-track properties.",
+)
+pdraw.add_argument(
+    "--tip-track-size",
+    "--tip_track_size",
+    dest="tip_track_size",
+    metavar="FLOAT",
+    default=5.0,
+    type=finite_float,
+    help="default=%(default)s: Width and height of each tip-track tile in points.",
+)
+pdraw.add_argument(
+    "--tip-track-palette",
+    "--tip_track_palette",
+    dest="tip_track_palette",
+    metavar="STR",
+    default="viridis",
+    type=str,
+    help="default=%(default)s: Matplotlib colormap for continuous tip tracks; categorical tracks use --trait-palette.",
 )
 pdraw.add_argument(
     "--root-marker",
@@ -1827,7 +2206,7 @@ pdraw.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=None: Display this Newick/NHX property beside matching nodes.",
+    help='default=None: Display this Newick/NHX property beside matching nodes; use "name" for ordinary Newick node labels.',
 )
 pdraw.add_argument(
     "--node-label-target",
@@ -1892,6 +2271,44 @@ pdraw.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Whether to draw legends for enabled categorical layers.",
+)
+pdraw.add_argument(
+    "--legend-columns",
+    "--legend_columns",
+    dest="legend_columns",
+    metavar="auto|INT",
+    default="auto",
+    type=str,
+    help="default=%(default)s: Number of legend columns when the legend is above the tree.",
+)
+pdraw.add_argument(
+    "--legend-position",
+    "--legend_position",
+    dest="legend_position",
+    metavar="auto|top|right",
+    default="auto",
+    type=str,
+    choices=["auto", "top", "right"],
+    help="default=%(default)s: Place dense legends to the right automatically or force top/right placement.",
+)
+pdraw.add_argument(
+    "--collision-policy",
+    "--collision_policy",
+    dest="collision_policy",
+    metavar="resolve|warn|error|ignore",
+    default="resolve",
+    type=str,
+    choices=["resolve", "warn", "error", "ignore"],
+    help="default=%(default)s: Resolve movable annotation collisions, report them, reject them, or leave them unchanged.",
+)
+pdraw.add_argument(
+    "--layout-report",
+    "--layout_report",
+    dest="layout_report",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="default=None: Write a reproducible JSON report of layout choices, annotation collisions, branch crossings, wrapping, and collapsing; use - for STDOUT.",
 )
 pdraw.add_argument(
     "--transparent",
@@ -3593,7 +4010,7 @@ def command_mcmctree(args):
 
 pmcmctree = subparsers.add_parser(
     "mcmctree",
-    help="Introduce divergence time constraints for PAML's mcmctree",
+    help="Prepare MCMCtree calibrations or summarize its posterior node ages",
     parents=[p_tree_input, p_download, p_species],
 )
 pmcmctree.add_argument(
@@ -3604,7 +4021,7 @@ pmcmctree.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=%(default)s: Output MCMCtree Newick file. Use "-" for STDOUT.',
+    help='default=%(default)s: Output MCMCtree calibration tree or posterior dated NHX tree. Use "-" for STDOUT.',
 )
 pmcmctree.add_argument(
     "--left-species",
@@ -3745,6 +4162,60 @@ pmcmctree.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Number of parallel workers used for TimeTree HTTP requests at the same taxonomic rank.",
+)
+pmcmctree.add_argument(
+    "--posterior",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="default=None: Summarize an MCMCtree mcmc.txt file on the input topology and emit a standard NHX dated tree instead of adding calibrations.",
+)
+pmcmctree.add_argument(
+    "--posterior-point",
+    "--posterior_point",
+    dest="posterior_point",
+    metavar="mean|median",
+    default="mean",
+    type=str,
+    choices=["mean", "median"],
+    help="default=%(default)s: Point age used for dated-tree branch lengths with --posterior.",
+)
+pmcmctree.add_argument(
+    "--posterior-ci",
+    "--posterior_ci",
+    dest="posterior_ci",
+    metavar="hpd|equal-tail",
+    default="hpd",
+    type=str,
+    choices=["hpd", "equal-tail"],
+    help="default=%(default)s: Marginal credible interval stored on each internal node with --posterior.",
+)
+pmcmctree.add_argument(
+    "--posterior-ci-level",
+    "--posterior_ci_level",
+    dest="posterior_ci_level",
+    metavar="0<FLOAT<1",
+    default=0.95,
+    type=finite_float,
+    help="default=%(default)s: Credible mass for --posterior intervals.",
+)
+pmcmctree.add_argument(
+    "--posterior-burnin",
+    "--posterior_burnin",
+    dest="posterior_burnin",
+    metavar="INT",
+    default=0,
+    type=int,
+    help="default=%(default)s: Additional leading posterior rows to discard.",
+)
+pmcmctree.add_argument(
+    "--posterior-thin",
+    "--posterior_thin",
+    dest="posterior_thin",
+    metavar="INT",
+    default=1,
+    type=int,
+    help="default=%(default)s: Keep every INT-th posterior row.",
 )
 pmcmctree.set_defaults(handler=command_mcmctree)
 

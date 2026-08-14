@@ -1,19 +1,36 @@
+import json
+import math
 import re
 from argparse import Namespace
 
 import matplotlib
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
 from matplotlib.figure import Figure
+from matplotlib.patches import Arc, Circle
+from matplotlib.path import Path as MatplotlibPath
 
 from nwkit.draw import (
+    _add_radial_depth_guide,
+    _add_scale_bar,
+    _age_interval_path,
+    _densitree_branch_envelope,
+    _densitree_topology_groups,
     _get_species_overlap_node_types,
     _load_tip_image,
+    _make_tree_collection_drawing_layouts,
+    _polar_auto_figure_height,
+    _prepare_tip_label_text,
     _read_tip_image_manifest,
+    _resample_polyline,
+    _wrap_tip_label,
     draw_main,
 )
+from nwkit.draw_layouts import make_tree_layout
+from nwkit.draw_quality import DrawingArtist, evaluate_drawing
 
 
 def make_draw_args(**kwargs):
@@ -23,6 +40,16 @@ def make_draw_args(**kwargs):
         "quoted_node_names": True,
         "outfile": None,
         "image_format": "auto",
+        "layout": "rectangular",
+        "subtree_packing": "standard",
+        "spiral_turns": None,
+        "angular_span": 360.0,
+        "angular_center": 90.0,
+        "unrooted_method": "equal-angle",
+        "daylight_iterations": 5,
+        "max_visible_tips": None,
+        "collapse_label": None,
+        "collapse_property_aggregation": "none",
         "species_parser": "legacy",
         "species_regex": r"^([^_]+_[^_]+)(?:_|$)",
         "species_map_tsv": None,
@@ -43,8 +70,23 @@ def make_draw_args(**kwargs):
         "font_size": 8.0,
         "font_family": "Helvetica",
         "branch_color": "#000000",
+        "branch_width": 0.8,
         "terminal_branch_color": None,
+        "branch_color_property": None,
+        "branch_width_property": None,
+        "branch_width_range": "0.4,2.5",
+        "scale_bar": "none",
+        "depth_guide": "none",
+        "branch_length_unit": "",
+        "tip_labels": True,
         "tip_label_position": "aligned",
+        "tip_label_wrap": "none",
+        "tip_spacing": "uniform",
+        "tip_label_font_style": "plain",
+        "tip_track": [],
+        "tip_track_type": "auto",
+        "tip_track_size": 5.0,
+        "tip_track_palette": "viridis",
         "root_marker": "none",
         "root_marker_color": "#0072B2",
         "root_marker_size": None,
@@ -60,7 +102,26 @@ def make_draw_args(**kwargs):
         "node_label_prefix": "",
         "property_color": [],
         "legend": True,
+        "legend_columns": "auto",
+        "legend_position": "auto",
+        "collision_policy": "resolve",
+        "layout_report": None,
         "transparent": False,
+        "time_constraints": "auto",
+        "time_credible_intervals": "auto",
+        "mcmctree_posterior": None,
+        "densitree_trees": None,
+        "posterior_point": "mean",
+        "posterior_ci": "hpd",
+        "posterior_ci_level": 0.95,
+        "posterior_burnin": 0,
+        "posterior_thin": 1,
+        "densitree": "none",
+        "densitree_alpha": 0.035,
+        "densitree_color": "#0072B2",
+        "densitree_ci_level": 0.95,
+        "densitree_ci_alpha": 0.18,
+        "densitree_ci_color": "#56B4E9",
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -78,6 +139,1227 @@ def extract_svg_text_positions(svg_text):
 
 
 class TestDrawMain:
+    def test_draw_shows_mcmctree_constraint_glyph(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk("((A:1,B:1)'B(2,4,0.025,0.025)':1,C:2);")
+        outfile = tmp_path / "constraints.svg"
+        report = tmp_path / "constraints.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                species_overlap_node_plot="no",
+                layout_report=str(report),
+            )
+        )
+
+        assert "2–4" in outfile.read_text()
+        payload = json.loads(report.read_text())
+        assert payload["time_constraint_count"] == 1
+        assert "time_constraint:branch" not in payload["final_collisions_by_kind"]
+
+    def test_rectangular_root_age_interval_uses_horizontal_time_scale(self):
+        tree = Tree("((A:4,B:4):6,(C:3,D:3):7);", parser=1)
+        tree.props.update(
+            {
+                "age": 10.0,
+                "age_ci_low": 8.0,
+                "age_ci_high": 12.0,
+            }
+        )
+        layout = make_tree_layout(tree, layout="rectangular")
+
+        interval = _age_interval_path(tree, layout)
+
+        assert interval[:, 1].tolist() == pytest.approx([layout.ycoord[tree]] * 2)
+        assert interval[1, 0] - interval[0, 0] == pytest.approx(4.0)
+
+    def test_projected_and_radial_time_intervals_follow_their_time_axes(self):
+        tree = Tree("((A:4,B:4):6,(C:3,D:3):7);", parser=1)
+        node = tree.common_ancestor(["A", "B"])
+        node.props.update({"age": 4.0, "age_ci_low": 3.0, "age_ci_high": 5.0})
+
+        slanted = make_tree_layout(tree, layout="slanted")
+        slanted_interval = _age_interval_path(node, slanted)
+        assert slanted_interval[:, 1].tolist() == pytest.approx(
+            [slanted.ycoord[node]] * 2
+        )
+        assert slanted_interval[1, 0] - slanted_interval[0, 0] == pytest.approx(2.0)
+
+        radial = make_tree_layout(tree, layout="radial")
+        radial_interval = _age_interval_path(node, radial)
+        radial_direction = np.asarray(
+            [
+                radial.xcoord[node] - radial.xcoord[tree],
+                radial.ycoord[node] - radial.ycoord[tree],
+            ]
+        )
+        radial_direction /= np.linalg.norm(radial_direction)
+        interval_direction = radial_interval[1] - radial_interval[0]
+        assert np.linalg.norm(interval_direction) == pytest.approx(2.0)
+        assert np.dot(interval_direction, radial_direction) == pytest.approx(2.0)
+
+    @pytest.mark.parametrize("layout", ["cladogram", "fractal"])
+    def test_explicit_time_intervals_reject_topology_only_layouts(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk(
+            "((A:4,B:4):6,(C:3,D:3):7)"
+            "[&&NHX:age_ci_low=8:age_ci_high=12:age_ci_kind=HPD:age_ci_level=0.95];"
+        )
+
+        with pytest.raises(ValueError, match="encodes branch-length"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "invalid-time.svg"),
+                    layout=layout,
+                    tip_label_position="branch-end",
+                    species_overlap_node_plot="no",
+                    time_credible_intervals="yes",
+                )
+            )
+
+    @pytest.mark.parametrize(
+        "layout",
+        ["rectangular", "slanted", "circular", "radial", "unrooted", "spiral"],
+    )
+    def test_densitree_renders_branchwise_ci_across_time_aware_layouts(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A,B),(C,D));")
+        posterior = tmp_path / "{}-mcmc.txt".format(layout)
+        posterior.write_text(
+            "Gen t_n5 t_n6 t_n7\n1 10 4 3\n2 12 5 4\n3 11 6 5\n4 13 7 6\n"
+        )
+        outfile = tmp_path / "{}-densitree.svg".format(layout)
+        report = tmp_path / "{}-densitree.json".format(layout)
+        densitree_mode = "both" if layout == "rectangular" else "ci"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                layout=layout,
+                tip_label_position=(
+                    "branch-end"
+                    if layout in {"circular", "radial", "unrooted", "spiral"}
+                    else "aligned"
+                ),
+                figure_width=5.0,
+                figure_height=4.0,
+                species_overlap_node_plot="no",
+                mcmctree_posterior=str(posterior),
+                densitree=densitree_mode,
+                layout_report=str(report),
+            )
+        )
+
+        payload = json.loads(report.read_text())
+        assert outfile.stat().st_size > 1000
+        assert payload["densitree"] == densitree_mode
+        assert payload["densitree_sample_count"] == 4
+        assert payload["densitree_ci_interpretation"] == (
+            "branchwise empirical central-path envelope"
+        )
+        assert payload["densitree_ci_path_coverage"] == pytest.approx(0.95)
+        assert payload["densitree_ci_topology_group_count"] == 1
+
+    def test_densitree_envelope_contains_the_selected_whole_paths(self):
+        paths = [
+            np.asarray(
+                [
+                    (0.0, 0.0),
+                    (0.45 + offset, 0.35 - offset / 2.0),
+                    (1.0 + offset, 1.0),
+                ]
+            )
+            for offset in np.linspace(-0.3, 0.3, 20)
+        ]
+
+        polygons, retained_indices = _densitree_branch_envelope(
+            paths,
+            level=0.8,
+            padding=0.01,
+            sample_count=25,
+            segments_per_polygon=4,
+        )
+
+        assert len(retained_indices) == 16
+        assert len(polygons) == 6
+        for index in retained_indices:
+            sampled = _resample_polyline(paths[index], sample_count=25)
+            for polygon_index, polygon in enumerate(polygons):
+                start = polygon_index * 4
+                segment = sampled[start : min(start + 5, len(sampled))]
+                assert (
+                    MatplotlibPath(polygon, closed=True)
+                    .contains_points(
+                        segment,
+                        radius=1e-9,
+                    )
+                    .all()
+                )
+
+    def test_densitree_envelopes_keep_distinct_topologies_separate(self):
+        trees = [
+            Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1),
+            Tree("((A:2,B:2):1,(C:2,D:2):1);", parser=1),
+            Tree("((A:1,C:1):1,(B:1,D:1):1);", parser=1),
+        ]
+        rendered = [("bounds-1", {}), ("bounds-2", {}), ("bounds-3", {})]
+
+        groups = _densitree_topology_groups(rendered, trees)
+
+        assert [len(group) for _, group in groups] == [2, 1]
+        assert groups[0][1] == rendered[:2]
+        assert groups[1][1] == rendered[2:]
+
+    @pytest.mark.parametrize(
+        "layout",
+        ["rectangular", "slanted", "cladogram", "circular", "radial", "spiral"],
+    )
+    def test_topology_densitree_pins_every_sample_to_reference_root(self, layout):
+        reference = Tree(
+            "(((A:2,B:2):3,(C:2,D:2):3):4,(E:2,F:2):7);",
+            parser=1,
+        )
+        samples = [
+            Tree(
+                "(((A:2,B:2):3,(C:2,D:2):3):4,(E:2,F:2):7);",
+                parser=1,
+            ),
+            Tree(
+                "(((A:2,B:2):3,(E:2,F:2):3):4,(C:2,D:2):7);",
+                parser=1,
+            ),
+        ]
+        terminal_extents = {leaf: 0.0 for leaf in reference.leaves()}
+        label_sizes = {leaf: (0.0, 0.0) for leaf in reference.leaves()}
+
+        rendered = _make_tree_collection_drawing_layouts(
+            reference,
+            samples,
+            layout=layout,
+            use_topology_depth=False,
+            aspect_ratio=1.0,
+            spiral_turns=1.5,
+            angular_span=360.0,
+            angular_center=90.0,
+            terminal_extent_by_leaf=terminal_extents,
+            label_size_by_leaf=label_sizes,
+            tip_spacing="uniform",
+            subtree_packing="standard",
+            unrooted_method="equal-angle",
+            daylight_iterations=0,
+        )
+
+        root_starts = []
+        for sample, (_, paths) in zip(samples, rendered, strict=True):
+            starts = [
+                paths[frozenset(child.leaf_names())][0]
+                for child in sample.get_children()
+            ]
+            assert np.allclose(starts, starts[0])
+            root_starts.append(starts[0])
+        assert np.allclose(root_starts, root_starts[0])
+
+    @pytest.mark.parametrize("layout", ["cladogram", "fractal"])
+    def test_densitree_rejects_topology_only_layouts(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A,B),(C,D));")
+        posterior = tmp_path / "mcmc.txt"
+        posterior.write_text("Gen t_n5 t_n6 t_n7\n1 10 4 3\n2 12 5 4\n")
+
+        with pytest.raises(ValueError, match="do not"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "invalid.svg"),
+                    layout=layout,
+                    tip_label_position="branch-end",
+                    species_overlap_node_plot="no",
+                    mcmctree_posterior=str(posterior),
+                    densitree="ci",
+                )
+            )
+
+    @pytest.mark.parametrize(
+        "layout",
+        ["rectangular", "slanted", "cladogram", "circular", "radial", "spiral"],
+    )
+    def test_densitree_tree_collection_renders_topology_variation(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("(((A:2,B:2):3,(C:2,D:2):3):4,((E:2,F:2):3,(G:2,H:2):3):4);")
+        samples = tmp_path / "{}-trees.nwk".format(layout)
+        samples.write_text(
+            "(((A:2,B:2):3,(C:2,D:2):3):4,"
+            "((E:2,F:2):3,(G:2,H:2):3):4);\n"
+            "(((A:2,C:2):3,(B:2,D:2):3):4,"
+            "((E:2,F:2):3,(G:2,H:2):3):4);\n"
+            "(((A:2,B:2):3,(C:2,D:2):3):4,"
+            "((E:2,G:2):3,(F:2,H:2):3):4);\n"
+            "(((A:2,B:2):3,(C:2,D:2):3):4,"
+            "((E:2,F:2):3,(G:2,H:2):3):4);\n"
+        )
+        outfile = tmp_path / "{}-topology-densitree.svg".format(layout)
+        report = tmp_path / "{}-topology-densitree.json".format(layout)
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                layout=layout,
+                angular_span=180.0 if layout in {"circular", "radial"} else 360.0,
+                tip_label_position=(
+                    "branch-end"
+                    if layout in {"circular", "radial", "spiral"}
+                    else "aligned"
+                ),
+                figure_width=5.0,
+                figure_height=4.0,
+                species_overlap_node_plot="no",
+                densitree_trees=str(samples),
+                densitree="both",
+                layout_report=str(report),
+            )
+        )
+
+        payload = json.loads(report.read_text())
+        assert outfile.stat().st_size > 1000
+        assert payload["densitree_source"] == "tree-collection"
+        assert payload["densitree_sample_count"] == 4
+        assert payload["densitree_topology_count"] == 3
+        assert payload["densitree_root_alignment"] == "reference-coordinate"
+        assert payload["densitree_ci_topology_group_count"] == 3
+        groups = payload["densitree_ci_topology_groups"]
+        assert [group["sample_fraction"] for group in groups] == pytest.approx(
+            [0.5, 0.25, 0.25]
+        )
+        assert groups[0]["opacity"] == pytest.approx(0.18)
+        assert groups[1]["opacity"] == pytest.approx(0.18 * math.sqrt(0.5))
+        assert groups[2]["opacity"] == pytest.approx(0.18 * math.sqrt(0.5))
+        assert payload["densitree_ci_topology_frequency_encoding"] == (
+            "square-root opacity relative to the most frequent topology"
+        )
+
+    @pytest.mark.parametrize("layout", ["unrooted", "fractal"])
+    def test_topology_densitree_rejects_layouts_without_fixed_tip_alignment(
+        self,
+        layout,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
+        samples = tmp_path / "trees.nwk"
+        samples.write_text("((A:1,B:1):1,(C:1,D:1):1);\n((A:1,C:1):1,(B:1,D:1):1);\n")
+
+        with pytest.raises(ValueError, match="currently supports"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "invalid.svg"),
+                    image_format="svg",
+                    layout=layout,
+                    species_overlap_node_plot="no",
+                    densitree_trees=str(samples),
+                    densitree="all",
+                )
+            )
+
+    def test_densitree_tree_collection_validates_tip_set_and_sample_selection(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
+        samples = tmp_path / "trees.nwk"
+        samples.write_text(
+            "((A:1,B:1):1,(C:1,D:1):1);\n"
+            "((A:1,C:1):1,(B:1,D:1):1);\n"
+            "((A:1,B:1):1,(C:1,D:1):1);\n"
+        )
+        report = tmp_path / "selected.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / "selected.svg"),
+                image_format="svg",
+                species_overlap_node_plot="no",
+                densitree_trees=str(samples),
+                densitree="all",
+                posterior_burnin=1,
+                posterior_thin=2,
+                layout_report=str(report),
+            )
+        )
+
+        payload = json.loads(report.read_text())
+        assert payload["densitree_sample_count"] == 1
+        assert payload["densitree_topology_count"] == 1
+
+        mismatched = tmp_path / "mismatched.nwk"
+        mismatched.write_text("((A:1,B:1):1,(C:1,E:1):1);\n")
+        with pytest.raises(ValueError, match="different tip set"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "mismatched.svg"),
+                    image_format="svg",
+                    species_overlap_node_plot="no",
+                    densitree_trees=str(mismatched),
+                    densitree="all",
+                )
+            )
+
+    def test_densitree_sources_are_mutually_exclusive(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A,B),(C,D));")
+        samples = tmp_path / "trees.nwk"
+        samples.write_text("((A,B),(C,D));\n")
+        posterior = tmp_path / "mcmc.txt"
+        posterior.write_text("Gen t_n5 t_n6 t_n7\n1 10 4 3\n")
+
+        with pytest.raises(ValueError, match="mutually exclusive"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "invalid.svg"),
+                    image_format="svg",
+                    species_overlap_node_plot="no",
+                    mcmctree_posterior=str(posterior),
+                    densitree_trees=str(samples),
+                    densitree="all",
+                )
+            )
+
+    def test_scale_bar_label_is_above_bar(self):
+        figure, axes = plt.subplots(figsize=(3.0, 2.0))
+        axes.set_xlim(0.0, 3.0)
+        artist = _add_scale_bar(
+            figure=figure,
+            axes=axes,
+            size=1.0,
+            label="1 substitutions/site",
+            color="#000000",
+            font_family="DejaVu Sans",
+            font_size=8.0,
+            anchor_x=0.1,
+            anchor_y=0.02,
+        )
+
+        try:
+            figure.canvas.draw()
+            renderer = figure.canvas.get_renderer()
+            label_bounds = artist.txt_label.get_window_extent(renderer)
+            bar_bounds = artist.size_bar.get_window_extent(renderer)
+        finally:
+            plt.close(figure)
+
+        assert label_bounds.y0 >= bar_bounds.y1
+
+    def test_collision_solver_moves_lower_priority_annotation(self):
+        figure, axes = plt.subplots(figsize=(2.0, 2.0))
+        fixed = axes.annotate(
+            "fixed", xy=(0.5, 0.5), xytext=(0.0, 0.0), textcoords="offset points"
+        )
+        movable = axes.annotate(
+            "movable", xy=(0.5, 0.5), xytext=(0.0, 0.0), textcoords="offset points"
+        )
+        artists = [
+            DrawingArtist(fixed, kind="node_label", priority=100),
+            DrawingArtist(
+                movable,
+                kind="node_label",
+                priority=10,
+                movable=True,
+            ),
+        ]
+
+        try:
+            report = evaluate_drawing(figure, artists, [], policy="resolve")
+        finally:
+            plt.close(figure)
+
+        assert report["initial_collision_count"] == 1
+        assert report["final_collision_count"] == 0
+        assert report["moved_artist_count"] == 1
+
+    def test_collision_solver_restores_best_non_worsening_placement(self):
+        figure, axes = plt.subplots(figsize=(2.0, 2.0))
+        fixed = axes.annotate(
+            "X",
+            xy=(0.5, 0.5),
+            xytext=(0.0, 0.0),
+            textcoords="offset points",
+            ha="center",
+            va="center",
+            fontsize=100,
+        )
+        movable = axes.annotate(
+            "movable",
+            xy=(0.5, 0.5),
+            xytext=(0.0, 0.0),
+            textcoords="offset points",
+            ha="center",
+            va="center",
+        )
+        artists = [
+            DrawingArtist(fixed, kind="node_label", priority=100),
+            DrawingArtist(
+                movable,
+                kind="node_label",
+                priority=10,
+                movable=True,
+            ),
+        ]
+
+        try:
+            report = evaluate_drawing(figure, artists, [], policy="resolve")
+        finally:
+            plt.close(figure)
+
+        assert report["initial_collision_count"] == 1
+        assert report["final_collision_count"] == 1
+        assert report["moved_artist_count"] == 0
+        assert movable.get_position() == (0.0, 0.0)
+
+    @pytest.mark.parametrize(
+        "layout",
+        [
+            "slanted",
+            "cladogram",
+            "circular",
+            "radial",
+            "unrooted",
+            "spiral",
+            "fractal",
+        ],
+    )
+    def test_draw_writes_svg_with_modern_layout(self, tmp_nwk, tmp_path, layout):
+        infile = tmp_nwk("(((A:1,B:1):1,C:1):1,(D:1,E:8):1);")
+        outfile = tmp_path / "{}.svg".format(layout)
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                layout=layout,
+                tip_label_position="branch-end",
+                species_overlap_node_plot="no",
+                figure_width=5.0,
+                figure_height=4.0,
+            )
+        )
+
+        svg = outfile.read_text()
+        assert "<svg" in svg
+        for leaf_name in ("A", "B", "C", "D", "E"):
+            assert ">{}<".format(leaf_name) in svg
+
+    def test_tidy_layout_preserves_branch_axis_and_compacts_tree(self):
+        tree = Tree("(((A:1,B:1):1,C:1):1,(D:1,E:8):1);", parser=1)
+        rectangular = make_tree_layout(tree, layout="rectangular")
+        tidy = make_tree_layout(
+            tree,
+            layout="rectangular",
+            subtree_packing="tidy",
+        )
+
+        assert tidy.name == "rectangular"
+        assert tidy.metadata["subtree_packing"] == "tidy"
+        assert tidy.xcoord == rectangular.xcoord
+        rectangular_span = max(rectangular.ycoord.values()) - min(
+            rectangular.ycoord.values()
+        )
+        tidy_span = max(tidy.ycoord.values()) - min(tidy.ycoord.values())
+        assert tidy_span < rectangular_span
+
+    def test_slanted_layout_preserves_phylogram_depth_with_straight_edges(self):
+        tree = Tree("((A:1,B:2):3,C:4);", parser=1)
+        rectangular = make_tree_layout(tree, layout="rectangular")
+        slanted = make_tree_layout(tree, layout="slanted")
+
+        assert slanted.xcoord == rectangular.xcoord
+        assert all(len(path) == 2 for path in slanted.edge_paths.values())
+
+    def test_cladogram_aligns_tips_and_ignores_branch_lengths(self):
+        tree = Tree("(((A:1,B:9):2,C:7):3,D:4);", parser=1)
+        cladogram = make_tree_layout(tree, layout="cladogram")
+
+        tip_positions = {cladogram.xcoord[leaf] for leaf in tree.leaves()}
+        assert len(tip_positions) == 1
+        assert cladogram.xcoord[tree] == 0.0
+        assert all(len(path) == 2 for path in cladogram.edge_paths.values())
+
+    def test_circular_layout_uses_arc_then_radial_paths(self):
+        tree = Tree("(((A:1,B:1):1,C:1):1,(D:1,E:1):1);", parser=1)
+        drawing = make_tree_layout(tree, layout="circular")
+
+        assert drawing.spatial is True
+        assert drawing.equal_aspect is True
+        assert any(len(path) > 3 for path in drawing.edge_paths.values())
+
+    def test_circular_angular_span_controls_tip_sector(self):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="circular",
+            angular_span=60.0,
+        )
+
+        angles = sorted(drawing.label_angles.values())
+        assert angles[-1] - angles[0] == pytest.approx(60.0)
+
+    def test_circular_180_degree_sector_uses_upper_half_by_default(self):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="circular",
+            angular_span=180.0,
+        )
+
+        angles = sorted(drawing.label_angles.values())
+        assert angles[0] == pytest.approx(0.0)
+        assert angles[-1] == pytest.approx(180.0)
+        assert min(drawing.ycoord.values()) >= -1e-12
+
+    def test_angular_center_rotates_a_circular_sector(self):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="circular",
+            angular_span=180.0,
+            angular_center=0.0,
+        )
+
+        angles = sorted(drawing.label_angles.values())
+        assert angles[0] == pytest.approx(-90.0)
+        assert angles[-1] == pytest.approx(90.0)
+
+    def test_single_tip_sector_uses_angular_center(self):
+        tree = Tree("(A:1);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="circular",
+            angular_span=180.0,
+            angular_center=135.0,
+        )
+
+        assert drawing.label_angles[tree["A"]] == pytest.approx(135.0)
+
+    def test_radial_layout_uses_straight_edges(self):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        radial = make_tree_layout(tree, layout="radial")
+
+        assert radial.spatial is True
+        assert all(len(path) == 2 for path in radial.edge_paths.values())
+
+    def test_radial_layout_accepts_an_upper_semicircle(self):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        radial = make_tree_layout(
+            tree,
+            layout="radial",
+            angular_span=180.0,
+        )
+
+        angles = sorted(radial.label_angles.values())
+        assert angles[0] == pytest.approx(0.0)
+        assert angles[-1] == pytest.approx(180.0)
+        assert min(radial.ycoord.values()) >= -1e-12
+
+    def test_radial_depth_guide_uses_sector_arcs(self):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="radial",
+            angular_span=180.0,
+        )
+        figure, axes = plt.subplots()
+        try:
+            _add_radial_depth_guide(
+                axes=axes,
+                drawing_layout=drawing,
+                tree=tree,
+                ticks=[1.0, 2.0],
+                color="#888888",
+                font_family="Helvetica",
+                font_size=8.0,
+            )
+            assert len(axes.patches) == 2
+            assert all(isinstance(patch, Arc) for patch in axes.patches)
+            assert not any(isinstance(patch, Circle) for patch in axes.patches)
+        finally:
+            plt.close(figure)
+
+    def test_polar_auto_height_tracks_sector_aspect(self):
+        full = _polar_auto_figure_height(
+            panel_width=7.2,
+            angular_span=360.0,
+            angular_center=90.0,
+            radial_label_extent=0.0,
+            tangential_label_extent=0.0,
+            top_margin=0.0,
+            bottom_margin=0.0,
+        )
+        upper = _polar_auto_figure_height(
+            panel_width=7.2,
+            angular_span=180.0,
+            angular_center=90.0,
+            radial_label_extent=0.0,
+            tangential_label_extent=0.0,
+            top_margin=0.0,
+            bottom_margin=0.0,
+        )
+
+        assert full == pytest.approx(7.2)
+        assert upper == pytest.approx(3.6)
+
+    def test_unrooted_layout_suppresses_degree_two_root_on_joined_edge(self):
+        tree = Tree("((A:1,B:1):2,(C:1,D:1):4);", parser=1)
+        unrooted = make_tree_layout(tree, layout="unrooted")
+        first, second = tree.get_children()
+
+        joined_length = math.hypot(
+            unrooted.xcoord[second] - unrooted.xcoord[first],
+            unrooted.ycoord[second] - unrooted.ycoord[first],
+        )
+        first_to_root = math.hypot(
+            unrooted.xcoord[tree] - unrooted.xcoord[first],
+            unrooted.ycoord[tree] - unrooted.ycoord[first],
+        )
+        assert joined_length == pytest.approx(6.0)
+        assert first_to_root == pytest.approx(2.0)
+        assert unrooted.root_path == []
+
+    def test_equal_daylight_unrooted_layout_preserves_every_branch_length(self):
+        tree = Tree(
+            "(((A:1,B:2):1,C:3):2,((D:1,E:2):1,(F:1,G:1):2):4);",
+            parser=1,
+        )
+        equal_angle = make_tree_layout(tree, layout="unrooted")
+        daylight = make_tree_layout(
+            tree,
+            layout="unrooted",
+            unrooted_method="equal-daylight",
+            daylight_iterations=8,
+        )
+
+        assert daylight.name == "unrooted-daylight"
+        assert any(
+            daylight.xcoord[node] != pytest.approx(equal_angle.xcoord[node])
+            or daylight.ycoord[node] != pytest.approx(equal_angle.ycoord[node])
+            for node in tree.traverse()
+        )
+        for node in tree.traverse():
+            if node.is_root:
+                continue
+            distance = math.hypot(
+                daylight.xcoord[node] - daylight.xcoord[node.up],
+                daylight.ycoord[node] - daylight.ycoord[node.up],
+            )
+            assert distance == pytest.approx(float(node.dist))
+
+    @pytest.mark.parametrize("angular_span", [0.0, 360.1])
+    def test_polar_layout_rejects_invalid_angular_span(self, angular_span):
+        tree = Tree("(A:1,B:1);", parser=1)
+
+        with pytest.raises(ValueError, match="--angular-span"):
+            make_tree_layout(
+                tree,
+                layout="circular",
+                angular_span=angular_span,
+            )
+
+    def test_nonpolar_layout_rejects_nondefault_angular_options(self):
+        tree = Tree("(A:1,B:1);", parser=1)
+
+        with pytest.raises(ValueError, match="--angular-span"):
+            make_tree_layout(tree, layout="spiral", angular_span=180.0)
+        with pytest.raises(ValueError, match="--angular-center"):
+            make_tree_layout(tree, layout="fractal", angular_center=0.0)
+
+    @pytest.mark.parametrize("layout_name", ["circular", "radial", "fractal"])
+    def test_label_aware_spatial_layout_allocates_more_angle_to_tall_labels(
+        self,
+        layout_name,
+    ):
+        tree = Tree("(A:1,B:1,C:1);", parser=1)
+        sizes = {
+            tree["A"]: (0.4, 0.1),
+            tree["B"]: (0.4, 1.0),
+            tree["C"]: (0.4, 0.1),
+        }
+        drawing = make_tree_layout(
+            tree,
+            layout=layout_name,
+            aspect_ratio=1.4,
+            label_size_by_leaf=sizes,
+            tip_spacing="label-aware",
+        )
+
+        angles = [
+            math.radians(drawing.label_angles[tree[name]]) % (2.0 * math.pi)
+            for name in ("A", "B", "C")
+        ]
+        gaps = [
+            (angles[(index + 1) % 3] - angles[index]) % (2.0 * math.pi)
+            for index in range(3)
+        ]
+        assert drawing.name == layout_name
+        assert drawing.spatial is True
+        assert gaps[0] > gaps[2]
+        assert gaps[1] > gaps[2]
+
+    @pytest.mark.parametrize("layout_name", ["rectangular", "slanted", "cladogram"])
+    def test_label_aware_cartesian_layout_uses_variable_tip_rows(
+        self,
+        layout_name,
+    ):
+        tree = Tree("(A:1,B:1,C:1);", parser=1)
+        sizes = {
+            tree["A"]: (0.4, 0.1),
+            tree["B"]: (0.4, 1.0),
+            tree["C"]: (0.4, 0.1),
+        }
+        uniform = make_tree_layout(tree, layout=layout_name)
+        aware = make_tree_layout(
+            tree,
+            layout=layout_name,
+            label_size_by_leaf=sizes,
+            tip_spacing="label-aware",
+        )
+
+        assert aware.ycoord[tree["B"]] - aware.ycoord[tree["A"]] > (
+            uniform.ycoord[tree["B"]] - uniform.ycoord[tree["A"]]
+        )
+        assert aware.ycoord[tree["C"]] - aware.ycoord[tree["B"]] > (
+            uniform.ycoord[tree["C"]] - uniform.ycoord[tree["B"]]
+        )
+
+    def test_label_aware_tidy_layout_uses_variable_leaf_boxes(self):
+        tree = Tree("(A:1,B:1,C:1);", parser=1)
+        uniform = make_tree_layout(
+            tree,
+            layout="rectangular",
+            subtree_packing="tidy",
+        )
+        aware = make_tree_layout(
+            tree,
+            layout="rectangular",
+            subtree_packing="tidy",
+            label_size_by_leaf={
+                tree["A"]: (0.4, 0.1),
+                tree["B"]: (0.4, 1.0),
+                tree["C"]: (0.4, 0.1),
+            },
+            tip_spacing="label-aware",
+        )
+
+        uniform_span = max(uniform.ycoord.values()) - min(uniform.ycoord.values())
+        aware_span = max(aware.ycoord.values()) - min(aware.ycoord.values())
+        assert aware_span > uniform_span
+
+    def test_tidy_multiline_label_reserves_height_only_at_terminal_extent(self):
+        def drawing_for(newick):
+            tree = Tree(newick, parser=1)
+            drawing = make_tree_layout(
+                tree,
+                layout="rectangular",
+                subtree_packing="tidy",
+                label_size_by_leaf={
+                    tree["A"]: (2.0, 2.0),
+                    tree["B"]: (0.2, 0.1),
+                    tree["C"]: (0.2, 0.1),
+                },
+                terminal_extent_by_leaf={
+                    tree["A"]: 2.0,
+                    tree["B"]: 0.2,
+                    tree["C"]: 0.2,
+                },
+                tip_spacing="label-aware",
+            )
+            return tree, drawing
+
+        separated_tree, separated = drawing_for("(A:10,B:1,C:1);")
+        overlapping_tree, overlapping = drawing_for("(A:1,B:1,C:1);")
+        separated_gap = (
+            separated.ycoord[separated_tree["B"]]
+            - separated.ycoord[separated_tree["A"]]
+        )
+        overlapping_gap = (
+            overlapping.ycoord[overlapping_tree["B"]]
+            - overlapping.ycoord[overlapping_tree["A"]]
+        )
+
+        assert separated_gap < overlapping_gap
+        assert separated_gap == pytest.approx(1.0)
+
+    @pytest.mark.parametrize("tip_spacing", ["uniform", "label-aware"])
+    def test_tidy_parents_are_centered_on_direct_children(self, tip_spacing):
+        tree = Tree("(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="rectangular",
+            subtree_packing="tidy",
+            label_size_by_leaf={
+                leaf: (
+                    0.4,
+                    1.2 if leaf.name == "B" else (0.6 if leaf.name == "E" else 0.1),
+                )
+                for leaf in tree.leaves()
+            },
+            tip_spacing=tip_spacing,
+        )
+
+        for node in tree.traverse():
+            children = node.get_children()
+            if not children:
+                continue
+            expected = sum(drawing.ycoord[child] for child in children) / len(children)
+            assert drawing.ycoord[node] == pytest.approx(expected)
+            assert (
+                min(drawing.ycoord[child] for child in children) <= drawing.ycoord[node]
+            )
+            assert drawing.ycoord[node] <= max(
+                drawing.ycoord[child] for child in children
+            )
+
+    def test_label_aware_circular_layout_preserves_root_distance_as_radius(self):
+        tree = Tree("(((A:1,B:2):3,C:2):1,(D:5,E:1):2);", parser=1)
+        rectangular = make_tree_layout(tree, layout="rectangular")
+        circular = make_tree_layout(
+            tree,
+            layout="circular",
+            label_size_by_leaf={
+                leaf: (0.5, 0.1 + index * 0.1)
+                for index, leaf in enumerate(tree.leaves())
+            },
+            tip_spacing="label-aware",
+        )
+
+        assert circular.name == "circular"
+        for node in tree.traverse():
+            radius = math.hypot(circular.xcoord[node], circular.ycoord[node])
+            assert radius == pytest.approx(rectangular.xcoord[node])
+
+    @pytest.mark.parametrize(
+        "layout_name",
+        [
+            "rectangular",
+            "slanted",
+            "cladogram",
+            "circular",
+            "radial",
+            "unrooted",
+            "spiral",
+            "fractal",
+        ],
+    )
+    def test_every_layout_accepts_label_aware_tip_spacing(self, layout_name):
+        tree = Tree("((A:1,B:2):1,(C:1,D:3):2);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout=layout_name,
+            label_size_by_leaf={
+                leaf: (0.4, 0.1 + index * 0.25)
+                for index, leaf in enumerate(tree.leaves())
+            },
+            tip_spacing="label-aware",
+        )
+
+        assert drawing.leaf_order
+        assert set(drawing.xcoord) == set(tree.traverse())
+        assert set(drawing.ycoord) == set(tree.traverse())
+
+    @pytest.mark.parametrize("layout_name", ["rectangular", "circular", "spiral"])
+    def test_tidy_subtree_packing_composes_with_supported_layouts(
+        self,
+        layout_name,
+    ):
+        tree = Tree("(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout=layout_name,
+            subtree_packing="tidy",
+            label_size_by_leaf={
+                leaf: (0.4, 1.0 if leaf.name == "B" else 0.1) for leaf in tree.leaves()
+            },
+            terminal_extent_by_leaf={leaf: 0.4 for leaf in tree.leaves()},
+            tip_spacing="label-aware",
+        )
+
+        assert drawing.name == layout_name
+        assert drawing.metadata["subtree_packing"] == "tidy"
+        assert drawing.leaf_order == list(tree.leaves())
+        assert all(math.isfinite(value) for value in drawing.xcoord.values())
+        assert all(math.isfinite(value) for value in drawing.ycoord.values())
+
+    @pytest.mark.parametrize(
+        "layout_name",
+        ["slanted", "cladogram", "radial", "unrooted", "fractal"],
+    )
+    def test_tidy_subtree_packing_rejects_unverified_geometries(
+        self,
+        layout_name,
+    ):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+
+        with pytest.raises(ValueError, match="supported only with rectangular"):
+            make_tree_layout(
+                tree,
+                layout=layout_name,
+                subtree_packing="tidy",
+            )
+
+    def test_tidy_circular_packing_reserves_the_wraparound_seam(self):
+        tree = Tree("(((A:1,B:1):1,C:1):1,(D:1,(E:1,F:1):1):1);", parser=1)
+        drawing = make_tree_layout(
+            tree,
+            layout="circular",
+            subtree_packing="tidy",
+            label_size_by_leaf={
+                leaf: (0.4, 1.5 if leaf.name in {"A", "F"} else 0.1)
+                for leaf in tree.leaves()
+            },
+            terminal_extent_by_leaf={leaf: 0.4 for leaf in tree.leaves()},
+            tip_spacing="label-aware",
+        )
+        angles = [
+            math.radians(drawing.label_angles[leaf]) % (2.0 * math.pi)
+            for leaf in drawing.leaf_order
+        ]
+        cyclic_gaps = [
+            (angles[(index + 1) % len(angles)] - angles[index]) % (2.0 * math.pi)
+            for index in range(len(angles))
+        ]
+
+        assert min(cyclic_gaps) > 0.0
+        assert cyclic_gaps[-1] > min(cyclic_gaps[1:-1])
+
+    @pytest.mark.parametrize("layout_name", ["rectangular", "circular", "spiral"])
+    def test_tidy_subtree_packing_is_deterministic(self, layout_name):
+        tree = Tree("(((A:1,B:2):1,C:1):1,(D:1,(E:2,F:1):1):2);", parser=1)
+        kwargs = {
+            "layout": layout_name,
+            "subtree_packing": "tidy",
+            "label_size_by_leaf": {
+                leaf: (0.4, 1.0 if leaf.name == "B" else 0.1) for leaf in tree.leaves()
+            },
+            "terminal_extent_by_leaf": {leaf: 0.4 for leaf in tree.leaves()},
+            "tip_spacing": "label-aware",
+        }
+
+        first = make_tree_layout(tree, **kwargs)
+        second = make_tree_layout(tree, **kwargs)
+
+        assert first.xcoord == second.xcoord
+        assert first.ycoord == second.ycoord
+        assert first.edge_paths == second.edge_paths
+
+    def test_label_aware_spiral_changes_tip_allocation(self):
+        tree = Tree("(A:1,B:1,C:1,D:1);", parser=1)
+        sizes = {
+            tree["A"]: (0.4, 0.1),
+            tree["B"]: (0.4, 1.0),
+            tree["C"]: (0.4, 0.1),
+            tree["D"]: (0.4, 0.1),
+        }
+        uniform = make_tree_layout(tree, layout="spiral")
+        aware = make_tree_layout(
+            tree,
+            layout="spiral",
+            label_size_by_leaf=sizes,
+            tip_spacing="label-aware",
+        )
+
+        assert any(
+            aware.xcoord[leaf] != pytest.approx(uniform.xcoord[leaf])
+            or aware.ycoord[leaf] != pytest.approx(uniform.ycoord[leaf])
+            for leaf in tree.leaves()
+        )
+
+    def test_label_aware_unrooted_changes_angles_and_preserves_edge_lengths(self):
+        tree = Tree("((A:1,B:2):1,(C:3,(D:1,E:2):1):2);", parser=1)
+        uniform = make_tree_layout(tree, layout="unrooted")
+        aware = make_tree_layout(
+            tree,
+            layout="unrooted",
+            label_size_by_leaf={
+                leaf: (0.4, 1.2 if leaf.name == "D" else 0.1) for leaf in tree.leaves()
+            },
+            tip_spacing="label-aware",
+        )
+
+        assert any(
+            aware.xcoord[leaf] != pytest.approx(uniform.xcoord[leaf])
+            or aware.ycoord[leaf] != pytest.approx(uniform.ycoord[leaf])
+            for leaf in tree.leaves()
+        )
+        uniform_center = min(
+            tree.traverse(),
+            key=lambda node: math.hypot(
+                uniform.xcoord[node],
+                uniform.ycoord[node],
+            ),
+        )
+        aware_center = min(
+            tree.traverse(),
+            key=lambda node: math.hypot(
+                aware.xcoord[node],
+                aware.ycoord[node],
+            ),
+        )
+        assert aware_center is uniform_center
+        for node, path in aware.edge_paths.items():
+            length = sum(
+                math.hypot(end[0] - start[0], end[1] - start[1])
+                for start, end in zip(path, path[1:], strict=False)
+            )
+            assert length == pytest.approx(float(node.dist))
+
+    @pytest.mark.parametrize(
+        "removed_layout",
+        ["packed", "packed-phylogram", "tidy", "fan"],
+    )
+    def test_removed_packed_layout_names_have_no_compatibility_alias(
+        self,
+        removed_layout,
+    ):
+        tree = Tree("(A:1,B:1);", parser=1)
+
+        with pytest.raises(ValueError, match="Unsupported '--layout'"):
+            make_tree_layout(tree, layout=removed_layout)
+
+    def test_invalid_tip_spacing_is_rejected(self):
+        tree = Tree("(A:1,B:1);", parser=1)
+
+        with pytest.raises(ValueError, match="--tip-spacing"):
+            make_tree_layout(tree, tip_spacing="packed")
+
+    def test_invalid_subtree_packing_is_rejected(self):
+        tree = Tree("(A:1,B:1);", parser=1)
+
+        with pytest.raises(ValueError, match="--subtree-packing"):
+            make_tree_layout(tree, subtree_packing="dense")
+
+    def test_tip_label_wrap_prefers_delimiters_and_hard_wraps(self):
+        assert _wrap_tip_label("Arabidopsis_thaliana", 12) == "Arabidopsis_\nthaliana"
+        assert _wrap_tip_label("ABCDEFGHIJ", 4) == "ABCD\nEFGH\nIJ"
+
+    def test_auto_tip_label_wraps_long_names_but_leaves_short_names(self):
+        tree = Tree("(Short:1,VeryLongSpeciesNameWithoutDelimiter:1);", parser=1)
+        text_by_leaf, size_by_leaf = _prepare_tip_label_text(
+            leaf_order=list(tree.leaves()),
+            wrap="auto",
+            font_size=8.0,
+            font_family="DejaVu Sans",
+            layout_name="fractal",
+            panel_width_in=7.2,
+            panel_height_in=5.0,
+        )
+
+        assert text_by_leaf[tree["Short"]] == "Short"
+        assert "\n" in text_by_leaf[tree["VeryLongSpeciesNameWithoutDelimiter"]]
+        assert tree["VeryLongSpeciesNameWithoutDelimiter"].name == (
+            "VeryLongSpeciesNameWithoutDelimiter"
+        )
+        assert size_by_leaf[tree["VeryLongSpeciesNameWithoutDelimiter"]][0] < 1.0
+
+    def test_taxonomy_wrap_keeps_binomial_together(self):
+        tree = Tree("(Arabidopsis_thaliana_accession_Col_0:1);", parser=1)
+        text_by_leaf, _ = _prepare_tip_label_text(
+            leaf_order=list(tree.leaves()),
+            wrap="taxonomy",
+            font_size=8.0,
+            font_family="DejaVu Sans",
+            layout_name="fractal",
+            panel_width_in=1.0,
+            panel_height_in=1.0,
+        )
+
+        displayed = text_by_leaf[tree["Arabidopsis_thaliana_accession_Col_0"]]
+        assert displayed.startswith("Arabidopsis_thaliana\n")
+
+    def test_draw_rejects_invalid_tip_label_wrap(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk("(A:1,B:1);")
+
+        with pytest.raises(ValueError, match="--tip-label-wrap"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "invalid-wrap.svg"),
+                    species_overlap_node_plot="no",
+                    tip_label_wrap="zero",
+                )
+            )
+
+    def test_spiral_layout_warps_connectors_into_sampled_curves(self):
+        tree = Tree("(((A:1,B:1):1,C:1):1,(D:1,E:8):1);", parser=1)
+        spiral = make_tree_layout(tree, layout="spiral", spiral_turns=2.5)
+
+        assert spiral.spatial is True
+        assert spiral.equal_aspect is True
+        assert any(len(path) > 3 for path in spiral.edge_paths.values())
+        assert all(math.isfinite(value) for value in spiral.xcoord.values())
+        assert all(math.isfinite(value) for value in spiral.ycoord.values())
+
+    def test_fractal_layout_fits_requested_rectangular_aspect(self):
+        tree = Tree("(((A:1,B:1):1,C:1):1,(D:1,E:8):1);", parser=1)
+        fractal = make_tree_layout(tree, layout="fractal", aspect_ratio=1.8)
+
+        node_x_span = max(fractal.xcoord.values()) - min(fractal.xcoord.values())
+        node_y_span = max(fractal.ycoord.values()) - min(fractal.ycoord.values())
+        assert node_x_span / node_y_span == pytest.approx(1.8)
+
+    def test_spiral_layout_rejects_nonpositive_turn_count(self):
+        tree = Tree("(A:1,B:1);", parser=1)
+
+        with pytest.raises(ValueError, match="--spiral-turns"):
+            make_tree_layout(tree, layout="spiral", spiral_turns=0)
+
+    def test_draw_can_hide_tip_labels_for_dense_overview(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk("((Alpha:1,Beta:1):1,(Gamma:1,Delta:1):1);")
+        outfile = tmp_path / "unlabelled-fractal.svg"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                layout="fractal",
+                tip_labels=False,
+                tip_label_position="branch-end",
+                species_overlap_node_plot="no",
+            )
+        )
+
+        svg = outfile.read_text()
+        assert "Alpha" not in svg
+        assert "Beta" not in svg
+
     def test_draw_rejects_unreasonably_large_tip_image_size(
         self,
         tmp_nwk,
@@ -274,6 +1556,307 @@ class TestDrawMain:
 
         assert outfile.exists()
         assert outfile.stat().st_size > 0
+
+    def test_draw_writes_scale_bar_and_layout_quality_report(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A:1,B:2):1,(C:3,D:4):2);")
+        outfile = tmp_path / "scaled.svg"
+        report_path = tmp_path / "layout.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                species_overlap_node_plot="no",
+                tip_spacing="label-aware",
+                scale_bar="auto",
+                branch_length_unit="substitutions/site",
+                layout_report=str(report_path),
+            )
+        )
+
+        svg = outfile.read_text(encoding="utf-8")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert "substitutions/site" in svg
+        assert report["branch_lengths_encoded"] is True
+        assert report["tip_spacing"] == "label-aware"
+        assert report["subtree_packing"] == "standard"
+        assert report["scale_bar"] > 0.0
+        assert report["scale_bar_position"] == "bottom-reserved"
+        assert report["scale_bar_label_position"] == "above"
+        assert not any(
+            "scale_bar" in collision_kind
+            for collision_kind in report["final_collisions_by_kind"]
+        )
+        assert report["visible_tip_count"] == 4
+        assert "final_collisions_by_kind" in report
+
+    def test_draw_reports_composed_tidy_packing(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk("(((A:1,B:2):1,C:1):1,(D:1,E:2):1);")
+        report_path = tmp_path / "circular-tidy.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / "circular-tidy.svg"),
+                image_format="svg",
+                layout="circular",
+                subtree_packing="tidy",
+                angular_span=180.0,
+                angular_center=90.0,
+                tip_label_position="branch-end",
+                tip_spacing="label-aware",
+                species_overlap_node_plot="no",
+                layout_report=str(report_path),
+            )
+        )
+
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["layout_requested"] == "circular"
+        assert report["layout"] == "circular"
+        assert report["subtree_packing"] == "tidy"
+        assert report["angular_span_degrees"] == pytest.approx(180.0)
+        assert report["angular_center_degrees"] == pytest.approx(90.0)
+        assert report["fits_within_figure"] is True
+        assert report["branch_crossing_count"] == 0
+        assert report["branch_crossing_check_complete"] is True
+
+    def test_draw_rejects_scale_bar_for_topology_only_layout(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("((A:1,B:2):1,C:3);")
+
+        with pytest.raises(ValueError, match="branch-length-preserving"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "fractal.svg"),
+                    species_overlap_node_plot="no",
+                    layout="fractal",
+                    tip_label_position="branch-end",
+                    scale_bar="auto",
+                )
+            )
+
+    @pytest.mark.parametrize(
+        ("layout_name", "guide_type", "encoding"),
+        [
+            ("slanted", "axis-grid", "depth-projection"),
+            ("radial", "concentric-rings", "depth-projection"),
+            ("spiral", "spiral-depth-key", "warped-depth"),
+        ],
+    )
+    def test_draw_writes_layout_specific_depth_guide(
+        self,
+        tmp_nwk,
+        tmp_path,
+        layout_name,
+        guide_type,
+        encoding,
+    ):
+        infile = tmp_nwk("(((A:1,B:2):1,C:3):1,D:5);")
+        outfile = tmp_path / "{}.svg".format(layout_name)
+        report_path = tmp_path / "{}.json".format(layout_name)
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                image_format="svg",
+                layout=layout_name,
+                tip_label_position="branch-end",
+                species_overlap_node_plot="no",
+                depth_guide="1",
+                branch_length_unit="substitutions/site",
+                layout_report=str(report_path),
+                figure_width=5.0,
+                figure_height=4.0,
+            )
+        )
+
+        svg = outfile.read_text(encoding="utf-8")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert "root-to-node distance" in svg.lower()
+        assert report["depth_guide_interval"] == pytest.approx(1.0)
+        assert report["depth_guide_type"] == guide_type
+        assert report["branch_length_encoding"] == encoding
+        assert report["branch_lengths_encoded"] is True
+        if layout_name == "radial":
+            assert report["depth_guide_in_panel_labels"] is True
+        assert not any(
+            "depth_guide" in collision_kind
+            for collision_kind in report["final_collisions_by_kind"]
+        )
+
+    def test_radial_sector_reports_concentric_depth_arcs(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("(((A:1,B:2):1,C:3):1,D:5);")
+        report_path = tmp_path / "radial-sector.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / "radial-sector.svg"),
+                image_format="svg",
+                layout="radial",
+                angular_span=180.0,
+                angular_center=90.0,
+                tip_label_position="branch-end",
+                species_overlap_node_plot="no",
+                depth_guide="1",
+                layout_report=str(report_path),
+                figure_width=5.0,
+            )
+        )
+
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert report["depth_guide_type"] == "concentric-arcs"
+        assert report["figure_height_inches"] < report["figure_width_inches"]
+
+    def test_draw_rejects_depth_guide_for_incompatible_layout(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("(A:1,B:2);")
+
+        with pytest.raises(ValueError, match="slanted, radial, and spiral"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "tree.svg"),
+                    species_overlap_node_plot="no",
+                    depth_guide="auto",
+                )
+            )
+
+    def test_draw_rejects_depth_guide_without_positive_branch_lengths(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("(A,B);")
+
+        with pytest.raises(ValueError, match="positive input branch lengths"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    outfile=str(tmp_path / "tree.svg"),
+                    layout="slanted",
+                    tip_label_position="branch-end",
+                    species_overlap_node_plot="no",
+                    depth_guide="auto",
+                )
+            )
+
+    def test_draw_auto_collapses_only_the_rendering_copy(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("(((A:1,B:1):1,(C:1,D:1):1):1,((E:1,F:1):1,(G:1,H:1):1):1);")
+        outfile = tmp_path / "collapsed.svg"
+        report_path = tmp_path / "collapsed.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                species_overlap_node_plot="no",
+                max_visible_tips=4,
+                layout_report=str(report_path),
+            )
+        )
+
+        svg = outfile.read_text(encoding="utf-8")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert "A…B (n=2)" in svg
+        assert report["input_tip_count"] == 8
+        assert report["visible_tip_count"] == 4
+        assert len(report["collapsed_clades"]) == 4
+        with open(infile, encoding="utf-8") as handle:
+            assert handle.read().count("A") == 1
+
+    def test_draw_maps_tip_tracks_and_branch_styles_from_nhx(self, tmp_path):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        for index, node in enumerate(tree.traverse()):
+            if not node.is_root:
+                node.add_props(
+                    regime="foreground" if index % 2 else "background",
+                    signal=index + 1,
+                )
+        for index, leaf in enumerate(tree.leaves()):
+            leaf.add_props(
+                state="X" if index % 2 else "Y",
+                score=index / 3.0,
+            )
+        infile = tmp_path / "layers.nhx"
+        infile.write_text(
+            tree.write(
+                props=["regime", "signal", "state", "score"],
+                parser=1,
+                format_root_node=True,
+            ),
+            encoding="utf-8",
+        )
+        outfile = tmp_path / "layers.svg"
+        report_path = tmp_path / "layers.json"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                species_overlap_node_plot="no",
+                tip_track=["state", "score"],
+                branch_color_property="regime",
+                branch_width_property="signal",
+                property_color=[
+                    "regime:foreground=#D55E00",
+                    "regime:background=#0072B2",
+                    "state:X=#009E73",
+                    "state:Y=#CC79A7",
+                ],
+                layout_report=str(report_path),
+            )
+        )
+
+        svg = outfile.read_text(encoding="utf-8").lower()
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert "#d55e00" in svg
+        assert "#0072b2" in svg
+        assert "#009e73" in svg
+        assert "#cc79a7" in svg
+        assert report["artist_counts"]["tip_track"] == 8
+        assert report["tip_track_properties"] == ["state", "score"]
+
+    def test_draw_taxonomy_typography_italicizes_exact_binomial(
+        self,
+        tmp_nwk,
+        tmp_path,
+    ):
+        infile = tmp_nwk("(Arabidopsis_thaliana:1,Sample_1:1);")
+        outfile = tmp_path / "taxonomy.svg"
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(outfile),
+                species_overlap_node_plot="no",
+                tip_label_font_style="taxonomy",
+            )
+        )
+
+        svg = outfile.read_text(encoding="utf-8")
+        assert "font: italic 8px 'Helvetica'" in svg
 
     def test_draw_uses_tight_tip_label_spacing(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
@@ -560,6 +2143,165 @@ class TestDrawMain:
         assert ">P(Y)=0.60</text>" not in text
         assert "#56b4e9" in text.lower()
         assert "#e69f00" in text.lower()
+
+    @pytest.mark.parametrize(
+        ("layout", "subtree_packing", "angular_span"),
+        [
+            ("rectangular", "standard", 360.0),
+            ("rectangular", "tidy", 360.0),
+            ("slanted", "standard", 360.0),
+            ("cladogram", "standard", 360.0),
+            ("circular", "standard", 180.0),
+            ("circular", "tidy", 360.0),
+            ("radial", "standard", 180.0),
+            ("unrooted", "standard", 360.0),
+            ("spiral", "standard", 360.0),
+            ("spiral", "tidy", 360.0),
+            ("fractal", "standard", 360.0),
+        ],
+    )
+    def test_support_names_and_pies_follow_every_layout(
+        self,
+        tmp_path,
+        layout,
+        subtree_packing,
+        angular_span,
+    ):
+        tree = Tree(
+            "(((A:0.4,B:0.7):0.5,(C:0.8,D:0.3):0.6):0.4,"
+            "((E:0.6,F:0.9):0.5,(G:0.7,H:0.4):0.8):0.5);",
+            parser=1,
+        )
+        internal_nodes = [node for node in tree.traverse() if not node.is_leaf]
+        for index, node in enumerate(internal_nodes):
+            node.add_props(
+                name="ROOT" if node.is_root else "clade_{}".format(index),
+                support=0.75 + (0.03 * index),
+                p_X=0.2 + (0.05 * index),
+                p_Y=0.8 - (0.05 * index),
+            )
+        infile = tmp_path / "{}-{}.nhx".format(layout, subtree_packing)
+        infile.write_text(
+            tree.write(
+                props=["name", "support", "p_X", "p_Y"],
+                parser=1,
+                format_root_node=True,
+            ),
+            encoding="utf-8",
+        )
+        outfile = tmp_path / "{}-{}.svg".format(layout, subtree_packing)
+        report_path = tmp_path / "{}-{}.json".format(layout, subtree_packing)
+
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                format="1",
+                outfile=str(outfile),
+                image_format="svg",
+                layout=layout,
+                subtree_packing=subtree_packing,
+                angular_span=angular_span,
+                figure_width=7.2,
+                tip_label_position="auto",
+                tip_spacing="label-aware",
+                species_overlap_node_plot="no",
+                support_labels=True,
+                support_min=0.80,
+                node_label_property="name",
+                node_label_target="root,intnode",
+                node_label_prefix="ID=",
+                node_pie_properties="p_X,p_Y",
+                node_pie_target="root,intnode",
+                property_color=["p_X=#56B4E9", "p_Y=#E69F00"],
+                legend=False,
+                layout_report=str(report_path),
+            )
+        )
+
+        svg = outfile.read_text(encoding="utf-8")
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+        assert ">ID=ROOT</text>" in svg
+        assert ">ID=clade_1</text>" in svg
+        assert ">0.81</text>" in svg
+        assert ">0.78</text>" not in svg
+        assert report["artist_counts"]["node_label"] == len(internal_nodes)
+        assert report["artist_counts"]["node_pie"] == len(internal_nodes)
+        assert report["final_collision_count"] <= report["initial_collision_count"]
+        assert not any(
+            kind == "node_pie:branch" for kind in report["final_collisions_by_kind"]
+        )
+        assert report["branch_crossing_count"] == 0
+        assert report["fits_within_figure"] is True
+
+    @pytest.mark.parametrize(
+        ("option", "value", "message"),
+        [
+            ("node_label_decimals", -1, "zero or greater"),
+            ("node_label_target", "bogus", "Unsupported node target"),
+        ],
+    )
+    def test_draw_validates_node_label_options_before_property_lookup(
+        self,
+        tmp_nwk,
+        tmp_path,
+        option,
+        value,
+        message,
+    ):
+        infile = tmp_nwk("((A:1,B:1):1,C:2);")
+        kwargs = {
+            "infile": infile,
+            "outfile": str(tmp_path / "invalid.svg"),
+            "species_overlap_node_plot": "no",
+            "node_label_property": "missing_property",
+            option: value,
+        }
+
+        with pytest.raises(ValueError, match=message):
+            draw_main(make_draw_args(**kwargs))
+
+    def test_draw_rejects_every_malformed_node_label_filter(self, tmp_nwk, tmp_path):
+        infile = tmp_nwk("((A:1,B:1):1,C:2);")
+
+        with pytest.raises(ValueError, match="PROPERTY:OP:VALUE"):
+            draw_main(
+                make_draw_args(
+                    infile=infile,
+                    outfile=str(tmp_path / "invalid-filter.svg"),
+                    species_overlap_node_plot="no",
+                    node_label_property="missing_property",
+                    node_label_filter=["also_missing:eq:value", "malformed"],
+                )
+            )
+
+    @pytest.mark.parametrize("invalid_value", [-0.1, float("nan")])
+    def test_draw_rejects_invalid_node_pie_values(
+        self,
+        tmp_path,
+        invalid_value,
+    ):
+        tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+        tree.add_props(p_X=invalid_value, p_Y=1.0)
+        infile = tmp_path / "invalid-pie.nhx"
+        infile.write_text(
+            tree.write(
+                props=["p_X", "p_Y"],
+                parser=1,
+                format_root_node=True,
+            ),
+            encoding="utf-8",
+        )
+
+        with pytest.raises(ValueError, match="finite, non-negative"):
+            draw_main(
+                make_draw_args(
+                    infile=str(infile),
+                    format="1",
+                    outfile=str(tmp_path / "invalid-pie.svg"),
+                    species_overlap_node_plot="no",
+                    node_pie_properties="p_X,p_Y",
+                )
+            )
 
     def test_draw_leaf_pie_filter_keeps_internal_and_matching_leaf_pies(self, tmp_path):
         tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)

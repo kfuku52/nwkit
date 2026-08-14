@@ -63,6 +63,8 @@ STDIN_INPUT_DESTS = (
     "support_source",
     "length_source",
     "tip_image_manifest",
+    "mcmctree_posterior",
+    "densitree_trees",
 )
 
 

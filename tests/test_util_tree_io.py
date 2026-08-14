@@ -9,7 +9,9 @@ from nwkit import util as util_mod
 from nwkit.util import (
     _compile_node_placeholder_pattern,
     iter_newick_stream,
+    iter_tree_strings,
     read_tree,
+    read_trees,
     split_newick_stream,
     write_tree,
 )
@@ -26,6 +28,60 @@ class TestReadTree:
         path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
         tree = read_tree(path, format="1", quoted_node_names=True, quiet=True)
         assert len(list(tree.leaves())) == 4
+
+    def test_read_paml_header_treefile_and_ignore_end_marker(self, tmp_path):
+        path = tmp_path / "species.trees"
+        path.write_text("4 1\n((A,B)'B(2,4,0.025,0.025)',(C,D));\n//end of file\n")
+
+        tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
+
+        assert list(tree.leaf_names()) == ["A", "B", "C", "D"]
+        assert tree.common_ancestor(["A", "B"]).name == "B(2,4,0.025,0.025)"
+
+    def test_read_paml_header_tree_collection(self, tmp_path):
+        path = tmp_path / "species.trees"
+        path.write_text("2 2\n(A,B);\n(C,D);\n//end of file\n")
+
+        trees = read_trees(path, format="auto", quoted_node_names=True, quiet=True)
+
+        assert [list(tree.leaf_names()) for tree in trees] == [
+            ["A", "B"],
+            ["C", "D"],
+        ]
+        assert list(iter_tree_strings(path)) == ["(A,B);", "(C,D);"]
+
+    def test_read_mcmctree_figtree_nexus_converts_hpd_to_nhx(self, tmp_path):
+        path = tmp_path / "FigTree.tre"
+        path.write_text(
+            "#NEXUS\nBEGIN TREES;\nUTREE 1 = (A:2,B:2) [&95%HPD={1.5, 2.5}];\nEND;\n"
+        )
+
+        tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
+
+        assert list(tree.leaf_names()) == ["A", "B"]
+        assert float(tree.props["age_ci_low"]) == pytest.approx(1.5)
+        assert float(tree.props["age_ci_high"]) == pytest.approx(2.5)
+        assert tree.props["age_ci_kind"] == "HPD"
+
+    def test_read_mcmctree_main_output_prefers_annotated_tree(self, tmp_path):
+        path = tmp_path / "out.txt"
+        path.write_text(
+            "unrelated output\nSpecies tree for FigTree.  "
+            "Branch lengths = posterior mean times; 95% CIs = labels\n"
+            "(1_A,2_B)3;\n(A:2,B:2);\n"
+            "(A:2,B:2) [&95%={1.1,2.9}];\nPosterior mean table follows\n"
+        )
+
+        tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
+
+        assert list(tree.leaf_names()) == ["A", "B"]
+        assert tree.props["age_ci_kind"] == "equal-tail"
+
+    def test_nexus_translate_table_is_rejected_instead_of_mislabeling_tips(self):
+        text = "#NEXUS\nBEGIN TREES;\nTRANSLATE\n1 A,\n2 B;\nTREE x = (1,2);\nEND;\n"
+
+        with pytest.raises(ValueError, match="TRANSLATE"):
+            read_tree(text, format="auto", quoted_node_names=True, quiet=True)
 
     def test_streaming_newick_parser_handles_quote_boundaries(self):
         text = "('A''quoted':1,B:1);\n(C:1,D:1);\n"

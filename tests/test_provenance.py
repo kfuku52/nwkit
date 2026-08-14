@@ -336,6 +336,37 @@ def test_audit_records_draw_tip_image_manifest_and_assets(tmp_path):
     ]
 
 
+def test_audit_records_densitree_tree_collection(tmp_path):
+    infile = tmp_path / "reference.nwk"
+    samples = tmp_path / "posterior.trees"
+    outfile = tmp_path / "densitree.svg"
+    audit = tmp_path / "audit.jsonl"
+    infile.write_text("((A:1,B:1):1,(C:1,D:1):1);")
+    samples.write_text("((A:1,B:1):1,(C:1,D:1):1);\n((A:1,C:1):1,(B:1,D:1):1);\n")
+
+    main(
+        [
+            "draw",
+            "-i",
+            str(infile),
+            "-o",
+            str(outfile),
+            "--species-overlap-node-plot",
+            "no",
+            "--densitree-trees",
+            str(samples),
+            "--densitree",
+            "all",
+            "--audit",
+            str(audit),
+        ]
+    )
+
+    record = json.loads(audit.read_text().strip())
+    records_by_path = {item["path"]: item for item in record["inputs"]}
+    assert records_by_path[str(samples.resolve())]["argument"] == "densitree_trees"
+
+
 def test_stderr_capture_is_bounded():
     writer = _TeeTextWriter(io.StringIO(), capture=True, max_lines=3, max_line_chars=10)
     writer.write("warning one\nline two\nline three\nline four\n")

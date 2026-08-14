@@ -26,6 +26,22 @@ unique to one command.
   be mixed. `intersection --seqout` is a second primary result and may use
   standard output only when `--outfile` is a file path.
 
+## Tree input containers
+
+Shared tree readers accept standard Newick/NHX plus the PAML/MCMCtree
+containers commonly encountered in dating workflows:
+
+- a PAML treefile beginning with `nTips nTrees`;
+- a direct-label NEXUS `TREE` or `UTREE` statement, including MCMCtree
+  `FigTree.tre` (NEXUS `TRANSLATE` tables are not applied); and
+- the annotated species-tree block in MCMCtree's main text output.
+
+MCMCtree/FigTree `95%HPD` and legacy `95%` node-age comments are normalized to
+`age_ci_low`, `age_ci_high`, `age_ci_kind`, and `age_ci_level` NHX properties.
+This normalization happens before command-specific processing, including for
+STDIN, so a header-bearing `nwkit mcmctree --add-header` result remains valid
+input to other NWKIT commands.
+
 ## Tip-keyed TSV files
 
 `annotate --table` and the `--trait` files used by `asr`, `contrast`, `draw`,

@@ -73,14 +73,14 @@ minimal worked example, in
 - [`contrast`](https://github.com/kfuku52/nwkit/wiki/nwkit-contrast): Calculating continuous-trait phylogenetic independent contrasts, with biological/technical replicates, batch adjustment, propagated sampling covariance, and reconciled gene-tree event mappings
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
-- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with aligned species images, support, categorical or missing-value badges, filtered node-probability pies, and property labels
+- [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, unrooted, spiral, or fractal geometry, annotation-aware spacing, and auditable layout reports
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment
 - [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
-- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Introducing divergence time constraints for PAML's mcmctree
+- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML MCMCtree calibrations and converting posterior node ages into pipeable dated NHX trees
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
@@ -156,6 +156,32 @@ The detailed statistical contract, limitations, and file schemas are in
 The RSC recursion, covariance propagation, event-balanced pseudo-likelihood,
 and a hand-calculated example are in the
 [mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).
+
+## Tree drawing layouts
+
+`nwkit draw --layout` supports `rectangular`, `slanted`, `cladogram`,
+`circular`, `radial`, `unrooted`, `spiral`, and `fractal` geometries. Layout,
+subtree packing, and tip spacing are independent choices:
+
+```sh
+nwkit draw -i tree.nwk --layout circular -o circular.svg
+nwkit draw -i tree.nwk --layout circular --angular-span 180 -o fan.svg
+nwkit draw -i tree.nwk --layout rectangular --subtree-packing tidy \
+  --tip-spacing label-aware --tip-label-wrap auto -o compact.svg
+```
+
+Additional layers include tip tracks, branch-property color and width,
+scale/depth guides, MCMCtree calibrations and node-age intervals, and fixed-
+or varying-topology DensiTree overlays. `--layout-report` records dimensions,
+collapsing, wrapping, annotation collisions, and bounded branch-crossing
+audits. The gallery can be regenerated with:
+
+```sh
+python scripts/make_draw_layout_gallery.py --output-prefix draw-layouts
+```
+
+For large overview figures, `--max-visible-tips` collapses clades only in the
+drawing copy; it never changes the input tree.
 
 ## Drawing trees with species images
 

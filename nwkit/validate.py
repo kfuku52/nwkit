@@ -9,6 +9,7 @@ from nwkit.util import (
     get_species_group_records,
     inspect_tree_text,
     is_rooted,
+    normalize_phylogenetic_tree_text,
     read_input_text,
     read_tree,
     split_newick_stream,
@@ -310,7 +311,10 @@ def _build_valid_tree_row(tree_id, tree, inspection, issues, references, options
 
 def validate_main(args):
     options = _validation_options(args)
-    raw_text = read_input_text(args.infile)
+    raw_text = normalize_phylogenetic_tree_text(
+        read_input_text(args.infile),
+        collection=True,
+    )
     tree_strings = split_newick_stream(raw_text)
     if len(tree_strings) == 0:
         raise Exception("Failed to parse the input trees.")

@@ -8,6 +8,14 @@ from typing import Any
 
 import requests
 
+from nwkit.time_tree import (
+    AGE_PROPERTY_NAMES,
+    CALIBRATION_PROPERTY_NAMES,
+    annotate_mcmctree_calibrations,
+    parse_mcmctree_calibration,
+    read_mcmctree_posterior,
+    summarize_mcmctree_posterior,
+)
 from nwkit.util import (
     get_ete_ncbitaxa,
     get_species_group_records,
@@ -15,6 +23,7 @@ from nwkit.util import (
     get_subtree_sci_name_sets,
     read_tree,
     warn_cleanup_failure,
+    write_tree,
 )
 
 SEARCH_RANKS = [
@@ -766,6 +775,47 @@ def mcmctree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     if len(tree.get_children()) != 2:
         raise ValueError("The input tree should be rooted.")
+    posterior_path = getattr(args, "posterior", None)
+    if posterior_path not in (None, ""):
+        if posterior_path == "-" and args.infile == "-":
+            raise ValueError(
+                "'--infile' and '--posterior' cannot both read from STDIN."
+            )
+        if getattr(args, "add_header", False):
+            raise ValueError("'--add-header' is not compatible with '--posterior'.")
+        if getattr(args, "timetree", "no") != "no" or any(
+            getattr(args, option, None) is not None
+            for option in (
+                "left_species",
+                "right_species",
+                "lower_bound",
+                "upper_bound",
+            )
+        ):
+            raise ValueError(
+                "Calibration-selection options are not compatible with '--posterior'."
+            )
+        annotate_mcmctree_calibrations(tree)
+        posterior = read_mcmctree_posterior(
+            posterior_path,
+            tree=tree,
+            burnin=getattr(args, "posterior_burnin", 0),
+            thin=getattr(args, "posterior_thin", 1),
+        )
+        summarize_mcmctree_posterior(
+            tree,
+            posterior=posterior,
+            point=getattr(args, "posterior_point", "mean"),
+            ci=getattr(args, "posterior_ci", "hpd"),
+            level=getattr(args, "posterior_ci_level", 0.95),
+        )
+        write_tree(
+            tree,
+            args=args,
+            format=1,
+            props=AGE_PROPERTY_NAMES + CALIBRATION_PROPERTY_NAMES,
+        )
+        return
     args.min_clade_prop = _finite_number(
         args.min_clade_prop,
         "'--min-clade-prop'",
@@ -776,7 +826,7 @@ def mcmctree_main(args):
     _tail_probability(args, "upper")
     for node in tree.traverse():
         if not node.is_leaf:
-            if any([kw in (node.name or "") for kw in ["@", "B(", "L(", "U("]]):
+            if parse_mcmctree_calibration(node.name) is not None:
                 node.name = "'" + node.name + "'"
             else:
                 node.name = "NoName"

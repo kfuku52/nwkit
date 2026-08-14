@@ -51,6 +51,19 @@ ETE_DOWNLOAD_HEADERS = {
     "User-Agent": "nwkit/{} (+https://github.com/kfuku52/nwkit)".format(__version__),
 }
 ETE_TAXONOMY_DEFAULT_MAX_AGE_DAYS = 30.0
+
+_PAML_TREEFILE_HEADER_PATTERN = re.compile(r"^\s*\d+\s+\d+\s*$")
+_PAML_FIGTREE_INTERVAL_PATTERN = re.compile(
+    r"\[\s*&\s*(95%HPD|95%)\s*=\s*\{\s*"
+    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*"
+    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*\}\s*\]"
+    r"(\s*:\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)?",
+    flags=re.IGNORECASE,
+)
+_PAML_NEXUS_TREE_PATTERN = re.compile(
+    r"(?ims)^\s*(?:u?tree)\s+[^=]+?=\s*(?:\[\s*&[RU]\s*\]\s*)?(.+?;)\s*$",
+)
+_PAML_MAIN_OUTPUT_MARKER = "Species tree for FigTree."
 COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser("~"), ".local", "share", "ete"),
     os.path.join(os.path.expanduser("~"), ".etetoolkit"),
@@ -87,6 +100,90 @@ def read_input_text(infile):
         with open(infile) as handle:
             return handle.read()
     return str(infile)
+
+
+def _convert_paml_figtree_intervals(text):
+    """Convert PAML/FigTree age intervals into ETE-readable NHX properties."""
+
+    def replace_interval(match):
+        kind = "HPD" if match.group(1).upper() == "95%HPD" else "equal-tail"
+        return (
+            "{}[&&NHX:age_ci_low={}:age_ci_high={}:age_ci_kind={}:age_ci_level=0.95]"
+        ).format(match.group(4) or "", match.group(2), match.group(3), kind)
+
+    return _PAML_FIGTREE_INTERVAL_PATTERN.sub(replace_interval, str(text))
+
+
+def _extract_paml_main_output_tree(text):
+    marker_index = text.find(_PAML_MAIN_OUTPUT_MARKER)
+    if marker_index < 0:
+        return None
+    candidates = []
+    for line in text[marker_index:].splitlines()[1:]:
+        candidate = line.strip()
+        if candidate.startswith("(") and candidate.endswith(";"):
+            candidates.append(candidate)
+            if len(candidates) == 3:
+                break
+    if not candidates:
+        raise ValueError("MCMCtree output did not contain its FigTree species tree.")
+    annotated = [candidate for candidate in candidates if "[&95%" in candidate]
+    return annotated[-1] if annotated else candidates[-1]
+
+
+def normalize_phylogenetic_tree_text(tree_text, collection=False):
+    """Normalize PAML tree containers while leaving ordinary Newick unchanged.
+
+    Accepted PAML variants are the ``nTips nTrees`` treefile header, the
+    NEXUS ``FigTree.tre`` emitted by MCMCtree, and the species-tree block in
+    MCMCtree's main text output.  FigTree age intervals become ordinary NHX
+    properties, so downstream NWKIT commands do not need PAML-specific parsers.
+    """
+
+    text = str(tree_text).strip()
+    if text == "":
+        return text
+    main_output_tree = _extract_paml_main_output_tree(text)
+    if main_output_tree is not None:
+        text = main_output_tree
+    elif re.search(r"(?im)^\s*(?:u?tree)\s+[^=]+?=", text):
+        if re.search(r"(?im)^\s*translate\b", text):
+            raise ValueError(
+                "NEXUS TRANSLATE tables are not supported; provide direct tip labels."
+            )
+        nexus_trees = _PAML_NEXUS_TREE_PATTERN.findall(text)
+        if not nexus_trees:
+            raise ValueError(
+                "NEXUS input did not contain a complete TREE or UTREE statement."
+            )
+        text = "\n".join(nexus_trees if collection else nexus_trees[:1])
+    else:
+        lines = text.splitlines()
+        first_content_index = next(
+            (index for index, line in enumerate(lines) if line.strip()),
+            None,
+        )
+        if first_content_index is not None and _PAML_TREEFILE_HEADER_PATTERN.fullmatch(
+            lines[first_content_index]
+        ):
+            header_fields = lines[first_content_index].split()
+            expected_tree_count = int(header_fields[1])
+            del lines[first_content_index]
+            if expected_tree_count < 1:
+                raise ValueError("PAML treefile header must declare at least one tree.")
+            body = "\n".join(
+                line for line in lines if not line.lstrip().startswith("//")
+            ).strip()
+            trees = split_newick_stream(body)
+            if len(trees) < expected_tree_count:
+                raise ValueError(
+                    "PAML treefile header declares {} tree(s), but only {} were found.".format(
+                        expected_tree_count,
+                        len(trees),
+                    )
+                )
+            text = "\n".join(trees[:expected_tree_count] if collection else trees[:1])
+    return _convert_paml_figtree_intervals(text)
 
 
 def _read_raw_tsv_column_values(text, column_name):
@@ -1267,7 +1364,9 @@ def get_ete_ncbitaxa(args=None):
 
 
 def read_tree(infile, format, quoted_node_names, quiet=False, allow_non_finite=False):
-    infile = read_input_text(infile).strip()
+    infile = normalize_phylogenetic_tree_text(
+        read_input_text(infile), collection=False
+    ).strip()
     if infile == "":
         raise Exception("Failed to parse the input tree.")
     if (not quoted_node_names) and _contains_quoted_node_names(infile):
@@ -1506,13 +1605,49 @@ def iter_tree_strings(infile):
         return
     if os.path.isfile(infile):
         with open(infile) as handle:
-            yield from iter_newick_stream(handle)
+            prefix = handle.read(4096)
+            first_content_line = next(
+                (line.strip() for line in prefix.splitlines() if line.strip()),
+                "",
+            )
+            is_paml_container = first_content_line.upper().startswith(
+                "#NEXUS"
+            ) or _PAML_TREEFILE_HEADER_PATTERN.fullmatch(first_content_line)
+            if is_paml_container:
+                normalized = normalize_phylogenetic_tree_text(
+                    prefix + handle.read(),
+                    collection=True,
+                )
+                yield from split_newick_stream(normalized)
+                return
+
+            class _PrefixedReader:
+                def __init__(self, initial, remainder):
+                    self.initial = initial
+                    self.remainder = remainder
+
+                def read(self, size=-1):
+                    if size is None or size < 0:
+                        value = self.initial + self.remainder.read()
+                        self.initial = ""
+                        return value
+                    value = self.initial[:size]
+                    self.initial = self.initial[len(value) :]
+                    if len(value) < size:
+                        value += self.remainder.read(size - len(value))
+                    return value
+
+            yield from iter_newick_stream(_PrefixedReader(prefix, handle))
         return
     yield from split_newick_stream(str(infile))
 
 
 def read_trees(infile, format, quoted_node_names, quiet=False):
-    tree_strings = read_tree_strings(infile)
+    tree_text = normalize_phylogenetic_tree_text(
+        read_input_text(infile),
+        collection=True,
+    )
+    tree_strings = split_newick_stream(tree_text)
     if len(tree_strings) == 0:
         raise Exception("Failed to parse the input trees.")
     trees = [
@@ -1525,12 +1660,15 @@ def read_trees(infile, format, quoted_node_names, quiet=False):
 
 
 def read_tree_strings(infile):
-    tree_text = read_input_text(infile)
+    tree_text = normalize_phylogenetic_tree_text(
+        read_input_text(infile),
+        collection=True,
+    )
     return split_newick_stream(tree_text)
 
 
 def inspect_tree_text(newick_text, format="auto", quoted_node_names=True):
-    text = str(newick_text).strip()
+    text = normalize_phylogenetic_tree_text(str(newick_text), collection=False).strip()
     if text == "":
         return {
             "parse_ok": False,

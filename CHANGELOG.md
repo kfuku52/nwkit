@@ -4,6 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Added rectangular, slanted, cladogram, circular/fan, radial, unrooted,
+  spiral, and fractal tree layouts, with optional tidy subtree packing,
+  label-aware spacing, automatic display-only clade collapsing, annotation
+  tracks, branch-property styling, scale/depth guides, collision auditing, and
+  reproducible layout reports.
+- Added common readers for PAML treefile headers, MCMCtree `FigTree.tre` and
+  annotated main-output trees, posterior node-age conversion to dated NHX, and
+  fixed- or varying-topology DensiTree overlays and empirical path envelopes.
+
 ### Fixed
 
 - Fixed batch-adjusted response replicates in conventional PGLS, rejected

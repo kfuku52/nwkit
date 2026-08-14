@@ -61,6 +61,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "gene_tree_ensemble",
         "length_source",
         "manifest",
+        "mcmctree_posterior",
         "name_source",
         "name_tsv",
         "property_source",
@@ -84,6 +85,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "trait",
         "tree",
         "weight_tsv",
+        "densitree_trees",
     )
 )
 

@@ -82,6 +82,28 @@ jobs:
       - name: Run tests
         run: python tools/check.py test
 
+  macos-clean-install:
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
+
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+          cache: pip
+
+      - name: Install from a clean environment
+        run: |
+          python -m pip install --upgrade pip
+          pip install '.[test,image]'
+
+      - name: Verify ETE and drawing on macOS
+        run: |
+          python -c 'from ete4 import Tree; assert len(list(Tree("(A:1,B:1);", parser=1).leaves())) == 2'
+          pytest tests/test_draw.py tests/test_draw_robustness.py -q
+
   quality:
     runs-on: ubuntu-latest
     timeout-minutes: 30

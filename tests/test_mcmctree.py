@@ -15,6 +15,7 @@ from nwkit.mcmctree import (
     mcmctree_main,
     remove_constraint_equal_upper,
 )
+from nwkit.util import read_tree
 
 
 def make_mcmctree_args(**kwargs):
@@ -40,6 +41,12 @@ def make_mcmctree_args(**kwargs):
         "add_header": False,
         "min_clade_prop": 0,
         "higher_rank_search": True,
+        "posterior": None,
+        "posterior_point": "mean",
+        "posterior_ci": "hpd",
+        "posterior_ci_level": 0.95,
+        "posterior_burnin": 0,
+        "posterior_thin": 1,
     }
     defaults.update(kwargs)
     return Namespace(**defaults)
@@ -643,6 +650,60 @@ class TestMcmctreeMain:
         # Both constraints should be present
         assert "B(152.3, 236.2, 1e-300, 1e-300)" in content
         assert "B(154.0, 245.8, 0.025, 0.025)" in content
+
+    def test_posterior_mode_emits_pipeable_nhx_dated_tree(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+        tmp_path,
+    ):
+        topology = tmp_nwk("4 1\n((A,B)'B(2,6,0.025,0.025)',(C,D));\n")
+        posterior = tmp_path / "mcmc.txt"
+        posterior.write_text("Gen t_n5 t_n6 t_n7\n1 10 4 3\n2 12 5 4\n3 11 6 5\n")
+        args = make_mcmctree_args(
+            infile=topology,
+            outfile=tmp_outfile,
+            posterior=str(posterior),
+        )
+
+        mcmctree_main(args)
+        dated_tree = read_tree(
+            tmp_outfile,
+            format="auto",
+            quoted_node_names=True,
+            quiet=True,
+        )
+
+        assert dated_tree.props["mcmctree_node_id"] == "5"
+        assert float(dated_tree.props["age_mean"]) == pytest.approx(11.0)
+        assert dated_tree["A"].dist == pytest.approx(5.0)
+        assert (
+            dated_tree.common_ancestor(["A", "B"]).props["calibration_type"]
+            == "bounded"
+        )
+
+    def test_paml_header_and_legacy_constraint_survive_another_mcmctree_step(
+        self,
+        tmp_path,
+        tmp_outfile,
+    ):
+        infile = tmp_path / "legacy.trees"
+        infile.write_text("4 1\n((A,B)'>2<4',(C,D));\n//end of file\n")
+        args = make_mcmctree_args(
+            infile=str(infile),
+            outfile=tmp_outfile,
+            left_species="C",
+            right_species="D",
+            lower_bound="1",
+            upper_bound="3",
+        )
+
+        mcmctree_main(args)
+
+        with open(tmp_outfile) as handle:
+            output = handle.read()
+        assert ">2<4" in output
+        assert "B(1, 3, 0.025, 0.025)" in output
 
     def test_unrooted_tree_raises(self, tmp_nwk):
         """mcmctree requires a rooted tree (2 children at root)."""

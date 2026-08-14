@@ -209,6 +209,45 @@ def test_compatibility_aliases_resolve_to_canonical_destinations():
     assert dist_args.dist is None
     assert dist_args.comparison == "unrooted"
 
+    draw_args = parser.parse_args(
+        [
+            "draw",
+            "--layout",
+            "circular",
+            "--subtree-packing",
+            "tidy",
+            "--angular-span",
+            "180",
+            "--angular-center",
+            "90",
+        ]
+    )
+    assert draw_args.layout == "circular"
+    assert draw_args.subtree_packing == "tidy"
+    assert draw_args.angular_span == 180.0
+    assert draw_args.angular_center == 90.0
+
+
+@pytest.mark.parametrize("removed_layout", ["tidy", "fan"])
+def test_removed_drawing_modes_are_not_layouts(capsys, removed_layout):
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["draw", "--layout", removed_layout])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+@pytest.mark.parametrize("removed_option", ["--fan-span", "--fan_span"])
+def test_removed_fan_span_options_have_no_compatibility_alias(
+    capsys,
+    removed_option,
+):
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["draw", removed_option, "180"])
+
+    assert exc_info.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
+
 
 @pytest.mark.parametrize("legacy_option", ["-d", "--dist"])
 def test_dist_legacy_metric_option_warns_and_preserves_rf_output(
