@@ -1,4 +1,4 @@
-![](https://raw.githubusercontent.com/kfuku52/nwkit/master/logo/logo_nwkit_large.png)
+![](https://raw.githubusercontent.com/kfuku52/nwkit/master/logo/logo_nwkit_large_02.png)
 
 [![Run Tests](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml/badge.svg)](https://github.com/kfuku52/nwkit/actions/workflows/tests.yml)
 [![GitHub release](https://img.shields.io/github/v/tag/kfuku52/nwkit?label=release)](https://github.com/kfuku52/nwkit/releases)

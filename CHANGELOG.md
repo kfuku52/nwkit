@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.36.2] - 2026-08-14
+
+### Changed
+
+- Added versioned variants of the NWKIT logo and updated the README to use the
+  logo describing phylogenetic tree processing, visualization, and analysis.
+
 ## [0.36.1] - 2026-08-14
 
 ### Added
