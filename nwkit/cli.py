@@ -100,7 +100,11 @@ def unit_interval_float(value):
 # Main parser
 parser = NwkitArgumentParser(
     prog="nwkit",
-    description="A toolkit for Newick trees. See `nwkit SUBCOMMAND -h` for usage (e.g., nwkit constrain -h)",
+    description=(
+        "A toolkit for processing and visualizing phylogenetic trees and for "
+        "phylogeny-aware comparative analysis. See `nwkit SUBCOMMAND -h` for "
+        "usage (e.g., nwkit constrain -h)"
+    ),
 )
 parser.add_argument(
     "--version", action="version", version="%(prog)s {}".format(__version__)

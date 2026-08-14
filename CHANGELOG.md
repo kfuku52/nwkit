@@ -4,6 +4,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.36.1] - 2026-08-14
+
 ### Added
 
 - Added rectangular, slanted, cladogram, circular/fan, radial, unrooted,
@@ -14,6 +16,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Added common readers for PAML treefile headers, MCMCtree `FigTree.tre` and
   annotated main-output trees, posterior node-age conversion to dated NHX, and
   fixed- or varying-topology DensiTree overlays and empirical path envelopes.
+
+### Changed
+
+- Updated the README, package metadata, and CLI description to present NWKIT as
+  a toolkit for phylogenetic tree processing, visualization, and comparative
+  analysis rather than only Newick tree processing.
 
 ### Fixed
 

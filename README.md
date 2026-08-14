@@ -9,7 +9,7 @@
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview
-**NWKIT** ([/njuːkit/](https://ipa-reader.com/?text=nju%CB%90kit&voice=Joanna)) is a toolkit for manipulating phylogenetic trees in the [Newick format](https://en.wikipedia.org/wiki/Newick_format).
+**NWKIT** ([/njuːkit/](https://ipa-reader.com/?text=nju%CB%90kit&voice=Joanna)) is a command-line toolkit for processing and visualizing phylogenetic trees and for phylogeny-aware comparative analysis.
 
 ## Installation
 

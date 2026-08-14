@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "nwkit"
 dynamic = ["version"]
-description = "Tools for processing Newick trees"
+description = "Phylogenetic tree processing, visualization, and comparative analysis"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"
