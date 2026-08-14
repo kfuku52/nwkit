@@ -1,3 +1,4 @@
+import argparse
 import subprocess
 import sys
 from pathlib import Path
@@ -5,7 +6,16 @@ from pathlib import Path
 import pytest
 
 from nwkit import __version__
-from nwkit.cli import main
+from nwkit.cli import main, parser
+
+
+def _subcommand_parser(command):
+    subparsers_action = next(
+        action
+        for action in parser._actions
+        if isinstance(action, argparse._SubParsersAction)
+    )
+    return subparsers_action.choices[command]
 
 
 def test_version_option(capsys):
@@ -14,6 +24,33 @@ def test_version_option(capsys):
 
     assert exc_info.value.code == 0
     assert capsys.readouterr().out.strip() == f"nwkit {__version__}"
+
+
+@pytest.mark.parametrize(
+    "command",
+    ["annotate", "asr", "draw", "monophyly", "sample", "skim"],
+)
+def test_shared_tip_table_commands_default_to_unmatched_warn(command):
+    assert _subcommand_parser(command).get_default("unmatched") == "warn"
+
+
+def test_contrast_has_independent_unmatched_default_and_allows_override():
+    assert _subcommand_parser("contrast").get_default("unmatched") == "error"
+    assert (
+        parser.parse_args(
+            [
+                "contrast",
+                "--trait",
+                "traits.tsv",
+                "--columns",
+                "expression",
+                "--unmatched",
+                "ignore",
+            ]
+        ).unmatched
+        == "ignore"
+    )
+    assert parser.parse_args(["draw", "--unmatched", "error"]).unmatched == "error"
 
 
 @pytest.mark.integration

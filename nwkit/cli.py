@@ -360,28 +360,34 @@ p_species.add_argument(
     "Mapped rows override the selected parser preset and regex.",
 )
 
-p_tip_table_policy = NwkitArgumentParser(add_help=False)
-p_tip_table_policy.add_argument(
-    "--missing-values",
-    "--missing_values",
-    dest="missing_values",
-    metavar="CSV",
-    default=DEFAULT_TABLE_MISSING_VALUES_CSV,
-    type=str,
-    required=False,
-    action="store",
-    help="default=%(default)s: Comma-separated table values treated as missing.",
-)
-p_tip_table_policy.add_argument(
-    "--unmatched",
-    metavar="warn|error|ignore",
-    default="warn",
-    type=str,
-    required=False,
-    action="store",
-    choices=["warn", "error", "ignore"],
-    help="default=%(default)s: Policy for table rows or tree tips without a counterpart.",
-)
+def _tip_table_policy_parent(*, unmatched_default="warn"):
+    parent = NwkitArgumentParser(add_help=False)
+    parent.add_argument(
+        "--missing-values",
+        "--missing_values",
+        dest="missing_values",
+        metavar="CSV",
+        default=DEFAULT_TABLE_MISSING_VALUES_CSV,
+        type=str,
+        required=False,
+        action="store",
+        help="default=%(default)s: Comma-separated table values treated as missing.",
+    )
+    parent.add_argument(
+        "--unmatched",
+        metavar="warn|error|ignore",
+        default=unmatched_default,
+        type=str,
+        required=False,
+        action="store",
+        choices=["warn", "error", "ignore"],
+        help="default=%(default)s: Policy for table rows or tree tips without a counterpart.",
+    )
+    return parent
+
+
+p_tip_table_policy = _tip_table_policy_parent()
+p_contrast_tip_table_policy = _tip_table_policy_parent(unmatched_default="error")
 
 
 def command_annotate(args):
@@ -1118,7 +1124,7 @@ def command_contrast(args):
 pcontrast = subparsers.add_parser(
     "contrast",
     help="Calculate continuous-trait phylogenetic independent contrasts",
-    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+    parents=[p_tree_input, p_table_output, p_contrast_tip_table_policy],
 )
 pcontrast.add_argument(
     "--trait",
@@ -1323,7 +1329,7 @@ pcontrast.add_argument(
     action="store",
     help="default=%(default)s: Optional audit TSV of leaf means, biological sample sizes, within-leaf SDs, and standard errors.",
 )
-pcontrast.set_defaults(handler=command_contrast, unmatched="error")
+pcontrast.set_defaults(handler=command_contrast)
 
 
 def command_diff(args):
@@ -2586,8 +2592,8 @@ ppgls.add_argument(
     type=str,
     help=(
         "Explicit response likelihood by trait. Tree-structured non-Gaussian "
-        "GLMMs use sparse Laplace calculations and are routinely validated "
-        "through 5,000 tips; larger fits are attempted with a warning. Dense/"
+        "GLMMs use sparse Laplace calculations; fits above 5,000 tips are "
+        "attempted with a warning. Dense/"
         "custom covariance fallbacks above 500 tips require "
         "'--allow-large-dense yes'. Sparse multinomial fits above 20,000 "
         "tip-by-level linear predictors are likewise attempted with a warning. "
@@ -2675,7 +2681,7 @@ ppgls.add_argument(
     metavar="yes|no",
     default="no",
     type=strtobool,
-    help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance (tree-structured sparse fits support 5,000 tips and 20,000 tip-trait cells; dense fallback supports 2,000 observed cells).",
+    help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance (tree-structured fits use sparse calculations and warn above 5,000 tips or 20,000 tip-trait cells; dense fallback supports 2,000 observed cells).",
 )
 ppgls.add_argument(
     "--allow-missing-responses",

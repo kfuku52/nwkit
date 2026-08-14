@@ -61,6 +61,25 @@ class TestDropMain:
         tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         # Leaf names should be preserved
         assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
+        assert "-999999" not in open(tmp_outfile).read()
+
+    def test_drop_without_fill_omits_values_instead_of_serializing_a_sentinel(
+        self, tmp_nwk, tmp_outfile
+    ):
+        path = tmp_nwk("((A:1,B:2)AB:3,(C:4,D:5)CD:6)root:0.5;")
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            target="intnode",
+            name=True,
+            support=False,
+            length=True,
+            fill=None,
+        )
+        drop_main(args)
+        content = open(tmp_outfile).read().strip()
+        assert content == "((A:1,B:2),(C:4,D:5));"
+        assert "-999999" not in content
 
     def test_drop_with_fill(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk("((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;")
@@ -131,6 +150,7 @@ class TestDropMain:
         assert not content.endswith(":;"), (
             f'Malformed Newick ending with ":;": {content}'
         )
+        assert "-999999" not in content
         assert content.endswith(";")
 
     def test_wiki_fill_unknown_exact(self, tmp_nwk, tmp_outfile):
