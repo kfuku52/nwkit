@@ -16,6 +16,7 @@ from nwkit.image import (
     download_media,
     image_main,
     postprocess_media_file,
+    validate_safe_svg,
 )
 from tests.image_test_support import (
     DummyProvider,
@@ -24,6 +25,27 @@ from tests.image_test_support import (
     read_tsv,
     write_valid_test_media,
 )
+
+
+def test_validate_safe_svg_rejects_external_doctype(tmp_path):
+    source = tmp_path / "external-doctype.svg"
+    source.write_text(
+        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
+        '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
+        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>',
+        encoding="utf-8",
+    )
+
+    with pytest.raises(MediaDownloadError, match="forbidden document type"):
+        validate_safe_svg(source)
+
+
+def test_validate_safe_svg_rejects_unterminated_doctype_without_backtracking(tmp_path):
+    source = tmp_path / "unterminated-doctype.svg"
+    source.write_bytes(b"<!DOCTYPE svg " + (b'"' * 100_000))
+
+    with pytest.raises(MediaDownloadError, match="forbidden document type"):
+        validate_safe_svg(source)
 
 
 class TestDownloadMedia:
@@ -1306,7 +1328,7 @@ class TestImageSecurityLimits:
             postprocess_media_file(str(source), make_image_args())
         assert "pixel" in str(error.value).lower() or "bomb" in str(error.value).lower()
 
-    def test_default_svg_output_strips_external_doctype(self, tmp_path):
+    def test_default_svg_output_rejects_external_doctype(self, tmp_path):
         source = tmp_path / "doctype.svg"
         source.write_text(
             '<?xml version="1.0"?>\n'
@@ -1316,14 +1338,14 @@ class TestImageSecurityLimits:
         )
         source.chmod(0o664)
 
-        result = postprocess_media_file(str(source), make_image_args())
+        with pytest.raises(MediaDownloadError, match="forbidden document type"):
+            postprocess_media_file(str(source), make_image_args())
 
-        assert result == str(source)
-        assert "<!DOCTYPE" not in source.read_text()
+        assert "<!DOCTYPE" in source.read_text()
         if os.name != "nt":
             assert stat.S_IMODE(source.stat().st_mode) == 0o664
 
-    def test_svg_dimensions_are_read_from_sanitized_xml_root(
+    def test_svg_dimensions_are_read_from_validated_xml_root(
         self,
         monkeypatch,
         tmp_path,
@@ -1331,7 +1353,6 @@ class TestImageSecurityLimits:
         source = tmp_path / "sanitized-dimensions.svg"
         source.write_text(
             '<?xml version="1.0"?>\n'
-            '<!DOCTYPE svg SYSTEM "https://example.org/external.dtd">\n'
             '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>'
         )
         monkeypatch.setattr(
@@ -1345,7 +1366,6 @@ class TestImageSecurityLimits:
         result = postprocess_media_file(str(source), make_image_args())
 
         assert result == str(source)
-        assert "<!DOCTYPE" not in source.read_text()
 
     def test_rasterizing_local_svg_does_not_modify_input(self, tmp_path):
         try:
@@ -1355,8 +1375,6 @@ class TestImageSecurityLimits:
         source = tmp_path / "local-input.svg"
         source.write_text(
             '<?xml version="1.0"?>\n'
-            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
-            '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
             '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10">'
             '<rect width="20" height="10" fill="#000"/>'
             "</svg>"

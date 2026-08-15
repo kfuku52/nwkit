@@ -2476,8 +2476,6 @@ class TestDrawMain:
         silhouette = tmp_path / "silhouette.svg"
         silhouette.write_text(
             '<?xml version="1.0"?>\n'
-            '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
-            '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
             '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="20">'
             '<path d="M2 18 L20 2 L38 18 Z" fill="#111111"/>'
             "</svg>"

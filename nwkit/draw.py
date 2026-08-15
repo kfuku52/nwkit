@@ -3601,9 +3601,7 @@ def _draw_tree(
                     else 0.0
                 )
                 approximate_badge_width = (
-                    max(len(badge_value), 1)
-                    * (font_size * 0.58 / 72.0)
-                    * data_per_inch
+                    max(len(badge_value), 1) * (font_size * 0.58 / 72.0) * data_per_inch
                 )
                 badge_padding = (font_size * 0.16 / 72.0) * data_per_inch
                 badge_gap = (4.0 / 72.0) * data_per_inch

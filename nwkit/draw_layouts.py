@@ -518,9 +518,7 @@ def _unrooted_graph(tree, use_topology_depth):
     nodes = list(tree.traverse())
     suppressed_root = tree if len(tree.get_children()) == 2 else None
     kept_nodes = [node for node in nodes if node is not suppressed_root]
-    adjacency: dict[Any, list[tuple[Any, float]]] = {
-        node: [] for node in kept_nodes
-    }
+    adjacency: dict[Any, list[tuple[Any, float]]] = {node: [] for node in kept_nodes}
 
     def edge_length(child):
         if use_topology_depth:

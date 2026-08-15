@@ -1012,9 +1012,7 @@ def _gmrf_likelihood_marginal_profiles(
         column = int(columns)
         unit_beta = np.zeros(n_coefficients, dtype=float)
         unit_beta[column] = 1.0
-        loading, precision, _ = _gmrf_uncertainty_update(
-            unit_beta, column, uncertainty
-        )
+        loading, precision, _ = _gmrf_uncertainty_update(unit_beta, column, uncertainty)
         profiles[index] = {
             "column": column,
             "row": (

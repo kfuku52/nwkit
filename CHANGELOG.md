@@ -4,6 +4,21 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.36.5] - 2026-08-15
+
+### Changed
+
+- Rejected SVG document type declarations before XML parsing instead of
+  stripping them with an unsafe backtracking expression.
+- Corrected the cyclomatic-complexity ratchet to record non-increasable legacy
+  renderer ceilings while retaining the strict budget for all other blocks.
+
+### Fixed
+
+- Removed an SVG validation denial-of-service path caused by exponential
+  regular-expression backtracking on malformed document type declarations.
+- Restored clean formatting and the complete quality and distribution gates.
+
 ## [0.36.4] - 2026-08-15
 
 ### Changed

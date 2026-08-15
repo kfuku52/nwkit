@@ -1011,26 +1011,16 @@ def validate_safe_svg(
         )
     if re.search(rb"<!\s*ENTITY\b", raw, flags=re.IGNORECASE):
         raise MediaDownloadError("SVG image contains a forbidden entity declaration.")
-    if re.search(rb"<!\s*DOCTYPE\b[^[]*\[", raw, flags=re.IGNORECASE):
+    if re.search(rb"<!\s*DOCTYPE\b", raw, flags=re.IGNORECASE):
         raise MediaDownloadError(
-            "SVG image contains a forbidden internal document type subset."
+            "SVG image contains a forbidden document type declaration."
         )
     sanitized_raw = re.sub(
-        rb'<!\s*DOCTYPE\b(?:(?:"[^"]*")|(?:\'[^\']*\')|[^>])*>\s*',
+        rb"<\?(?!xml(?:\s|$))[\s\S]*?\?>\s*",
         b"",
         raw,
         flags=re.IGNORECASE,
     )
-    sanitized_raw = re.sub(
-        rb"<\?(?!xml(?:\s|$))[\s\S]*?\?>\s*",
-        b"",
-        sanitized_raw,
-        flags=re.IGNORECASE,
-    )
-    if re.search(rb"<!\s*DOCTYPE\b", sanitized_raw, flags=re.IGNORECASE):
-        raise MediaDownloadError(
-            "SVG image contains an unsupported document type declaration."
-        )
     try:
         root = ElementTree.fromstring(sanitized_raw)
     except (ElementTree.ParseError, DefusedXmlException) as exc:
