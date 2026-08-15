@@ -47,6 +47,31 @@ def test_pooled_biological_replicates_estimate_tip_sampling_variance():
     assert set(summary["variance_method"]) == {"pooled"}
 
 
+def test_mixed_replicate_traits_treat_one_observation_as_an_exact_tip_value():
+    dataframe = pd.DataFrame(
+        [
+            {"leaf_name": "A", "sample": "a1", "replicated": 1.0, "single": 2.0},
+            {"leaf_name": "A", "sample": "a2", "replicated": 3.0, "single": np.nan},
+            {"leaf_name": "B", "sample": "b1", "replicated": 4.0, "single": 5.0},
+            {"leaf_name": "B", "sample": "b2", "replicated": 6.0, "single": np.nan},
+        ]
+    )
+    estimates = estimate_replicate_traits(
+        dataframe,
+        ["A", "B"],
+        ["replicated", "single"],
+        biological_id="sample",
+    )
+
+    np.testing.assert_allclose(
+        estimates.sampling_covariance_by_trait["single"], np.zeros(2)
+    )
+    summary = estimates.tip_summary.query("trait == 'single'")
+    assert set(summary["variance_method"]) == {"single-observation"}
+    assert set(summary["n_biological"]) == {1}
+    assert set(summary["standard_error"]) == {0.0}
+
+
 def test_technical_replicates_require_explicit_aggregation_and_do_not_add_n():
     dataframe = pd.DataFrame(
         [

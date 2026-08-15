@@ -568,6 +568,27 @@ def _leaf_specific_no_batch(dataframe, leaf_names, trait):
     )
 
 
+def _single_observation_no_batch(dataframe, leaf_names, trait):
+    """Treat a non-replicated trait as exact tip observations.
+
+    A shared biological-ID column can describe several traits with different
+    replication depths.  When this trait has one observation at every fitted
+    leaf there is no within-leaf variance to estimate; it must retain the
+    ordinary tip-value semantics instead of failing a pooled residual-df check.
+    """
+    selected = dataframe[dataframe[trait].notna()].copy()
+    grouped = selected.groupby("leaf_name", sort=False)[trait]
+    means = grouped.mean().reindex(leaf_names)
+    counts = grouped.size().reindex(leaf_names).astype(int)
+    if not (counts == 1).all():
+        raise ValueError(
+            "Single-observation handling requires exactly one biological "
+            "observation per observed leaf."
+        )
+    zeros = np.zeros(len(leaf_names), dtype=float)
+    return means.to_numpy(float), zeros, counts.to_numpy(int), zeros
+
+
 def _batch_observation_indices(selected, leaf_levels, batch, batch_levels):
     leaf_index = {leaf: index for index, leaf in enumerate(leaf_levels)}
     observed_leaf = np.asarray(
@@ -906,7 +927,17 @@ def _estimate_one_trait(
     if not observed_leaf_names:
         raise ValueError("Trait '{}' contains no observations.".format(trait))
     fitted_leaf_names = observed_leaf_names if allow_missing else leaf_names
-    if batch is not None:
+    selected_counts = (
+        dataframe[dataframe[trait].notna()]
+        .groupby("leaf_name", sort=False)[trait]
+        .size()
+        .reindex(fitted_leaf_names)
+        .astype(int)
+    )
+    if batch is None and within_variance == "pooled" and (selected_counts == 1).all():
+        estimates = _single_observation_no_batch(dataframe, fitted_leaf_names, trait)
+        method = "single-observation"
+    elif batch is not None:
         estimates = _pooled_with_batch(dataframe, fitted_leaf_names, trait, batch)
         method = "pooled-batch-adjusted"
     elif within_variance == "leaf":

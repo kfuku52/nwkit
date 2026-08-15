@@ -1463,6 +1463,55 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
 
 
 @pytest.mark.integration
+def test_pgls_raw_mode_supports_mixed_response_replication_depth(tmp_path):
+    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+        tmp_path,
+        biological_replicates=True,
+    )
+    frame = pd.read_csv(expression, sep="\t")
+    frame["single"] = np.where(
+        frame["sample_id"].str.endswith("_1"),
+        frame["expression"] + 1.0,
+        np.nan,
+    )
+    frame.to_csv(expression, sep="\t", index=False, na_rep="NA")
+    prefix = tmp_path / "mixed-depth"
+
+    main(
+        [
+            "pgls",
+            "--gene-tree",
+            str(gene_tree),
+            "--species-tree",
+            str(species_tree),
+            "--expression",
+            str(expression),
+            "--species-traits",
+            str(species_traits),
+            "--responses",
+            "expression,single",
+            "--predictors",
+            "body_size",
+            "--tree-id",
+            "OGMIXED",
+            "--biological-id",
+            "sample_id",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+
+    result = pd.read_csv(tmp_path / "mixed-depth.pgls.tsv", sep="\t")
+    assert set(result["response"]) == {"expression", "single"}
+    summary = pd.read_csv(tmp_path / "mixed-depth.response-tip-summary.tsv", sep="\t")
+    assert set(summary.query("trait == 'expression'")["variance_method"]) == {"pooled"}
+    assert set(summary.query("trait == 'single'")["variance_method"]) == {
+        "single-observation"
+    }
+    assert set(summary.query("trait == 'single'")["standard_error"]) == {0.0}
+
+
+@pytest.mark.integration
 def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
     gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
         tmp_path

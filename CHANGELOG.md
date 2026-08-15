@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.36.3] - 2026-08-15
+
+### Fixed
+
+- Allowed one shared biological-replicate table to contain both replicated
+  traits and traits with exactly one observation per tip. The latter now keep
+  ordinary exact-tip semantics instead of failing pooled residual-variance
+  estimation.
+
 ## [0.36.2] - 2026-08-14
 
 ### Changed

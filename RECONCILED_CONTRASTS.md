@@ -67,7 +67,11 @@ Predictors independently support the corresponding
 columns use `--predictor-standard-error-columns` and
 `--predictor-sample-size-columns`. Thus either role or both roles may be
 replicated. When only one role is replicated, values for the other role must be
-identical within each tip.
+identical within each tip. A shared raw-replicate table may also contain traits
+with different replication depths. Under `pooled`, a trait having exactly one
+observation at every fitted tip is treated as ordinary exact tip data (zero
+sampling variance), while genuinely replicated traits retain their estimated
+sampling covariance.
 
 Predictor uncertainty is not added to response covariance as though it were
 response noise. NWKIT fits a phylogenetic latent predictor and integrates its
@@ -566,10 +570,13 @@ level effect. Leaf and batch effects must be separable; confounded designs are
 rejected.
 
 `--within-variance pooled` estimates one residual biological variance shared
-across gene-tree tips. `leaf` estimates one variance per tip and requires at
-least two biological observations for every tip; it cannot be combined with
-batch adjustment. If means and standard errors have already been estimated,
-use `--within-variance known-se` and columns named `<trait>_se`, or name them
+across gene-tree tips when replicate residual degrees of freedom exist. If a
+selected trait instead has exactly one observation at each fitted tip, `pooled`
+records `variance_method=single-observation` and preserves those exact tip
+values without inventing within-tip variance. `leaf` estimates one variance per
+tip and requires at least two biological observations for every tip; it cannot
+be combined with batch adjustment. If means and standard errors have already
+been estimated, use `--within-variance known-se` and columns named `<trait>_se`, or name them
 with `--standard-error-columns`. Optional `--sample-size-columns` add sample
 sizes to the audit without changing the supplied standard errors.
 
