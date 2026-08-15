@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from typing import Any
 
 from ete4 import Tree
 
@@ -19,8 +20,8 @@ def _aggregate_leaf_properties(leaves, numeric_mode="none"):
             if key not in {"name", "dist", "support"}
         }
     )
-    aggregated = {}
-    status = {}
+    aggregated: dict[str, Any] = {}
+    status: dict[str, str] = {}
     for key in keys:
         values = [leaf.props.get(key) for leaf in leaves]
         present = [value for value in values if value not in (None, "")]
@@ -86,7 +87,7 @@ def collapse_tree_for_drawing(
     if len(list(tree.leaves())) <= maximum:
         return tree, []
     drawing_tree = _copy_tree_iteratively(tree)
-    leaf_count = {}
+    leaf_count: dict[Any, int] = {}
     for node in drawing_tree.traverse(strategy="postorder"):
         leaf_count[node] = (
             1

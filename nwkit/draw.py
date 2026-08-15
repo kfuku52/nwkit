@@ -3,6 +3,7 @@ import hashlib
 import math
 import os
 import sys
+from typing import Any
 
 import matplotlib
 import matplotlib.pyplot as plt
@@ -127,7 +128,7 @@ def _get_species_overlap_node_types(tree, args, require_all_tip_labels=False):
     species_by_leaf, all_tip_labels_parsed = _get_species_by_leaf(tree=tree, args=args)
     if bool(require_all_tip_labels) and (not all_tip_labels_parsed):
         return dict(), all_tip_labels_parsed
-    species_to_bit = dict()
+    species_to_bit: dict[str, int] = {}
     species_mask_by_node = dict()
     has_missing_species_by_node = dict()
     node_type_by_node = dict()
@@ -298,7 +299,8 @@ def _load_tip_image(path, max_edge_px=None):
             image = rasterize_svg_to_image(path, max_edge=max_edge_px)
         else:
             with Image.open(path) as source_image:
-                validate_image_dimensions(*source_image.size, label="Tip image")
+                width, height = source_image.size
+                validate_image_dimensions(width, height, label="Tip image")
                 if max_edge_px not in (None, 0):
                     source_image.draft(
                         source_image.mode,
@@ -328,7 +330,7 @@ def _load_tip_images(path_by_leaf, image_size_pt=18.0):
         ),
     )
     image_by_leaf = dict()
-    image_by_path = dict()
+    image_by_path: dict[str, np.ndarray] = {}
     for leaf_name, path in path_by_leaf.items():
         image = image_by_path.get(path)
         if image is None:
@@ -1929,12 +1931,12 @@ def _convex_hull(points):
             first[1] - origin[1]
         ) * (second[0] - origin[0])
 
-    lower = []
+    lower: list[tuple[float, float]] = []
     for point in unique:
         while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0.0:
             lower.pop()
         lower.append(point)
-    upper = []
+    upper: list[tuple[float, float]] = []
     for point in reversed(unique):
         while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0.0:
             upper.pop()
@@ -2010,7 +2012,7 @@ def _densitree_topology_groups(posterior_layouts, sample_trees):
         return []
     if not sample_trees:
         return [((), list(posterior_layouts))]
-    grouped = {}
+    grouped: dict[tuple, list[Any]] = {}
     for sample_tree, rendered in zip(sample_trees, posterior_layouts, strict=True):
         signature = _densitree_topology_signature(sample_tree)
         grouped.setdefault(signature, []).append(rendered)
@@ -2803,7 +2805,7 @@ def _draw_tree(
             densitree_topology_groups,
             start=1,
         ):
-            path_groups = {}
+            path_groups: dict[Any, list[Any]] = {}
             for _, path_by_clade in group:
                 for clade, path in path_by_clade.items():
                     path_groups.setdefault(clade, []).append(path)
@@ -3537,12 +3539,12 @@ def _draw_tree(
             is_missing = raw_value in (None, "")
             if is_missing and tip_badge_missing_label in (None, ""):
                 continue
-            value = str(tip_badge_missing_label if is_missing else raw_value)
+            badge_value = str(tip_badge_missing_label if is_missing else raw_value)
             badge_color = _property_color(
                 prop=tip_badge_property,
-                value=value,
+                value=badge_value,
                 property_colors=property_colors,
-                fallback_index=badge_value_index[value],
+                fallback_index=badge_value_index[badge_value],
                 palette=trait_palette,
             )
             badge_style = {
@@ -3559,11 +3561,11 @@ def _draw_tree(
                     track_span_pt
                     + (tip_label_size_by_leaf[leaf][0] * 72.0 if tip_labels else 0.0)
                     + 4.0
-                    + max(len(value), 1) * font_size * 0.29
+                    + max(len(badge_value), 1) * font_size * 0.29
                     + (font_size * 0.16)
                 )
                 badge_artist = ax.annotate(
-                    value,
+                    badge_value,
                     xy=(label_x, label_y),
                     xytext=(
                         math.cos(radians) * badge_offset_points,
@@ -3599,7 +3601,9 @@ def _draw_tree(
                     else 0.0
                 )
                 approximate_badge_width = (
-                    max(len(value), 1) * (font_size * 0.58 / 72.0) * data_per_inch
+                    max(len(badge_value), 1)
+                    * (font_size * 0.58 / 72.0)
+                    * data_per_inch
                 )
                 badge_padding = (font_size * 0.16 / 72.0) * data_per_inch
                 badge_gap = (4.0 / 72.0) * data_per_inch
@@ -3612,7 +3616,7 @@ def _draw_tree(
                 badge_artist = ax.text(
                     label_x + badge_offset,
                     label_y,
-                    value,
+                    badge_value,
                     va="center",
                     ha="center",
                     fontsize=font_size,
@@ -4146,7 +4150,7 @@ def _draw_tree(
             "initial_fit": fit_report,
         }
     )
-    metadata = {"Creator": "NWKIT {}".format(__version__)}
+    metadata: dict[str, Any] = {"Creator": "NWKIT {}".format(__version__)}
     if image_format == "svg":
         metadata["Date"] = None
     elif image_format == "pdf":
@@ -4406,7 +4410,7 @@ def draw_main(args):
     )
     node_plot_mode = str(args.species_overlap_node_plot).strip().lower()
     if node_plot_mode == "no":
-        node_type_by_node = dict()
+        node_type_by_node: dict[Any, str] = {}
     else:
         if not is_rooted(tree):
             if node_plot_mode == "yes":

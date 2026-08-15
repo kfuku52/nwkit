@@ -4,6 +4,25 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.36.4] - 2026-08-15
+
+### Changed
+
+- Made sparse reconciled errors-in-variables PGLS use exact, bounded-memory
+  precision diagonals at every dataset size, removing a hidden stochastic
+  objective change above 512 observations while retaining practical scaling.
+- Cached repeated grouped marginal-variance calculations outside optimization
+  and used deterministic small posterior factorizations for reproducible
+  cross-platform inference.
+
+### Fixed
+
+- Fixed exact posterior-variance diagnostics for sparse factor-loading models
+  and strengthened threshold, dense-equivalence, and cache-reuse regression
+  coverage.
+- Fixed drawing type annotations and made image tests robust to legitimate
+  font-rendering differences and unavailable optional Cairo support.
+
 ## [0.36.3] - 2026-08-15
 
 ### Fixed

@@ -8,11 +8,12 @@ import os
 import sys
 from collections import Counter
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
 class DrawingArtist:
-    artist: object
+    artist: Any
     kind: str
     priority: int = 50
     movable: bool = False
@@ -60,7 +61,7 @@ def _segment_intersects_bbox(start, end, bbox, padding=0.75):
 
     dx = end[0] - start[0]
     dy = end[1] - start[1]
-    candidates = []
+    candidates: list[float] = []
     if abs(dx) > 1e-12:
         candidates.extend(
             (
@@ -135,7 +136,7 @@ def _count_branch_crossings(branch_lines, segment_limit=8000):
     if len(branch_segments) > int(segment_limit):
         return 0, False
     cell_size = 36.0
-    grid = {}
+    grid: dict[tuple[int, int], list[int]] = {}
     tested = set()
     crossing_owners = set()
     for index, (owner, (start, end)) in enumerate(branch_segments):
@@ -201,7 +202,7 @@ def _find_collisions(figure, artists, branch_lines):
     lower = (lambda bound: bound.x0) if sweep_x else (lambda bound: bound.y0)
     upper = (lambda bound: bound.x1) if sweep_x else (lambda bound: bound.y1)
     ordered = sorted(visible, key=lambda item: lower(bounds[id(item)]))
-    active = []
+    active: list[DrawingArtist] = []
     for first in ordered:
         first_bounds = bounds[id(first)]
         active = [
@@ -227,7 +228,7 @@ def _find_collisions(figure, artists, branch_lines):
         for segment in _line_segments(line)
     ]
     cell_size = 36.0
-    segment_grid = {}
+    segment_grid: dict[tuple[int, int], list[int]] = {}
     broad_segments = []
     for index, (_, (start, end)) in enumerate(branch_segments):
         x0, x1 = sorted((float(start[0]), float(end[0])))
@@ -270,7 +271,7 @@ def _find_collisions(figure, artists, branch_lines):
 
 
 def _collision_summary(collisions):
-    counter = Counter()
+    counter: Counter[str] = Counter()
     for collision_type, first, second in collisions:
         if collision_type == "artist":
             pair = sorted((first.kind, second.kind))

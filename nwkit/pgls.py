@@ -76,6 +76,7 @@ RESPONSE_REQUIRED_COLUMNS = {
 }
 
 MAX_DENSE_GAUSSIAN_OBSERVATIONS = 2000
+MAX_DENSE_FACTOR_POSTERIOR_OBSERVATIONS = 512
 LINEAGE_COMPONENT_PREFIX = "lineage_slope_variance:"
 
 PREDICTOR_REQUIRED_COLUMNS = {
@@ -946,8 +947,18 @@ def _prepare_predictor_posteriors(
                 covariance,
                 include_intercept=False,
             )
-            posterior_factor = None
-            posterior_model = posterior.covariance_model
+            if len(event_ids) <= MAX_DENSE_FACTOR_POSTERIOR_OBSERVATIONS:
+                # Use the same dense posterior representation as an explicit
+                # covariance input at modest sizes.  This removes platform-
+                # dependent sparse-LU drift without materializing the supplied
+                # factor-loading covariance; large analyses remain structured.
+                posterior_factor = _covariance_factor(
+                    posterior.covariance_model.materialize()
+                )
+                posterior_model = None
+            else:
+                posterior_factor = None
+                posterior_model = posterior.covariance_model
         else:
             posterior = fit_latent_predictor(
                 observed,

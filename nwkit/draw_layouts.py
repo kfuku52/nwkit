@@ -11,6 +11,7 @@ from __future__ import annotations
 import bisect
 import math
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -302,7 +303,7 @@ def cladogram_layout(
         fixed_leaf_position_by_name=fixed_leaf_position_by_name,
         fixed_root_position=fixed_root_position,
     )
-    height = {}
+    height: dict[Any, float] = {}
     for node in tree.traverse(strategy="postorder"):
         children = node.get_children()
         height[node] = (
@@ -371,20 +372,20 @@ def _polar_coordinates(
         linear_origin = 0.0
     elif angular_span_degrees < 360.0:
         start = center - (available / 2.0)
-        leaf_positions = [linear_y[leaf] for leaf in leaf_order]
-        linear_origin = min(leaf_positions)
-        denominator = max(max(leaf_positions) - linear_origin, 1e-12)
+        ordered_leaf_positions = [linear_y[leaf] for leaf in leaf_order]
+        linear_origin = min(ordered_leaf_positions)
+        denominator = max(max(ordered_leaf_positions) - linear_origin, 1e-12)
     else:
         start = center - math.pi
         _, normalized_weight = _normalized_leaf_weights(
             tree,
             leaf_weight_by_leaf,
         )
-        leaf_positions = {leaf: linear_y[leaf] for leaf in leaf_order}
-        first_at_seam = min(leaf_order, key=leaf_positions.get)
-        last_at_seam = max(leaf_order, key=leaf_positions.get)
-        linear_origin = leaf_positions[first_at_seam]
-        linear_span = max(leaf_positions.values()) - linear_origin
+        leaf_position_by_node = {leaf: linear_y[leaf] for leaf in leaf_order}
+        first_at_seam = min(leaf_order, key=lambda leaf: leaf_position_by_node[leaf])
+        last_at_seam = max(leaf_order, key=lambda leaf: leaf_position_by_node[leaf])
+        linear_origin = leaf_position_by_node[first_at_seam]
+        linear_span = max(leaf_position_by_node.values()) - linear_origin
         # A complete circle also needs clearance across its seam. This formula
         # reproduces the conventional weighted layout.  Tidy packing can move
         # traversal-adjacent leaves past one another in the perpendicular
@@ -517,7 +518,9 @@ def _unrooted_graph(tree, use_topology_depth):
     nodes = list(tree.traverse())
     suppressed_root = tree if len(tree.get_children()) == 2 else None
     kept_nodes = [node for node in nodes if node is not suppressed_root]
-    adjacency = {node: [] for node in kept_nodes}
+    adjacency: dict[Any, list[tuple[Any, float]]] = {
+        node: [] for node in kept_nodes
+    }
 
     def edge_length(child):
         if use_topology_depth:
@@ -560,7 +563,7 @@ def _unrooted_component_weight(adjacency, leaf_weight_by_leaf=None):
     leaf_weight_by_leaf = leaf_weight_by_leaf or {}
     arbitrary_root = next(iter(adjacency))
     parent, order = _root_graph(adjacency, arbitrary_root)
-    descendant_weight = {}
+    descendant_weight: dict[Any, float] = {}
     for node in reversed(order):
         own_weight = (
             max(float(leaf_weight_by_leaf.get(node, 1.0)), 1e-9)
@@ -738,7 +741,7 @@ def _graph_has_crossing(edges, xcoord, ycoord):
     )
     axis = "x" if x_density <= y_density else "y"
     ordered = sorted(records, key=lambda record: record[axis + "0"])
-    active = []
+    active: list[dict[str, Any]] = []
     for record in ordered:
         active = [other for other in active if other[axis + "1"] >= record[axis + "0"]]
         first, second = record["nodes"]
@@ -1265,7 +1268,7 @@ def tidy_layout(
         leaf_weight_by_leaf,
     )
 
-    box_by_node = {}
+    box_by_node: dict[Any, _TidyBox] = {}
     label_aware = leaf_weight_by_leaf is not None
     for node in tree.traverse(strategy="postorder"):
         children = [box_by_node[child] for child in node.get_children()]
@@ -1307,7 +1310,7 @@ def tidy_layout(
         )
     root_box = box_by_node[tree]
     _tidy_first_walk(root_box)
-    ycoord = {}
+    ycoord: dict[Any, float] = {}
     minimum = _tidy_second_walk(root_box, 0.0, ycoord)
     if minimum != 0.0:
         _tidy_third_walk(root_box, -minimum, ycoord)

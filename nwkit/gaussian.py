@@ -45,7 +45,8 @@ class DiagonalSparsePrecisionCovariance:
     diagonal: np.ndarray
     loading: sparse.csr_matrix
     precision: sparse.csc_matrix
-    marginal_diagonal: np.ndarray
+    marginal_diagonal: np.ndarray | None = None
+    grouped_marginal_diagonal: np.ndarray | None = None
 
 
 @dataclass(frozen=True)
@@ -730,17 +731,48 @@ def materialize_covariance(
     return np.diag(covariance) if covariance.ndim == 1 else covariance
 
 
-def _sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.ndarray:
+def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.ndarray:
+    """Return ``diag(L @ inv(Q) @ L.T)`` exactly with bounded workspace.
+
+    A stochastic diagonal estimator is not suitable here: these values enter
+    event-balanced Gaussian objectives through a sum of logarithms, so even an
+    unbiased estimate of each diagonal element would produce a biased
+    likelihood.  Blocked solves keep peak memory bounded without changing the
+    objective when an analysis crosses an arbitrary observation threshold.
+    """
     loading = sparse.csr_matrix(loading, dtype=float)
-    solver = splu(precision, permc_spec="COLAMD") if solver is None else solver
+    solver = (
+        splu(sparse.csc_matrix(precision, dtype=float), permc_spec="COLAMD")
+        if solver is None
+        else solver
+    )
     n_rows = loading.shape[0]
-    if n_rows <= 512:
-        solved = solver.solve(loading.T.toarray())
-        return np.asarray(loading.multiply(solved.T).sum(axis=1)).reshape(-1)
-    probe_count = min(64, max(16, int(math.ceil(math.log2(n_rows + 1))) * 4))
-    probes = np.random.default_rng(0).choice((-1.0, 1.0), size=(n_rows, probe_count))
-    projected = loading @ solver.solve(np.asarray(loading.T @ probes))
-    return np.maximum(0.0, np.mean(probes * projected, axis=1))
+    if n_rows == 0:
+        return np.empty(0, dtype=float)
+    # A 100k-element dense RHS/output block is under 1 MiB in float64.  Sparse
+    # direct solvers need additional work arrays, so this conservative block
+    # size keeps 5,000-tip exact diagonals well below dense-covariance memory.
+    target_entries = 100_000
+    block_size = max(
+        1,
+        min(n_rows, target_entries // max(1, loading.shape[1])),
+    )
+    diagonal = np.empty(n_rows, dtype=float)
+    for start in range(0, n_rows, block_size):
+        stop = min(n_rows, start + block_size)
+        block = loading[start:stop]
+        solved = solver.solve(block.T.toarray())
+        diagonal[start:stop] = np.asarray(
+            block.multiply(np.asarray(solved).T).sum(axis=1)
+        ).reshape(-1)
+    scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
+    tolerance = np.finfo(float).eps * scale * max(1, loading.shape[1]) * 100.0
+    if np.any(diagonal < -tolerance):
+        raise np.linalg.LinAlgError(
+            "Sparse precision covariance has a negative marginal variance."
+        )
+    diagonal[diagonal < 0.0] = 0.0
+    return diagonal
 
 
 def covariance_marginal_diagonal(covariance, *, precision_factor=None) -> np.ndarray:
@@ -754,9 +786,11 @@ def covariance_marginal_diagonal(covariance, *, precision_factor=None) -> np.nda
         )
         return np.asarray(covariance.diagonal, dtype=float) + row_squares
     if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        if covariance.marginal_diagonal is not None:
+            return np.asarray(covariance.marginal_diagonal, dtype=float)
         return np.asarray(
             covariance.diagonal, dtype=float
-        ) + _sparse_precision_update_diagonal(
+        ) + sparse_precision_update_diagonal(
             covariance.loading,
             covariance.precision,
             solver=(
@@ -827,13 +861,18 @@ def grouped_mean_covariance_diagonal(
         ).reshape(-1)
 
     if isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        if covariance.grouped_marginal_diagonal is not None:
+            grouped = np.asarray(covariance.grouped_marginal_diagonal, dtype=float)
+            if grouped.shape != (n_groups,):
+                raise ValueError("Cached grouped covariance diagonal is malformed.")
+            return grouped.copy()
         grouped_diagonal = np.bincount(
             groups,
             weights=np.square(row_weights) * covariance.diagonal,
             minlength=n_groups,
         )
         grouped_loading = sparse.csr_matrix(aggregation @ covariance.loading)
-        return grouped_diagonal + _sparse_precision_update_diagonal(
+        return grouped_diagonal + sparse_precision_update_diagonal(
             grouped_loading,
             covariance.precision,
             solver=(

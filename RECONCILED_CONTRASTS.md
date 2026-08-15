@@ -750,6 +750,11 @@ needed to distinguish evolutionary residual variance from event variance. It
 is deliberately an event-balanced composite objective, not the determinant of
 an ordinary observation-level multivariate Gaussian likelihood. Bootstrap and
 lineage likelihood refits always reuse the same objective as the fitted model.
+Sparse-precision predictor uncertainty does not change this objective at a
+size threshold: required row or event-mean marginal variances are computed
+exactly by bounded-block sparse solves and cached before coefficient/variance
+optimization. NWKIT never silently substitutes a stochastic diagonal estimate
+for analyses above 500 observations.
 In every model, reported residual degrees of freedom are
 `n_species_events - num_parameters`, never the number of gene-tree rows.
 

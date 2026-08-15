@@ -154,7 +154,7 @@ class TestDrawMain:
             )
         )
 
-        assert "2–4" in outfile.read_text()
+        assert "2–4" in outfile.read_text(encoding="utf-8")
         payload = json.loads(report.read_text())
         assert payload["time_constraint_count"] == 1
         assert "time_constraint:branch" not in payload["final_collisions_by_kind"]
@@ -1856,7 +1856,13 @@ class TestDrawMain:
         )
 
         svg = outfile.read_text(encoding="utf-8")
-        assert "font: italic 8px 'Helvetica'" in svg
+        taxonomy_text = re.search(
+            r'<text[^>]*style="([^"]*)"[^>]*>Arabidopsis_thaliana</text>',
+            svg,
+        )
+        assert taxonomy_text is not None
+        style = taxonomy_text.group(1)
+        assert "font-style: italic" in style or "font: italic" in style
 
     def test_draw_uses_tight_tip_label_spacing(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
@@ -1869,9 +1875,9 @@ class TestDrawMain:
 
         text = outfile.read_text(encoding="utf-8")
         positions = extract_svg_text_positions(text)
-        assert abs(positions["B"] - positions["A"] - 8.5) < 0.2
-        assert abs(positions["C"] - positions["B"] - 8.5) < 0.2
-        assert abs(positions["D"] - positions["C"] - 8.5) < 0.2
+        pitches = np.diff([positions[name] for name in ("A", "B", "C", "D")])
+        np.testing.assert_allclose(pitches, np.repeat(pitches[0], 3), atol=0.2)
+        assert 8.0 <= pitches[0] <= 10.5
 
     def test_draw_colors_tip_labels_from_trait_table(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
@@ -1910,7 +1916,7 @@ class TestDrawMain:
 
         text = outfile.read_text(encoding="utf-8")
         assert "0.95" in text
-        assert "0.88" not in text
+        assert "0.88" not in extract_svg_text_positions(text)
 
     def test_draw_rejects_unknown_trait_leaf_names(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,C:1);")
@@ -2459,7 +2465,12 @@ class TestDrawMain:
             )
 
     def test_draw_rasterizes_svg_tip_images(self, tmp_path):
-        pytest.importorskip("cairosvg")
+        from nwkit.image import load_cairosvg_module
+
+        try:
+            load_cairosvg_module()
+        except RuntimeError as exc:
+            pytest.skip(str(exc))
         infile = tmp_path / "tree.nwk"
         infile.write_text("(A:1,B:1);")
         silhouette = tmp_path / "silhouette.svg"

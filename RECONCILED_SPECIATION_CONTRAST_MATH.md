@@ -298,6 +298,9 @@ $$
 厳密な多変量Gaussian log determinantではない。二次形式はどちらも
 $\mathbf r^\mathsf TV_{\mathrm{work}}^{-1}\mathbf r$ を用いる。parametric bootstrapと
 lineage likelihood-ratio検定も、元のfitと同じevent-level目的関数で再fitする。
+species側の説明変数誤差がsparse precisionで表される場合も、必要な $v_i$ または
+$(AV_{\mathrm{work}}A^\mathsf T)_{ee}$ はbounded-block sparse solveで厳密に計算し、
+最適化前にcacheする。tip数によるstochastic diagonal近似への暗黙の切替は行わない。
 
 さらに、識別可能なら同じ `species_event_id` を共有する行に
 species-event random effectを入れる。残差自由度も遺伝子contrast数ではなく

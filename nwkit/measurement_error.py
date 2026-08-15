@@ -11,6 +11,7 @@ from scipy.optimize import minimize, minimize_scalar
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
+    covariance_marginal_diagonal,
     effective_likelihood_settings,
     factor_covariance,
     factor_diagonal_low_rank_updates,
@@ -21,6 +22,7 @@ from nwkit.gaussian import (
     is_diagonal,
     materialize_covariance,
     solve_factor,
+    sparse_precision_update_diagonal,
 )
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
@@ -391,14 +393,13 @@ def fit_factor_latent_predictor(
         sampling_variance=np.empty(0, dtype=float),
         sampling_precision_factor=posterior_precision_factor,
     )
-    probe_count = min(64, max(16, int(math.ceil(math.log2(len(observed) + 1))) * 4))
-    rng = np.random.default_rng(0)
-    probes = rng.choice((-1.0, 1.0), size=(len(observed), probe_count))
     factor = factor_sparse_nonsingular(posterior_precision)
-    projected = posterior_loading @ factor.solve(
-        np.asarray(posterior_loading.T @ probes)
+    posterior_marginal_variance = sparse_precision_update_diagonal(
+        posterior_loading,
+        posterior_precision,
+        solver=factor,
     )
-    mean_posterior_variance = max(0.0, float(np.mean(probes * projected)))
+    mean_posterior_variance = float(np.mean(posterior_marginal_variance))
     boundary = bool(rate <= lower_rate * 10.0 or rate >= upper_rate / 10.0)
     return SparseLatentPredictorPosterior(
         mean=np.asarray(posterior_mean, dtype=float),
@@ -966,20 +967,80 @@ def _gmrf_uncertainty_update(beta, column, uncertainty):
 
 
 def _sparse_precision_marginal_diagonal(loading, precision):
-    loading = sparse.csr_matrix(loading, dtype=float)
-    factor = factor_sparse_nonsingular(precision)
-    if loading.shape[0] <= 512:
-        solved = factor.solve(loading.T.toarray())
-        return np.asarray(loading.multiply(solved.T).sum(axis=1)).reshape(-1)
-    probe_count = min(64, max(16, int(math.ceil(math.log2(loading.shape[0] + 1))) * 4))
-    rng = np.random.default_rng(0)
-    probes = rng.choice((-1.0, 1.0), size=(loading.shape[0], probe_count))
-    projected = loading @ factor.solve(np.asarray(loading.T @ probes))
-    return np.maximum(0.0, np.mean(probes * projected, axis=1))
+    return sparse_precision_update_diagonal(loading, precision)
+
+
+def _gmrf_likelihood_marginal_profiles(
+    predictor_uncertainties,
+    predictor_columns,
+    n_coefficients,
+    likelihood_groups,
+    *,
+    use_row_marginals,
+):
+    """Precompute exact unit-slope GMRF marginals for an EIV objective."""
+    if not any(
+        isinstance(uncertainty, GmrfPredictorUncertainty)
+        for uncertainty in predictor_uncertainties
+    ):
+        return {}
+    profiles = {}
+    groups = None if likelihood_groups is None else np.asarray(likelihood_groups)
+    if groups is not None:
+        unique_groups, inverse = np.unique(groups, return_inverse=True)
+        if len(unique_groups) == 0 or not np.array_equal(
+            unique_groups, np.arange(len(unique_groups))
+        ):
+            raise ValueError("Likelihood groups must be non-empty and contiguous.")
+        counts = np.bincount(inverse, minlength=len(unique_groups))
+        aggregation = sparse.csr_matrix(
+            (
+                1.0 / counts[inverse].astype(float),
+                (inverse, np.arange(len(inverse))),
+            ),
+            shape=(len(unique_groups), len(inverse)),
+        )
+    else:
+        aggregation = None
+    for index, (uncertainty, columns) in enumerate(
+        zip(predictor_uncertainties, predictor_columns, strict=True)
+    ):
+        if not isinstance(uncertainty, GmrfPredictorUncertainty):
+            continue
+        if not isinstance(columns, (int, np.integer)):
+            raise ValueError("GMRF predictor uncertainty requires one column.")
+        column = int(columns)
+        unit_beta = np.zeros(n_coefficients, dtype=float)
+        unit_beta[column] = 1.0
+        loading, precision, _ = _gmrf_uncertainty_update(
+            unit_beta, column, uncertainty
+        )
+        profiles[index] = {
+            "column": column,
+            "row": (
+                sparse_precision_update_diagonal(loading, precision)
+                if use_row_marginals
+                else None
+            ),
+            "grouped": (
+                sparse_precision_update_diagonal(
+                    sparse.csr_matrix(aggregation @ loading), precision
+                )
+                if aggregation is not None and not use_row_marginals
+                else None
+            ),
+        }
+    return profiles
 
 
 def _factor_sparse_precision_eiv(
-    diagonal, updates, precision_updates, *, compute_marginal
+    diagonal,
+    updates,
+    precision_updates,
+    *,
+    compute_marginal,
+    marginal_diagonal=None,
+    grouped_marginal_diagonal=None,
 ):
     latent_updates = list(precision_updates)
     for update in updates:
@@ -995,8 +1056,10 @@ def _factor_sparse_precision_eiv(
         [sparse.csc_matrix(update[1], dtype=float) for update in latent_updates],
         format="csc",
     )
-    marginal_diagonal = np.asarray(diagonal, dtype=float).copy()
-    if compute_marginal:
+    if marginal_diagonal is not None:
+        marginal_diagonal = np.asarray(marginal_diagonal, dtype=float)
+    elif compute_marginal:
+        marginal_diagonal = np.asarray(diagonal, dtype=float).copy()
         start = 0
         for loading_value, precision_value, _ in latent_updates:
             width = loading_value.shape[1]
@@ -1004,11 +1067,18 @@ def _factor_sparse_precision_eiv(
                 loading[:, start : start + width], precision_value
             )
             start += width
+    else:
+        marginal_diagonal = None
     covariance = DiagonalSparsePrecisionCovariance(
         diagonal=np.asarray(diagonal, dtype=float),
         loading=loading,
         precision=precision,
         marginal_diagonal=marginal_diagonal,
+        grouped_marginal_diagonal=(
+            None
+            if grouped_marginal_diagonal is None
+            else np.asarray(grouped_marginal_diagonal, dtype=float)
+        ),
     )
     return covariance, cholesky
 
@@ -1075,18 +1145,41 @@ def _conditional_eiv_covariance(
     structured,
     *,
     compute_marginal=False,
+    gmrf_marginal_profiles=None,
+    likelihood_groups=None,
 ):
     if structured:
         diagonal, updates = _structured_eiv_base(fixed_covariance)
         precision_updates = []
-        for columns, uncertainty in zip(
-            predictor_columns, predictor_uncertainties, strict=True
+        row_precision_marginal = None
+        grouped_precision_marginal = None
+        for uncertainty_index, (columns, uncertainty) in enumerate(
+            zip(predictor_columns, predictor_uncertainties, strict=True)
         ):
             if isinstance(uncertainty, GmrfPredictorUncertainty):
                 assert isinstance(columns, (int, np.integer))
                 precision_updates.append(
                     _gmrf_uncertainty_update(beta, int(columns), uncertainty)
                 )
+                profile = (gmrf_marginal_profiles or {}).get(uncertainty_index)
+                if profile is not None:
+                    scale = float(beta[int(columns)]) ** 2
+                    if profile["row"] is not None:
+                        contribution = scale * np.asarray(profile["row"], dtype=float)
+                        row_precision_marginal = (
+                            contribution
+                            if row_precision_marginal is None
+                            else row_precision_marginal + contribution
+                        )
+                    if profile["grouped"] is not None:
+                        contribution = scale * np.asarray(
+                            profile["grouped"], dtype=float
+                        )
+                        grouped_precision_marginal = (
+                            contribution
+                            if grouped_precision_marginal is None
+                            else grouped_precision_marginal + contribution
+                        )
                 continue
             if not (
                 isinstance(uncertainty, ContinuousPredictorUncertainty)
@@ -1105,11 +1198,41 @@ def _conditional_eiv_covariance(
             component_factors,
         )
         if precision_updates:
+            nonprecision = DiagonalLowRankCovariance(
+                np.asarray(diagonal, dtype=float),
+                (
+                    sparse.hstack(
+                        [sparse.csr_matrix(update) for update in updates],
+                        format="csr",
+                    )
+                    if updates
+                    else sparse.csr_matrix((n_observations, 0), dtype=float)
+                ),
+            )
+            marginal_diagonal = None
+            if row_precision_marginal is not None:
+                marginal_diagonal = (
+                    np.asarray(covariance_marginal_diagonal(nonprecision), dtype=float)
+                    + row_precision_marginal
+                )
+            grouped_marginal_diagonal = None
+            if grouped_precision_marginal is not None:
+                grouped_marginal_diagonal = (
+                    np.asarray(
+                        grouped_mean_covariance_diagonal(
+                            nonprecision, likelihood_groups
+                        ),
+                        dtype=float,
+                    )
+                    + grouped_precision_marginal
+                )
             return _factor_sparse_precision_eiv(
                 diagonal,
                 updates,
                 precision_updates,
                 compute_marginal=compute_marginal,
+                marginal_diagonal=marginal_diagonal,
+                grouped_marginal_diagonal=grouped_marginal_diagonal,
             )
         return _factor_structured_eiv(diagonal, updates, n_observations)
     covariance = _dense_eiv_covariance(
@@ -1213,6 +1336,19 @@ def fit_conditional_eiv_gaussian(
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
     num_coefficients = design.shape[1]
+    gmrf_marginal_profiles = _gmrf_likelihood_marginal_profiles(
+        predictor_uncertainties,
+        predictor_columns,
+        num_coefficients,
+        likelihood_groups,
+        use_row_marginals=(
+            likelihood_groups is not None
+            and any(
+                name == "species_event_variance"
+                for name, _matrix in normalized_components
+            )
+        ),
+    )
     variance_bounds = [(math.log(lower_variance), math.log(upper_variance))] * len(
         normalized_components
     )
@@ -1235,6 +1371,8 @@ def fit_conditional_eiv_gaussian(
                 len(response),
                 structured,
                 compute_marginal=return_details,
+                gmrf_marginal_profiles=gmrf_marginal_profiles,
+                likelihood_groups=likelihood_groups,
             )
         except (ValueError, np.linalg.LinAlgError):
             return float("inf")
@@ -1398,6 +1536,8 @@ def fit_conditional_eiv_gaussian(
             len(response),
             structured,
             compute_marginal=False,
+            gmrf_marginal_profiles=gmrf_marginal_profiles,
+            likelihood_groups=likelihood_groups,
         )
 
     details["covariance_for_beta"] = covariance_for_beta

@@ -1348,7 +1348,10 @@ class TestImageSecurityLimits:
         assert "<!DOCTYPE" not in source.read_text()
 
     def test_rasterizing_local_svg_does_not_modify_input(self, tmp_path):
-        pytest.importorskip("cairosvg")
+        try:
+            image_module.load_cairosvg_module()
+        except RuntimeError as exc:
+            pytest.skip(str(exc))
         source = tmp_path / "local-input.svg"
         source.write_text(
             '<?xml version="1.0"?>\n'
@@ -1366,7 +1369,10 @@ class TestImageSecurityLimits:
         assert source.read_bytes() == before
 
     def test_svg_is_scaled_before_rasterization(self, tmp_path):
-        pytest.importorskip("cairosvg")
+        try:
+            image_module.load_cairosvg_module()
+        except RuntimeError as exc:
+            pytest.skip(str(exc))
         pytest.importorskip("PIL.Image")
         source = tmp_path / "huge.svg"
         source.write_text(

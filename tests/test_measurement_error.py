@@ -14,6 +14,7 @@ from nwkit.gaussian import (
     draw_from_factor,
     factor_diagonal_sparse_precision_updates,
     materialize_covariance,
+    sparse_precision_update_diagonal,
 )
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
@@ -298,6 +299,55 @@ def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():
     )
 
 
+def test_grouped_sparse_precision_eiv_objective_matches_dense_covariance():
+    response = np.asarray([1.0, 1.9, 3.2, 4.0])
+    design = np.column_stack([np.ones(4), np.arange(4.0)])
+    loading = sparse.eye(4, format="csr")
+    precision = sparse.csc_matrix(
+        np.asarray(
+            [
+                [2.0, -0.3, 0.0, 0.0],
+                [-0.3, 1.8, -0.2, 0.0],
+                [0.0, -0.2, 1.7, -0.25],
+                [0.0, 0.0, -0.25, 1.6],
+            ]
+        )
+    )
+    precision_factor = np.linalg.cholesky(precision.toarray()).T
+    model = measurement_error_mod.SparseCovarianceModel(
+        precision=precision,
+        tip_loading=loading,
+        logdet_covariance=-np.linalg.slogdet(precision.toarray())[1],
+        sampling_parent=np.empty(0, dtype=int),
+        sampling_transition=np.empty(0),
+        sampling_variance=np.empty(0),
+        sampling_precision_factor=sparse.csr_matrix(precision_factor),
+    )
+    common = dict(
+        response=response,
+        design=design,
+        predictor_columns=[1],
+        fixed_covariance=np.full(4, 0.1),
+        components=[("evolutionary", np.ones(4))],
+        reml=False,
+        likelihood_observations=2,
+        likelihood_groups=np.asarray([0, 0, 1, 1]),
+    )
+
+    dense = fit_conditional_eiv_gaussian(
+        predictor_uncertainties=[model.materialize()], **common
+    )
+    structured = fit_conditional_eiv_gaussian(
+        predictor_uncertainties=[GmrfPredictorUncertainty(model, np.arange(4))],
+        **common,
+    )
+
+    np.testing.assert_allclose(structured["beta"], dense["beta"], rtol=5e-5)
+    assert structured["objective"] == pytest.approx(
+        dense["objective"], rel=2e-6, abs=2e-5
+    )
+
+
 def test_sparse_precision_covariance_draw_uses_retained_precision_factor():
     diagonal = np.asarray([0.2, 0.3, 0.4])
     loading = sparse.csr_matrix(np.asarray([[0.2, 0.0], [0.1, 0.2], [0.0, 0.3]]))
@@ -325,6 +375,73 @@ def test_sparse_precision_covariance_draw_uses_retained_precision_factor():
         precision, latent_perturbation
     )
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_sparse_precision_marginal_diagonal_is_exact_above_legacy_threshold():
+    block = sparse.csc_matrix(np.asarray([[2.0, -0.8], [-0.8, 1.5]]))
+    precision = sparse.block_diag([block] * 256 + [sparse.csc_matrix([[1.2]])])
+    loading = sparse.eye(513, format="csr")
+    block_inverse = np.linalg.inv(block.toarray())
+    expected = np.concatenate(
+        [np.tile(np.diag(block_inverse), 256), np.asarray([1.0 / 1.2])]
+    )
+
+    actual = sparse_precision_update_diagonal(loading, precision)
+
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+def test_grouped_gmrf_marginals_are_precomputed_once_for_optimization(monkeypatch):
+    response = np.asarray([1.0, 2.0, 3.2, 4.1])
+    design = np.column_stack([np.ones(4), np.arange(4.0)])
+    loading = sparse.eye(4, format="csr")
+    precision = sparse.csc_matrix(
+        np.asarray(
+            [
+                [2.0, -0.3, 0.0, 0.0],
+                [-0.3, 1.8, -0.2, 0.0],
+                [0.0, -0.2, 1.7, -0.25],
+                [0.0, 0.0, -0.25, 1.6],
+            ]
+        )
+    )
+    model = measurement_error_mod.SparseCovarianceModel(
+        precision=precision,
+        tip_loading=loading,
+        logdet_covariance=-np.linalg.slogdet(precision.toarray())[1],
+        sampling_parent=np.empty(0, dtype=int),
+        sampling_transition=np.empty(0),
+        sampling_variance=np.empty(0),
+        sampling_precision_factor=sparse.csr_matrix(
+            np.linalg.cholesky(precision.toarray()).T
+        ),
+    )
+    original = measurement_error_mod.sparse_precision_update_diagonal
+    calls = 0
+
+    def count_calls(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(
+        measurement_error_mod, "sparse_precision_update_diagonal", count_calls
+    )
+    fit_conditional_eiv_gaussian(
+        response,
+        design,
+        [GmrfPredictorUncertainty(model, np.arange(4))],
+        [1],
+        np.full(4, 0.1),
+        [("evolutionary", np.ones(4))],
+        reml=False,
+        likelihood_observations=2,
+        likelihood_groups=np.asarray([0, 0, 1, 1]),
+    )
+
+    # One grouped profile before optimization and one row profile retained in
+    # the returned diagnostic covariance; never one exact solve per objective.
+    assert calls == 2
 
 
 def test_structured_eiv_warns_and_attempts_above_validated_size(monkeypatch):
