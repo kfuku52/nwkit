@@ -3,7 +3,7 @@ from typing import Any
 DEFAULT_TABLE_MISSING_VALUES = ("", "NA", "NaN", "nan", "?", "missing", "unknown")
 DEFAULT_TABLE_MISSING_VALUES_CSV = ",".join(DEFAULT_TABLE_MISSING_VALUES)
 
-PGLS_BUNDLE_SUFFIXES = {
+REGRESSION_BUNDLE_SUFFIXES = {
     "reconciliation_out": ".reconciliation.tsv",
     "gene_contrasts_out": ".gene-contrasts.tsv",
     "species_contrasts_out": ".species-contrasts.tsv",
@@ -14,22 +14,22 @@ PGLS_BUNDLE_SUFFIXES = {
     "random_effects_out": ".random-effects.tsv",
     "sensitivity_out": ".sensitivity.tsv",
     "trait_origins_out": ".trait-origins.tsv",
-    "outfile": ".pgls.tsv",
+    "outfile": ".regression.tsv",
 }
-PGLS_BUNDLE_LOCK_SUFFIX = ".pgls-bundle.lock"
+REGRESSION_BUNDLE_LOCK_SUFFIX = ".regression-bundle.lock"
 
 
-def pgls_bundle_paths(prefix: str) -> dict[str, str]:
-    """Return deterministic output paths for an end-to-end PGLS bundle."""
+def regression_bundle_paths(prefix: str) -> dict[str, str]:
+    """Return deterministic output paths for an end-to-end regression bundle."""
     return {
         argument: "{}{}".format(prefix, suffix)
-        for argument, suffix in PGLS_BUNDLE_SUFFIXES.items()
+        for argument, suffix in REGRESSION_BUNDLE_SUFFIXES.items()
     }
 
 
-def pgls_bundle_lock_path(prefix: str) -> str:
-    """Return the internal lock path protecting a PGLS bundle transaction."""
-    return "{}{}".format(prefix, PGLS_BUNDLE_LOCK_SUFFIX)
+def regression_bundle_lock_path(prefix: str) -> str:
+    """Return the internal lock path protecting a regression bundle transaction."""
+    return "{}{}".format(prefix, REGRESSION_BUNDLE_LOCK_SUFFIX)
 
 
 STDIN_INPUT_DESTS = (

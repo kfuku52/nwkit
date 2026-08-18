@@ -1,3 +1,5 @@
+"""Phylogeny-aware regression command and reconciled PGLS implementation."""
+
 import math
 import os
 import sys
@@ -3891,19 +3893,19 @@ def fit_reconciled_pgls(
     )
 
 
-RAW_PGLS_REQUIRED_ARGUMENTS = {
+RAW_REGRESSION_REQUIRED_ARGUMENTS = {
     "expression": "--expression",
     "species_traits": "--species-traits",
     "species_tree": "--species-tree",
     "tree_id": "--tree-id",
 }
 
-ORDINARY_PGLS_REQUIRED_ARGUMENTS = {
+ORDINARY_REGRESSION_REQUIRED_ARGUMENTS = {
     "data": "--data",
     "tree": "--tree",
 }
 
-ORDINARY_PGLS_ONLY_ARGUMENTS = {
+ORDINARY_REGRESSION_ONLY_ARGUMENTS = {
     "branch_length": "--branch-length",
     "compare_evolution_models": "--compare-evolution-models",
     "data": "--data",
@@ -3923,7 +3925,7 @@ ORDINARY_PGLS_ONLY_ARGUMENTS = {
     "tree_format": "--tree-format",
 }
 
-RAW_PGLS_ONLY_ARGUMENTS = {
+RAW_REGRESSION_ONLY_ARGUMENTS = {
     "batch": "--batch",
     "biological_id": "--biological-id",
     "event_source": "--event-source",
@@ -4012,7 +4014,7 @@ def _validate_evolution_cli_pair(
     return model
 
 
-def _require_pgls_arguments(args, required, description):
+def _require_regression_arguments(args, required, description):
     missing = [
         option
         for name, option in required.items()
@@ -4135,12 +4137,16 @@ def _validate_ordinary_custom_model_options(args, evolution_model):
         )
 
 
-def _validate_ordinary_pgls_mode(args):
-    _require_pgls_arguments(args, ORDINARY_PGLS_REQUIRED_ARGUMENTS, "Conventional PGLS")
+def _validate_ordinary_regression_mode(args):
+    _require_regression_arguments(
+        args,
+        ORDINARY_REGRESSION_REQUIRED_ARGUMENTS,
+        "Conventional tip-level regression",
+    )
     incompatible = _ordinary_incompatible_options(args)
     if incompatible:
         raise ValueError(
-            "Conventional PGLS cannot use reconciled/precomputed option(s): {}.".format(
+            "Conventional regression cannot use reconciled/precomputed option(s): {}.".format(
                 ", ".join(sorted(incompatible))
             )
         )
@@ -4201,13 +4207,15 @@ def _validate_raw_output_options(args):
         )
 
 
-def _validate_raw_pgls_mode(args):
-    _require_pgls_arguments(args, RAW_PGLS_REQUIRED_ARGUMENTS, "Raw-input PGLS")
+def _validate_raw_regression_mode(args):
+    _require_regression_arguments(
+        args, RAW_REGRESSION_REQUIRED_ARGUMENTS, "Raw-input regression"
+    )
     gene_tree = _nonempty_argument(args, "gene_tree")
     ensemble = _nonempty_argument(args, "gene_tree_ensemble")
     if gene_tree == ensemble:
         raise ValueError(
-            "Raw-input PGLS requires exactly one of '--gene-tree' or "
+            "Raw-input regression requires exactly one of '--gene-tree' or "
             "'--gene-tree-ensemble'."
         )
     if ensemble and _nonempty_argument(args, "reconciliation_tree"):
@@ -4227,7 +4235,7 @@ def _validate_raw_pgls_mode(args):
     ]
     if incompatible:
         raise ValueError(
-            "Raw-input PGLS cannot be combined with precomputed input(s): {}.".format(
+            "Raw-input regression cannot be combined with precomputed input(s): {}.".format(
                 ", ".join(incompatible)
             )
         )
@@ -4297,18 +4305,20 @@ def _validate_raw_pgls_mode(args):
     _validate_raw_output_options(args)
 
 
-def _pgls_input_mode(args):
-    if any(_nonempty_argument(args, name) for name in ORDINARY_PGLS_ONLY_ARGUMENTS):
-        _validate_ordinary_pgls_mode(args)
+def _regression_input_mode(args):
+    if any(
+        _nonempty_argument(args, name) for name in ORDINARY_REGRESSION_ONLY_ARGUMENTS
+    ):
+        _validate_ordinary_regression_mode(args)
         return "ordinary"
     if _nonempty_argument(args, "gene_tree") or _nonempty_argument(
         args, "gene_tree_ensemble"
     ):
-        _validate_raw_pgls_mode(args)
+        _validate_raw_regression_mode(args)
         return "raw"
     raw_options = [
         option
-        for name, option in RAW_PGLS_ONLY_ARGUMENTS.items()
+        for name, option in RAW_REGRESSION_ONLY_ARGUMENTS.items()
         if _nonempty_argument(args, name)
     ]
     if raw_options:
@@ -4332,7 +4342,7 @@ def _pgls_input_mode(args):
     return "contrasts"
 
 
-def _warn_pgls_diagnostics(results):
+def _warn_regression_diagnostics(results):
     if (results["small_sample_warning"] == "yes").any():
         sys.stderr.write(
             "Warning: at least one model has fewer than 20 unique species events; "
@@ -4366,20 +4376,20 @@ def _warn_pgls_diagnostics(results):
         )
 
 
-def _warn_ordinary_pgls_diagnostics(results):
+def _warn_ordinary_regression_diagnostics(results):
     if (results["small_sample_warning"] == "yes").any():
         sys.stderr.write(
-            "Warning: at least one conventional PGLS model has fewer than 20 "
+            "Warning: at least one conventional regression has fewer than 20 "
             "species; small-sample inference may be unstable.\n"
         )
     if (results["boundary_warning"] == "yes").any():
         sys.stderr.write(
-            "Warning: at least one conventional PGLS variance or evolution-model "
+            "Warning: at least one conventional regression variance or evolution-model "
             "parameter is near its optimization boundary.\n"
         )
     if (results["optimizer_converged"] == "no").any():
         sys.stderr.write(
-            "Warning: at least one conventional PGLS optimizer did not converge; "
+            "Warning: at least one conventional regression optimizer did not converge; "
             "do not interpret that model without further diagnosis.\n"
         )
     if (
@@ -4387,7 +4397,7 @@ def _warn_ordinary_pgls_diagnostics(results):
         and (results["predictor_evolution_boundary_warning"] == "yes").any()
     ):
         sys.stderr.write(
-            "Warning: at least one conventional-PGLS latent predictor is near "
+            "Warning: at least one conventional-regression latent predictor is near "
             "an evolution-model optimization boundary.\n"
         )
 
@@ -4411,10 +4421,10 @@ def _warn_ordinary_model_comparison(results):
         )
 
 
-def _write_pgls_outputs(
+def _write_regression_outputs(
     args, results, random_effects, sensitivity=None, trait_origins=None
 ):
-    _validate_pgls_file_output_paths(args)
+    _validate_regression_file_output_paths(args)
     random_effects_path = getattr(args, "random_effects_out", None)
     file_outputs = []
     if random_effects_path is not None:
@@ -4444,7 +4454,7 @@ def _write_pgls_outputs(
     if args.outfile != "-":
         file_outputs.append((args.outfile, results))
     if file_outputs:
-        from nwkit.pgls_pipeline import _write_dataframes_transactionally
+        from nwkit.regression_pipeline import _write_dataframes_transactionally
 
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":
@@ -4464,7 +4474,7 @@ def _paths_identify_same_file(input_path, output_path):
         return False
 
 
-def _validate_pgls_file_output_paths(args):
+def _validate_regression_file_output_paths(args):
     random_effects_path = getattr(args, "random_effects_out", None)
     sensitivity_path = getattr(args, "sensitivity_out", None)
     trait_origins_path = getattr(args, "trait_origins_out", None)
@@ -4512,16 +4522,16 @@ def _validate_pgls_file_output_paths(args):
                 continue
             if _paths_identify_same_file(input_path, output_path):
                 raise ValueError(
-                    "PGLS output must not overwrite an input file: '{}'".format(
+                    "Regression output must not overwrite an input file: '{}'".format(
                         os.path.realpath(output_path)
                     )
                 )
 
 
-def pgls_main(args):
+def regress_main(args):
     responses = _parse_names(args.responses, "--responses")
     predictors = _parse_names(args.predictors, "--predictors")
-    input_mode = _pgls_input_mode(args)
+    input_mode = _regression_input_mode(args)
     if (
         input_mode != "ordinary"
         and (
@@ -4545,30 +4555,30 @@ def pgls_main(args):
             "'--out-prefix'."
         )
     if input_mode == "ordinary":
-        from nwkit.ordinary_pgls import (
-            build_ordinary_pgls,
-            validate_ordinary_pgls_output_paths,
-            write_ordinary_pgls_outputs,
+        from nwkit.ordinary_regression import (
+            build_ordinary_regression,
+            validate_ordinary_regression_output_paths,
+            write_ordinary_regression_outputs,
         )
 
-        validate_ordinary_pgls_output_paths(args)
-        ordinary_artifacts = build_ordinary_pgls(args, responses, predictors)
-        _warn_ordinary_pgls_diagnostics(ordinary_artifacts.results)
+        validate_ordinary_regression_output_paths(args)
+        ordinary_artifacts = build_ordinary_regression(args, responses, predictors)
+        _warn_ordinary_regression_diagnostics(ordinary_artifacts.results)
         _warn_ordinary_model_comparison(ordinary_artifacts.model_comparison)
-        write_ordinary_pgls_outputs(args, ordinary_artifacts)
+        write_ordinary_regression_outputs(args, ordinary_artifacts)
         return
     if input_mode == "raw":
-        from nwkit.pgls_pipeline import (
-            _active_pgls_bundle_paths,
-            build_pgls_ensemble_pipeline,
-            build_pgls_pipeline,
-            validate_pgls_bundle_target,
-            write_pgls_bundle,
+        from nwkit.regression_pipeline import (
+            _active_regression_bundle_paths,
+            build_regression_ensemble_pipeline,
+            build_regression_pipeline,
+            validate_regression_bundle_target,
+            write_regression_bundle,
         )
 
         out_prefix = getattr(args, "out_prefix", None)
         if out_prefix is not None:
-            validate_pgls_bundle_target(
+            validate_regression_bundle_target(
                 out_prefix,
                 protected_inputs=[
                     getattr(args, name, None)
@@ -4584,15 +4594,15 @@ def pgls_main(args):
                 ],
             )
         else:
-            _validate_pgls_file_output_paths(args)
+            _validate_regression_file_output_paths(args)
         pipeline_artifacts = (
-            build_pgls_ensemble_pipeline(args, responses, predictors)
+            build_regression_ensemble_pipeline(args, responses, predictors)
             if _nonempty_argument(args, "gene_tree_ensemble")
-            else build_pgls_pipeline(args, responses, predictors)
+            else build_regression_pipeline(args, responses, predictors)
         )
-        _warn_pgls_diagnostics(pipeline_artifacts.results)
+        _warn_regression_diagnostics(pipeline_artifacts.results)
         if out_prefix is None:
-            _write_pgls_outputs(
+            _write_regression_outputs(
                 args,
                 pipeline_artifacts.results,
                 pipeline_artifacts.random_effects,
@@ -4600,10 +4610,12 @@ def pgls_main(args):
                 pipeline_artifacts.trait_origins,
             )
         else:
-            written_paths = _active_pgls_bundle_paths(out_prefix, pipeline_artifacts)
+            written_paths = _active_regression_bundle_paths(
+                out_prefix, pipeline_artifacts
+            )
             for argument, path in written_paths.items():
                 setattr(args, argument, path)
-            write_pgls_bundle(out_prefix, pipeline_artifacts)
+            write_regression_bundle(out_prefix, pipeline_artifacts)
         return
     unsupported_typed_options = [
         option
@@ -4634,12 +4646,12 @@ def pgls_main(args):
     )
     if unsupported_typed_options:
         raise ValueError(
-            "Typed response/predictor options require raw-input or conventional PGLS, "
+            "Typed response/predictor options require raw-input or conventional regression, "
             "not precomputed contrasts: {}.".format(
                 ", ".join(unsupported_typed_options)
             )
         )
-    _validate_pgls_file_output_paths(args)
+    _validate_regression_file_output_paths(args)
     response_table = _read_tsv(args.infile, "--infile")
     predictor_table = _read_tsv(args.predictor_contrasts, "--predictor-contrasts")
     covariance_path = getattr(args, "response_sampling_covariance", None)
@@ -4680,5 +4692,5 @@ def pgls_main(args):
         return_random_effects=True,
         return_sensitivity=True,
     )
-    _warn_pgls_diagnostics(results)
-    _write_pgls_outputs(args, results, random_effects, sensitivity)
+    _warn_regression_diagnostics(results)
+    _write_regression_outputs(args, results, random_effects, sensitivity)

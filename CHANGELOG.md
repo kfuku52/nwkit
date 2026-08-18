@@ -4,6 +4,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.37.0] - 2026-08-18
+
+### Changed
+
+- Renamed the phylogenetic regression command from `pgls` to `regress`
+  without a compatibility alias, reflecting that it fits Gaussian PGLS as
+  well as non-Gaussian phylogenetic GLMMs.
+- Renamed the command-facing implementation modules and end-to-end output
+  bundle terminology. The primary bundle output now ends in
+  `.regression.tsv`, and its transaction lock ends in
+  `.regression-bundle.lock`.
+
 ## [0.36.5] - 2026-08-15
 
 ### Changed

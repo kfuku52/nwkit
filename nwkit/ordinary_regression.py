@@ -1,4 +1,4 @@
-"""Conventional tip-level phylogenetic generalized least squares."""
+"""Conventional tip-level phylogenetic regression."""
 
 import math
 import os
@@ -53,7 +53,6 @@ from nwkit.model_matrix import (
     validate_response_auxiliaries,
 )
 from nwkit.multivariate_pgls import fit_multivariate_pgls
-from nwkit.pgls import _profile_covariance_fit, _solve_positive_definite
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
     fit_phylogenetic_glmm,
@@ -61,6 +60,7 @@ from nwkit.phylogenetic_glmm import (
     summarize_glmm_omnibus,
     summarize_glmm_threshold,
 )
+from nwkit.regress import _profile_covariance_fit, _solve_positive_definite
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
 from nwkit.sparse_laplace import GmrfPredictorUncertainty
 from nwkit.util import (
@@ -177,7 +177,7 @@ ORDINARY_SAMPLING_COVARIANCE_COLUMNS = [
 
 
 @dataclass
-class OrdinaryPglsArtifacts:
+class OrdinaryRegressionArtifacts:
     results: pd.DataFrame
     response_sampling_covariance: pd.DataFrame
     response_tip_summary: pd.DataFrame
@@ -190,14 +190,14 @@ def _validate_ordinary_tree(tree, branch_length: str) -> None:
     validate_unique_named_leaves(
         tree,
         option_name="--tree",
-        context=" for ordinary PGLS",
+        context=" for ordinary regression",
     )
     if len(list(tree.leaves())) < 3:
-        raise ValueError("'--tree' must contain at least three tips for PGLS.")
+        raise ValueError("'--tree' must contain at least three tips for regression.")
     if not is_rooted(tree) or len(tree.children) != 2:
         raise ValueError("'--tree' must be rooted with two root descendants.")
     if branch_length not in {"original", "unit"}:
-        raise ValueError("Unsupported ordinary PGLS branch-length mode.")
+        raise ValueError("Unsupported ordinary regression branch-length mode.")
     for node in tree.traverse():
         if node.is_root:
             continue
@@ -206,10 +206,10 @@ def _validate_ordinary_tree(tree, branch_length: str) -> None:
         try:
             distance = float(node.dist)
         except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("PGLS tree branch lengths must be numeric.") from exc
+            raise ValueError("Regression tree branch lengths must be numeric.") from exc
         if not math.isfinite(distance) or distance <= 0.0:
             raise ValueError(
-                "PGLS requires positive finite non-root branch lengths; "
+                "Phylogenetic regression requires positive finite non-root branch lengths; "
                 "use '--branch-length unit' to ignore input lengths."
             )
 
@@ -594,7 +594,7 @@ def _validate_ordinary_fit_settings(
     reml,
 ):
     if branch_length not in {"original", "unit"}:
-        raise ValueError("Unsupported ordinary PGLS branch-length mode.")
+        raise ValueError("Unsupported ordinary regression branch-length mode.")
     spec = evolution_model_spec(evolution_model)
     _validate_ordinary_tree(
         tree,
@@ -678,12 +678,12 @@ def _ordinary_design_matrix(
     num_parameters = design.shape[1]
     if len(leaf_names) <= num_parameters:
         raise ValueError(
-            "Ordinary PGLS needs more species than fitted coefficients "
+            "Ordinary regression needs more species than fitted coefficients "
             "(species={}; coefficients={}).".format(len(leaf_names), num_parameters)
         )
     matrix_rank = int(np.linalg.matrix_rank(design))
     if matrix_rank != num_parameters:
-        raise ValueError("Ordinary PGLS design matrix is rank deficient.")
+        raise ValueError("Ordinary regression design matrix is rank deficient.")
     return design, term_names, term_metadata, num_parameters, matrix_rank
 
 
@@ -2173,7 +2173,7 @@ def _fit_ordinary_gaussian_response(
     )
 
 
-def fit_ordinary_pgls(
+def fit_ordinary_regression(
     tree,
     response_values_by_trait,
     predictor_values_by_trait,
@@ -2215,7 +2215,7 @@ def fit_ordinary_pgls(
     allow_missing_responses=False,
     allow_large_dense=False,
 ):
-    """Fit conventional tip-level PGLS models, one per response trait."""
+    """Fit conventional tip-level regressions, one per response trait."""
     if allow_missing_responses and not multivariate_responses:
         raise ValueError(
             "allow_missing_responses requires multivariate_responses=True."
@@ -2975,7 +2975,9 @@ def _sampling_covariance_table(covariance_by_trait, leaf_names):
     return pd.DataFrame(rows, columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)
 
 
-def build_ordinary_pgls(args, responses, predictors) -> OrdinaryPglsArtifacts:
+def build_ordinary_regression(
+    args, responses, predictors
+) -> OrdinaryRegressionArtifacts:
     effective = _effective_ordinary_args(args)
     if effective.allow_missing_responses and not effective.multivariate_responses:
         raise ValueError(
@@ -3201,7 +3203,7 @@ def build_ordinary_pgls(args, responses, predictors) -> OrdinaryPglsArtifacts:
         raise ValueError(
             "--compare-evolution-models is currently available for Gaussian responses only."
         )
-    results = fit_ordinary_pgls(
+    results = fit_ordinary_regression(
         tree,
         response_values,
         predictor_values,
@@ -3275,7 +3277,7 @@ def build_ordinary_pgls(args, responses, predictors) -> OrdinaryPglsArtifacts:
         if comparison_models
         else pd.DataFrame(columns=ORDINARY_MODEL_COMPARISON_COLUMNS)
     )
-    return OrdinaryPglsArtifacts(
+    return OrdinaryRegressionArtifacts(
         results=results,
         response_sampling_covariance=_sampling_covariance_table(
             covariance_by_trait,
@@ -3313,14 +3315,14 @@ def _validate_outputs_do_not_replace_inputs(input_paths, output_paths):
                 continue
             if _paths_identify_same_file(input_path, output_path):
                 raise ValueError(
-                    "Conventional PGLS output must not overwrite an input file: '{}'.".format(
+                    "Conventional regression output must not overwrite an input file: '{}'.".format(
                         os.path.realpath(output_path)
                     )
                 )
 
 
-def validate_ordinary_pgls_output_paths(args) -> None:
-    """Validate conventional PGLS outputs before fitting or writing."""
+def validate_ordinary_regression_output_paths(args) -> None:
+    """Validate conventional regression outputs before fitting or writing."""
     sampling_path = getattr(args, "sampling_covariance_out", None)
     tip_summary_path = getattr(args, "tip_summary_out", None)
     predictor_sampling_path = getattr(args, "predictor_sampling_covariance_out", None)
@@ -3363,8 +3365,10 @@ def validate_ordinary_pgls_output_paths(args) -> None:
     )
 
 
-def write_ordinary_pgls_outputs(args, artifacts: OrdinaryPglsArtifacts) -> None:
-    validate_ordinary_pgls_output_paths(args)
+def write_ordinary_regression_outputs(
+    args, artifacts: OrdinaryRegressionArtifacts
+) -> None:
+    validate_ordinary_regression_output_paths(args)
     sampling_path = getattr(args, "sampling_covariance_out", None)
     tip_summary_path = getattr(args, "tip_summary_out", None)
     predictor_sampling_path = getattr(args, "predictor_sampling_covariance_out", None)
@@ -3388,7 +3392,7 @@ def write_ordinary_pgls_outputs(args, artifacts: OrdinaryPglsArtifacts) -> None:
     if comparison_path is not None:
         file_outputs.append((comparison_path, artifacts.model_comparison))
     if file_outputs:
-        from nwkit.pgls_pipeline import _write_dataframes_transactionally
+        from nwkit.regression_pipeline import _write_dataframes_transactionally
 
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":

@@ -512,13 +512,15 @@ def _primary_input_text(args, stdin_text):
     ordinary_tree = getattr(args, "tree", None)
     primary_input = (
         ordinary_tree
-        if getattr(args, "command", None) == "pgls" and ordinary_tree not in (None, "")
+        if getattr(args, "command", None) == "regress"
+        and ordinary_tree not in (None, "")
         else (
             gene_tree
-            if getattr(args, "command", None) == "pgls" and gene_tree not in (None, "")
+            if getattr(args, "command", None) == "regress"
+            and gene_tree not in (None, "")
             else (
                 gene_tree_ensemble
-                if getattr(args, "command", None) == "pgls"
+                if getattr(args, "command", None) == "regress"
                 and gene_tree_ensemble not in (None, "")
                 else infile
             )
@@ -566,7 +568,7 @@ def _input_summary(text, args):
             summary["truncated"] = True
         return summary
     input_format = getattr(args, "format", "auto")
-    if getattr(args, "command", None) == "pgls":
+    if getattr(args, "command", None) == "regress":
         if getattr(args, "tree", None) not in (None, ""):
             input_format = getattr(args, "tree_format", "auto") or "auto"
         elif getattr(args, "gene_tree", None) not in (None, ""):
@@ -744,14 +746,17 @@ def _audit_collision_candidates(args, audit_path):
                 )
     out_prefix = getattr(args, "out_prefix", None)
     if out_prefix not in (None, ""):
-        from nwkit.conventions import pgls_bundle_lock_path, pgls_bundle_paths
+        from nwkit.conventions import (
+            regression_bundle_lock_path,
+            regression_bundle_paths,
+        )
 
         candidates.extend(
             ("--out-prefix {}".format(argument), path)
-            for argument, path in pgls_bundle_paths(out_prefix).items()
+            for argument, path in regression_bundle_paths(out_prefix).items()
         )
         candidates.append(
-            ("--out-prefix transaction lock", pgls_bundle_lock_path(out_prefix))
+            ("--out-prefix transaction lock", regression_bundle_lock_path(out_prefix))
         )
     candidates.extend(_image_output_collision_candidates(args))
     return candidates

@@ -75,14 +75,14 @@ input to other NWKIT commands.
 | `contrast --reconciliation` | Output columns from `nwkit reconcile` | Stable `gene_clade_id` values must uniquely and exactly cover the contrast tree. Event/status enums, orientation clades, coverage states, and `tree_id` consistency are validated. |
 | `contrast --trait` with `--biological-id` | `leaf_name`, biological-ID column, and selected numeric traits | Multiple rows per tip are biological observations. Optional technical IDs are nested within leaf and biological ID; optional batch values are categorical and complete. Missing trait cells are allowed, but every tip needs an estimable mean. Under pooled variance, a trait with exactly one observation at every fitted tip remains exact tip data even when another selected trait is replicated. |
 | `contrast --trait` with `--within-variance known-se` | `leaf_name`, selected means, and one SE column per trait | Exactly one row per tip. SEs are finite and non-negative. Optional sample-size columns contain positive integers. |
-| `pgls --data` | `leaf_name`, selected `--responses` and `--predictors`, plus optional response- and predictor-replicate columns | Conventional PGLS requires every tree tip. Either role can use biological/technical replicates, batch adjustment, or role-specific known-SE columns. A non-replicated role must have one value per tip, or the same value on all rows created by the other role's replicate design. |
-| `pgls --evolution-covariance` | First column `leaf_name`; remaining columns named for tree tips | Wide square covariance matrix. Row and column names must each exactly match all tree tips; values are reordered by name and must be numeric, finite, symmetric, and positive definite. |
-| `pgls --expression` | `leaf_name`, selected `--responses`, and optional replicate columns | End-to-end mode applies the same replicate, technical-replicate, batch, missing-value, and known-SE rules as `contrast --trait`. Gene-tip labels must match `--gene-tree`. |
-| `pgls --species-traits` | `leaf_name`, selected numeric `--predictors`, and optional predictor-replicate columns | End-to-end mode requires an estimable mean for every `--species-tree` tip and predictor. Predictor replicates use the `--predictor-*` biological/technical ID, batch, variance, known-SE, and sample-size options. |
-| `pgls` input | Reconciled output columns from `nwkit contrast` | Selected responses must be speciation contrasts. Eligible rows require stable gene, lineage, species-event, and orientation IDs plus positive finite contrast variance. |
-| `pgls --predictor-contrasts` | Species-tree output columns from `nwkit contrast` | Selected predictor traits must uniquely identify every joined `branch_clade_id`; event taxa and signed orientation must exactly match the response table. |
-| `pgls --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Contains one upper-triangle row for every selected response-contrast pair. Each model matrix must be complete, finite, symmetric by construction, and positive semidefinite. It is required when response contrasts contain replicate metadata. |
-| `pgls --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Contains one complete upper triangle per predictor from replicate-aware species-tree contrasts. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
+| `regress --data` | `leaf_name`, selected `--responses` and `--predictors`, plus optional response- and predictor-replicate columns | Conventional regression requires every tree tip. Either role can use biological/technical replicates, batch adjustment, or role-specific known-SE columns. A non-replicated role must have one value per tip, or the same value on all rows created by the other role's replicate design. |
+| `regress --evolution-covariance` | First column `leaf_name`; remaining columns named for tree tips | Wide square covariance matrix. Row and column names must each exactly match all tree tips; values are reordered by name and must be numeric, finite, symmetric, and positive definite. |
+| `regress --expression` | `leaf_name`, selected `--responses`, and optional replicate columns | End-to-end mode applies the same replicate, technical-replicate, batch, missing-value, and known-SE rules as `contrast --trait`. Gene-tip labels must match `--gene-tree`. |
+| `regress --species-traits` | `leaf_name`, selected numeric `--predictors`, and optional predictor-replicate columns | End-to-end mode requires an estimable mean for every `--species-tree` tip and predictor. Predictor replicates use the `--predictor-*` biological/technical ID, batch, variance, known-SE, and sample-size options. |
+| `regress` input | Reconciled output columns from `nwkit contrast` | Selected responses must be speciation contrasts. Eligible rows require stable gene, lineage, species-event, and orientation IDs plus positive finite contrast variance. |
+| `regress --predictor-contrasts` | Species-tree output columns from `nwkit contrast` | Selected predictor traits must uniquely identify every joined `branch_clade_id`; event taxa and signed orientation must exactly match the response table. |
+| `regress --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Contains one upper-triangle row for every selected response-contrast pair. Each model matrix must be complete, finite, symmetric by construction, and positive semidefinite. It is required when response contrasts contain replicate metadata. |
+| `regress --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Contains one complete upper triangle per predictor from replicate-aware species-tree contrasts. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
 | `table2nwk` input | `branch_id`, `parent` | Optional `name`, `dist`, and `support`; exactly one root has `parent = -1`. |
 
 All supported input TSV options may use `-` for standard input, subject to the
@@ -123,7 +123,7 @@ single-standard-input rule.
   records mean estimation and replicate counts. Every contrast row also records
   `evolution_model`, `evolution_parameter_name`, `evolution_parameter`, and
   `branch_length_mode` for the transformed-tree calculation.
-- Conventional `pgls --tree/--data` reports one row per response coefficient,
+- Conventional `regress --tree/--data` reports one row per response coefficient,
   including `(intercept)` by default. It records the number of species,
   evolutionary model and generic shape parameter, whether the parameter was
   estimated or fixed, branch-length mode, evolutionary rate, sampling-variance
@@ -134,14 +134,14 @@ single-standard-input rule.
   `--predictor-tip-summary-out` files. Result rows distinguish the input
   predictor sampling variance from the posterior latent-predictor variance and
   report the fitted predictor evolutionary rate and optimization diagnostics.
-- Conventional `pgls --model-comparison-out` reports one row per response and
+- Conventional `regress --model-comparison-out` reports one row per response and
   candidate evolutionary model. It contains the ML log likelihood, AIC, AICc,
   BIC, likelihood parameter count, estimated shape parameter, convergence and
   boundary diagnostics, delta AIC and AIC weight, and delta AICc and AICc
   weight. An individual AICc is empty when its sample size is insufficient;
   delta AICc and AICc weights are empty for the response if any candidate lacks
   AICc. AIC-derived cells remain available.
-- Reconciled `pgls` reports one coefficient row per `tree_id`, response, and predictor.
+- Reconciled `regress` reports one coefficient row per `tree_id`, response, and predictor.
   `n_gene_contrasts` is the physical input-row count, whereas
   `n_species_events` and `degrees_of_freedom` expose the effective independent
   species-event count. Variance-component diagnostics state whether event and
@@ -155,9 +155,9 @@ single-standard-input rule.
   optimizer convergence and boundary diagnostics; predictor marginal
   log-likelihood; and whether bootstrap inference re-estimated the gene
   parameter.
-- End-to-end `pgls --out-prefix PREFIX` additionally writes deterministic
+- End-to-end `regress --out-prefix PREFIX` additionally writes deterministic
   `.reconciliation.tsv`, `.gene-contrasts.tsv`, `.species-contrasts.tsv`,
-  `.random-effects.tsv`, and `.pgls.tsv` files. Replicate-aware input also
+  `.random-effects.tsv`, and `.regression.tsv` files. Replicate-aware input also
   writes `.response-sampling-covariance.tsv` and `.response-tip-summary.tsv`
   for responses and `.predictor-sampling-covariance.tsv` and
   `.predictor-tip-summary.tsv` for predictors, whenever the corresponding role

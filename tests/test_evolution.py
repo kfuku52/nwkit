@@ -12,7 +12,7 @@ from nwkit.evolution import (
     validate_custom_covariance,
     validate_evolution_parameter,
 )
-from nwkit.ordinary_pgls import fit_ordinary_pgls
+from nwkit.ordinary_regression import fit_ordinary_regression
 from nwkit.sparse_laplace import (
     combine_sparse_covariance_models,
     condition_sparse_tip_model,
@@ -327,7 +327,7 @@ def test_custom_covariance_tsv_rejects_non_positive_definite_matrix(tmp_path):
     ],
 )
 def test_new_evolution_models_fit_fixed_parameter_pgls(model, parameter):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values([2.0, 5.0, 7.5, 8.0, 12.5])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -343,7 +343,7 @@ def test_new_evolution_models_fit_fixed_parameter_pgls(model, parameter):
 
 @pytest.mark.parametrize("model", ["kappa", "delta", "eb", "acdc"])
 def test_new_evolution_model_parameters_can_be_estimated(model):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values([2.0, 5.0, 7.5, 8.0, 12.5])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -360,7 +360,7 @@ def test_custom_covariance_pgls_matches_direct_gls():
     response = np.asarray([2.0, 5.0, 7.5, 8.0, 12.5])
     predictor = np.asarray([1.0, 2.0, 4.0, 3.0, 7.0])
     covariance = build_evolutionary_covariance(tree, LEAF_NAMES)
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         tree,
         {"expression": _values(response)},
         {"body_size": _values(predictor)},

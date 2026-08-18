@@ -762,6 +762,6 @@ def reconcile_main(args):
     if args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
     else:
-        from nwkit.pgls_pipeline import _write_dataframes_transactionally
+        from nwkit.regression_pipeline import _write_dataframes_transactionally
 
         _write_dataframes_transactionally([(args.outfile, table)])

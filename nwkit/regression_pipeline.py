@@ -1,4 +1,4 @@
-"""End-to-end reconciliation, contrast, and PGLS orchestration."""
+"""End-to-end reconciliation, contrast, and phylogenetic regression."""
 
 import hashlib
 import math
@@ -28,8 +28,8 @@ from nwkit.contrast import (
 )
 from nwkit.conventions import (
     DEFAULT_TABLE_MISSING_VALUES_CSV,
-    pgls_bundle_lock_path,
-    pgls_bundle_paths,
+    regression_bundle_lock_path,
+    regression_bundle_paths,
 )
 from nwkit.evolution import (
     build_evolutionary_covariance,
@@ -55,17 +55,10 @@ from nwkit.model_matrix import (
     validate_response_auxiliaries,
 )
 from nwkit.multivariate_pgls import fit_multivariate_pgls
-from nwkit.ordinary_pgls import (
+from nwkit.ordinary_regression import (
     _categorical_shape_settings,
     _global_bounded_scalar_minimize,
     estimate_marginal_evolution_parameter,
-)
-from nwkit.pgls import (
-    RANDOM_EFFECT_COLUMNS,
-    RESPONSE_REQUIRED_COLUMNS,
-    RESULT_COLUMNS,
-    SENSITIVITY_COLUMNS,
-    fit_reconciled_pgls,
 )
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
@@ -75,6 +68,13 @@ from nwkit.phylogenetic_glmm import (
     summarize_glmm_threshold,
 )
 from nwkit.reconcile import _report_unmatched_species, build_reconciliation_table
+from nwkit.regress import (
+    RANDOM_EFFECT_COLUMNS,
+    RESPONSE_REQUIRED_COLUMNS,
+    RESULT_COLUMNS,
+    SENSITIVITY_COLUMNS,
+    fit_reconciled_pgls,
+)
 from nwkit.rsc_diagnostics import (
     ORIGIN_DIAGNOSTIC_COLUMNS,
     build_categorical_origin_diagnostics,
@@ -99,7 +99,7 @@ from nwkit.util import (
 
 
 @dataclass
-class PglsPipelineArtifacts:
+class RegressionPipelineArtifacts:
     reconciliation: pd.DataFrame
     gene_contrasts: pd.DataFrame
     species_contrasts: pd.DataFrame
@@ -263,11 +263,11 @@ def _concat_optional_frames(frames):
     return None if not available else pd.concat(available, ignore_index=True)
 
 
-def _active_pgls_bundle_paths(
+def _active_regression_bundle_paths(
     prefix: str,
-    artifacts: PglsPipelineArtifacts,
+    artifacts: RegressionPipelineArtifacts,
 ) -> dict[str, str]:
-    paths = pgls_bundle_paths(prefix)
+    paths = regression_bundle_paths(prefix)
     inactive = set()
     if artifacts.response_sampling_covariance is None:
         inactive.add("response_sampling_covariance_out")
@@ -299,7 +299,9 @@ def _regular_output_mode(path: str) -> int | None:
         return None
     if not stat.S_ISREG(path_stat.st_mode):
         raise ValueError(
-            "Existing PGLS bundle target must be a regular file: '{}'.".format(path)
+            "Existing regression bundle target must be a regular file: '{}'.".format(
+                path
+            )
         )
     return stat.S_IMODE(path_stat.st_mode)
 
@@ -308,7 +310,7 @@ def _new_output_mode(directory: str) -> int:
     for _ in range(100):
         probe = os.path.join(
             directory,
-            ".nwkit-pgls-mode-probe-{}".format(secrets.token_hex(16)),
+            ".nwkit-regression-mode-probe-{}".format(secrets.token_hex(16)),
         )
         try:
             descriptor = os.open(
@@ -323,7 +325,7 @@ def _new_output_mode(directory: str) -> int:
         finally:
             os.close(descriptor)
             os.remove(probe)
-    raise FileExistsError("Could not allocate a PGLS output-mode probe.")
+    raise FileExistsError("Could not allocate a regression output-mode probe.")
 
 
 def _stage_dataframe(path: str, dataframe: pd.DataFrame, output_mode: int) -> str:
@@ -351,7 +353,7 @@ def _stage_dataframe(path: str, dataframe: pd.DataFrame, output_mode: int) -> st
             or path_stat.st_dev != staged_stat.st_dev
             or path_stat.st_ino != staged_stat.st_ino
         ):
-            raise RuntimeError("A PGLS staging file was replaced before commit.")
+            raise RuntimeError("A regression staging file was replaced before commit.")
         return staged_path
     except BaseException:
         if descriptor_open:
@@ -380,7 +382,9 @@ def _backup_regular_output(path: str) -> str:
         source_stat = os.fstat(source_descriptor)
         if not stat.S_ISREG(source_stat.st_mode):
             raise ValueError(
-                "Existing PGLS bundle target must be a regular file: '{}'.".format(path)
+                "Existing regression bundle target must be a regular file: '{}'.".format(
+                    path
+                )
             )
         with os.fdopen(source_descriptor, "rb") as source_handle:
             source_descriptor = None
@@ -408,7 +412,7 @@ def _replace_output(source: str, target: str) -> None:
     os.replace(source, target)
 
 
-def _restore_pgls_outputs(transactions: list[dict[str, Any]]) -> None:
+def _restore_regression_outputs(transactions: list[dict[str, Any]]) -> None:
     for transaction in reversed(transactions):
         target = transaction["target"]
         backup = transaction["backup"]
@@ -422,7 +426,7 @@ def _restore_pgls_outputs(transactions: list[dict[str, Any]]) -> None:
             os.remove(backup)
 
 
-def _commit_pgls_outputs(staged_outputs: list[tuple[str, str]]) -> None:
+def _commit_regression_outputs(staged_outputs: list[tuple[str, str]]) -> None:
     transactions: list[dict[str, Any]] = []
     commit_succeeded = False
     restoration_succeeded = False
@@ -447,11 +451,11 @@ def _commit_pgls_outputs(staged_outputs: list[tuple[str, str]]) -> None:
             ):
                 transaction["installed"] = True
         try:
-            _restore_pgls_outputs(transactions)
+            _restore_regression_outputs(transactions)
             restoration_succeeded = True
         except BaseException as restore_exc:
             raise RuntimeError(
-                "Failed to restore PGLS bundle outputs after a commit error; "
+                "Failed to restore regression bundle outputs after a commit error; "
                 "backup files were preserved."
             ) from restore_exc
         raise
@@ -517,7 +521,7 @@ def _write_dataframes_transactionally(
                         ),
                     )
                 )
-            _commit_pgls_outputs(staged_outputs)
+            _commit_regression_outputs(staged_outputs)
         except BaseException:
             for _, staged_path in staged_outputs:
                 if os.path.lexists(staged_path):
@@ -525,15 +529,15 @@ def _write_dataframes_transactionally(
             raise
 
 
-def validate_pgls_bundle_target(
+def validate_regression_bundle_target(
     prefix: str,
     protected_inputs: list[str | None] | None = None,
 ) -> dict[str, str]:
     """Validate deterministic bundle targets before an expensive model fit."""
     if not isinstance(prefix, str) or prefix.strip() in {"", "-"}:
         raise ValueError("'--out-prefix' must be a non-empty filesystem prefix.")
-    paths = pgls_bundle_paths(prefix)
-    lock_path = pgls_bundle_lock_path(prefix)
+    paths = regression_bundle_paths(prefix)
+    lock_path = regression_bundle_lock_path(prefix)
     protected_paths = {**paths, "transaction_lock": lock_path}
     validate_distinct_output_paths(
         [
@@ -560,7 +564,7 @@ def validate_pgls_bundle_target(
                     same_file = False
             if same_path or same_file:
                 raise ValueError(
-                    "PGLS bundle path must not overwrite an input file: '{}'.".format(
+                    "Regression bundle path must not overwrite an input file: '{}'.".format(
                         os.path.realpath(output_path)
                     )
                 )
@@ -3133,7 +3137,7 @@ def _reconciled_multivariate_artifacts(
         encoded_predictors,
         predictor_diagnostics,
     )
-    return PglsPipelineArtifacts(
+    return RegressionPipelineArtifacts(
         reconciliation=reconciliation,
         gene_contrasts=pd.DataFrame(columns=sorted(RESPONSE_REQUIRED_COLUMNS)),
         species_contrasts=species_contrasts,
@@ -3245,12 +3249,12 @@ def _merge_reconciled_result_frames(continuous, non_gaussian, columns):
     return pd.concat(frames, ignore_index=True).reindex(columns=columns)
 
 
-def build_pgls_pipeline(
+def build_regression_pipeline(
     args: Any,
     responses: list[str],
     predictors: list[str],
-) -> PglsPipelineArtifacts:
-    """Run reconciliation, both PIC transforms, and hierarchical PGLS in memory."""
+) -> RegressionPipelineArtifacts:
+    """Run reconciliation, both PIC transforms, and regression in memory."""
     raw_args = _effective_raw_args(args)
     if raw_args.allow_missing_responses and not raw_args.multivariate_responses:
         raise ValueError(
@@ -3595,7 +3599,7 @@ def build_pgls_pipeline(
             response_diagnostics,
             fit_states,
         )
-    return PglsPipelineArtifacts(
+    return RegressionPipelineArtifacts(
         reconciliation=reconciliation,
         gene_contrasts=gene_contrasts,
         species_contrasts=species_contrasts,
@@ -3610,11 +3614,11 @@ def build_pgls_pipeline(
     )
 
 
-def build_pgls_ensemble_pipeline(
+def build_regression_ensemble_pipeline(
     args: Any,
     responses: list[str],
     predictors: list[str],
-) -> PglsPipelineArtifacts:
+) -> RegressionPipelineArtifacts:
     """Fit a Newick sample and combine within- and between-tree uncertainty."""
     tree_strings = read_tree_strings(args.gene_tree_ensemble)
     if len(tree_strings) < 2:
@@ -3626,14 +3630,14 @@ def build_pgls_ensemble_pipeline(
         values["gene_tree_ensemble"] = None
         values["tree_id"] = "{}#{}".format(args.tree_id, tree_index)
         artifacts.append(
-            build_pgls_pipeline(SimpleNamespace(**values), responses, predictors)
+            build_regression_pipeline(SimpleNamespace(**values), responses, predictors)
         )
     results = _combine_ensemble_results(
         [artifact.results for artifact in artifacts],
         str(args.tree_id),
         args.confidence_level,
     )
-    return PglsPipelineArtifacts(
+    return RegressionPipelineArtifacts(
         reconciliation=pd.concat(
             [artifact.reconciliation for artifact in artifacts], ignore_index=True
         ),
@@ -3658,13 +3662,13 @@ def build_pgls_ensemble_pipeline(
     )
 
 
-def write_pgls_bundle(
+def write_regression_bundle(
     prefix: str,
-    artifacts: PglsPipelineArtifacts,
+    artifacts: RegressionPipelineArtifacts,
 ) -> dict[str, str]:
     """Transactionally write an end-to-end bundle and return committed paths."""
-    validate_pgls_bundle_target(prefix)
-    written = _active_pgls_bundle_paths(prefix, artifacts)
+    validate_regression_bundle_target(prefix)
+    written = _active_regression_bundle_paths(prefix, artifacts)
     validate_distinct_output_paths(
         [
             ("--out-prefix {}".format(name.replace("_", " ")), path)
@@ -3685,8 +3689,8 @@ def write_pgls_bundle(
         "outfile": artifacts.results,
     }
     with acquire_exclusive_lock(
-        pgls_bundle_lock_path(prefix),
-        lock_label="PGLS output bundle",
+        regression_bundle_lock_path(prefix),
+        lock_label="regression output bundle",
     ):
         _write_dataframes_transactionally(
             [(path, frames[name]) for name, path in written.items()]

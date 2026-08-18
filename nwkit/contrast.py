@@ -1613,7 +1613,7 @@ def contrast_main(args):
     if args.outfile != "-":
         file_outputs.append((args.outfile, table))
     if file_outputs:
-        from nwkit.pgls_pipeline import _write_dataframes_transactionally
+        from nwkit.regression_pipeline import _write_dataframes_transactionally
 
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":

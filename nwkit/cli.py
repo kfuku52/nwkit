@@ -2927,18 +2927,18 @@ preconcile.add_argument(
 preconcile.set_defaults(handler=command_reconcile)
 
 
-def command_pgls(args):
-    from nwkit.pgls import pgls_main
+def command_regress(args):
+    from nwkit.regress import regress_main
 
-    pgls_main(args)
+    regress_main(args)
 
 
-ppgls = subparsers.add_parser(
-    "pgls",
-    help="Fit conventional tip-level or reconciled-contrast phylogenetic generalized least-squares models",
+pregress = subparsers.add_parser(
+    "regress",
+    help="Fit phylogeny-aware regressions, including Gaussian PGLS and non-Gaussian PGLMMs",
     parents=[p_audit, p_table_output],
 )
-ppgls.add_argument(
+pregress.add_argument(
     "-i",
     "--infile",
     metavar="PATH",
@@ -2948,7 +2948,7 @@ ppgls.add_argument(
     action="store",
     help='Precomputed mode: reconciled gene-contrast TSV from "nwkit contrast". Use "-" for STDIN.',
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--predictor-contrasts",
     "--predictor_contrasts",
     dest="predictor_contrasts",
@@ -2959,7 +2959,7 @@ ppgls.add_argument(
     action="store",
     help="Precomputed mode: species-tree contrast TSV from 'nwkit contrast'.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--responses",
     metavar="TRAIT1,TRAIT2,...",
     default=None,
@@ -2968,7 +2968,7 @@ ppgls.add_argument(
     action="store",
     help="Comma-separated response columns in --data/--expression or trait names in --infile. One model is fitted per response and applicable tree_id.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--predictors",
     metavar="TRAIT1,TRAIT2,...",
     default=None,
@@ -2977,7 +2977,7 @@ ppgls.add_argument(
     action="store",
     help="Comma-separated predictor columns in --data/--species-traits or trait names in --predictor-contrasts.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--categorical-responses",
     "--categorical_responses",
     dest="categorical_responses",
@@ -2986,7 +2986,7 @@ ppgls.add_argument(
     type=str,
     help="Responses explicitly treated as unordered categories; non-numeric responses are also detected automatically. Two levels use a logit model and three or more use a multinomial-logit model.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--ordered-responses",
     "--ordered_responses",
     dest="ordered_responses",
@@ -2995,7 +2995,7 @@ ppgls.add_argument(
     type=str,
     help="Ordered responses and their complete low-to-high level order; a cumulative-logit phylogenetic mixed model is used.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-reference",
     "--response_reference",
     dest="response_reference",
@@ -3004,7 +3004,7 @@ ppgls.add_argument(
     type=str,
     help="Reference level for each unordered categorical response.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-family",
     "--response_family",
     dest="response_family",
@@ -3023,7 +3023,7 @@ ppgls.add_argument(
         "Supported families: {}."
     ).format(", ".join(sorted(RESPONSE_FAMILIES))),
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-offset",
     "--response_offset",
     dest="response_offset",
@@ -3032,7 +3032,7 @@ ppgls.add_argument(
     type=str,
     help="Log-offset column for count-response traits (for example log library size).",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-trials",
     "--response_trials",
     dest="response_trials",
@@ -3041,7 +3041,7 @@ ppgls.add_argument(
     type=str,
     help="Positive integer trial-count column required by beta-binomial responses.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-censor-lower",
     "--response_censor_lower",
     dest="response_censor_lower",
@@ -3050,7 +3050,7 @@ ppgls.add_argument(
     type=str,
     help="Lower censor-bound column for censored-Gaussian responses; missing means no lower bound.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-censor-upper",
     "--response_censor_upper",
     dest="response_censor_upper",
@@ -3059,7 +3059,7 @@ ppgls.add_argument(
     type=str,
     help="Upper censor-bound column for censored-Gaussian responses; missing means no upper bound.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-dispersion",
     "--response_dispersion",
     dest="response_dispersion",
@@ -3068,7 +3068,7 @@ ppgls.add_argument(
     type=str,
     help="Fix positive dispersion/shape/precision/SD parameters; omitted values are estimated.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-zero-probability",
     "--response_zero_probability",
     dest="response_zero_probability",
@@ -3077,7 +3077,7 @@ ppgls.add_argument(
     type=str,
     help="Fix structural-zero probability in (0,1); omitted zero components are estimated.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--coefficient-penalty",
     "--coefficient_penalty",
     dest="coefficient_penalty",
@@ -3086,7 +3086,7 @@ ppgls.add_argument(
     choices=["none", "gaussian", "student-t"],
     help="default=%(default)s: Weak coefficient regularization for non-Gaussian models to stabilize sparse or separated data.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--coefficient-prior-sd",
     "--coefficient_prior_sd",
     dest="coefficient_prior_sd",
@@ -3095,7 +3095,7 @@ ppgls.add_argument(
     type=finite_float,
     help="default=%(default)s: Positive scale for Gaussian or Student-t coefficient regularization.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--multivariate-responses",
     "--multivariate_responses",
     dest="multivariate_responses",
@@ -3104,7 +3104,7 @@ ppgls.add_argument(
     type=strtobool,
     help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance (tree-structured fits use sparse calculations and warn above 5,000 tips or 20,000 tip-trait cells; dense fallback supports 2,000 observed cells).",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--allow-missing-responses",
     "--allow_missing_responses",
     dest="allow_missing_responses",
@@ -3113,7 +3113,7 @@ ppgls.add_argument(
     type=strtobool,
     help="default=%(default)s: Retain partially observed tips in a multivariate Gaussian likelihood.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--categorical-predictors",
     "--categorical_predictors",
     dest="categorical_predictors",
@@ -3122,7 +3122,7 @@ ppgls.add_argument(
     type=str,
     help="Predictors explicitly treated as unordered factors; non-numeric predictors are also detected automatically.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--ordered-predictors",
     "--ordered_predictors",
     dest="ordered_predictors",
@@ -3131,7 +3131,7 @@ ppgls.add_argument(
     type=str,
     help="Ordered predictors and their complete low-to-high level order; polynomial factor contrasts are used.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--factor-reference",
     "--factor_reference",
     dest="factor_reference",
@@ -3140,7 +3140,7 @@ ppgls.add_argument(
     type=str,
     help="Reference level for each unordered categorical predictor.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--factor-coding",
     "--factor_coding",
     dest="factor_coding",
@@ -3149,7 +3149,7 @@ ppgls.add_argument(
     choices=["treatment", "sum"],
     help="default=%(default)s: Coding used for unordered categorical predictors.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--categorical-replicate-policy",
     "--categorical_replicate_policy",
     dest="categorical_replicate_policy",
@@ -3158,22 +3158,24 @@ ppgls.add_argument(
     choices=["error", "latent"],
     help="default=%(default)s: Require one state per tip or propagate the empirical category mean with sample-size-scaled moment uncertainty.",
 )
-ppgls_ordinary = ppgls.add_argument_group("conventional tip-level PGLS mode")
-ppgls_ordinary.add_argument(
+pregress_ordinary = pregress.add_argument_group(
+    "conventional tip-level regression mode"
+)
+pregress_ordinary.add_argument(
     "--tree",
     metavar="PATH",
     default=None,
     type=str,
-    help="Rooted species tree whose branch lengths define the tip covariance. Its presence selects conventional PGLS mode.",
+    help="Rooted species tree whose branch lengths define the tip covariance. Its presence selects conventional tip-level regression mode.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--data",
     metavar="PATH",
     default=None,
     type=str,
     help='Tip-level TSV with "leaf_name", --responses, --predictors, and optional replicate columns.',
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--tree-format",
     "--tree_format",
     dest="tree_format",
@@ -3182,7 +3184,7 @@ ppgls_ordinary.add_argument(
     type=str,
     help="default=auto: ETE tree format for --tree.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--branch-length",
     "--branch_length",
     dest="branch_length",
@@ -3190,9 +3192,9 @@ ppgls_ordinary.add_argument(
     default=None,
     type=str,
     choices=["original", "unit"],
-    help="default=original: Use positive tree branch lengths or unit lengths for conventional PGLS.",
+    help="default=original: Use positive tree branch lengths or unit lengths for conventional regression.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--evolution-model",
     "--evolution_model",
     dest="evolution_model",
@@ -3202,7 +3204,7 @@ ppgls_ordinary.add_argument(
     choices=list(EVOLUTION_MODELS),
     help="default=brownian: Evolutionary residual covariance model. Shape parameters are estimated unless fixed below.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--evolution-parameter",
     "--evolution_parameter",
     dest="evolution_parameter",
@@ -3211,7 +3213,7 @@ ppgls_ordinary.add_argument(
     type=finite_float,
     help="Fix the selected model's shape parameter; otherwise parameterized models estimate it.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--evolution-covariance",
     "--evolution_covariance",
     dest="evolution_covariance",
@@ -3220,7 +3222,7 @@ ppgls_ordinary.add_argument(
     type=str,
     help="Wide named covariance TSV required by --evolution-model custom and optionally used in model comparison.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--compare-evolution-models",
     "--compare_evolution_models",
     dest="compare_evolution_models",
@@ -3229,7 +3231,7 @@ ppgls_ordinary.add_argument(
     type=str,
     help="Fit the listed evolutionary models by ML and calculate AIC, AICc, BIC, and both information-criterion weights.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--model-comparison-out",
     "--model_comparison_out",
     dest="model_comparison_out",
@@ -3238,32 +3240,32 @@ ppgls_ordinary.add_argument(
     type=str,
     help="Model-comparison TSV; required with --compare-evolution-models.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--intercept",
     metavar="yes|no",
     default=None,
     type=strtobool,
-    help="default=yes: Include an intercept in conventional tip-level PGLS.",
+    help="default=yes: Include an intercept in conventional tip-level regression.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--sampling-covariance-out",
     "--sampling_covariance_out",
     dest="sampling_covariance_out",
     metavar="PATH",
     default=None,
     type=str,
-    help="Optional long-form species-mean response sampling covariance for replicate-aware conventional PGLS.",
+    help="Optional long-form species-mean response sampling covariance for replicate-aware conventional regression.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--tip-summary-out",
     "--tip_summary_out",
     dest="tip_summary_out",
     metavar="PATH",
     default=None,
     type=str,
-    help="Optional per-species response mean, sample size, and uncertainty audit for conventional PGLS.",
+    help="Optional per-species response mean, sample size, and uncertainty audit for conventional regression.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--predictor-evolution-model",
     "--predictor_evolution_model",
     dest="predictor_evolution_model",
@@ -3271,9 +3273,9 @@ ppgls_ordinary.add_argument(
     default=None,
     type=str,
     choices=list(EVOLUTION_MODELS),
-    help="default=--evolution-model: Evolutionary covariance model for latent conventional-PGLS predictors.",
+    help="default=--evolution-model: Evolutionary covariance model for latent conventional-regression predictors.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--predictor-evolution-parameter",
     "--predictor_evolution_parameter",
     dest="predictor_evolution_parameter",
@@ -3282,7 +3284,7 @@ ppgls_ordinary.add_argument(
     type=finite_float,
     help="Fix the latent predictor model's shape parameter; otherwise parameterized models estimate it.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--predictor-branch-length",
     "--predictor_branch_length",
     dest="predictor_branch_length",
@@ -3290,9 +3292,9 @@ ppgls_ordinary.add_argument(
     default=None,
     type=str,
     choices=["original", "unit"],
-    help="default=--branch-length: Branch-length mode for latent conventional-PGLS predictors.",
+    help="default=--branch-length: Branch-length mode for latent conventional-regression predictors.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--predictor-sampling-covariance-out",
     "--predictor_sampling_covariance_out",
     dest="predictor_sampling_covariance_out",
@@ -3301,7 +3303,7 @@ ppgls_ordinary.add_argument(
     type=str,
     help="Optional long-form species-mean predictor sampling covariance.",
 )
-ppgls_ordinary.add_argument(
+pregress_ordinary.add_argument(
     "--predictor-tip-summary-out",
     "--predictor_tip_summary_out",
     dest="predictor_tip_summary_out",
@@ -3310,8 +3312,8 @@ ppgls_ordinary.add_argument(
     type=str,
     help="Optional per-species predictor replicate and uncertainty audit.",
 )
-ppgls_raw = ppgls.add_argument_group("end-to-end raw-input mode")
-ppgls_raw.add_argument(
+pregress_raw = pregress.add_argument_group("end-to-end raw-input mode")
+pregress_raw.add_argument(
     "--gene-tree",
     "--gene_tree",
     dest="gene_tree",
@@ -3320,7 +3322,7 @@ ppgls_raw.add_argument(
     type=str,
     help="Dated rooted gene tree used for expression contrasts. Its presence selects end-to-end raw-input mode.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--gene-tree-ensemble",
     "--gene_tree_ensemble",
     dest="gene_tree_ensemble",
@@ -3329,7 +3331,7 @@ ppgls_raw.add_argument(
     type=str,
     help="Multi-Newick posterior/bootstrap gene-tree sample. Fits every tree and combines coefficient uncertainty across trees and reconciliations.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--reconciliation-tree",
     "--reconciliation_tree",
     dest="reconciliation_tree",
@@ -3338,7 +3340,7 @@ ppgls_raw.add_argument(
     type=str,
     help="Optional annotation-bearing gene tree used only for reconciliation; defaults to --gene-tree and must have the same rooted topology.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-tree",
     "--species_tree",
     dest="species_tree",
@@ -3347,14 +3349,14 @@ ppgls_raw.add_argument(
     type=str,
     help="Rooted species tree used for reconciliation and predictor contrasts.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--expression",
     metavar="PATH",
     default=None,
     type=str,
     help='Expression TSV with "leaf_name" and the --responses columns.',
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-traits",
     "--species_traits",
     dest="species_traits",
@@ -3363,7 +3365,7 @@ ppgls_raw.add_argument(
     type=str,
     help='Species-trait TSV with "leaf_name" and the --predictors columns.',
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--tree-id",
     "--tree_id",
     dest="tree_id",
@@ -3372,7 +3374,7 @@ ppgls_raw.add_argument(
     type=str,
     help="Required non-empty gene-family identifier recorded throughout the output bundle.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--out-prefix",
     "--out_prefix",
     dest="out_prefix",
@@ -3381,7 +3383,7 @@ ppgls_raw.add_argument(
     type=str,
     help="Write the final model and all inspectable intermediate tables under this prefix instead of --outfile.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--gene-tree-format",
     "--gene_tree_format",
     dest="gene_tree_format",
@@ -3390,7 +3392,7 @@ ppgls_raw.add_argument(
     type=str,
     help="default=auto: ETE tree format for --gene-tree.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--reconciliation-tree-format",
     "--reconciliation_tree_format",
     dest="reconciliation_tree_format",
@@ -3399,7 +3401,7 @@ ppgls_raw.add_argument(
     type=str,
     help="default=--gene-tree-format: ETE tree format for --reconciliation-tree.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-tree-format",
     "--species_tree_format",
     dest="species_tree_format",
@@ -3408,7 +3410,7 @@ ppgls_raw.add_argument(
     type=str,
     help="default=auto: ETE tree format for --species-tree.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--quoted-node-names",
     "--quoted_node_names",
     dest="quoted_node_names",
@@ -3417,7 +3419,7 @@ ppgls_raw.add_argument(
     type=strtobool,
     help="default=yes: Whether node names are quoted in raw-input trees.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--event-source",
     "--event_source",
     dest="event_source",
@@ -3427,7 +3429,7 @@ ppgls_raw.add_argument(
     choices=["lca", "nhx", "species-overlap"],
     help="default=lca: Reconciliation event source; NHX reads GeneRax S/D/H properties.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-parser",
     "--species_parser",
     dest="species_parser",
@@ -3437,7 +3439,7 @@ ppgls_raw.add_argument(
     choices=list(SUPPORTED_SPECIES_PARSERS),
     help="default=legacy: Species parser preset for mapping gene tips.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-regex",
     "--species_regex",
     dest="species_regex",
@@ -3446,7 +3448,7 @@ ppgls_raw.add_argument(
     type=str,
     help="default=the legacy species regex: Extraction regex for gene-tip species IDs.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-map-tsv",
     "--species_map_tsv",
     dest="species_map_tsv",
@@ -3455,8 +3457,8 @@ ppgls_raw.add_argument(
     type=str,
     help='Optional mapping TSV with "leaf_name" and "species_label" columns.',
 )
-ppgls_tip_tables = ppgls.add_argument_group("tip-table matching options")
-ppgls_tip_tables.add_argument(
+pregress_tip_tables = pregress.add_argument_group("tip-table matching options")
+pregress_tip_tables.add_argument(
     "--unmatched",
     metavar="error|warn|ignore",
     default=None,
@@ -3464,7 +3466,7 @@ ppgls_tip_tables.add_argument(
     choices=["error", "warn", "ignore"],
     help="default=error: Policy for rows and tree tips that do not match in raw or conventional input.",
 )
-ppgls_tip_tables.add_argument(
+pregress_tip_tables.add_argument(
     "--missing-values",
     "--missing_values",
     dest="missing_values",
@@ -3473,11 +3475,13 @@ ppgls_tip_tables.add_argument(
     type=str,
     help="default=the NWKIT missing-value set: Values treated as missing in raw or conventional trait tables.",
 )
-ppgls_replicates = ppgls.add_argument_group("response replicate and known-SE options")
-ppgls_predictor_replicates = ppgls.add_argument_group(
+pregress_replicates = pregress.add_argument_group(
+    "response replicate and known-SE options"
+)
+pregress_predictor_replicates = pregress.add_argument_group(
     "predictor replicate and known-SE options"
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--gene-branch-length",
     "--gene_branch_length",
     dest="gene_branch_length",
@@ -3487,7 +3491,7 @@ ppgls_raw.add_argument(
     choices=["original", "unit"],
     help="default=original: Branch lengths used for expression PICs.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-branch-length",
     "--species_branch_length",
     dest="species_branch_length",
@@ -3497,7 +3501,7 @@ ppgls_raw.add_argument(
     choices=["original", "unit"],
     help="default=original: Branch lengths used for species-trait PICs.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--gene-evolution-model",
     "--gene_evolution_model",
     dest="gene_evolution_model",
@@ -3507,7 +3511,7 @@ ppgls_raw.add_argument(
     choices=list(CONTRAST_EVOLUTION_MODELS),
     help="default=brownian: Evolutionary model used for gene-expression contrasts.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--gene-evolution-parameter",
     "--gene_evolution_parameter",
     dest="gene_evolution_parameter",
@@ -3516,7 +3520,7 @@ ppgls_raw.add_argument(
     type=auto_or_finite_float,
     help="default=auto: Estimate each response's shape parameter, or fix it to FLOAT.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-evolution-model",
     "--species_evolution_model",
     dest="species_evolution_model",
@@ -3526,7 +3530,7 @@ ppgls_raw.add_argument(
     choices=list(CONTRAST_EVOLUTION_MODELS),
     help="default=brownian: Evolutionary model used for species-trait contrasts.",
 )
-ppgls_raw.add_argument(
+pregress_raw.add_argument(
     "--species-evolution-parameter",
     "--species_evolution_parameter",
     dest="species_evolution_parameter",
@@ -3535,7 +3539,7 @@ ppgls_raw.add_argument(
     type=auto_or_finite_float,
     help="default=auto: Estimate each predictor's shape parameter by marginal ML, or fix it to FLOAT.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--biological-id",
     "--biological_id",
     dest="biological_id",
@@ -3544,7 +3548,7 @@ ppgls_replicates.add_argument(
     type=str,
     help="Response-table column identifying independent biological observations in --data or --expression.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--technical-id",
     "--technical_id",
     dest="technical_id",
@@ -3553,7 +3557,7 @@ ppgls_replicates.add_argument(
     type=str,
     help="Optional technical-replicate identifier nested within a biological observation.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--technical-aggregation",
     "--technical_aggregation",
     dest="technical_aggregation",
@@ -3563,14 +3567,14 @@ ppgls_replicates.add_argument(
     choices=["error", "mean"],
     help="default=error: Reject or explicitly average technical replicates.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--batch",
     metavar="COLUMN",
     default=None,
     type=str,
     help="Optional categorical response-table batch column fitted as a fixed effect.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--within-variance",
     "--within_variance",
     dest="within_variance",
@@ -3580,7 +3584,7 @@ ppgls_replicates.add_argument(
     choices=["pooled", "leaf", "known-se"],
     help="default=pooled: Biological replicate variance model or known-SE input.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--standard-error-columns",
     "--standard_error_columns",
     dest="standard_error_columns",
@@ -3589,7 +3593,7 @@ ppgls_replicates.add_argument(
     type=str,
     help="Known-SE columns corresponding to --responses.",
 )
-ppgls_replicates.add_argument(
+pregress_replicates.add_argument(
     "--sample-size-columns",
     "--sample_size_columns",
     dest="sample_size_columns",
@@ -3598,7 +3602,7 @@ ppgls_replicates.add_argument(
     type=str,
     help="Optional known-SE sample-size columns corresponding to --responses.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-biological-id",
     "--predictor_biological_id",
     dest="predictor_biological_id",
@@ -3607,7 +3611,7 @@ ppgls_predictor_replicates.add_argument(
     type=str,
     help="Predictor-table column identifying independent biological observations.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-technical-id",
     "--predictor_technical_id",
     dest="predictor_technical_id",
@@ -3616,7 +3620,7 @@ ppgls_predictor_replicates.add_argument(
     type=str,
     help="Optional technical-replicate identifier for predictor observations.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-technical-aggregation",
     "--predictor_technical_aggregation",
     dest="predictor_technical_aggregation",
@@ -3626,7 +3630,7 @@ ppgls_predictor_replicates.add_argument(
     choices=["error", "mean"],
     help="default=error: Reject or explicitly average predictor technical replicates.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-batch",
     "--predictor_batch",
     dest="predictor_batch",
@@ -3635,7 +3639,7 @@ ppgls_predictor_replicates.add_argument(
     type=str,
     help="Optional categorical predictor-table batch column fitted as a fixed effect.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-within-variance",
     "--predictor_within_variance",
     dest="predictor_within_variance",
@@ -3645,7 +3649,7 @@ ppgls_predictor_replicates.add_argument(
     choices=["pooled", "leaf", "known-se"],
     help="default=pooled: Predictor biological-replicate variance model or known-SE input.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-standard-error-columns",
     "--predictor_standard_error_columns",
     dest="predictor_standard_error_columns",
@@ -3654,7 +3658,7 @@ ppgls_predictor_replicates.add_argument(
     type=str,
     help="Known-SE columns corresponding to --predictors.",
 )
-ppgls_predictor_replicates.add_argument(
+pregress_predictor_replicates.add_argument(
     "--predictor-sample-size-columns",
     "--predictor_sample_size_columns",
     dest="predictor_sample_size_columns",
@@ -3663,7 +3667,7 @@ ppgls_predictor_replicates.add_argument(
     type=str,
     help="Optional known-SE sample-size columns corresponding to --predictors.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--event-weighting",
     "--event_weighting",
     dest="event_weighting",
@@ -3675,7 +3679,7 @@ ppgls.add_argument(
     choices=["equal", "observation"],
     help="default=equal: Give each species event equal total weight, or count each gene contrast equally. Equal prevents copy-rich events from dominating.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--speciation-coverage",
     "--speciation_coverage",
     dest="speciation_coverage",
@@ -3687,7 +3691,7 @@ ppgls.add_argument(
     choices=["complete", "any"],
     help="default=complete: Require complete daughter-clade sampling or include explicitly reported partial coverage.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--confidence-level",
     "--confidence_level",
     dest="confidence_level",
@@ -3698,7 +3702,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Two-sided confidence-interval level strictly between zero and one.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--model",
     metavar="hierarchical|replicate-reml|legacy",
     default=None,
@@ -3708,7 +3712,7 @@ ppgls.add_argument(
     choices=["hierarchical", "replicate-reml", "legacy"],
     help="default=hierarchical: Fit the replicate-aware hierarchical model, omit random effects, or run the earlier cluster-HC1 estimator for sensitivity analysis.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--response-sampling-covariance",
     "--response_sampling_covariance",
     dest="response_sampling_covariance",
@@ -3719,7 +3723,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Long-form response-contrast sampling covariance from replicate-aware 'nwkit contrast'. A zero matrix is used when the response has no sampling-variance columns.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--predictor-sampling-covariance",
     "--predictor_sampling_covariance",
     dest="predictor_sampling_covariance",
@@ -3730,7 +3734,7 @@ ppgls.add_argument(
     action="store",
     help="Precomputed mode: long-form predictor-contrast sampling covariance from replicate-aware 'nwkit contrast'.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--inference",
     metavar="wald|parametric-bootstrap|likelihood-ratio|profile-likelihood",
     default="wald",
@@ -3745,7 +3749,7 @@ ppgls.add_argument(
     ],
     help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--allow-large-dense",
     "--allow_large_dense",
     dest="allow_large_dense",
@@ -3756,7 +3760,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Explicitly permit large non-Gaussian fits that cannot use a sparse covariance representation; nwkit reports an estimated dense working-memory requirement before attempting them.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--bootstrap-replicates",
     "--bootstrap_replicates",
     dest="bootstrap_replicates",
@@ -3767,7 +3771,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Number of simulations for parametric-bootstrap inference.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--seed",
     metavar="INT",
     default=1,
@@ -3776,7 +3780,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Non-negative parametric-bootstrap random seed.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--reml",
     metavar="yes|no",
     default="yes",
@@ -3785,7 +3789,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Use restricted maximum likelihood for Gaussian variance components; predictor-dependent errors-in-variables covariance is always fitted by ML.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--event-random-effect",
     "--event_random_effect",
     dest="event_random_effect",
@@ -3797,7 +3801,7 @@ ppgls.add_argument(
     choices=["auto", "yes", "no"],
     help="default=auto: Include a shared species-event response when identifiable.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--lineage-random-slope",
     "--lineage_random_slope",
     dest="lineage_random_slope",
@@ -3809,7 +3813,7 @@ ppgls.add_argument(
     choices=["auto", "yes", "no"],
     help="default=auto: Include partially pooled lineage-specific trait slopes when identifiable.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--lineage-inference",
     "--lineage_inference",
     dest="lineage_inference",
@@ -3821,7 +3825,7 @@ ppgls.add_argument(
     choices=["none", "likelihood-ratio", "parametric-bootstrap"],
     help="default=none: Test lineage-slope heterogeneity and average-plus-lineage joint effects; bootstrap gives calibrated joint-null P-values.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--lineage-leave-one-out",
     "--lineage_leave_one_out",
     dest="lineage_leave_one_out",
@@ -3832,7 +3836,7 @@ ppgls.add_argument(
     action="store",
     help="default=no: Refit after removing each reconciled gene lineage and report coefficient sensitivity.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--categorical-origin-diagnostics",
     "--categorical_origin_diagnostics",
     dest="categorical_origin_diagnostics",
@@ -3844,7 +3848,7 @@ ppgls.add_argument(
     choices=["none", "stochastic-map"],
     help="default=none: Estimate categorical predictor gains/losses on species-tree branches with an ER Mk stochastic map.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--origin-map-replicates",
     "--origin_map_replicates",
     dest="origin_map_replicates",
@@ -3855,7 +3859,7 @@ ppgls.add_argument(
     action="store",
     help="default=200: Number of stochastic maps for categorical trait-origin diagnostics.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--origin-map-threads",
     "--origin_map_threads",
     dest="origin_map_threads",
@@ -3866,7 +3870,7 @@ ppgls.add_argument(
     action="store",
     help="default=1: Parallel workers for categorical stochastic maps.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--origin-min-posterior",
     "--origin_min_posterior",
     dest="origin_min_posterior",
@@ -3877,7 +3881,7 @@ ppgls.add_argument(
     action="store",
     help="default=0.5: Minimum transition posterior frequency used for origin leave-one-out.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--origin-leave-one-out",
     "--origin_leave_one_out",
     dest="origin_leave_one_out",
@@ -3888,7 +3892,7 @@ ppgls.add_argument(
     action="store",
     help="default=no: Refit after omitting events descended from each credible mapped trait origin.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--random-effects-out",
     "--random_effects_out",
     dest="random_effects_out",
@@ -3899,7 +3903,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV of species-event modes plus lineage deviations, total slopes, intervals, and reliability.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--sensitivity-out",
     "--sensitivity_out",
     dest="sensitivity_out",
@@ -3910,7 +3914,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV of lineage/origin leave-one-out diagnostics.",
 )
-ppgls.add_argument(
+pregress.add_argument(
     "--trait-origins-out",
     "--trait_origins_out",
     dest="trait_origins_out",
@@ -3921,7 +3925,7 @@ ppgls.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV of categorical predictor transition-origin diagnostics.",
 )
-ppgls.set_defaults(handler=command_pgls)
+pregress.set_defaults(handler=command_regress)
 
 
 def command_mark(args):

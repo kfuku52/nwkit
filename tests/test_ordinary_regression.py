@@ -14,13 +14,13 @@ from nwkit.evolution import evolutionary_covariance_factory
 from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.model_matrix import CategoricalObservation, encode_predictors
 from nwkit.multivariate_pgls import fit_multivariate_pgls
-from nwkit.ordinary_pgls import (
+from nwkit.ordinary_regression import (
     _global_bounded_scalar_minimize,
     _prepare_latent_ordinary_predictors,
     build_phylogenetic_covariance,
     estimate_marginal_evolution_parameter,
     fit_ordinary_model_comparison,
-    fit_ordinary_pgls,
+    fit_ordinary_regression,
 )
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
@@ -203,7 +203,7 @@ def test_ordinary_brownian_pgls_matches_direct_gls_with_intercept():
     tree = _tree()
     response = np.asarray([2.0, 5.0, 7.5, 8.0, 12.5])
     predictor = np.asarray([1.0, 2.0, 4.0, 3.0, 7.0])
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         tree,
         {"expression": _values(response)},
         {"body_size": _values(predictor)},
@@ -231,7 +231,7 @@ def test_ordinary_pgls_encodes_categorical_predictor_and_reports_omnibus_test():
             strict=True,
         )
     )
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values([2.0, 4.0, 8.0, 5.0, 9.0])},
         {"habitat": habitats},
@@ -256,7 +256,7 @@ def test_ordinary_pgls_encodes_categorical_predictor_and_reports_omnibus_test():
 
 
 def test_ordinary_pgls_auto_detects_string_predictor_as_categorical():
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values([2.0, 4.0, 8.0, 5.0, 9.0])},
         {
@@ -296,7 +296,7 @@ def test_predictor_measurement_error_reduces_attenuation_in_simulation():
 
     sampling = pd.DataFrame(np.eye(len(names)), index=names, columns=names)
 
-    naive = fit_ordinary_pgls(
+    naive = fit_ordinary_regression(
         tree,
         {"response": values(response)},
         {"predictor": values(observed)},
@@ -304,7 +304,7 @@ def test_predictor_measurement_error_reduces_attenuation_in_simulation():
         ["predictor"],
         evolution_model="independent",
     ).set_index("term")
-    corrected = fit_ordinary_pgls(
+    corrected = fit_ordinary_regression(
         tree,
         {"response": values(response)},
         {"predictor": values(observed)},
@@ -331,13 +331,13 @@ def test_zero_predictor_sampling_covariance_recovers_exact_predictor_pgls():
         predictors=["body_size"],
         reml=False,
     )
-    exact = fit_ordinary_pgls(**arguments)
+    exact = fit_ordinary_regression(**arguments)
     zero_sampling = pd.DataFrame(
         np.zeros((len(LEAF_NAMES), len(LEAF_NAMES))),
         index=LEAF_NAMES,
         columns=LEAF_NAMES,
     )
-    latent = fit_ordinary_pgls(
+    latent = fit_ordinary_regression(
         **arguments,
         predictor_sampling_covariance={"body_size": zero_sampling},
     )
@@ -351,7 +351,7 @@ def test_zero_predictor_sampling_covariance_recovers_exact_predictor_pgls():
 def test_independent_correlation_matches_ordinary_least_squares():
     response = np.asarray([2.0, 5.0, 7.5, 8.0, 12.5])
     predictor = np.asarray([1.0, 2.0, 4.0, 3.0, 7.0])
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values(response)},
         {"body_size": _values(predictor)},
@@ -370,7 +370,7 @@ def test_independent_correlation_matches_ordinary_least_squares():
 
 def test_independent_pgls_ignores_invalid_input_branch_lengths():
     tree = Tree(TREE_TEXT.replace("A:1", "A:0"), parser=1)
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         tree,
         {"expression": _values([2.0, 5.0, 7.5, 8.0, 12.5])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -388,7 +388,7 @@ def test_independent_pgls_ignores_invalid_input_branch_lengths():
 def test_fixed_phylogenetic_correlation_parameters_are_reported(
     evolution_model, parameter
 ):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values([2.0, 5.0, 7.5, 8.0, 12.5])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -403,7 +403,7 @@ def test_fixed_phylogenetic_correlation_parameters_are_reported(
 
 @pytest.mark.parametrize("evolution_model", ["lambda", "ou"])
 def test_phylogenetic_correlation_parameter_can_be_estimated(evolution_model):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"expression": _values([2.0, 5.0, 7.5, 8.0, 12.5])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -437,8 +437,8 @@ def test_ordinary_pgls_parametric_bootstrap_is_reproducible():
         bootstrap_replicates=6,
         seed=19,
     )
-    first = fit_ordinary_pgls(**arguments)
-    second = fit_ordinary_pgls(**arguments)
+    first = fit_ordinary_regression(**arguments)
+    second = fit_ordinary_regression(**arguments)
     pd.testing.assert_frame_equal(first, second)
     assert set(first["inference_method"]) == {"parametric-bootstrap"}
     assert set(first["measurement_error_model"]) == {"latent-predictor"}
@@ -452,7 +452,7 @@ def test_ordinary_sampling_covariance_requires_exact_unique_tree_tip_names():
         columns=LEAF_NAMES + ["extra"],
     )
     with pytest.raises(ValueError, match="exactly match tree tips"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             _tree(),
             {"expression": _values([2.0, 5.0, 7.5, 8.0, 12.5])},
             {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -469,7 +469,7 @@ def test_conventional_pgls_cli_reads_tree_and_tip_table(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -497,7 +497,7 @@ def test_conventional_pgls_cli_can_replace_invalid_branch_lengths_with_units(
     tree_path.write_text(TREE_TEXT.replace("A:1", "A:0"))
     output_path = tmp_path / "pgls.tsv"
     arguments = [
-        "pgls",
+        "regress",
         "--tree",
         str(tree_path),
         "--data",
@@ -529,7 +529,7 @@ def test_conventional_pgls_cli_supports_multiple_traits_and_no_intercept(tmp_pat
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -563,7 +563,7 @@ def test_conventional_pgls_cli_propagates_biological_replicate_uncertainty(
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -616,7 +616,7 @@ def test_conventional_pgls_cli_supports_batch_adjusted_response_replicates(tmp_p
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -650,7 +650,7 @@ def test_conventional_pgls_cli_rejects_duplicate_tsv_headers(tmp_path):
     with pytest.raises(ValueError, match="duplicated column header.*expression"):
         main(
             [
-                "pgls",
+                "regress",
                 "--tree",
                 str(tree_path),
                 "--data",
@@ -677,7 +677,7 @@ def test_conventional_pgls_cli_supports_known_standard_errors(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -720,7 +720,7 @@ def test_conventional_pgls_supports_response_and_predictor_known_se(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -796,7 +796,7 @@ def test_conventional_pgls_supports_unpaired_replicate_rows_for_both_roles(tmp_p
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -853,7 +853,7 @@ def test_conventional_pgls_supports_known_se_and_unpaired_raw_predictor_rows(
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -901,7 +901,7 @@ def test_conventional_pgls_cli_supports_new_models_custom_covariance_and_compari
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -982,7 +982,7 @@ def test_conventional_pgls_rejects_predictors_that_vary_among_replicates(tmp_pat
     with pytest.raises(ValueError, match="differs among rows"):
         main(
             [
-                "pgls",
+                "regress",
                 "--tree",
                 str(tree_path),
                 "--data",
@@ -1004,7 +1004,7 @@ def test_conventional_pgls_output_cannot_overwrite_an_input(tmp_path):
     with pytest.raises(ValueError, match="must not overwrite an input"):
         main(
             [
-                "pgls",
+                "regress",
                 "--tree",
                 str(tree_path),
                 "--data",
@@ -1036,7 +1036,7 @@ def test_model_comparison_output_cannot_overwrite_custom_covariance(tmp_path):
     with pytest.raises(ValueError, match="must not overwrite an input"):
         main(
             [
-                "pgls",
+                "regress",
                 "--tree",
                 str(tree_path),
                 "--data",
@@ -1076,7 +1076,7 @@ def test_custom_covariance_and_model_comparison_are_recorded_in_audit(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -1111,9 +1111,9 @@ def test_custom_covariance_and_model_comparison_are_recorded_in_audit(tmp_path):
     assert output_paths == {str(output_path.resolve()), str(comparison_path.resolve())}
 
 
-def test_conventional_pgls_mode_rejects_incomplete_mixed_and_invalid_options():
-    common = ["pgls", "--responses", "expression", "--predictors", "body_size"]
-    with pytest.raises(ValueError, match="Conventional PGLS requires"):
+def test_conventional_regression_mode_rejects_incomplete_mixed_and_invalid_options():
+    common = ["regress", "--responses", "expression", "--predictors", "body_size"]
+    with pytest.raises(ValueError, match="Conventional tip-level regression requires"):
         main(common + ["--tree", "species.nwk"])
     with pytest.raises(ValueError, match="cannot use reconciled/precomputed"):
         main(
@@ -1224,7 +1224,7 @@ def test_conventional_pgls_tree_stdin_is_summarized_in_audit(monkeypatch, tmp_pa
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             "-",
             "--data",
@@ -1273,7 +1273,7 @@ def test_conventional_pgls_tree_stdin_is_summarized_in_audit(monkeypatch, tmp_pa
 def test_conventional_phylogenetic_glmm_response_families(
     response_values, options, family
 ):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"state": _values(response_values)},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -1330,7 +1330,7 @@ def test_conventional_categorical_response_and_predictor_replicates(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -1388,7 +1388,7 @@ def test_conventional_categorical_response_and_predictor_replicates(tmp_path):
     ],
 )
 def test_conventional_scalar_non_gaussian_response_families(family, values, extra):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"state": _values(values)},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -1449,7 +1449,7 @@ def test_censored_gaussian_interval_probability_is_stable_in_both_tails():
 
 def test_censored_gaussian_never_reports_a_nonfinite_successful_fit():
     try:
-        result = fit_ordinary_pgls(
+        result = fit_ordinary_regression(
             _tree(),
             {"state": _values([np.nan] * 5)},
             {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -1985,7 +1985,7 @@ def test_multivariate_pgls_rejects_invalid_component_covariance():
 
 
 def test_conventional_censored_gaussian_uses_bounds_for_missing_observations():
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"state": _values([1.0, np.nan, 3.0, np.nan, 5.0])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -2006,7 +2006,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
     tree = _tree()
     predictors = {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])}
     with pytest.raises(ValueError, match="unordered categorical"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             tree,
             {"state": _values([0, 1, 0, 1, 1])},
             predictors,
@@ -2016,7 +2016,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
             response_families={"state": "gaussian"},
         )
     with pytest.raises(ValueError, match="offset"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             tree,
             {"state": _values([1.0, 1.5, 2.0, 3.0, 4.5])},
             predictors,
@@ -2026,7 +2026,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
             response_offsets={"state": _values([0.0] * 5)},
         )
     with pytest.raises(ValueError, match="strictly in"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             tree,
             {"state": _values([0, 0, 1, 3, 6])},
             predictors,
@@ -2036,7 +2036,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
             response_zero_probabilities={"state": 1.0},
         )
     with pytest.raises(ValueError, match="finite or missing"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             tree,
             {"state": _values([1.0, 1.5, 2.0, 3.0, 4.5])},
             predictors,
@@ -2048,7 +2048,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
             },
         )
     with pytest.raises(ValueError, match="must have a missing response"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             tree,
             {"state": _values([1.0, 1.5, 2.0, 3.0, 4.5])},
             predictors,
@@ -2060,7 +2060,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
             },
         )
     with pytest.raises(ValueError, match="positive finite coefficient prior SD"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             tree,
             {"state": _values([1, 1, 2, 3, 5])},
             predictors,
@@ -2072,7 +2072,7 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
 
 
 def test_categorical_separation_is_regularized_and_likelihood_tested():
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"state": _values(["no", "no", "no", "yes", "yes"])},
         {"body_size": _values([1.0, 2.0, 3.0, 4.0, 5.0])},
@@ -2088,7 +2088,7 @@ def test_categorical_separation_is_regularized_and_likelihood_tested():
 
 
 def test_non_gaussian_factor_omnibus_is_explicitly_labeled_wald():
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"count": _values([1, 2, 3, 5, 8])},
         {"habitat": _values(["a", "b", "c", "a", "b"])},
@@ -2106,7 +2106,7 @@ def test_non_gaussian_factor_omnibus_is_explicitly_labeled_wald():
 
 
 def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"state": _values([1, 2, 2, 4, 5])},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -2132,7 +2132,7 @@ def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():
     ],
 )
 def test_non_gaussian_parametric_bootstrap_refits_the_family(values, response_families):
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         {"state": _values(values)},
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -2156,7 +2156,7 @@ def test_multivariate_gaussian_pgls_retains_partially_observed_tips():
         "first": _values([1.0, 2.0, 3.0, 4.0, 5.0]),
         "second": _values([2.0, 3.5, np.nan, 6.5, 8.0]),
     }
-    result = fit_ordinary_pgls(
+    result = fit_ordinary_regression(
         _tree(),
         responses,
         {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -2176,7 +2176,7 @@ def test_multivariate_gaussian_pgls_retains_partially_observed_tips():
 
 def test_missing_response_flag_requires_multivariate_model():
     with pytest.raises(ValueError, match="requires multivariate_responses"):
-        fit_ordinary_pgls(
+        fit_ordinary_regression(
             _tree(),
             {"state": _values([1.0, 2.0, 3.0, 4.0, 5.0])},
             {"body_size": _values([1.0, 2.0, 4.0, 3.0, 7.0])},
@@ -2213,7 +2213,7 @@ def test_multivariate_cli_combines_biological_replicates_with_partial_missingnes
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",
@@ -2272,7 +2272,7 @@ def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path
 
     main(
         [
-            "pgls",
+            "regress",
             "--tree",
             str(tree_path),
             "--data",

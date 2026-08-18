@@ -241,7 +241,7 @@ def test_audit_records_pgls_sampling_covariance_and_random_effect_output(tmp_pat
 
     main(
         [
-            "pgls",
+            "regress",
             "--infile",
             str(response),
             "--predictor-contrasts",

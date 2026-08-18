@@ -36,9 +36,9 @@ def main() -> int:
         "nwkit/measurement_error.py",
         "nwkit/model_matrix.py",
         "nwkit/multivariate_pgls.py",
-        "nwkit/ordinary_pgls.py",
-        "nwkit/pgls.py",
-        "nwkit/pgls_pipeline.py",
+        "nwkit/ordinary_regression.py",
+        "nwkit/regress.py",
+        "nwkit/regression_pipeline.py",
         "nwkit/phylogenetic_glmm.py",
         "nwkit/reconcile.py",
         "nwkit/replicates.py",
@@ -46,7 +46,13 @@ def main() -> int:
         "nwkit/sparse_laplace.py",
         "nwkit/data_tree/apgiv.nwk",
     }
-    forbidden_names = {"nwkit/_mad.py", "THIRD_PARTY_NOTICES"}
+    forbidden_names = {
+        "nwkit/_mad.py",
+        "nwkit/ordinary_pgls.py",
+        "nwkit/pgls.py",
+        "nwkit/pgls_pipeline.py",
+        "THIRD_PARTY_NOTICES",
+    }
     for candidate in (direct_wheel, wheel):
         members = _wheel_members(candidate)
         missing = required_wheel - members
@@ -69,16 +75,16 @@ def main() -> int:
         "/nwkit/measurement_error.py",
         "/nwkit/model_matrix.py",
         "/nwkit/multivariate_pgls.py",
-        "/nwkit/ordinary_pgls.py",
-        "/nwkit/pgls.py",
-        "/nwkit/pgls_pipeline.py",
+        "/nwkit/ordinary_regression.py",
+        "/nwkit/regress.py",
+        "/nwkit/regression_pipeline.py",
         "/nwkit/phylogenetic_glmm.py",
         "/nwkit/reconcile.py",
         "/nwkit/replicates.py",
         "/nwkit/root.py",
         "/nwkit/sparse_laplace.py",
         "/CLI_TSV_CONVENTIONS.md",
-        "/RECONCILED_CONTRASTS.md",
+        "/PHYLOGENETIC_REGRESSION.md",
         "/RECONCILED_SPECIATION_CONTRAST_MATH.md",
         "/nwkit/data_tree/apgiv.nwk",
         "/constraints-dev.txt",
@@ -89,10 +95,10 @@ def main() -> int:
     ):
         if not any(member.endswith(suffix) for member in sdist_members):
             raise RuntimeError(f"Source distribution is missing {suffix}.")
-    if any(
-        member.endswith(("/nwkit/_mad.py", "/THIRD_PARTY_NOTICES"))
-        for member in sdist_members
-    ):
+    forbidden_sdist_suffixes = tuple(
+        "/{}".format(name) for name in sorted(forbidden_names)
+    )
+    if any(member.endswith(forbidden_sdist_suffixes) for member in sdist_members):
         raise RuntimeError("Source distribution contains a forbidden member.")
 
     subprocess.run(

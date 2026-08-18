@@ -1,15 +1,16 @@
-# Conventional PGLS and reconciled speciation contrasts
+# Phylogenetic regression and reconciled speciation contrasts
 
-`nwkit pgls` supports conventional tip-level PGLS as well as reconciled
-gene-tree contrasts. The input mode is selected explicitly by its input paths.
+`nwkit regress` supports conventional tip-level phylogenetic regression,
+including Gaussian PGLS and non-Gaussian PGLMMs, as well as reconciled
+gene-tree analyses. The input mode is selected explicitly by its input paths.
 
-## Conventional tip-level PGLS
+## Conventional tip-level regression
 
 Supply one rooted species tree and one table containing the response and
 predictor values:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --tree species_tree.dated.nwk \
   --data species_data.tsv \
   --responses expression \
@@ -198,7 +199,7 @@ their likelihood contribution.
 For example, a table with known uncertainty for both roles can be fitted with:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --tree species_tree.dated.nwk \
   --data species_means.tsv \
   --responses expression \
@@ -229,7 +230,7 @@ trait-tip combinations, while the joint likelihood omits missing components.
 For example:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --tree species_tree.dated.nwk \
   --data multivariate_traits.tsv \
   --responses expression,protein_abundance \
@@ -272,7 +273,7 @@ validates the species set and regression row order.
 Conventional PGLS can compare models on the same response data and design:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --tree species_tree.dated.nwk \
   --data species_data.tsv \
   --responses expression \
@@ -296,7 +297,7 @@ weights remain available.
 Include `custom` in the list only when `--evolution-covariance` is also
 supplied.
 
-## Reconciled speciation-contrast PGLS
+## Reconciled gene-tree regression
 
 NWKIT separates tree reconciliation, contrast calculation, and statistical
 inference. This keeps every mapping decision inspectable and prevents repeated
@@ -338,7 +339,7 @@ final model with one command. Expression is the response and the species trait
 is the predictor:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --gene-tree gene_tree.pruned.dated.nwk \
   --reconciliation-tree gene_tree.pruned.nhx \
   --species-tree species_tree.dated.nwk \
@@ -378,7 +379,7 @@ annotations in each sampled tree; one fixed `--reconciliation-tree` is rejected
 with an ensemble.
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --gene-tree-ensemble dated_gene_trees.nwk \
   --species-tree species_tree.dated.nwk \
   --expression gene_expression.tsv \
@@ -468,7 +469,7 @@ has no gene-contrast rows.
 | `OG000001.random-effects.tsv` | Conditional event and lineage effects; header-only when none are fitted |
 | `OG000001.sensitivity.tsv` | Lineage and mapped trait-origin leave-one-out refits, when requested |
 | `OG000001.trait-origins.tsv` | Mk stochastic-map transition support on species-tree branches, when requested |
-| `OG000001.pgls.tsv` | Final coefficient and variance-component results |
+| `OG000001.regression.tsv` | Final coefficient and variance-component results |
 
 NWKIT stages every applicable table before committing the bundle. A per-prefix
 lock serializes concurrent writers. If ordinary staging or commit fails, newly
@@ -488,7 +489,7 @@ that do not need retained intermediates.
 `reconcile` and `contrast` remain available as low-level commands. Use them to
 inspect event assignments, reuse one reconciliation across several expression
 datasets, or start from an externally prepared reconciliation. Precomputed
-gene and species contrasts can still be fitted by supplying `pgls --infile`
+gene and species contrasts can still be fitted by supplying `regress --infile`
 and `--predictor-contrasts`; raw and precomputed inputs cannot be mixed.
 
 First map the pruned, rooted GeneRax tree onto the rooted species tree. Supply a
@@ -591,7 +592,7 @@ method, and batch status.
 Fit precomputed contrasts through the low-level PGLS input mode:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --infile gene_contrasts.tsv \
   --predictor-contrasts species_contrasts.tsv \
   --response-sampling-covariance expression_sampling_covariance.tsv \
@@ -600,10 +601,10 @@ nwkit pgls \
   --predictors body_size \
   --model hierarchical \
   --random-effects-out random_effects.tsv \
-  --outfile pgls.tsv
+  --outfile regression.tsv
 ```
 
-`pgls` performs and validates the join
+`regress` performs and validates the join
 `gene_contrasts.species_event_id = species_contrasts.branch_clade_id`. It also
 requires exact agreement between `species_event_taxa` and `descendant_taxa`,
 and between the numerator and denominator event IDs. These SHA-256 clade
@@ -626,7 +627,7 @@ rejects both response and predictor covariance sidecars; use `hierarchical` or
 `factor-loading` representation. A model cannot mix explicit covariance and
 factor-loading rows.
 
-## PGLS model and pseudoreplication control
+## Regression models and pseudoreplication control
 
 The model is a regression through the origin on signed reconciled contrasts:
 
@@ -805,7 +806,7 @@ gain/loss branches rather than assigning a single observed tip state to one
 speciation event:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --gene-tree gene.nwk \
   --species-tree species.nwk \
   --expression expression.tsv \
@@ -886,7 +887,7 @@ Use these identifiers downstream:
 - `lineage_clade_id`: stable lineage segment descended from the most recent
   observed or collapsed non-speciation event.
 
-Inference must account for repeated `species_event_id` values. `nwkit pgls`
+Inference must account for repeated `species_event_id` values. `nwkit regress`
 does so with equal total event weighting and, when identifiable, a shared
 species-event effect. The effective information for an organismal predictor
 therefore comes from unique species events, not from the number of paralogs
@@ -967,7 +968,7 @@ transfer no longer silently produces an empty table.
 - Tree ensembles are equally weighted. They propagate the supplied tree and
   reconciliation sample but do not infer a tree distribution or model
   incomplete lineage sorting internally.
-- `pgls` deliberately fits separate models by `tree_id` rather than silently
+- `regress` deliberately fits separate models by `tree_id` rather than silently
   pooling gene families. Branch lengths must be comparable within each model.
 - Small-sample inference remains uncertain. Results with fewer than 20 unique
   species events are flagged. Regularization, profile likelihood, and

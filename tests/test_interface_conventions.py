@@ -136,7 +136,7 @@ def test_non_newick_outputs_do_not_expose_outformat():
         "mcmctree",
         "monophyly",
         "nwk2table",
-        "pgls",
+        "regress",
         "printlabel",
         "reconcile",
         "validate",

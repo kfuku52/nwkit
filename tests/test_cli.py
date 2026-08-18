@@ -26,6 +26,16 @@ def test_version_option(capsys):
     assert capsys.readouterr().out.strip() == f"nwkit {__version__}"
 
 
+def test_regress_replaces_pgls_without_compatibility_alias(capsys):
+    assert _subcommand_parser("regress").prog == "nwkit regress"
+
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["pgls"])
+
+    assert exc_info.value.code == 2
+    assert "invalid choice: 'pgls'" in capsys.readouterr().err
+
+
 @pytest.mark.parametrize(
     "command",
     ["annotate", "asr", "draw", "monophyly", "sample", "skim"],

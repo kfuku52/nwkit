@@ -84,7 +84,7 @@ minimal worked example, in
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nhx2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-nhx2nwk): Generating Newick from NHX
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
-- [`pgls`](https://github.com/kfuku52/nwkit/wiki/nwkit-pgls): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
+- [`regress`](https://github.com/kfuku52/nwkit/wiki/nwkit-regress): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
@@ -100,7 +100,7 @@ minimal worked example, in
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
 
-## Reconciled speciation contrasts and PGLS
+## Reconciled speciation contrasts and phylogenetic regression
 
 Reconciled speciation contrasts (RSC) relate a gene-expression change on a
 gene-tree speciation node to the organismal-trait change at the corresponding
@@ -112,7 +112,7 @@ of treating repeated paralogs as independent trait observations.
 The complete workflow can be run in one command:
 
 ```sh
-nwkit pgls \
+nwkit regress \
   --gene-tree gene_tree.dated.nwk \
   --species-tree species_tree.dated.nwk \
   --expression expression.tsv \
@@ -129,7 +129,7 @@ nwkit pgls \
 
 Alternatively, run [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile),
 [`contrast`](https://github.com/kfuku52/nwkit/wiki/nwkit-contrast), and
-[`pgls`](https://github.com/kfuku52/nwkit/wiki/nwkit-pgls) separately to inspect
+[`regress`](https://github.com/kfuku52/nwkit/wiki/nwkit-regress) separately to inspect
 and reuse every intermediate table. LCA reconciliation, GeneRax-style NHX
 `S`/`D`/`H` annotations, and the species-overlap heuristic are explicit event
 sources.
@@ -152,7 +152,7 @@ The reconciled model supports:
   tree-structured analyses with thousands of tips feasible.
 
 The detailed statistical contract, limitations, and file schemas are in
-[Conventional PGLS and reconciled speciation contrasts](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_CONTRASTS.md).
+[Phylogenetic regression and reconciled speciation contrasts](https://github.com/kfuku52/nwkit/blob/master/PHYLOGENETIC_REGRESSION.md).
 The RSC recursion, covariance propagation, event-balanced pseudo-likelihood,
 and a hand-calculated example are in the
 [mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).

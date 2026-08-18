@@ -12,8 +12,8 @@ import pytest
 from ete4 import Tree
 from scipy import sparse
 
-from nwkit import pgls as pgls_mod
-from nwkit import pgls_pipeline as pgls_pipeline_mod
+from nwkit import regress as regression_mod
+from nwkit import regression_pipeline as regression_pipeline_mod
 from nwkit.cli import main
 from nwkit.contrast import build_contrast_table
 from nwkit.gaussian import (
@@ -24,16 +24,19 @@ from nwkit.gaussian import (
     solve_factor,
 )
 from nwkit.model_matrix import PredictorTerm
-from nwkit.pgls import _profile_covariance_fit, fit_reconciled_pgls
-from nwkit.pgls_pipeline import PglsPipelineArtifacts, write_pgls_bundle
 from nwkit.reconcile import build_reconciliation_table
+from nwkit.regress import _profile_covariance_fit, fit_reconciled_pgls
+from nwkit.regression_pipeline import (
+    RegressionPipelineArtifacts,
+    write_regression_bundle,
+)
 from nwkit.sparse_laplace import (
     JointPredictorUncertainty,
     continuous_predictor_loading,
 )
 
 
-def _write_raw_pgls_inputs(tmp_path, *, biological_replicates=False):
+def _write_raw_regression_inputs(tmp_path, *, biological_replicates=False):
     gene_tree = tmp_path / "gene.nwk"
     species_tree = tmp_path / "species.nwk"
     expression = tmp_path / "expression.tsv"
@@ -141,7 +144,7 @@ def test_hierarchical_gaussian_components_remain_unmaterialized():
     design = np.asarray([[1.0], [1.5], [2.0], [2.5], [3.0], [3.5]])
     event_inverse = np.asarray([0, 0, 1, 1, 2, 2])
     lineage_inverse = np.arange(6)
-    output = pgls_mod._build_covariance_components(
+    output = regression_mod._build_covariance_components(
         design,
         np.ones(6),
         np.zeros(6),
@@ -175,7 +178,7 @@ def test_collinear_hierarchical_covariance_components_are_not_both_fitted():
     grouping = np.asarray([0, 0, 1, 1, 2, 2])
     counts = np.asarray([2, 2, 2])
     labels = np.asarray(["a", "b", "c"])
-    output = pgls_mod._build_covariance_components(
+    output = regression_mod._build_covariance_components(
         design,
         np.ones(6),
         np.zeros(6),
@@ -195,7 +198,7 @@ def test_collinear_hierarchical_covariance_components_are_not_both_fitted():
     )
     assert output[-2:] == (True, False)
     with pytest.raises(ValueError, match="lineage random slope.*not identifiable"):
-        pgls_mod._build_covariance_components(
+        regression_mod._build_covariance_components(
             design,
             np.ones(6),
             np.zeros(6),
@@ -216,7 +219,7 @@ def test_collinear_hierarchical_covariance_components_are_not_both_fitted():
 
 
 def test_large_dense_gaussian_fit_is_rejected_before_optimization(monkeypatch):
-    monkeypatch.setattr(pgls_mod, "MAX_DENSE_GAUSSIAN_OBSERVATIONS", 3)
+    monkeypatch.setattr(regression_mod, "MAX_DENSE_GAUSSIAN_OBSERVATIONS", 3)
     dense_covariance = np.eye(4)
     dense_covariance[0, 1] = dense_covariance[1, 0] = 0.1
     with pytest.raises(ValueError, match="Dense Gaussian covariance fitting"):
@@ -230,7 +233,7 @@ def test_large_dense_gaussian_fit_is_rejected_before_optimization(monkeypatch):
 
 
 def test_large_structured_gaussian_fit_remains_available(monkeypatch):
-    monkeypatch.setattr(pgls_mod, "MAX_DENSE_GAUSSIAN_OBSERVATIONS", 3)
+    monkeypatch.setattr(regression_mod, "MAX_DENSE_GAUSSIAN_OBSERVATIONS", 3)
     result = _profile_covariance_fit(
         np.asarray([1.0, 2.0, 4.0, 8.0]),
         np.ones((4, 1)),
@@ -839,7 +842,7 @@ def test_pgls_cli_writes_coefficient_table(tmp_path):
     assert (
         main(
             [
-                "pgls",
+                "regress",
                 "--infile",
                 str(response_path),
                 "--predictor-contrasts",
@@ -877,7 +880,7 @@ def test_precomputed_pgls_output_cannot_overwrite_an_input(tmp_path):
     with pytest.raises(ValueError, match="must not overwrite an input"):
         main(
             [
-                "pgls",
+                "regress",
                 "--infile",
                 str(response_path),
                 "--predictor-contrasts",
@@ -1389,7 +1392,7 @@ def test_pgls_rejects_empty_tree_ids_to_prevent_family_pooling():
 
 @pytest.mark.integration
 def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path,
         biological_replicates=True,
     )
@@ -1399,7 +1402,7 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
     assert (
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 str(gene_tree),
                 "--species-tree",
@@ -1432,7 +1435,7 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
         tmp_path / "analysis.response-sampling-covariance.tsv",
         tmp_path / "analysis.response-tip-summary.tsv",
         tmp_path / "analysis.random-effects.tsv",
-        tmp_path / "analysis.pgls.tsv",
+        tmp_path / "analysis.regression.tsv",
     }
     assert all(path.is_file() for path in expected_paths)
     reconciliation = pd.read_csv(tmp_path / "analysis.reconciliation.tsv", sep="\t")
@@ -1441,7 +1444,7 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
         tmp_path / "analysis.response-sampling-covariance.tsv", sep="\t"
     )
     tip_summary = pd.read_csv(tmp_path / "analysis.response-tip-summary.tsv", sep="\t")
-    result = pd.read_csv(tmp_path / "analysis.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "analysis.regression.tsv", sep="\t")
     assert set(reconciliation["tree_id"]) == {"OG000001"}
     assert set(gene_contrasts["tree_id"]) == {"OG000001"}
     assert set(gene_contrasts["replicate_model"]) == {"pooled"}
@@ -1464,7 +1467,7 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
 
 @pytest.mark.integration
 def test_pgls_raw_mode_supports_mixed_response_replication_depth(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path,
         biological_replicates=True,
     )
@@ -1479,7 +1482,7 @@ def test_pgls_raw_mode_supports_mixed_response_replication_depth(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1501,7 +1504,7 @@ def test_pgls_raw_mode_supports_mixed_response_replication_depth(tmp_path):
         ]
     )
 
-    result = pd.read_csv(tmp_path / "mixed-depth.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "mixed-depth.regression.tsv", sep="\t")
     assert set(result["response"]) == {"expression", "single"}
     summary = pd.read_csv(tmp_path / "mixed-depth.response-tip-summary.tsv", sep="\t")
     assert set(summary.query("trait == 'expression'")["variance_method"]) == {"pooled"}
@@ -1513,7 +1516,7 @@ def test_pgls_raw_mode_supports_mixed_response_replication_depth(tmp_path):
 
 @pytest.mark.integration
 def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     traits = pd.read_csv(species_traits, sep="\t")
@@ -1529,7 +1532,7 @@ def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1568,7 +1571,7 @@ def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
 
 @pytest.mark.integration
 def test_categorical_origin_mapping_and_origin_leave_one_out_are_auditable(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     traits = pd.read_csv(species_traits, sep="\t")
@@ -1580,7 +1583,7 @@ def test_categorical_origin_mapping_and_origin_leave_one_out_are_auditable(tmp_p
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1626,13 +1629,13 @@ def test_categorical_origin_mapping_and_origin_leave_one_out_are_auditable(tmp_p
 
 
 def test_origin_specific_options_require_stochastic_mapping_mode(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     with pytest.raises(ValueError, match="Categorical origin option.*require"):
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 str(gene_tree),
                 "--species-tree",
@@ -1655,7 +1658,7 @@ def test_origin_specific_options_require_stochastic_mapping_mode(tmp_path):
 
 @pytest.mark.integration
 def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     traits = pd.read_csv(species_traits, sep="\t")
@@ -1683,7 +1686,7 @@ def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1713,7 +1716,7 @@ def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_
         ]
     )
 
-    result = pd.read_csv(tmp_path / "latent-category.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "latent-category.regression.tsv", sep="\t")
     coefficient = result[result["term_test"] == "coefficient"].iloc[0]
     assert coefficient["measurement_error_model"] == "latent-predictor"
     summary = pd.read_csv(
@@ -1729,7 +1732,7 @@ def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_
 
 @pytest.mark.integration
 def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     species_names = pd.read_csv(species_traits, sep="\t")["leaf_name"].tolist()
@@ -1755,7 +1758,7 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1783,7 +1786,7 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
         ]
     )
 
-    result = pd.read_csv(tmp_path / "multilevel-latent.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "multilevel-latent.regression.tsv", sep="\t")
     coefficients = result[result["term_test"] == "coefficient"]
     assert len(coefficients) == 2
     assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
@@ -1800,7 +1803,7 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
 
 @pytest.mark.integration
 def test_reconciled_categorical_response_uses_tip_pglmm(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     expression_table = pd.read_csv(expression, sep="\t")
@@ -1813,7 +1816,7 @@ def test_reconciled_categorical_response_uses_tip_pglmm(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1839,7 +1842,7 @@ def test_reconciled_categorical_response_uses_tip_pglmm(tmp_path):
         ]
     )
 
-    result = pd.read_csv(tmp_path / "categorical-response.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "categorical-response.regression.tsv", sep="\t")
     coefficients = result[result["term_test"] == "coefficient"]
     assert set(coefficients["response_family"]) == {"ordinal"}
     assert set(coefficients["model"]) == {"reconciled-tip-pglmm"}
@@ -1859,7 +1862,7 @@ def test_reconciled_categorical_response_uses_tip_pglmm(tmp_path):
 
 @pytest.mark.integration
 def test_reconciled_categorical_response_and_predictor_replicates_together(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     gene_names = pd.read_csv(expression, sep="\t")["leaf_name"].tolist()
@@ -1903,7 +1906,7 @@ def test_reconciled_categorical_response_and_predictor_replicates_together(tmp_p
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1929,7 +1932,7 @@ def test_reconciled_categorical_response_and_predictor_replicates_together(tmp_p
         ]
     )
 
-    result = pd.read_csv(tmp_path / "categorical-replicates.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "categorical-replicates.regression.tsv", sep="\t")
     coefficients = result[result["term_test"] == "coefficient"]
     assert set(coefficients["response_family"]) == {"binomial"}
     assert set(coefficients["predictor_type"]) == {"categorical", "intercept"}
@@ -1946,7 +1949,7 @@ def test_reconciled_categorical_response_and_predictor_replicates_together(tmp_p
 
 @pytest.mark.integration
 def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     gene_names = pd.read_csv(expression, sep="\t")["leaf_name"].tolist()
@@ -1966,7 +1969,7 @@ def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -1998,7 +2001,7 @@ def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path
         ]
     )
 
-    result = pd.read_csv(tmp_path / "negative-binomial.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "negative-binomial.regression.tsv", sep="\t")
     assert set(result["response_family"]) == {"negative-binomial"}
     assert set(result["link_function"]) == {"log"}
     assert set(result["inference_method"]) == {"parametric-bootstrap"}
@@ -2012,7 +2015,7 @@ def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path
 
 @pytest.mark.integration
 def test_reconciled_gene_tree_ensemble_combines_tree_uncertainty(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     original = gene_tree.read_text()
@@ -2026,7 +2029,7 @@ def test_reconciled_gene_tree_ensemble_combines_tree_uncertainty(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree-ensemble",
             str(ensemble),
             "--species-tree",
@@ -2063,7 +2066,7 @@ def test_reconciled_gene_tree_ensemble_combines_tree_uncertainty(tmp_path):
 
 @pytest.mark.integration
 def test_reconciled_multivariate_pgls_retains_missing_paralog_responses(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     gene_names = [
@@ -2089,7 +2092,7 @@ def test_reconciled_multivariate_pgls_retains_missing_paralog_responses(tmp_path
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -2127,7 +2130,7 @@ def test_reconciled_multivariate_pgls_retains_missing_paralog_responses(tmp_path
 def test_reconciled_categorical_response_shares_species_effect_across_paralogs(
     tmp_path,
 ):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     gene_names = [
@@ -2153,7 +2156,7 @@ def test_reconciled_categorical_response_shares_species_effect_across_paralogs(
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -2199,7 +2202,7 @@ def test_reconciled_categorical_response_shares_species_effect_across_paralogs(
 def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
     tmp_path,
 ):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path,
         biological_replicates=True,
     )
@@ -2219,7 +2222,7 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -2263,7 +2266,7 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
         tmp_path / "predictor-replicates.response-tip-summary.tsv",
         sep="\t",
     )
-    result = pd.read_csv(tmp_path / "predictor-replicates.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "predictor-replicates.regression.tsv", sep="\t")
     assert len(covariance) == 10
     assert len(response_covariance) == 10
     assert set(summary["n_biological"]) == {2}
@@ -2281,7 +2284,7 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
 def test_reconciled_poisson_conditions_replicated_predictor_on_species_model(
     tmp_path,
 ):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     expression_frame = pd.read_csv(expression, sep="\t").rename(
@@ -2307,7 +2310,7 @@ def test_reconciled_poisson_conditions_replicated_predictor_on_species_model(
         prefix = tmp_path / "tip-latent-{}".format(model)
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 str(gene_tree),
                 "--species-tree",
@@ -2332,7 +2335,7 @@ def test_reconciled_poisson_conditions_replicated_predictor_on_species_model(
                 str(prefix),
             ]
         )
-        result = pd.read_csv(str(prefix) + ".pgls.tsv", sep="\t")
+        result = pd.read_csv(str(prefix) + ".regression.tsv", sep="\t")
         coefficient = result[
             (result["term"] == "body_size") & (result["term_test"] == "coefficient")
         ].iloc[0]
@@ -2407,20 +2410,20 @@ def test_grouped_predictor_uncertainty_validation_is_explicit_and_lossless():
         "uncertainty": JointPredictorUncertainty(factors=(factor_a, factor_b)),
     }
     groups = {"state": ("state[a]", "state[b]")}
-    normalized = pgls_mod._normalize_grouped_uncertainties(
+    normalized = regression_mod._normalize_grouped_uncertainties(
         [state], ["state[a]", "state[b]"], "hierarchical", groups
     )
 
     with pytest.raises(ValueError, match="missing species event.*event3"):
-        pgls_mod._grouped_predictor_uncertainties_for_rows(
+        regression_mod._grouped_predictor_uncertainties_for_rows(
             pd.DataFrame({"species_event_id": ["event1", "event3"]}), normalized
         )
     with pytest.raises(ValueError, match="assigns term.*more than once"):
-        pgls_mod._normalize_grouped_uncertainties(
+        regression_mod._normalize_grouped_uncertainties(
             [state, state], ["state[a]", "state[b]"], "hierarchical", groups
         )
     with pytest.raises(ValueError, match="must match one predictor group"):
-        pgls_mod._normalize_grouped_uncertainties(
+        regression_mod._normalize_grouped_uncertainties(
             [
                 {
                     **state,
@@ -2437,7 +2440,7 @@ def test_grouped_predictor_uncertainty_validation_is_explicit_and_lossless():
     uncertainty = JointPredictorUncertainty(
         factors=(factor_a, factor_b), row_scale=row_scale
     )
-    selected, columns = pgls_mod._subset_predictor_uncertainties(
+    selected, columns = regression_mod._subset_predictor_uncertainties(
         [uncertainty], [(0, 1)], [0]
     )
     assert columns == [0]
@@ -2482,7 +2485,9 @@ def test_predictor_factor_loading_sidecar_matches_explicit_covariance(monkeypatc
     def reject_materialization(_covariance):
         raise AssertionError("factor-loading covariance was materialized")
 
-    monkeypatch.setattr(pgls_mod, "materialize_covariance", reject_materialization)
+    monkeypatch.setattr(
+        regression_mod, "materialize_covariance", reject_materialization
+    )
     factor_result = fit_reconciled_pgls(
         **common, predictor_sampling_covariance=pd.DataFrame(factor_rows)
     )
@@ -2507,7 +2512,7 @@ def test_predictor_factor_loading_sidecar_matches_explicit_covariance(monkeypatc
 
 @pytest.mark.slow
 def test_large_predictor_factor_loading_remains_structured(monkeypatch):
-    size = pgls_mod.MAX_DENSE_GAUSSIAN_OBSERVATIONS + 1
+    size = regression_mod.MAX_DENSE_GAUSSIAN_OBSERVATIONS + 1
     predictor_values = np.linspace(-2.0, 2.0, size)
     predictor = _predictor_table(predictor_values)
     predictor["contrast_variance"] = 1.0
@@ -2531,7 +2536,9 @@ def test_large_predictor_factor_loading_remains_structured(monkeypatch):
     def reject_materialization(_covariance):
         raise AssertionError("large factor-loading covariance was materialized")
 
-    monkeypatch.setattr(pgls_mod, "materialize_covariance", reject_materialization)
+    monkeypatch.setattr(
+        regression_mod, "materialize_covariance", reject_materialization
+    )
     result = fit_reconciled_pgls(
         response,
         predictor,
@@ -2553,12 +2560,12 @@ def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
         predictor.rename(columns={"branch_clade_id": "gene_clade_id"}),
         np.diag([0.05, 0.10, 0.15]),
     )
-    prepared_predictor = pgls_mod._prepare_predictors(predictor, ["body_size"])
-    prepared_covariance = pgls_mod._prepare_sampling_covariance(
+    prepared_predictor = regression_mod._prepare_predictors(predictor, ["body_size"])
+    prepared_covariance = regression_mod._prepare_sampling_covariance(
         covariance,
         option_name="--predictor-sampling-covariance",
     )
-    posteriors = pgls_mod._prepare_predictor_posteriors(
+    posteriors = regression_mod._prepare_predictor_posteriors(
         prepared_predictor,
         ["body_size"],
         prepared_covariance,
@@ -2572,7 +2579,7 @@ def test_repeated_paralogs_share_one_latent_species_event_uncertainty():
         ]
     )
 
-    uncertainty = pgls_mod._predictor_uncertainties_for_rows(
+    uncertainty = regression_mod._predictor_uncertainties_for_rows(
         repeated,
         ["body_size"],
         posteriors,
@@ -2649,7 +2656,7 @@ def test_legacy_reconciled_pgls_rejects_predictor_sampling_covariance():
 
 def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
     common = [
-        "pgls",
+        "regress",
         "--responses",
         "expression",
         "--predictors",
@@ -2724,7 +2731,7 @@ def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
 
 
 def test_pgls_raw_mode_rejects_mismatched_reconciliation_topology(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     reconciliation_tree = tmp_path / "reconciliation.nwk"
@@ -2735,7 +2742,7 @@ def test_pgls_raw_mode_rejects_mismatched_reconciliation_topology(tmp_path):
     with pytest.raises(ValueError, match="identical rooted topologies"):
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 str(gene_tree),
                 "--reconciliation-tree",
@@ -2758,14 +2765,14 @@ def test_pgls_raw_mode_rejects_mismatched_reconciliation_topology(tmp_path):
 
 @pytest.mark.integration
 def test_pgls_raw_mode_without_prefix_writes_only_requested_primary_output(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     outfile = tmp_path / "result.tsv"
     assert (
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 str(gene_tree),
                 "--species-tree",
@@ -2793,14 +2800,14 @@ def test_pgls_raw_mode_without_prefix_writes_only_requested_primary_output(tmp_p
 
 @pytest.mark.integration
 def test_pgls_raw_mode_applies_gene_and_species_evolution_models(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     prefix = tmp_path / "transformed"
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -2832,7 +2839,7 @@ def test_pgls_raw_mode_applies_gene_and_species_evolution_models(tmp_path):
     species_contrasts = pd.read_csv(
         tmp_path / "transformed.species-contrasts.tsv", sep="\t"
     )
-    result = pd.read_csv(tmp_path / "transformed.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "transformed.regression.tsv", sep="\t")
     assert set(gene_contrasts["evolution_model"]) == {"kappa"}
     assert set(gene_contrasts["evolution_parameter"]) == {0.7}
     assert set(species_contrasts["evolution_model"]) == {"delta"}
@@ -2849,14 +2856,14 @@ def test_pgls_raw_mode_applies_gene_and_species_evolution_models(tmp_path):
 
 @pytest.mark.integration
 def test_pgls_raw_parameterized_models_are_automatically_estimated(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     prefix = tmp_path / "estimated"
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -2886,7 +2893,7 @@ def test_pgls_raw_parameterized_models_are_automatically_estimated(tmp_path):
     species_contrasts = pd.read_csv(
         tmp_path / "estimated.species-contrasts.tsv", sep="\t"
     )
-    result = pd.read_csv(tmp_path / "estimated.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "estimated.regression.tsv", sep="\t")
     gene_parameter = float(gene_contrasts["evolution_parameter"].iloc[0])
     species_parameter = float(species_contrasts["evolution_parameter"].iloc[0])
     assert 0.0 <= gene_parameter <= 3.0
@@ -2900,7 +2907,7 @@ def test_pgls_raw_parameterized_models_are_automatically_estimated(tmp_path):
     identity_out = tmp_path / "identity.tsv"
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -2935,7 +2942,7 @@ def test_pgls_raw_auto_parameter_is_rejected_for_parameterless_model():
     with pytest.raises(ValueError, match="no shape parameter"):
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 "gene.nwk",
                 "--species-tree",
@@ -2960,7 +2967,7 @@ def test_pgls_raw_auto_gene_parameter_rejects_legacy_model_before_io():
     with pytest.raises(ValueError, match="likelihood-based"):
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 "gene.nwk",
                 "--species-tree",
@@ -2985,14 +2992,14 @@ def test_pgls_raw_auto_gene_parameter_rejects_legacy_model_before_io():
 
 @pytest.mark.integration
 def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path, biological_replicates=True
     )
     outfile = tmp_path / "bootstrap.tsv"
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -3029,13 +3036,15 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
     assert np.isfinite(result.iloc[0]["standard_error"])
 
 
-@pytest.mark.parametrize("suffix", [".pgls.tsv", ".pgls-bundle.lock"])
-def test_pgls_bundle_audit_path_cannot_collide_with_generated_output(tmp_path, suffix):
+@pytest.mark.parametrize("suffix", [".regression.tsv", ".regression-bundle.lock"])
+def test_regression_bundle_audit_path_cannot_collide_with_generated_output(
+    tmp_path, suffix
+):
     prefix = tmp_path / "analysis"
     with pytest.raises(ValueError, match="Output paths must be distinct"):
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 "gene.nwk",
                 "--species-tree",
@@ -3060,7 +3069,7 @@ def test_pgls_bundle_audit_path_cannot_collide_with_generated_output(tmp_path, s
 
 def _minimal_pipeline_artifacts(*, replicate_aware=False):
     frame = pd.DataFrame({"value": [1.0]})
-    return PglsPipelineArtifacts(
+    return RegressionPipelineArtifacts(
         reconciliation=frame.copy(),
         gene_contrasts=frame.copy(),
         species_contrasts=frame.copy(),
@@ -3071,13 +3080,13 @@ def _minimal_pipeline_artifacts(*, replicate_aware=False):
     )
 
 
-def test_pgls_bundle_rejects_nonregular_target_before_writing_any_file(tmp_path):
+def test_regression_bundle_rejects_nonregular_target_before_writing_any_file(tmp_path):
     prefix = tmp_path / "analysis"
     blocked = tmp_path / "analysis.response-sampling-covariance.tsv"
     blocked.mkdir()
 
     with pytest.raises(ValueError, match="must be a regular file"):
-        write_pgls_bundle(
+        write_regression_bundle(
             str(prefix),
             _minimal_pipeline_artifacts(replicate_aware=True),
         )
@@ -3090,19 +3099,21 @@ def test_pgls_bundle_rejects_nonregular_target_before_writing_any_file(tmp_path)
     assert generated == []
 
 
-def test_pgls_bundle_commit_failure_restores_every_existing_output(
+def test_regression_bundle_commit_failure_restores_every_existing_output(
     monkeypatch, tmp_path
 ):
     prefix = tmp_path / "analysis"
     paths = {
         name: path
-        for name, path in pgls_pipeline_mod.pgls_bundle_paths(str(prefix)).items()
+        for name, path in regression_pipeline_mod.regression_bundle_paths(
+            str(prefix)
+        ).items()
         if name not in {"response_sampling_covariance_out", "response_tip_summary_out"}
     }
     for path in paths.values():
         with open(path, "w") as handle:
             handle.write("original\n")
-    real_replace = pgls_pipeline_mod._replace_output
+    real_replace = regression_pipeline_mod._replace_output
     replace_calls = 0
 
     def fail_second_replace(source, target):
@@ -3112,9 +3123,9 @@ def test_pgls_bundle_commit_failure_restores_every_existing_output(
             raise OSError("simulated bundle commit failure")
         real_replace(source, target)
 
-    monkeypatch.setattr(pgls_pipeline_mod, "_replace_output", fail_second_replace)
+    monkeypatch.setattr(regression_pipeline_mod, "_replace_output", fail_second_replace)
     with pytest.raises(OSError, match="bundle commit failure"):
-        write_pgls_bundle(str(prefix), _minimal_pipeline_artifacts())
+        write_regression_bundle(str(prefix), _minimal_pipeline_artifacts())
 
     assert all(Path(path).read_text() == "original\n" for path in paths.values())
     assert not [
@@ -3130,7 +3141,7 @@ def test_explicit_output_transactions_are_isolated_across_concurrent_writers(
     first_entered = threading.Event()
     release_first = threading.Event()
     second_entered = threading.Event()
-    real_commit = pgls_pipeline_mod._commit_pgls_outputs
+    real_commit = regression_pipeline_mod._commit_regression_outputs
     commit_count = 0
     commit_guard = threading.Lock()
 
@@ -3146,12 +3157,14 @@ def test_explicit_output_transactions_are_isolated_across_concurrent_writers(
             second_entered.set()
         real_commit(staged_outputs)
 
-    monkeypatch.setattr(pgls_pipeline_mod, "_commit_pgls_outputs", controlled_commit)
+    monkeypatch.setattr(
+        regression_pipeline_mod, "_commit_regression_outputs", controlled_commit
+    )
     errors = []
 
     def write(label):
         try:
-            pgls_pipeline_mod._write_dataframes_transactionally(
+            regression_pipeline_mod._write_dataframes_transactionally(
                 [
                     (str(result_path), pd.DataFrame({"run": [label]})),
                     (str(sidecar_path), pd.DataFrame({"run": [label]})),
@@ -3182,13 +3195,13 @@ def test_explicit_output_transactions_are_isolated_across_concurrent_writers(
 def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
     monkeypatch, tmp_path
 ):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path,
         biological_replicates=True,
     )
     prefix = tmp_path / "analysis"
     audit = tmp_path / "analysis.audit.jsonl"
-    real_replace = pgls_pipeline_mod._replace_output
+    real_replace = regression_pipeline_mod._replace_output
     replace_calls = 0
 
     def fail_second_replace(source, target):
@@ -3198,11 +3211,11 @@ def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
             raise OSError("simulated bundle commit failure")
         real_replace(source, target)
 
-    monkeypatch.setattr(pgls_pipeline_mod, "_replace_output", fail_second_replace)
+    monkeypatch.setattr(regression_pipeline_mod, "_replace_output", fail_second_replace)
     with pytest.raises(OSError, match="bundle commit failure"):
         main(
             [
-                "pgls",
+                "regress",
                 "--gene-tree",
                 str(gene_tree),
                 "--species-tree",
@@ -3240,14 +3253,14 @@ def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
             tmp_path / "analysis.response-sampling-covariance.tsv",
             tmp_path / "analysis.response-tip-summary.tsv",
             tmp_path / "analysis.random-effects.tsv",
-            tmp_path / "analysis.pgls.tsv",
+            tmp_path / "analysis.regression.tsv",
         ]
     }
 
 
 @pytest.mark.integration
 def test_pgls_raw_mode_accepts_separate_nhx_reconciliation_tree(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     reconciliation_tree = tmp_path / "gene-reconciled.nhx"
@@ -3260,7 +3273,7 @@ def test_pgls_raw_mode_accepts_separate_nhx_reconciliation_tree(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--reconciliation-tree",
@@ -3294,7 +3307,7 @@ def test_pgls_raw_mode_accepts_separate_nhx_reconciliation_tree(tmp_path):
 
 @pytest.mark.integration
 def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     expression_table = pd.read_csv(expression, sep="\t")
@@ -3313,7 +3326,7 @@ def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             str(gene_tree),
             "--species-tree",
@@ -3347,7 +3360,7 @@ def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
         ]
     )
 
-    result = pd.read_csv(tmp_path / "analysis.pgls.tsv", sep="\t")
+    result = pd.read_csv(tmp_path / "analysis.regression.tsv", sep="\t")
     assert set(result["response"]) == {"expression", "expression_alt"}
     assert set(result["term"]) == {"body_size", "temperature"}
     assert len(result) == 4
@@ -3382,17 +3395,17 @@ def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
 def test_pgls_raw_gene_tree_stdin_has_primary_input_summary_and_hash(
     monkeypatch, tmp_path
 ):
-    gene_tree, species_tree, expression, species_traits = _write_raw_pgls_inputs(
+    gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
     )
     gene_tree_text = gene_tree.read_text()
     monkeypatch.setattr(sys, "stdin", io.StringIO(gene_tree_text))
     audit = tmp_path / "analysis.audit.jsonl"
-    outfile = tmp_path / "analysis.pgls.tsv"
+    outfile = tmp_path / "analysis.regression.tsv"
 
     main(
         [
-            "pgls",
+            "regress",
             "--gene-tree",
             "-",
             "--species-tree",
@@ -3440,8 +3453,8 @@ def test_expected_scipy_numdiff_warning_is_suppressed_without_hiding_others(
         warnings.warn("independent numerical warning", RuntimeWarning, stacklevel=2)
         return sentinel
 
-    monkeypatch.setattr(pgls_mod, "minimize", noisy_minimize)
+    monkeypatch.setattr(regression_mod, "minimize", noisy_minimize)
     with pytest.warns(RuntimeWarning, match="independent numerical warning") as caught:
-        result = pgls_mod._minimize_variance_components(object())
+        result = regression_mod._minimize_variance_components(object())
     assert result is sentinel
     assert len(caught) == 1

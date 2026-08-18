@@ -3,7 +3,7 @@
 この文書は、NWKIT が reconciled speciation contrast をどのように作るかを、
 実装に対応した数式と手計算できる例で示す。コマンド全体の使い方、入力形式、
 進化モデル、replicate、PGLS の選択肢については
-[`RECONCILED_CONTRASTS.md`](RECONCILED_CONTRASTS.md) を参照すること。
+[`PHYLOGENETIC_REGRESSION.md`](PHYLOGENETIC_REGRESSION.md) を参照すること。
 
 ## 一文での定義
 
