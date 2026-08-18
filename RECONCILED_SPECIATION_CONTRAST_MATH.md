@@ -259,7 +259,7 @@ $e(i)$ を持つ。このとき $X$ の同じ種形質contrastが複数行に現
 種分化の反復が増えたわけではない。
 
 イベント $e$ に属する遺伝子contrast数を $k_e$ とすると、既定の
-`--event-weighting equal` は、各イベントへ同じ総情報重みを与える。行固有の
+`--event-weighting event` は、各イベントへ同じ総情報重みを与える。行固有の
 発現進化分散と発現sampling covarianceについては
 $B_{ii}=\sqrt{k_{e(i)}}$ としてworking covarianceを
 
@@ -476,7 +476,7 @@ nwkit contrast \
 - 回帰に使う値は `raw_contrast`、進化分散はgene側の
   `contrast_variance` であることを取り違えていないか。
 - `n_gene_contrasts` ではなく `n_species_events` を独立な比較数として見ているか。
-- 同一イベントのパラログが多い場合、`event-weighting=equal` とevent random
+- 同一イベントのパラログが多い場合、`--event-weighting event` とevent random
   effectの診断を確認したか。
 
 この構成により、パラログごとの発現差を潰さずに保持しつつ、同じ種分化contrastを

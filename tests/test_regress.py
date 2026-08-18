@@ -456,7 +456,7 @@ def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
         predictors,
         ["expression"],
         ["body_size"],
-        event_weighting="observation",
+        event_weighting="contrast",
     )
 
     assert equal_result.iloc[0]["coefficient"] == pytest.approx(
@@ -612,7 +612,7 @@ def test_species_event_cluster_hc1_standard_error_matches_reference_formula():
         _predictor_table(values=tuple(predictor_values)),
         ["expression"],
         ["body_size"],
-        model="legacy",
+        model="cluster-hc1",
     ).iloc[0]
 
     coefficient = float(
@@ -843,7 +843,7 @@ def test_pgls_cli_writes_coefficient_table(tmp_path):
         main(
             [
                 "regress",
-                "--infile",
+                "--response-contrasts",
                 str(response_path),
                 "--predictor-contrasts",
                 str(predictor_path),
@@ -881,7 +881,7 @@ def test_precomputed_pgls_output_cannot_overwrite_an_input(tmp_path):
         main(
             [
                 "regress",
-                "--infile",
+                "--response-contrasts",
                 str(response_path),
                 "--predictor-contrasts",
                 str(predictor_path),
@@ -1339,13 +1339,13 @@ def test_model_specific_options_are_validated_instead_of_ignored():
     response = pd.DataFrame(
         [_response_row(1, 2.0), _response_row(2, 4.0), _response_row(3, 6.0)]
     )
-    with pytest.raises(ValueError, match="unavailable for legacy"):
+    with pytest.raises(ValueError, match="unavailable for cluster-HC1"):
         fit_reconciled_pgls(
             response,
             _predictor_table(),
             ["expression"],
             ["body_size"],
-            model="legacy",
+            model="cluster-hc1",
             inference="parametric-bootstrap",
             bootstrap_replicates=2,
         )
@@ -1417,7 +1417,7 @@ def test_pgls_raw_mode_writes_complete_replicate_aware_bundle_and_audit(tmp_path
                 "body_size",
                 "--tree-id",
                 "OG000001",
-                "--biological-id",
+                "--response-biological-id",
                 "sample_id",
                 "--out-prefix",
                 str(prefix),
@@ -1497,7 +1497,7 @@ def test_pgls_raw_mode_supports_mixed_response_replication_depth(tmp_path):
             "body_size",
             "--tree-id",
             "OGMIXED",
-            "--biological-id",
+            "--response-biological-id",
             "sample_id",
             "--out-prefix",
             str(prefix),
@@ -1547,7 +1547,7 @@ def test_reconciled_pgls_accepts_categorical_species_predictor(tmp_path):
             "habitat",
             "--categorical-predictors",
             "habitat",
-            "--factor-reference",
+            "--predictor-reference",
             "habitat=aquatic",
             "--tree-id",
             "OGCAT",
@@ -1703,7 +1703,7 @@ def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_
             "habitat",
             "--predictor-biological-id",
             "sample",
-            "--categorical-replicate-policy",
+            "--predictor-categorical-replicate-policy",
             "latent",
             "--categorical-origin-diagnostics",
             "stochastic-map",
@@ -1775,7 +1775,7 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
             "habitat",
             "--predictor-biological-id",
             "sample",
-            "--categorical-replicate-policy",
+            "--predictor-categorical-replicate-policy",
             "latent",
             "--species-evolution-model",
             "lambda",
@@ -1919,11 +1919,11 @@ def test_reconciled_categorical_response_and_predictor_replicates_together(tmp_p
             "state",
             "--predictors",
             "habitat",
-            "--biological-id",
+            "--response-biological-id",
             "sample",
             "--predictor-biological-id",
             "sample",
-            "--categorical-replicate-policy",
+            "--predictor-categorical-replicate-policy",
             "latent",
             "--tree-id",
             "OGCATREP",
@@ -1986,7 +1986,7 @@ def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path
             "count=log_library",
             "--predictors",
             "body_size",
-            "--biological-id",
+            "--response-biological-id",
             "sample",
             "--inference",
             "parametric-bootstrap",
@@ -2237,7 +2237,7 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
             "body_size",
             "--tree-id",
             "OG1",
-            "--biological-id",
+            "--response-biological-id",
             "sample_id",
             "--predictor-biological-id",
             "predictor_sample",
@@ -2642,14 +2642,14 @@ def test_zero_predictor_sampling_covariance_recovers_exact_reconciled_pgls():
     )
 
 
-def test_legacy_reconciled_pgls_rejects_predictor_sampling_covariance():
+def test_cluster_hc1_reconciled_pgls_rejects_predictor_sampling_covariance():
     with pytest.raises(ValueError, match="likelihood-based"):
         fit_reconciled_pgls(
             pd.DataFrame([_response_row(1, 2.0)]),
             _predictor_table(values=(1.0,)),
             ["expression"],
             ["body_size"],
-            model="legacy",
+            model="cluster-hc1",
             predictor_sampling_covariance=pd.DataFrame({"unused": [1]}),
         )
 
@@ -2662,11 +2662,11 @@ def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
         "--predictors",
         "body_size",
     ]
-    with pytest.raises(ValueError, match="require '--gene-tree'"):
+    with pytest.raises(ValueError, match="End-to-end reconciled regression requires"):
         main(common + ["--expression", "expression.tsv"])
-    with pytest.raises(ValueError, match="Precomputed-contrast PGLS requires"):
+    with pytest.raises(ValueError, match="Regression input mode is missing"):
         main(common)
-    with pytest.raises(ValueError, match="cannot be combined with precomputed"):
+    with pytest.raises(ValueError, match="input modes cannot be combined"):
         main(
             common
             + [
@@ -2680,15 +2680,15 @@ def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
                 "traits.tsv",
                 "--tree-id",
                 "OG1",
-                "--infile",
+                "--response-contrasts",
                 "gene-contrasts.tsv",
             ]
         )
-    with pytest.raises(ValueError, match="Typed response/predictor options"):
+    with pytest.raises(ValueError, match="require original tip data or trees"):
         main(
             common
             + [
-                "--infile",
+                "--response-contrasts",
                 "gene-contrasts.tsv",
                 "--predictor-contrasts",
                 "species-contrasts.tsv",
@@ -2726,6 +2726,85 @@ def test_pgls_raw_and_precomputed_modes_reject_mixed_or_incomplete_inputs():
                 "trees.nwk",
                 "--reconciliation-tree",
                 "reconciled.nwk",
+            ]
+        )
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--predictor-factor-coding", "sum"),
+        ("--predictor-categorical-replicate-policy", "latent"),
+        ("--coefficient-penalty", "none"),
+        ("--coefficient-prior-sd", "9"),
+        ("--response-biological-id", "sample_id"),
+        ("--quoted-node-names", "no"),
+    ],
+)
+def test_precomputed_mode_rejects_explicitly_inapplicable_options(option, value):
+    with pytest.raises(ValueError, match="require original tip data or trees"):
+        main(
+            [
+                "regress",
+                "--response-contrasts",
+                "gene-contrasts.tsv",
+                "--predictor-contrasts",
+                "species-contrasts.tsv",
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                option,
+                value,
+            ]
+        )
+
+
+def test_regression_mode_is_selected_only_by_primary_inputs():
+    raw = [
+        "regress",
+        "--gene-tree",
+        "gene.nwk",
+        "--species-tree",
+        "species.nwk",
+        "--expression",
+        "expression.tsv",
+        "--species-traits",
+        "traits.tsv",
+        "--tree-id",
+        "OG1",
+        "--responses",
+        "expression",
+        "--predictors",
+        "body_size",
+    ]
+    with pytest.raises(ValueError, match="--intercept"):
+        main(raw + ["--intercept", "no"])
+
+    precomputed = [
+        "regress",
+        "--response-contrasts",
+        "gene-contrasts.tsv",
+        "--predictor-contrasts",
+        "species-contrasts.tsv",
+        "--responses",
+        "expression",
+        "--predictors",
+        "body_size",
+    ]
+    with pytest.raises(ValueError, match="--evolution-model"):
+        main(precomputed + ["--evolution-model", "lambda"])
+
+    with pytest.raises(ValueError, match="Regression input mode is missing"):
+        main(
+            [
+                "regress",
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                "--unmatched",
+                "ignore",
             ]
         )
 
@@ -2963,7 +3042,7 @@ def test_pgls_raw_auto_parameter_is_rejected_for_parameterless_model():
         )
 
 
-def test_pgls_raw_auto_gene_parameter_rejects_legacy_model_before_io():
+def test_pgls_raw_auto_gene_parameter_rejects_cluster_hc1_before_io():
     with pytest.raises(ValueError, match="likelihood-based"):
         main(
             [
@@ -2984,8 +3063,8 @@ def test_pgls_raw_auto_gene_parameter_rejects_legacy_model_before_io():
                 "OG1",
                 "--gene-evolution-model",
                 "lambda",
-                "--model",
-                "legacy",
+                "--reconciled-model",
+                "cluster-hc1",
             ]
         )
 
@@ -3014,7 +3093,7 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
             "body_size",
             "--tree-id",
             "OG1",
-            "--biological-id",
+            "--response-biological-id",
             "sample_id",
             "--gene-evolution-model",
             "lambda",
@@ -3230,7 +3309,7 @@ def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
                 "body_size",
                 "--tree-id",
                 "OG1",
-                "--biological-id",
+                "--response-biological-id",
                 "sample_id",
                 "--out-prefix",
                 str(prefix),
@@ -3341,11 +3420,11 @@ def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
             "body_size,temperature",
             "--tree-id",
             "OG1",
-            "--within-variance",
+            "--response-within-variance",
             "known-se",
-            "--standard-error-columns",
+            "--response-standard-error-columns",
             "expression_se,expression_alt_se",
-            "--sample-size-columns",
+            "--response-sample-size-columns",
             "expression_n,expression_alt_n",
             "--predictor-within-variance",
             "known-se",

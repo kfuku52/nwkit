@@ -573,12 +573,48 @@ def validate_regression_bundle_target(
 
 def _effective_raw_args(args: Any) -> SimpleNamespace:
     values = vars(args).copy()
+    values.update(
+        {
+            "batch": values.get("response_batch", values.get("batch")),
+            "biological_id": values.get(
+                "response_biological_id", values.get("biological_id")
+            ),
+            "categorical_replicate_policy": values.get(
+                "predictor_categorical_replicate_policy",
+                values.get("categorical_replicate_policy"),
+            ),
+            "factor_coding": values.get(
+                "predictor_factor_coding", values.get("factor_coding")
+            ),
+            "factor_reference": values.get(
+                "predictor_reference", values.get("factor_reference")
+            ),
+            "model": values.get("reconciled_model", values.get("model")),
+            "sample_size_columns": values.get(
+                "response_sample_size_columns", values.get("sample_size_columns")
+            ),
+            "standard_error_columns": values.get(
+                "response_standard_error_columns",
+                values.get("standard_error_columns"),
+            ),
+            "technical_aggregation": values.get(
+                "response_technical_aggregation",
+                values.get("technical_aggregation"),
+            ),
+            "technical_id": values.get(
+                "response_technical_id", values.get("technical_id")
+            ),
+            "within_variance": values.get(
+                "response_within_variance", values.get("within_variance")
+            ),
+        }
+    )
     defaults = {
         "batch": None,
         "biological_id": None,
         "event_source": "lca",
         "event_random_effect": "auto",
-        "event_weighting": "equal",
+        "event_weighting": "event",
         "gene_branch_length": "original",
         "gene_evolution_model": "brownian",
         "gene_evolution_parameter": None,
@@ -1102,10 +1138,10 @@ def _build_gene_contrasts(
             "auto",
         }
     )
-    if auto_parameter and args.model == "legacy":
+    if auto_parameter and args.model == "cluster-hc1":
         raise ValueError(
             "Automatic gene evolution-parameter estimation requires a likelihood-based "
-            "reconciled model, not '--model legacy'."
+            "reconciled model, not '--reconciled-model cluster-hc1'."
         )
     contrast_frames = []
     covariance_frames = []
@@ -3068,11 +3104,13 @@ def _validate_reconciled_response_modes(raw_args, responses, response_specs):
             raise ValueError("Multivariate PGLS currently supports Wald inference.")
         if raw_args.model != "hierarchical":
             raise ValueError(
-                "Reconciled multivariate responses require '--model hierarchical'."
+                "Reconciled multivariate responses require "
+                "'--reconciled-model hierarchical'."
             )
     if non_gaussian and raw_args.model != "hierarchical":
         raise ValueError(
-            "Non-Gaussian reconciled responses require '--model hierarchical'."
+            "Non-Gaussian reconciled responses require "
+            "'--reconciled-model hierarchical'."
         )
     if continuous and raw_args.inference in {
         "likelihood-ratio",
@@ -3402,7 +3440,7 @@ def build_regression_pipeline(
     categorical_predictors = parse_name_list(raw_args.categorical_predictors)
     ordered_predictors = parse_ordered_levels(raw_args.ordered_predictors)
     factor_references = parse_key_values(
-        raw_args.factor_reference, "--factor-reference"
+        raw_args.factor_reference, "--predictor-reference"
     )
     encoded_predictors = encode_predictors(
         raw_predictor_inputs.values_by_trait,

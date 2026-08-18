@@ -2937,10 +2937,56 @@ pregress = subparsers.add_parser(
     "regress",
     help="Fit phylogeny-aware regressions, including Gaussian PGLS and non-Gaussian PGLMMs",
     parents=[p_audit, p_table_output],
+    allow_abbrev=False,
+    usage=(
+        "%(prog)s --tree TREE --data TABLE --responses TRAITS --predictors TRAITS [options]\n"
+        "       %(prog)s (--gene-tree TREE | --gene-tree-ensemble TREES) "
+        "--species-tree TREE --expression TABLE --species-traits TABLE --tree-id ID "
+        "--responses TRAITS --predictors TRAITS [options]\n"
+        "       %(prog)s --response-contrasts TABLE --predictor-contrasts TABLE "
+        "--responses TRAITS --predictors TRAITS [options]"
+    ),
+    description=(
+        "Fit conventional tip-level regressions, end-to-end reconciled gene-tree "
+        "regressions, or models from precomputed reconciled contrasts. The primary "
+        "input paths select exactly one workflow; modeling options never select a "
+        "workflow implicitly."
+    ),
+    epilog=(
+        "Input modes: conventional uses --tree and --data; end-to-end reconciled "
+        "analysis uses a gene tree or ensemble with --species-tree, --expression, "
+        "--species-traits, and --tree-id; precomputed analysis uses "
+        "--response-contrasts and --predictor-contrasts."
+    ),
 )
-pregress.add_argument(
-    "-i",
-    "--infile",
+pregress_common = pregress.add_argument_group("common regression inputs")
+pregress_ordinary = pregress.add_argument_group(
+    "conventional tip-level regression inputs and evolution"
+)
+pregress_raw = pregress.add_argument_group("end-to-end reconciled inputs")
+pregress_precomputed = pregress.add_argument_group("precomputed contrast inputs")
+pregress_tree_parsing = pregress.add_argument_group("shared tree parsing")
+pregress_response = pregress.add_argument_group("response specification")
+pregress_predictor = pregress.add_argument_group("predictor specification")
+pregress_tip_matching = pregress.add_argument_group("tip-table matching")
+pregress_response_replicates = pregress.add_argument_group(
+    "response replicates and known standard errors"
+)
+pregress_predictor_replicates = pregress.add_argument_group(
+    "predictor replicates and known standard errors"
+)
+pregress_reconciled = pregress.add_argument_group("reconciled regression model")
+pregress_inference = pregress.add_argument_group("inference and computation")
+pregress_origin = pregress.add_argument_group(
+    "end-to-end categorical-origin diagnostics"
+)
+pregress_diagnostics = pregress.add_argument_group(
+    "reconciled diagnostics and auxiliary outputs"
+)
+
+pregress_precomputed.add_argument(
+    "--response-contrasts",
+    dest="response_contrasts",
     metavar="PATH",
     default=None,
     type=str,
@@ -2948,9 +2994,8 @@ pregress.add_argument(
     action="store",
     help='Precomputed mode: reconciled gene-contrast TSV from "nwkit contrast". Use "-" for STDIN.',
 )
-pregress.add_argument(
+pregress_precomputed.add_argument(
     "--predictor-contrasts",
-    "--predictor_contrasts",
     dest="predictor_contrasts",
     metavar="PATH",
     default=None,
@@ -2959,16 +3004,16 @@ pregress.add_argument(
     action="store",
     help="Precomputed mode: species-tree contrast TSV from 'nwkit contrast'.",
 )
-pregress.add_argument(
+pregress_common.add_argument(
     "--responses",
     metavar="TRAIT1,TRAIT2,...",
     default=None,
     type=str,
     required=True,
     action="store",
-    help="Comma-separated response columns in --data/--expression or trait names in --infile. One model is fitted per response and applicable tree_id.",
+    help="Comma-separated response columns in --data/--expression or trait names in --response-contrasts. One model is fitted per response and applicable tree_id.",
 )
-pregress.add_argument(
+pregress_common.add_argument(
     "--predictors",
     metavar="TRAIT1,TRAIT2,...",
     default=None,
@@ -2977,36 +3022,32 @@ pregress.add_argument(
     action="store",
     help="Comma-separated predictor columns in --data/--species-traits or trait names in --predictor-contrasts.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--categorical-responses",
-    "--categorical_responses",
     dest="categorical_responses",
     metavar="TRAIT1,TRAIT2,...",
     default=None,
     type=str,
     help="Responses explicitly treated as unordered categories; non-numeric responses are also detected automatically. Two levels use a logit model and three or more use a multinomial-logit model.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--ordered-responses",
-    "--ordered_responses",
     dest="ordered_responses",
     metavar="TRAIT=LOW|MIDDLE|HIGH,...",
     default=None,
     type=str,
     help="Ordered responses and their complete low-to-high level order; a cumulative-logit phylogenetic mixed model is used.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-reference",
-    "--response_reference",
     dest="response_reference",
     metavar="TRAIT=LEVEL,...",
     default=None,
     type=str,
     help="Reference level for each unordered categorical response.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-family",
-    "--response_family",
     dest="response_family",
     metavar="TRAIT=FAMILY,...",
     default=None,
@@ -3023,143 +3064,125 @@ pregress.add_argument(
         "Supported families: {}."
     ).format(", ".join(sorted(RESPONSE_FAMILIES))),
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-offset",
-    "--response_offset",
     dest="response_offset",
     metavar="TRAIT=COLUMN,...",
     default=None,
     type=str,
     help="Log-offset column for count-response traits (for example log library size).",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-trials",
-    "--response_trials",
     dest="response_trials",
     metavar="TRAIT=COLUMN,...",
     default=None,
     type=str,
     help="Positive integer trial-count column required by beta-binomial responses.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-censor-lower",
-    "--response_censor_lower",
     dest="response_censor_lower",
     metavar="TRAIT=COLUMN,...",
     default=None,
     type=str,
     help="Lower censor-bound column for censored-Gaussian responses; missing means no lower bound.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-censor-upper",
-    "--response_censor_upper",
     dest="response_censor_upper",
     metavar="TRAIT=COLUMN,...",
     default=None,
     type=str,
     help="Upper censor-bound column for censored-Gaussian responses; missing means no upper bound.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-dispersion",
-    "--response_dispersion",
     dest="response_dispersion",
     metavar="TRAIT=FLOAT,...",
     default=None,
     type=str,
     help="Fix positive dispersion/shape/precision/SD parameters; omitted values are estimated.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--response-zero-probability",
-    "--response_zero_probability",
     dest="response_zero_probability",
     metavar="TRAIT=FLOAT,...",
     default=None,
     type=str,
     help="Fix structural-zero probability in (0,1); omitted zero components are estimated.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--coefficient-penalty",
-    "--coefficient_penalty",
     dest="coefficient_penalty",
     metavar="none|gaussian|student-t",
-    default="student-t",
+    default=None,
     choices=["none", "gaussian", "student-t"],
-    help="default=%(default)s: Weak coefficient regularization for non-Gaussian models to stabilize sparse or separated data.",
+    help="default=student-t: Weak coefficient regularization for non-Gaussian models to stabilize sparse or separated data.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--coefficient-prior-sd",
-    "--coefficient_prior_sd",
     dest="coefficient_prior_sd",
     metavar="FLOAT",
-    default=2.5,
+    default=None,
     type=finite_float,
-    help="default=%(default)s: Positive scale for Gaussian or Student-t coefficient regularization.",
+    help="default=2.5: Positive scale for Gaussian or Student-t coefficient regularization.",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--multivariate-responses",
-    "--multivariate_responses",
     dest="multivariate_responses",
     metavar="yes|no",
     default="no",
     type=strtobool,
     help="default=%(default)s: Jointly fit continuous Gaussian responses and estimate their evolutionary covariance (tree-structured fits use sparse calculations and warn above 5,000 tips or 20,000 tip-trait cells; dense fallback supports 2,000 observed cells).",
 )
-pregress.add_argument(
+pregress_response.add_argument(
     "--allow-missing-responses",
-    "--allow_missing_responses",
     dest="allow_missing_responses",
     metavar="yes|no",
     default="no",
     type=strtobool,
     help="default=%(default)s: Retain partially observed tips in a multivariate Gaussian likelihood.",
 )
-pregress.add_argument(
+pregress_predictor.add_argument(
     "--categorical-predictors",
-    "--categorical_predictors",
     dest="categorical_predictors",
     metavar="TRAIT1,TRAIT2,...",
     default=None,
     type=str,
     help="Predictors explicitly treated as unordered factors; non-numeric predictors are also detected automatically.",
 )
-pregress.add_argument(
+pregress_predictor.add_argument(
     "--ordered-predictors",
-    "--ordered_predictors",
     dest="ordered_predictors",
     metavar="TRAIT=LOW|MIDDLE|HIGH,...",
     default=None,
     type=str,
     help="Ordered predictors and their complete low-to-high level order; polynomial factor contrasts are used.",
 )
-pregress.add_argument(
-    "--factor-reference",
-    "--factor_reference",
-    dest="factor_reference",
+pregress_predictor.add_argument(
+    "--predictor-reference",
+    dest="predictor_reference",
     metavar="TRAIT=LEVEL,...",
     default=None,
     type=str,
     help="Reference level for each unordered categorical predictor.",
 )
-pregress.add_argument(
-    "--factor-coding",
-    "--factor_coding",
-    dest="factor_coding",
+pregress_predictor.add_argument(
+    "--predictor-factor-coding",
+    dest="predictor_factor_coding",
     metavar="treatment|sum",
-    default="treatment",
+    default=None,
     choices=["treatment", "sum"],
-    help="default=%(default)s: Coding used for unordered categorical predictors.",
+    help="default=treatment: Coding used for unordered categorical predictors.",
 )
-pregress.add_argument(
-    "--categorical-replicate-policy",
-    "--categorical_replicate_policy",
-    dest="categorical_replicate_policy",
+pregress_predictor.add_argument(
+    "--predictor-categorical-replicate-policy",
+    dest="predictor_categorical_replicate_policy",
     metavar="error|latent",
-    default="error",
+    default=None,
     choices=["error", "latent"],
-    help="default=%(default)s: Require one state per tip or propagate the empirical category mean with sample-size-scaled moment uncertainty.",
-)
-pregress_ordinary = pregress.add_argument_group(
-    "conventional tip-level regression mode"
+    help="default=error: Require one predictor state per tip or propagate the empirical category mean with sample-size-scaled moment uncertainty.",
 )
 pregress_ordinary.add_argument(
     "--tree",
@@ -3177,7 +3200,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--tree-format",
-    "--tree_format",
     dest="tree_format",
     metavar="auto|auto-strict|INT",
     default=None,
@@ -3186,7 +3208,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--branch-length",
-    "--branch_length",
     dest="branch_length",
     metavar="original|unit",
     default=None,
@@ -3196,7 +3217,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--evolution-model",
-    "--evolution_model",
     dest="evolution_model",
     metavar="MODEL",
     default=None,
@@ -3206,7 +3226,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--evolution-parameter",
-    "--evolution_parameter",
     dest="evolution_parameter",
     metavar="FLOAT",
     default=None,
@@ -3215,7 +3234,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--evolution-covariance",
-    "--evolution_covariance",
     dest="evolution_covariance",
     metavar="PATH",
     default=None,
@@ -3224,7 +3242,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--compare-evolution-models",
-    "--compare_evolution_models",
     dest="compare_evolution_models",
     metavar="MODEL1,MODEL2,...",
     default=None,
@@ -3233,7 +3250,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--model-comparison-out",
-    "--model_comparison_out",
     dest="model_comparison_out",
     metavar="PATH",
     default=None,
@@ -3248,18 +3264,16 @@ pregress_ordinary.add_argument(
     help="default=yes: Include an intercept in conventional tip-level regression.",
 )
 pregress_ordinary.add_argument(
-    "--sampling-covariance-out",
-    "--sampling_covariance_out",
-    dest="sampling_covariance_out",
+    "--response-sampling-covariance-out",
+    dest="response_sampling_covariance_out",
     metavar="PATH",
     default=None,
     type=str,
     help="Optional long-form species-mean response sampling covariance for replicate-aware conventional regression.",
 )
 pregress_ordinary.add_argument(
-    "--tip-summary-out",
-    "--tip_summary_out",
-    dest="tip_summary_out",
+    "--response-tip-summary-out",
+    dest="response_tip_summary_out",
     metavar="PATH",
     default=None,
     type=str,
@@ -3267,7 +3281,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--predictor-evolution-model",
-    "--predictor_evolution_model",
     dest="predictor_evolution_model",
     metavar="MODEL",
     default=None,
@@ -3277,7 +3290,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--predictor-evolution-parameter",
-    "--predictor_evolution_parameter",
     dest="predictor_evolution_parameter",
     metavar="FLOAT",
     default=None,
@@ -3286,7 +3298,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--predictor-branch-length",
-    "--predictor_branch_length",
     dest="predictor_branch_length",
     metavar="original|unit",
     default=None,
@@ -3296,7 +3307,6 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--predictor-sampling-covariance-out",
-    "--predictor_sampling_covariance_out",
     dest="predictor_sampling_covariance_out",
     metavar="PATH",
     default=None,
@@ -3305,26 +3315,22 @@ pregress_ordinary.add_argument(
 )
 pregress_ordinary.add_argument(
     "--predictor-tip-summary-out",
-    "--predictor_tip_summary_out",
     dest="predictor_tip_summary_out",
     metavar="PATH",
     default=None,
     type=str,
     help="Optional per-species predictor replicate and uncertainty audit.",
 )
-pregress_raw = pregress.add_argument_group("end-to-end raw-input mode")
 pregress_raw.add_argument(
     "--gene-tree",
-    "--gene_tree",
     dest="gene_tree",
     metavar="PATH",
     default=None,
     type=str,
-    help="Dated rooted gene tree used for expression contrasts. Its presence selects end-to-end raw-input mode.",
+    help="Dated rooted gene tree used for expression contrasts. Its presence selects the end-to-end reconciled workflow.",
 )
 pregress_raw.add_argument(
     "--gene-tree-ensemble",
-    "--gene_tree_ensemble",
     dest="gene_tree_ensemble",
     metavar="PATH",
     default=None,
@@ -3333,7 +3339,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--reconciliation-tree",
-    "--reconciliation_tree",
     dest="reconciliation_tree",
     metavar="PATH",
     default=None,
@@ -3342,7 +3347,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-tree",
-    "--species_tree",
     dest="species_tree",
     metavar="PATH",
     default=None,
@@ -3358,7 +3362,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-traits",
-    "--species_traits",
     dest="species_traits",
     metavar="PATH",
     default=None,
@@ -3367,7 +3370,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--tree-id",
-    "--tree_id",
     dest="tree_id",
     metavar="TEXT",
     default=None,
@@ -3376,7 +3378,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--out-prefix",
-    "--out_prefix",
     dest="out_prefix",
     metavar="PREFIX",
     default=None,
@@ -3385,7 +3386,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--gene-tree-format",
-    "--gene_tree_format",
     dest="gene_tree_format",
     metavar="auto|auto-strict|INT",
     default=None,
@@ -3394,7 +3394,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--reconciliation-tree-format",
-    "--reconciliation_tree_format",
     dest="reconciliation_tree_format",
     metavar="auto|auto-strict|INT",
     default=None,
@@ -3403,25 +3402,22 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-tree-format",
-    "--species_tree_format",
     dest="species_tree_format",
     metavar="auto|auto-strict|INT",
     default=None,
     type=str,
     help="default=auto: ETE tree format for --species-tree.",
 )
-pregress_raw.add_argument(
+pregress_tree_parsing.add_argument(
     "--quoted-node-names",
-    "--quoted_node_names",
     dest="quoted_node_names",
     metavar="yes|no",
     default=None,
     type=strtobool,
-    help="default=yes: Whether node names are quoted in raw-input trees.",
+    help="default=yes: Whether node names are quoted in conventional and end-to-end input trees.",
 )
 pregress_raw.add_argument(
     "--event-source",
-    "--event_source",
     dest="event_source",
     metavar="lca|nhx|species-overlap",
     default=None,
@@ -3431,7 +3427,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-parser",
-    "--species_parser",
     dest="species_parser",
     metavar="PRESET",
     default=None,
@@ -3441,7 +3436,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-regex",
-    "--species_regex",
     dest="species_regex",
     metavar="REGEX",
     default=None,
@@ -3450,15 +3444,13 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-map-tsv",
-    "--species_map_tsv",
     dest="species_map_tsv",
     metavar="PATH",
     default=None,
     type=str,
     help='Optional mapping TSV with "leaf_name" and "species_label" columns.',
 )
-pregress_tip_tables = pregress.add_argument_group("tip-table matching options")
-pregress_tip_tables.add_argument(
+pregress_tip_matching.add_argument(
     "--unmatched",
     metavar="error|warn|ignore",
     default=None,
@@ -3466,24 +3458,16 @@ pregress_tip_tables.add_argument(
     choices=["error", "warn", "ignore"],
     help="default=error: Policy for rows and tree tips that do not match in raw or conventional input.",
 )
-pregress_tip_tables.add_argument(
+pregress_tip_matching.add_argument(
     "--missing-values",
-    "--missing_values",
     dest="missing_values",
     metavar="CSV",
     default=None,
     type=str,
     help="default=the NWKIT missing-value set: Values treated as missing in raw or conventional trait tables.",
 )
-pregress_replicates = pregress.add_argument_group(
-    "response replicate and known-SE options"
-)
-pregress_predictor_replicates = pregress.add_argument_group(
-    "predictor replicate and known-SE options"
-)
 pregress_raw.add_argument(
     "--gene-branch-length",
-    "--gene_branch_length",
     dest="gene_branch_length",
     metavar="original|unit",
     default=None,
@@ -3493,7 +3477,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-branch-length",
-    "--species_branch_length",
     dest="species_branch_length",
     metavar="original|unit",
     default=None,
@@ -3503,7 +3486,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--gene-evolution-model",
-    "--gene_evolution_model",
     dest="gene_evolution_model",
     metavar="MODEL",
     default=None,
@@ -3513,7 +3495,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--gene-evolution-parameter",
-    "--gene_evolution_parameter",
     dest="gene_evolution_parameter",
     metavar="auto|FLOAT",
     default=None,
@@ -3522,7 +3503,6 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-evolution-model",
-    "--species_evolution_model",
     dest="species_evolution_model",
     metavar="MODEL",
     default=None,
@@ -3532,71 +3512,65 @@ pregress_raw.add_argument(
 )
 pregress_raw.add_argument(
     "--species-evolution-parameter",
-    "--species_evolution_parameter",
     dest="species_evolution_parameter",
     metavar="auto|FLOAT",
     default=None,
     type=auto_or_finite_float,
     help="default=auto: Estimate each predictor's shape parameter by marginal ML, or fix it to FLOAT.",
 )
-pregress_replicates.add_argument(
-    "--biological-id",
-    "--biological_id",
-    dest="biological_id",
+pregress_response_replicates.add_argument(
+    "--response-biological-id",
+    dest="response_biological_id",
     metavar="COLUMN",
     default=None,
     type=str,
     help="Response-table column identifying independent biological observations in --data or --expression.",
 )
-pregress_replicates.add_argument(
-    "--technical-id",
-    "--technical_id",
-    dest="technical_id",
+pregress_response_replicates.add_argument(
+    "--response-technical-id",
+    dest="response_technical_id",
     metavar="COLUMN",
     default=None,
     type=str,
     help="Optional technical-replicate identifier nested within a biological observation.",
 )
-pregress_replicates.add_argument(
-    "--technical-aggregation",
-    "--technical_aggregation",
-    dest="technical_aggregation",
+pregress_response_replicates.add_argument(
+    "--response-technical-aggregation",
+    dest="response_technical_aggregation",
     metavar="error|mean",
     default=None,
     type=str,
     choices=["error", "mean"],
     help="default=error: Reject or explicitly average technical replicates.",
 )
-pregress_replicates.add_argument(
-    "--batch",
+pregress_response_replicates.add_argument(
+    "--response-batch",
+    dest="response_batch",
     metavar="COLUMN",
     default=None,
     type=str,
     help="Optional categorical response-table batch column fitted as a fixed effect.",
 )
-pregress_replicates.add_argument(
-    "--within-variance",
-    "--within_variance",
-    dest="within_variance",
+pregress_response_replicates.add_argument(
+    "--response-within-variance",
+    dest="response_within_variance",
     metavar="pooled|leaf|known-se",
     default=None,
     type=str,
     choices=["pooled", "leaf", "known-se"],
     help="default=pooled: Biological replicate variance model or known-SE input.",
 )
-pregress_replicates.add_argument(
-    "--standard-error-columns",
-    "--standard_error_columns",
-    dest="standard_error_columns",
+pregress_response_replicates.add_argument(
+    "--response-standard-error-columns",
+    dest="response_standard_error_columns",
     metavar="COLUMN1,COLUMN2,...",
     default=None,
     type=str,
     help="Known-SE columns corresponding to --responses.",
 )
-pregress_replicates.add_argument(
-    "--sample-size-columns",
-    "--sample_size_columns",
-    dest="sample_size_columns",
+pregress_response_replicates.add_argument(
+    "--response-sample-size-columns",
+    dest="response_sample_size_columns",
     metavar="COLUMN1,COLUMN2,...",
     default=None,
     type=str,
@@ -3604,7 +3578,6 @@ pregress_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-biological-id",
-    "--predictor_biological_id",
     dest="predictor_biological_id",
     metavar="COLUMN",
     default=None,
@@ -3613,7 +3586,6 @@ pregress_predictor_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-technical-id",
-    "--predictor_technical_id",
     dest="predictor_technical_id",
     metavar="COLUMN",
     default=None,
@@ -3622,7 +3594,6 @@ pregress_predictor_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-technical-aggregation",
-    "--predictor_technical_aggregation",
     dest="predictor_technical_aggregation",
     metavar="error|mean",
     default=None,
@@ -3632,7 +3603,6 @@ pregress_predictor_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-batch",
-    "--predictor_batch",
     dest="predictor_batch",
     metavar="COLUMN",
     default=None,
@@ -3641,7 +3611,6 @@ pregress_predictor_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-within-variance",
-    "--predictor_within_variance",
     dest="predictor_within_variance",
     metavar="pooled|leaf|known-se",
     default=None,
@@ -3651,7 +3620,6 @@ pregress_predictor_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-standard-error-columns",
-    "--predictor_standard_error_columns",
     dest="predictor_standard_error_columns",
     metavar="COLUMN1,COLUMN2,...",
     default=None,
@@ -3660,28 +3628,25 @@ pregress_predictor_replicates.add_argument(
 )
 pregress_predictor_replicates.add_argument(
     "--predictor-sample-size-columns",
-    "--predictor_sample_size_columns",
     dest="predictor_sample_size_columns",
     metavar="COLUMN1,COLUMN2,...",
     default=None,
     type=str,
     help="Optional known-SE sample-size columns corresponding to --predictors.",
 )
-pregress.add_argument(
+pregress_reconciled.add_argument(
     "--event-weighting",
-    "--event_weighting",
     dest="event_weighting",
-    metavar="equal|observation",
+    metavar="event|contrast",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["equal", "observation"],
-    help="default=equal: Give each species event equal total weight, or count each gene contrast equally. Equal prevents copy-rich events from dominating.",
+    choices=["event", "contrast"],
+    help="default=event: Give each species event equal total weight, or give each gene contrast equal weight. Event weighting prevents copy-rich events from dominating.",
 )
-pregress.add_argument(
+pregress_reconciled.add_argument(
     "--speciation-coverage",
-    "--speciation_coverage",
     dest="speciation_coverage",
     metavar="complete|any",
     default=None,
@@ -3691,9 +3656,8 @@ pregress.add_argument(
     choices=["complete", "any"],
     help="default=complete: Require complete daughter-clade sampling or include explicitly reported partial coverage.",
 )
-pregress.add_argument(
+pregress_inference.add_argument(
     "--confidence-level",
-    "--confidence_level",
     dest="confidence_level",
     metavar="FLOAT",
     default=0.95,
@@ -3702,30 +3666,29 @@ pregress.add_argument(
     action="store",
     help="default=%(default)s: Two-sided confidence-interval level strictly between zero and one.",
 )
-pregress.add_argument(
-    "--model",
-    metavar="hierarchical|replicate-reml|legacy",
+pregress_reconciled.add_argument(
+    "--reconciled-model",
+    dest="reconciled_model",
+    metavar="hierarchical|replicate-reml|cluster-hc1",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["hierarchical", "replicate-reml", "legacy"],
+    choices=["hierarchical", "replicate-reml", "cluster-hc1"],
     help="default=hierarchical: Fit the replicate-aware hierarchical model, omit random effects, or run the earlier cluster-HC1 estimator for sensitivity analysis.",
 )
-pregress.add_argument(
+pregress_precomputed.add_argument(
     "--response-sampling-covariance",
-    "--response_sampling_covariance",
     dest="response_sampling_covariance",
     metavar="PATH",
     default=None,
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Long-form response-contrast sampling covariance from replicate-aware 'nwkit contrast'. A zero matrix is used when the response has no sampling-variance columns.",
+    help="Long-form response-contrast sampling covariance from replicate-aware 'nwkit contrast'. A zero matrix is used when the response has no sampling-variance columns.",
 )
-pregress.add_argument(
+pregress_precomputed.add_argument(
     "--predictor-sampling-covariance",
-    "--predictor_sampling_covariance",
     dest="predictor_sampling_covariance",
     metavar="PATH",
     default=None,
@@ -3734,7 +3697,7 @@ pregress.add_argument(
     action="store",
     help="Precomputed mode: long-form predictor-contrast sampling covariance from replicate-aware 'nwkit contrast'.",
 )
-pregress.add_argument(
+pregress_inference.add_argument(
     "--inference",
     metavar="wald|parametric-bootstrap|likelihood-ratio|profile-likelihood",
     default="wald",
@@ -3749,20 +3712,18 @@ pregress.add_argument(
     ],
     help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
 )
-pregress.add_argument(
+pregress_inference.add_argument(
     "--allow-large-dense",
-    "--allow_large_dense",
     dest="allow_large_dense",
     metavar="yes|no",
     default=False,
     type=strtobool,
     required=False,
     action="store",
-    help="default=%(default)s: Explicitly permit large non-Gaussian fits that cannot use a sparse covariance representation; nwkit reports an estimated dense working-memory requirement before attempting them.",
+    help="default=%(default)s: Explicitly permit large Gaussian or non-Gaussian fits that require a dense covariance representation; nwkit reports an estimated dense working-memory requirement before attempting them.",
 )
-pregress.add_argument(
+pregress_inference.add_argument(
     "--bootstrap-replicates",
-    "--bootstrap_replicates",
     dest="bootstrap_replicates",
     metavar="INT",
     default=1000,
@@ -3771,7 +3732,7 @@ pregress.add_argument(
     action="store",
     help="default=%(default)s: Number of simulations for parametric-bootstrap inference.",
 )
-pregress.add_argument(
+pregress_inference.add_argument(
     "--seed",
     metavar="INT",
     default=1,
@@ -3780,7 +3741,7 @@ pregress.add_argument(
     action="store",
     help="default=%(default)s: Non-negative parametric-bootstrap random seed.",
 )
-pregress.add_argument(
+pregress_inference.add_argument(
     "--reml",
     metavar="yes|no",
     default="yes",
@@ -3789,9 +3750,8 @@ pregress.add_argument(
     action="store",
     help="default=%(default)s: Use restricted maximum likelihood for Gaussian variance components; predictor-dependent errors-in-variables covariance is always fitted by ML.",
 )
-pregress.add_argument(
+pregress_reconciled.add_argument(
     "--event-random-effect",
-    "--event_random_effect",
     dest="event_random_effect",
     metavar="auto|yes|no",
     default=None,
@@ -3801,9 +3761,8 @@ pregress.add_argument(
     choices=["auto", "yes", "no"],
     help="default=auto: Include a shared species-event response when identifiable.",
 )
-pregress.add_argument(
+pregress_reconciled.add_argument(
     "--lineage-random-slope",
-    "--lineage_random_slope",
     dest="lineage_random_slope",
     metavar="auto|yes|no",
     default=None,
@@ -3813,9 +3772,8 @@ pregress.add_argument(
     choices=["auto", "yes", "no"],
     help="default=auto: Include partially pooled lineage-specific trait slopes when identifiable.",
 )
-pregress.add_argument(
+pregress_reconciled.add_argument(
     "--lineage-inference",
-    "--lineage_inference",
     dest="lineage_inference",
     metavar="none|likelihood-ratio|parametric-bootstrap",
     default=None,
@@ -3825,9 +3783,8 @@ pregress.add_argument(
     choices=["none", "likelihood-ratio", "parametric-bootstrap"],
     help="default=none: Test lineage-slope heterogeneity and average-plus-lineage joint effects; bootstrap gives calibrated joint-null P-values.",
 )
-pregress.add_argument(
+pregress_reconciled.add_argument(
     "--lineage-leave-one-out",
-    "--lineage_leave_one_out",
     dest="lineage_leave_one_out",
     metavar="yes|no",
     default=None,
@@ -3836,9 +3793,8 @@ pregress.add_argument(
     action="store",
     help="default=no: Refit after removing each reconciled gene lineage and report coefficient sensitivity.",
 )
-pregress.add_argument(
+pregress_origin.add_argument(
     "--categorical-origin-diagnostics",
-    "--categorical_origin_diagnostics",
     dest="categorical_origin_diagnostics",
     metavar="none|stochastic-map",
     default=None,
@@ -3848,9 +3804,8 @@ pregress.add_argument(
     choices=["none", "stochastic-map"],
     help="default=none: Estimate categorical predictor gains/losses on species-tree branches with an ER Mk stochastic map.",
 )
-pregress.add_argument(
+pregress_origin.add_argument(
     "--origin-map-replicates",
-    "--origin_map_replicates",
     dest="origin_map_replicates",
     metavar="INT",
     default=None,
@@ -3859,9 +3814,8 @@ pregress.add_argument(
     action="store",
     help="default=200: Number of stochastic maps for categorical trait-origin diagnostics.",
 )
-pregress.add_argument(
+pregress_origin.add_argument(
     "--origin-map-threads",
-    "--origin_map_threads",
     dest="origin_map_threads",
     metavar="INT",
     default=None,
@@ -3870,9 +3824,8 @@ pregress.add_argument(
     action="store",
     help="default=1: Parallel workers for categorical stochastic maps.",
 )
-pregress.add_argument(
+pregress_origin.add_argument(
     "--origin-min-posterior",
-    "--origin_min_posterior",
     dest="origin_min_posterior",
     metavar="FLOAT",
     default=None,
@@ -3881,9 +3834,8 @@ pregress.add_argument(
     action="store",
     help="default=0.5: Minimum transition posterior frequency used for origin leave-one-out.",
 )
-pregress.add_argument(
+pregress_origin.add_argument(
     "--origin-leave-one-out",
-    "--origin_leave_one_out",
     dest="origin_leave_one_out",
     metavar="yes|no",
     default=None,
@@ -3892,9 +3844,8 @@ pregress.add_argument(
     action="store",
     help="default=no: Refit after omitting events descended from each credible mapped trait origin.",
 )
-pregress.add_argument(
+pregress_diagnostics.add_argument(
     "--random-effects-out",
-    "--random_effects_out",
     dest="random_effects_out",
     metavar="PATH",
     default=None,
@@ -3903,9 +3854,8 @@ pregress.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV of species-event modes plus lineage deviations, total slopes, intervals, and reliability.",
 )
-pregress.add_argument(
+pregress_diagnostics.add_argument(
     "--sensitivity-out",
-    "--sensitivity_out",
     dest="sensitivity_out",
     metavar="PATH",
     default=None,
@@ -3914,9 +3864,8 @@ pregress.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV of lineage/origin leave-one-out diagnostics.",
 )
-pregress.add_argument(
+pregress_origin.add_argument(
     "--trait-origins-out",
-    "--trait_origins_out",
     dest="trait_origins_out",
     metavar="PATH",
     default=None,

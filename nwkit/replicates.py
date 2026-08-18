@@ -129,7 +129,8 @@ def estimate_categorical_traits(
             if policy == "error" and len(observed_levels) != 1:
                 raise ValueError(
                     "Biological replicates disagree for categorical trait '{}' at "
-                    "tree tip '{}'; use '--categorical-replicate-policy latent'.".format(
+                    "tree tip '{}'; use "
+                    "'--predictor-categorical-replicate-policy latent'.".format(
                         trait, leaf_name
                     )
                 )

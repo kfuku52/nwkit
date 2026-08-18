@@ -36,6 +36,74 @@ def test_regress_replaces_pgls_without_compatibility_alias(capsys):
     assert "invalid choice: 'pgls'" in capsys.readouterr().err
 
 
+def test_regress_help_is_grouped_by_workflow_and_role(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(["regress", "--help"])
+
+    assert exc_info.value.code == 0
+    help_text = capsys.readouterr().out
+    for heading in [
+        "common regression inputs:",
+        "conventional tip-level regression inputs and evolution:",
+        "end-to-end reconciled inputs:",
+        "precomputed contrast inputs:",
+        "response specification:",
+        "predictor specification:",
+        "reconciled regression model:",
+        "inference and computation:",
+    ]:
+        assert heading in help_text
+    assert "--response-contrasts" in help_text
+    assert "--reconciled-model" in help_text
+
+
+@pytest.mark.parametrize(
+    ("option", "value"),
+    [
+        ("--infile", "response.tsv"),
+        ("--model", "hierarchical"),
+        ("--factor-reference", "habitat=water"),
+        ("--factor-coding", "sum"),
+        ("--categorical-replicate-policy", "latent"),
+        ("--sampling-covariance-out", "response-covariance.tsv"),
+        ("--tip-summary-out", "response-summary.tsv"),
+        ("--biological-id", "sample_id"),
+        ("--technical-id", "technical_id"),
+        ("--technical-aggregation", "mean"),
+        ("--batch", "batch"),
+        ("--within-variance", "pooled"),
+        ("--standard-error-columns", "response_se"),
+        ("--sample-size-columns", "response_n"),
+    ],
+)
+def test_regress_rejects_replaced_option_names(option, value, capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        parser.parse_args(
+            [
+                "regress",
+                "--responses",
+                "expression",
+                "--predictors",
+                "body_size",
+                option,
+                value,
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    assert "unrecognized arguments" in capsys.readouterr().err
+
+
+def test_regress_has_no_hidden_underscore_option_aliases():
+    regress_parser = _subcommand_parser("regress")
+    assert not [
+        option
+        for action in regress_parser._actions
+        for option in action.option_strings
+        if option.startswith("--") and "_" in option
+    ]
+
+
 @pytest.mark.parametrize(
     "command",
     ["annotate", "asr", "draw", "monophyly", "sample", "skim"],

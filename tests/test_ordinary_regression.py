@@ -572,13 +572,13 @@ def test_conventional_pgls_cli_propagates_biological_replicate_uncertainty(
             "expression",
             "--predictors",
             "body_size",
-            "--biological-id",
+            "--response-biological-id",
             "sample_id",
             "--outfile",
             str(output_path),
-            "--sampling-covariance-out",
+            "--response-sampling-covariance-out",
             str(covariance_path),
-            "--tip-summary-out",
+            "--response-tip-summary-out",
             str(summary_path),
         ]
     )
@@ -625,9 +625,9 @@ def test_conventional_pgls_cli_supports_batch_adjusted_response_replicates(tmp_p
             "expression",
             "--predictors",
             "body_size",
-            "--biological-id",
+            "--response-biological-id",
             "sample_id",
-            "--batch",
+            "--response-batch",
             "batch",
             "--outfile",
             str(output_path),
@@ -686,13 +686,13 @@ def test_conventional_pgls_cli_supports_known_standard_errors(tmp_path):
             "expression",
             "--predictors",
             "body_size",
-            "--within-variance",
+            "--response-within-variance",
             "known-se",
-            "--sample-size-columns",
+            "--response-sample-size-columns",
             "expression_n",
             "--outfile",
             str(output_path),
-            "--tip-summary-out",
+            "--response-tip-summary-out",
             str(summary_path),
         ]
     )
@@ -729,17 +729,17 @@ def test_conventional_pgls_supports_response_and_predictor_known_se(tmp_path):
             "expression",
             "--predictors",
             "body_size",
-            "--within-variance",
+            "--response-within-variance",
             "known-se",
             "--predictor-within-variance",
             "known-se",
             "--outfile",
             str(output_path),
-            "--sampling-covariance-out",
+            "--response-sampling-covariance-out",
             str(response_covariance),
             "--predictor-sampling-covariance-out",
             str(predictor_covariance),
-            "--tip-summary-out",
+            "--response-tip-summary-out",
             str(response_summary),
             "--predictor-tip-summary-out",
             str(predictor_summary),
@@ -805,7 +805,7 @@ def test_conventional_pgls_supports_unpaired_replicate_rows_for_both_roles(tmp_p
             "expression",
             "--predictors",
             "body_size",
-            "--biological-id",
+            "--response-biological-id",
             "response_sample",
             "--predictor-biological-id",
             "predictor_sample",
@@ -862,7 +862,7 @@ def test_conventional_pgls_supports_known_se_and_unpaired_raw_predictor_rows(
             "expression",
             "--predictors",
             "body_size",
-            "--within-variance",
+            "--response-within-variance",
             "known-se",
             "--predictor-biological-id",
             "predictor_sample",
@@ -991,7 +991,7 @@ def test_conventional_pgls_rejects_predictors_that_vary_among_replicates(tmp_pat
                 "expression",
                 "--predictors",
                 "body_size",
-                "--biological-id",
+                "--response-biological-id",
                 "sample_id",
             ]
         )
@@ -1115,7 +1115,7 @@ def test_conventional_regression_mode_rejects_incomplete_mixed_and_invalid_optio
     common = ["regress", "--responses", "expression", "--predictors", "body_size"]
     with pytest.raises(ValueError, match="Conventional tip-level regression requires"):
         main(common + ["--tree", "species.nwk"])
-    with pytest.raises(ValueError, match="cannot use reconciled/precomputed"):
+    with pytest.raises(ValueError, match="input modes cannot be combined"):
         main(
             common
             + [
@@ -1148,7 +1148,7 @@ def test_conventional_regression_mode_rejects_incomplete_mixed_and_invalid_optio
                 "--data",
                 "data.tsv",
                 "--event-weighting",
-                "equal",
+                "event",
             ]
         )
     with pytest.raises(ValueError, match="does not take a parameter"):
@@ -1343,13 +1343,13 @@ def test_conventional_categorical_response_and_predictor_replicates(tmp_path):
             "state",
             "--categorical-predictors",
             "habitat",
-            "--biological-id",
+            "--response-biological-id",
             "sample",
             "--predictor-biological-id",
             "sample",
-            "--categorical-replicate-policy",
+            "--predictor-categorical-replicate-policy",
             "latent",
-            "--tip-summary-out",
+            "--response-tip-summary-out",
             str(response_summary_path),
             "--predictor-tip-summary-out",
             str(predictor_summary_path),
@@ -2222,7 +2222,7 @@ def test_multivariate_cli_combines_biological_replicates_with_partial_missingnes
             "first,second",
             "--predictors",
             "body_size",
-            "--biological-id",
+            "--response-biological-id",
             "sample",
             "--multivariate-responses",
             "yes",
@@ -2281,7 +2281,7 @@ def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path
             "state",
             "--predictors",
             "body_size",
-            "--biological-id",
+            "--response-biological-id",
             "sample",
             "--response-family",
             "state=censored-gaussian",

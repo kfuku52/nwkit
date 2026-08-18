@@ -102,6 +102,17 @@ minimal worked example, in
 
 ## Reconciled speciation contrasts and phylogenetic regression
 
+`nwkit regress` selects exactly one workflow from its primary inputs:
+
+| Workflow | Required primary inputs |
+|---|---|
+| Conventional tip-level | `--tree`, `--data` |
+| End-to-end reconciled | exactly one of `--gene-tree` or `--gene-tree-ensemble`, plus `--species-tree`, `--expression`, `--species-traits`, `--tree-id` |
+| Precomputed reconciled contrasts | `--response-contrasts`, `--predictor-contrasts` |
+
+Modeling options do not implicitly select a workflow, and primary inputs from
+different workflows are rejected.
+
 Reconciled speciation contrasts (RSC) relate a gene-expression change on a
 gene-tree speciation node to the organismal-trait change at the corresponding
 species-tree split. An ancient duplication may place the same species event in
@@ -119,11 +130,11 @@ nwkit regress \
   --species-traits species_traits.tsv \
   --responses expression \
   --predictors body_size \
-  --biological-id sample_id \
+  --response-biological-id sample_id \
   --predictor-biological-id sample_id \
   --tree-id OG000001 \
-  --model hierarchical \
-  --event-weighting equal \
+  --reconciled-model hierarchical \
+  --event-weighting event \
   --out-prefix OG000001
 ```
 

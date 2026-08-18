@@ -4,6 +4,28 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.38.0] - 2026-08-18
+
+### Changed
+
+- Reorganized `nwkit regress` help around its three input workflows and the
+  response, predictor, reconciled-model, inference, and diagnostic roles. The
+  command now selects a workflow only from primary input paths and reports
+  mixed or incomplete inputs in that workflow's terms.
+- Replaced ambiguous regression options with role-specific names, including
+  `--response-contrasts`, `--reconciled-model`, `--predictor-reference`,
+  response-prefixed replicate and audit options, and the `event|contrast`
+  event-weighting choices. Removed the replaced spellings and hidden
+  underscore aliases from `regress`.
+- Renamed the earlier reconciled cluster-robust estimator from `legacy` to
+  `cluster-hc1` in the CLI, Python API, and output metadata.
+
+### Fixed
+
+- Rejected every explicitly supplied precomputed-mode option that requires
+  original tip observations or trees instead of silently ignoring factor
+  coding, categorical-replicate, or coefficient-regularization settings.
+
 ## [0.37.0] - 2026-08-18
 
 ### Changed

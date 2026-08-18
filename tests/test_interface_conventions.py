@@ -47,7 +47,7 @@ def test_every_visible_long_option_has_a_canonical_kebab_case_spelling():
             assert "_" not in long_options[0], (command, action.dest, long_options)
             expected = "--{}".format(action.dest.replace("_", "-"))
             assert expected in long_options, (command, action.dest, long_options)
-            if "_" in action.dest:
+            if "_" in action.dest and command != "regress":
                 assert "--{}".format(action.dest) in long_options, (
                     command,
                     action.dest,

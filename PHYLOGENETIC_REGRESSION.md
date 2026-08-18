@@ -3,6 +3,22 @@
 `nwkit regress` supports conventional tip-level phylogenetic regression,
 including Gaussian PGLS and non-Gaussian PGLMMs, as well as reconciled
 gene-tree analyses. The input mode is selected explicitly by its input paths.
+Modeling and output options never select a mode by themselves, and primary
+inputs from different modes cannot be combined.
+
+| Workflow | Required primary inputs | Options available only in this workflow |
+|---|---|---|
+| Conventional tip-level | `--tree`, `--data` | `--evolution-model`, `--intercept`, model comparison, conventional covariance/summary outputs |
+| End-to-end reconciled | exactly one of `--gene-tree` or `--gene-tree-ensemble`, plus `--species-tree`, `--expression`, `--species-traits`, `--tree-id` | reconciliation, branch/evolution transforms, `--out-prefix`, categorical-origin diagnostics |
+| Precomputed reconciled contrasts | `--response-contrasts`, `--predictor-contrasts` | response/predictor contrast-covariance inputs |
+
+Response and predictor typing, factor encoding, replicate aggregation, and
+coefficient regularization require original tip observations, so they are
+available in conventional and end-to-end workflows but are rejected in the
+precomputed workflow. Reconciled-model, event-weighting, lineage, and
+random-effect options apply to both end-to-end and precomputed reconciled
+workflows. Inference and computational controls apply wherever the selected
+family and model support them.
 
 ## Conventional tip-level regression
 
@@ -54,10 +70,11 @@ search boundary are flagged. A scientifically justified fixed value may use
 the broader domains in the model table, provided the transformed covariance
 remains finite and positive definite.
 
-Biological and technical response replicates use the same
-`--biological-id`, `--technical-id`, `--technical-aggregation`, `--batch`, and
-`--within-variance` rules as reconciled expression input. Known response means
-and standard errors use `--within-variance known-se`. Estimated species-mean
+Biological and technical response replicates use
+`--response-biological-id`, `--response-technical-id`,
+`--response-technical-aggregation`, `--response-batch`, and
+`--response-within-variance`. Known response means and standard errors use
+`--response-within-variance known-se`. Estimated species-mean
 sampling covariance is added to the evolutionary covariance rather than being
 treated as extra species.
 
@@ -80,8 +97,9 @@ posterior covariance into the response likelihood; this is an
 errors-in-variables PGLS and avoids the usual attenuation from treating noisy
 predictor means as exact. Because this covariance depends on the fitted slope,
 the errors-in-variables Gaussian model is fitted by ML even when `--reml yes`
-is requested; the result records `reml=no`. `--sampling-covariance-out` and
-`--tip-summary-out` audit the response calculation, while
+is requested; the result records `reml=no`.
+`--response-sampling-covariance-out` and `--response-tip-summary-out` audit
+the response calculation, while
 `--predictor-sampling-covariance-out` and `--predictor-tip-summary-out` audit
 the predictor calculation. For independent tip errors, ordinary PGLS writes
 only the nonzero diagonal rows instead of enumerating known-zero pairs.
@@ -101,8 +119,8 @@ Predictors may be continuous, unordered categorical, or ordered categorical.
 Non-numeric columns are detected as unordered factors; numeric category labels
 must be declared explicitly. Use
 `--categorical-predictors habitat,feeding_mode`, choose references with
-`--factor-reference habitat=water`, and select treatment or sum coding with
-`--factor-coding`. Use
+`--predictor-reference habitat=water`, and select treatment or sum coding with
+`--predictor-factor-coding`. Use
 `--ordered-predictors 'stage=juvenile|subadult|adult'` for orthogonal
 polynomial contrasts. The coefficient table records the original source term,
 encoded level, reference, coding, and an omnibus Wald test over all columns
@@ -175,7 +193,7 @@ be selected instead.
 Categorical biological replicates are not averaged. Response replicates enter
 the binomial/multinomial/ordinal likelihood as per-tip category counts.
 Predictor replicates must agree by default; with
-`--categorical-replicate-policy latent`, their empirical state probabilities
+`--predictor-categorical-replicate-policy latent`, their empirical state probabilities
 are encoded as the expected factor columns. The full covariance of the
 biological-replicate mean is divided by the biological sample size, so 20
 replicates carry one tenth the sampling covariance of two replicates with the
@@ -204,8 +222,8 @@ nwkit regress \
   --data species_means.tsv \
   --responses expression \
   --predictors body_size \
-  --within-variance known-se \
-  --standard-error-columns expression_se \
+  --response-within-variance known-se \
+  --response-standard-error-columns expression_se \
   --predictor-within-variance known-se \
   --predictor-standard-error-columns body_size_se \
   --outfile ordinary-pgls.tsv
@@ -347,8 +365,8 @@ nwkit regress \
   --species-traits species_traits.tsv \
   --responses expression \
   --predictors body_size \
-  --biological-id sample_id \
-  --batch sequencing_batch \
+  --response-biological-id sample_id \
+  --response-batch sequencing_batch \
   --predictor-biological-id organism_id \
   --predictor-batch phenotyping_batch \
   --event-source nhx \
@@ -489,8 +507,9 @@ that do not need retained intermediates.
 `reconcile` and `contrast` remain available as low-level commands. Use them to
 inspect event assignments, reuse one reconciliation across several expression
 datasets, or start from an externally prepared reconciliation. Precomputed
-gene and species contrasts can still be fitted by supplying `regress --infile`
-and `--predictor-contrasts`; raw and precomputed inputs cannot be mixed.
+gene and species contrasts can still be fitted by supplying
+`regress --response-contrasts` and `--predictor-contrasts`; end-to-end and
+precomputed inputs cannot be mixed.
 
 First map the pruned, rooted GeneRax tree onto the rooted species tree. Supply a
 stable family identifier whenever multiple trees will later be combined:
@@ -593,13 +612,13 @@ Fit precomputed contrasts through the low-level PGLS input mode:
 
 ```sh
 nwkit regress \
-  --infile gene_contrasts.tsv \
+  --response-contrasts gene_contrasts.tsv \
   --predictor-contrasts species_contrasts.tsv \
   --response-sampling-covariance expression_sampling_covariance.tsv \
   --predictor-sampling-covariance body_size_sampling_covariance.tsv \
   --responses expression \
   --predictors body_size \
-  --model hierarchical \
+  --reconciled-model hierarchical \
   --random-effects-out random_effects.tsv \
   --outfile regression.tsv
 ```
@@ -621,7 +640,7 @@ and predictor transforms on every row.
 When `--predictor-sampling-covariance` is supplied, the species-contrast table
 must retain its positive `contrast_variance` column. An explicit covariance
 table must contain every selected predictor-contrast pair; a factor-loading
-table must contain every selected contrast. The legacy clustered estimator
+table must contain every selected contrast. The cluster-HC1 estimator
 rejects both response and predictor covariance sidecars; use `hierarchical` or
 `replicate-reml`. Both response and predictor sidecars accept NWKIT's sparse
 `factor-loading` representation. A model cannot mix explicit covariance and
@@ -635,7 +654,7 @@ The model is a regression through the origin on signed reconciled contrasts:
 expression contrast = species-trait contrasts * fixed slopes + error
 ```
 
-The default `--model hierarchical` fits the Gaussian covariance
+The default `--reconciled-model hierarchical` fits the Gaussian covariance
 
 ```text
 V = sigma^2 G + M + tau_event^2 Z_event Z_event'
@@ -729,13 +748,14 @@ covariance. The observed submatrix is used for partial response vectors.
 
 `--event-random-effect auto` and `--lineage-random-slope auto` include only
 identifiable covariance components. `yes` requires the component and fails if
-the data cannot identify it; `no` removes it. `--model replicate-reml` retains
-`sigma^2 G + M` but omits both random effects. `--model legacy` keeps the older
-event-cluster HC1 estimator only as a sensitivity analysis.
+the data cannot identify it; `no` removes it.
+`--reconciled-model replicate-reml` retains `sigma^2 G + M` but omits both
+random effects. `--reconciled-model cluster-hc1` keeps the older event-cluster
+HC1 estimator only as a sensitivity analysis.
 
 Rows sharing a `species_event_id` have equal total working weight by default,
 so a species split represented by ten paralogs does not dominate a split
-represented once. `--event-weighting observation` is an explicit sensitivity
+represented once. `--event-weighting contrast` is an explicit sensitivity
 analysis. Gaussian ML/REML uses the number of species events as the effective
 likelihood sample size. For `replicate-reml` and models without a species-event
 random effect, its pseudo-determinant is the sum of the log marginal variances

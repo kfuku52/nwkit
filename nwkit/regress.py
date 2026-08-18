@@ -419,8 +419,8 @@ def _evolution_metadata_by_group(dataframe, group_columns):
 
 
 def _prepare_responses(dataframe, responses, coverage_policy):
-    _require_columns(dataframe, RESPONSE_REQUIRED_COLUMNS, "--infile")
-    _selected_traits(dataframe, responses, "--responses", "--infile")
+    _require_columns(dataframe, RESPONSE_REQUIRED_COLUMNS, "--response-contrasts")
+    _selected_traits(dataframe, responses, "--responses", "--response-contrasts")
     selected = dataframe[dataframe["trait"].isin(responses)].copy()
     for column in [
         "tree_id",
@@ -443,12 +443,14 @@ def _prepare_responses(dataframe, responses, coverage_policy):
     ]
     if not invalid_event.empty:
         raise ValueError(
-            "'--infile' selected response rows must contain only speciation events."
+            "'--response-contrasts' selected rows must contain only speciation events."
         )
     if not invalid_eligible.empty:
-        raise ValueError("'--infile' contains invalid eligible values.")
+        raise ValueError("'--response-contrasts' contains invalid eligible values.")
     if not invalid_coverage.empty:
-        raise ValueError("'--infile' contains invalid coverage_status values.")
+        raise ValueError(
+            "'--response-contrasts' contains invalid coverage_status values."
+        )
     inconsistent_coverage = selected[
         (
             (selected["eligible"] == "yes")
@@ -461,47 +463,55 @@ def _prepare_responses(dataframe, responses, coverage_policy):
     ]
     if not inconsistent_coverage.empty:
         raise ValueError(
-            "'--infile' eligible and coverage_status values are inconsistent."
+            "'--response-contrasts' eligible and coverage_status values are inconsistent."
         )
     if (selected["gene_clade_id"] == "").any():
-        raise ValueError("'--infile' selected rows require gene_clade_id.")
+        raise ValueError("'--response-contrasts' selected rows require gene_clade_id.")
     if (selected["tree_id"] == "").any():
         raise ValueError(
-            "'--infile' selected rows require a non-empty tree_id so gene "
+            "'--response-contrasts' selected rows require a non-empty tree_id so gene "
             "families cannot be pooled accidentally."
         )
     eligible_rows = selected[selected["eligible"] == "yes"]
     if (eligible_rows["lineage_clade_id"] == "").any():
-        raise ValueError("'--infile' eligible rows require lineage_clade_id.")
+        raise ValueError(
+            "'--response-contrasts' eligible rows require lineage_clade_id."
+        )
     if (eligible_rows["species_event_id"] == "").any():
-        raise ValueError("'--infile' eligible rows require species_event_id.")
+        raise ValueError(
+            "'--response-contrasts' eligible rows require species_event_id."
+        )
     orientation_columns = [
         "species_numerator_event_id",
         "species_denominator_event_id",
     ]
     if eligible_rows[orientation_columns].eq("").any(axis=None):
-        raise ValueError("'--infile' eligible rows require species-event orientation.")
+        raise ValueError(
+            "'--response-contrasts' eligible rows require species-event orientation."
+        )
     if (
         eligible_rows["species_numerator_event_id"]
         == eligible_rows["species_denominator_event_id"]
     ).any():
         raise ValueError(
-            "'--infile' species numerator and denominator event IDs must differ."
+            "'--response-contrasts' species numerator and denominator event IDs must differ."
         )
     duplicated = selected.duplicated(
         subset=["tree_id", "trait", "gene_clade_id"], keep=False
     )
     if duplicated.any():
         raise ValueError(
-            "'--infile' contains duplicated tree_id/trait/gene_clade_id rows."
+            "'--response-contrasts' contains duplicated tree_id/trait/gene_clade_id rows."
         )
-    selected["raw_contrast"] = _numeric_column(selected, "raw_contrast", "--infile")
+    selected["raw_contrast"] = _numeric_column(
+        selected, "raw_contrast", "--response-contrasts"
+    )
     selected["contrast_variance"] = _numeric_column(
-        selected, "contrast_variance", "--infile", positive=True
+        selected, "contrast_variance", "--response-contrasts", positive=True
     )
     selected = _prepare_evolution_metadata(
         selected,
-        "--infile",
+        "--response-contrasts",
         ["tree_id", "trait"],
     )
     selected["_eligible_for_model"] = selected["eligible"] == "yes"
@@ -1146,7 +1156,7 @@ def _fit_model(
             )
         )
     weights = np.ones(n_observations, dtype=float)
-    if event_weighting == "equal":
+    if event_weighting == "event":
         weights = 1.0 / counts[inverse]
     sqrt_weights = np.sqrt(weights)
     weighted_design = design * sqrt_weights[:, None]
@@ -2236,7 +2246,7 @@ def _build_covariance_components(
 ):
     n_observations = len(design)
     balance = np.ones(n_observations, dtype=float)
-    if event_weighting == "equal":
+    if event_weighting == "event":
         balance = np.sqrt(event_counts[event_inverse].astype(float))
     fixed_covariance = (
         DiagonalLowRankCovariance(
@@ -2904,8 +2914,8 @@ def _fit_covariance_model(
             "Lineage inference was requested but lineage random slopes are not "
             "identifiable for model '{}'.".format(model_id)
         )
-    likelihood_observations = n_events if event_weighting == "equal" else n_observations
-    likelihood_groups = event_inverse if event_weighting == "equal" else None
+    likelihood_observations = n_events if event_weighting == "event" else n_observations
+    likelihood_groups = event_inverse if event_weighting == "event" else None
     likelihood_logdet_offset = 0.0
     index_by_predictor = {
         predictor: index for index, predictor in enumerate(predictors)
@@ -3205,7 +3215,7 @@ def _fit_covariance_model(
 def _validate_reconciled_pgls_options(
     *,
     confidence_level=0.95,
-    event_weighting="equal",
+    event_weighting="event",
     coverage_policy="complete",
     model="hierarchical",
     response_sampling_covariance=None,
@@ -3222,11 +3232,11 @@ def _validate_reconciled_pgls_options(
 ):
     if not 0.0 < confidence_level < 1.0:
         raise ValueError("confidence_level must be between zero and one.")
-    if event_weighting not in {"equal", "observation"}:
+    if event_weighting not in {"event", "contrast"}:
         raise ValueError("Unsupported event weighting: {}.".format(event_weighting))
     if coverage_policy not in {"complete", "any"}:
         raise ValueError("Unsupported coverage policy: {}.".format(coverage_policy))
-    if model not in {"hierarchical", "legacy", "replicate-reml"}:
+    if model not in {"hierarchical", "cluster-hc1", "replicate-reml"}:
         raise ValueError("Unsupported PGLS model: {}.".format(model))
     if inference not in {"parametric-bootstrap", "wald"}:
         raise ValueError("Unsupported inference method: {}.".format(inference))
@@ -3256,16 +3266,14 @@ def _validate_reconciled_pgls_options(
         raise ValueError(
             "lineage_inference must be none, likelihood-ratio, or parametric-bootstrap."
         )
-    if model == "legacy" and (
+    if model == "cluster-hc1" and (
         response_sampling_covariance is not None
         or predictor_sampling_covariance is not None
     ):
         raise ValueError("Sampling covariance requires a likelihood-based PGLS model.")
-    if model == "legacy" and inference != "wald":
-        raise ValueError(
-            "Parametric-bootstrap inference is unavailable for legacy PGLS."
-        )
-    if model == "legacy" and return_fit_state:
+    if model == "cluster-hc1" and inference != "wald":
+        raise ValueError("Non-Wald inference is unavailable for cluster-HC1 PGLS.")
+    if model == "cluster-hc1" and return_fit_state:
         raise ValueError("Fit-state output requires a likelihood-based PGLS model.")
     if model != "hierarchical" and (
         event_random_effect == "yes" or lineage_random_slope == "yes"
@@ -3275,7 +3283,7 @@ def _validate_reconciled_pgls_options(
         )
     if model != "hierarchical" and lineage_inference != "none":
         raise ValueError("Lineage inference requires the hierarchical PGLS model.")
-    if model == "legacy" and lineage_leave_one_out:
+    if model == "cluster-hc1" and lineage_leave_one_out:
         raise ValueError(
             "Lineage leave-one-out requires a likelihood-based PGLS model."
         )
@@ -3364,7 +3372,7 @@ def _normalize_grouped_uncertainties(states, predictors, model, predictor_groups
     normalized = [
         _normalize_one_grouped_uncertainty(state, predictors) for state in states or ()
     ]
-    if model == "legacy" and normalized:
+    if model == "cluster-hc1" and normalized:
         raise ValueError(
             "Grouped predictor uncertainty requires a likelihood-based PGLS model."
         )
@@ -3669,7 +3677,7 @@ def fit_reconciled_pgls(
     predictors,
     *,
     confidence_level=0.95,
-    event_weighting="equal",
+    event_weighting="event",
     coverage_policy="complete",
     model="hierarchical",
     response_sampling_covariance=None,
@@ -3773,7 +3781,7 @@ def fit_reconciled_pgls(
             predictors,
             predictor_posteriors,
         )
-        if model == "legacy":
+        if model == "cluster-hc1":
             model_rows = _fit_model(
                 filtered,
                 predictors,
@@ -3788,7 +3796,7 @@ def fit_reconciled_pgls(
             for row in model_rows:
                 row.update(
                     {
-                        "model": "legacy",
+                        "model": "cluster-hc1",
                         "inference_method": "species-event-cluster-HC1",
                         "reml": "no",
                         "optimizer_converged": "not-applicable",
@@ -3905,7 +3913,29 @@ ORDINARY_REGRESSION_REQUIRED_ARGUMENTS = {
     "tree": "--tree",
 }
 
-ORDINARY_REGRESSION_ONLY_ARGUMENTS = {
+CONVENTIONAL_REGRESSION_INPUT_ARGUMENTS = {
+    "data": "--data",
+    "tree": "--tree",
+}
+
+RAW_REGRESSION_INPUT_ARGUMENTS = {
+    "expression": "--expression",
+    "gene_tree": "--gene-tree",
+    "gene_tree_ensemble": "--gene-tree-ensemble",
+    "reconciliation_tree": "--reconciliation-tree",
+    "species_traits": "--species-traits",
+    "species_tree": "--species-tree",
+    "tree_id": "--tree-id",
+}
+
+PRECOMPUTED_REGRESSION_INPUT_ARGUMENTS = {
+    "response_contrasts": "--response-contrasts",
+    "predictor_contrasts": "--predictor-contrasts",
+    "response_sampling_covariance": "--response-sampling-covariance",
+    "predictor_sampling_covariance": "--predictor-sampling-covariance",
+}
+
+CONVENTIONAL_REGRESSION_SPECIFIC_ARGUMENTS = {
     "branch_length": "--branch-length",
     "compare_evolution_models": "--compare-evolution-models",
     "data": "--data",
@@ -3919,33 +3949,29 @@ ORDINARY_REGRESSION_ONLY_ARGUMENTS = {
     "predictor_evolution_parameter": "--predictor-evolution-parameter",
     "predictor_sampling_covariance_out": "--predictor-sampling-covariance-out",
     "predictor_tip_summary_out": "--predictor-tip-summary-out",
-    "sampling_covariance_out": "--sampling-covariance-out",
-    "tip_summary_out": "--tip-summary-out",
+    "response_sampling_covariance_out": "--response-sampling-covariance-out",
+    "response_tip_summary_out": "--response-tip-summary-out",
     "tree": "--tree",
     "tree_format": "--tree-format",
 }
 
-RAW_REGRESSION_ONLY_ARGUMENTS = {
-    "batch": "--batch",
-    "biological_id": "--biological-id",
+RAW_REGRESSION_SPECIFIC_ARGUMENTS = {
     "event_source": "--event-source",
     "expression": "--expression",
     "gene_branch_length": "--gene-branch-length",
     "gene_evolution_model": "--gene-evolution-model",
     "gene_evolution_parameter": "--gene-evolution-parameter",
     "gene_tree_format": "--gene-tree-format",
+    "gene_tree": "--gene-tree",
     "gene_tree_ensemble": "--gene-tree-ensemble",
-    "missing_values": "--missing-values",
     "out_prefix": "--out-prefix",
     "categorical_origin_diagnostics": "--categorical-origin-diagnostics",
     "origin_map_replicates": "--origin-map-replicates",
     "origin_map_threads": "--origin-map-threads",
     "origin_min_posterior": "--origin-min-posterior",
     "origin_leave_one_out": "--origin-leave-one-out",
-    "quoted_node_names": "--quoted-node-names",
     "reconciliation_tree": "--reconciliation-tree",
     "reconciliation_tree_format": "--reconciliation-tree-format",
-    "sample_size_columns": "--sample-size-columns",
     "species_branch_length": "--species-branch-length",
     "species_evolution_model": "--species-evolution-model",
     "species_evolution_parameter": "--species-evolution-parameter",
@@ -3955,6 +3981,14 @@ RAW_REGRESSION_ONLY_ARGUMENTS = {
     "species_traits": "--species-traits",
     "species_tree": "--species-tree",
     "species_tree_format": "--species-tree-format",
+    "tree_id": "--tree-id",
+    "trait_origins_out": "--trait-origins-out",
+}
+
+PRECOMPUTED_UNSUPPORTED_PREPROCESSING_ARGUMENTS = {
+    "response_batch": "--response-batch",
+    "response_biological_id": "--response-biological-id",
+    "missing_values": "--missing-values",
     "predictor_batch": "--predictor-batch",
     "predictor_biological_id": "--predictor-biological-id",
     "predictor_sample_size_columns": "--predictor-sample-size-columns",
@@ -3962,13 +3996,33 @@ RAW_REGRESSION_ONLY_ARGUMENTS = {
     "predictor_technical_aggregation": "--predictor-technical-aggregation",
     "predictor_technical_id": "--predictor-technical-id",
     "predictor_within_variance": "--predictor-within-variance",
-    "standard_error_columns": "--standard-error-columns",
-    "technical_aggregation": "--technical-aggregation",
-    "technical_id": "--technical-id",
-    "tree_id": "--tree-id",
-    "trait_origins_out": "--trait-origins-out",
+    "quoted_node_names": "--quoted-node-names",
+    "response_sample_size_columns": "--response-sample-size-columns",
+    "response_standard_error_columns": "--response-standard-error-columns",
+    "response_technical_aggregation": "--response-technical-aggregation",
+    "response_technical_id": "--response-technical-id",
     "unmatched": "--unmatched",
-    "within_variance": "--within-variance",
+    "response_within_variance": "--response-within-variance",
+}
+
+PRECOMPUTED_UNSUPPORTED_MODELING_ARGUMENTS = {
+    "categorical_responses": "--categorical-responses",
+    "ordered_responses": "--ordered-responses",
+    "response_reference": "--response-reference",
+    "response_family": "--response-family",
+    "response_offset": "--response-offset",
+    "response_trials": "--response-trials",
+    "response_censor_lower": "--response-censor-lower",
+    "response_censor_upper": "--response-censor-upper",
+    "response_dispersion": "--response-dispersion",
+    "response_zero_probability": "--response-zero-probability",
+    "coefficient_penalty": "--coefficient-penalty",
+    "coefficient_prior_sd": "--coefficient-prior-sd",
+    "categorical_predictors": "--categorical-predictors",
+    "ordered_predictors": "--ordered-predictors",
+    "predictor_reference": "--predictor-reference",
+    "predictor_factor_coding": "--predictor-factor-coding",
+    "predictor_categorical_replicate_policy": "--predictor-categorical-replicate-policy",
 }
 
 
@@ -4027,12 +4081,13 @@ def _require_regression_arguments(args, required, description):
 
 
 def _require_biological_id_for_variance(args):
-    within_variance = getattr(args, "within_variance", None)
+    within_variance = getattr(args, "response_within_variance", None)
     if within_variance in {"pooled", "leaf"} and not _nonempty_argument(
-        args, "biological_id"
+        args, "response_biological_id"
     ):
         raise ValueError(
-            "'--within-variance {}' requires '--biological-id'.".format(within_variance)
+            "'--response-within-variance {}' requires "
+            "'--response-biological-id'.".format(within_variance)
         )
     predictor_within = getattr(args, "predictor_within_variance", None)
     if predictor_within in {"pooled", "leaf"} and not _nonempty_argument(
@@ -4056,7 +4111,7 @@ def _ordinary_incompatible_options(args):
             "gene_tree": "--gene-tree",
             "gene_tree_ensemble": "--gene-tree-ensemble",
             "gene_tree_format": "--gene-tree-format",
-            "infile": "--infile",
+            "response_contrasts": "--response-contrasts",
             "out_prefix": "--out-prefix",
             "predictor_contrasts": "--predictor-contrasts",
             "random_effects_out": "--random-effects-out",
@@ -4084,7 +4139,7 @@ def _ordinary_incompatible_options(args):
         for name, option in [
             ("event_weighting", "--event-weighting"),
             ("speciation_coverage", "--speciation-coverage"),
-            ("model", "--model"),
+            ("reconciled_model", "--reconciled-model"),
             ("event_random_effect", "--event-random-effect"),
             ("lineage_random_slope", "--lineage-random-slope"),
             ("lineage_inference", "--lineage-inference"),
@@ -4208,14 +4263,24 @@ def _validate_raw_output_options(args):
 
 
 def _validate_raw_regression_mode(args):
-    _require_regression_arguments(
-        args, RAW_REGRESSION_REQUIRED_ARGUMENTS, "Raw-input regression"
-    )
     gene_tree = _nonempty_argument(args, "gene_tree")
     ensemble = _nonempty_argument(args, "gene_tree_ensemble")
-    if gene_tree == ensemble:
+    missing = [
+        option
+        for name, option in RAW_REGRESSION_REQUIRED_ARGUMENTS.items()
+        if not _nonempty_argument(args, name)
+    ]
+    if not gene_tree and not ensemble:
+        missing.append("one of --gene-tree or --gene-tree-ensemble")
+    if missing:
         raise ValueError(
-            "Raw-input regression requires exactly one of '--gene-tree' or "
+            "End-to-end reconciled regression requires: {}.".format(
+                ", ".join(sorted(missing))
+            )
+        )
+    if gene_tree and ensemble:
+        raise ValueError(
+            "End-to-end reconciled regression requires exactly one of '--gene-tree' or "
             "'--gene-tree-ensemble'."
         )
     if ensemble and _nonempty_argument(args, "reconciliation_tree"):
@@ -4225,19 +4290,16 @@ def _validate_raw_regression_mode(args):
         )
     incompatible = [
         option
-        for name, option in [
-            ("infile", "--infile"),
-            ("predictor_contrasts", "--predictor-contrasts"),
-            ("response_sampling_covariance", "--response-sampling-covariance"),
-            ("predictor_sampling_covariance", "--predictor-sampling-covariance"),
-        ]
+        for name, option in {
+            **CONVENTIONAL_REGRESSION_SPECIFIC_ARGUMENTS,
+            **PRECOMPUTED_REGRESSION_INPUT_ARGUMENTS,
+        }.items()
         if _nonempty_argument(args, name)
     ]
     if incompatible:
         raise ValueError(
-            "Raw-input regression cannot be combined with precomputed input(s): {}.".format(
-                ", ".join(incompatible)
-            )
+            "End-to-end reconciled regression cannot use conventional or "
+            "precomputed option(s): {}.".format(", ".join(incompatible))
         )
     if _nonempty_argument(
         args, "reconciliation_tree_format"
@@ -4263,13 +4325,13 @@ def _validate_raw_regression_mode(args):
     )
     gene_parameter = getattr(args, "gene_evolution_parameter", None)
     if (
-        (getattr(args, "model", None) or "hierarchical") == "legacy"
+        (getattr(args, "reconciled_model", None) or "hierarchical") == "cluster-hc1"
         and evolution_model_spec(gene_model).parameter_name is not None
         and gene_parameter in {None, "auto"}
     ):
         raise ValueError(
             "Automatic gene evolution-parameter estimation requires a likelihood-based "
-            "reconciled model, not '--model legacy'."
+            "reconciled model, not '--reconciled-model cluster-hc1'."
         )
     _require_biological_id_for_variance(args)
     origin_mode = getattr(args, "categorical_origin_diagnostics", None) or "none"
@@ -4305,40 +4367,84 @@ def _validate_raw_regression_mode(args):
     _validate_raw_output_options(args)
 
 
-def _regression_input_mode(args):
-    if any(
-        _nonempty_argument(args, name) for name in ORDINARY_REGRESSION_ONLY_ARGUMENTS
-    ):
-        _validate_ordinary_regression_mode(args)
-        return "ordinary"
-    if _nonempty_argument(args, "gene_tree") or _nonempty_argument(
-        args, "gene_tree_ensemble"
-    ):
-        _validate_raw_regression_mode(args)
-        return "raw"
-    raw_options = [
+def _validate_precomputed_regression_mode(args):
+    _require_regression_arguments(
+        args,
+        {
+            "response_contrasts": "--response-contrasts",
+            "predictor_contrasts": "--predictor-contrasts",
+        },
+        "Precomputed reconciled-contrast regression",
+    )
+    incompatible = [
         option
-        for name, option in RAW_REGRESSION_ONLY_ARGUMENTS.items()
+        for name, option in {
+            **CONVENTIONAL_REGRESSION_SPECIFIC_ARGUMENTS,
+            **RAW_REGRESSION_SPECIFIC_ARGUMENTS,
+            **PRECOMPUTED_UNSUPPORTED_PREPROCESSING_ARGUMENTS,
+            **PRECOMPUTED_UNSUPPORTED_MODELING_ARGUMENTS,
+        }.items()
         if _nonempty_argument(args, name)
     ]
-    if raw_options:
-        raise ValueError(
-            "Raw-input option(s) require '--gene-tree' or '--gene-tree-ensemble': {}.".format(
-                ", ".join(sorted(raw_options))
-            )
-        )
-    missing = [
+    incompatible.extend(
         option
         for name, option in [
-            ("infile", "--infile"),
-            ("predictor_contrasts", "--predictor-contrasts"),
+            ("multivariate_responses", "--multivariate-responses"),
+            ("allow_missing_responses", "--allow-missing-responses"),
         ]
-        if not _nonempty_argument(args, name)
-    ]
-    if missing:
+        if bool(getattr(args, name, False))
+    )
+    if incompatible:
         raise ValueError(
-            "Precomputed-contrast PGLS requires: {}.".format(", ".join(missing))
+            "Precomputed reconciled contrasts cannot use option(s) that require "
+            "original tip data or trees: {}.".format(
+                ", ".join(sorted(set(incompatible)))
+            )
         )
+
+
+def _selected_regression_input_modes(args):
+    mode_inputs = {
+        "conventional": CONVENTIONAL_REGRESSION_INPUT_ARGUMENTS,
+        "raw": RAW_REGRESSION_INPUT_ARGUMENTS,
+        "contrasts": PRECOMPUTED_REGRESSION_INPUT_ARGUMENTS,
+    }
+    selected = {}
+    for mode, inputs in mode_inputs.items():
+        options = [
+            option for name, option in inputs.items() if _nonempty_argument(args, name)
+        ]
+        if options:
+            selected[mode] = options
+    return selected
+
+
+def _regression_input_mode(args):
+    selected = _selected_regression_input_modes(args)
+    if not selected:
+        raise ValueError(
+            "Regression input mode is missing. Supply exactly one input signature: "
+            "conventional (--tree and --data); end-to-end reconciled "
+            "(--gene-tree or --gene-tree-ensemble, --species-tree, --expression, "
+            "--species-traits, and --tree-id); or precomputed reconciled contrasts "
+            "(--response-contrasts and --predictor-contrasts)."
+        )
+    if len(selected) > 1:
+        details = "; ".join(
+            "{} ({})".format(mode, ", ".join(options))
+            for mode, options in selected.items()
+        )
+        raise ValueError(
+            "Regression input modes cannot be combined: {}.".format(details)
+        )
+    input_mode = next(iter(selected))
+    if input_mode == "conventional":
+        _validate_ordinary_regression_mode(args)
+        return "ordinary"
+    if input_mode == "raw":
+        _validate_raw_regression_mode(args)
+        return "raw"
+    _validate_precomputed_regression_mode(args)
     return "contrasts"
 
 
@@ -4504,7 +4610,7 @@ def _validate_regression_file_output_paths(args):
             "expression",
             "gene_tree",
             "gene_tree_ensemble",
-            "infile",
+            "response_contrasts",
             "predictor_contrasts",
             "predictor_sampling_covariance",
             "reconciliation_tree",
@@ -4617,42 +4723,8 @@ def regress_main(args):
                 setattr(args, argument, path)
             write_regression_bundle(out_prefix, pipeline_artifacts)
         return
-    unsupported_typed_options = [
-        option
-        for name, option in [
-            ("categorical_responses", "--categorical-responses"),
-            ("ordered_responses", "--ordered-responses"),
-            ("response_reference", "--response-reference"),
-            ("response_family", "--response-family"),
-            ("response_offset", "--response-offset"),
-            ("response_trials", "--response-trials"),
-            ("response_censor_lower", "--response-censor-lower"),
-            ("response_censor_upper", "--response-censor-upper"),
-            ("response_dispersion", "--response-dispersion"),
-            ("response_zero_probability", "--response-zero-probability"),
-            ("categorical_predictors", "--categorical-predictors"),
-            ("ordered_predictors", "--ordered-predictors"),
-            ("factor_reference", "--factor-reference"),
-        ]
-        if _nonempty_argument(args, name)
-    ]
-    unsupported_typed_options.extend(
-        option
-        for name, option in [
-            ("multivariate_responses", "--multivariate-responses"),
-            ("allow_missing_responses", "--allow-missing-responses"),
-        ]
-        if bool(getattr(args, name, False))
-    )
-    if unsupported_typed_options:
-        raise ValueError(
-            "Typed response/predictor options require raw-input or conventional regression, "
-            "not precomputed contrasts: {}.".format(
-                ", ".join(unsupported_typed_options)
-            )
-        )
     _validate_regression_file_output_paths(args)
-    response_table = _read_tsv(args.infile, "--infile")
+    response_table = _read_tsv(args.response_contrasts, "--response-contrasts")
     predictor_table = _read_tsv(args.predictor_contrasts, "--predictor-contrasts")
     covariance_path = getattr(args, "response_sampling_covariance", None)
     sampling_covariance = (
@@ -4675,9 +4747,9 @@ def regress_main(args):
         responses,
         predictors,
         confidence_level=args.confidence_level,
-        event_weighting=getattr(args, "event_weighting", None) or "equal",
+        event_weighting=getattr(args, "event_weighting", None) or "event",
         coverage_policy=getattr(args, "speciation_coverage", None) or "complete",
-        model=getattr(args, "model", None) or "hierarchical",
+        model=getattr(args, "reconciled_model", None) or "hierarchical",
         response_sampling_covariance=sampling_covariance,
         predictor_sampling_covariance=predictor_sampling_covariance,
         inference=getattr(args, "inference", "wald"),

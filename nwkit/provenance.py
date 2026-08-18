@@ -70,6 +70,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "reconciliation",
         "reconciliation_tree",
         "reference",
+        "response_contrasts",
         "response_sampling_covariance",
         "root_source",
         "seqin",
@@ -507,6 +508,7 @@ def _planned_output_records(args):
 
 def _primary_input_text(args, stdin_text):
     infile = getattr(args, "infile", None)
+    response_contrasts = getattr(args, "response_contrasts", None)
     gene_tree = getattr(args, "gene_tree", None)
     gene_tree_ensemble = getattr(args, "gene_tree_ensemble", None)
     ordinary_tree = getattr(args, "tree", None)
@@ -522,7 +524,12 @@ def _primary_input_text(args, stdin_text):
                 gene_tree_ensemble
                 if getattr(args, "command", None) == "regress"
                 and gene_tree_ensemble not in (None, "")
-                else infile
+                else (
+                    response_contrasts
+                    if getattr(args, "command", None) == "regress"
+                    and response_contrasts not in (None, "")
+                    else infile
+                )
             )
         )
     )

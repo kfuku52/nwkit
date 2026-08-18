@@ -2682,6 +2682,41 @@ def fit_ordinary_model_comparison(
 
 def _effective_ordinary_args(args) -> SimpleNamespace:
     values = vars(args).copy()
+    values.update(
+        {
+            "batch": values.get("response_batch", values.get("batch")),
+            "biological_id": values.get(
+                "response_biological_id", values.get("biological_id")
+            ),
+            "categorical_replicate_policy": values.get(
+                "predictor_categorical_replicate_policy",
+                values.get("categorical_replicate_policy"),
+            ),
+            "factor_coding": values.get(
+                "predictor_factor_coding", values.get("factor_coding")
+            ),
+            "factor_reference": values.get(
+                "predictor_reference", values.get("factor_reference")
+            ),
+            "sample_size_columns": values.get(
+                "response_sample_size_columns", values.get("sample_size_columns")
+            ),
+            "standard_error_columns": values.get(
+                "response_standard_error_columns",
+                values.get("standard_error_columns"),
+            ),
+            "technical_aggregation": values.get(
+                "response_technical_aggregation",
+                values.get("technical_aggregation"),
+            ),
+            "technical_id": values.get(
+                "response_technical_id", values.get("technical_id")
+            ),
+            "within_variance": values.get(
+                "response_within_variance", values.get("within_variance")
+            ),
+        }
+    )
     defaults = {
         "batch": None,
         "biological_id": None,
@@ -3015,7 +3050,7 @@ def build_ordinary_regression(
     categorical_predictors = parse_name_list(effective.categorical_predictors)
     ordered_predictors = parse_ordered_levels(effective.ordered_predictors)
     factor_references = parse_key_values(
-        effective.factor_reference, "--factor-reference"
+        effective.factor_reference, "--predictor-reference"
     )
     tree = read_tree(
         effective.tree,
@@ -3323,14 +3358,14 @@ def _validate_outputs_do_not_replace_inputs(input_paths, output_paths):
 
 def validate_ordinary_regression_output_paths(args) -> None:
     """Validate conventional regression outputs before fitting or writing."""
-    sampling_path = getattr(args, "sampling_covariance_out", None)
-    tip_summary_path = getattr(args, "tip_summary_out", None)
+    sampling_path = getattr(args, "response_sampling_covariance_out", None)
+    tip_summary_path = getattr(args, "response_tip_summary_out", None)
     predictor_sampling_path = getattr(args, "predictor_sampling_covariance_out", None)
     predictor_tip_summary_path = getattr(args, "predictor_tip_summary_out", None)
     comparison_path = getattr(args, "model_comparison_out", None)
     for option, path in [
-        ("--sampling-covariance-out", sampling_path),
-        ("--tip-summary-out", tip_summary_path),
+        ("--response-sampling-covariance-out", sampling_path),
+        ("--response-tip-summary-out", tip_summary_path),
         ("--predictor-sampling-covariance-out", predictor_sampling_path),
         ("--predictor-tip-summary-out", predictor_tip_summary_path),
         ("--model-comparison-out", comparison_path),
@@ -3340,8 +3375,8 @@ def validate_ordinary_regression_output_paths(args) -> None:
     validate_distinct_output_paths(
         [
             ("--outfile", args.outfile),
-            ("--sampling-covariance-out", sampling_path),
-            ("--tip-summary-out", tip_summary_path),
+            ("--response-sampling-covariance-out", sampling_path),
+            ("--response-tip-summary-out", tip_summary_path),
             ("--predictor-sampling-covariance-out", predictor_sampling_path),
             ("--predictor-tip-summary-out", predictor_tip_summary_path),
             ("--model-comparison-out", comparison_path),
@@ -3369,8 +3404,8 @@ def write_ordinary_regression_outputs(
     args, artifacts: OrdinaryRegressionArtifacts
 ) -> None:
     validate_ordinary_regression_output_paths(args)
-    sampling_path = getattr(args, "sampling_covariance_out", None)
-    tip_summary_path = getattr(args, "tip_summary_out", None)
+    sampling_path = getattr(args, "response_sampling_covariance_out", None)
+    tip_summary_path = getattr(args, "response_tip_summary_out", None)
     predictor_sampling_path = getattr(args, "predictor_sampling_covariance_out", None)
     predictor_tip_summary_path = getattr(args, "predictor_tip_summary_out", None)
     comparison_path = getattr(args, "model_comparison_out", None)
