@@ -82,6 +82,13 @@ def finite_float(value):
     return number
 
 
+def nonnegative_finite_float(value):
+    number = finite_float(value)
+    if number < 0:
+        raise argparse.ArgumentTypeError("Floating-point values must be non-negative.")
+    return number
+
+
 def auto_or_finite_float(value):
     if isinstance(value, str) and value.lower() == "auto":
         return "auto"
@@ -4454,6 +4461,7 @@ proot.add_argument(
         "transfer",
         "mad",
         "mv",
+        "reconciliation",
         "taxonomy",
     ],
     help="default=%(default)s: "
@@ -4463,7 +4471,53 @@ proot.add_argument(
     "The two trees should have the same bipartitions at the root node. "
     "mad: Minimal Ancestor Deviation rooting (Tria et al. 2017). "
     "mv: Minimum Variance rooting (Mai et al. 2017). "
+    "reconciliation: Root by minimizing the weighted LCA-reconciliation "
+    "duplication/loss count over every gene-tree edge. "
     "taxonomy: Root by transferring a taxonomy-derived root split onto --infile.",
+)
+proot.add_argument(
+    "--species-tree",
+    "--species_tree",
+    dest="species_tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Rooted, strictly bifurcating species tree required by --method reconciliation. Its tip labels must match parsed gene-tip species labels.",
+)
+proot.add_argument(
+    "--species-tree-format",
+    "--species_tree_format",
+    dest="species_tree_format",
+    metavar="auto|auto-strict|INT",
+    default="auto",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: ETE tree format for --species-tree.",
+)
+proot.add_argument(
+    "--duplication-cost",
+    "--duplication_cost",
+    dest="duplication_cost",
+    metavar="FLOAT",
+    default=1.0,
+    type=nonnegative_finite_float,
+    required=False,
+    action="store",
+    help="default=%(default)s: Non-negative duplication weight for --method reconciliation.",
+)
+proot.add_argument(
+    "--loss-cost",
+    "--loss_cost",
+    dest="loss_cost",
+    metavar="FLOAT",
+    default=1.0,
+    type=nonnegative_finite_float,
+    required=False,
+    action="store",
+    help="default=%(default)s: Non-negative implied-loss weight for --method reconciliation. Both reconciliation weights cannot be zero.",
 )
 proot.add_argument(
     "--outgroup",

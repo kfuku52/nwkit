@@ -293,6 +293,29 @@ def _event_annotations(
     )
 
 
+def lca_duplication_loss_contribution(
+    mapped_species_node,
+    child_species_nodes,
+    species_depth_by_node,
+):
+    """Return the standard LCA-reconciliation D/L contribution of one event.
+
+    Losses are counted on species-tree edges.  A duplication contributes the
+    complete mapped distance to each child lineage, whereas a speciation
+    consumes the first edge on each child path and therefore contributes
+    ``distance - 1``.
+    """
+    child_species_nodes = tuple(child_species_nodes)
+    parent_depth = species_depth_by_node[mapped_species_node]
+    child_depths = tuple(species_depth_by_node[child] for child in child_species_nodes)
+    is_duplication = any(child is mapped_species_node for child in child_species_nodes)
+    speciation_offset = 0 if is_duplication else 1
+    losses = sum(
+        child_depth - parent_depth - speciation_offset for child_depth in child_depths
+    )
+    return int(is_duplication), losses
+
+
 def _is_subset(mask, container_mask):
     return mask != 0 and mask & ~container_mask == 0
 

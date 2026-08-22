@@ -155,6 +155,8 @@ def test_python_module_entry_point():
         ["consensus", "--min-freq", "1.01"],
         ["mcmctree", "--min-clade-prop", "-0.01"],
         ["subtree", "--dup-conf-score-threshold", "1.01"],
+        ["root", "--duplication-cost", "-0.01"],
+        ["root", "--loss-cost", "inf"],
     ],
 )
 def test_float_options_reject_non_finite_or_out_of_range_values(arguments, capsys):
@@ -163,6 +165,28 @@ def test_float_options_reject_non_finite_or_out_of_range_values(arguments, capsy
 
     assert exc_info.value.code == 2
     assert "error:" in capsys.readouterr().err
+
+
+def test_root_reconciliation_options_parse():
+    args = parser.parse_args(
+        [
+            "root",
+            "--method",
+            "reconciliation",
+            "--species-tree",
+            "species.nwk",
+            "--duplication-cost",
+            "2.5",
+            "--loss-cost",
+            "0",
+        ]
+    )
+
+    assert args.method == "reconciliation"
+    assert args.species_tree == "species.nwk"
+    assert args.species_tree_format == "auto"
+    assert args.duplication_cost == pytest.approx(2.5)
+    assert args.loss_cost == pytest.approx(0.0)
 
 
 def test_console_handler_error_is_concise_without_traceback(

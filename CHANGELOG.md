@@ -4,6 +4,25 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.39.0] - 2026-08-22
+
+### Added
+
+- Added `root --method reconciliation` to select the minimum-cost gene-tree
+  root over all physical edges using weighted LCA-reconciliation duplication
+  and implied-loss counts, without requiring Notung.
+
+### Fixed
+
+- Prevented reconciliation rooting from creating an unnamed tip when the gene
+  tree has a singleton root, and made large finite total scores printable
+  without floating-point overflow.
+- Made LCA duplication/loss scoring safe for one-pass child iterators and
+  replaced quadratic reroot-annotation split construction with compact
+  bitmask indexing. Reconciliation rooting now avoids a redundant analysis-tree
+  copy and per-edge rational-number allocation, and skips split indexing when
+  branch annotations or missing lengths do not require it.
+
 ## [0.38.0] - 2026-08-18
 
 ### Changed

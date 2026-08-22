@@ -3,6 +3,8 @@ import math
 import re
 import sys
 from collections import defaultdict
+from dataclasses import dataclass
+from decimal import Decimal, localcontext
 from fractions import Fraction
 from itertools import combinations
 from typing import Any
@@ -13,7 +15,6 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from nwkit.clade_mapping import (
-    canonical_split,
     find_root_split_candidates,
     projected_root_split,
 )
@@ -37,6 +38,8 @@ from nwkit.util import (
     read_tree,
     remove_singleton,
     support_is_missing,
+    validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
     warn_cleanup_failure,
     write_tree,
@@ -289,34 +292,55 @@ _RESERVED_NODE_PROPERTIES = frozenset(
 )
 
 
-def _internal_branch_key(node, all_taxa):
-    side = frozenset(str(name) for name in node.leaf_names())
-    return canonical_split(side, all_taxa - side)
+def _reroot_leaf_mask_context(tree, leaf_name_to_bit=None):
+    if leaf_name_to_bit is None:
+        leaf_names = sorted(str(name) for name in tree.leaf_names())
+        leaf_name_to_bit = {name: index for index, name in enumerate(leaf_names)}
+    subtree_masks = dict()
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            subtree_masks[node] = 1 << leaf_name_to_bit[str(node.name)]
+            continue
+        mask = 0
+        for child in node.get_children():
+            mask |= subtree_masks[child]
+        subtree_masks[node] = mask
+    all_mask = (1 << len(leaf_name_to_bit)) - 1
+    return leaf_name_to_bit, all_mask, subtree_masks
+
+
+def _internal_branch_key(node_mask, all_mask):
+    return min(node_mask, all_mask ^ node_mask)
 
 
 def _snapshot_missing_branch_lengths(tree):
-    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    branch_nodes = [node for node in tree.traverse() if not node.is_root]
+    missing_nodes = [node for node in branch_nodes if node.dist is None]
+    if not missing_nodes:
+        return {"mode": "none", "splits": set()}
+    if len(missing_nodes) == len(branch_nodes):
+        return {"mode": "all", "splits": set()}
+
+    leaf_name_to_bit, all_mask, subtree_masks = _reroot_leaf_mask_context(tree)
     missing_splits = {
-        _internal_branch_key(node, all_taxa)
-        for node in tree.traverse()
-        if (not node.is_root) and node.dist is None
+        _internal_branch_key(subtree_masks[node], all_mask) for node in missing_nodes
     }
     root_split = None
     missing_root_sides = set()
     root_children = tree.get_children()
     if len(root_children) == 2:
-        root_sides = [
-            frozenset(str(name) for name in child.leaf_names())
-            for child in root_children
-        ]
+        root_sides = [subtree_masks[child] for child in root_children]
         if root_sides[0] and root_sides[1]:
-            root_split = canonical_split(root_sides[0], root_sides[1])
+            root_split = _internal_branch_key(root_sides[0], all_mask)
             missing_root_sides = {
                 side
                 for child, side in zip(root_children, root_sides, strict=True)
                 if child.dist is None
             }
     return {
+        "mode": "partial",
+        "leaf_name_to_bit": leaf_name_to_bit,
+        "all_mask": all_mask,
         "splits": missing_splits,
         "root_split": root_split,
         "missing_root_sides": missing_root_sides,
@@ -324,27 +348,35 @@ def _snapshot_missing_branch_lengths(tree):
 
 
 def _restore_missing_branch_lengths(tree, snapshot):
-    missing_splits = snapshot["splits"]
-    if not missing_splits:
+    mode = snapshot["mode"]
+    if mode == "none":
         return
-    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    if mode == "all":
+        for node in tree.traverse():
+            if not node.is_root:
+                node.dist = None
+        return
+    missing_splits = snapshot["splits"]
+    _, all_mask, subtree_masks = _reroot_leaf_mask_context(
+        tree,
+        snapshot["leaf_name_to_bit"],
+    )
+    if all_mask != snapshot["all_mask"]:
+        raise ValueError("Leaf labels changed unexpectedly while rerooting.")
     same_root_split = False
     root_children = tree.get_children()
     if snapshot["root_split"] is not None and len(root_children) == 2:
-        final_root_sides = [
-            frozenset(str(name) for name in child.leaf_names())
-            for child in root_children
-        ]
+        final_root_sides = [subtree_masks[child] for child in root_children]
         same_root_split = (
-            canonical_split(final_root_sides[0], final_root_sides[1])
+            _internal_branch_key(final_root_sides[0], all_mask)
             == snapshot["root_split"]
         )
     for node in tree.traverse():
         if node.is_root:
             continue
-        split = _internal_branch_key(node, all_taxa)
+        split = _internal_branch_key(subtree_masks[node], all_mask)
         if same_root_split and node.up is tree and split == snapshot["root_split"]:
-            side = frozenset(str(name) for name in node.leaf_names())
+            side = subtree_masks[node]
             if side in snapshot["missing_root_sides"]:
                 node.dist = None
             continue
@@ -398,54 +430,101 @@ def _merge_branch_annotation_values(values):
     return None, False
 
 
+def _nonempty_internal_branch_annotation(node):
+    custom_properties = _custom_node_properties(node)
+    name = node.name if node.name not in (None, "") else None
+    support = None if support_is_missing(node.support) else node.support
+    if (name, support, custom_properties) == (None, None, {}):
+        return None
+    return {
+        "name": name,
+        "support": support,
+        "properties": custom_properties,
+    }
+
+
+def _resolve_internal_branch_annotation(split, records, conflicts):
+    annotation: dict[str, Any] = {"properties": {}}
+    for field in ("name", "support"):
+        values = [record[field] for record in records if record[field] is not None]
+        value, usable = _merge_branch_annotation_values(values)
+        if usable:
+            annotation[field] = value
+        elif values:
+            conflicts.add((split, field))
+    property_names = {prop for record in records for prop in record["properties"]}
+    for prop in property_names:
+        values = [
+            record["properties"][prop]
+            for record in records
+            if prop in record["properties"]
+        ]
+        value, usable = _merge_branch_annotation_values(values)
+        if usable:
+            annotation["properties"][prop] = value
+        elif values:
+            conflicts.add((split, prop))
+    return annotation
+
+
 def _snapshot_internal_branch_annotations(tree):
-    all_taxa = frozenset(str(name) for name in tree.leaf_names())
-    grouped = defaultdict(list)
+    annotated_records = list()
     for node in tree.traverse():
         if node.is_root or node.is_leaf:
             continue
-        custom_properties = _custom_node_properties(node)
-        grouped[_internal_branch_key(node, all_taxa)].append(
-            {
-                "name": node.name if node.name not in (None, "") else None,
-                "support": None if support_is_missing(node.support) else node.support,
-                "properties": custom_properties,
-            }
+        branch_annotation = _nonempty_internal_branch_annotation(node)
+        if branch_annotation is not None:
+            annotated_records.append((node, branch_annotation))
+
+    if not annotated_records:
+        return {
+            "leaf_name_to_bit": None,
+            "all_mask": None,
+            "by_split": {},
+            "conflicts": set(),
+        }
+
+    leaf_name_to_bit, all_mask, subtree_masks = _reroot_leaf_mask_context(tree)
+    grouped = defaultdict(list)
+    for node, branch_annotation in annotated_records:
+        grouped[_internal_branch_key(subtree_masks[node], all_mask)].append(
+            branch_annotation
         )
 
     resolved = dict()
-    conflicts = set()
-    for split, records in grouped.items():
-        annotation: dict[str, Any] = {"properties": {}}
-        for field in ("name", "support"):
-            values = [record[field] for record in records if record[field] is not None]
-            value, usable = _merge_branch_annotation_values(values)
-            if usable:
-                annotation[field] = value
-            elif values:
-                conflicts.add((split, field))
-        property_names = {prop for record in records for prop in record["properties"]}
-        for prop in property_names:
-            values = [
-                record["properties"][prop]
-                for record in records
-                if prop in record["properties"]
-            ]
-            value, usable = _merge_branch_annotation_values(values)
-            if usable:
-                annotation["properties"][prop] = value
-            elif values:
-                conflicts.add((split, prop))
-        resolved[split] = annotation
+    conflicts: set[tuple[int, str]] = set()
+    for split, split_records in grouped.items():
+        resolved[split] = _resolve_internal_branch_annotation(
+            split,
+            split_records,
+            conflicts,
+        )
     return {
-        "all_taxa": all_taxa,
+        "leaf_name_to_bit": leaf_name_to_bit,
+        "all_mask": all_mask,
         "by_split": resolved,
         "conflicts": conflicts,
     }
 
 
 def _restore_internal_branch_annotations(tree, snapshot):
-    all_taxa = snapshot["all_taxa"]
+    if snapshot["leaf_name_to_bit"] is None:
+        for node in tree.traverse():
+            if node.is_root or node.is_leaf:
+                continue
+            node.name = None
+            node.support = None
+            for prop in list(node.props):
+                if str(prop) not in _RESERVED_NODE_PROPERTIES:
+                    node.props.pop(prop, None)
+        return
+
+    _, all_mask, subtree_masks = _reroot_leaf_mask_context(
+        tree,
+        snapshot["leaf_name_to_bit"],
+    )
+    if all_mask != snapshot["all_mask"]:
+        raise ValueError("Leaf labels changed unexpectedly while rerooting.")
     for node in tree.traverse():
         if node.is_root or node.is_leaf:
             continue
@@ -454,7 +533,9 @@ def _restore_internal_branch_annotations(tree, snapshot):
         for prop in list(node.props):
             if str(prop) not in _RESERVED_NODE_PROPERTIES:
                 node.props.pop(prop, None)
-        annotation = snapshot["by_split"].get(_internal_branch_key(node, all_taxa))
+        annotation = snapshot["by_split"].get(
+            _internal_branch_key(subtree_masks[node], all_mask)
+        )
         if annotation is None:
             continue
         if "name" in annotation:
@@ -2136,7 +2217,427 @@ def taxonomy_rooting(
     raise ValueError("All taxonomy sources failed: {}".format(" | ".join(errors)))
 
 
+@dataclass(slots=True)
+class _ReconciliationRootingMessage:
+    species_index: int
+    duplications: int
+    losses: int
+    gene_leaf_count: int
+    nearest_gene_leaf_distance: int
+    nearest_gene_leaf_name: str
+
+
+def _reconciliation_rooting_graph(tree):
+    """Return the physical unrooted graph represented by an ETE tree."""
+    validate_unique_named_leaves(
+        tree,
+        option_name="--infile",
+        context=" for reconciliation rooting",
+    )
+    leaf_count = len(list(tree.leaves()))
+    if leaf_count < 2:
+        raise ValueError("Reconciliation rooting requires at least two gene tips.")
+
+    # Scoring is read-only, so operate directly on the input nodes instead of
+    # copying the entire gene tree.  Singleton roots are only wrappers around
+    # the same physical unrooted topology and can be skipped in this view.
+    analysis_root = tree
+    while len(analysis_root.get_children()) == 1:
+        analysis_root = analysis_root.get_children()[0]
+
+    nodes = list(analysis_root.traverse())
+    adjacency: dict[Any, list[Any]] = {node: list() for node in nodes}
+    for node in nodes:
+        for child in node.get_children():
+            adjacency[node].append(child)
+            adjacency[child].append(node)
+    root_children = analysis_root.get_children()
+    if len(root_children) == 2:
+        left, right = root_children
+        adjacency[left].remove(analysis_root)
+        adjacency[right].remove(analysis_root)
+        adjacency[left].append(right)
+        adjacency[right].append(left)
+        adjacency.pop(analysis_root)
+    elif len(root_children) != 3:
+        raise ValueError(
+            "Reconciliation rooting requires a fully bifurcating tree; an "
+            "unrooted top-level node must have three children."
+        )
+    expected_degree_by_leaf_status = {True: 1, False: 3}
+    invalid_nodes = [
+        node
+        for node, neighbors in adjacency.items()
+        if len(neighbors) != expected_degree_by_leaf_status[node.is_leaf]
+    ]
+    if invalid_nodes:
+        raise ValueError(
+            "Reconciliation rooting requires a fully bifurcating unrooted "
+            "topology; found {} node(s) with invalid degree.".format(len(invalid_nodes))
+        )
+    return analysis_root, adjacency
+
+
+def _reconciliation_rooting_weights(duplication_cost, loss_cost):
+    weights: dict[str, Any] = {
+        "duplication": duplication_cost,
+        "loss": loss_cost,
+    }
+    weight_fractions: dict[str, Fraction] = dict()
+    for label, value in weights.items():
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "{} cost must be numeric.".format(label.capitalize())
+            ) from exc
+        if not math.isfinite(numeric_value) or numeric_value < 0:
+            raise ValueError(
+                "{} cost must be finite and non-negative.".format(label.capitalize())
+            )
+        weight_fractions[label] = Fraction(str(numeric_value))
+    if all(weight == 0 for weight in weight_fractions.values()):
+        raise ValueError(
+            "At least one of duplication cost and loss cost must be positive."
+        )
+    return weight_fractions
+
+
+def _format_reconciliation_cost(value):
+    with localcontext() as context:
+        context.prec = 15
+        decimal_value = Decimal(value.numerator) / Decimal(value.denominator)
+    return format(decimal_value.normalize(), ".15g")
+
+
+def _integer_reconciliation_score_units(weight_fractions):
+    denominator = math.lcm(
+        weight_fractions["duplication"].denominator,
+        weight_fractions["loss"].denominator,
+    )
+    duplication_unit = weight_fractions["duplication"].numerator * (
+        denominator // weight_fractions["duplication"].denominator
+    )
+    loss_unit = weight_fractions["loss"].numerator * (
+        denominator // weight_fractions["loss"].denominator
+    )
+    return denominator, duplication_unit, loss_unit
+
+
+def _reconciliation_rooting_tip_mapping(
+    analysis_tree,
+    species_tree,
+    species_label_by_gene_leaf,
+):
+    from nwkit.reconcile import _report_unmatched_species
+
+    gene_leaves = sorted(analysis_tree.leaves(), key=lambda leaf: str(leaf.name))
+    gene_leaf_names = [str(leaf.name) for leaf in gene_leaves]
+    normalized_mapping: dict[str, str | None] = dict.fromkeys(gene_leaf_names)
+    normalized_mapping.update(
+        {
+            str(name): None if species is None else str(species)
+            for name, species in species_label_by_gene_leaf.items()
+        }
+    )
+    species_leaf_by_name = {str(leaf.name): leaf for leaf in species_tree.leaves()}
+    _report_unmatched_species(normalized_mapping, species_tree, policy="error")
+    return gene_leaves, gene_leaf_names, normalized_mapping, species_leaf_by_name
+
+
+def reconciliation_rooting(
+    tree,
+    species_tree,
+    species_label_by_gene_leaf,
+    duplication_cost=1.0,
+    loss_cost=1.0,
+):
+    """Root a gene tree by minimizing weighted LCA-reconciliation D/L cost.
+
+    Every physical edge of the unrooted gene topology is evaluated with a
+    linear number of directed component messages and indexed species-tree LCA
+    queries.
+    """
+    from nwkit.clade_index import LcaIndex
+    from nwkit.reconcile import _validate_rooted_binary_tree
+
+    weight_fractions = _reconciliation_rooting_weights(
+        duplication_cost,
+        loss_cost,
+    )
+
+    _validate_rooted_binary_tree(species_tree, "--species-tree")
+    analysis_tree, adjacency = _reconciliation_rooting_graph(tree)
+    (
+        gene_leaves,
+        gene_leaf_names,
+        normalized_mapping,
+        species_leaf_by_name,
+    ) = _reconciliation_rooting_tip_mapping(
+        analysis_tree,
+        species_tree,
+        species_label_by_gene_leaf,
+    )
+
+    species_lca = LcaIndex(species_tree)
+    species_index_by_name = {
+        name: species_lca.index_by_node[node]
+        for name, node in species_leaf_by_name.items()
+    }
+    species_depth = species_lca.depth
+    species_ancestors = species_lca.ancestors
+
+    def common_ancestor_index(index1, index2):
+        if species_depth[index1] < species_depth[index2]:
+            index1, index2 = index2, index1
+        depth_difference = species_depth[index1] - species_depth[index2]
+        level = 0
+        while depth_difference:
+            if depth_difference & 1:
+                index1 = species_ancestors[level][index1]
+            depth_difference >>= 1
+            level += 1
+        if index1 == index2:
+            return index1
+        for ancestors in reversed(species_ancestors):
+            ancestor1 = ancestors[index1]
+            ancestor2 = ancestors[index2]
+            if ancestor1 != ancestor2:
+                index1 = ancestor1
+                index2 = ancestor2
+        return species_ancestors[0][index1]
+
+    messages: dict[tuple[Any, Any], _ReconciliationRootingMessage] = dict()
+
+    def build_message(source, target):
+        if target.is_leaf:
+            gene_name = str(target.name)
+            species_name = normalized_mapping.get(gene_name)
+            if species_name is None or species_name == "":
+                raise ValueError(
+                    "Gene tip '{}' has no resolved species mapping.".format(gene_name)
+                )
+            return _ReconciliationRootingMessage(
+                species_index=species_index_by_name[species_name],
+                duplications=0,
+                losses=0,
+                gene_leaf_count=1,
+                nearest_gene_leaf_distance=0,
+                nearest_gene_leaf_name=gene_name,
+            )
+
+        neighbors = adjacency[target]
+        if neighbors[0] is source:
+            child1, child2 = neighbors[1], neighbors[2]
+        elif neighbors[1] is source:
+            child1, child2 = neighbors[0], neighbors[2]
+        else:
+            child1, child2 = neighbors[0], neighbors[1]
+        message1 = messages[(target, child1)]
+        message2 = messages[(target, child2)]
+        species_index1 = message1.species_index
+        species_index2 = message2.species_index
+        mapped_species_index = common_ancestor_index(species_index1, species_index2)
+        event_duplications = int(
+            species_index1 == mapped_species_index
+            or species_index2 == mapped_species_index
+        )
+        event_losses = (
+            species_depth[species_index1]
+            + species_depth[species_index2]
+            - 2 * species_depth[mapped_species_index]
+            - (0 if event_duplications else 2)
+        )
+        nearest1 = (
+            message1.nearest_gene_leaf_distance,
+            message1.nearest_gene_leaf_name,
+        )
+        nearest2 = (
+            message2.nearest_gene_leaf_distance,
+            message2.nearest_gene_leaf_name,
+        )
+        nearest_distance, nearest_name = min(nearest1, nearest2)
+        return _ReconciliationRootingMessage(
+            species_index=mapped_species_index,
+            duplications=event_duplications
+            + message1.duplications
+            + message2.duplications,
+            losses=event_losses + message1.losses + message2.losses,
+            gene_leaf_count=message1.gene_leaf_count + message2.gene_leaf_count,
+            nearest_gene_leaf_distance=nearest_distance + 1,
+            nearest_gene_leaf_name=nearest_name,
+        )
+
+    anchor = gene_leaves[0]
+    parent: dict[Any, Any | None] = {anchor: None}
+    traversal_order: list[Any] = list()
+    stack = [anchor]
+    while stack:
+        node = stack.pop()
+        traversal_order.append(node)
+        for neighbor in adjacency[node]:
+            if neighbor is parent[node]:
+                continue
+            parent[neighbor] = node
+            stack.append(neighbor)
+
+    for target in reversed(traversal_order[1:]):
+        source = parent[target]
+        messages[(source, target)] = build_message(source, target)
+    for child in traversal_order[1:]:
+        target = parent[child]
+        messages[(child, target)] = build_message(child, target)
+
+    score_denominator, duplication_score_unit, loss_score_unit = (
+        _integer_reconciliation_score_units(weight_fractions)
+    )
+
+    best: tuple[Any, Any, int, int] | None = None
+    best_score_numerator: int | None = None
+    best_split_key: tuple[tuple[str, int], tuple[str, int]] = (
+        ("", 0),
+        ("", 0),
+    )
+    tied_best_count = 0
+    candidate_count = 0
+    for right in traversal_order[1:]:
+        left = parent[right]
+        candidate_count += 1
+        left_message = messages[(right, left)]
+        right_message = messages[(left, right)]
+        left_species_index = left_message.species_index
+        right_species_index = right_message.species_index
+        mapped_species_index = common_ancestor_index(
+            left_species_index,
+            right_species_index,
+        )
+        root_duplications = int(
+            left_species_index == mapped_species_index
+            or right_species_index == mapped_species_index
+        )
+        root_losses = (
+            species_depth[left_species_index]
+            + species_depth[right_species_index]
+            - 2 * species_depth[mapped_species_index]
+            - (0 if root_duplications else 2)
+        )
+        duplications = (
+            left_message.duplications + right_message.duplications + root_duplications
+        )
+        losses = left_message.losses + right_message.losses + root_losses
+        score_numerator = (
+            duplications * duplication_score_unit + losses * loss_score_unit
+        )
+        if best_score_numerator is not None and score_numerator > best_score_numerator:
+            continue
+        left_anchor = (
+            left_message.nearest_gene_leaf_name,
+            left_message.nearest_gene_leaf_distance,
+        )
+        right_anchor = (
+            right_message.nearest_gene_leaf_name,
+            right_message.nearest_gene_leaf_distance,
+        )
+        edge_key = (
+            (left_anchor, right_anchor)
+            if left_anchor <= right_anchor
+            else (right_anchor, left_anchor)
+        )
+        if left_message.gene_leaf_count < right_message.gene_leaf_count:
+            outgroup_endpoint = left
+            blocked_endpoint = right
+        elif right_message.gene_leaf_count < left_message.gene_leaf_count:
+            outgroup_endpoint = right
+            blocked_endpoint = left
+        elif left_anchor <= right_anchor:
+            outgroup_endpoint = left
+            blocked_endpoint = right
+        else:
+            outgroup_endpoint = right
+            blocked_endpoint = left
+        if best_score_numerator is None or score_numerator < best_score_numerator:
+            best = (
+                outgroup_endpoint,
+                blocked_endpoint,
+                duplications,
+                losses,
+            )
+            best_score_numerator = score_numerator
+            best_split_key = edge_key
+            tied_best_count = 1
+        else:
+            tied_best_count += 1
+            if edge_key < best_split_key:
+                best = (
+                    outgroup_endpoint,
+                    blocked_endpoint,
+                    duplications,
+                    losses,
+                )
+                best_split_key = edge_key
+    if best is None or best_score_numerator is None:
+        raise ValueError(
+            "Reconciliation rooting could not identify a candidate root edge."
+        )
+    best_score = Fraction(best_score_numerator, score_denominator)
+
+    outgroup_endpoint, blocked_endpoint, duplications, losses = best
+    outgroup_names = set()
+    outgroup_stack = [(outgroup_endpoint, blocked_endpoint)]
+    while outgroup_stack:
+        node, previous = outgroup_stack.pop()
+        if node.is_leaf:
+            outgroup_names.add(str(node.name))
+        for neighbor in adjacency[node]:
+            if neighbor is not previous:
+                outgroup_stack.append((neighbor, node))
+    sys.stderr.write(
+        "Reconciliation rooting evaluated {:,} candidate edge(s).\n".format(
+            candidate_count
+        )
+    )
+    sys.stderr.write(
+        "Reconciliation rooting score: {} (duplications={}, losses={}, "
+        "duplication_cost={}, loss_cost={}).\n".format(
+            _format_reconciliation_cost(best_score),
+            duplications,
+            losses,
+            _format_reconciliation_cost(weight_fractions["duplication"]),
+            _format_reconciliation_cost(weight_fractions["loss"]),
+        )
+    )
+    if tied_best_count > 1:
+        sys.stderr.write(
+            "Reconciliation rooting had {:,} equally optimal edge(s); selected "
+            "a deterministic canonical split.\n".format(tied_best_count)
+        )
+    sys.stderr.write(
+        "Selected reconciliation root split: {:,}|{:,} gene tips.\n".format(
+            len(outgroup_names),
+            len(gene_leaf_names) - len(outgroup_names),
+        )
+    )
+    output_tree = _collapse_singleton_root(tree)
+    return _root_by_outgroup_set(output_tree, outgroup_names, verbose=False)
+
+
 def root_main(args):
+    if args.method == "reconciliation":
+        if getattr(args, "species_tree", None) in (None, ""):
+            raise ValueError(
+                "'--species-tree' is required when '--method reconciliation' is used."
+            )
+        outputs = [("--outfile", args.outfile)]
+        validate_distinct_output_paths(outputs)
+        validate_outputs_do_not_replace_inputs(
+            [
+                ("--infile", args.infile),
+                ("--species-tree", args.species_tree),
+                ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+            ],
+            outputs,
+            label="Rooted tree output",
+        )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     output_properties = set(get_tree_property_names(tree))
     if args.method == "transfer":
@@ -2179,6 +2680,21 @@ def root_main(args):
         tree = mad_rooting(tree=tree)
     elif args.method == "mv":
         tree = mv_rooting(tree=tree)
+    elif args.method == "reconciliation":
+        from nwkit.reconcile import _parsed_species_labels
+
+        species_tree = read_tree(
+            args.species_tree,
+            getattr(args, "species_tree_format", "auto"),
+            args.quoted_node_names,
+        )
+        tree = reconciliation_rooting(
+            tree,
+            species_tree,
+            _parsed_species_labels(tree, args),
+            duplication_cost=getattr(args, "duplication_cost", 1.0),
+            loss_cost=getattr(args, "loss_cost", 1.0),
+        )
     elif args.method == "taxonomy":
         tree = taxonomy_rooting(
             tree=tree,

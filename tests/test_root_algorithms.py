@@ -11,6 +11,7 @@ from nwkit.root import (
     midpoint_rooting,
     mv_rooting,
     outgroup_rooting,
+    reconciliation_rooting,
     transfer_root,
 )
 from nwkit.util import is_rooted
@@ -742,6 +743,184 @@ class TestRerootAnnotationSafety:
         }
         assert child_by_taxa[frozenset({"A", "B"})].dist is None
         assert child_by_taxa[frozenset({"C", "D"})].dist == pytest.approx(0.0)
+
+
+class TestReconciliationRooting:
+    def test_selects_species_tree_consistent_root_and_preserves_distances(self, capsys):
+        gene_newick = "(A_a_g1:2,B_b_g1:3,(C_c_g1:4,D_d_g1:5):6);"
+        original = Tree(gene_newick, parser=1)
+        gene_tree = Tree(gene_newick, parser=1)
+        species_tree = Tree(
+            "((A_a:1,B_b:1):1,(C_c:1,D_d:1):1);",
+            parser=1,
+        )
+
+        rooted = reconciliation_rooting(
+            gene_tree,
+            species_tree,
+            {
+                str(leaf.name): "_".join(str(leaf.name).split("_")[:2])
+                for leaf in gene_tree.leaves()
+            },
+        )
+
+        assert {frozenset(child.leaf_names()) for child in rooted.get_children()} == {
+            frozenset({"A_a_g1", "B_b_g1"}),
+            frozenset({"C_c_g1", "D_d_g1"}),
+        }
+        for left in rooted.leaves():
+            for right in rooted.leaves():
+                assert rooted.get_distance(left, right) == pytest.approx(
+                    original.get_distance(left.name, right.name)
+                )
+        stderr = capsys.readouterr().err
+        assert "evaluated 5 candidate edge(s)" in stderr
+        assert "duplications=0, losses=0" in stderr
+
+    def test_equal_scores_use_a_label_stable_edge(self):
+        species_tree = Tree("(A:1,B:1);", parser=1)
+        mapping = {name: "A" for name in ["A_g1", "B_g1", "C_g1", "D_g1"]}
+
+        first = reconciliation_rooting(
+            Tree("(C_g1:1,A_g1:1,(D_g1:1,B_g1:1):1);", parser=1),
+            species_tree,
+            mapping,
+        )
+        second = reconciliation_rooting(
+            Tree("((B_g1:1,D_g1:1):1,A_g1:1,C_g1:1);", parser=1),
+            species_tree,
+            mapping,
+        )
+
+        for rooted in (first, second):
+            root_sides = {
+                frozenset(child.leaf_names()) for child in rooted.get_children()
+            }
+            assert frozenset({"A_g1"}) in root_sides
+
+    def test_duplication_and_loss_weights_can_select_different_edges(self):
+        species_tree = Tree("((E,B),(D,(C,A)));", parser=1)
+        gene_newick = "(E_g6,(((D_g2,E_g4),(E_g1,E_g5)),(E_g3,B_g0)));"
+        mapping = {
+            "B_g0": "B",
+            "D_g2": "D",
+            "E_g1": "E",
+            "E_g3": "E",
+            "E_g4": "E",
+            "E_g5": "E",
+            "E_g6": "E",
+        }
+
+        duplication_only = reconciliation_rooting(
+            Tree(gene_newick, parser=1),
+            species_tree,
+            mapping,
+            duplication_cost=1,
+            loss_cost=0,
+        )
+        loss_only = reconciliation_rooting(
+            Tree(gene_newick, parser=1),
+            species_tree,
+            mapping,
+            duplication_cost=0,
+            loss_cost=1,
+        )
+
+        duplication_sides = {
+            frozenset(child.leaf_names()) for child in duplication_only.get_children()
+        }
+        loss_sides = {
+            frozenset(child.leaf_names()) for child in loss_only.get_children()
+        }
+        assert frozenset({"B_g0", "E_g3"}) in duplication_sides
+        assert frozenset({"D_g2"}) in loss_sides
+
+    def test_fractional_weights_retain_exact_score(self, capsys):
+        species_tree = Tree("((E,B),(D,(C,A)));", parser=1)
+        gene_newick = "(E_g6,(((D_g2,E_g4),(E_g1,E_g5)),(E_g3,B_g0)));"
+        mapping = {
+            "B_g0": "B",
+            "D_g2": "D",
+            "E_g1": "E",
+            "E_g3": "E",
+            "E_g4": "E",
+            "E_g5": "E",
+            "E_g6": "E",
+        }
+
+        rooted = reconciliation_rooting(
+            Tree(gene_newick, parser=1),
+            species_tree,
+            mapping,
+            duplication_cost=1.5,
+            loss_cost=0.7,
+        )
+
+        root_sides = {frozenset(child.leaf_names()) for child in rooted.get_children()}
+        assert frozenset({"D_g2"}) in root_sides
+        assert "score: 8.8 (duplications=4, losses=4" in capsys.readouterr().err
+
+    def test_rejects_nonbinary_unrooted_topology(self):
+        with pytest.raises(ValueError, match="fully bifurcating"):
+            reconciliation_rooting(
+                Tree("(A_g1:1,B_g1:1,C_g1:1,D_g1:1);", parser=1),
+                Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1),
+                {
+                    "A_g1": "A",
+                    "B_g1": "B",
+                    "C_g1": "C",
+                    "D_g1": "D",
+                },
+            )
+
+    def test_rejects_unmapped_gene_tips(self):
+        with pytest.raises(ValueError, match="unresolved=B_g1"):
+            reconciliation_rooting(
+                Tree("(A_g1:1,B_g1:1);", parser=1),
+                Tree("(A:1,B:1);", parser=1),
+                {"A_g1": "A"},
+            )
+
+    def test_rejects_two_zero_costs(self):
+        with pytest.raises(ValueError, match="must be positive"):
+            reconciliation_rooting(
+                Tree("(A_g1:1,B_g1:1);", parser=1),
+                Tree("(A:1,B:1);", parser=1),
+                {"A_g1": "A", "B_g1": "B"},
+                duplication_cost=0,
+                loss_cost=0,
+            )
+
+    def test_singleton_root_is_collapsed_without_creating_a_tip(self):
+        gene_tree = Tree(
+            "(((A_g:1,B_g:1):1,C_g:1)INNER:2)OUTER:3;",
+            parser=1,
+        )
+
+        rooted = reconciliation_rooting(
+            gene_tree,
+            Tree("((A:1,B:1):1,C:1);", parser=1),
+            {"A_g": "A", "B_g": "B", "C_g": "C"},
+        )
+
+        assert set(rooted.leaf_names()) == {"A_g", "B_g", "C_g"}
+        assert None not in rooted.leaf_names()
+        assert rooted.name == "INNER"
+        assert rooted.dist == pytest.approx(5.0)
+        assert set(gene_tree.leaf_names()) == {"A_g", "B_g", "C_g"}
+        assert gene_tree.name == "OUTER"
+
+    def test_large_finite_total_score_does_not_overflow(self, capsys):
+        rooted = reconciliation_rooting(
+            Tree("(A_g1,A_g2,(A_g3,A_g4));", parser=1),
+            Tree("(A:1,B:1);", parser=1),
+            {name: "A" for name in ["A_g1", "A_g2", "A_g3", "A_g4"]},
+            duplication_cost=1e308,
+            loss_cost=0,
+        )
+
+        assert set(rooted.leaf_names()) == {"A_g1", "A_g2", "A_g3", "A_g4"}
+        assert "score: 3e+308" in capsys.readouterr().err
 
 
 class TestTransferRoot:

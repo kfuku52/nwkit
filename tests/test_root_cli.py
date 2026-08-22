@@ -268,6 +268,77 @@ class TestRootMain:
         assert is_rooted(tree)
         assert set(tree.leaf_names()) == {"A", "B", "C", "D", "E"}
 
+    def test_reconciliation(self, tmp_nwk, tmp_outfile):
+        gene_path = tmp_nwk(
+            "(A_a_g1:2,B_b_g1:3,(C_c_g1:4,D_d_g1:5):6);",
+            "gene.nwk",
+        )
+        species_path = tmp_nwk(
+            "((A_a:1,B_b:1):1,(C_c:1,D_d:1):1);",
+            "species.nwk",
+        )
+        args = make_args(
+            infile=gene_path,
+            outfile=tmp_outfile,
+            method="reconciliation",
+            species_tree=species_path,
+            species_tree_format="auto",
+            duplication_cost=1.0,
+            loss_cost=1.0,
+        )
+
+        root_main(args)
+
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert {frozenset(child.leaf_names()) for child in tree.get_children()} == {
+            frozenset({"A_a_g1", "B_b_g1"}),
+            frozenset({"C_c_g1", "D_d_g1"}),
+        }
+
+    def test_reconciliation_requires_species_tree(self, tmp_nwk):
+        gene_path = tmp_nwk("(A_a_g1:1,B_b_g1:1);", "gene.nwk")
+        args = make_args(
+            infile=gene_path,
+            outfile="-",
+            method="reconciliation",
+            species_tree=None,
+        )
+
+        with pytest.raises(ValueError, match="species-tree.*required"):
+            root_main(args)
+
+    def test_reconciliation_large_finite_score_still_writes_tree(
+        self,
+        tmp_nwk,
+        tmp_outfile,
+        capsys,
+    ):
+        gene_path = tmp_nwk(
+            "(A_a_g1:1,A_a_g2:1,(A_a_g3:1,A_a_g4:1):1);",
+            "gene.nwk",
+        )
+        species_path = tmp_nwk("(A_a:1,B_b:1);", "species.nwk")
+        args = make_args(
+            infile=gene_path,
+            outfile=tmp_outfile,
+            method="reconciliation",
+            species_tree=species_path,
+            species_tree_format="auto",
+            duplication_cost=1e308,
+            loss_cost=0,
+        )
+
+        root_main(args)
+
+        rooted = read_tree(
+            tmp_outfile,
+            format="auto",
+            quoted_node_names=True,
+            quiet=True,
+        )
+        assert len(list(rooted.leaves())) == 4
+        assert "score: 3e+308" in capsys.readouterr().err
+
     def test_taxonomy(self, monkeypatch, tmp_nwk, tmp_outfile):
         install_fake_ncbi(
             monkeypatch,

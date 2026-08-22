@@ -4,6 +4,7 @@ from ete4 import Tree
 from nwkit.reconcile import (
     _report_unmatched_species,
     build_reconciliation_table,
+    lca_duplication_loss_contribution,
 )
 
 SPECIES_TREE = "((A_a:1,B_b:1):1,C_c:2);"
@@ -17,6 +18,34 @@ def _species_mapping(tree):
         str(leaf.name): "_".join(str(leaf.name).split("_")[:2])
         for leaf in tree.leaves()
     }
+
+
+def test_lca_duplication_loss_contribution_counts_species_edges():
+    species_tree = Tree("((A:1,B:1)AB:1,C:1)ABC;", parser=1)
+    nodes = {str(node.name): node for node in species_tree.traverse()}
+    depths = {
+        species_tree: 0,
+        nodes["AB"]: 1,
+        nodes["A"]: 2,
+        nodes["B"]: 2,
+        nodes["C"]: 1,
+    }
+
+    assert lca_duplication_loss_contribution(
+        species_tree,
+        [nodes["A"], nodes["C"]],
+        depths,
+    ) == (0, 1)
+    assert lca_duplication_loss_contribution(
+        species_tree,
+        [species_tree, nodes["A"]],
+        depths,
+    ) == (1, 2)
+    assert lca_duplication_loss_contribution(
+        species_tree,
+        (node for node in [species_tree, nodes["A"]]),
+        depths,
+    ) == (1, 2)
 
 
 def test_lca_reconciliation_keeps_parallel_speciation_events_as_separate_rows():

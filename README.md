@@ -90,7 +90,7 @@ minimal worked example, in
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
 - [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
-- [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing or transferring the tree root
+- [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root
 - [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
 - [`sample`](https://github.com/kfuku52/nwkit/wiki/nwkit-sample): Selecting a representative leaf subset by filters, ranks, and sampling method
 - [`shuffle`](https://github.com/kfuku52/nwkit/wiki/nwkit-shuffle): Shuffling branches and/or labels
@@ -99,6 +99,32 @@ minimal worked example, in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+
+## Reconciliation-assisted gene-tree rooting
+
+`nwkit root --method reconciliation` evaluates every physical edge of a fully
+bifurcating gene tree and selects the root that minimizes the weighted sum of
+LCA-reconciliation duplications and implied losses. It performs the
+reconciliation directly and does not require Notung or another external
+reconciliation program.
+
+```sh
+nwkit root -i gene_tree.nwk \
+  --method reconciliation \
+  --species-tree species_tree.nwk \
+  --duplication-cost 1 \
+  --loss-cost 1 \
+  -o rooted_gene_tree.nwk
+```
+
+The species tree must be rooted and strictly bifurcating. Every gene tip must
+map to one of its tips through `--species-parser`, `--species-regex`, or
+`--species-map-tsv`. Losses are counted on topological species-tree edges;
+branch lengths do not affect the score. Both costs are non-negative and at
+least one must be positive. Equally optimal edges are resolved deterministically
+from the gene-tip labels and topology. A top-level singleton wrapper in the
+gene tree is collapsed before rooting, with its root-stem length preserved;
+non-binary internal topology is rejected.
 
 ## Reconciled speciation contrasts and phylogenetic regression
 
@@ -310,9 +336,9 @@ length values still require `--allow-projected-values yes`, and strict mode
 still rejects every projected match.
 
 `compose` changes the target rooting only when `--root-source` is supplied.
-The `midpoint`, `outgroup`, `mad`, `mv`, `taxonomy`, and `transfer` rooting
-methods apply the same split-based annotation preservation. For tree
-collections, `validate --require-same-rooting yes` compares the root
+The `midpoint`, `outgroup`, `mad`, `mv`, `reconciliation`, `taxonomy`, and
+`transfer` rooting methods apply the same split-based annotation preservation.
+For tree collections, `validate --require-same-rooting yes` compares the root
 bipartition when leaf sets are identical.
 
 Arbitrary NHX properties can be transferred or renamed directly:
