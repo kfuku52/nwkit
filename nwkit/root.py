@@ -15,6 +15,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 
 from nwkit.clade_mapping import (
+    canonical_split,
     find_root_split_candidates,
     projected_root_split,
 )
@@ -24,6 +25,11 @@ from nwkit.constrain import (
     name_to_taxid,
     read_taxid_tsv,
     taxid2tree,
+)
+from nwkit.root_evaluation import (
+    RootingCandidate,
+    RootingEvaluation,
+    candidate_from_rooted_tree,
 )
 from nwkit.util import (
     TREE_FORMAT_PROP,
@@ -871,7 +877,41 @@ def _restore_reroot_branch_length_scale(tree, branch_length_scale):
         node.dist = float(node.dist) * branch_length_scale
 
 
-def midpoint_rooting(tree):
+def _root_radius(tree):
+    maximum = 0.0
+    stack = [(tree, 0.0)]
+    while stack:
+        node, distance = stack.pop()
+        if node.is_leaf:
+            maximum = max(maximum, distance)
+        for child in node.get_children():
+            edge_length = 0.0 if child.dist is None else float(child.dist)
+            stack.append((child, distance + edge_length))
+    return maximum
+
+
+def _scaled_finite_value(value, scale):
+    scaled = float(value) * float(scale)
+    return scaled if math.isfinite(scaled) else None
+
+
+def _canonical_incident_child(tree):
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    candidates = []
+    for child in tree.get_children():
+        side = frozenset(str(name) for name in child.leaf_names())
+        other = all_taxa - side
+        key = (
+            min((len(side), tuple(sorted(side))), (len(other), tuple(sorted(other)))),
+            max((len(side), tuple(sorted(side))), (len(other), tuple(sorted(other)))),
+        )
+        candidates.append((key, child))
+    if not candidates:
+        return None
+    return min(candidates, key=lambda item: item[0])[1]
+
+
+def midpoint_rooting(tree, _return_evaluation=False):
     tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(
         tree,
@@ -882,15 +922,36 @@ def midpoint_rooting(tree):
     branch_length_scale = _normalize_reroot_branch_lengths(tree, "Midpoint")
     _normalize_root_distance_for_reroot(tree)
     outgroup_node = tree.get_midpoint_outgroup()
-    # If the outgroup is the root itself, tree is already optimally rooted
     if outgroup_node.is_root:
-        _restore_reroot_branch_length_scale(tree, branch_length_scale)
-        _finish_annotations_after_reroot(tree, annotation_backup)
-        return tree
-    tree.set_outgroup(outgroup_node)
+        if len(tree.get_children()) != 2:
+            incident_child = _canonical_incident_child(tree)
+            if incident_child is not None:
+                root_distance = (
+                    None if incident_child.dist is None else float(incident_child.dist)
+                )
+                tree.set_outgroup(incident_child, dist=root_distance)
+    else:
+        tree.set_midpoint_outgroup()
+    normalized_radius = _root_radius(tree)
     _restore_reroot_branch_length_scale(tree, branch_length_scale)
     _finish_annotations_after_reroot(tree, annotation_backup)
-    return tree
+    if not _return_evaluation:
+        return tree
+    score = _scaled_finite_value(normalized_radius, branch_length_scale)
+    candidate = candidate_from_rooted_tree(
+        tree,
+        position_kind="exact",
+        score=score,
+    )
+    evaluation = RootingEvaluation(
+        method="midpoint",
+        selection_basis="diameter_midpoint",
+        score_name="radius",
+        score_unit="branch_length",
+        candidates=(candidate,),
+        tie_rule="unique_tree_center",
+    )
+    return tree, evaluation
 
 
 def _prepare_mad_tree(tree):
@@ -1217,7 +1278,7 @@ def _mad_candidate_key(node, all_subtree_masks, all_tips_by_name):
     return key, side_indices
 
 
-def _select_mad_candidate(
+def _select_mad_candidates(
     tree,
     tips,
     node_index_by_id,
@@ -1227,18 +1288,33 @@ def _select_mad_candidate(
     tree_index,
     objective_data,
     use_float_arithmetic,
+    return_all_ties,
 ):
-    best: dict[str, Any] = {
-        "score": math.inf,
-        "node": None,
-        "root_distance": 0.0,
-        "edge_length": 0.0,
-        "side_names": None,
-        "key": None,
-    }
+    candidate_records = []
+    best_candidate = None
+    evaluated_edges = 0
     pair_count = len(tips) * (len(tips) - 1) // 2
     zero = tree_index["zero"]
     all_effective_mask = (1 << len(tips)) - 1
+
+    def completed_candidate(record):
+        score, node, root_distance, edge_length = record
+        candidate_key, side_indices = _mad_candidate_key(
+            node,
+            all_subtree_masks,
+            all_tips_by_name,
+        )
+        return {
+            "score": score,
+            "node": node,
+            "root_distance": root_distance,
+            "edge_length": edge_length,
+            "side_names": frozenset(
+                str(all_tips_by_name[index].name) for index in side_indices
+            ),
+            "key": candidate_key,
+        }
+
     for node in tree.traverse():
         if node.is_root:
             continue
@@ -1262,31 +1338,54 @@ def _select_mad_candidate(
         )
         normalized = objective / (pair_count * objective_data["weight_scale"] ** 2)
         score = math.sqrt(max(0.0, float(normalized)))
-        is_tied = math.isclose(score, best["score"], rel_tol=10**-12, abs_tol=10**-15)
-        is_improvement = score < best["score"] and not is_tied
+        record = (
+            score,
+            node,
+            float(root_distance),
+            float(edge_length),
+        )
+        evaluated_edges += 1
+        if return_all_ties:
+            candidate_records.append(record)
+            continue
+        is_tied = best_candidate is not None and math.isclose(
+            score,
+            best_candidate["score"],
+            rel_tol=10**-12,
+            abs_tol=10**-15,
+        )
+        is_improvement = best_candidate is None or (
+            score < best_candidate["score"] and not is_tied
+        )
         if not is_improvement and not is_tied:
             continue
-        candidate_key, side_indices = _mad_candidate_key(
-            node, all_subtree_masks, all_tips_by_name
-        )
-        if is_improvement or (
-            is_tied and (best["key"] is None or candidate_key < best["key"])
-        ):
-            best.update(
-                {
-                    "score": score,
-                    "node": node,
-                    "root_distance": float(root_distance),
-                    "edge_length": float(edge_length),
-                    "side_names": frozenset(
-                        str(all_tips_by_name[index].name) for index in side_indices
-                    ),
-                    "key": candidate_key,
-                }
-            )
-    if best["node"] is None:
+        completed = completed_candidate(record)
+        if is_improvement:
+            best_candidate = completed
+        elif best_candidate is not None and completed["key"] < best_candidate["key"]:
+            best_candidate = completed
+
+    if not return_all_ties:
+        if best_candidate is None:
+            raise ValueError("MAD rooting could not identify a candidate root edge.")
+        return [best_candidate], evaluated_edges
+    if not candidate_records:
         raise ValueError("MAD rooting could not identify a candidate root edge.")
-    return best
+    minimum_score = min(record[0] for record in candidate_records)
+
+    tied_records = (
+        record
+        for record in candidate_records
+        if math.isclose(
+            record[0],
+            minimum_score,
+            rel_tol=10**-12,
+            abs_tol=10**-15,
+        )
+    )
+    tied = [completed_candidate(record) for record in tied_records]
+    tied.sort(key=lambda candidate: candidate["key"])
+    return tied, evaluated_edges
 
 
 def _finish_mad_rooting(tree, best, branch_length_scale, annotation_backup):
@@ -1312,7 +1411,28 @@ def _finish_mad_rooting(tree, best, branch_length_scale, annotation_backup):
     return tree
 
 
-def mad_rooting(tree):
+def _mad_evaluation_candidate(candidate, all_tips_by_name, branch_length_scale):
+    first_side_indices, second_side_indices = candidate["key"]
+    split = (
+        frozenset(str(all_tips_by_name[index].name) for index in first_side_indices),
+        frozenset(str(all_tips_by_name[index].name) for index in second_side_indices),
+    )
+    edge_length = float(candidate["edge_length"])
+    root_distance = float(candidate["root_distance"])
+    if candidate["side_names"] == split[0]:
+        fraction = root_distance / edge_length
+    else:
+        fraction = (edge_length - root_distance) / edge_length
+    return RootingCandidate(
+        split=split,
+        position_kind="exact",
+        position_fraction_from_side_a=float(fraction),
+        edge_length=_scaled_finite_value(edge_length, branch_length_scale),
+        score=float(candidate["score"]),
+    )
+
+
+def mad_rooting(tree, _return_evaluation=False):
     """Root a tree by minimal ancestor deviation (Tria et al. 2017)."""
     prepared = _prepare_mad_tree(tree)
     tree = prepared["tree"]
@@ -1334,7 +1454,7 @@ def mad_rooting(tree):
         tree_index,
         use_float_arithmetic,
     )
-    best = _select_mad_candidate(
+    best_candidates, evaluated_edges = _select_mad_candidates(
         tree,
         tips,
         node_index_by_id,
@@ -1344,13 +1464,33 @@ def mad_rooting(tree):
         tree_index,
         objective_data,
         use_float_arithmetic,
+        return_all_ties=_return_evaluation,
     )
-    return _finish_mad_rooting(
+    rooted = _finish_mad_rooting(
         tree,
-        best,
+        best_candidates[0],
         prepared["branch_length_scale"],
         prepared["annotation_backup"],
     )
+    if not _return_evaluation:
+        return rooted
+    evaluation = RootingEvaluation(
+        method="mad",
+        selection_basis="optimized",
+        score_name="ancestor_deviation",
+        score_unit="dimensionless",
+        candidates=tuple(
+            _mad_evaluation_candidate(
+                candidate,
+                all_tips_by_name,
+                prepared["branch_length_scale"],
+            )
+            for candidate in best_candidates
+        ),
+        evaluated_edges=evaluated_edges,
+        tie_rule="isclose(rel=1e-12,abs=1e-15)",
+    )
+    return rooted, evaluation
 
 
 def _collect_leaf_distance_stats(tree):
@@ -1405,7 +1545,31 @@ def _collect_leaf_distance_stats(tree):
     return subtree_stats, all_stats
 
 
-def mv_rooting(tree):
+def _mv_reported_variance(variance, branch_length_scale):
+    reported = float(variance) * float(branch_length_scale)
+    reported *= float(branch_length_scale)
+    return reported if math.isfinite(reported) else None
+
+
+def _mv_evaluation_candidate(candidate, branch_length_scale):
+    edge_length = float(candidate["edge_length"])
+    root_distance = float(candidate["root_distance"])
+    if edge_length == 0.0:
+        fraction = 0.0
+    elif candidate["side_names"] == candidate["split"][0]:
+        fraction = root_distance / edge_length
+    else:
+        fraction = (edge_length - root_distance) / edge_length
+    return RootingCandidate(
+        split=candidate["split"],
+        position_kind="exact",
+        position_fraction_from_side_a=float(fraction),
+        edge_length=_scaled_finite_value(edge_length, branch_length_scale),
+        score=_mv_reported_variance(candidate["variance"], branch_length_scale),
+    )
+
+
+def mv_rooting(tree, _return_evaluation=False):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
     tree = copy_tree_iteratively(tree)
     validate_unique_named_leaves(
@@ -1432,10 +1596,9 @@ def mv_rooting(tree):
             tree.remove_child(to_dissolve)
     subtree_stats, all_stats = _collect_leaf_distance_stats(tree)
     total_leaf_count = subtree_stats[tree][0]
-    best_var = float("inf")
-    best_node = None
-    best_x = 0.0
-    best_L = 0.0
+    candidate_records = []
+    best_record = None
+    evaluated_edges = 0
     for node in tree.traverse():
         if node.is_root:
             continue
@@ -1466,30 +1629,88 @@ def mv_rooting(tree):
         var = (total_sumsq / total_leaf_count) - (mean * mean)
         if (var < 0) and (abs(var) < 10**-12):
             var = 0.0
-        if var < best_var:
-            best_var = var
-            best_node = node
-            best_x = x
-            best_L = L
-    if best_node is None:
+        record = (var, node, x, L)
+        evaluated_edges += 1
+        if _return_evaluation:
+            candidate_records.append(record)
+        elif best_record is None or var < best_record[0]:
+            best_record = record
+    if (_return_evaluation and not candidate_records) or (
+        not _return_evaluation and best_record is None
+    ):
         _restore_reroot_branch_length_scale(tree, branch_length_scale)
         _finish_annotations_after_reroot(tree, annotation_backup)
+        if _return_evaluation:
+            raise ValueError("MV rooting could not identify a candidate root edge.")
         return tree
-    reported_var = best_var * branch_length_scale
-    reported_var *= branch_length_scale
-    sys.stderr.write("MV rooting variance: {:.6g}\n".format(reported_var))
-    tree.set_outgroup(best_node)
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+
+    def completed_candidate(record):
+        variance, node, root_distance, edge_length = record
+        side_names = frozenset(str(name) for name in node.leaf_names())
+        split = canonical_split(side_names, all_taxa - side_names)
+        return {
+            "node": node,
+            "root_distance": root_distance,
+            "edge_length": edge_length,
+            "variance": variance,
+            "side_names": side_names,
+            "split": split,
+            "key": (
+                tuple(sorted(split[0])),
+                tuple(sorted(split[1])),
+            ),
+        }
+
+    if _return_evaluation:
+        minimum_variance = min(record[0] for record in candidate_records)
+        tied_records = (
+            record
+            for record in candidate_records
+            if math.isclose(
+                record[0],
+                minimum_variance,
+                rel_tol=10**-12,
+                abs_tol=10**-15,
+            )
+        )
+        best_candidates = [completed_candidate(record) for record in tied_records]
+        best_candidates.sort(key=lambda candidate: candidate["key"])
+    else:
+        assert best_record is not None
+        best_candidates = [completed_candidate(best_record)]
+    best = best_candidates[0]
+    reported_var = _mv_reported_variance(best["variance"], branch_length_scale)
+    if reported_var is None:
+        sys.stderr.write("MV rooting variance exceeds the finite output range.\n")
+    else:
+        sys.stderr.write("MV rooting variance: {:.6g}\n".format(reported_var))
+    tree.set_outgroup(best["node"])
     # Adjust branch lengths at root: best_x from root to best_node, (L - best_x) to sibling
-    best_subtree_leaves = set(best_node.leaf_names())
+    best_subtree_leaves = set(best["node"].leaf_names())
     root_leaf_sets = get_subtree_leaf_name_sets(tree)
     for child in tree.get_children():
         if root_leaf_sets[child] == best_subtree_leaves:
-            child.dist = best_x
+            child.dist = best["root_distance"]
         else:
-            child.dist = best_L - best_x
+            child.dist = best["edge_length"] - best["root_distance"]
     _restore_reroot_branch_length_scale(tree, branch_length_scale)
     _finish_annotations_after_reroot(tree, annotation_backup)
-    return tree
+    if not _return_evaluation:
+        return tree
+    evaluation = RootingEvaluation(
+        method="mv",
+        selection_basis="optimized",
+        score_name="root_to_tip_variance",
+        score_unit="branch_length_squared",
+        candidates=tuple(
+            _mv_evaluation_candidate(candidate, branch_length_scale)
+            for candidate in best_candidates
+        ),
+        evaluated_edges=evaluated_edges,
+        tie_rule="isclose(rel=1e-12,abs=1e-15) on normalized variance",
+    )
+    return tree, evaluation
 
 
 def outgroup_rooting(tree, outgroup_str):
@@ -2351,6 +2572,7 @@ def reconciliation_rooting(
     species_label_by_gene_leaf,
     duplication_cost=1.0,
     loss_cost=1.0,
+    _return_evaluation=False,
 ):
     """Root a gene tree by minimizing weighted LCA-reconciliation D/L cost.
 
@@ -2492,13 +2714,8 @@ def reconciliation_rooting(
         _integer_reconciliation_score_units(weight_fractions)
     )
 
-    best: tuple[Any, Any, int, int] | None = None
     best_score_numerator: int | None = None
-    best_split_key: tuple[tuple[str, int], tuple[str, int]] = (
-        ("", 0),
-        ("", 0),
-    )
-    tied_best_count = 0
+    best_records = []
     candidate_count = 0
     for right in traversal_order[1:]:
         left = parent[right]
@@ -2556,41 +2773,54 @@ def reconciliation_rooting(
             outgroup_endpoint = right
             blocked_endpoint = left
         if best_score_numerator is None or score_numerator < best_score_numerator:
-            best = (
-                outgroup_endpoint,
-                blocked_endpoint,
-                duplications,
-                losses,
-            )
             best_score_numerator = score_numerator
-            best_split_key = edge_key
-            tied_best_count = 1
+            best_records = [
+                {
+                    "outgroup_endpoint": outgroup_endpoint,
+                    "blocked_endpoint": blocked_endpoint,
+                    "duplications": duplications,
+                    "losses": losses,
+                    "edge_key": edge_key,
+                }
+            ]
         else:
-            tied_best_count += 1
-            if edge_key < best_split_key:
-                best = (
-                    outgroup_endpoint,
-                    blocked_endpoint,
-                    duplications,
-                    losses,
-                )
-                best_split_key = edge_key
-    if best is None or best_score_numerator is None:
+            best_records.append(
+                {
+                    "outgroup_endpoint": outgroup_endpoint,
+                    "blocked_endpoint": blocked_endpoint,
+                    "duplications": duplications,
+                    "losses": losses,
+                    "edge_key": edge_key,
+                }
+            )
+    if not best_records or best_score_numerator is None:
         raise ValueError(
             "Reconciliation rooting could not identify a candidate root edge."
         )
+    best_records.sort(key=lambda record: record["edge_key"])
     best_score = Fraction(best_score_numerator, score_denominator)
 
-    outgroup_endpoint, blocked_endpoint, duplications, losses = best
-    outgroup_names = set()
-    outgroup_stack = [(outgroup_endpoint, blocked_endpoint)]
-    while outgroup_stack:
-        node, previous = outgroup_stack.pop()
-        if node.is_leaf:
-            outgroup_names.add(str(node.name))
-        for neighbor in adjacency[node]:
-            if neighbor is not previous:
-                outgroup_stack.append((neighbor, node))
+    def component_leaf_names(endpoint, blocked_endpoint):
+        names = set()
+        component_stack = [(endpoint, blocked_endpoint)]
+        while component_stack:
+            node, previous = component_stack.pop()
+            if node.is_leaf:
+                names.add(str(node.name))
+            for neighbor in adjacency[node]:
+                if neighbor is not previous:
+                    component_stack.append((neighbor, node))
+        return names
+
+    for record in best_records:
+        record["outgroup_names"] = component_leaf_names(
+            record["outgroup_endpoint"],
+            record["blocked_endpoint"],
+        )
+    best = best_records[0]
+    outgroup_names = best["outgroup_names"]
+    duplications = best["duplications"]
+    losses = best["losses"]
     sys.stderr.write(
         "Reconciliation rooting evaluated {:,} candidate edge(s).\n".format(
             candidate_count
@@ -2606,10 +2836,10 @@ def reconciliation_rooting(
             _format_reconciliation_cost(weight_fractions["loss"]),
         )
     )
-    if tied_best_count > 1:
+    if len(best_records) > 1:
         sys.stderr.write(
             "Reconciliation rooting had {:,} equally optimal edge(s); selected "
-            "a deterministic canonical split.\n".format(tied_best_count)
+            "a deterministic canonical split.\n".format(len(best_records))
         )
     sys.stderr.write(
         "Selected reconciliation root split: {:,}|{:,} gene tips.\n".format(
@@ -2618,7 +2848,39 @@ def reconciliation_rooting(
         )
     )
     output_tree = _collapse_singleton_root(tree)
-    return _root_by_outgroup_set(output_tree, outgroup_names, verbose=False)
+    rooted = _root_by_outgroup_set(output_tree, outgroup_names, verbose=False)
+    if not _return_evaluation:
+        return rooted
+    all_gene_names = frozenset(gene_leaf_names)
+    candidates = []
+    for record in best_records:
+        side = frozenset(record["outgroup_names"])
+        split = canonical_split(side, all_gene_names - side)
+        candidates.append(
+            RootingCandidate(
+                split=split,
+                position_kind="edge_unspecified",
+                position_fraction_from_side_a=None,
+                edge_length=None,
+                score=best_score,
+                metrics={
+                    "duplications": record["duplications"],
+                    "losses": record["losses"],
+                    "duplication_cost": weight_fractions["duplication"],
+                    "loss_cost": weight_fractions["loss"],
+                },
+            )
+        )
+    evaluation = RootingEvaluation(
+        method="reconciliation",
+        selection_basis="optimized_edge",
+        score_name="weighted_duplication_loss_cost",
+        score_unit="cost",
+        candidates=tuple(candidates),
+        evaluated_edges=candidate_count,
+        tie_rule="exact",
+    )
+    return rooted, evaluation
 
 
 def root_main(args):

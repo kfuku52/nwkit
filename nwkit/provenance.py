@@ -46,6 +46,7 @@ OUTPUT_ARGUMENTS = frozenset(
         "manifest_out",
         "attribution_out",
         "group_table_prefix",
+        "figure_out",
         "audit",
     )
 )

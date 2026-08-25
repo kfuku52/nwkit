@@ -19,9 +19,11 @@ from matplotlib.offsetbox import AnnotationBbox, DrawingArea, OffsetImage
 from matplotlib.patches import Arc, Circle, Patch, PathPatch, Rectangle, Wedge
 from matplotlib.path import Path as MatplotlibPath
 from matplotlib.text import Text
+from matplotlib.transforms import ScaledTranslation
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
 from nwkit import __version__
+from nwkit.clade_mapping import canonical_split
 from nwkit.draw_layouts import get_rectangular_coordinates, make_tree_layout
 from nwkit.draw_prep import collapse_tree_for_drawing
 from nwkit.draw_quality import DrawingArtist, evaluate_drawing, write_layout_report
@@ -33,6 +35,7 @@ from nwkit.time_tree import (
 )
 from nwkit.util import (
     extract_species_label,
+    get_subtree_leaf_name_sets,
     is_rooted,
     read_tip_table,
     read_tree,
@@ -1586,6 +1589,248 @@ def _branch_style_maps(
     )
 
 
+def _physical_edge_paths(tree, drawing_layout):
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    taxon_sets = get_subtree_leaf_name_sets(tree)
+    nodes_by_split: dict[Any, list[Any]] = {}
+    for node in tree.traverse():
+        if node.is_root or node not in drawing_layout.edge_paths:
+            continue
+        side = frozenset(str(name) for name in taxon_sets[node])
+        split = canonical_split(side, all_taxa - side)
+        nodes_by_split.setdefault(split, []).append(node)
+
+    paths = {}
+    for split, nodes in nodes_by_split.items():
+        if len(nodes) == 1:
+            node = nodes[0]
+            path = list(drawing_layout.edge_paths[node])
+            side = frozenset(str(name) for name in taxon_sets[node])
+            if side == split[0]:
+                path.reverse()
+            paths[split] = path
+            continue
+        root_children = tree.get_children()
+        if len(nodes) == 2 and {id(node) for node in nodes} == {
+            id(child) for child in root_children
+        }:
+            side_a = next(
+                node
+                for node in nodes
+                if frozenset(str(name) for name in taxon_sets[node]) == split[0]
+            )
+            side_b = nodes[0] if nodes[1] is side_a else nodes[1]
+            path_a = list(reversed(drawing_layout.edge_paths[side_a]))
+            path_b = list(drawing_layout.edge_paths[side_b])
+            paths[split] = path_a + path_b[1:]
+    return paths
+
+
+def _point_on_path(path, fraction):
+    points = [np.asarray(point, dtype=float) for point in path]
+    if not points:
+        return None
+    if len(points) == 1:
+        return tuple(points[0])
+    segment_lengths = [
+        float(np.linalg.norm(second - first))
+        for first, second in zip(points, points[1:], strict=False)
+    ]
+    total_length = math.fsum(segment_lengths)
+    if total_length <= 1e-15:
+        return tuple(points[len(points) // 2])
+    target = min(max(float(fraction), 0.0), 1.0) * total_length
+    traversed = 0.0
+    for index, (first, second, segment_length) in enumerate(
+        zip(
+            points,
+            points[1:],
+            segment_lengths,
+            strict=True,
+        )
+    ):
+        if target <= traversed + segment_length or index == len(segment_lengths) - 1:
+            local_fraction = (target - traversed) / max(segment_length, 1e-15)
+            return tuple(first + ((second - first) * local_fraction))
+        traversed += segment_length
+    return tuple(points[-1])
+
+
+def _draw_branch_marker_overlays(ax, figure, tree, drawing_layout, branch_markers):
+    edge_paths = _physical_edge_paths(tree, drawing_layout)
+    resolved = []
+    for marker in branch_markers:
+        split = marker["split"]
+        path = edge_paths.get(split)
+        if path is None:
+            raise ValueError(
+                "A rooting marker split was not found in the displayed tree."
+            )
+        fraction = marker.get("position_fraction_from_side_a")
+        plotted_fraction = 0.5 if fraction is None else float(fraction)
+        point = _point_on_path(path, plotted_fraction)
+        if point is None:
+            raise ValueError("A rooting marker branch has no drawable path.")
+        display_point = np.asarray(ax.transData.transform(point), dtype=float)
+        point_units = display_point * (72.0 / figure.dpi)
+        resolved.append((marker, point, point_units))
+
+    parents = list(range(len(resolved)))
+
+    def find(index):
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    def union(first, second):
+        first_root = find(first)
+        second_root = find(second)
+        if first_root != second_root:
+            parents[max(first_root, second_root)] = min(first_root, second_root)
+
+    largest_marker = max(
+        (float(marker.get("size", 6.0)) for marker, _, _ in resolved),
+        default=6.0,
+    )
+    cell_size = largest_marker + 2.0
+    collision_headroom = 1.75
+    neighbor_span = math.ceil(collision_headroom)
+    marker_grid: dict[tuple[int, int], list[int]] = {}
+    for index, (marker, _, point_units) in enumerate(resolved):
+        cell = (
+            math.floor(point_units[0] / cell_size),
+            math.floor(point_units[1] / cell_size),
+        )
+        neighbor_indices = {
+            previous
+            for x_offset in range(-neighbor_span, neighbor_span + 1)
+            for y_offset in range(-neighbor_span, neighbor_span + 1)
+            for previous in marker_grid.get(
+                (cell[0] + x_offset, cell[1] + y_offset),
+                (),
+            )
+        }
+        marker_size = float(marker.get("size", 6.0))
+        for previous in neighbor_indices:
+            previous_marker, _, previous_point = resolved[previous]
+            separation = float(np.linalg.norm(point_units - previous_point))
+            collision_distance = (
+                marker_size + float(previous_marker.get("size", 6.0))
+            ) / 2.0 + 2.0
+            # Leave headroom for the axes shrink applied during final fitting.
+            if separation <= collision_distance * collision_headroom:
+                union(index, previous)
+        marker_grid.setdefault(cell, []).append(index)
+
+    grouped: dict[int, list[Any]] = {}
+    for index, record in enumerate(resolved):
+        grouped.setdefault(find(index), []).append(record)
+
+    artists = []
+    legend_handles = []
+    for group in grouped.values():
+        count = len(group)
+        largest_marker = max(float(marker.get("size", 6.0)) for marker, _, _ in group)
+        point_xs = [point_units[0] for _, _, point_units in group]
+        point_ys = [point_units[1] for _, _, point_units in group]
+        anchor_diameter = math.hypot(
+            max(point_xs) - min(point_xs),
+            max(point_ys) - min(point_ys),
+        )
+        fan_radius = (
+            0.0
+            if count == 1
+            else anchor_diameter
+            + max(
+                5.0,
+                (largest_marker + 2.0) / (2.0 * math.sin(math.pi / count)),
+            )
+        )
+        for index, (marker, point, _) in enumerate(group):
+            if count == 1:
+                offset_x = 0.0
+                offset_y = 0.0
+            else:
+                angle = (2.0 * math.pi * index / count) - (math.pi / 2.0)
+                offset_x = fan_radius * math.cos(angle)
+                offset_y = fan_radius * math.sin(angle)
+                ax.annotate(
+                    "",
+                    xy=point,
+                    xytext=(offset_x, offset_y),
+                    textcoords="offset points",
+                    arrowprops={
+                        "arrowstyle": "-",
+                        "color": marker["color"],
+                        "linewidth": 0.45,
+                    },
+                    zorder=7,
+                )
+            transform = ax.transData + ScaledTranslation(
+                offset_x / 72.0,
+                offset_y / 72.0,
+                figure.dpi_scale_trans,
+            )
+            filled = bool(marker.get("filled", True))
+            artist = ax.plot(
+                [point[0]],
+                [point[1]],
+                linestyle="None",
+                marker=marker["marker"],
+                markersize=float(marker.get("size", 6.0)),
+                markerfacecolor=marker["color"] if filled else "white",
+                markeredgecolor=marker["color"],
+                markeredgewidth=1.0,
+                transform=transform,
+                zorder=8,
+            )[0]
+            artists.append(artist)
+            legend_handles.append(
+                Line2D(
+                    [0],
+                    [0],
+                    linestyle="None",
+                    marker=marker["marker"],
+                    markersize=float(marker.get("size", 6.0)),
+                    markerfacecolor=marker["color"] if filled else "white",
+                    markeredgecolor=marker["color"],
+                    markeredgewidth=1.0,
+                    label=marker["label"],
+                )
+            )
+    return artists, legend_handles
+
+
+def _normalized_branch_markers(branch_markers):
+    return [] if branch_markers is None else list(branch_markers)
+
+
+def _branch_marker_artists(ax, figure, tree, drawing_layout, branch_markers):
+    if not branch_markers:
+        return [], []
+    artists, legend_handles = _draw_branch_marker_overlays(
+        ax,
+        figure,
+        tree,
+        drawing_layout,
+        branch_markers,
+    )
+    drawing_artists = [
+        DrawingArtist(
+            artist,
+            kind="branch_marker",
+            priority=90,
+        )
+        for artist in artists
+    ]
+    return drawing_artists, legend_handles
+
+
+def _legend_is_needed(legend, *content_groups):
+    return bool(legend) and any(bool(group) for group in content_groups)
+
+
 def _tip_track_colors(
     tree,
     properties,
@@ -2174,6 +2419,7 @@ def _draw_tree(
     branch_color_property=None,
     branch_width_property=None,
     branch_width_range="0.4,2.5",
+    branch_markers=None,
     tip_label_font_style="plain",
     tip_track_properties=None,
     tip_track_type="auto",
@@ -2205,6 +2451,7 @@ def _draw_tree(
     node_label_filters = node_label_filters or []
     tip_image_by_leaf = tip_image_by_leaf or {}
     tip_track_properties = tip_track_properties or []
+    branch_markers = _normalized_branch_markers(branch_markers)
     collapsed_clades = collapsed_clades or []
     densitree_mode = str(densitree).strip().lower()
     if densitree_mode not in {"none", "all", "ci", "both"}:
@@ -2555,13 +2802,15 @@ def _draw_tree(
             )
     row_pitch_in = row_pitch_pt / 72.0
     property_legend_needed = bool(badge_values or node_pie_properties)
-    legend_needed = bool(legend) and bool(
-        node_type_by_node
-        or group_color_by_name
-        or property_legend_needed
-        or tip_track_legend_entries
-        or branch_color_property not in (None, "")
-        or branch_width_property not in (None, "")
+    legend_needed = _legend_is_needed(
+        legend,
+        node_type_by_node,
+        group_color_by_name,
+        property_legend_needed,
+        tip_track_legend_entries,
+        branch_color_property not in (None, ""),
+        branch_width_property not in (None, ""),
+        branch_markers,
     )
     top_margin_in = (44.0 / 72.0) if legend_needed else (4.0 / 72.0)
     scale_bar_strip_pt = (
@@ -3106,7 +3355,15 @@ def _draw_tree(
 
     marker_area = 18.0 * (0.5**2)
     marker_size_pt = 4.8 * 0.5
-    legend_handles = list()
+    marker_drawing_artists, marker_legend_handles = _branch_marker_artists(
+        ax,
+        fig,
+        tree,
+        drawing_layout,
+        branch_markers,
+    )
+    drawing_artists.extend(marker_drawing_artists)
+    legend_handles = list(marker_legend_handles)
     if len(node_type_by_node) > 0:
         for node, node_type in node_type_by_node.items():
             marker_color = (

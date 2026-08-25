@@ -626,7 +626,7 @@ class TestRootMain:
         """Wiki example: nwkit root --method midpoint
 
         Input:  ((((a:5,b:1):1,c:3):1,f:1):1,(d:1,e:1):1):0;
-        Output: ((a:5,b:1):0.5,(c:3,(f:1,(d:1,e:1):2):1):0.5):0;
+        The exact diameter midpoint is the endpoint of the length-5 branch to a.
         """
         # Note: Added explicit :1 to internal node that was missing dist in original wiki example
         path = tmp_nwk("((((a:5,b:1):1,c:3):1,f:1):1,(d:1,e:1):1):0;")
@@ -639,18 +639,15 @@ class TestRootMain:
         tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         assert is_rooted(tree)
         assert set(tree.leaf_names()) == {"a", "b", "c", "d", "e", "f"}
-        # Verify exact root-to-tip distances from wiki output
+        # Verify exact root-to-tip distances from the diameter midpoint.
         dists = {l.name: safe_get_distance(tree, tree, l) for l in tree.leaves()}
-        assert abs(dists["a"] - 5.5) < 1e-6
-        assert abs(dists["b"] - 1.5) < 1e-6
-        assert abs(dists["c"] - 3.5) < 1e-6
-        assert abs(dists["f"] - 2.5) < 1e-6
-        assert abs(dists["d"] - 4.5) < 1e-6
-        assert abs(dists["e"] - 4.5) < 1e-6
-        # Root children should both have dist 0.5
-        children = tree.get_children()
-        for c in children:
-            assert abs(c.dist - 0.5) < 1e-6
+        assert abs(dists["a"] - 5.0) < 1e-6
+        assert abs(dists["b"] - 1.0) < 1e-6
+        assert abs(dists["c"] - 4.0) < 1e-6
+        assert abs(dists["f"] - 3.0) < 1e-6
+        assert abs(dists["d"] - 5.0) < 1e-6
+        assert abs(dists["e"] - 5.0) < 1e-6
+        assert sorted(child.dist for child in tree.get_children()) == [0.0, 5.0]
 
     def test_wiki_outgroup_single_exact_distances(self, tmp_nwk, tmp_outfile):
         """Wiki outgroup single: verify exact root-to-tip distances.

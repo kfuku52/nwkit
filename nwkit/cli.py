@@ -4571,6 +4571,235 @@ proot.add_argument(
 proot.set_defaults(handler=command_root)
 
 
+def command_rootcompare(args):
+    from nwkit.root_compare import root_compare_main
+
+    root_compare_main(args)
+
+
+prootcompare = subparsers.add_parser(
+    "rootcompare",
+    help="Compare rooting methods in a TSV table and marked PDF tree",
+    parents=[p_tree_input, p_table_output, p_download, p_species],
+)
+prootcompare.add_argument(
+    "--methods",
+    metavar="all|METHOD[,METHOD,...]",
+    default="all",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Rooting methods to compare. 'all' always runs midpoint, MAD, and MV; it also runs outgroup, transfer, and reconciliation when their required inputs are supplied, and independently runs configured taxonomy sources when species names can be parsed (or NCBI taxids are supplied).",
+)
+prootcompare.add_argument(
+    "--exclude-methods",
+    "--exclude_methods",
+    dest="exclude_methods",
+    metavar="METHOD[,METHOD,...]",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Exclude methods from the resolved method set. 'taxonomy' excludes every taxonomy source.",
+)
+prootcompare.add_argument(
+    "--figure-out",
+    "--figure_out",
+    dest="figure_out",
+    metavar="PATH.pdf",
+    default=None,
+    type=str,
+    required=True,
+    action="store",
+    help="PDF showing every best rooting position, including ties, as a branch marker.",
+)
+prootcompare.add_argument(
+    "-i2",
+    "--infile2",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Rooted reference tree for the transfer method. With --methods all, supplying this option enables transfer automatically.",
+)
+prootcompare.add_argument(
+    "-f2",
+    "--format2",
+    metavar="auto|auto-strict|INT",
+    default="auto",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: ETE tree format for --infile2.",
+)
+prootcompare.add_argument(
+    "--taxon-mode",
+    "--taxon_mode",
+    dest="taxon_mode",
+    metavar="exact|intersection",
+    default="exact",
+    type=str,
+    required=False,
+    action="store",
+    choices=["exact", "intersection"],
+    help="default=%(default)s: Require identical tips for transfer or project the reference root onto shared tips.",
+)
+prootcompare.add_argument(
+    "--species-tree",
+    "--species_tree",
+    dest="species_tree",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Rooted, strictly bifurcating species tree for reconciliation. With --methods all, supplying this option enables reconciliation automatically.",
+)
+prootcompare.add_argument(
+    "--species-tree-format",
+    "--species_tree_format",
+    dest="species_tree_format",
+    metavar="auto|auto-strict|INT",
+    default="auto",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: ETE tree format for --species-tree.",
+)
+prootcompare.add_argument(
+    "--duplication-cost",
+    "--duplication_cost",
+    dest="duplication_cost",
+    metavar="FLOAT",
+    default=1.0,
+    type=nonnegative_finite_float,
+    required=False,
+    action="store",
+    help="default=%(default)s: Non-negative reconciliation duplication weight.",
+)
+prootcompare.add_argument(
+    "--loss-cost",
+    "--loss_cost",
+    dest="loss_cost",
+    metavar="FLOAT",
+    default=1.0,
+    type=nonnegative_finite_float,
+    required=False,
+    action="store",
+    help="default=%(default)s: Non-negative reconciliation implied-loss weight. Both reconciliation weights cannot be zero.",
+)
+prootcompare.add_argument(
+    "--outgroup",
+    metavar="STR",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Outgroup label or comma-separated labels. With --methods all, supplying this option enables outgroup rooting automatically.",
+)
+prootcompare.add_argument(
+    "--taxonomy-source",
+    "--taxonomy_source",
+    dest="taxonomy_source",
+    metavar="ncbi[,opentree,timetree,...]",
+    default="ncbi,opentree,timetree",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Taxonomy sources to evaluate independently. Under --methods all they are enabled when every tip yields a species name; NCBI is also enabled by --taxid-tsv.",
+)
+prootcompare.add_argument(
+    "--taxid-tsv",
+    "--taxid_tsv",
+    dest="taxid_tsv",
+    metavar="PATH",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help='TSV with "leaf_name" and "taxid" columns for the NCBI taxonomy method.',
+)
+prootcompare.add_argument(
+    "--rank",
+    metavar="no|species|genus|family|order|...",
+    default="no",
+    type=str,
+    required=False,
+    action="store",
+    help="default=%(default)s: Highest taxonomic rank retained for NCBI rooting.",
+)
+prootcompare.add_argument(
+    "--figure-width",
+    "--figure_width",
+    dest="figure_width",
+    metavar="INCHES",
+    default=None,
+    type=finite_float,
+    required=False,
+    action="store",
+    help="default=auto: PDF figure width in inches. Auto expands unrooted trees according to tip-label density, from 7.2 up to 200 inches.",
+)
+prootcompare.add_argument(
+    "--figure-height",
+    "--figure_height",
+    dest="figure_height",
+    metavar="INCHES",
+    default=None,
+    type=finite_float,
+    required=False,
+    action="store",
+    help="default=auto: PDF figure height in inches.",
+)
+prootcompare.add_argument(
+    "--font-size",
+    "--font_size",
+    dest="font_size",
+    metavar="POINTS",
+    default=8.0,
+    type=finite_float,
+    required=False,
+    action="store",
+    help="default=%(default)s: Tip-label and legend font size in points.",
+)
+prootcompare.add_argument(
+    "--tip-labels",
+    "--tip_labels",
+    dest="tip_labels",
+    metavar="auto|yes|no",
+    default="auto",
+    type=str,
+    required=False,
+    choices=["auto", "yes", "no"],
+    action="store",
+    help="default=%(default)s: Show tip labels. Auto omits them above 200 tips to keep large comparison PDFs readable.",
+)
+prootcompare.add_argument(
+    "--unrooted-method",
+    "--unrooted_method",
+    dest="unrooted_method",
+    metavar="auto|equal-daylight|equal-angle",
+    default="auto",
+    type=str,
+    required=False,
+    choices=["auto", "equal-daylight", "equal-angle"],
+    action="store",
+    help="default=%(default)s: Unrooted layout algorithm. Auto uses equal-daylight through 2,000 displayed nodes and equal-angle for larger trees.",
+)
+prootcompare.add_argument(
+    "--layout-report",
+    "--layout_report",
+    dest="layout_report",
+    metavar="PATH.json",
+    default=None,
+    type=str,
+    required=False,
+    action="store",
+    help="Optional JSON report containing resolved layout dimensions and collision counts.",
+)
+prootcompare.set_defaults(handler=command_rootcompare)
+
+
 def command_sanitize(args):
     from nwkit.sanitize import sanitize_main
 

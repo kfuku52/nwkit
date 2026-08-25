@@ -43,6 +43,8 @@ def main() -> int:
         "nwkit/reconcile.py",
         "nwkit/replicates.py",
         "nwkit/root.py",
+        "nwkit/root_compare.py",
+        "nwkit/root_evaluation.py",
         "nwkit/sparse_laplace.py",
         "nwkit/data_tree/apgiv.nwk",
     }
@@ -82,6 +84,8 @@ def main() -> int:
         "/nwkit/reconcile.py",
         "/nwkit/replicates.py",
         "/nwkit/root.py",
+        "/nwkit/root_compare.py",
+        "/nwkit/root_evaluation.py",
         "/nwkit/sparse_laplace.py",
         "/CLI_TSV_CONVENTIONS.md",
         "/PHYLOGENETIC_REGRESSION.md",

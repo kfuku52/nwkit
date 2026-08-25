@@ -274,6 +274,13 @@ class TestMadRooting:
             )
         assert observed_splits == [expected_split, expected_split]
 
+        _, evaluation = mad_rooting(
+            Tree("(D:1,C:1,B:1,A:1);", parser=1),
+            _return_evaluation=True,
+        )
+        assert len(evaluation.candidates) == 4
+        assert evaluation.evaluated_edges == 4
+
     def test_root_position_is_invariant_to_branch_length_scale(self):
         base_tree = Tree(
             "((A:1,B:2):1,(C:3,(D:1,E:2):1):1);",
@@ -502,6 +509,16 @@ class TestMvRooting:
         tree = Tree("((A:1,B:2):1,(C:3,(D:1,E:2):1):1);", parser=1)
         rooted = mv_rooting(tree)
         assert is_rooted(rooted)
+
+    def test_reports_every_tied_best_edge(self):
+        _, evaluation = mv_rooting(
+            Tree("(A:1,B:1,C:1,D:1);", parser=1),
+            _return_evaluation=True,
+        )
+
+        assert len(evaluation.candidates) == 4
+        assert evaluation.evaluated_edges == 4
+        assert {candidate.score for candidate in evaluation.candidates} == {0.0}
 
     def test_preserves_leaves(self):
         tree = Tree("((A:1,B:2):1,(C:3,(D:1,E:2):1):1);", parser=1)
@@ -797,6 +814,15 @@ class TestReconciliationRooting:
                 frozenset(child.leaf_names()) for child in rooted.get_children()
             }
             assert frozenset({"A_g1"}) in root_sides
+
+        _, evaluation = reconciliation_rooting(
+            Tree("(C_g1:1,A_g1:1,(D_g1:1,B_g1:1):1);", parser=1),
+            species_tree,
+            mapping,
+            _return_evaluation=True,
+        )
+        assert len(evaluation.candidates) == 5
+        assert evaluation.evaluated_edges == 5
 
     def test_duplication_and_loss_weights_can_select_different_edges(self):
         species_tree = Tree("((E,B),(D,(C,A)));", parser=1)

@@ -4,6 +4,27 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.0] - 2026-08-25
+
+### Added
+
+- Added `rootcompare`, which runs applicable rooting methods by default, writes
+  every best position (including ties and automatic-method failures) to TSV,
+  and reuses the unrooted `draw` renderer to mark the selected branches in PDF.
+  Taxonomy sources are evaluated independently and are enabled automatically
+  when species names can be parsed or NCBI taxids are supplied. Physically
+  identical endpoint ties are merged while their equivalent split IDs remain
+  available in TSV, reference root-edge ratios are retained when usable, large
+  trees automatically use equal-angle layout with density-aware labels and
+  canvas sizing, and the output files are staged before replacement.
+
+### Fixed
+
+- Midpoint rooting now places the root at the exact tree-diameter midpoint,
+  including midpoints that coincide with a branch endpoint.
+- Avoided retaining per-edge taxon sets during ordinary MAD and MV rooting,
+  restoring linear-memory behavior when tie details are not requested.
+
 ## [0.39.0] - 2026-08-22
 
 ### Added

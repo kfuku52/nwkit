@@ -243,7 +243,8 @@ def _find_collisions(figure, artists, branch_lines):
             for y_cell in y_cells:
                 segment_grid.setdefault((x_cell, y_cell), []).append(index)
     for item in visible:
-        if item.kind == "legend":
+        # Branch markers intentionally sit on their selected branch.
+        if item.kind in {"legend", "branch_marker"}:
             continue
         item_bounds = bounds[id(item)]
         candidates = set(broad_segments)

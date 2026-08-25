@@ -139,6 +139,7 @@ def test_non_newick_outputs_do_not_expose_outformat():
         "regress",
         "printlabel",
         "reconcile",
+        "rootcompare",
         "validate",
     ):
         assert "--outformat" not in commands[command]._option_string_actions

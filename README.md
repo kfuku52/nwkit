@@ -91,6 +91,7 @@ minimal worked example, in
 - [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
 - [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root
+- `rootcompare`: Comparing rooting methods in a TSV summary and a branch-marked PDF
 - [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
 - [`sample`](https://github.com/kfuku52/nwkit/wiki/nwkit-sample): Selecting a representative leaf subset by filters, ranks, and sampling method
 - [`shuffle`](https://github.com/kfuku52/nwkit/wiki/nwkit-shuffle): Shuffling branches and/or labels
@@ -99,6 +100,53 @@ minimal worked example, in
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+
+## Comparing rooting methods
+
+`nwkit rootcompare` evaluates alternative root placements without producing a
+single rooted Newick tree. It writes one TSV row for every physically distinct
+best position from each method and draws those positions as markers on an
+unrooted PDF tree. When several tied incident-edge solutions meet at the same
+node, they are represented by one position; `num_equivalent_splits` and
+`equivalent_root_split_ids` retain every equivalent split. Filled markers
+denote a resolved within-edge or node position; hollow markers denote methods
+that select an edge but do not define a location within that edge.
+
+```sh
+nwkit rootcompare -i gene_tree.nwk \
+  --figure-out rooting-comparison.pdf \
+  -o rooting-comparison.tsv
+```
+
+`--methods all` is the default. It always includes midpoint, MAD, and MV, then
+adds outgroup rooting when `--outgroup` is present, root transfer when
+`--infile2` is present, and reconciliation rooting when `--species-tree` is
+present. If every tip can be parsed into one of at least two species names,
+the configured NCBI, OpenTree, and TimeTree taxonomy sources are each evaluated
+as an independent method. `--taxid-tsv` also makes NCBI eligible without parsed
+species names. Use `--exclude-methods taxonomy` (or a source such as
+`taxonomy:timetree`) to disable automatic taxonomy queries.
+
+Under automatic `all` selection, an inapplicable or failed method is retained
+as a `failed` TSV row while the other methods continue. A named explicit method
+list instead fails the command if any requested method fails. The TSV records
+canonical split IDs, both taxon sets, exact edge fractions where defined,
+method-specific scores, evaluated-edge counts, and tie metadata. Root transfer
+also retains the reference tree's root-edge ratio when its two root lengths are
+usable; otherwise its marker remains edge-only. The TSV, PDF, and optional
+`--layout-report` are staged before they replace existing files, so a rendering
+or write failure does not leave a mismatched output set. If every automatically
+selected method fails, the failure TSV is still written while the PDF is left
+unchanged.
+
+The PDF uses equal-daylight layout for up to 2,000 displayed nodes and switches
+to linear-time equal-angle layout for larger trees. Override this choice with
+`--unrooted-method equal-daylight` or `--unrooted-method equal-angle`. Its
+default width also expands from 7.2 inches according to tip-label density (up
+to the PDF-safe 200-inch limit); `--figure-width` selects a fixed width. To
+avoid an unreadable label cloud, `--tip-labels auto` omits tip labels above 200
+tips. Use `--tip-labels yes` to force them or `--tip-labels no` to omit them on
+smaller trees too.
 
 ## Reconciliation-assisted gene-tree rooting
 
