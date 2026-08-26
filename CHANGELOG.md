@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.1] - 2026-08-26
+
+### Changed
+
+- Reduced the README to installation and subcommand navigation, linked
+  `rootcompare` to its Wiki guide, and moved non-duplicated workflow details to
+  the corresponding Wiki pages.
+
 ## [0.40.0] - 2026-08-25
 
 ### Added
