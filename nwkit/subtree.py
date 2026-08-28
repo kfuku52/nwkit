@@ -5,16 +5,19 @@ from nwkit.util import (
     annotate_scientific_names,
     get_subtree_sci_name_sets,
     read_tree,
+    validate_unique_named_leaves,
     write_tree,
 )
 
 
 def subtree_main(args):
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    validate_unique_named_leaves(
+        tree,
+        option_name="--infile",
+        context=" for 'subtree'",
+    )
     leaf_nodes = list(tree.leaves())
-    leaf_names = [leaf.name for leaf in leaf_nodes]
-    if len(leaf_names) != len(set(leaf_names)):
-        raise ValueError("Leaf names are not unique.")
     leaf_name_set = set(leaf.name for leaf in leaf_nodes)
     leaf_by_name = {leaf.name: leaf for leaf in leaf_nodes}
     if args.leaves is not None:

@@ -6,6 +6,7 @@ from nwkit.util import (
     get_subtree_leaf_name_sets,
     read_tip_table,
     read_tree,
+    remove_singleton,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
     write_tree,
@@ -245,6 +246,8 @@ def skim_main(args):
         raise ValueError(
             "No leaves were selected for output. Adjust trait/grouping/sampling options."
         )
+    tree.prune(sampled_trait_df["leaf_name"].tolist(), preserve_branch_length=True)
+    tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
     if group_table_prefix not in ["", None]:
         trait_df.sort_values("group").to_csv(
             f"{group_table_prefix}.all.tsv", sep="\t", index=False
@@ -252,5 +255,4 @@ def skim_main(args):
         sampled_trait_df.sort_values("group").to_csv(
             f"{group_table_prefix}.sampled.tsv", sep="\t", index=False
         )
-    tree.prune(sampled_trait_df["leaf_name"].tolist(), preserve_branch_length=True)
     write_tree(tree, args, format=args.outformat)

@@ -4,6 +4,32 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.4] - 2026-08-28
+
+### Fixed
+
+- Made MV rooting treat the two displayed root branches of a two-tip tree as
+  one physical edge. The root is now placed at that edge's midpoint without
+  shortening the tip-to-tip distance, including in `rootcompare` evaluations.
+- Counted a direct one-tip tree's branch length in de novo consensus length
+  aggregation, making one-tip `mean` and `median` consensus output idempotent.
+- Clamped the RF maximum reported by `shuffle` to zero for a one-tip tree, and
+  skipped RF calculation for whitespace-only tip labels as well as missing
+  labels.
+- Treated whitespace-only tip labels as empty wherever unique named tips are
+  required. `intersection` and `subtree` now use the same validation as other
+  tip-identity-dependent commands.
+- Made singleton-node removal also promote one-tip roots, preserving the tip's
+  metadata and the complete finite root-to-tip branch length. Consequently,
+  `intersection`, `prune`, `sample`, `skim`, de novo `consensus`, `collapse`,
+  and `sanitize` now write a direct leaf such as `A:4;` instead of `(A:4);`.
+- Collapsed singleton nodes after `constrain --collapse` removes duplicate gene
+  tips, so that gene collapsing cannot leave unary internal nodes.
+- Normalized singleton root wrappers before midpoint, outgroup, MAD, MV, and
+  taxonomy rooting, and before validating a `root --method transfer` source.
+  This prevents rerooting from turning a wrapped root into an empty artificial
+  tip while preserving pairwise distances and the root stem length.
+
 ## [0.40.3] - 2026-08-28
 
 ### Fixed

@@ -64,6 +64,23 @@ class TestPruneMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {"B", "C", "D"}
 
+    def test_prune_to_one_tip_outputs_a_direct_leaf(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk("((A:1,B:2):3,C:4);")
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            pattern="B|C",
+            invert_match=False,
+        )
+
+        prune_main(args)
+
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(4.0)
+        assert Path(tmp_outfile).read_text() == "A:4;"
+
     def test_prune_all_leaves_raises(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
         args = make_args(

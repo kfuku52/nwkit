@@ -13,6 +13,7 @@ from nwkit.skim import (
     sample_from_groups,
     skim_main,
 )
+from nwkit.util import read_tree
 from tests.helpers import make_args
 
 
@@ -213,6 +214,36 @@ class TestSampling:
 
 
 class TestSkimMainValidation:
+    def test_sampling_one_tip_outputs_a_direct_leaf(self, tmp_path):
+        nwk_path = tmp_path / "tree.nwk"
+        nwk_path.write_text("((A:1,B:2):3,C:4);")
+        out_tree = tmp_path / "out.nwk"
+        args = make_args(
+            infile=str(nwk_path),
+            outfile=str(out_tree),
+            format="auto",
+            outformat="auto",
+            quoted_node_names=True,
+            trait=None,
+            group_by=None,
+            retain_per_clade=1,
+            prioritize_non_missing=True,
+            filter_by=None,
+            filter_mode="ascending",
+            only_contrastive_clades=False,
+            output_groupfile=False,
+            seed=1,
+        )
+
+        skim_main(args)
+
+        tree = read_tree(
+            str(out_tree), format="auto", quoted_node_names=True, quiet=True
+        )
+        assert tree.is_leaf
+        assert tree.name in {"A", "B", "C"}
+        assert "(" not in out_tree.read_text()
+
     def test_only_contrastive_clades_with_no_contrastive_raises(self, tmp_path):
         nwk_path = tmp_path / "tree.nwk"
         nwk_path.write_text("((A:1,B:1):1,(C:1,D:1):1);")

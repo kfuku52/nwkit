@@ -10,7 +10,9 @@ from typing import Any
 from nwkit.util import (
     read_seqs,
     read_tree,
+    remove_singleton,
     validate_distinct_output_paths,
+    validate_unique_named_leaves,
     write_seqs,
     write_tree,
 )
@@ -18,11 +20,13 @@ from nwkit.util import (
 TRIE_TERM = "__TERM__"
 
 
-def get_leaf_names(tree):
+def get_leaf_names(tree, option_name="tree input"):
+    validate_unique_named_leaves(
+        tree,
+        option_name=option_name,
+        context=" for 'intersection'",
+    )
     leaf_names = list(tree.leaf_names())
-    is_unique = len(leaf_names) == len(set(leaf_names))
-    if not is_unique:
-        raise ValueError("Leaf names are not unique.")
     return leaf_names
 
 
@@ -428,10 +432,10 @@ def intersection_main(args):
             "Set '--outfile' or '--seqout' to a file path."
         )
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
-    leaf_names = get_leaf_names(tree)
+    leaf_names = get_leaf_names(tree, option_name="--infile")
     if has_infile2:
         tree2 = read_tree(infile2, args.format2, args.quoted_node_names)
-        leaf_names2 = get_leaf_names(tree2)
+        leaf_names2 = get_leaf_names(tree2, option_name="--infile2")
         seq_names = []
         new_seqs = None
     else:
@@ -462,4 +466,7 @@ def intersection_main(args):
     for leaf in tree.leaves():
         if leaf.name in leaves_to_remove:
             leaf.delete(preserve_branch_length=True)
+    # Restricting tips can leave unary internal nodes, including a singleton
+    # root. They do not represent splits in the restricted tree.
+    tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
     _write_outputs_atomically(tree, args, new_seqs, seqout_path)

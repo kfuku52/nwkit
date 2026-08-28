@@ -66,6 +66,9 @@ def collapse_main(args):
             preserve_branch_length=False,
         )
         collapsed_count += 1
-    remove_singleton(tree, preserve_branch_length=args.preserve_branch_length)
+    tree = remove_singleton(
+        tree,
+        preserve_branch_length=args.preserve_branch_length,
+    )
     sys.stderr.write("Collapsed {} internal node(s).\n".format(collapsed_count))
     write_tree(tree, args, format=args.outformat)

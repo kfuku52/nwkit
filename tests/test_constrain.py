@@ -330,6 +330,55 @@ class TestNcbiDownloadDirRouting:
 
 
 class TestConstrainMain:
+    def test_user_backbone_single_match_outputs_a_direct_leaf(self, tmp_path):
+        species_path = tmp_path / "species.txt"
+        species_path.write_text("A_a_g1\n")
+        tree_path = tmp_path / "tree.nwk"
+        tree_path.write_text("(A_a:1,B_b:1,C_c:1);\n")
+        outfile = tmp_path / "constraint.nwk"
+        args = make_args(
+            infile=str(tree_path),
+            outfile=str(outfile),
+            species_list=str(species_path),
+            taxid_tsv=None,
+            backbone="user",
+            rank="no",
+            collapse=False,
+        )
+
+        constrain_main(args)
+
+        tree = Tree(outfile.read_text(), parser=9)
+        assert tree.is_leaf
+        assert tree.name == "A_a_g1"
+        assert outfile.read_text() == "A_a_g1;"
+
+    def test_collapse_removes_singletons_created_by_duplicate_gene_removal(
+        self, tmp_path
+    ):
+        species_path = tmp_path / "species.txt"
+        species_path.write_text("A_a_g1\nA_a_g2\nB_b_g1\n")
+        tree_path = tmp_path / "tree.nwk"
+        tree_path.write_text("(A_a:1,B_b:1);\n")
+        outfile = tmp_path / "constraint.nwk"
+        args = make_args(
+            infile=str(tree_path),
+            outfile=str(outfile),
+            species_list=str(species_path),
+            taxid_tsv=None,
+            backbone="user",
+            rank="no",
+            collapse=True,
+        )
+
+        constrain_main(args)
+
+        tree = Tree(outfile.read_text(), parser=9)
+        assert set(tree.leaf_names()) == {"A_a", "B_b"}
+        assert all(
+            node.is_leaf or len(node.get_children()) != 1 for node in tree.traverse()
+        )
+
     def test_ncbi_backbone_reuses_one_database_handle(self, monkeypatch, tmp_path):
         observed = {"opens": 0, "closes": 0}
 

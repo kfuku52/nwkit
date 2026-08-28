@@ -17,6 +17,7 @@ from nwkit.util import (
     is_rooted,
     iter_tree_strings,
     read_tree,
+    remove_singleton,
     validate_unique_named_leaves,
     write_tree,
 )
@@ -250,7 +251,8 @@ def _collect_single_tree_clade_stats(
     clade_masks = set()
     for node, mask in subtree_masks.items():
         num_tips = count_set_bits(mask)
-        if branch_length_method != "none" and (not node.is_root):
+        is_direct_one_tip = node.is_root and node.is_leaf and len(leaf_names) == 1
+        if branch_length_method != "none" and ((not node.is_root) or is_direct_one_tip):
             observation_mask = _branch_observation_mask(
                 mask,
                 all_mask,
@@ -757,5 +759,10 @@ def consensus_main(args):
             selected_masks=[mask for mask, _, _ in selected_masks],
             support_by_mask=support_by_mask,
             dist_by_mask=dist_by_mask,
+        )
+        output_tree = remove_singleton(
+            output_tree,
+            verbose=False,
+            preserve_branch_length=True,
         )
     write_tree(output_tree, args, format=0)

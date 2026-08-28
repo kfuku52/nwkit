@@ -12,6 +12,7 @@ from nwkit.sample import (
     select_ranked,
     sort_candidates,
 )
+from nwkit.util import read_tree
 from tests.helpers import make_args
 
 
@@ -276,6 +277,27 @@ class TestSampleMain:
         assert "D" in out_text
         for excluded in ["B", "C", "E"]:
             assert excluded not in out_text
+
+    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
+    def test_sampling_one_tip_outputs_a_direct_leaf(self, tmp_path, method):
+        tree_path = tmp_path / "tree.nwk"
+        out_tree = tmp_path / "sampled.nwk"
+        tree_path.write_text("((A:1,B:2):3,C:4);", encoding="utf-8")
+        args = make_sample_args(
+            infile=str(tree_path),
+            outfile=str(out_tree),
+            method=method,
+            n=1,
+        )
+
+        sample_main(args)
+
+        tree = read_tree(
+            str(out_tree), format="auto", quoted_node_names=True, quiet=True
+        )
+        assert tree.is_leaf
+        assert tree.name in {"A", "B", "C"}
+        assert "(" not in out_tree.read_text(encoding="utf-8")
 
     def test_sample_filters_quality_size_and_uses_rank_as_pd_tiebreaker(self, tmp_path):
         tree_path = tmp_path / "tree.nwk"

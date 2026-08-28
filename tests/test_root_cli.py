@@ -128,6 +128,27 @@ class TestRootMain:
         tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         assert is_rooted(tree)
 
+    def test_transfer_accepts_singleton_root_source(self, tmp_nwk, tmp_outfile):
+        path1 = tmp_nwk("(A:1,B:1,(C:1,D:1):1);", "tree1.nwk")
+        path2 = tmp_nwk("(((A:1,B:1):1,(C:1,D:1):1):2);", "tree2.nwk")
+        args = make_args(
+            infile=path1,
+            outfile=tmp_outfile,
+            method="transfer",
+            infile2=path2,
+            format2="auto",
+        )
+
+        root_main(args)
+
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert is_rooted(tree)
+        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
+        assert None not in tree.leaf_names()
+        assert all(
+            node.is_leaf or len(node.get_children()) != 1 for node in tree.traverse()
+        )
+
     def test_transfer_single_leaf_tree(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk("A;", "tree1.nwk")
         path2 = tmp_nwk("A;", "tree2.nwk")
@@ -168,19 +189,6 @@ class TestRootMain:
             format2="auto",
         )
         with pytest.raises(ValueError, match="must be rooted"):
-            root_main(args)
-
-    def test_transfer_requires_bifurcating_root_infile2(self, tmp_nwk):
-        path1 = tmp_nwk("(A:1,B:1,(C:1,D:1):1);", "tree1.nwk")
-        path2 = tmp_nwk("(((A:1,B:1):1,C:1):1);", "tree2.nwk")
-        args = make_args(
-            infile=path1,
-            outfile="-",
-            method="transfer",
-            infile2=path2,
-            format2="auto",
-        )
-        with pytest.raises(ValueError, match="exactly two children"):
             root_main(args)
 
     def test_transfer_incompatible_root_bipartition_raises(self, tmp_nwk):

@@ -147,6 +147,26 @@ def test_automatic_failures_are_reported_but_explicit_failures_raise():
         evaluate_root_compare_methods(tree, ["mad"], args, automatic=False)
 
 
+def test_two_tip_mv_evaluation_reports_the_complete_root_edge():
+    tree = Tree("(A:1,B:3):7;", parser=1)
+
+    evaluations = evaluate_root_compare_methods(
+        tree,
+        ["mv"],
+        _compare_args(),
+        automatic=True,
+    )
+
+    evaluation = evaluations[0]
+    assert evaluation.status == "ok"
+    assert evaluation.evaluated_edges == 1
+    assert len(evaluation.candidates) == 1
+    candidate = evaluation.candidates[0]
+    assert candidate.edge_length == pytest.approx(4.0)
+    assert candidate.position_fraction_from_side_a == pytest.approx(0.5)
+    assert candidate.score == pytest.approx(0.0)
+
+
 def test_taxonomy_sources_are_evaluated_independently(monkeypatch):
     tree = Tree("(A:1,(B:1,C:1):1);", parser=1)
     calls = []

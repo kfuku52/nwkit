@@ -10,6 +10,89 @@ from tests.helpers import write_tree_collection as _write_tree_collection
 
 
 class TestConsensusMain:
+    def test_one_tip_consensus_outputs_a_direct_leaf(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            ["(A:1);", "(A:3);"],
+            name="one_tip.nwk",
+        )
+        outfile = str(tmp_path / "one_tip_consensus.nwk")
+        args = make_args(
+            infile=infile,
+            outfile=outfile,
+            min_freq=0.5,
+            reference=None,
+            reference_format="auto",
+            support_scale="percent",
+            method="greedy",
+            branch_length="mean",
+            weight_tsv=None,
+            threads=1,
+        )
+
+        consensus_main(args)
+
+        tree = read_tree(outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(2.0)
+        assert (tmp_path / "one_tip_consensus.nwk").read_text() == "A:2;"
+
+    def test_one_tip_consensus_is_branch_length_idempotent(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            ["A:2;"],
+            name="direct_one_tip.nwk",
+        )
+        outfile = str(tmp_path / "direct_one_tip_consensus.nwk")
+        args = make_args(
+            infile=infile,
+            outfile=outfile,
+            min_freq=0.5,
+            reference=None,
+            reference_format="auto",
+            support_scale="percent",
+            method="greedy",
+            branch_length="mean",
+            weight_tsv=None,
+            threads=1,
+        )
+
+        consensus_main(args)
+
+        tree = read_tree(outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(2.0)
+        assert (tmp_path / "direct_one_tip_consensus.nwk").read_text() == "A:2;"
+
+    def test_direct_and_wrapped_one_tip_lengths_are_both_observed(self, tmp_path):
+        infile = _write_tree_collection(
+            tmp_path,
+            ["A:2;", "(A:4);"],
+            name="mixed_one_tip.nwk",
+        )
+        outfile = str(tmp_path / "mixed_one_tip_consensus.nwk")
+        args = make_args(
+            infile=infile,
+            outfile=outfile,
+            min_freq=0.5,
+            reference=None,
+            reference_format="auto",
+            support_scale="percent",
+            method="greedy",
+            branch_length="mean",
+            weight_tsv=None,
+            threads=1,
+        )
+
+        consensus_main(args)
+
+        tree = read_tree(outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(3.0)
+
     def test_threaded_consensus_matches_single_thread(self, tmp_path):
         infile = _write_tree_collection(
             tmp_path,

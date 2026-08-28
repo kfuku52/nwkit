@@ -1,5 +1,6 @@
 import os
 import stat
+from pathlib import Path
 
 import pytest
 from ete4 import Tree
@@ -27,7 +28,12 @@ class TestGetLeafNames:
 
     def test_duplicate_raises(self):
         tree = Tree("((A,A),(C,D));", parser=1)
-        with pytest.raises(ValueError, match="unique"):
+        with pytest.raises(ValueError, match="Duplicated leaf labels"):
+            get_leaf_names(tree)
+
+    def test_whitespace_only_name_raises(self):
+        tree = Tree("('   ':1,A:1);", parser=1)
+        with pytest.raises(ValueError, match="Empty leaf labels"):
             get_leaf_names(tree)
 
 
@@ -189,7 +195,9 @@ class TestIntersectionMain:
         with pytest.raises(ValueError, match="regular file"):
             intersection_main(args)
 
-    def test_tree_tree_intersection(self, tmp_nwk, tmp_outfile):
+    def test_tree_tree_intersection_collapses_singleton_root(
+        self, tmp_nwk, tmp_outfile
+    ):
         path1 = tmp_nwk("(((A:1,B:1):1,(C:1,D:1):1):1,(E:1,F:1):1):0;", "tree1.nwk")
         path2 = tmp_nwk("(((A:1,B:1):1,C:1):1,G:1):0;", "tree2.nwk")
         args = make_args(
@@ -206,6 +214,36 @@ class TestIntersectionMain:
         tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {"A", "B", "C"}
+        assert all(
+            node.is_leaf or len(node.get_children()) != 1 for node in tree.traverse()
+        )
+        assert tree.get_distance("A", "B") == pytest.approx(2.0)
+        assert tree.get_distance("A", "C") == pytest.approx(4.0)
+        assert Path(tmp_outfile).read_text() == "((A:1,B:1):1,C:2):1;"
+
+    def test_tree_tree_one_tip_intersection_outputs_a_direct_leaf(
+        self, tmp_nwk, tmp_outfile
+    ):
+        path1 = tmp_nwk("((A:1,B:2):3,C:4);", "tree1.nwk")
+        path2 = tmp_nwk("(A:10,D:1);", "tree2.nwk")
+        args = make_args(
+            infile=path1,
+            infile2=path2,
+            outfile=tmp_outfile,
+            format2="auto",
+            seqin="",
+            seqout="",
+            seqformat="fasta",
+            match="complete",
+        )
+
+        intersection_main(args)
+
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(4.0)
+        assert Path(tmp_outfile).read_text() == "A:4;"
 
     def test_requires_second_input_or_sequences(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
@@ -288,6 +326,66 @@ class TestIntersectionMain:
         leaf_names = set(tree.leaf_names())
         assert leaf_names == {"A", "C", "D", "F"}
         assert os.path.exists(out_seq)
+
+    def test_tree_seq_intersection_collapses_singleton_root(self, tmp_path):
+        nwk_path = tmp_path / "tree.nwk"
+        nwk_path.write_text("((A:1,B:1):2,(C:1,D:1):3,(E:1,F:1):4):5;")
+        seq_path = tmp_path / "input.fasta"
+        seq_path.write_text(">C\nATG\n>D\nATG\n")
+        out_tree = tmp_path / "out.nwk"
+        out_seq = tmp_path / "out.fasta"
+        args = make_args(
+            infile=str(nwk_path),
+            infile2="",
+            outfile=str(out_tree),
+            seqin=str(seq_path),
+            seqout=str(out_seq),
+            seqformat="fasta",
+            format2="auto",
+            match="complete",
+        )
+
+        intersection_main(args)
+
+        tree = read_tree(
+            str(out_tree), format="auto", quoted_node_names=True, quiet=True
+        )
+        assert set(tree.leaf_names()) == {"C", "D"}
+        assert len(tree.get_children()) == 2
+        assert all(
+            node.is_leaf or len(node.get_children()) != 1 for node in tree.traverse()
+        )
+        assert tree.get_distance("C", "D") == pytest.approx(2.0)
+        assert out_seq.read_text() == ">C\nATG\n>D\nATG\n"
+
+    def test_tree_seq_one_tip_intersection_outputs_a_direct_leaf(self, tmp_path):
+        nwk_path = tmp_path / "tree.nwk"
+        nwk_path.write_text("((A:1,B:2):3,C:4);")
+        seq_path = tmp_path / "input.fasta"
+        seq_path.write_text(">A\nATG\n")
+        out_tree = tmp_path / "out.nwk"
+        out_seq = tmp_path / "out.fasta"
+        args = make_args(
+            infile=str(nwk_path),
+            infile2="",
+            outfile=str(out_tree),
+            seqin=str(seq_path),
+            seqout=str(out_seq),
+            seqformat="fasta",
+            format2="auto",
+            match="complete",
+        )
+
+        intersection_main(args)
+
+        tree = read_tree(
+            str(out_tree), format="auto", quoted_node_names=True, quiet=True
+        )
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(4.0)
+        assert out_tree.read_text() == "A:4;"
+        assert out_seq.read_text() == ">A\nATG\n"
 
     def test_tree_seq_no_overlap_leaves_both_outputs_unchanged(self, tmp_path):
         nwk_path = tmp_path / "tree.nwk"

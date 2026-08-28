@@ -33,6 +33,7 @@ from nwkit.root_evaluation import (
 )
 from nwkit.util import (
     TREE_FORMAT_PROP,
+    _sum_finite_singleton_root_branch_lengths,
     copy_tree_iteratively,
     extract_taxonomy_query,
     get_ete_ncbitaxa,
@@ -270,22 +271,23 @@ def _normalize_root_distance_for_reroot(tree):
 
 
 def _collapse_singleton_root(tree):
-    while (len(tree.get_children()) == 1) and (len(list(tree.leaves())) > 1):
-        child = tree.get_children()[0]
-        root_dist = tree.dist
-        child_dist = child.dist
-        tree = copy_tree_iteratively(child)
-        if root_dist is None or child_dist is None:
-            tree.dist = None
-        else:
-            collapsed_root_dist = float(root_dist) + float(child_dist)
-            if not math.isfinite(collapsed_root_dist):
-                raise ValueError(
-                    "Collapsing a singleton root would produce a "
-                    "non-finite root branch length."
-                )
-            tree.dist = collapsed_root_dist
-    return tree
+    root_chain = [tree]
+    cursor = tree
+    while len(cursor.get_children()) == 1:
+        cursor = cursor.get_children()[0]
+        root_chain.append(cursor)
+    if len(root_chain) == 1:
+        return tree
+    output_tree = copy_tree_iteratively(root_chain[-1])
+    try:
+        output_tree.dist = _sum_finite_singleton_root_branch_lengths(
+            node.dist for node in root_chain
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "Collapsing a singleton root would produce a non-finite root branch length."
+        ) from exc
+    return output_tree
 
 
 _RESERVED_NODE_PROPERTIES = frozenset(
@@ -913,6 +915,7 @@ def _canonical_incident_child(tree):
 
 def midpoint_rooting(tree, _return_evaluation=False):
     tree = copy_tree_iteratively(tree)
+    tree = _collapse_singleton_root(tree)
     validate_unique_named_leaves(
         tree,
         option_name="--infile",
@@ -958,6 +961,7 @@ def _prepare_mad_tree(tree):
     if len(list(tree.leaves())) < 3:
         raise ValueError("MAD rooting requires at least 3 leaves.")
     tree = copy_tree_iteratively(tree)
+    tree = _collapse_singleton_root(tree)
     validate_unique_named_leaves(
         tree, option_name="--infile", context=" for MAD rooting"
     )
@@ -1569,9 +1573,50 @@ def _mv_evaluation_candidate(candidate, branch_length_scale):
     )
 
 
+def _mv_root_two_tip_tree(
+    tree,
+    children,
+    branch_length_scale,
+    annotation_backup,
+    return_evaluation,
+):
+    """Root a displayed two-tip tree at the midpoint of its physical edge."""
+    edge_length = math.fsum(float(child.dist or 0.0) for child in children)
+    root_distance = edge_length / 2.0
+    for child in children:
+        child.dist = root_distance
+
+    side_names = frozenset(str(name) for name in children[0].leaf_names())
+    all_taxa = frozenset(str(name) for name in tree.leaf_names())
+    split = canonical_split(side_names, all_taxa - side_names)
+    candidate = {
+        "root_distance": root_distance,
+        "edge_length": edge_length,
+        "variance": 0.0,
+        "side_names": side_names,
+        "split": split,
+    }
+    sys.stderr.write("MV rooting variance: 0\n")
+    _restore_reroot_branch_length_scale(tree, branch_length_scale)
+    _finish_annotations_after_reroot(tree, annotation_backup)
+    if not return_evaluation:
+        return tree
+    evaluation = RootingEvaluation(
+        method="mv",
+        selection_basis="optimized",
+        score_name="root_to_tip_variance",
+        score_unit="branch_length_squared",
+        candidates=(_mv_evaluation_candidate(candidate, branch_length_scale),),
+        evaluated_edges=1,
+        tie_rule="isclose(rel=1e-12,abs=1e-15) on normalized variance",
+    )
+    return tree, evaluation
+
+
 def mv_rooting(tree, _return_evaluation=False):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
     tree = copy_tree_iteratively(tree)
+    tree = _collapse_singleton_root(tree)
     validate_unique_named_leaves(
         tree,
         option_name="--infile",
@@ -1585,6 +1630,16 @@ def mv_rooting(tree, _return_evaluation=False):
     # Unroot bifurcating root so each edge is a proper edge in the unrooted tree.
     # Manual unroot because unroot() can drop the dissolved node's branch length.
     children = tree.get_children()
+    # With two direct tips, the two displayed root halves together represent one
+    # physical edge. Dissolving neither half would incorrectly shorten that edge.
+    if len(children) == 2 and all(child.is_leaf for child in children):
+        return _mv_root_two_tip_tree(
+            tree,
+            children,
+            branch_length_scale,
+            annotation_backup,
+            _return_evaluation,
+        )
     if len(children) == 2:
         c0, c1 = children
         to_dissolve = c0 if not c0.is_leaf else (c1 if not c1.is_leaf else None)
@@ -1717,6 +1772,7 @@ def outgroup_rooting(tree, outgroup_str):
     if outgroup_str is None:
         raise ValueError("Specify at least one outgroup label with '--outgroup'.")
     tree = copy_tree_iteratively(tree)
+    tree = _collapse_singleton_root(tree)
     validate_unique_named_leaves(
         tree,
         option_name="--infile",
@@ -2065,6 +2121,7 @@ def _resolve_reference_query_sets(
 
 def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
     tree = copy_tree_iteratively(tree)
+    tree = _collapse_singleton_root(tree)
     validate_unique_named_leaves(
         tree, option_name="--infile", context=" for taxonomy rooting"
     )
@@ -2364,6 +2421,7 @@ def taxonomy_rooting(
     verbose=False,
     args=None,
 ):
+    tree = _collapse_singleton_root(tree)
     if len(list(tree.leaves())) <= 1:
         return tree
     errors = list()
@@ -2908,6 +2966,7 @@ def root_main(args):
                 "'--infile2' is required when '--method transfer' is used."
             )
         tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
+        tree2 = _collapse_singleton_root(tree2)
         if not is_rooted(tree2):
             raise ValueError(
                 "'--infile2' must be rooted when '--method transfer' is used."

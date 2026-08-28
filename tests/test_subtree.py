@@ -130,7 +130,21 @@ class TestSubtreeMain:
             leaves="a",
             orthogroup=False,
         )
-        with pytest.raises(ValueError, match="not unique"):
+        with pytest.raises(ValueError, match="Duplicated leaf labels"):
+            subtree_main(args)
+
+    def test_whitespace_only_leaf_name_raises(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk("('   ':1,a:1);", "whitespace_tip.nwk")
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            left_leaf=None,
+            right_leaf=None,
+            leaves="a",
+            orthogroup=False,
+        )
+
+        with pytest.raises(ValueError, match="Empty leaf labels"):
             subtree_main(args)
 
     def test_orthogroup_mode(self, tmp_nwk, tmp_outfile):

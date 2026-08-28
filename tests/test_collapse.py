@@ -46,6 +46,23 @@ class TestCollapseMain:
         assert abs(next(tree.search_nodes(name="A")).dist - 1.1) < 1e-6
         assert abs(next(tree.search_nodes(name="B")).dist - 1.1) < 1e-6
 
+    def test_one_tip_singleton_chain_outputs_a_direct_leaf(self, tmp_nwk, tmp_outfile):
+        path = tmp_nwk("((A:1):2):3;", "tree.nwk")
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            min_support=None,
+            max_dist=99.0,
+            preserve_branch_length=True,
+        )
+
+        collapse_main(args)
+
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(6.0)
+
     def test_requires_at_least_one_threshold(self, tmp_nwk):
         path = tmp_nwk("((A:1,B:1):1,C:1);", "tree.nwk")
         args = make_args(

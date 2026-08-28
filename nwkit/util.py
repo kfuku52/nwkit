@@ -1824,30 +1824,59 @@ def write_seqs(records, outfile, seqformat="fasta", quiet=False):
 
 
 def _sum_finite_singleton_branch_lengths(branch_lengths):
-    if any(branch_length is None for branch_length in branch_lengths):
-        return None
+    branch_lengths = list(branch_lengths)
     try:
-        values = [float(branch_length) for branch_length in branch_lengths]
-        combined = math.fsum(values)
+        values = [
+            float(branch_length)
+            for branch_length in branch_lengths
+            if branch_length is not None
+        ]
     except (TypeError, ValueError, OverflowError) as exc:
         raise ValueError(
             "Collapsing singleton nodes must produce a finite branch length."
         ) from exc
-    if not all(math.isfinite(value) for value in values) or not math.isfinite(combined):
+    if not all(math.isfinite(value) for value in values):
+        raise ValueError(
+            "Collapsing singleton nodes must produce a finite branch length."
+        )
+    if any(branch_length is None for branch_length in branch_lengths):
+        return None
+    try:
+        combined = math.fsum(values)
+    except OverflowError as exc:
+        raise ValueError(
+            "Collapsing singleton nodes must produce a finite branch length."
+        ) from exc
+    if not math.isfinite(combined):
         raise ValueError(
             "Collapsing singleton nodes must produce a finite branch length."
         )
     return combined
 
 
+def _sum_finite_singleton_root_branch_lengths(branch_lengths):
+    branch_lengths = list(branch_lengths)
+    if len(branch_lengths) < 2:
+        raise ValueError("A singleton root branch chain requires at least two nodes.")
+    root_length, *descendant_lengths = branch_lengths
+    if any(length is None for length in descendant_lengths):
+        return _sum_finite_singleton_branch_lengths(branch_lengths)
+    # A missing root stem means that no edge above the root was supplied.  It
+    # is therefore the additive identity when the root child is promoted.
+    normalized_root_length = 0.0 if root_length is None else root_length
+    return _sum_finite_singleton_branch_lengths(
+        (normalized_root_length, *descendant_lengths)
+    )
+
+
 def _validate_singleton_branch_length_sums(tree):
-    if len(list(tree.leaves())) > 1:
+    if len(tree.get_children()) == 1:
         root_chain = [tree.dist]
         cursor = tree
-        while len(cursor.get_children()) == 1 and not cursor.get_children()[0].is_leaf:
+        while len(cursor.get_children()) == 1:
             cursor = cursor.get_children()[0]
             root_chain.append(cursor.dist)
-        _sum_finite_singleton_branch_lengths(root_chain)
+        _sum_finite_singleton_root_branch_lengths(root_chain)
     for node in tree.traverse():
         if node.is_root or node.is_leaf or len(node.get_children()) != 1:
             continue
@@ -1864,7 +1893,7 @@ def _validate_singleton_branch_length_sums(tree):
 def remove_singleton(tree, verbose=False, preserve_branch_length=True):
     if preserve_branch_length:
         _validate_singleton_branch_length_sums(tree)
-    for node in tree.traverse():
+    for node in list(tree.traverse(strategy="postorder")):
         if node.is_leaf or node.is_root:
             continue
         num_children = len(node.get_children())
@@ -1878,23 +1907,18 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
         node.delete(
             prevent_nondicotomic=False, preserve_branch_length=preserve_branch_length
         )
-    # ete4 does not always collapse a singleton root in-place.
-    # Explicitly promote the root child while more than one tip exists.
-    while (len(tree.get_children()) == 1) and (len(list(tree.leaves())) > 1):
+    # ete4 does not always collapse a singleton root in-place.  Explicitly
+    # promote its child, including when the result is a one-tip tree.
+    while len(tree.get_children()) == 1:
         child = tree.get_children()[0]
-        if child.is_leaf:
-            break
         if verbose:
             sys.stderr.write("Deleting a singleton node: {}\n".format(tree.name))
         root_dist = tree.dist
         child_dist = child.dist
         if preserve_branch_length:
-            if root_dist is None or child_dist is None:
-                promoted_dist = None
-            else:
-                promoted_dist = _sum_finite_singleton_branch_lengths(
-                    (root_dist, child_dist)
-                )
+            promoted_dist = _sum_finite_singleton_root_branch_lengths(
+                (root_dist, child_dist)
+            )
         else:
             promoted_dist = root_dist
         child_props = {k: v for k, v in child.props.items() if k != "dist"}
@@ -2191,7 +2215,9 @@ def validate_unique_named_leaves(tree, option_name, context=""):
                 option_name, context
             )
         )
-    has_missing = any((name is None) or (str(name) == "") for name in leaf_names)
+    has_missing = any(
+        (name is None) or (str(name).strip() == "") for name in leaf_names
+    )
     if has_missing:
         raise ValueError(
             "Empty leaf labels are not supported in '{}'{}.".format(

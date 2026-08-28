@@ -16,7 +16,7 @@ def print_rf_dist(tree1, tree2):
     leaf_names1 = list(tree1.leaf_names())
     leaf_names2 = list(tree2.leaf_names())
     all_leaf_names = leaf_names1 + leaf_names2
-    if any(name is None for name in all_leaf_names):
+    if any((name is None) or (str(name).strip() == "") for name in all_leaf_names):
         sys.stderr.write(
             "Skipping RF distance: leaf names must be non-empty for RF calculation.\n"
         )
@@ -39,6 +39,7 @@ def print_rf_dist(tree1, tree2):
         discarded_edges_t1,
         discarded_edges_t2,
     ) = out
+    rf_max = max(0, rf_max)
     sys.stderr.write(
         "Robinson-Foulds distance = {:,} (max = {:,})\n".format(rf, rf_max)
     )

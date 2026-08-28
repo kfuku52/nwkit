@@ -525,6 +525,42 @@ class TestMvRooting:
         rooted = mv_rooting(tree)
         assert set(rooted.leaf_names()) == {"A", "B", "C", "D", "E"}
 
+    def test_two_tip_tree_uses_the_complete_physical_edge(self):
+        tree = Tree("(A:1,B:3):7;", parser=1)
+
+        rooted, evaluation = mv_rooting(tree, _return_evaluation=True)
+
+        assert tree.get_distance("A", "B") == pytest.approx(4.0)
+        assert sorted(child.dist for child in tree.get_children()) == [1.0, 3.0]
+        assert rooted.get_distance("A", "B") == pytest.approx(4.0)
+        assert [child.dist for child in rooted.get_children()] == pytest.approx(
+            [2.0, 2.0]
+        )
+        assert rooted.dist == pytest.approx(7.0)
+        assert evaluation.evaluated_edges == 1
+        assert len(evaluation.candidates) == 1
+        candidate = evaluation.candidates[0]
+        assert candidate.split == (
+            frozenset({"A"}),
+            frozenset({"B"}),
+        )
+        assert candidate.position_fraction_from_side_a == pytest.approx(0.5)
+        assert candidate.edge_length == pytest.approx(4.0)
+        assert candidate.score == pytest.approx(0.0)
+
+    def test_two_tip_tree_handles_a_total_edge_longer_than_float_max(self):
+        rooted, evaluation = mv_rooting(
+            Tree("(A:1e308,B:1e308);", parser=1),
+            _return_evaluation=True,
+        )
+
+        assert all(
+            math.isfinite(child.dist) and child.dist == pytest.approx(1e308)
+            for child in rooted.get_children()
+        )
+        assert evaluation.candidates[0].edge_length is None
+        assert evaluation.candidates[0].score == pytest.approx(0.0)
+
     def test_clock_like_tree(self):
         """On a clock-like tree, MV root should achieve near-zero variance."""
         import numpy as np
@@ -639,6 +675,39 @@ class TestMvRooting:
 
 
 class TestRerootAnnotationSafety:
+    @pytest.mark.parametrize(
+        ("method_name", "rooter"),
+        [
+            ("midpoint", midpoint_rooting),
+            ("outgroup", lambda tree: outgroup_rooting(tree, "A")),
+            ("mad", mad_rooting),
+            ("mv", mv_rooting),
+            (
+                "taxonomy-edge",
+                lambda tree: root_mod._root_by_outgroup_set(tree, {"A"}),
+            ),
+        ],
+    )
+    def test_singleton_root_is_removed_before_rerooting(self, method_name, rooter):
+        newick = "(((A:1,B:2):3,(C:4,D:5):6):7):8;"
+        original = Tree(newick, parser=1)
+        tree = Tree(newick, parser=1)
+
+        rooted = rooter(tree)
+
+        assert set(rooted.leaf_names()) == {"A", "B", "C", "D"}
+        assert None not in rooted.leaf_names()
+        assert all(
+            node.is_leaf or len(node.get_children()) != 1 for node in rooted.traverse()
+        )
+        for name1 in original.leaf_names():
+            for name2 in original.leaf_names():
+                assert rooted.get_distance(name1, name2) == pytest.approx(
+                    original.get_distance(name1, name2)
+                )
+        assert len(tree.get_children()) == 1
+        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
+
     @pytest.mark.parametrize(
         "rooter",
         [

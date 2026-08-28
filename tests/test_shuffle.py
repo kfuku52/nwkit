@@ -41,6 +41,24 @@ class TestPrintRfDist:
         captured = capsys.readouterr()
         assert "Robinson-Foulds distance" in captured.err
 
+    def test_one_tip_tree_clamps_negative_rf_maximum(self, capsys):
+        t1 = Tree("A;", parser=1)
+        t2 = Tree("A;", parser=1)
+
+        print_rf_dist(t1, t2)
+
+        assert "Robinson-Foulds distance = 0 (max = 0)" in capsys.readouterr().err
+
+    def test_whitespace_only_leaf_name_skips_rf(self, capsys):
+        t1 = Tree("('   ':1,A:1);", parser=1)
+        t2 = Tree("('   ':1,A:1);", parser=1)
+
+        print_rf_dist(t1, t2)
+
+        captured = capsys.readouterr()
+        assert "Skipping RF distance" in captured.err
+        assert "Robinson-Foulds distance =" not in captured.err
+
 
 class TestShuffleMain:
     @pytest.mark.slow

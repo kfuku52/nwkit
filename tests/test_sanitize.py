@@ -72,6 +72,25 @@ class TestSanitizeMain:
             if not node.is_leaf:
                 assert len(node.get_children()) != 1
 
+    def test_remove_singleton_one_tip_chain_outputs_a_direct_leaf(
+        self, tmp_nwk, tmp_outfile
+    ):
+        path = tmp_nwk("((A:1):2):3;")
+        args = make_args(
+            infile=path,
+            outfile=tmp_outfile,
+            remove_singleton=True,
+            resolve_polytomy=False,
+            name_quote="none",
+        )
+
+        sanitize_main(args)
+
+        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(6.0)
+
     def test_preserve_properties_propagates_boundary_through_singleton_chain(
         self, tmp_nwk, tmp_outfile
     ):

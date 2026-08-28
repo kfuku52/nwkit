@@ -501,9 +501,9 @@ def constrain_main(args):
             )
         tree = delete_nomatch_leaves(tree)
         tree = polytomize_one2many_matches(tree)
-    tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
     if args.collapse:
         tree = collapse_genes(tree)
+    tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
     for node in tree.traverse():
         node.name = (node.name or "").replace(" ", "_")
     write_tree(tree, args, format=9)

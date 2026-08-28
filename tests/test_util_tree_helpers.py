@@ -94,6 +94,7 @@ class TestRemoveSingleton:
         tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
         assert set(tree.leaf_names()) == {"A", "B"}
         assert len(tree.get_children()) == 2
+        assert tree.dist == pytest.approx(1.0)
         assert abs(tree.get_distance("A", "B") - 2.0) < 1e-6
         for node in tree.traverse():
             if not node.is_leaf:
@@ -105,11 +106,32 @@ class TestRemoveSingleton:
         assert tree.name == "INNER"
         assert tree.dist == pytest.approx(7.0)
 
+    def test_remove_singleton_promotes_one_tip_and_preserves_path_metadata(self):
+        tree = Tree("((A:1):2):3;", parser=1)
+        next(tree.leaves()).props["tag"] = "kept"
+
+        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
+
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(6.0)
+        assert tree.props["tag"] == "kept"
+
+    def test_remove_singleton_one_tip_with_missing_root_stem_keeps_tip_length(self):
+        tree = Tree("(A:4);", parser=1)
+
+        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
+
+        assert tree.is_leaf
+        assert tree.name == "A"
+        assert tree.dist == pytest.approx(4.0)
+
     @pytest.mark.parametrize(
         "newick",
         [
             "(((A:1,B:1):1e308):1e308,C:1);",
             "((A:1,B:1):1e308):1e308;",
+            "(A:1e308):1e308;",
         ],
     )
     def test_remove_singleton_rejects_overflow_before_mutating_tree(self, newick):
@@ -364,6 +386,11 @@ class TestValidateUniqueNamedLeaves:
 
     def test_empty_leaf_names_raise(self):
         tree = Tree("(A:1,:1,B:1);", parser=1)
+        with pytest.raises(ValueError, match="Empty leaf labels"):
+            validate_unique_named_leaves(tree, "--infile", " for 'transfer'")
+
+    def test_whitespace_only_leaf_names_raise(self):
+        tree = Tree("(A:1,'   ':1,B:1);", parser=1)
         with pytest.raises(ValueError, match="Empty leaf labels"):
             validate_unique_named_leaves(tree, "--infile", " for 'transfer'")
 

@@ -10,6 +10,7 @@ import pandas as pd
 from nwkit.util import (
     read_tip_table,
     read_tree,
+    remove_singleton,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
     write_tree,
@@ -449,6 +450,7 @@ def sample_main(args):
 
     tree.prune(selected_names, preserve_branch_length=True)
     _validate_pd_tree(tree)
+    tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
 
     if report_path is not None:
         output_df = _build_output_table(selected_rows, ranked_df)
