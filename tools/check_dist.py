@@ -20,12 +20,17 @@ def _wheel_members(path: Path) -> set[str]:
 def main() -> int:
     direct_wheel = PROJECT_ROOT / "direct-dist" / WHEEL_NAME
     wheel = PROJECT_ROOT / "dist" / WHEEL_NAME
+    direct_sdist = PROJECT_ROOT / "direct-dist" / f"nwkit-{__version__}.tar.gz"
     sdist = PROJECT_ROOT / "dist" / f"nwkit-{__version__}.tar.gz"
-    for artifact in (direct_wheel, wheel, sdist):
+    for artifact in (direct_wheel, wheel, direct_sdist, sdist):
         if not artifact.is_file():
             raise FileNotFoundError(f"Expected distribution was not built: {artifact}")
     if direct_wheel.read_bytes() != wheel.read_bytes():
         raise RuntimeError("Direct and sdist-built wheels are not byte-for-byte equal.")
+    if direct_sdist.read_bytes() != sdist.read_bytes():
+        raise RuntimeError(
+            "Independent source distributions are not byte-for-byte equal."
+        )
 
     required_wheel = {
         "nwkit/__init__.py",
@@ -95,7 +100,9 @@ def main() -> int:
         "/setup.py",
         "/tests/test_properties.py",
         "/tests/test_measurement_error.py",
+        "/tests/test_distribution_reproducibility.py",
         "/tools/check_dist.py",
+        "/tools/normalize_sdist.py",
     ):
         if not any(member.endswith(suffix) for member in sdist_members):
             raise RuntimeError(f"Source distribution is missing {suffix}.")

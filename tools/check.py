@@ -7,6 +7,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from nwkit import __version__
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 PYTHON = sys.executable
 
@@ -84,7 +86,20 @@ def build_and_check_distributions() -> None:
         "direct-dist",
         env=environment,
     )
+    run(
+        PYTHON,
+        "-m",
+        "build",
+        "--sdist",
+        "--outdir",
+        "direct-dist",
+        env=environment,
+    )
+    direct_sdist = "direct-dist/nwkit-{}.tar.gz".format(__version__)
+    run(PYTHON, "tools/normalize_sdist.py", direct_sdist, env=environment)
     run(PYTHON, "-m", "build", env=environment)
+    sdist = "dist/nwkit-{}.tar.gz".format(__version__)
+    run(PYTHON, "tools/normalize_sdist.py", sdist, env=environment)
     run(PYTHON, "tools/check_dist.py")
 
 

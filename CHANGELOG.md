@@ -4,6 +4,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Normalized source-distribution archive metadata and added a byte-for-byte
+  comparison of two independent sdist builds to the release gate.
+
 ## [0.40.1] - 2026-08-26
 
 ### Changed
