@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.3] - 2026-08-28
+
+### Fixed
+
+- Kept the source-distribution mode assertion POSIX-only so the reproducibility
+  regression test also passes on Windows, where `chmod(0644)` is not represented
+  as POSIX permission bits.
+
 ## [0.40.2] - 2026-08-28
 
 ### Changed

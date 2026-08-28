@@ -1,5 +1,6 @@
 import gzip
 import importlib.util
+import os
 import struct
 import tarfile
 from io import BytesIO
@@ -80,7 +81,8 @@ def test_normalize_sdist_is_byte_reproducible_across_archive_metadata(tmp_path):
     normalize_sdist(second, 42)
 
     assert first.read_bytes() == second.read_bytes()
-    assert first.stat().st_mode & 0o777 == 0o644
+    if os.name != "nt":
+        assert first.stat().st_mode & 0o777 == 0o644
     assert struct.unpack("<I", first.read_bytes()[4:8])[0] == 42
     with tarfile.open(first, "r:gz") as archive:
         members = archive.getmembers()
