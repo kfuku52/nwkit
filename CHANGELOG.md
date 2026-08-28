@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.2] - 2026-08-28
+
+### Changed
+
+- Updated Ruff to 0.16.2, GitHub Actions checkout to 7.0.1, and setup-python
+  to 7.0.0 after validating the selected Dependabot updates against the
+  current codebase.
+
 ### Fixed
 
 - Normalized source-distribution archive metadata and added a byte-for-byte
