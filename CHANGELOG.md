@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.5] - 2026-08-29
+
+### Changed
+
+- Updated the pinned development tools to diff-cover 10.5.1, Hypothesis
+  6.165.10, mypy 2.3.1, and Ruff 0.16.4.
+
 ## [0.40.4] - 2026-08-28
 
 ### Fixed
