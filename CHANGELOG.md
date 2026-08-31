@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.7] - 2026-08-31
+
+### Fixed
+
+- Improved conditional EIV gradient accuracy and convergence near a zero
+  variance component. Equivalent dense and structured covariance fits now
+  agree with an independently profiled likelihood reference, including the
+  Windows case exposed by the 0.40.6 validation run.
+
 ## [0.40.6] - 2026-08-31
 
 ### Fixed

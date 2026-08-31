@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from ete4 import Tree
 from scipy import sparse
+from scipy.optimize import minimize_scalar
 
 from nwkit import measurement_error as measurement_error_mod
 from nwkit.evolution import (
@@ -243,6 +244,30 @@ def test_diagonal_predictor_factor_matches_dense_eiv_covariance():
     np.testing.assert_allclose(structured["beta"], dense["beta"], rtol=3e-5)
     assert structured["objective"] == pytest.approx(dense["objective"], rel=1e-6)
     assert structured["covariance"].low_rank.shape == (4, 0)
+
+    # This fixture's residual variation is below its known sampling error,
+    # so the additional variance has its optimum at zero. Independently
+    # profile the intercept and optimize the remaining one-dimensional
+    # likelihood: agreement between two prematurely stopped fits is not enough.
+    def boundary_objective(slope):
+        variance = 0.1 + np.square(slope * diagonal_factor)
+        intercept = np.sum((response - slope * design[:, 1]) / variance) / np.sum(
+            1.0 / variance
+        )
+        residual = response - intercept - slope * design[:, 1]
+        return 0.5 * np.sum(
+            np.log(2.0 * np.pi * variance) + np.square(residual) / variance
+        )
+
+    reference = minimize_scalar(
+        boundary_objective,
+        bounds=(0.5, 1.5),
+        method="bounded",
+        options={"xatol": 1e-14},
+    )
+    assert reference.success
+    for fit in (dense, structured):
+        assert fit["objective"] == pytest.approx(reference.fun, abs=1e-8, rel=0.0)
 
 
 def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():

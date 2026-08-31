@@ -1470,8 +1470,12 @@ def fit_conditional_eiv_gaussian(
                 evaluate,
                 start,
                 method="L-BFGS-B",
+                # One-sided differences lose the small log-variance score
+                # near zero. Central differences and tighter stopping rules
+                # keep equivalent covariance representations at the same fit.
+                jac="3-point",
                 bounds=bounds,
-                options={"maxiter": 3000, "ftol": 1e-11},
+                options={"maxiter": 3000, "ftol": 1e-13, "gtol": 1e-9},
             )
             if math.isfinite(float(result.fun)):
                 candidates.append(result)
