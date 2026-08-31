@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.9] - 2026-08-31
+
+### Fixed
+
+- Corrected documentation for contrast unmatched-row defaults, scalar
+  covariance and factor-loading sidecars, categorical predictor inputs, and
+  the exact-predictor example in the low-level regression workflow.
+- Updated Wiki ASR model values, midpoint rooting and Newick output examples,
+  and the corresponding tree figures. Clarified node-age medians, MAD
+  diagnostics, recoverable output installation, and the audit boundary for
+  argument-parsing failures. These are documentation corrections; analysis
+  behavior is unchanged.
+
 ## [0.40.8] - 2026-08-31
 
 ### Fixed

@@ -59,8 +59,10 @@ input to other NWKIT commands.
   default is the empty string, `NA`, `NaN`, `nan`, `?`, `missing`, and
   `unknown`.
 - `--unmatched warn|error|ignore` controls table-only rows and tree-only tips.
-  The default is `warn`. Table-only rows are not applied to the tree; commands
-  that can operate on absent metadata treat tree-only tips as missing.
+  The default is `error` for `contrast` and `warn` for the other tip-metadata
+  commands listed above. Table-only rows are not applied to the tree; commands
+  that can operate on absent metadata treat tree-only tips as missing. Choosing
+  `warn` or `ignore` does not waive a command's requirement for estimable traits.
 
 ## Specialized input TSV schemas
 
@@ -78,15 +80,45 @@ input to other NWKIT commands.
 | `regress --data` | `leaf_name`, selected `--responses` and `--predictors`, plus optional response- and predictor-replicate columns | Conventional regression requires every tree tip. Either role can use biological/technical replicates, batch adjustment, or role-specific known-SE columns. A non-replicated role must have one value per tip, or the same value on all rows created by the other role's replicate design. |
 | `regress --evolution-covariance` | First column `leaf_name`; remaining columns named for tree tips | Wide square covariance matrix. Row and column names must each exactly match all tree tips; values are reordered by name and must be numeric, finite, symmetric, and positive definite. |
 | `regress --expression` | `leaf_name`, selected `--responses`, and optional replicate columns | End-to-end mode applies the same replicate, technical-replicate, batch, missing-value, and known-SE rules as `contrast --trait`. Gene-tip labels must match `--gene-tree`. |
-| `regress --species-traits` | `leaf_name`, selected numeric `--predictors`, and optional predictor-replicate columns | End-to-end mode requires an estimable mean for every `--species-tree` tip and predictor. Predictor replicates use the `--predictor-*` biological/technical ID, batch, variance, known-SE, and sample-size options. |
+| `regress --species-traits` | `leaf_name`, selected `--predictors`, and optional predictor-replicate columns | End-to-end mode accepts continuous and categorical predictors. Every `--species-tree` tip needs an estimable value or category distribution. Continuous predictor replicates use the `--predictor-*` biological/technical ID, batch, variance, known-SE, and sample-size options; categorical replicates follow the policies in the regression guide. |
 | `regress` input | Reconciled output columns from `nwkit contrast` | Selected responses must be speciation contrasts. Eligible rows require stable gene, lineage, species-event, and orientation IDs plus positive finite contrast variance. |
 | `regress --predictor-contrasts` | Species-tree output columns from `nwkit contrast` | Selected predictor traits must uniquely identify every joined `branch_clade_id`; event taxa and signed orientation must exactly match the response table. |
-| `regress --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Contains one upper-triangle row for every selected response-contrast pair. Each model matrix must be complete, finite, symmetric by construction, and positive semidefinite. It is required when response contrasts contain replicate metadata. |
-| `regress --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Contains one complete upper triangle per predictor from replicate-aware species-tree contrasts. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
+| `regress --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings, as described below. Required when response contrasts contain replicate metadata. |
+| `regress --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings for every selected predictor. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
 | `table2nwk` input | `branch_id`, `parent` | Optional `name`, `dist`, and `support`; exactly one root has `parent = -1`. |
 
 All supported input TSV options may use `-` for standard input, subject to the
 single-standard-input rule.
+
+### Sampling-covariance representations
+
+The two sampling-covariance inputs above describe scalar contrasts, grouped by
+`tree_id` and `trait`. The optional `covariance_representation` column selects
+the meaning of each row. Omitting the column means `covariance`; when supplied,
+each row must name one of the representations below.
+
+- `covariance`: both IDs identify contrasts and `sampling_covariance` is their
+  covariance. Every selected unordered pair, including each diagonal, must
+  occur exactly once. NWKIT writes the upper triangle; the reader reconstructs
+  its symmetric counterpart and requires finite, positive-semidefinite matrices.
+- `factor-loading`: `contrast_id_1` identifies a contrast, `contrast_id_2`
+  identifies a latent error column, and `sampling_covariance` is a loading in
+  a factor matrix `U`. The covariance is `M = U U'`, not the table of loadings
+  itself. Omitted loadings are zero. Every selected contrast must occur at
+  least once, including an explicit zero row for a contrast with no sampling
+  error. Contrast/latent-column pairs must be unique and loadings finite.
+
+One `tree_id`/`trait` group cannot mix the two representations. Reconciled
+scalar analyses can emit factor loadings above 500 contrasts, avoiding a dense
+matrix while retaining off-diagonal covariance. See the
+[regression guide](PHYLOGENETIC_REGRESSION.md#conventional-tip-level-regression)
+for the propagation and numerical precision rules.
+
+These scalar re-input schemas are distinct from tip-level regression audit
+tables and categorical-predictor audits containing `trait_2` cross-column
+covariances. Do not interpret those cross-column blocks as separate scalar
+sidecars; use the raw-input regression mode to propagate categorical predictor
+uncertainty.
 
 ## Output TSV vocabulary
 
@@ -200,8 +232,9 @@ but already emitted stdout bytes cannot be retracted.
 
 ## Compatibility names
 
-The following older names remain accepted with a deprecation warning, but
-canonical output and new examples use the replacements below.
+The following older names remain accepted, but canonical output and new
+examples use the replacements below. Option aliases emit a deprecation
+warning; legacy ASR target values are normalized without an option-name warning.
 
 | Older interface | Canonical interface |
 |---|---|

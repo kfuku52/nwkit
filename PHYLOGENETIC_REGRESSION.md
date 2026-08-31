@@ -610,18 +610,30 @@ method, and batch status.
 
 Fit precomputed contrasts through the low-level PGLS input mode:
 
+The species-trait command above treats `body_size` as exact tip data and does
+not generate a predictor sampling-covariance file. Only the replicated
+expression response needs a covariance sidecar in this example.
+
 ```sh
 nwkit regress \
   --response-contrasts gene_contrasts.tsv \
   --predictor-contrasts species_contrasts.tsv \
   --response-sampling-covariance expression_sampling_covariance.tsv \
-  --predictor-sampling-covariance body_size_sampling_covariance.tsv \
   --responses expression \
   --predictors body_size \
   --reconciled-model hierarchical \
   --random-effects-out random_effects.tsv \
   --outfile regression.tsv
 ```
+
+If `body_size` instead has supplied standard errors, include one non-negative
+`body_size_se` value per tip in `species_traits.tsv` and rerun the species-tree
+`contrast` command with `--within-variance known-se`,
+`--standard-error-columns body_size_se`, and
+`--sampling-covariance-out body_size_sampling_covariance.tsv`. Then add
+`--predictor-sampling-covariance body_size_sampling_covariance.tsv` to the
+`regress` command. Biological predictor replicates can generate the same
+sidecar through the replicate options described above.
 
 `regress` performs and validates the join
 `gene_contrasts.species_event_id = species_contrasts.branch_clade_id`. It also
@@ -645,6 +657,9 @@ rejects both response and predictor covariance sidecars; use `hierarchical` or
 `replicate-reml`. Both response and predictor sidecars accept NWKIT's sparse
 `factor-loading` representation. A model cannot mix explicit covariance and
 factor-loading rows.
+
+The [shared TSV specification](CLI_TSV_CONVENTIONS.md#sampling-covariance-representations)
+defines the representation column, ID meanings, and completeness rules.
 
 ## Regression models and pseudoreplication control
 
