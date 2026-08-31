@@ -268,6 +268,30 @@ def test_diagonal_predictor_factor_matches_dense_eiv_covariance():
     assert reference.success
     for fit in (dense, structured):
         assert fit["objective"] == pytest.approx(reference.fun, abs=1e-8, rel=0.0)
+        assert fit["boundary_warning"]
+        assert fit["component_variances"]["evolutionary"] == pytest.approx(
+            fit["lower_variance"], rel=1e-12, abs=0.0
+        )
+        # Independent coefficient information for the active zero-variance
+        # model, including covariance dependence on the slope.
+        intercept, slope = fit["beta"]
+        residual = response - intercept - slope * design[:, 1]
+        variance = 0.1 + np.square(slope * diagonal_factor)
+        derivative = 2.0 * slope * np.square(diagonal_factor)
+        h00 = np.sum(1.0 / variance)
+        h01 = np.sum(design[:, 1] / variance + residual * derivative / variance**2)
+        h11 = np.sum(
+            design[:, 1] ** 2 / variance
+            + 2.0 * design[:, 1] * residual * derivative / variance**2
+            + np.square(diagonal_factor)
+            * (1.0 / variance - np.square(residual) / variance**2)
+            + np.square(derivative)
+            * (-0.5 / variance**2 + np.square(residual) / variance**3)
+        )
+        expected_covariance = np.linalg.inv([[h00, h01], [h01, h11]])
+        np.testing.assert_allclose(
+            fit["beta_covariance"], expected_covariance, rtol=1e-5, atol=1e-8
+        )
 
 
 def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():

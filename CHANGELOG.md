@@ -4,6 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.8] - 2026-08-31
+
+### Fixed
+
+- Profile feasible zero-variance boundaries explicitly in conditional EIV fits,
+  then calculate coefficient information over the remaining free parameters.
+  This avoids vanishing log-variance gradients and replaces the globally tighter
+  stopping rules from 0.40.7, which caused line-search failures in sparse EIV
+  models on Linux. Boundary likelihood and coefficient covariance are checked
+  against independent calculations.
+
 ## [0.40.7] - 2026-08-31
 
 ### Fixed

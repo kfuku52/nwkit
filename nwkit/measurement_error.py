@@ -1248,6 +1248,85 @@ def _conditional_eiv_covariance(
     return covariance, factor_covariance(covariance)
 
 
+def _refine_eiv_variance_boundaries(function, result, bounds, num_coefficients):
+    """Profile feasible zero-variance boundaries without vanishing log scores.
+
+    A small derivative with respect to log(variance) need not mean that the
+    variance is at its optimum. Test its lower bound directly and optimize
+    the remaining free parameters before accepting a better boundary fit.
+    """
+    for index in range(num_coefficients, len(bounds)):
+        point = np.asarray(result.x, dtype=float).copy()
+        # Only profile a regular zero-variance model. A singular covariance
+        # at zero is not made reliable by a tiny positive diagonal floor.
+        point[index] = -np.inf
+        if not math.isfinite(float(function(point))):
+            continue
+        point[index] = bounds[index][0]
+        boundary_value = float(function(point))
+        if not math.isfinite(boundary_value) or boundary_value >= float(result.fun):
+            continue
+        free = np.arange(len(point)) != index
+
+        def expand(values, point=point, free=free):
+            candidate = point.copy()
+            candidate[free] = values
+            return candidate
+
+        def objective(values, expand=expand):
+            return function(expand(values))
+
+        free_bounds = [bound for keep, bound in zip(free, bounds, strict=True) if keep]
+        candidate = minimize(
+            objective,
+            point[free],
+            method="L-BFGS-B",
+            bounds=free_bounds,
+            options={"maxiter": 3000, "ftol": 1e-11},
+        )
+        if not candidate.success:
+            candidate = minimize(
+                objective,
+                point[free],
+                method="Powell",
+                bounds=free_bounds,
+                options={"maxiter": 10000, "xtol": 1e-8, "ftol": 1e-10},
+            )
+        if not candidate.success or not math.isfinite(float(candidate.fun)):
+            raise ValueError(
+                "Errors-in-variables variance-boundary fit did not converge."
+            )
+        if float(candidate.fun) <= float(result.fun):
+            candidate.x = expand(candidate.x)
+            result = candidate
+    return result
+
+
+def _eiv_parameter_covariance(function, point, bounds):
+    """Condition coefficient information on variance bounds that are active."""
+    point = np.asarray(point, dtype=float)
+    free = np.asarray(
+        [
+            value != lower and value != upper
+            for value, (lower, upper) in zip(point, bounds, strict=True)
+        ]
+    )
+
+    def objective(values):
+        candidate = point.copy()
+        candidate[free] = values
+        return function(candidate)
+
+    hessian = _finite_difference_hessian(objective, point[free])
+    try:
+        free_covariance = np.linalg.inv(hessian)
+    except np.linalg.LinAlgError:
+        free_covariance = np.linalg.pinv(hessian)
+    covariance = np.zeros((len(point), len(point)), dtype=float)
+    covariance[np.ix_(free, free)] = free_covariance
+    return covariance
+
+
 def fit_conditional_eiv_gaussian(
     response,
     design,
@@ -1470,12 +1549,8 @@ def fit_conditional_eiv_gaussian(
                 evaluate,
                 start,
                 method="L-BFGS-B",
-                # One-sided differences lose the small log-variance score
-                # near zero. Central differences and tighter stopping rules
-                # keep equivalent covariance representations at the same fit.
-                jac="3-point",
                 bounds=bounds,
-                options={"maxiter": 3000, "ftol": 1e-13, "gtol": 1e-9},
+                options={"maxiter": 3000, "ftol": 1e-11},
             )
             if math.isfinite(float(result.fun)):
                 candidates.append(result)
@@ -1500,14 +1575,11 @@ def fit_conditional_eiv_gaussian(
                 result.message
             )
         )
+    result = _refine_eiv_variance_boundaries(evaluate, result, bounds, num_coefficients)
     details = evaluate(result.x, return_details=True)
     if not isinstance(details, dict):
         raise ValueError("Errors-in-variables optimization produced an invalid fit.")
-    hessian = _finite_difference_hessian(evaluate, result.x)
-    try:
-        parameter_covariance = np.linalg.inv(hessian)
-    except np.linalg.LinAlgError:
-        parameter_covariance = np.linalg.pinv(hessian)
+    parameter_covariance = _eiv_parameter_covariance(evaluate, result.x, bounds)
     beta_covariance = parameter_covariance[:num_coefficients, :num_coefficients]
     beta_covariance = (beta_covariance + beta_covariance.T) / 2.0
     if not np.isfinite(beta_covariance).all():

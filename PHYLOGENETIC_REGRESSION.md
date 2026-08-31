@@ -1002,6 +1002,9 @@ origin-independent calculation. Models without an intercept are not centered.
 An exactly fitted constant response with zero sampling variance has a zero-variance
 likelihood boundary; NWKIT uses a small positive limiting covariance and reports
 `boundary_warning` rather than claiming a regular interior optimum.
+Conditional EIV fits also profile feasible variance lower bounds explicitly.
+When a variance is fixed at an active bound, coefficient information conditions
+on that bound instead of inverting numerical noise in its log-variance curvature.
 - Tree ensembles are equally weighted. They propagate the supplied tree and
   reconciliation sample but do not infer a tree distribution or model
   incomplete lineage sorting internally.
