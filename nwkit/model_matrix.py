@@ -5,6 +5,8 @@ from typing import Mapping, Sequence
 
 import numpy as np
 
+from nwkit.model_specs import RESPONSE_FAMILIES as RESPONSE_FAMILIES
+
 
 @dataclass(frozen=True)
 class CategoricalObservation:
@@ -69,25 +71,6 @@ class ResponseSpec:
     family: str
     levels: tuple[str, ...] = ()
     reference: str = ""
-
-
-RESPONSE_FAMILIES = {
-    "gaussian": ("continuous", "identity"),
-    "binomial": ("categorical", "logit"),
-    "multinomial": ("categorical", "reference-logit"),
-    "ordinal": ("ordered", "cumulative-logit"),
-    "poisson": ("count", "log"),
-    "negative-binomial": ("count", "log"),
-    "zero-inflated-poisson": ("count", "log/zero-logit"),
-    "zero-inflated-negative-binomial": ("count", "log/zero-logit"),
-    "hurdle-poisson": ("count", "log/zero-logit"),
-    "hurdle-negative-binomial": ("count", "log/zero-logit"),
-    "gamma": ("positive", "log"),
-    "lognormal": ("positive", "log"),
-    "beta": ("proportion", "logit"),
-    "beta-binomial": ("proportion", "logit"),
-    "censored-gaussian": ("continuous", "identity"),
-}
 
 
 def response_family_link(family: str) -> str:

@@ -256,7 +256,7 @@ class TestDownloadDirHelpers:
         tmp_path,
     ):
         monkeypatch.setattr(
-            "nwkit.util._filesystem_is_case_insensitive",
+            "nwkit.file_paths._filesystem_is_case_insensitive",
             lambda path: True,
         )
 

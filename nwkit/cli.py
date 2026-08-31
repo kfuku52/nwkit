@@ -4,8 +4,11 @@ import sys
 
 from nwkit import __version__
 from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES_CSV, get_stdin_input_options
-from nwkit.evolution import CONTRAST_EVOLUTION_MODELS, EVOLUTION_MODELS
-from nwkit.model_matrix import RESPONSE_FAMILIES
+from nwkit.model_specs import (
+    CONTRAST_EVOLUTION_MODELS,
+    EVOLUTION_MODELS,
+    RESPONSE_FAMILIES,
+)
 from nwkit.species_parser import (
     DEFAULT_SPECIES_PARSER,
     DEFAULT_SPECIES_REGEX,
@@ -539,7 +542,7 @@ pasr.add_argument(
     "--root_prior",
     dest="root_prior",
     metavar="equal|empirical",
-    default=None,
+    default="equal",
     type=str,
     required=False,
     action="store",

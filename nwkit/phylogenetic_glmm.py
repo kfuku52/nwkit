@@ -1170,6 +1170,43 @@ def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     return gradient, curvature
 
 
+def _zero_truncation_terms(eta, dispersion):
+    """Stable zero-truncation score correction and its derivative.
+
+    Evaluate q / expm1(x) through exp(-x) for large x. This avoids overflow
+    while retaining expm1 accuracy at the small-mean limit, where t tends to 1.
+    """
+    eta = np.asarray(eta, dtype=np.longdouble)
+    if dispersion is None:
+        with np.errstate(over="ignore", under="ignore"):
+            q = np.exp(eta)
+        exponent = q
+        leading_derivative = np.ones_like(q)
+    else:
+        size = np.longdouble(1.0) / np.longdouble(dispersion)
+        log_relative_mean = eta - np.log(size)
+        fraction = np.exp(-np.logaddexp(0.0, -log_relative_mean))
+        q = size * fraction
+        exponent = size * np.logaddexp(0.0, log_relative_mean)
+        leading_derivative = 1.0 - fraction
+    correction = np.zeros_like(q)
+    small = exponent <= 1.0
+    denominator = np.expm1(exponent[small])
+    correction[small] = np.divide(
+        q[small], denominator, out=np.ones_like(denominator), where=denominator != 0.0
+    )
+    large = ~small & np.isfinite(q)
+    correction[large] = (
+        q[large] * np.exp(-exponent[large]) / -np.expm1(-exponent[large])
+    )
+    derivative = np.zeros_like(q)
+    positive = correction > 0.0
+    derivative[positive] = correction[positive] * (
+        leading_derivative[positive] - q[positive] - correction[positive]
+    )
+    return correction, derivative
+
+
 def _zero_component_count_scalar_terms(
     values,
     linear,
@@ -1212,32 +1249,7 @@ def _zero_component_count_scalar_terms(
             # base_gradient + t and curvature base_curvature + t'.  This form
             # and extended precision avoid subtracting two order-one terms
             # when the mean approaches zero.
-            selected_eta = np.asarray(eta[positive], dtype=np.longdouble)
-            with np.errstate(over="ignore", under="ignore", invalid="ignore"):
-                selected_mean = np.exp(selected_eta)
-            if negative_binomial:
-                size_long = np.longdouble(1.0 / dispersion)
-                fraction = selected_mean / (size_long + selected_mean)
-                q = size_long * fraction
-                zero_exponent = size_long * np.log1p(selected_mean / size_long)
-                denominator = np.expm1(zero_exponent)
-                t = np.divide(
-                    q,
-                    denominator,
-                    out=np.ones_like(q),
-                    where=denominator != 0.0,
-                )
-                t_derivative = t * ((1.0 - fraction) - q - t)
-            else:
-                denominator = np.expm1(selected_mean)
-                t = np.divide(
-                    selected_mean,
-                    denominator,
-                    out=np.ones_like(selected_mean),
-                    where=denominator != 0.0,
-                )
-                t = np.where(np.isposinf(selected_mean), 0.0, t)
-                t_derivative = t * (1.0 - selected_mean - t)
+            t, t_derivative = _zero_truncation_terms(eta[positive], dispersion)
             selected_gradient = (
                 np.asarray(base_gradient[positive], dtype=np.longdouble) + t
             )

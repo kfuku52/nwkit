@@ -17,6 +17,7 @@ from scipy.stats import t as student_t
 from nwkit.evolution import evolution_model_spec, validate_evolution_parameter
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
+    center_response,
     draw_from_factor,
     effective_likelihood_settings,
     factor_diagonal_low_rank_updates,
@@ -25,6 +26,7 @@ from nwkit.gaussian import (
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
+    residual_variance_scale,
     solve_factor,
 )
 from nwkit.measurement_error import (
@@ -34,6 +36,7 @@ from nwkit.measurement_error import (
     fit_latent_predictor,
 )
 from nwkit.model_matrix import PredictorTerm
+from nwkit.optimization import FitResourceError
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
     GmrfPredictorUncertainty,
@@ -78,6 +81,29 @@ RESPONSE_REQUIRED_COLUMNS = {
 }
 
 MAX_DENSE_GAUSSIAN_OBSERVATIONS = 2000
+
+
+def validate_dense_gaussian_size(n_observations, allow_large_dense=False):
+    """Fail explicitly before constructing a large dense Gaussian covariance."""
+    if n_observations <= MAX_DENSE_GAUSSIAN_OBSERVATIONS:
+        return
+    message = (
+        "Dense Gaussian covariance fitting is limited to {} observations "
+        "by default (received {}); use diagonal sampling covariance and "
+        "low-rank variance components for larger analyses."
+    ).format(MAX_DENSE_GAUSSIAN_OBSERVATIONS, n_observations)
+    if not allow_large_dense:
+        raise FitResourceError(
+            message + " Pass allow_large_dense=True (--allow-large-dense yes) "
+            "to attempt the allocation."
+        )
+    warnings.warn(
+        message + " Large dense allocation was explicitly enabled; attempting it.",
+        RuntimeWarning,
+        stacklevel=2,
+    )
+
+
 MAX_DENSE_FACTOR_POSTERIOR_OBSERVATIONS = 512
 LINEAGE_COMPONENT_PREFIX = "lineage_slope_variance:"
 
@@ -1529,20 +1555,7 @@ def _profile_covariance_fit(
             fixed_covariance, components, component_factors
         )
     ):
-        message = (
-            "Dense Gaussian covariance fitting is limited to {} observations "
-            "by default (received {}); use diagonal sampling covariance and "
-            "low-rank variance components for larger analyses."
-        ).format(MAX_DENSE_GAUSSIAN_OBSERVATIONS, n_observations)
-        if not allow_large_dense:
-            raise ValueError(
-                message + " Pass allow_large_dense=True to attempt the allocation."
-            )
-        warnings.warn(
-            message + " Large dense allocation was explicitly enabled; attempting it.",
-            RuntimeWarning,
-            stacklevel=2,
-        )
+        validate_dense_gaussian_size(n_observations, allow_large_dense)
     (
         fixed_covariance,
         component_matrices,
@@ -1555,13 +1568,11 @@ def _profile_covariance_fit(
     ) = _prepare_profile_covariance_components(
         n_observations, fixed_covariance, components, component_factors
     )
-    ordinary_beta = np.linalg.lstsq(design, y, rcond=None)[0]
-    ordinary_residual = y - design @ ordinary_beta
-    response_scale = max(
-        float(np.mean(y**2)),
-        float(np.mean(ordinary_residual**2)),
-        float(np.mean(_covariance_diagonal(fixed_covariance))) if len(y) else 0.0,
-        np.finfo(float).tiny,
+    centered_response, beta_offset = center_response(y, design)
+    ordinary_beta = np.linalg.lstsq(design, centered_response, rcond=None)[0]
+    ordinary_residual = centered_response - design @ ordinary_beta
+    response_scale = residual_variance_scale(
+        centered_response, ordinary_residual, _covariance_diagonal(fixed_covariance)
     )
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
@@ -1569,7 +1580,7 @@ def _profile_covariance_fit(
         normalized_components
     )
 
-    def evaluate(log_variances, response=y, return_details=False):
+    def evaluate(log_variances, response=ordinary_residual, return_details=False):
         variances = np.exp(np.asarray(log_variances, dtype=float))
         covariance = working_fixed_covariance.copy()
         if structured_model:
@@ -1686,7 +1697,7 @@ def _profile_covariance_fit(
         }
         return {
             "objective": objective,
-            "beta": beta,
+            "beta": beta + ordinary_beta + beta_offset,
             "beta_covariance": beta_covariance,
             "residual": residual,
             "inverse_residual": inverse_residual,

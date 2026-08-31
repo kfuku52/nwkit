@@ -34,6 +34,7 @@ from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
     draw_from_factor,
+    is_diagonal,
 )
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
@@ -53,6 +54,7 @@ from nwkit.model_matrix import (
     validate_response_auxiliaries,
 )
 from nwkit.multivariate_pgls import fit_multivariate_pgls
+from nwkit.optimization import ScalarFitCache
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
     fit_phylogenetic_glmm,
@@ -60,7 +62,11 @@ from nwkit.phylogenetic_glmm import (
     summarize_glmm_omnibus,
     summarize_glmm_threshold,
 )
-from nwkit.regress import _profile_covariance_fit, _solve_positive_definite
+from nwkit.regress import (
+    _profile_covariance_fit,
+    _solve_positive_definite,
+    validate_dense_gaussian_size,
+)
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
 from nwkit.sparse_laplace import GmrfPredictorUncertainty
 from nwkit.util import (
@@ -234,6 +240,42 @@ def build_phylogenetic_covariance(
     )
 
 
+def _ordinary_covariance_builder(
+    tree,
+    leaf_names,
+    *,
+    evolution_model,
+    evolution_parameter,
+    branch_length,
+    custom_covariance,
+):
+    def build(parameter):
+        return build_phylogenetic_covariance(
+            tree,
+            leaf_names,
+            evolution_model=evolution_model,
+            parameter=parameter,
+            branch_length=branch_length,
+            custom_covariance=custom_covariance,
+        )
+
+    if evolution_model != "lambda" or evolution_parameter is not None:
+        return build
+    # Pagel's lambda leaves tip variances unchanged and scales every shared
+    # depth by lambda. Build and validate the tree covariance once, after the
+    # caller's size preflight, instead of repeating all pairwise LCA queries.
+    brownian = build(1.0)
+    diagonal = np.diag(brownian).copy()
+
+    def lambda_covariance(parameter):
+        parameter = validate_evolution_parameter("lambda", parameter)
+        covariance = brownian * parameter
+        np.fill_diagonal(covariance, diagonal)
+        return covariance
+
+    return lambda_covariance
+
+
 def _bounded_scalar_minimize(function, bounds):
     with warnings.catch_warnings():
         warnings.filterwarnings(
@@ -315,6 +357,66 @@ def _global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
     )
 
 
+def _ordinary_covariance_may_be_dense(
+    tree,
+    leaf_names,
+    evolution_model,
+    evolution_parameter,
+    branch_length,
+    custom_covariance,
+):
+    if evolution_model == "independent" or (
+        evolution_model == "lambda" and evolution_parameter == 0.0
+    ):
+        return False
+    if evolution_model == "custom":
+        return custom_covariance is None or not is_diagonal(custom_covariance)
+    requested = set(leaf_names)
+    descendant_counts: dict[object, int] = {}
+    for node in tree.traverse(strategy="postorder"):
+        count = (
+            int(str(node.name) in requested)
+            if node.is_leaf
+            else sum(descendant_counts[child] for child in node.children)
+        )
+        descendant_counts[node] = count
+        if (
+            not node.is_root
+            and count > 1
+            and (
+                branch_length == "unit"
+                or node.dist != 0.0
+                or evolution_model == "kappa"
+            )
+        ):
+            return True
+    return False
+
+
+def _validate_ordinary_gaussian_size(
+    n_observations,
+    tree,
+    leaf_names,
+    evolution_model,
+    evolution_parameter,
+    branch_length,
+    custom_covariance,
+    allow_large_dense,
+):
+    # This model builds a dense tip covariance. Check the requested model
+    # before any trial, including lambda=0, so a resource limit cannot select
+    # an independent model in place of estimating the full covariance.
+    if not allow_large_dense and _ordinary_covariance_may_be_dense(
+        tree,
+        leaf_names,
+        evolution_model,
+        evolution_parameter,
+        branch_length,
+        custom_covariance,
+    ):
+        validate_dense_gaussian_size(n_observations)
+
+
 def _fit_ordinary_gaussian(
     y,
     design,
@@ -335,16 +437,27 @@ def _fit_ordinary_gaussian(
     outer_converged = True
     outer_message = "fixed evolutionary model"
     spec = evolution_model_spec(evolution_model)
+    _validate_ordinary_gaussian_size(
+        len(y),
+        tree,
+        leaf_names,
+        evolution_model,
+        evolution_parameter,
+        branch_length,
+        custom_covariance,
+        allow_large_dense,
+    )
+    covariance_at = _ordinary_covariance_builder(
+        tree,
+        leaf_names,
+        evolution_model=evolution_model,
+        evolution_parameter=evolution_parameter,
+        branch_length=branch_length,
+        custom_covariance=custom_covariance,
+    )
 
     def fit_at(parameter):
-        phylogenetic_covariance = build_phylogenetic_covariance(
-            tree,
-            leaf_names,
-            evolution_model=evolution_model,
-            parameter=parameter,
-            branch_length=branch_length,
-            custom_covariance=custom_covariance,
-        )
+        phylogenetic_covariance = covariance_at(parameter)
         components = [("evolutionary_rate", phylogenetic_covariance)]
         if predictor_uncertainties:
             fit = fit_conditional_eiv_gaussian(
@@ -383,33 +496,18 @@ def _fit_ordinary_gaussian(
             branch_length=branch_length,
         )
 
-        cache = {}
-
-        def cached_fit(value):
-            decoded = decode(value)
-            key = float(decoded)
-            if key not in cache:
-                try:
-                    cache[key] = fit_at(decoded)
-                except ValueError:
-                    cache[key] = None
-            return cache[key]
-
-        def objective(value):
-            candidate = cached_fit(value)
-            return float("inf") if candidate is None else float(candidate["objective"])
-
-        optimized = _global_bounded_scalar_minimize(objective, parameter_bounds)
+        cache = ScalarFitCache(fit_at, lambda fit: fit["objective"])
+        optimized = _global_bounded_scalar_minimize(
+            lambda value: cache.objective(float(decode(value))), parameter_bounds
+        )
         candidate_values = [parameter_bounds[0], parameter_bounds[1]]
         if math.isfinite(float(optimized.fun)):
             candidate_values.append(float(optimized.x))
-        candidates = [cached_fit(value) for value in candidate_values]
-        candidates = [candidate for candidate in candidates if candidate is not None]
-        if not candidates:
+        fit = cache.best(float(decode(value)) for value in candidate_values)
+        if fit is None:
             raise ValueError(
                 "Evolution-parameter optimization failed to find a finite PGLS fit."
             )
-        fit = min(candidates, key=lambda candidate: float(candidate["objective"]))
         outer_converged = bool(optimized.success)
         outer_message = str(optimized.message)
     parameter = fit["evolution_parameter"]
@@ -1284,43 +1382,27 @@ def _prepare_latent_ordinary_predictors(
                 bounds, decode = optimization_parameterization(
                     tree, evolution_model, branch_length=branch_length
                 )
-                cache: dict[float, tuple | None] = {}
+                cache = ScalarFitCache(
+                    sparse_fit_at,
+                    lambda candidate: -candidate[0].log_likelihood,
+                    invalid_errors=(ValueError, np.linalg.LinAlgError),
+                )
 
-                def cached_fit(
-                    value,
-                    decode=decode,
-                    cache=cache,
-                    sparse_fit_at=sparse_fit_at,
-                ):
-                    decoded = float(decode(value))
-                    if decoded not in cache:
-                        try:
-                            cache[decoded] = sparse_fit_at(decoded)
-                        except (ValueError, np.linalg.LinAlgError):
-                            cache[decoded] = None
-                    return cache[decoded]
-
-                def objective(value, cached_fit=cached_fit):
-                    candidate = cached_fit(value)
-                    return (
-                        float("inf")
-                        if candidate is None
-                        else -float(candidate[0].log_likelihood)
-                    )
+                def objective(value, cache=cache, decode=decode):
+                    return cache.objective(float(decode(value)))
 
                 optimized = _global_bounded_scalar_minimize(objective, bounds)
                 candidate_values = [bounds[0], bounds[1]]
                 if math.isfinite(float(optimized.fun)):
                     candidate_values.append(float(optimized.x))
-                candidates = [cached_fit(value) for value in candidate_values]
-                candidates = [candidate for candidate in candidates if candidate]
-                if not candidates:
+                selected = cache.best(
+                    float(decode(value)) for value in candidate_values
+                )
+                if selected is None:
                     raise ValueError(
                         "Predictor evolution-parameter optimization found no finite fit."
                     )
-                posterior, posterior_model, selected_parameter = max(
-                    candidates, key=lambda candidate: candidate[0].log_likelihood
-                )
+                posterior, posterior_model, selected_parameter = selected
                 parameter_status = "estimated"
                 outer_converged = bool(optimized.success)
                 outer_message = str(optimized.message)

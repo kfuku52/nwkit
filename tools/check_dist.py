@@ -6,9 +6,10 @@ import tarfile
 import zipfile
 from pathlib import Path
 
-from nwkit import __version__
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+from nwkit import __version__  # noqa: E402
+
 WHEEL_NAME = f"nwkit-{__version__}-py3-none-any.whl"
 
 
@@ -53,6 +54,10 @@ def main() -> int:
         "nwkit/sparse_laplace.py",
         "nwkit/data_tree/apgiv.nwk",
     }
+    required_wheel.update(
+        path.relative_to(PROJECT_ROOT).as_posix()
+        for path in (PROJECT_ROOT / "nwkit").glob("*.py")
+    )
     forbidden_names = {
         "nwkit/_mad.py",
         "nwkit/ordinary_pgls.py",
@@ -73,37 +78,27 @@ def main() -> int:
 
     with tarfile.open(sdist, "r:gz") as archive:
         sdist_members = set(archive.getnames())
-    for suffix in (
-        "/nwkit/__init__.py",
-        "/nwkit/contrast.py",
-        "/nwkit/evolution.py",
-        "/nwkit/gaussian.py",
-        "/nwkit/image_metadata.py",
-        "/nwkit/measurement_error.py",
-        "/nwkit/model_matrix.py",
-        "/nwkit/multivariate_pgls.py",
-        "/nwkit/ordinary_regression.py",
-        "/nwkit/regress.py",
-        "/nwkit/regression_pipeline.py",
-        "/nwkit/phylogenetic_glmm.py",
-        "/nwkit/reconcile.py",
-        "/nwkit/replicates.py",
-        "/nwkit/root.py",
-        "/nwkit/root_compare.py",
-        "/nwkit/root_evaluation.py",
-        "/nwkit/sparse_laplace.py",
+    required_sdist = {"/" + member for member in required_wheel} | {
+        "/CHANGELOG.md",
         "/CLI_TSV_CONVENTIONS.md",
+        "/DEVELOPMENT.md",
         "/PHYLOGENETIC_REGRESSION.md",
         "/RECONCILED_SPECIATION_CONTRAST_MATH.md",
-        "/nwkit/data_tree/apgiv.nwk",
+        "/RELEASING.md",
         "/constraints-dev.txt",
         "/setup.py",
         "/tests/test_properties.py",
         "/tests/test_measurement_error.py",
         "/tests/test_distribution_reproducibility.py",
+        "/tests/test_cli_contracts.py",
+        "/tests/test_numerical_invariance.py",
+        "/tests/test_output_transaction.py",
         "/tools/check_dist.py",
         "/tools/normalize_sdist.py",
-    ):
+        "/tools/complexity_baseline.json",
+        "/tools/benchmark.py",
+    }
+    for suffix in sorted(required_sdist):
         if not any(member.endswith(suffix) for member in sdist_members):
             raise RuntimeError(f"Source distribution is missing {suffix}.")
     forbidden_sdist_suffixes = tuple(

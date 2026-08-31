@@ -4,6 +4,47 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.40.6] - 2026-08-31
+
+### Fixed
+
+- Reject oversized dense Gaussian searches before allocating trial covariances
+  instead of silently reporting lambda=0 when nonzero candidates exceed the
+  resource limit. Explicit dense opt-in still explores the complete model.
+- Stabilized Gaussian, latent-predictor, and conditional EIV calculations under
+  response/predictor offsets, using residual and sampling scales for Gaussian
+  variance bounds and reporting exact fits as variance-boundary cases.
+- Restored ASR's default equal root prior, preserved numeric internal-node names
+  and missing support through the common Newick writer, and made stochastic maps
+  invariant to inverse rate/time scaling. Impossible state bridges now fail
+  explicitly instead of returning zero transitions.
+- Protected drawing inputs and paired image/report outputs against hard-link,
+  symbolic-link, and case aliases. Drawing, root comparison, regression, and
+  intersection now share recoverable file installation with failure rollback,
+  permission preservation, and retained backups when recovery itself fails.
+- Removed hurdle-likelihood overflow warnings with stable zero-truncation
+  derivatives, and made categorical sampling factors explicitly use sparse
+  matrices across SciPy's sparse-array migration.
+
+### Changed
+
+- Moved shared model metadata out of numerical imports, keeping CLI help/version
+  startup lightweight. Scalar searches retain at most two full fits, and ordinary
+  automatic lambda fitting reuses one validated Brownian covariance.
+- Split the drawing renderer into typed setup, rendering, quality, and output
+  stages while preserving deterministic SVG/report output.
+- Added real parser-to-handler smoke coverage for every subcommand and numerical,
+  filesystem-failure, and cache-lifetime regression tests.
+- Made `quick` use incremental mypy and skip explicitly marked slow tests, with
+  pytest target/option forwarding. Full checks and source CI retain all tests.
+- Replaced the average-complexity gate with per-function ceilings and a checked
+  baseline updater. Added a reproducible checkout-comparison benchmark runner and
+  a dedicated development guide.
+- Scoped CI to changed paths while retaining full platform/version coverage for
+  dependency changes, weekly/manual runs and release versions; cached the verified
+  ETE Windows wheel and validated documentation-only distributions without the
+  numerical runtime dependencies.
+
 ## [0.40.5] - 2026-08-29
 
 ### Changed

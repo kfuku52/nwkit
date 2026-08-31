@@ -1,14 +1,9 @@
 """End-to-end reconciliation, contrast, and phylogenetic regression."""
 
-import hashlib
 import math
 import os
-import secrets
-import shutil
-import stat
-import tempfile
-from contextlib import ExitStack
 from dataclasses import dataclass
+from functools import partial
 from types import SimpleNamespace
 from typing import Any
 
@@ -55,11 +50,13 @@ from nwkit.model_matrix import (
     validate_response_auxiliaries,
 )
 from nwkit.multivariate_pgls import fit_multivariate_pgls
+from nwkit.optimization import ScalarFitCache
 from nwkit.ordinary_regression import (
     _categorical_shape_settings,
     _global_bounded_scalar_minimize,
     estimate_marginal_evolution_parameter,
 )
+from nwkit.output_transaction import output_transaction
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
     fit_phylogenetic_glmm,
@@ -292,241 +289,14 @@ def _active_regression_bundle_paths(
     return {name: path for name, path in paths.items() if name not in inactive}
 
 
-def _regular_output_mode(path: str) -> int | None:
-    try:
-        path_stat = os.lstat(path)
-    except FileNotFoundError:
-        return None
-    if not stat.S_ISREG(path_stat.st_mode):
-        raise ValueError(
-            "Existing regression bundle target must be a regular file: '{}'.".format(
-                path
-            )
-        )
-    return stat.S_IMODE(path_stat.st_mode)
-
-
-def _new_output_mode(directory: str) -> int:
-    for _ in range(100):
-        probe = os.path.join(
-            directory,
-            ".nwkit-regression-mode-probe-{}".format(secrets.token_hex(16)),
-        )
-        try:
-            descriptor = os.open(
-                probe,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o666,
-            )
-        except FileExistsError:
-            continue
-        try:
-            return stat.S_IMODE(os.fstat(descriptor).st_mode)
-        finally:
-            os.close(descriptor)
-            os.remove(probe)
-    raise FileExistsError("Could not allocate a regression output-mode probe.")
-
-
-def _stage_dataframe(path: str, dataframe: pd.DataFrame, output_mode: int) -> str:
-    absolute_path = os.path.abspath(path)
-    directory = os.path.dirname(absolute_path)
-    descriptor, staged_path = tempfile.mkstemp(
-        prefix=".{}.stage.".format(os.path.basename(absolute_path)),
-        dir=directory,
-    )
-    descriptor_open = True
-    staged_stat = os.fstat(descriptor)
-    try:
-        with os.fdopen(descriptor, "w", encoding="utf-8", newline="") as handle:
-            descriptor_open = False
-            dataframe.to_csv(handle, sep="\t", index=False)
-            handle.flush()
-            os.fsync(handle.fileno())
-            if hasattr(os, "fchmod"):
-                os.fchmod(handle.fileno(), output_mode)
-        if not hasattr(os, "fchmod"):
-            os.chmod(staged_path, output_mode)
-        path_stat = os.lstat(staged_path)
-        if (
-            not stat.S_ISREG(path_stat.st_mode)
-            or path_stat.st_dev != staged_stat.st_dev
-            or path_stat.st_ino != staged_stat.st_ino
-        ):
-            raise RuntimeError("A regression staging file was replaced before commit.")
-        return staged_path
-    except BaseException:
-        if descriptor_open:
-            os.close(descriptor)
-        if os.path.lexists(staged_path):
-            os.remove(staged_path)
-        raise
-
-
-def _backup_regular_output(path: str) -> str:
-    absolute_path = os.path.abspath(path)
-    directory = os.path.dirname(absolute_path)
-    descriptor, backup_path = tempfile.mkstemp(
-        prefix=".{}.backup.".format(os.path.basename(absolute_path)),
-        dir=directory,
-    )
-    descriptor_open = True
-    flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    if hasattr(os, "O_NONBLOCK"):
-        flags |= os.O_NONBLOCK
-    source_descriptor = None
-    try:
-        source_descriptor = os.open(absolute_path, flags)
-        source_stat = os.fstat(source_descriptor)
-        if not stat.S_ISREG(source_stat.st_mode):
-            raise ValueError(
-                "Existing regression bundle target must be a regular file: '{}'.".format(
-                    path
-                )
-            )
-        with os.fdopen(source_descriptor, "rb") as source_handle:
-            source_descriptor = None
-            with os.fdopen(descriptor, "wb") as backup_handle:
-                descriptor_open = False
-                shutil.copyfileobj(source_handle, backup_handle, length=1024 * 1024)
-                backup_handle.flush()
-                os.fsync(backup_handle.fileno())
-                if hasattr(os, "fchmod"):
-                    os.fchmod(backup_handle.fileno(), stat.S_IMODE(source_stat.st_mode))
-        if not hasattr(os, "fchmod"):
-            os.chmod(backup_path, stat.S_IMODE(source_stat.st_mode))
-        return backup_path
-    except BaseException:
-        if source_descriptor is not None:
-            os.close(source_descriptor)
-        if descriptor_open:
-            os.close(descriptor)
-        if os.path.lexists(backup_path):
-            os.remove(backup_path)
-        raise
-
-
-def _replace_output(source: str, target: str) -> None:
-    os.replace(source, target)
-
-
-def _restore_regression_outputs(transactions: list[dict[str, Any]]) -> None:
-    for transaction in reversed(transactions):
-        target = transaction["target"]
-        backup = transaction["backup"]
-        if transaction["installed"]:
-            if backup is None:
-                if os.path.lexists(target):
-                    os.remove(target)
-            elif os.path.lexists(backup):
-                _replace_output(backup, target)
-        elif backup is not None and os.path.lexists(backup):
-            os.remove(backup)
-
-
-def _commit_regression_outputs(staged_outputs: list[tuple[str, str]]) -> None:
-    transactions: list[dict[str, Any]] = []
-    commit_succeeded = False
-    restoration_succeeded = False
-    try:
-        for target, staged_path in staged_outputs:
-            transaction: dict[str, Any] = {
-                "target": target,
-                "staged_path": staged_path,
-                "backup": None,
-                "installed": False,
-            }
-            transactions.append(transaction)
-            if os.path.lexists(target):
-                transaction["backup"] = _backup_regular_output(target)
-            _replace_output(staged_path, target)
-            transaction["installed"] = True
-        commit_succeeded = True
-    except BaseException:
-        for transaction in transactions:
-            if not transaction["installed"] and not os.path.lexists(
-                transaction["staged_path"]
-            ):
-                transaction["installed"] = True
-        try:
-            _restore_regression_outputs(transactions)
-            restoration_succeeded = True
-        except BaseException as restore_exc:
-            raise RuntimeError(
-                "Failed to restore regression bundle outputs after a commit error; "
-                "backup files were preserved."
-            ) from restore_exc
-        raise
-    finally:
-        if commit_succeeded or restoration_succeeded:
-            for transaction in transactions:
-                backup = transaction["backup"]
-                if backup is not None and os.path.lexists(backup):
-                    os.remove(backup)
-        for _, staged_path in staged_outputs:
-            if os.path.lexists(staged_path):
-                os.remove(staged_path)
-
-
-def _transaction_output_modes(outputs):
-    output_modes: dict[str, int] = {}
-    for path, _ in outputs:
-        absolute_path = os.path.abspath(path)
-        directory = os.path.dirname(absolute_path)
-        mode = _regular_output_mode(absolute_path)
-        output_modes[absolute_path] = (
-            _new_output_mode(directory) if mode is None else mode
-        )
-    return output_modes
-
-
-def _transaction_output_lock_path(absolute_path):
-    directory = os.path.realpath(os.path.dirname(absolute_path))
-    identity = hashlib.sha256(
-        os.path.join(directory, os.path.basename(absolute_path)).encode("utf-8")
-    ).hexdigest()
-    return os.path.join(directory, ".nwkit-output-{}.lock".format(identity))
-
-
-def _transaction_output_lock_paths(output_modes):
-    return [
-        _transaction_output_lock_path(absolute_path)
-        for absolute_path in sorted(output_modes)
-    ]
-
-
 def _write_dataframes_transactionally(
     outputs: list[tuple[str, pd.DataFrame]],
 ) -> None:
-    output_modes = _transaction_output_modes(outputs)
-    lock_paths = _transaction_output_lock_paths(output_modes)
-    with ExitStack() as locks:
-        for lock_path in lock_paths:
-            locks.enter_context(
-                acquire_exclusive_lock(lock_path, lock_label="NWKIT output")
-            )
-        staged_outputs: list[tuple[str, str]] = []
-        try:
-            for path, dataframe in outputs:
-                absolute_path = os.path.abspath(path)
-                staged_outputs.append(
-                    (
-                        absolute_path,
-                        _stage_dataframe(
-                            absolute_path,
-                            dataframe,
-                            output_modes[absolute_path],
-                        ),
-                    )
-                )
-            _commit_regression_outputs(staged_outputs)
-        except BaseException:
-            for _, staged_path in staged_outputs:
-                if os.path.lexists(staged_path):
-                    os.remove(staged_path)
-            raise
+    with output_transaction(
+        [path for path, _ in outputs], follow_symlinks=False
+    ) as staged:
+        for path, dataframe in outputs:
+            staged.write_text(path, partial(dataframe.to_csv, sep="\t", index=False))
 
 
 def validate_regression_bundle_target(
@@ -1031,68 +801,58 @@ def _estimate_gene_response_parameter(
         args.gene_evolution_model,
         branch_length=args.gene_branch_length,
     )
-    cache: dict[float, dict[str, Any] | None] = {}
 
-    def cached_candidate(encoded_value: float) -> dict[str, Any] | None:
-        parameter = float(decode(float(encoded_value)))
-        if parameter not in cache:
-            try:
-                contrasts, covariance = _build_gene_response_contrasts(
-                    args,
-                    gene_tree,
-                    reconciliation_by_id,
-                    response_inputs,
-                    response,
-                    parameter,
-                )
-                result = _fit_candidate_reconciled_model(
-                    args,
-                    contrasts,
-                    species_contrasts,
-                    response,
-                    predictors,
-                    covariance,
-                    predictor_sampling_covariance,
-                    predictor_group_uncertainties,
-                )
-                likelihoods = pd.to_numeric(
-                    result["log_likelihood"], errors="coerce"
-                ).to_numpy(dtype=float)
-                if not np.isfinite(likelihoods).all() or not np.allclose(
-                    likelihoods, likelihoods[0]
-                ):
-                    raise ValueError(
-                        "Candidate reconciled fit returned an inconsistent likelihood."
-                    )
-                cache[parameter] = {
-                    "parameter": parameter,
-                    "contrasts": contrasts,
-                    "covariance": covariance,
-                    "result": result,
-                    "objective": -float(likelihoods[0]),
-                }
-            except ValueError:
-                cache[parameter] = None
-        return cache[parameter]
+    def fit_candidate(parameter):
+        contrasts, covariance = _build_gene_response_contrasts(
+            args,
+            gene_tree,
+            reconciliation_by_id,
+            response_inputs,
+            response,
+            parameter,
+        )
+        result = _fit_candidate_reconciled_model(
+            args,
+            contrasts,
+            species_contrasts,
+            response,
+            predictors,
+            covariance,
+            predictor_sampling_covariance,
+            predictor_group_uncertainties,
+        )
+        likelihoods = pd.to_numeric(result["log_likelihood"], errors="coerce").to_numpy(
+            dtype=float
+        )
+        if not np.isfinite(likelihoods).all() or not np.allclose(
+            likelihoods, likelihoods[0]
+        ):
+            raise ValueError(
+                "Candidate reconciled fit returned an inconsistent likelihood."
+            )
+        return {
+            "parameter": parameter,
+            "contrasts": contrasts,
+            "covariance": covariance,
+            "result": result,
+            "objective": -float(likelihoods[0]),
+        }
+
+    cache = ScalarFitCache(fit_candidate, lambda candidate: candidate["objective"])
 
     def objective(encoded_value: float) -> float:
-        candidate = cached_candidate(encoded_value)
-        return float("inf") if candidate is None else float(candidate["objective"])
+        return cache.objective(float(decode(encoded_value)))
 
     optimized = _global_bounded_scalar_minimize(objective, bounds)
     encoded_candidates = [bounds[0], bounds[1]]
     if math.isfinite(float(optimized.fun)):
         encoded_candidates.append(float(optimized.x))
-    candidates = [cached_candidate(value) for value in encoded_candidates]
-    finite_candidates = [candidate for candidate in candidates if candidate is not None]
-    if not finite_candidates:
+    selected = cache.best(float(decode(value)) for value in encoded_candidates)
+    if selected is None:
         raise ValueError(
             "Gene evolution-parameter optimization failed to find a finite "
             "reconciled PGLS fit for response '{}'.".format(response)
         )
-    selected = min(
-        finite_candidates, key=lambda candidate: float(candidate["objective"])
-    )
     parameter = float(selected["parameter"])
     inner_converged = selected["result"]["optimizer_converged"].eq("yes").all()
     diagnostics = {
@@ -1630,7 +1390,9 @@ def _categorical_contrast_uncertainties(
             local_factors.append(
                 eigenvectors[:, positive] * np.sqrt(eigenvalues[positive])
             )
-        latent_factor = sparse.block_diag(local_factors, format="csr")
+        latent_factor = sparse.block_diag(
+            tuple(map(sparse.csr_matrix, local_factors)), format="csr"
+        )
         factor_by_term = tuple(
             (
                 coefficient_matrices[term_index]

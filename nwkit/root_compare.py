@@ -3,7 +3,6 @@ import math
 import os
 import stat
 import sys
-import tempfile
 from copy import copy
 from dataclasses import replace
 from decimal import Decimal, localcontext
@@ -12,6 +11,7 @@ from typing import Any
 
 from nwkit.clade_mapping import canonical_split
 from nwkit.draw import _draw_tree
+from nwkit.output_transaction import output_transaction
 from nwkit.root import (
     DEFAULT_TAXONOMY_SOURCE_CHAIN,
     SUPPORTED_TAXONOMY_SOURCES,
@@ -874,6 +874,7 @@ def _draw_root_comparison(tree, evaluations, args):
         collision_policy="resolve",
         layout_report=getattr(args, "layout_report", None),
         branch_markers=markers,
+        transactional_output=not getattr(args, "_nwkit_outputs_staged", False),
     )
 
 
@@ -921,124 +922,33 @@ def _validate_root_compare_paths(args):
     )
 
 
-def _staged_output_path(destination):
-    final_path = os.path.realpath(os.fspath(destination))
-    parent = os.path.dirname(final_path)
-    prefix = ".{}.".format(os.path.basename(final_path) or "nwkit-rootcompare")
-    descriptor, staged_path = tempfile.mkstemp(
-        prefix=prefix,
-        suffix=".tmp",
-        dir=parent,
-    )
-    os.close(descriptor)
-    mode = 0o644
-    if os.path.exists(final_path):
-        mode = os.stat(final_path).st_mode & 0o777
-    os.chmod(staged_path, mode)
-    return staged_path, final_path
-
-
-def _remove_staged_paths(staged_outputs):
-    for staged_path, _ in staged_outputs:
-        try:
-            if os.path.exists(staged_path):
-                os.remove(staged_path)
-        except OSError as exc:
-            sys.stderr.write(
-                "Warning: failed to clean up staged root comparison output '{}': {}\n".format(
-                    staged_path,
-                    exc,
-                )
-            )
-
-
-def _commit_staged_outputs(staged_outputs):
-    backups = []
-    try:
-        for staged_path, final_path in staged_outputs:
-            backup_path = None
-            if os.path.lexists(final_path):
-                descriptor, backup_path = tempfile.mkstemp(
-                    prefix=".{}-backup.".format(os.path.basename(final_path)),
-                    suffix=".tmp",
-                    dir=os.path.dirname(final_path),
-                )
-                os.close(descriptor)
-                os.remove(backup_path)
-                os.replace(final_path, backup_path)
-            backups.append((final_path, backup_path))
-            os.replace(staged_path, final_path)
-    except Exception:
-        for final_path, backup_path in reversed(backups):
-            try:
-                if os.path.lexists(final_path):
-                    os.remove(final_path)
-                if backup_path is not None and os.path.lexists(backup_path):
-                    os.replace(backup_path, final_path)
-            except OSError as rollback_exc:
-                sys.stderr.write(
-                    "Warning: failed to roll back root comparison output '{}': {}\n".format(
-                        final_path,
-                        rollback_exc,
-                    )
-                )
-        _remove_staged_paths(staged_outputs)
-        raise
-    for _, backup_path in backups:
-        if backup_path is None:
-            continue
-        try:
-            os.remove(backup_path)
-        except OSError as exc:
-            sys.stderr.write(
-                "Warning: failed to clean up root comparison backup '{}': {}\n".format(
-                    backup_path,
-                    exc,
-                )
-            )
-
-
 def _write_failed_evaluations(args, rows):
     if args.outfile == "-":
         _write_root_compare_rows("-", rows)
         return
-    staged_output = _staged_output_path(args.outfile)
-    try:
-        _write_root_compare_rows(staged_output[0], rows)
-        _commit_staged_outputs([staged_output])
-    except Exception:
-        _remove_staged_paths([staged_output])
-        raise
+    with output_transaction([args.outfile]) as staged:
+        _write_root_compare_rows(staged[args.outfile], rows)
 
 
 def _write_successful_outputs(tree, evaluations, args, rows):
-    staged_outputs = []
-    staged_table = None
-    try:
-        if args.outfile != "-":
-            staged_table = _staged_output_path(args.outfile)
-            staged_outputs.append(staged_table)
-        staged_figure = _staged_output_path(args.figure_out)
-        staged_outputs.append(staged_figure)
-        layout_report = getattr(args, "layout_report", None)
-        staged_layout = None
-        if layout_report not in (None, ""):
-            staged_layout = _staged_output_path(layout_report)
-            staged_outputs.append(staged_layout)
-
+    outputs = [args.figure_out]
+    if args.outfile != "-":
+        outputs.append(args.outfile)
+    layout_report = getattr(args, "layout_report", None)
+    if layout_report not in (None, ""):
+        outputs.append(layout_report)
+    write_stdout = (
+        (lambda: _write_root_compare_rows("-", rows)) if args.outfile == "-" else None
+    )
+    with output_transaction(outputs, after_install=write_stdout) as staged:
         drawing_args = copy(args)
-        drawing_args.figure_out = staged_figure[0]
-        if staged_layout is not None:
-            drawing_args.layout_report = staged_layout[0]
+        drawing_args.figure_out = staged[args.figure_out]
+        drawing_args._nwkit_outputs_staged = True
+        if layout_report not in (None, ""):
+            drawing_args.layout_report = staged[layout_report]
         _draw_root_comparison(tree, evaluations, drawing_args)
-        _write_root_compare_rows(
-            "-" if staged_table is None else staged_table[0],
-            rows,
-        )
-        _commit_staged_outputs(staged_outputs)
-    except Exception:
-        _remove_staged_paths(staged_outputs)
-        raise
+        if args.outfile != "-":
+            _write_root_compare_rows(staged[args.outfile], rows)
 
 
 def root_compare_main(args):

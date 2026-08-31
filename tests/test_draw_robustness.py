@@ -1,5 +1,6 @@
 import json
 import math
+import os
 import random
 from pathlib import Path
 
@@ -176,7 +177,7 @@ def test_draw_rejects_output_report_alias_before_mutation(tmp_nwk, tmp_path):
     destination = tmp_path / "same.svg"
     destination.write_text("sentinel", encoding="utf-8")
 
-    with pytest.raises(ValueError, match="different paths"):
+    with pytest.raises(ValueError, match="Output paths must be distinct"):
         draw_main(
             make_draw_args(
                 infile=str(infile),
@@ -187,6 +188,79 @@ def test_draw_rejects_output_report_alias_before_mutation(tmp_nwk, tmp_path):
         )
 
     assert destination.read_text(encoding="utf-8") == "sentinel"
+
+
+@pytest.mark.parametrize("alias_kind", ["hardlink", "symlink", "case"])
+def test_draw_rejects_filesystem_aliases_of_inputs(tmp_nwk, tmp_path, alias_kind):
+    source = Path(tmp_nwk("(A:1,B:1);", "Tree.nwk"))
+    alias = tmp_path / "alias.svg"
+    if alias_kind == "hardlink":
+        os.link(source, alias)
+    elif alias_kind == "symlink":
+        try:
+            alias.symlink_to(source)
+        except OSError:
+            pytest.skip("symlink creation unavailable")
+    else:
+        alias = source.with_name("tree.nwk")
+        if not alias.exists() or not os.path.samefile(source, alias):
+            pytest.skip("case-sensitive filesystem")
+    with pytest.raises(ValueError, match="must not overwrite"):
+        draw_main(
+            make_draw_args(
+                infile=str(source), outfile=str(alias), species_overlap_node_plot="no"
+            )
+        )
+    assert source.read_text() == "(A:1,B:1);"
+
+
+def test_draw_rejects_case_aliases_of_future_outputs(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        "nwkit.file_paths._filesystem_is_case_insensitive", lambda path: True
+    )
+    with pytest.raises(ValueError, match="must be distinct"):
+        draw_module._validate_draw_paths(
+            str(tmp_path / "Figure.svg"), str(tmp_path / "figure.svg"), {}
+        )
+
+
+def test_draw_protects_species_mapping_input(tmp_nwk, tmp_path):
+    source = tmp_nwk("(A:1,B:1);")
+    mapping = tmp_path / "mapping.tsv"
+    mapping.write_text("leaf_name\tspecies\nA\tA\nB\tB\n")
+    with pytest.raises(ValueError, match="species-map-tsv"):
+        draw_main(
+            make_draw_args(
+                infile=source, outfile=str(mapping), species_map_tsv=str(mapping)
+            )
+        )
+    assert mapping.read_text().startswith("leaf_name\tspecies")
+
+
+def test_draw_report_failure_preserves_existing_image_and_report(
+    monkeypatch, tmp_nwk, tmp_path
+):
+    source = tmp_nwk("(A:1,B:1);")
+    image, report = tmp_path / "image.svg", tmp_path / "layout.json"
+    image.write_text("original image")
+    report.write_text("original report")
+
+    def fail_report(path, data):
+        Path(path).write_text("partial report")
+        raise OSError("report failure")
+
+    monkeypatch.setattr("nwkit.draw_output.write_layout_report", fail_report)
+    with pytest.raises(OSError, match="report failure"):
+        draw_main(
+            make_draw_args(
+                infile=source,
+                outfile=str(image),
+                layout_report=str(report),
+                species_overlap_node_plot="no",
+            )
+        )
+    assert image.read_text() == "original image"
+    assert report.read_text() == "original report"
 
 
 def test_draw_rejects_report_aliasing_input_before_mutation(tmp_nwk, tmp_path):
@@ -420,7 +494,7 @@ def test_new_matplotlib_figures_are_closed_when_rendering_raises(
     def fail_quality_check(*args, **kwargs):
         raise RuntimeError("quality failure")
 
-    monkeypatch.setattr(draw_module, "evaluate_drawing", fail_quality_check)
+    monkeypatch.setattr("nwkit.draw_render.evaluate_drawing", fail_quality_check)
     with pytest.raises(RuntimeError, match="quality failure"):
         draw_main(
             make_draw_args(

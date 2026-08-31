@@ -432,7 +432,7 @@ def test_missing_input_audit_collision_respects_case_insensitive_filesystems(
     tmp_path,
 ):
     monkeypatch.setattr(
-        "nwkit.util._filesystem_is_case_insensitive",
+        "nwkit.file_paths._filesystem_is_case_insensitive",
         lambda path: True,
     )
     missing_infile = tmp_path / "Future-Input.nwk"

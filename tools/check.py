@@ -7,9 +7,11 @@ import subprocess
 import sys
 from pathlib import Path
 
-from nwkit import __version__
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT))
+# Distribution checks must work before installing runtime dependencies.
+from nwkit import __version__  # noqa: E402
+
 PYTHON = sys.executable
 
 
@@ -18,7 +20,7 @@ def run(*command: str, env: dict[str, str] | None = None) -> None:
     subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=env)
 
 
-def lint_and_typecheck() -> None:
+def lint_and_typecheck(*, incremental: bool = False) -> None:
     run(PYTHON, "-m", "ruff", "check", "nwkit", "tests", "setup.py", "tools")
     run(
         PYTHON,
@@ -31,18 +33,24 @@ def lint_and_typecheck() -> None:
         "setup.py",
         "tools",
     )
-    run(PYTHON, "-m", "mypy", "--no-incremental")
+    run(PYTHON, "-m", "mypy", *([] if incremental else ["--no-incremental"]))
 
 
-def run_tests() -> None:
+def run_tests(pytest_args: tuple[str, ...] = (), *, quick: bool = False) -> None:
+    marker_selected = any(
+        arg == "--markexpr" or arg.startswith("--markexpr=") or arg.startswith("-m")
+        for arg in pytest_args
+    )
+    markers = ["-m", "not slow"] if quick and not marker_selected else []
     run(
         PYTHON,
         "-m",
         "pytest",
-        "tests/",
         "-q",
         "--durations=20",
         "--durations-min=0.05",
+        *markers,
+        *pytest_args,
     )
 
 
@@ -103,19 +111,31 @@ def build_and_check_distributions() -> None:
     run(PYTHON, "tools/check_dist.py")
 
 
-def main() -> int:
+def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "mode",
         choices=("test", "quick", "full", "dist", "release"),
         help="Validation depth to run.",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "pytest_args",
+        nargs=argparse.REMAINDER,
+        help="Optional pytest targets/options for test or quick (after --).",
+    )
+    args = parser.parse_args(argv)
+    pytest_args = tuple(args.pytest_args)
+    if pytest_args[:1] == ("--",):
+        pytest_args = pytest_args[1:]
+    if pytest_args and args.mode not in {"test", "quick"}:
+        parser.error(
+            "pytest selection is only supported by test and quick; full/release always run the entire suite"
+        )
     if args.mode == "test":
-        run_tests()
+        run_tests(pytest_args)
     elif args.mode == "quick":
-        lint_and_typecheck()
-        run_tests()
+        lint_and_typecheck(incremental=True)
+        run_tests(pytest_args, quick=True)
     elif args.mode == "full":
         run_full_checks()
     elif args.mode == "dist":

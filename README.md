@@ -119,10 +119,12 @@ python -m pip install -c constraints-dev.txt -e ".[dev,image]"
 python tools/check.py quick
 ```
 
-`quick` runs formatting, linting, type checks, and tests. Use `full` for the
+`quick` runs formatting, linting, incremental type checks, and tests excluding
+the `slow` group. Use `full` for all tests and the
 security, dependency, coverage, and maintainability gates; `dist` for
 reproducible package validation; or `release` for the complete pre-release
-suite.
+suite. Focused checks, CI coverage, and benchmarks are described in
+[DEVELOPMENT.md](https://github.com/kfuku52/nwkit/blob/master/DEVELOPMENT.md).
 
 See [CHANGELOG.md](https://github.com/kfuku52/nwkit/blob/master/CHANGELOG.md) for changes and
 [RELEASING.md](https://github.com/kfuku52/nwkit/blob/master/RELEASING.md) for the release checklist.

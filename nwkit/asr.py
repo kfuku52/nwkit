@@ -2,6 +2,8 @@ import math
 import multiprocessing
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
+from copy import copy
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -12,7 +14,6 @@ from scipy.special import logsumexp
 from scipy.stats import poisson
 
 from nwkit.util import (
-    TREE_FORMAT_PROP,
     assign_branch_ids,
     get_node_class,
     is_missing_table_value,
@@ -22,12 +23,37 @@ from nwkit.util import (
     read_tree,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
+    write_tree,
 )
 
 DEFAULT_RATE_BOUNDS = (10**-9, 10**3)
 DEFAULT_AMBIGUOUS_SEPARATOR = "|"
 DEFAULT_TARGET = "all"
 SUPPORTED_MODELS = ("ER", "SYM", "ARD")
+
+
+@dataclass(frozen=True)
+class AsrSettings:
+    """Normalized CLI settings shared by inference and its output metadata."""
+
+    model: str
+    root_prior: str
+    output: str
+
+    @classmethod
+    def from_args(cls, args):
+        model = getattr(args, "model", "ER")
+        output = getattr(args, "output", "probabilities")
+        root_prior = getattr(args, "root_prior", None)
+        if root_prior is None:
+            root_prior = "equal"
+        if model not in SUPPORTED_MODELS:
+            raise ValueError("Unsupported '--model': {}".format(model))
+        if output not in {"probabilities", "map"}:
+            raise ValueError("Unsupported '--output': {}".format(output))
+        if root_prior not in {"equal", "empirical"}:
+            raise ValueError("Unsupported '--root-prior': {}".format(root_prior))
+        return cls(model=model, root_prior=root_prior, output=output)
 
 
 def _parse_comma_list(value, option_name):
@@ -344,12 +370,10 @@ def _get_er_rate_from_matrix(rate_matrix):
     rate = float(off_diagonal_rates[0])
     if rate < 0.0:
         return None
-    if not np.allclose(off_diagonal_rates, rate, rtol=10**-12, atol=10**-15):
+    if not np.allclose(off_diagonal_rates, rate, rtol=10**-12, atol=0.0):
         return None
     expected_diagonal = np.full(num_states, -rate * float(num_states - 1), dtype=float)
-    if not np.allclose(
-        np.diag(rate_matrix), expected_diagonal, rtol=10**-12, atol=10**-15
-    ):
+    if not np.allclose(np.diag(rate_matrix), expected_diagonal, rtol=10**-12, atol=0.0):
         return None
     return rate
 
@@ -746,15 +770,15 @@ def _write_annotated_tree(
         ]
     else:
         raise ValueError("Unsupported '--tree-annotation': {}".format(tree_annotation))
-    parser_format = tree.props.get(TREE_FORMAT_PROP, 0)
-    if getattr(args, "tree_outformat", "auto") != "auto":
-        parser_format = int(args.tree_outformat)
-    tree_string = tree.write(props=props, parser=parser_format, format_root_node=True)
-    if tree_out == "-":
-        print(tree_string)
-    else:
-        with open(tree_out, "w") as handle:
-            handle.write(tree_string)
+    output_args = copy(args)
+    output_args.outfile = tree_out
+    write_tree(
+        tree,
+        output_args,
+        format=getattr(args, "tree_outformat", "auto"),
+        quiet=True,
+        props=props,
+    )
 
 
 def _normalize_probability_vector(weights):
@@ -769,15 +793,17 @@ def _normalize_probability_vector(weights):
 def _build_uniformization_context(rate_matrix, branch_length):
     branch_length = float(branch_length)
     num_states = rate_matrix.shape[0]
-    if branch_length == 0.0 or np.allclose(rate_matrix, 0.0):
+    if branch_length == 0.0 or not np.any(rate_matrix):
         return {"no_events": True}
     omega = float(np.max(-np.diag(rate_matrix)))
     if omega <= 0.0:
         return {"no_events": True}
     lam = omega * branch_length
-    max_n = int(max(10, poisson.ppf(1.0 - 10**-12, lam)))
-    if num_states > 1:
-        max_n = max(max_n, 1)
+    if not 0.0 <= lam < math.inf:
+        raise ValueError(
+            "Stochastic mapping requires a finite non-negative rate × time."
+        )
+    max_n = int(max(10, num_states - 1, poisson.ppf(1.0 - 10**-12, lam)))
     r_matrix = np.eye(num_states, dtype=float) + (rate_matrix / omega)
     r_matrix = np.maximum(r_matrix, 0.0)
     r_matrix = r_matrix / r_matrix.sum(axis=1, keepdims=True)
@@ -842,11 +868,23 @@ def _sample_bridge_event_count(
     else:
         context = uniformization_contexts[branch_length]
     if context.get("no_events"):
-        return 0
+        return _constant_bridge_event_count(start_state, end_state)
     probabilities = context["event_count_probabilities"].get((start_state, end_state))
     if probabilities is None:
-        return 0
+        raise ValueError("No feasible stochastic bridge connects the requested states.")
     return int(rng.choice(context["event_counts"], p=probabilities))
+
+
+def _constant_bridge_event_count(start_state, end_state):
+    if start_state != end_state:
+        raise ValueError("A zero-rate or zero-length branch cannot change state.")
+    return 0
+
+
+def _bridge_probabilities(weights):
+    if not np.any(weights > 0.0):
+        raise ValueError("Stochastic bridge has no feasible next state.")
+    return _normalize_probability_vector(weights)
 
 
 def _sample_bridge_transition_counts(
@@ -880,7 +918,7 @@ def _sample_bridge_transition_counts(
     for step_index in range(event_count):
         remaining = event_count - step_index - 1
         weights = r_matrix[current_state, :] * powers[remaining][:, end_state]
-        probabilities = _normalize_probability_vector(weights)
+        probabilities = _bridge_probabilities(weights)
         next_state = int(rng.choice(np.arange(num_states), p=probabilities))
         if next_state != current_state:
             counts[(current_state, next_state)] += 1
@@ -1154,12 +1192,7 @@ def asr_main(args):
             ("--stochastic-map-out", getattr(args, "stochastic_map_out", None)),
         ]
     )
-    model = getattr(args, "model", "ER")
-    if model not in SUPPORTED_MODELS:
-        raise ValueError("Unsupported '--model': {}".format(model))
-    output_mode = getattr(args, "output", "probabilities")
-    if output_mode not in ["probabilities", "map"]:
-        raise ValueError("Unsupported '--output': {}".format(output_mode))
+    settings = AsrSettings.from_args(args)
     tree = read_tree(args.infile, args.format, args.quoted_node_names)
     _validate_tree_for_asr(tree)
     leaf_names = list(tree.leaf_names())
@@ -1180,9 +1213,9 @@ def asr_main(args):
         states=states,
         observed_state_by_leaf=observed_state_by_leaf,
         likelihood_by_leaf=likelihood_by_leaf,
-        model=model,
+        model=settings.model,
         rate=getattr(args, "rate", None),
-        root_prior_mode=getattr(args, "root_prior", "equal"),
+        root_prior_mode=settings.root_prior,
         rate_bounds=rate_bounds,
     )
     targets = _parse_targets(getattr(args, "target", DEFAULT_TARGET))
@@ -1192,12 +1225,12 @@ def asr_main(args):
         observed_state_by_leaf=observed_state_by_leaf,
         posterior_by_node=posterior_by_node,
         targets=targets,
-        output_mode=output_mode,
+        output_mode=settings.output,
     )
     _write_table(table, args.outfile)
     _write_model_table(
         states,
-        getattr(args, "root_prior", "equal"),
+        settings.root_prior,
         fit,
         getattr(args, "model_out", None),
     )

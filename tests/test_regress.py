@@ -12,6 +12,7 @@ import pytest
 from ete4 import Tree
 from scipy import sparse
 
+import nwkit.output_transaction as output_transaction_mod
 from nwkit import regress as regression_mod
 from nwkit import regression_pipeline as regression_pipeline_mod
 from nwkit.cli import main
@@ -1657,6 +1658,7 @@ def test_origin_specific_options_require_stochastic_mapping_mode(tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.filterwarnings(r"error::DeprecationWarning:nwkit\.")
 def test_reconciled_pgls_propagates_latent_categorical_predictor_replicates(tmp_path):
     gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path
@@ -3070,6 +3072,7 @@ def test_pgls_raw_auto_gene_parameter_rejects_cluster_hc1_before_io():
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
     gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path, biological_replicates=True
@@ -3192,7 +3195,7 @@ def test_regression_bundle_commit_failure_restores_every_existing_output(
     for path in paths.values():
         with open(path, "w") as handle:
             handle.write("original\n")
-    real_replace = regression_pipeline_mod._replace_output
+    real_replace = output_transaction_mod.replace_output
     replace_calls = 0
 
     def fail_second_replace(source, target):
@@ -3202,7 +3205,7 @@ def test_regression_bundle_commit_failure_restores_every_existing_output(
             raise OSError("simulated bundle commit failure")
         real_replace(source, target)
 
-    monkeypatch.setattr(regression_pipeline_mod, "_replace_output", fail_second_replace)
+    monkeypatch.setattr(output_transaction_mod, "replace_output", fail_second_replace)
     with pytest.raises(OSError, match="bundle commit failure"):
         write_regression_bundle(str(prefix), _minimal_pipeline_artifacts())
 
@@ -3220,7 +3223,7 @@ def test_explicit_output_transactions_are_isolated_across_concurrent_writers(
     first_entered = threading.Event()
     release_first = threading.Event()
     second_entered = threading.Event()
-    real_commit = regression_pipeline_mod._commit_regression_outputs
+    real_commit = output_transaction_mod.commit_outputs
     commit_count = 0
     commit_guard = threading.Lock()
 
@@ -3236,9 +3239,7 @@ def test_explicit_output_transactions_are_isolated_across_concurrent_writers(
             second_entered.set()
         real_commit(staged_outputs)
 
-    monkeypatch.setattr(
-        regression_pipeline_mod, "_commit_regression_outputs", controlled_commit
-    )
+    monkeypatch.setattr(output_transaction_mod, "commit_outputs", controlled_commit)
     errors = []
 
     def write(label):
@@ -3280,7 +3281,7 @@ def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
     )
     prefix = tmp_path / "analysis"
     audit = tmp_path / "analysis.audit.jsonl"
-    real_replace = regression_pipeline_mod._replace_output
+    real_replace = output_transaction_mod.replace_output
     replace_calls = 0
 
     def fail_second_replace(source, target):
@@ -3290,7 +3291,7 @@ def test_pgls_failed_bundle_commit_is_rolled_back_and_audits_planned_outputs(
             raise OSError("simulated bundle commit failure")
         real_replace(source, target)
 
-    monkeypatch.setattr(regression_pipeline_mod, "_replace_output", fail_second_replace)
+    monkeypatch.setattr(output_transaction_mod, "replace_output", fail_second_replace)
     with pytest.raises(OSError, match="bundle commit failure"):
         main(
             [
@@ -3385,6 +3386,7 @@ def test_pgls_raw_mode_accepts_separate_nhx_reconciliation_tree(tmp_path):
 
 
 @pytest.mark.integration
+@pytest.mark.slow
 def test_pgls_raw_known_se_supports_multiple_responses_and_predictors(tmp_path):
     gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path

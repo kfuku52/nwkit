@@ -1,81 +1,90 @@
-"""Enforce NWKIT's ratcheted cyclomatic-complexity budget."""
+"""Enforce per-function cyclomatic-complexity ratchets without an average gate."""
 
+import argparse
 import json
 import subprocess
 import sys
+from pathlib import Path
 
-MAX_BLOCK_COMPLEXITY = 40
-MAX_AVERAGE_COMPLEXITY = 6.821
-
-# These renderer entry points predate the complexity check. Keep their exact
-# current ceilings as explicit, non-increasable debt while enforcing the normal
-# budget for every other block. Removing or splitting one requires deleting its
-# stale entry here, so the ratchet can only move downward.
-LEGACY_BLOCK_LIMITS = {
-    ("nwkit/draw.py", "_draw_tree"): 363,
-    ("nwkit/draw.py", "draw_main"): 50,
-}
+MAX_NEW_FUNCTION_COMPLEXITY = 40
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+BASELINE_PATH = Path(__file__).with_name("complexity_baseline.json")
 
 
-def main() -> int:
+def function_complexities(results):
+    """Include methods and nested functions, each with a stable qualified name."""
+    functions = {}
+
+    def visit(path, block, prefix=""):
+        name = prefix + block["name"]
+        if block["type"] == "class":
+            for method in block.get("methods", []):
+                visit(path, method, name + ".")
+            for child in block.get("inner_classes", []):
+                visit(path, child, name + ".")
+            return
+        functions[f"{path}:{name}"] = int(block["complexity"])
+        for closure in block.get("closures", []):
+            visit(path, closure, name + ".<locals>.")
+
+    for path, blocks in results.items():
+        for block in blocks:
+            visit(path.replace("\\", "/"), block)
+    return functions
+
+
+def complexity_violations(current, baseline):
+    violations = []
+    for name, complexity in sorted(current.items()):
+        limit = baseline.get(name, MAX_NEW_FUNCTION_COMPLEXITY)
+        if complexity > limit:
+            label = (
+                "existing function ceiling"
+                if name in baseline
+                else "new function limit"
+            )
+            violations.append(
+                f"{name}: complexity {complexity} exceeds {label} {limit}"
+            )
+    return violations
+
+
+def collect_complexities():
     completed = subprocess.run(
         [sys.executable, "-m", "radon", "cc", "nwkit", "--json"],
+        cwd=PROJECT_ROOT,
         check=True,
         stdout=subprocess.PIPE,
         text=True,
     )
-    results = json.loads(completed.stdout)
-    blocks = [block for file_blocks in results.values() for block in file_blocks]
-    if not blocks:
-        raise RuntimeError("Radon did not find any code blocks to analyze.")
-    observed_legacy = set()
-    violations = []
-    for path, file_blocks in results.items():
-        for block in file_blocks:
-            key = (path, block["name"])
-            legacy_limit = LEGACY_BLOCK_LIMITS.get(key)
-            if legacy_limit is not None:
-                observed_legacy.add(key)
-                if block["complexity"] > legacy_limit:
-                    violations.append(
-                        "{}:{} complexity {} exceeds legacy ceiling {}".format(
-                            path,
-                            block["name"],
-                            block["complexity"],
-                            legacy_limit,
-                        )
-                    )
-            elif block["complexity"] > MAX_BLOCK_COMPLEXITY:
-                violations.append(
-                    "{}:{} complexity {} exceeds {}".format(
-                        path,
-                        block["name"],
-                        block["complexity"],
-                        MAX_BLOCK_COMPLEXITY,
-                    )
-                )
-    stale_limits = set(LEGACY_BLOCK_LIMITS) - observed_legacy
-    if stale_limits:
-        stale = ", ".join("{}:{}".format(*key) for key in sorted(stale_limits))
-        violations.append("remove stale legacy complexity limits: " + stale)
+    current = function_complexities(json.loads(completed.stdout))
+    if not current:
+        raise RuntimeError("Radon did not find any functions to analyze.")
+    return current
+
+
+def main(argv=None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--update-baseline",
+        action="store_true",
+        help="Record reductions/new functions and remove deleted functions; never raise an existing ceiling.",
+    )
+    args = parser.parse_args(argv)
+    baseline = json.loads(BASELINE_PATH.read_text(encoding="utf-8"))
+    current = collect_complexities()
+    violations = complexity_violations(current, baseline)
     if violations:
         raise RuntimeError(
             "Cyclomatic-complexity budget failed:\n- " + "\n- ".join(violations)
         )
-
-    grade_f = [block for block in blocks if block["rank"] == "F"]
-    maximum = max(block["complexity"] for block in blocks)
-    average = sum(block["complexity"] for block in blocks) / len(blocks)
-    if average > MAX_AVERAGE_COMPLEXITY:
-        raise RuntimeError(
-            f"Average complexity {average:.2f} exceeds {MAX_AVERAGE_COMPLEXITY:.2f}."
+    if args.update_baseline:
+        BASELINE_PATH.write_text(
+            json.dumps(current, indent=2, sort_keys=True) + "\n", encoding="utf-8"
         )
+    average = sum(current.values()) / len(current)
     print(
-        "Radon baseline: {:.2f} average, {} grade-F blocks, {} maximum.".format(
-            average,
-            len(grade_f),
-            maximum,
-        )
+        f"Radon: {len(current)} functions, {average:.2f} average (informational), {max(current.values())} maximum; all function ceilings respected."
     )
     return 0
 

@@ -11,6 +11,7 @@ from scipy.optimize import minimize, minimize_scalar
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
     DiagonalSparsePrecisionCovariance,
+    center_response,
     covariance_marginal_diagonal,
     effective_likelihood_settings,
     factor_covariance,
@@ -21,9 +22,11 @@ from nwkit.gaussian import (
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
+    residual_variance_scale,
     solve_factor,
     sparse_precision_update_diagonal,
 )
+from nwkit.optimization import FitResourceError
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
     GmrfPredictorUncertainty,
@@ -164,9 +167,9 @@ def fit_latent_predictor(
     evolutionary_diagonal = np.diag(evolutionary_covariance)
     if not np.any(evolutionary_diagonal > 0.0):
         raise ValueError("Predictor evolutionary covariance has zero diagonal.")
-    centered = observed - (float(np.mean(observed)) if include_intercept else 0.0)
+    observed_offset = float(np.mean(observed)) if include_intercept else 0.0
+    observed = observed - observed_offset
     observed_scale = max(
-        float(np.mean(centered**2)),
         float(np.mean(observed**2)),
         float(np.mean(np.diag(sampling_covariance))),
         np.finfo(float).tiny,
@@ -248,9 +251,9 @@ def fit_latent_predictor(
     )
     boundary = bool(rate <= lower_rate * 10.0 or rate >= upper_rate / 10.0)
     return LatentPredictorPosterior(
-        mean=np.asarray(posterior_mean, dtype=float),
+        mean=np.asarray(posterior_mean + observed_offset, dtype=float),
         covariance=posterior_covariance,
-        prior_mean=float(prior_mean),
+        prior_mean=float(prior_mean + observed_offset),
         evolutionary_rate=float(rate),
         log_likelihood=-float(objective_value),
         optimizer_converged=bool(optimized.success),
@@ -299,10 +302,10 @@ def fit_factor_latent_predictor(
     if loading.shape[1]:
         nonzero_columns = np.asarray(loading.getnnz(axis=0)).reshape(-1) > 0
         loading = loading[:, nonzero_columns]
-    centered = observed - (float(np.mean(observed)) if include_intercept else 0.0)
+    observed_offset = float(np.mean(observed)) if include_intercept else 0.0
+    observed = observed - observed_offset
     sampling_variance = np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
     observed_scale = max(
-        float(np.mean(centered**2)),
         float(np.mean(observed**2)),
         float(np.mean(sampling_variance)),
         np.finfo(float).tiny,
@@ -402,10 +405,10 @@ def fit_factor_latent_predictor(
     mean_posterior_variance = float(np.mean(posterior_marginal_variance))
     boundary = bool(rate <= lower_rate * 10.0 or rate >= upper_rate / 10.0)
     return SparseLatentPredictorPosterior(
-        mean=np.asarray(posterior_mean, dtype=float),
+        mean=np.asarray(posterior_mean + observed_offset, dtype=float),
         covariance_model=posterior_model,
         mean_posterior_variance=mean_posterior_variance,
-        prior_mean=float(prior_mean),
+        prior_mean=float(prior_mean + observed_offset),
         evolutionary_rate=float(rate),
         log_likelihood=-float(objective_value),
         optimizer_converged=bool(optimized.success),
@@ -529,9 +532,9 @@ def fit_sparse_latent_predictor(
     observation_information = (
         observation_loading.T @ sparse.diags(inverse_sampling) @ observation_loading
     )
-    centered = observed - (float(np.mean(observed)) if include_intercept else 0.0)
+    observed_offset = float(np.mean(observed)) if include_intercept else 0.0
+    observed = observed - observed_offset
     observed_scale = max(
-        float(np.mean(centered**2)),
         float(np.mean(observed**2)),
         float(np.mean(sampling)),
         np.finfo(float).tiny,
@@ -641,10 +644,10 @@ def fit_sparse_latent_predictor(
         or latent_variance >= upper_variance / 10.0
     )
     return SparseLatentPredictorPosterior(
-        mean=np.asarray(posterior_mean, dtype=float),
+        mean=np.asarray(posterior_mean + observed_offset, dtype=float),
         covariance_model=covariance_model,
         mean_posterior_variance=mean_posterior_variance,
-        prior_mean=float(prior_mean),
+        prior_mean=float(prior_mean + observed_offset),
         evolutionary_rate=float(latent_variance / evolutionary_model.covariance_scale),
         log_likelihood=-float(objective_value),
         optimizer_converged=bool(optimized.success),
@@ -774,7 +777,7 @@ def _predictor_error_variance_diagonal(beta, uncertainty, columns, n_observation
 
 def _validate_conditional_eiv_size(n_observations, allow_large_dense):
     if n_observations > MAX_DENSE_EIV_OBSERVATIONS and not allow_large_dense:
-        raise ValueError(
+        raise FitResourceError(
             "Conditional errors-in-variables Gaussian fitting is limited to {} "
             "observations (received {}) because its predictor-dependent "
             "covariance is dense; pass allow_large_dense=True to attempt the "
@@ -1312,24 +1315,21 @@ def fit_conditional_eiv_gaussian(
     normalized_components, component_scales = _prepare_eiv_components(
         components, component_factors, len(response)
     )
-    ordinary_beta = np.linalg.lstsq(design, response, rcond=None)[0]
-    ordinary_residual = response - design @ ordinary_beta
-    response_scale = max(
-        float(np.mean(response**2)),
-        float(np.mean(ordinary_residual**2)),
-        float(
-            np.mean(
-                fixed_covariance
-                if not isinstance(fixed_covariance, DiagonalLowRankCovariance)
-                and np.asarray(fixed_covariance).ndim == 1
-                else (
-                    fixed_covariance.diagonal
-                    if isinstance(fixed_covariance, DiagonalLowRankCovariance)
-                    else np.diag(fixed_covariance)
-                )
-            )
-        ),
-        np.finfo(float).tiny,
+    centered_response, beta_offset = center_response(
+        response,
+        design,
+        excluded_columns={
+            int(column)
+            for columns in predictor_columns
+            for column in np.atleast_1d(columns)
+        },
+    )
+    ordinary_beta = np.linalg.lstsq(design, centered_response, rcond=None)[0]
+    ordinary_residual = centered_response - design @ ordinary_beta
+    response_scale = residual_variance_scale(
+        centered_response,
+        ordinary_residual,
+        covariance_marginal_diagonal(fixed_covariance),
     )
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
@@ -1354,7 +1354,8 @@ def fit_conditional_eiv_gaussian(
 
     def evaluate(parameters, return_details=False):
         parameters = np.asarray(parameters, dtype=float)
-        beta = parameters[:num_coefficients]
+        working_beta = parameters[:num_coefficients]
+        beta = working_beta + beta_offset
         log_variances = parameters[num_coefficients:]
         variances = np.exp(log_variances)
         try:
@@ -1374,7 +1375,7 @@ def fit_conditional_eiv_gaussian(
             )
         except (ValueError, np.linalg.LinAlgError):
             return float("inf")
-        residual = response - design @ beta
+        residual = centered_response - design @ working_beta
         try:
             inverse_residual = _solve(cholesky, residual)
             quadratic = float(residual @ inverse_residual)
@@ -1441,7 +1442,7 @@ def fit_conditional_eiv_gaussian(
             "quadratic": quadratic,
             "component_variances": component_variances,
             "log_variances": log_variances,
-            "parameters": parameters,
+            "parameters": np.concatenate([beta, log_variances]),
             "lower_variance": lower_variance,
             "upper_variance": upper_variance,
         }
@@ -1453,7 +1454,9 @@ def fit_conditional_eiv_gaussian(
             )
         ]
     else:
-        starts = [np.asarray(starting_parameters, dtype=float)]
+        start = np.asarray(starting_parameters, dtype=float).copy()
+        start[:num_coefficients] -= beta_offset
+        starts = [start]
     candidates = []
     with warnings.catch_warnings():
         warnings.filterwarnings(

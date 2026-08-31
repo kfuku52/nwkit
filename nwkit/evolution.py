@@ -10,16 +10,26 @@ import pandas as pd
 from scipy import sparse
 
 from nwkit.clade_index import LcaIndex
+from nwkit.model_specs import (
+    CONTRAST_EVOLUTION_MODELS as CONTRAST_EVOLUTION_MODELS,
+)
+from nwkit.model_specs import (
+    EVOLUTION_MODEL_SPECS as EVOLUTION_MODEL_SPECS,
+)
+from nwkit.model_specs import (
+    EVOLUTION_MODELS as EVOLUTION_MODELS,
+)
+from nwkit.model_specs import (
+    PARAMETERIZED_EVOLUTION_MODELS as PARAMETERIZED_EVOLUTION_MODELS,
+)
+from nwkit.model_specs import (
+    EvolutionModelSpec as EvolutionModelSpec,
+)
+from nwkit.model_specs import (
+    evolution_model_spec as evolution_model_spec,
+)
 from nwkit.sparse_laplace import SparseCovarianceModel
 from nwkit.util import read_input_text
-
-
-@dataclass(frozen=True)
-class EvolutionModelSpec:
-    name: str
-    parameter_name: str | None
-    contrast_supported: bool = True
-    branch_lengths_used: bool = True
 
 
 @dataclass(frozen=True)
@@ -52,38 +62,6 @@ class EvolutionaryCovarianceFactory:
             parameter=parameter,
             branch_length=self.branch_length,
         )
-
-
-EVOLUTION_MODEL_SPECS = {
-    spec.name: spec
-    for spec in [
-        EvolutionModelSpec("brownian", None),
-        EvolutionModelSpec("lambda", "lambda"),
-        EvolutionModelSpec("ou", "alpha"),
-        EvolutionModelSpec("kappa", "kappa"),
-        EvolutionModelSpec("delta", "delta"),
-        EvolutionModelSpec("eb", "rate_change"),
-        EvolutionModelSpec("acdc", "rate_change"),
-        EvolutionModelSpec("independent", None, branch_lengths_used=False),
-        EvolutionModelSpec(
-            "custom", None, contrast_supported=False, branch_lengths_used=False
-        ),
-    ]
-}
-EVOLUTION_MODELS = tuple(EVOLUTION_MODEL_SPECS)
-CONTRAST_EVOLUTION_MODELS = tuple(
-    name for name, spec in EVOLUTION_MODEL_SPECS.items() if spec.contrast_supported
-)
-PARAMETERIZED_EVOLUTION_MODELS = tuple(
-    name for name, spec in EVOLUTION_MODEL_SPECS.items() if spec.parameter_name
-)
-
-
-def evolution_model_spec(model: str) -> EvolutionModelSpec:
-    try:
-        return EVOLUTION_MODEL_SPECS[str(model)]
-    except KeyError as exc:
-        raise ValueError("Unsupported evolutionary model: {}.".format(model)) from exc
 
 
 def _base_edge_lengths(tree, branch_length: str) -> dict[Any, float]:

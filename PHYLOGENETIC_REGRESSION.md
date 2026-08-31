@@ -985,6 +985,23 @@ transfer no longer silently produces an empty table.
   likelihood-ratio, and profile-likelihood inference all use the same selected
   likelihood backend; they differ only in how coefficient uncertainty is
   calculated.
+
+For ordinary Gaussian models with a non-diagonal tree covariance, the 2,000-tip
+dense limit is checked before constructing trial covariances. An automatic
+lambda search that cannot evaluate its nonzero candidates fails explicitly; it
+does not report lambda=0 as an estimated optimum. `--allow-large-dense yes`
+explicitly permits the full search with a memory warning. Diagonal models remain
+eligible for diagonal fitting, and a resource error is never treated as a poor
+likelihood candidate.
+
+Gaussian fits with an explicit, certain intercept remove its response offset
+before solving and calculate variance bounds from residual/sampling scales.
+Adding a constant to the response therefore shifts the intercept without changing
+the slope uncertainty. Latent-predictor and conditional EIV fits use the same
+origin-independent calculation. Models without an intercept are not centered.
+An exactly fitted constant response with zero sampling variance has a zero-variance
+likelihood boundary; NWKIT uses a small positive limiting covariance and reports
+`boundary_warning` rather than claiming a regular interior optimum.
 - Tree ensembles are equally weighted. They propagate the supplied tree and
   reconciliation sample but do not infer a tree distribution or model
   incomplete lineage sorting internally.

@@ -1,12 +1,12 @@
 import copy
 import os
-import secrets
 import shutil
 import stat
 import sys
 import tempfile
 from typing import Any
 
+from nwkit.output_transaction import commit_outputs, new_output_mode
 from nwkit.util import (
     read_seqs,
     read_tree,
@@ -122,28 +122,6 @@ def _resolve_output_target(target):
     return target
 
 
-def _umask_adjusted_output_mode(directory):
-    for _ in range(100):
-        probe_path = os.path.join(
-            directory,
-            ".nwkit-mode-probe-{}".format(secrets.token_hex(16)),
-        )
-        try:
-            fd = os.open(
-                probe_path,
-                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
-                0o666,
-            )
-        except FileExistsError:
-            continue
-        try:
-            return stat.S_IMODE(os.fstat(fd).st_mode)
-        finally:
-            os.close(fd)
-            os.remove(probe_path)
-    raise FileExistsError("Could not allocate a temporary output-mode probe.")
-
-
 def _regular_output_stat(target):
     try:
         target_stat = os.stat(target)
@@ -154,39 +132,6 @@ def _regular_output_stat(target):
             "Existing output target must be a regular file: '{}'.".format(target)
         )
     return target_stat
-
-
-def _copy_regular_output_to_backup(target, backup_fd):
-    flags = os.O_RDONLY
-    if hasattr(os, "O_NOFOLLOW"):
-        flags |= os.O_NOFOLLOW
-    if hasattr(os, "O_NONBLOCK"):
-        flags |= os.O_NONBLOCK
-    opened_source_fd = os.open(target, flags)
-    source_fd: int | None = opened_source_fd
-    try:
-        source_stat = os.fstat(opened_source_fd)
-        if not stat.S_ISREG(source_stat.st_mode):
-            raise ValueError(
-                "Existing output target must be a regular file: '{}'.".format(target)
-            )
-        with os.fdopen(opened_source_fd, "rb") as source_handle:
-            source_fd = None
-            with os.fdopen(os.dup(backup_fd), "wb") as backup_handle:
-                shutil.copyfileobj(
-                    source_handle,
-                    backup_handle,
-                    length=1024 * 1024,
-                )
-                backup_handle.flush()
-                os.fsync(backup_handle.fileno())
-        source_mode = stat.S_IMODE(source_stat.st_mode)
-        if hasattr(os, "fchmod"):
-            os.fchmod(backup_fd, source_mode)
-        return source_mode
-    finally:
-        if source_fd is not None:
-            os.close(source_fd)
 
 
 def _stage_file(target, writer):
@@ -216,7 +161,7 @@ def _stage_file(target, writer):
             if target_stat is not None:
                 output_mode = stat.S_IMODE(target_stat.st_mode)
             elif target != "-":
-                output_mode = _umask_adjusted_output_mode(directory)
+                output_mode = new_output_mode(directory)
             else:
                 output_mode = None
             if output_mode is not None and hasattr(os, "fchmod"):
@@ -261,116 +206,32 @@ def _stage_file(target, writer):
     }
 
 
-def _restore_staged_outputs(transactions):
-    for transaction in reversed(transactions):
-        target = transaction["target"]
-        backup = transaction["backup"]
-        if backup is not None and transaction["installed"] and os.path.lexists(backup):
-            os.replace(backup, target)
-        elif backup is not None and os.path.lexists(backup):
-            os.remove(backup)
-        elif transaction["installed"] and os.path.lexists(target):
-            os.remove(target)
-
-
 def _commit_staged_outputs(staged_outputs):
-    transactions = []
-    stdout_stages = []
-    commit_succeeded = False
-    try:
+    def write_stdout():
         for target, staged in staged_outputs:
-            staged_path = staged["path"]
-            if target == "-":
-                stdout_stages.append(staged)
+            if target != "-":
                 continue
-            transaction = {
-                "target": target,
-                "backup": None,
-                "installed": False,
-                "staged_path": staged_path,
-            }
-            transactions.append(transaction)
-            if os.path.lexists(target):
-                directory = os.path.dirname(os.path.abspath(target))
-                backup_fd, backup = tempfile.mkstemp(
-                    prefix=".{}.backup.".format(os.path.basename(target)),
-                    dir=directory,
-                )
-                backup_stat = os.fstat(backup_fd)
-                try:
-                    backup_mode = _copy_regular_output_to_backup(
-                        target,
-                        backup_fd,
-                    )
-                    path_stat = os.lstat(backup)
-                    if (
-                        not stat.S_ISREG(path_stat.st_mode)
-                        or path_stat.st_dev != backup_stat.st_dev
-                        or path_stat.st_ino != backup_stat.st_ino
-                    ):
-                        raise RuntimeError(
-                            "Intersection backup file was replaced before commit."
-                        )
-                    if not hasattr(os, "fchmod"):
-                        os.chmod(backup, backup_mode)
-                        path_stat = os.lstat(backup)
-                        if (
-                            not stat.S_ISREG(path_stat.st_mode)
-                            or path_stat.st_dev != backup_stat.st_dev
-                            or path_stat.st_ino != backup_stat.st_ino
-                        ):
-                            raise RuntimeError(
-                                "Intersection backup file was replaced before commit."
-                            )
-                except BaseException:
-                    if os.path.lexists(backup):
-                        os.remove(backup)
-                    raise
-                finally:
-                    os.close(backup_fd)
-                transaction["backup"] = backup
-            os.replace(staged_path, target)
-            transaction["installed"] = True
-        for staged in stdout_stages:
             os.lseek(staged["read_fd"], 0, os.SEEK_SET)
             with os.fdopen(os.dup(staged["read_fd"])) as handle:
-                while True:
-                    chunk = handle.read(1024 * 1024)
-                    if chunk == "":
-                        break
-                    sys.stdout.write(chunk)
+                shutil.copyfileobj(handle, sys.stdout, length=1024 * 1024)
         sys.stdout.flush()
-        commit_succeeded = True
-    except BaseException:
-        # If an asynchronous exception arrived immediately after the atomic
-        # replace completed, the staged path is already gone even though the
-        # flag assignment may not have run.
-        for transaction in transactions:
-            if not transaction["installed"] and not os.path.lexists(
-                transaction["staged_path"]
-            ):
-                transaction["installed"] = True
-        try:
-            _restore_staged_outputs(transactions)
-        except BaseException as restore_exc:
-            raise RuntimeError(
-                "Failed to restore intersection outputs after a commit error; "
-                "backup files were preserved."
-            ) from restore_exc
-        raise
+
+    try:
+        commit_outputs(
+            [
+                (os.path.abspath(target), staged["path"])
+                for target, staged in staged_outputs
+                if target != "-"
+            ],
+            after_install=write_stdout,
+        )
     finally:
-        if commit_succeeded:
-            for transaction in transactions:
-                backup = transaction["backup"]
-                if backup is not None and os.path.lexists(backup):
-                    os.remove(backup)
         for _, staged in staged_outputs:
-            staged_path = staged["path"]
             if staged["read_fd"] is not None:
                 os.close(staged["read_fd"])
                 staged["read_fd"] = None
-            if os.path.lexists(staged_path):
-                os.remove(staged_path)
+            if os.path.lexists(staged["path"]):
+                os.remove(staged["path"])
 
 
 def _write_outputs_atomically(tree, args, new_seqs, seqout):

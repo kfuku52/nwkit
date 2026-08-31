@@ -1,11 +1,16 @@
 import math
 
+import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
 
 import nwkit.asr as asr
+from nwkit import rsc_diagnostics
 from nwkit.asr import _er_transition_matrix, asr_main
+from nwkit.clade_index import CladeIndex
+from nwkit.cli import main
+from nwkit.util import MISSING_SUPPORT_VALUE, read_tree
 from tests.helpers import make_args
 
 
@@ -28,6 +33,134 @@ def test_initial_rate_stays_scaled_for_huge_finite_branch_lengths():
     )
 
     assert rate == pytest.approx(1e-308, rel=1e-12, abs=0.0)
+
+
+def test_cli_defaults_and_stochastic_maps_do_not_depend_on_time_units(tmp_path):
+    trait = tmp_path / "trait.tsv"
+    trait.write_text("leaf_name\tstate\nA\tx\nB\ty\n")
+    maps, posteriors = [], []
+    for index, scale in enumerate((1.0, 1e9)):
+        tree = tmp_path / f"tree{index}.nwk"
+        tree.write_text(f"(A:{scale},B:{scale});")
+        table = tmp_path / f"posterior{index}.tsv"
+        mapping = tmp_path / f"map{index}.tsv"
+        main(
+            [
+                "asr",
+                "-i",
+                str(tree),
+                "--trait",
+                str(trait),
+                "--state-column",
+                "state",
+                "--rate",
+                str(0.2 / scale),
+                "--n-sim",
+                "20",
+                "--seed",
+                "9",
+                "--stochastic-map-out",
+                str(mapping),
+                "-o",
+                str(table),
+            ]
+        )
+        maps.append(pd.read_csv(mapping, sep="\t"))
+        posteriors.append(pd.read_csv(table, sep="\t"))
+    pd.testing.assert_frame_equal(maps[0], maps[1])
+    pd.testing.assert_frame_equal(posteriors[0], posteriors[1])
+    assert maps[0]["total_count"].sum() >= 20
+
+
+def test_tiny_asymmetric_rates_are_not_misclassified_as_er():
+    matrix = np.asarray([[-1.0, 1.0], [2.0, -2.0]])
+    assert asr._get_er_rate_from_matrix(matrix * 1e-18) is None
+    assert asr._transition_matrix(matrix, 1.0) == pytest.approx(
+        asr._transition_matrix(matrix * 1e-18, 1e18)
+    )
+
+
+def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypatch):
+    original_fit = asr.compute_mk_marginals
+    results, omissions = [], []
+    for scale in (1.0, 1e9):
+        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
+        for node in tree.traverse():
+            if not node.is_root:
+                node.dist *= scale
+
+        def fixed_process(*args, _scale=scale, **kwargs):
+            return original_fit(*args, rate=0.2 / _scale, **kwargs)
+
+        # Hold Q*t fixed at the fitting boundary; exercise the real mapping
+        # consumer, origin labels, and descendant-event sensitivity sets.
+        monkeypatch.setattr(rsc_diagnostics, "compute_mk_marginals", fixed_process)
+        clades = CladeIndex(tree)
+        frame, omitted = rsc_diagnostics.build_categorical_origin_diagnostics(
+            tree,
+            {"state": {"A": "x", "B": "y", "C": "x", "D": "y"}},
+            ["state"],
+            [
+                clades.clade_id_for_node(node)
+                for node in tree.traverse()
+                if not node.is_leaf
+            ],
+            num_simulations=20,
+            seed=9,
+        )
+        results.append(frame.drop(columns=["mk_rates"]))
+        omissions.append(omitted)
+    pd.testing.assert_frame_equal(results[0], results[1])
+    assert omissions[0] == omissions[1]
+    assert results[0]["total_count"].sum() >= 40
+
+
+@pytest.mark.parametrize(
+    "length, matrix", [(0.0, [[-1, 1], [1, -1]]), (1.0, [[0, 0], [0, 0]])]
+)
+def test_impossible_zero_event_bridge_is_rejected(length, matrix):
+    with pytest.raises(ValueError, match="cannot change state"):
+        asr._sample_bridge_event_count(
+            0, 1, length, np.asarray(matrix), np.random.default_rng(0)
+        )
+
+
+def test_unreachable_stochastic_bridge_is_rejected():
+    matrix = np.asarray([[-1.0, 1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 0.0]])
+    with pytest.raises(ValueError, match="No feasible stochastic bridge"):
+        asr._sample_bridge_event_count(0, 2, 1.0, matrix, np.random.default_rng(0))
+
+
+@pytest.mark.parametrize(
+    "tree_text, expected_names",
+    [
+        ("((A:1,B:1)'95':1,C:2)'20';", {"95", "20"}),
+        ("((A:1,B:1):1,C:2);", set()),
+    ],
+)
+def test_annotated_tree_preserves_numeric_names_and_missing_support(
+    tmp_path, tree_text, expected_names
+):
+    source = tmp_path / "source.nwk"
+    source.write_text(tree_text)
+    tree = read_tree(str(source), "auto", True)
+    posterior = {node: np.asarray([0.25, 0.75]) for node in tree.traverse()}
+    destination = tmp_path / "annotated.nwk"
+    asr._write_annotated_tree(
+        tree,
+        ["x", "y"],
+        posterior,
+        {},
+        make_args(
+            tree_out=str(destination), tree_outformat="auto", tree_annotation="all"
+        ),
+    )
+    assert str(int(MISSING_SUPPORT_VALUE)) not in destination.read_text()
+    restored = read_tree(str(destination), "auto", True)
+    assert {
+        node.name for node in restored.traverse() if not node.is_leaf and node.name
+    } == expected_names
+    assert all(node.props["asr_state"] == "y" for node in restored.traverse())
 
 
 class TestAsrMain:

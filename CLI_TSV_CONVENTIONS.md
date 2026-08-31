@@ -163,13 +163,40 @@ single-standard-input rule.
   `.predictor-tip-summary.tsv` for predictors, whenever the corresponding role
   has replicates or known SEs.
   Applicable files are staged and committed as one recoverable transaction,
-  with concurrent writers serialized by a per-prefix lock; an ordinary write
+  with concurrent writers serialized by prefix/output locks; an ordinary write
   or commit failure does not leave a partial mixed bundle.
   Without `--out-prefix`, intermediate tables remain in memory and only the
   requested primary and random-effect outputs are written.
   Gene and species contrast rows, and every final reconciled result, retain the
   independently selected response and predictor evolutionary models, parameter
   names and fixed or automatically estimated values, and branch-length modes.
+
+## ASR defaults and Newick annotations
+
+`asr` uses equal root-state probabilities when `--root-prior` is omitted.
+Annotated Newick uses the shared writer, preserving quoted numeric internal
+names and suppressing internal missing-support sentinels. Stochastic maps
+distinguish exactly zero rates from small positive rates: scaling branch lengths
+and inversely scaling a fixed rate matrix preserves the process and seeded map
+counts. Bounds for estimated rates remain expressed in inverse branch-length
+units; adjust `--rate-bounds` when changing those units.
+
+## Protecting related outputs
+
+`draw`, `rootcompare`, `regress`, and `intersection` share recoverable output
+installation. All file destinations are validated before writing, staged beside
+their targets, and installed after generation succeeds. Handled write/rename
+failures restore existing outputs and remove newly installed files. Recovery
+backups are retained if restoration itself fails. Existing file modes and the
+process creation mask are respected.
+
+`draw` rejects outputs that alias each other or any input, including species maps
+and referenced tip images. Checks cover symbolic links, hard links, and equivalent
+names on case-insensitive filesystems. Image and layout-report failures preserve
+the previous complete pair. As with any separate filesystem renames, this is not
+a crash-atomic multi-file transaction. Output locks coordinate NWKIT writers, not
+arbitrary external programs. A stdout write can trigger file rollback on failure,
+but already emitted stdout bytes cannot be retracted.
 
 ## Compatibility names
 

@@ -1,4 +1,7 @@
 include CLI_TSV_CONVENTIONS.md
+include DEVELOPMENT.md
+include CHANGELOG.md
+include RELEASING.md
 include PHYLOGENETIC_REGRESSION.md
 include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt

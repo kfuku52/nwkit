@@ -8,6 +8,46 @@ from scipy import sparse
 from scipy.sparse.linalg import SuperLU, splu
 
 
+def center_response(response, design, *, excluded_columns=()):
+    """Remove an explicit intercept offset without changing a no-intercept fit.
+
+    Center before solving or taking numerical derivatives: subtracting a large
+    fitted intercept afterwards loses useful precision. An uncertain predictor
+    cannot be used as the intercept in an errors-in-variables model.
+    """
+    response = np.asarray(response, dtype=float)
+    offset = np.zeros(design.shape[1], dtype=float)
+    for column in range(design.shape[1]):
+        values = design[:, column]
+        if (
+            column not in excluded_columns
+            and len(values)
+            and values[0] != 0.0
+            and np.all(values == values[0])
+        ):
+            mean = float(np.mean(response))
+            offset[column] = mean / float(values[0])
+            return response - mean, offset
+    return response, offset
+
+
+def residual_variance_scale(response, residual, sampling_diagonal):
+    """Choose variance bounds in residual units, independent of a fitted mean."""
+    sampling_scale = float(np.mean(sampling_diagonal))
+    residual_scale = float(np.mean(np.square(residual)))
+    # The floor follows response units and only affects a numerically exact
+    # fit. The response passed here has already had its intercept removed.
+    return max(
+        residual_scale,
+        sampling_scale,
+        np.finfo(float).eps * float(np.mean(np.square(response))),
+        # For an exactly constant response with no sampling error, the ML
+        # optimum is zero. Keep the limiting covariance invertible; callers
+        # explicitly report the resulting variance-boundary warning.
+        math.sqrt(np.finfo(float).tiny),
+    )
+
+
 @dataclass(frozen=True)
 class DiagonalLowRankFactor:
     """Factorization of ``diag(diagonal) + low_rank @ low_rank.T``."""

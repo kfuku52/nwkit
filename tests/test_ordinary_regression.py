@@ -419,6 +419,7 @@ def test_phylogenetic_correlation_parameter_can_be_estimated(evolution_model):
         assert result.iloc[0]["evolution_parameter"] <= 1.0
 
 
+@pytest.mark.slow
 def test_ordinary_pgls_parametric_bootstrap_is_reproducible():
     predictor_sampling = pd.DataFrame(
         np.eye(len(LEAF_NAMES)) * 0.04,
@@ -1504,6 +1505,7 @@ def test_sparse_phylogenetic_glmm_warns_above_validated_tip_limit(monkeypatch):
     assert fit.optimizer_converged
 
 
+@pytest.mark.slow
 def test_sparse_phylogenetic_glmm_supports_parametric_bootstrap(monkeypatch):
     monkeypatch.setattr("nwkit.phylogenetic_glmm.MAX_DENSE_GLMM_TIPS", 4)
     covariance = evolutionary_covariance_factory(_tree(), LEAF_NAMES)
