@@ -3,7 +3,7 @@ from typing import Any
 
 import pandas as pd
 
-from nwkit.clade_mapping import projected_root_split
+from nwkit.rooting_state import get_rooting_info
 from nwkit.util import (
     compute_node_ages,
     get_species_group_records,
@@ -35,6 +35,8 @@ VALIDATE_COLUMNS = (
     "num_missing_support_internal_nodes",
     "num_non_finite_support_internal_nodes",
     "is_rooted",
+    "rooting_state",
+    "rooting_source",
     "is_ultrametric",
     "leaf_names_unique",
     "num_duplicate_leaf_names",
@@ -117,6 +119,8 @@ def _collect_tree_metrics(tree):
         "num_missing_support_internal_nodes": num_missing_support_internal_nodes,
         "num_non_finite_support_internal_nodes": num_non_finite_support_internal_nodes,
         "is_rooted": is_rooted(tree),
+        "rooting_state": get_rooting_info(tree).state,
+        "rooting_source": get_rooting_info(tree).source,
         "is_ultrametric": is_ultrametric,
     }
 
@@ -159,6 +163,8 @@ def _build_parse_error_row(tree_id, inspection, issues):
         "num_missing_support_internal_nodes": "",
         "num_non_finite_support_internal_nodes": "",
         "is_rooted": "",
+        "rooting_state": "",
+        "rooting_source": "",
         "is_ultrametric": "",
         "leaf_names_unique": "",
         "num_duplicate_leaf_names": "",
@@ -226,18 +232,18 @@ def _metric_issues(metrics, duplicate_leaf_names, empty_leaf_names, options):
     return [issue for condition, issue in checks if condition]
 
 
+def _root_partition(tree):
+    return frozenset(frozenset(child.leaf_names()) for child in tree.get_children())
+
+
 def _comparison_values(tree_id, tree, metrics, references, options, issues):
     leaf_name_set = set(tree.leaf_names())
     if tree_id == 1:
         references.update(
             {
                 "leaf_set": leaf_name_set,
-                "rooted_state": metrics["is_rooted"],
-                "root_split": (
-                    projected_root_split(tree, leaf_name_set)
-                    if metrics["is_rooted"]
-                    else None
-                ),
+                "rooted_state": metrics["rooting_state"],
+                "root_split": (_root_partition(tree) if metrics["is_rooted"] else None),
                 "first_tree_parsed": True,
             }
         )
@@ -250,14 +256,12 @@ def _comparison_values(tree_id, tree, metrics, references, options, issues):
     rooting_matches: bool | str
     if not leaf_set_matches:
         rooting_matches = ""
-    elif metrics["is_rooted"] != references["rooted_state"]:
+    elif metrics["rooting_state"] != references["rooted_state"]:
         rooting_matches = False
-    elif not references["rooted_state"]:
+    elif references["rooted_state"] != "rooted":
         rooting_matches = True
     else:
-        rooting_matches = (
-            projected_root_split(tree, leaf_name_set) == references["root_split"]
-        )
+        rooting_matches = _root_partition(tree) == references["root_split"]
     if options["require_same_rooting"] and rooting_matches is False:
         issues.append("rooting_mismatch")
     return leaf_set_matches, rooting_matches
@@ -347,6 +351,7 @@ def validate_main(args):
             args.quoted_node_names,
             quiet=True,
             allow_non_finite=True,
+            rooted=getattr(args, "input_rooted", "auto"),
         )
         row = _build_valid_tree_row(
             tree_id, tree, inspection, issues, references, options, args

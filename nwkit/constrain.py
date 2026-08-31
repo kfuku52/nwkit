@@ -8,6 +8,7 @@ import ete4
 import numpy as np
 import pandas as pd
 
+from nwkit.rooting_state import set_rooting_info
 from nwkit.util import (
     extract_taxonomy_query,
     get_ete_ncbitaxa,
@@ -448,6 +449,15 @@ def collapse_genes(tree):
     return tree
 
 
+def _prepare_constraint_output(tree, backbone):
+    if not backbone.endswith("user"):
+        set_rooting_info(tree, True, source="taxonomy")
+    tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
+    for node in tree.traverse():
+        node.name = (node.name or "").replace(" ", "_")
+    return tree
+
+
 def constrain_main(args):
     labels, taxid_df = check_input_file(args)
     if args.backbone == "ncbi":
@@ -478,7 +488,12 @@ def constrain_main(args):
             _close_ncbi_db(ncbi)
     else:
         if args.backbone.endswith("user"):
-            tree = read_tree(args.infile, args.format, args.quoted_node_names)
+            tree = read_tree(
+                args.infile,
+                args.format,
+                args.quoted_node_names,
+                rooted=getattr(args, "input_rooted", "auto"),
+            )
             for node in tree.traverse():
                 node.name = (node.name or "").replace("_", " ")
             validate_unique_named_leaves(
@@ -503,7 +518,5 @@ def constrain_main(args):
         tree = polytomize_one2many_matches(tree)
     if args.collapse:
         tree = collapse_genes(tree)
-    tree = remove_singleton(tree, verbose=False, preserve_branch_length=False)
-    for node in tree.traverse():
-        node.name = (node.name or "").replace(" ", "_")
+    tree = _prepare_constraint_output(tree, args.backbone)
     write_tree(tree, args, format=9)

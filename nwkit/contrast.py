@@ -13,10 +13,10 @@ from nwkit.evolution import (
     validate_evolution_parameter,
 )
 from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.rooting_state import require_rooted, rooting_option_for_input
 from nwkit.util import (
     assign_branch_ids,
     get_node_class,
-    is_rooted,
     read_input_text,
     read_tip_table,
     read_tree,
@@ -146,8 +146,9 @@ def _validate_contrast_tree(tree, branch_length, option_name="--infile"):
         raise ValueError(
             "'{}' must contain at least two tips for contrasts.".format(option_name)
         )
-    if not is_rooted(tree):
-        raise ValueError("Contrasts require a rooted tree.")
+    require_rooted(
+        tree, "Contrasts require a rooted tree.", rooting_option_for_input(option_name)
+    )
     nonbinary = [
         node for node in tree.traverse() if not node.is_leaf and len(node.children) != 2
     ]
@@ -1541,7 +1542,12 @@ def contrast_main(args):
         outputs,
         label="Contrast output",
     )
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     columns = _parse_columns(args.columns)
     _validate_contrast_tree(tree, args.branch_length)
     clades = CladeIndex(tree)

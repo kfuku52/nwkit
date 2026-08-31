@@ -7,6 +7,7 @@ import pandas as pd
 
 from nwkit.clade_mapping import build_clade_mapping, projected_root_split
 from nwkit.root import transfer_root_with_taxon_mode
+from nwkit.rooting_state import require_rooted
 from nwkit.transfer import (
     REPORT_COLUMNS,
     parse_property_specs,
@@ -168,7 +169,12 @@ def compose_main(args):
     match_basis = getattr(args, "match_basis", "clade")
     allow_projected_values = bool(getattr(args, "allow_projected_values", False))
     source_format = getattr(args, "source_format", "auto")
-    target = read_tree(args.infile, args.format, args.quoted_node_names)
+    target = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     collect_report = getattr(args, "report", None) not in (None, "")
     report_rows = list()
     status_counts: dict[str, int] = {}
@@ -177,7 +183,12 @@ def compose_main(args):
 
     root_source_path = sources["root"]
     if root_source_path:
-        root_source = read_tree(root_source_path, source_format, args.quoted_node_names)
+        root_source = read_tree(
+            root_source_path,
+            source_format,
+            args.quoted_node_names,
+            rooted=getattr(args, "root_source_rooted", "auto"),
+        )
         mapping = build_clade_mapping(
             target=target, source=root_source, taxon_mode=taxon_mode
         )
@@ -201,6 +212,11 @@ def compose_main(args):
             failures.append(reason)
         else:
             try:
+                require_rooted(
+                    root_source,
+                    "Root transfer requires a rooted source tree.",
+                    "--root-source-rooted",
+                )
                 target = transfer_root_with_taxon_mode(
                     tree_to=target,
                     tree_from=root_source,
@@ -243,10 +259,21 @@ def compose_main(args):
         ("support", sources["support"], ("support", "support"), "intnode", True),
         ("length", sources["length"], ("length", "length"), "all", True),
     )
-    for _, source_path, property_spec, target_class, exclude_root in built_in_sources:
+    for (
+        source_kind,
+        source_path,
+        property_spec,
+        target_class,
+        exclude_root,
+    ) in built_in_sources:
         if not source_path:
             continue
-        source_tree = read_tree(source_path, source_format, args.quoted_node_names)
+        source_tree = read_tree(
+            source_path,
+            source_format,
+            args.quoted_node_names,
+            rooted=getattr(args, source_kind + "_source_rooted", "auto"),
+        )
         result = transfer_properties(
             target=target,
             source=source_tree,
@@ -277,6 +304,7 @@ def compose_main(args):
             source_path,
             property_source.get("format", source_format),
             args.quoted_node_names,
+            rooted=getattr(args, "property_source_rooted", "auto"),
         )
         property_spec = parse_property_specs(
             property_maps=[

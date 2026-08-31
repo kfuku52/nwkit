@@ -4,9 +4,10 @@ import sys
 from itertools import combinations
 from typing import Any
 
+from nwkit.rf_distance import robinson_foulds
+from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     get_subtree_leaf_name_sets,
-    is_rooted,
     read_tree,
     validate_unique_named_leaves,
 )
@@ -351,14 +352,11 @@ def _path_distance(tree1, tree2, leaf_names, topological):
 def _calculate_distances(tree1, tree2, leaf_names, metrics, comparison):
     results = dict()
     if {"rf", "normalized-rf"}.intersection(metrics):
-        rf_result = tree1.robinson_foulds(
-            t2=tree2,
-            unrooted_trees=(comparison == "unrooted"),
+        rf_distance, max_rf_distance = robinson_foulds(
+            tree1,
+            tree2,
+            rooted=(comparison == "rooted"),
         )
-        rf_distance, max_rf_distance = rf_result[:2]
-        # ETE reports -2 as the rooted maximum for two identical one-tip trees.
-        # Mathematically, no split can differ, so the maximum is zero.
-        max_rf_distance = max(0, max_rf_distance)
         results["rf"] = (rf_distance, max_rf_distance)
         normalized_rf = 0.0 if max_rf_distance == 0 else rf_distance / max_rf_distance
         results["normalized-rf"] = (normalized_rf, 1.0)
@@ -421,8 +419,18 @@ def dist_main(args):
     if comparison not in {"rooted", "unrooted"}:
         raise ValueError("'--comparison' must be 'rooted' or 'unrooted'.")
 
-    tree1 = read_tree(args.infile, args.format, args.quoted_node_names)
-    tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
+    tree1 = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
+    tree2 = read_tree(
+        args.infile2,
+        args.format2,
+        args.quoted_node_names,
+        rooted=getattr(args, "infile2_rooted", "auto"),
+    )
     validate_unique_named_leaves(tree1, option_name="--infile", context=" for 'dist'")
     validate_unique_named_leaves(tree2, option_name="--infile2", context=" for 'dist'")
     leaf_names1 = sorted(tree1.leaf_names())
@@ -431,10 +439,12 @@ def dist_main(args):
         raise ValueError("Leaf name(s) did not match.")
 
     if comparison == "rooted" and SPLIT_METRICS.intersection(metrics):
-        if (not is_rooted(tree1)) or (not is_rooted(tree2)):
-            raise ValueError(
-                "Rooted comparison requires rooted trees for split metrics. Root the input trees "
-                "first or use '--comparison unrooted'."
+        for tree, option in ((tree1, "--input-rooted"), (tree2, "--infile2-rooted")):
+            require_rooted(
+                tree,
+                "Rooted comparison requires rooted trees for split metrics; "
+                "use '--comparison unrooted' for root-independent splits.",
+                option,
             )
     _validate_branch_lengths(tree1, "--infile", metrics)
     _validate_branch_lengths(tree2, "--infile2", metrics)

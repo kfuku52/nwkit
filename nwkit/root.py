@@ -31,6 +31,7 @@ from nwkit.root_evaluation import (
     RootingEvaluation,
     candidate_from_rooted_tree,
 )
+from nwkit.rooting_state import ROOTING_PROPERTIES, require_rooted, rooting_operation
 from nwkit.util import (
     TREE_FORMAT_PROP,
     _sum_finite_singleton_root_branch_lengths,
@@ -41,7 +42,6 @@ from nwkit.util import (
     get_subtree_leaf_name_sets,
     get_tree_property_names,
     is_all_leaf_names_identical,
-    is_rooted,
     read_tree,
     remove_singleton,
     support_is_missing,
@@ -290,13 +290,16 @@ def _collapse_singleton_root(tree):
     return output_tree
 
 
-_RESERVED_NODE_PROPERTIES = frozenset(
-    (
-        "name",
-        "dist",
-        "support",
-        TREE_FORMAT_PROP,
+_RESERVED_NODE_PROPERTIES = (
+    frozenset(
+        (
+            "name",
+            "dist",
+            "support",
+            TREE_FORMAT_PROP,
+        )
     )
+    | ROOTING_PROPERTIES
 )
 
 
@@ -662,6 +665,7 @@ def _redistribute_root_child_lengths(target, source, shared_taxa):
         )
 
 
+@rooting_operation
 def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=True):
     tree_to = copy_tree_iteratively(tree_to)
     tree_to = _collapse_singleton_root(tree_to)
@@ -681,6 +685,9 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
         raise ValueError(
             "Root transfer requires the source tree root to have exactly two children."
         )
+    require_rooted(
+        tree_from, "Root transfer requires a rooted source tree.", "--infile2-rooted"
+    )
     tree_from_leaf_sets = get_subtree_leaf_name_sets(tree_from)
     is_n0_bigger_than_n1 = len(tree_from_leaf_sets[subroot_from[0]]) > len(
         tree_from_leaf_sets[subroot_from[1]]
@@ -746,6 +753,7 @@ def transfer_root(tree_to, tree_from, verbose=False, redistribute_root_length=Tr
     return tree_to
 
 
+@rooting_operation
 def transfer_root_with_taxon_mode(
     tree_to, tree_from, taxon_mode="exact", verbose=False, redistribute_root_length=True
 ):
@@ -773,6 +781,9 @@ def transfer_root_with_taxon_mode(
         target=tree_to,
         source=tree_from,
         taxon_mode=taxon_mode,
+    )
+    require_rooted(
+        tree_from, "Root transfer requires a rooted source tree.", "--infile2-rooted"
     )
     if verbose:
         sys.stderr.write(
@@ -913,6 +924,7 @@ def _canonical_incident_child(tree):
     return min(candidates, key=lambda item: item[0])[1]
 
 
+@rooting_operation
 def midpoint_rooting(tree, _return_evaluation=False):
     tree = copy_tree_iteratively(tree)
     tree = _collapse_singleton_root(tree)
@@ -1436,6 +1448,7 @@ def _mad_evaluation_candidate(candidate, all_tips_by_name, branch_length_scale):
     )
 
 
+@rooting_operation
 def mad_rooting(tree, _return_evaluation=False):
     """Root a tree by minimal ancestor deviation (Tria et al. 2017)."""
     prepared = _prepare_mad_tree(tree)
@@ -1613,6 +1626,7 @@ def _mv_root_two_tip_tree(
     return tree, evaluation
 
 
+@rooting_operation
 def mv_rooting(tree, _return_evaluation=False):
     """Minimum Variance rooting. Mai, Saeedian & Mirarab 2017, DOI:10.1371/journal.pone.0182238"""
     tree = copy_tree_iteratively(tree)
@@ -1768,6 +1782,7 @@ def mv_rooting(tree, _return_evaluation=False):
     return tree, evaluation
 
 
+@rooting_operation
 def outgroup_rooting(tree, outgroup_str):
     if outgroup_str is None:
         raise ValueError("Specify at least one outgroup label with '--outgroup'.")
@@ -2413,6 +2428,7 @@ def _build_opentree_reference_tree(tree, args=None):
             close()
 
 
+@rooting_operation
 def taxonomy_rooting(
     tree,
     taxonomy_source=DEFAULT_TAXONOMY_SOURCE_CHAIN,
@@ -2624,6 +2640,7 @@ def _reconciliation_rooting_tip_mapping(
     return gene_leaves, gene_leaf_names, normalized_mapping, species_leaf_by_name
 
 
+@rooting_operation
 def reconciliation_rooting(
     tree,
     species_tree,
@@ -2958,19 +2975,30 @@ def root_main(args):
             outputs,
             label="Rooted tree output",
         )
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     output_properties = set(get_tree_property_names(tree))
     if args.method == "transfer":
         if args.infile2 in ["", None]:
             raise ValueError(
                 "'--infile2' is required when '--method transfer' is used."
             )
-        tree2 = read_tree(args.infile2, args.format2, args.quoted_node_names)
+        tree2 = read_tree(
+            args.infile2,
+            args.format2,
+            args.quoted_node_names,
+            rooted=getattr(args, "infile2_rooted", "auto"),
+        )
         tree2 = _collapse_singleton_root(tree2)
-        if not is_rooted(tree2):
-            raise ValueError(
-                "'--infile2' must be rooted when '--method transfer' is used."
-            )
+        require_rooted(
+            tree2,
+            "'--infile2' must be rooted when '--method transfer' is used.",
+            "--infile2-rooted",
+        )
         if (len(list(tree2.leaves())) > 1) and (len(tree2.get_children()) != 2):
             raise ValueError(
                 "'--infile2' root must have exactly two children for '--method transfer'."
@@ -3008,6 +3036,7 @@ def root_main(args):
             args.species_tree,
             getattr(args, "species_tree_format", "auto"),
             args.quoted_node_names,
+            rooted=getattr(args, "species_tree_rooted", "auto"),
         )
         tree = reconciliation_rooting(
             tree,

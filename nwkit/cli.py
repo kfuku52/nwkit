@@ -5387,7 +5387,7 @@ pvalidate.add_argument(
     type=strtobool,
     required=False,
     action="store",
-    help="default=%(default)s: Mark unrooted trees as invalid.",
+    help="default=%(default)s: Mark unrooted or unknown-rooting trees as invalid. Declared rooted polytomies are accepted.",
 )
 pvalidate.add_argument(
     "--require-ultrametric",
@@ -5420,7 +5420,7 @@ pvalidate.add_argument(
     type=strtobool,
     required=False,
     action="store",
-    help="default=%(default)s: For multiple input trees with the same leaf set, mark trees whose rooted/unrooted status or root bipartition differs from the first parsed tree as invalid.",
+    help="default=%(default)s: For multiple input trees with the same leaf set, mark trees whose rooting status or partition into immediate root-child clades differs from the first parsed tree as invalid.",
 )
 pvalidate.add_argument(
     "--require-binary",
@@ -5501,6 +5501,37 @@ def command_help(args):
 parser_help = subparsers.add_parser("help", help="Show help messages")
 parser_help.add_argument("command", help="command name which help is shown")
 parser_help.set_defaults(handler=command_help)
+
+
+def _add_input_rooting_options():
+    from nwkit.rooting_state import ROOTING_INPUT_OPTIONS
+
+    for command, command_parser in subparsers.choices.items():
+        if command in {"table2nwk", "help"}:
+            continue
+        input_names = {action.dest for action in command_parser._actions}
+        if command == "regress":
+            input_names.discard("infile")  # Precomputed contrasts are a table.
+        options: dict[str, list[str]] = {}
+        for role, option in ROOTING_INPUT_OPTIONS.items():
+            if role in input_names:
+                options.setdefault(option, []).append("--" + role.replace("_", "-"))
+        for option, inputs in options.items():
+            flags = ["--" + option]
+            if command != "regress":
+                flags.append("--" + option.replace("-", "_"))
+            command_parser.add_argument(
+                *flags,
+                choices=("auto", "yes", "no"),
+                default="auto",
+                help="default=%(default)s: Rooting interpretation for {}. "
+                "auto respects [&R]/[&U] and root NHX, otherwise assumes rooted only "
+                "for roots with at most two children; yes/no override without rerooting or "
+                "relaxing other validation.".format(", ".join(inputs)),
+            )
+
+
+_add_input_rooting_options()
 
 
 def _validate_stdin_ownership(args):

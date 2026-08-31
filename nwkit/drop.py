@@ -2,7 +2,12 @@ from nwkit.util import get_target_nodes, get_tree_property_names, read_tree, wri
 
 
 def drop_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     nodes = get_target_nodes(tree=tree, target=args.target)
     placeholder = None if args.fill is None else args.fill
     numeric_placeholder = None

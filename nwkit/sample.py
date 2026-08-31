@@ -409,7 +409,12 @@ def sample_main(args):
         ]
     )
 
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     validate_unique_named_leaves(tree, option_name="--infile", context=" for 'sample'")
     _validate_pd_tree(tree)
     trait_df = read_sample_trait(args, tree)

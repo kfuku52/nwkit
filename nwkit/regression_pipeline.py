@@ -3064,6 +3064,7 @@ def build_regression_pipeline(
         raw_args.gene_tree,
         raw_args.gene_tree_format,
         raw_args.quoted_node_names,
+        rooted=getattr(raw_args, "input_rooted", "auto"),
     )
     if raw_args.reconciliation_tree is None:
         reconciliation_tree = gene_tree
@@ -3072,12 +3073,14 @@ def build_regression_pipeline(
             raw_args.reconciliation_tree,
             raw_args.reconciliation_tree_format or raw_args.gene_tree_format,
             raw_args.quoted_node_names,
+            rooted=getattr(raw_args, "reconciliation_tree_rooted", "auto"),
         )
         _validate_matching_gene_topologies(gene_tree, reconciliation_tree)
     species_tree = read_tree(
         raw_args.species_tree,
         raw_args.species_tree_format,
         raw_args.quoted_node_names,
+        rooted=getattr(raw_args, "species_tree_rooted", "auto"),
     )
     species_labels = _species_labels(reconciliation_tree, raw_args)
     _report_unmatched_species(

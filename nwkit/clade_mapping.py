@@ -259,6 +259,17 @@ def projected_root_split(tree, shared_taxa):
     return canonical_split(sides[0], sides[1])
 
 
+def projected_root_partition(tree, shared_taxa):
+    """Project every root child, preserving an unresolved side as unknown."""
+    children = tree.get_children()
+    if len(children) < 2:
+        return None
+    sides = [frozenset(child.leaf_names()) & shared_taxa for child in children]
+    if any(not side for side in sides) or frozenset().union(*sides) != shared_taxa:
+        return None
+    return tuple(sorted(sides, key=lambda side: (len(side), tuple(sorted(side)))))
+
+
 def canonical_split(side_a, side_b):
     len_a = len(side_a)
     len_b = len(side_b)

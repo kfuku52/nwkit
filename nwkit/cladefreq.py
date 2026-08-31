@@ -9,10 +9,10 @@ from nwkit.consensus import (
     _read_tree_weights,
     _scale_support,
 )
+from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     count_set_bits,
     get_subtree_leaf_bitmasks,
-    is_rooted,
     iter_tree_strings,
     read_tree,
     support_is_missing,
@@ -58,6 +58,7 @@ def cladefreq_main(args):
             collect_branch_lengths=False,
             threads=getattr(args, "threads", 1),
             require_rooted=True,
+            input_rooted=getattr(args, "input_rooted", "auto"),
         )
     )
     num_trees = tree_count[0]
@@ -77,17 +78,21 @@ def cladefreq_main(args):
     reference_mask_to_node = dict()
     if args.reference not in ["", None]:
         reference_tree = read_tree(
-            args.reference, args.reference_format, args.quoted_node_names
+            args.reference,
+            args.reference_format,
+            args.quoted_node_names,
+            rooted=getattr(args, "reference_rooted", "auto"),
         )
         validate_unique_named_leaves(
             reference_tree,
             option_name="--reference",
             context=" for 'cladefreq'",
         )
-        if not is_rooted(reference_tree):
-            raise ValueError(
-                "'--reference' must be rooted for rooted clade-frequency comparisons."
-            )
+        require_rooted(
+            reference_tree,
+            "'--reference' must be rooted for rooted clade-frequency comparisons.",
+            "--reference-rooted",
+        )
         if set(reference_tree.leaf_names()) != set(leaf_names):
             raise ValueError(
                 "Leaf labels in '--reference' must match the input tree collection."

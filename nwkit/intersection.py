@@ -292,10 +292,20 @@ def intersection_main(args):
             "Tree and sequence outputs cannot both be written to stdout. "
             "Set '--outfile' or '--seqout' to a file path."
         )
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     leaf_names = get_leaf_names(tree, option_name="--infile")
     if has_infile2:
-        tree2 = read_tree(infile2, args.format2, args.quoted_node_names)
+        tree2 = read_tree(
+            infile2,
+            args.format2,
+            args.quoted_node_names,
+            rooted=getattr(args, "infile2_rooted", "auto"),
+        )
         leaf_names2 = get_leaf_names(tree2, option_name="--infile2")
         seq_names = []
         new_seqs = None

@@ -4498,7 +4498,13 @@ def image_main(args):
         args, "name_tsv", None
     )
     name_mapping = read_name_tsv(species_name_tsv) if species_name_tsv else None
-    tree = read_tree(args.infile, args.format, args.quoted_node_names, quiet=True)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        quiet=True,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     leaf_to_species, unmatched_rows = extract_species_mapping(
         tree,
         name_mapping=name_mapping,

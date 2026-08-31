@@ -14,6 +14,8 @@ def test_rooted_diff_reports_common_and_tree_specific_clades():
     assert "exact_match" in statuses
     assert "unmatched" in statuses
     assert "source_only" in statuses
+    root_row = next(row for row in rows if row["comparison"] == "root_split")
+    assert root_row["reason"] == "projected_root_bipartition"
 
 
 def test_unrooted_diff_with_partial_taxon_overlap(tmp_nwk, tmp_path):

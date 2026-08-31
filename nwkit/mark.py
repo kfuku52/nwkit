@@ -105,7 +105,12 @@ def label_insert_nodes(tree, args):
 
 
 def mark_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     tree = annotate_tree_attr(tree, args)
     tree = label_insert_nodes(tree, args)
     outformat = 1 if args.outformat == "auto" else args.outformat

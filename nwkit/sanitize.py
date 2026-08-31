@@ -12,7 +12,12 @@ def add_quote(tree, quote_char):
 
 
 def sanitize_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     if args.remove_singleton:
         if getattr(args, "preserve_properties", False):
             preserve_collapsed_event_boundaries(tree)

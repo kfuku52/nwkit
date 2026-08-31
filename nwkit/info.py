@@ -6,7 +6,12 @@ from nwkit.util import extract_species_label, read_tree
 
 
 def info_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     tree_length = 0
     num_leaves = 0
     num_nodes = 0

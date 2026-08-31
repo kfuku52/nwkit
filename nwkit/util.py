@@ -41,6 +41,17 @@ from nwkit.file_paths import (
 from nwkit.file_paths import (
     validate_outputs_do_not_replace_inputs as validate_outputs_do_not_replace_inputs,
 )
+from nwkit.rooting_state import (
+    ROOTED_PROP,
+    ROOTING_PROPERTIES,
+    apply_input_rooting,
+    extract_rooting_token,
+    get_rooting_info,
+    inherit_subtree_rooting,
+    rooting_needs_serialization,
+    set_rooting_info,
+)
+from nwkit.rooting_state import is_rooted as is_rooted
 from nwkit.species_parser import (
     extract_parsed_species,
     get_species_parser,
@@ -72,7 +83,7 @@ _PAML_FIGTREE_INTERVAL_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 _PAML_NEXUS_TREE_PATTERN = re.compile(
-    r"(?ims)^\s*(?:u?tree)\s+[^=]+?=\s*(?:\[\s*&[RU]\s*\]\s*)?(.+?;)\s*$",
+    r"(?ims)^\s*(?:u?tree)\s+[^=]+?=\s*(.+?;)\s*$",
 )
 _PAML_MAIN_OUTPUT_MARKER = "Species tree for FigTree."
 COMMON_ETE_CACHE_DIRS = (
@@ -101,7 +112,7 @@ def copy_tree_iteratively(tree):
             target_parent.add_child(target_child)
             child_pairs.append((source_child, target_child))
         stack.extend(reversed(child_pairs))
-    return copied_root
+    return inherit_subtree_rooting(tree, copied_root)
 
 
 def read_input_text(infile):
@@ -1283,10 +1294,20 @@ def get_ete_ncbitaxa(args=None):
         return ete4.NCBITaxa(dbfile=dbfile, update=False)
 
 
-def read_tree(infile, format, quoted_node_names, quiet=False, allow_non_finite=False):
+def read_tree(
+    infile,
+    format,
+    quoted_node_names,
+    quiet=False,
+    allow_non_finite=False,
+    *,
+    rooted="auto",
+    warn_rooting=True,
+):
     infile = normalize_phylogenetic_tree_text(
         read_input_text(infile), collection=False
     ).strip()
+    infile, rooting_declaration = extract_rooting_token(infile)
     if infile == "":
         raise Exception("Failed to parse the input tree.")
     if (not quoted_node_names) and _contains_quoted_node_names(infile):
@@ -1306,6 +1327,7 @@ def read_tree(infile, format, quoted_node_names, quiet=False, allow_non_finite=F
         format = int(format)
         tree = Tree(infile, parser=format)
     parser_format = int(format)
+    apply_input_rooting(tree, rooted, rooting_declaration, warn=warn_rooting)
     # Keep per-node format metadata so writing a subtree keeps the original parser.
     for node in tree.traverse():
         node.props[TREE_FORMAT_PROP] = parser_format
@@ -1353,7 +1375,23 @@ def _validate_finite_tree_values(tree):
                 raise ValueError("Tree support values must be finite.")
 
 
+def _tree_output_properties(tree, args, props):
+    if props is None:
+        props = getattr(args, "output_properties", None)
+    properties = (
+        set(str(prop) for prop in (props or ()))
+        - ROOTING_PROPERTIES
+        - {TREE_FORMAT_PROP}
+    )
+    if rooting_needs_serialization(tree):
+        properties.add(ROOTED_PROP)
+    return sorted(properties)
+
+
 def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
+    # Writing a descendant subtree must retain the input tree's interpretation.
+    if ROOTED_PROP not in tree.props and tree.up is not None:
+        tree = copy_tree_iteratively(tree)
     if format == "auto":
         format = tree.props.get(TREE_FORMAT_PROP, 0)
         format = int(format)
@@ -1400,10 +1438,7 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
             if _is_missing_support_value(node.support):
                 original_support_values.append((node, node.support))
                 node.support = None
-        if props is None:
-            props = getattr(args, "output_properties", None)
-        if props is not None:
-            props = sorted(set(str(prop) for prop in props if prop != TREE_FORMAT_PROP))
+        props = _tree_output_properties(tree, args, props)
         write_kwargs = {
             "parser": format,
             "format_root_node": True,
@@ -1519,50 +1554,52 @@ def iter_newick_stream(handle, chunk_size=1024 * 1024):
         raise ValueError("Input tree collection ended before a terminal semicolon.")
 
 
+class _PrefixedTreeReader:
+    def __init__(self, initial, remainder):
+        self.initial = initial
+        self.remainder = remainder
+
+    def read(self, size=-1):
+        if size is None or size < 0:
+            value = self.initial + self.remainder.read()
+            self.initial = ""
+            return value
+        value = self.initial[:size]
+        self.initial = self.initial[len(value) :]
+        if len(value) < size:
+            value += self.remainder.read(size - len(value))
+        return value
+
+
+def _iter_tree_handle(handle):
+    prefix = handle.read(4096)
+    first_content_line = next(
+        (line.strip() for line in prefix.splitlines() if line.strip()), ""
+    )
+    if first_content_line.upper().startswith(
+        "#NEXUS"
+    ) or _PAML_TREEFILE_HEADER_PATTERN.fullmatch(first_content_line):
+        normalized = normalize_phylogenetic_tree_text(
+            prefix + handle.read(), collection=True
+        )
+        yield from split_newick_stream(normalized)
+    else:
+        yield from iter_newick_stream(_PrefixedTreeReader(prefix, handle))
+
+
 def iter_tree_strings(infile):
     if infile == "-":
-        yield from iter_newick_stream(sys.stdin)
-        return
-    if os.path.isfile(infile):
+        yield from _iter_tree_handle(sys.stdin)
+    elif os.path.isfile(infile):
         with open(infile) as handle:
-            prefix = handle.read(4096)
-            first_content_line = next(
-                (line.strip() for line in prefix.splitlines() if line.strip()),
-                "",
-            )
-            is_paml_container = first_content_line.upper().startswith(
-                "#NEXUS"
-            ) or _PAML_TREEFILE_HEADER_PATTERN.fullmatch(first_content_line)
-            if is_paml_container:
-                normalized = normalize_phylogenetic_tree_text(
-                    prefix + handle.read(),
-                    collection=True,
-                )
-                yield from split_newick_stream(normalized)
-                return
-
-            class _PrefixedReader:
-                def __init__(self, initial, remainder):
-                    self.initial = initial
-                    self.remainder = remainder
-
-                def read(self, size=-1):
-                    if size is None or size < 0:
-                        value = self.initial + self.remainder.read()
-                        self.initial = ""
-                        return value
-                    value = self.initial[:size]
-                    self.initial = self.initial[len(value) :]
-                    if len(value) < size:
-                        value += self.remainder.read(size - len(value))
-                    return value
-
-            yield from iter_newick_stream(_PrefixedReader(prefix, handle))
-        return
-    yield from split_newick_stream(str(infile))
+            yield from _iter_tree_handle(handle)
+    else:
+        yield from split_newick_stream(
+            normalize_phylogenetic_tree_text(str(infile), collection=True)
+        )
 
 
-def read_trees(infile, format, quoted_node_names, quiet=False):
+def read_trees(infile, format, quoted_node_names, quiet=False, *, rooted="auto"):
     tree_text = normalize_phylogenetic_tree_text(
         read_input_text(infile),
         collection=True,
@@ -1571,7 +1608,7 @@ def read_trees(infile, format, quoted_node_names, quiet=False):
     if len(tree_strings) == 0:
         raise Exception("Failed to parse the input trees.")
     trees = [
-        read_tree(tree_string, format, quoted_node_names, quiet=True)
+        read_tree(tree_string, format, quoted_node_names, quiet=True, rooted=rooted)
         for tree_string in tree_strings
     ]
     if not quiet:
@@ -1610,8 +1647,9 @@ def inspect_tree_text(newick_text, format="auto", quoted_node_names=True):
             "has_quoted_internal_node_names": has_quoted_internal_node_names,
         }
     try:
+        text, rooting_declaration = extract_rooting_token(text)
         if format in ("auto", "auto-strict"):
-            inferred_format, _, ambiguity_message = _read_tree_auto(text)
+            inferred_format, parsed_tree, ambiguity_message = _read_tree_auto(text)
             input_format = inferred_format
             format_ambiguous = ambiguity_message is not None
             if format == "auto-strict" and format_ambiguous:
@@ -1624,9 +1662,10 @@ def inspect_tree_text(newick_text, format="auto", quoted_node_names=True):
                     "has_quoted_internal_node_names": has_quoted_internal_node_names,
                 }
         else:
-            Tree(text, parser=int(format))
+            parsed_tree = Tree(text, parser=int(format))
             input_format = int(format)
             format_ambiguous = False
+        apply_input_rooting(parsed_tree, declared=rooting_declaration, warn=False)
     except Exception as exc:
         return {
             "parse_ok": False,
@@ -1674,7 +1713,7 @@ def support_is_missing(support):
 
 
 def get_tree_property_names(tree):
-    reserved = {TREE_FORMAT_PROP, "name", "dist", "support"}
+    reserved = {TREE_FORMAT_PROP, "name", "dist", "support"} | ROOTING_PROPERTIES
     return {
         str(prop)
         for node in tree.traverse()
@@ -1811,6 +1850,7 @@ def _validate_singleton_branch_length_sums(tree):
 
 
 def remove_singleton(tree, verbose=False, preserve_branch_length=True):
+    rooting = get_rooting_info(tree)
     if preserve_branch_length:
         _validate_singleton_branch_length_sums(tree)
     for node in list(tree.traverse(strategy="postorder")):
@@ -1850,6 +1890,7 @@ def remove_singleton(tree, verbose=False, preserve_branch_length=True):
         tree.props.update(child_props)
         tree.name = child_name
         tree.dist = promoted_dist
+    set_rooting_info(tree, rooting.rooted, rooting.source, rooting.declared)
     return tree
 
 
@@ -2242,10 +2283,3 @@ def get_target_nodes(tree, target):
     else:
         raise ValueError("Unknown target: {}".format(target))
     return nodes
-
-
-def is_rooted(tree):
-    num_subroot_nodes = len(tree.get_children())
-    if num_subroot_nodes <= 2:
-        return True
-    return False

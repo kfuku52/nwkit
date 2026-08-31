@@ -11,7 +11,12 @@ from nwkit.util import (
 
 
 def subtree_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     validate_unique_named_leaves(
         tree,
         option_name="--infile",

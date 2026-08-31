@@ -6,7 +6,12 @@ from nwkit.util import get_target_nodes, read_tree, write_tree
 def rescale_main(args):
     if not math.isfinite(args.factor):
         raise ValueError("'--factor' must be a finite number.")
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     nodes = get_target_nodes(tree=tree, target=args.target)
     scaled_distances = list()
     for node in nodes:

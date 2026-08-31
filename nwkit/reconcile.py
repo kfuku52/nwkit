@@ -8,11 +8,11 @@ from nwkit.reconciliation_properties import (
     COLLAPSED_EVENT_BOUNDARY_PROP,
     property_is_true,
 )
+from nwkit.rooting_state import require_rooted, rooting_option_for_input
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
     assign_branch_ids,
     get_node_class,
-    is_rooted,
     read_tree,
     validate_distinct_output_paths,
     validate_outputs_do_not_replace_inputs,
@@ -74,8 +74,11 @@ def _validate_rooted_binary_tree(tree, option_name):
     validate_unique_named_leaves(tree, option_name=option_name)
     if len(list(tree.leaves())) < 2:
         raise ValueError("'{}' must contain at least two tips.".format(option_name))
-    if not is_rooted(tree):
-        raise ValueError("'{}' must be rooted.".format(option_name))
+    require_rooted(
+        tree,
+        "'{}' must be rooted.".format(option_name),
+        rooting_option_for_input(option_name),
+    )
     multifurcations = [
         node for node in tree.traverse() if not node.is_leaf and len(node.children) != 2
     ]
@@ -765,11 +768,17 @@ def reconcile_main(args):
         outputs,
         label="Reconciliation output",
     )
-    gene_tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    gene_tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     species_tree = read_tree(
         args.species_tree,
         args.species_tree_format,
         args.quoted_node_names,
+        rooted=getattr(args, "species_tree_rooted", "auto"),
     )
     species_label_by_gene_leaf = _parsed_species_labels(gene_tree, args)
     _report_unmatched_species(

@@ -9,12 +9,13 @@ from typing import Any, Iterable
 import pandas as pd
 from ete4 import Tree
 
+from nwkit.rooting_state import get_rooting_info, set_rooting_info
+from nwkit.rooting_state import require_rooted as check_rooted
 from nwkit.util import (
     MISSING_SUPPORT_VALUE,
     TREE_FORMAT_PROP,
     count_set_bits,
     get_subtree_leaf_bitmasks,
-    is_rooted,
     iter_tree_strings,
     read_tree,
     remove_singleton,
@@ -214,6 +215,11 @@ def _initialize_clade_collection(first_tree):
     return leaf_names, leaf_name_to_bit, all_mask
 
 
+def _check_clade_rooting(tree, comparison, required, message, option="--input-rooted"):
+    if required or (comparison == "rooted" and get_rooting_info(tree).rooted is False):
+        check_rooted(tree, message, option)
+
+
 def _collect_single_tree_clade_stats(
     tree,
     tree_weight,
@@ -236,12 +242,14 @@ def _collect_single_tree_clade_stats(
     validate_unique_named_leaves(
         tree, option_name="--infile", context=" for 'consensus'"
     )
-    if require_rooted and not is_rooted(tree):
-        raise ValueError(
-            "Input tree {} is not rooted; cladefreq requires rooted trees.".format(
-                tree_index
-            )
-        )
+    _check_clade_rooting(
+        tree,
+        comparison,
+        require_rooted,
+        "Input tree {} is not rooted; rooted clade collection requires rooted trees.".format(
+            tree_index
+        ),
+    )
     if set(tree.leaf_names()) != set(leaf_names):
         raise ValueError(
             "Leaf labels must be identical across all input trees for consensus."
@@ -336,6 +344,7 @@ def _collect_tree_string_chunk_clade_stats(payload):
         branch_length_method,
         comparison,
         require_rooted,
+        input_rooted,
     ) = payload
     leaf_name_to_bit = {leaf_name: index for index, leaf_name in enumerate(leaf_names)}
     clade_weights: defaultdict[int, float] = defaultdict(float)
@@ -343,7 +352,9 @@ def _collect_tree_string_chunk_clade_stats(payload):
         {} if branch_length_method == "mean" else defaultdict(list)
     )
     for tree_index, tree_string, tree_weight in records:
-        tree = read_tree(tree_string, format, quoted_node_names, quiet=True)
+        tree = read_tree(
+            tree_string, format, quoted_node_names, quiet=True, rooted=input_rooted
+        )
         _, _, _, tree_clade_weights, tree_branch_length_observations = (
             _collect_single_tree_clade_stats(
                 tree=tree,
@@ -375,6 +386,7 @@ def _collect_clade_stats_from_tree_strings(
     branch_length_method=None,
     comparison="rooted",
     require_rooted=False,
+    input_rooted="auto",
 ):
     tree_string_iterator = iter(tree_strings)
     try:
@@ -384,7 +396,9 @@ def _collect_clade_stats_from_tree_strings(
     threads = _validate_threads(threads)
     if branch_length_method is None:
         branch_length_method = "median" if collect_branch_lengths else "none"
-    first_tree = read_tree(first_tree_string, format, quoted_node_names, quiet=True)
+    first_tree = read_tree(
+        first_tree_string, format, quoted_node_names, quiet=True, rooted=input_rooted
+    )
     leaf_names, leaf_name_to_bit, all_mask = _initialize_clade_collection(first_tree)
 
     def tree_weight(tree_index):
@@ -438,6 +452,7 @@ def _collect_clade_stats_from_tree_strings(
                 branch_length_method,
                 comparison,
                 require_rooted,
+                input_rooted,
             )
         )
         _merge_clade_stats(
@@ -468,6 +483,7 @@ def _collect_clade_stats_from_tree_strings(
                         branch_length_method,
                         comparison,
                         require_rooted,
+                        input_rooted,
                     )
                     futures.add(
                         executor.submit(_collect_tree_string_chunk_clade_stats, payload)
@@ -716,6 +732,7 @@ def consensus_main(args):
         threads=getattr(args, "threads", 1),
         branch_length_method=branch_length,
         comparison=comparison,
+        input_rooted=getattr(args, "input_rooted", "auto"),
     )
     num_trees = tree_count[0]
     if tree_weights is not None and len(tree_weights) != num_trees:
@@ -724,7 +741,17 @@ def consensus_main(args):
     total_weight = float(num_trees) if tree_weights is None else math.fsum(tree_weights)
     if args.reference not in ["", None]:
         reference_tree = read_tree(
-            args.reference, args.reference_format, args.quoted_node_names
+            args.reference,
+            args.reference_format,
+            args.quoted_node_names,
+            rooted=getattr(args, "reference_rooted", "auto"),
+        )
+        _check_clade_rooting(
+            reference_tree,
+            comparison,
+            False,
+            "'--reference' must be rooted for rooted consensus comparison.",
+            "--reference-rooted",
         )
         if set(reference_tree.leaf_names()) != set(leaf_names):
             raise ValueError(
@@ -765,4 +792,5 @@ def consensus_main(args):
             verbose=False,
             preserve_branch_length=True,
         )
+    set_rooting_info(output_tree, comparison == "rooted", source="consensus")
     write_tree(output_tree, args, format=0)

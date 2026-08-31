@@ -64,7 +64,9 @@ class TestWikiExamples:
             preserve_branch_length=True,
         )
         collapse_main(args)
-        assert outfile.read_text().strip() == "((C:1,D:1)90:1,A:2,B:2);"
+        assert outfile.read_text().strip() == (
+            "((C:1,D:1)90:1,A:2,B:2)[&&NHX:nwkit_rooted=yes];"
+        )
 
     def test_cladefreq_example(self, tmp_path):
         infile = _write_tree_collection(

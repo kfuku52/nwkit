@@ -13,11 +13,11 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats import poisson
 
+from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     assign_branch_ids,
     get_node_class,
     is_missing_table_value,
-    is_rooted,
     parse_table_missing_values,
     read_tip_table,
     read_tree,
@@ -231,8 +231,7 @@ def _read_tip_states(
 
 def _validate_tree_for_asr(tree):
     validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
-    if not is_rooted(tree):
-        raise ValueError("ASR requires a rooted tree.")
+    require_rooted(tree, "ASR requires a rooted tree.")
     for node in tree.traverse():
         if node.is_root:
             continue
@@ -378,7 +377,34 @@ def _get_er_rate_from_matrix(rate_matrix):
     return rate
 
 
-def _compute_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix):
+def _log_probabilities(values):
+    with np.errstate(divide="ignore"):
+        return np.log(values)
+
+
+def _probabilities_from_logs(values):
+    normalizer = float(logsumexp(values))
+    if not math.isfinite(normalizer):
+        raise ValueError("Failed to calculate posterior state probabilities.")
+    return np.exp(values - normalizer)
+
+
+def _compute_inside_likelihoods(
+    tree, likelihood_by_leaf, rate_matrix, *, log_space=False
+):
+    inside, log_scales, child_terms, matrices = _compute_log_inside_likelihoods(
+        tree, likelihood_by_leaf, rate_matrix
+    )
+    if not log_space:
+        inside = {node: np.exp(values) for node, values in inside.items()}
+        child_terms = {
+            node: {child: np.exp(values) for child, values in terms.items()}
+            for node, terms in child_terms.items()
+        }
+    return inside, log_scales, child_terms, matrices
+
+
+def _compute_log_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix):
     num_states = rate_matrix.shape[0]
     inside = dict()
     log_scales = dict()
@@ -387,32 +413,36 @@ def _compute_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix):
     transition_matrix_cache = dict()
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
-            inside[node] = likelihood_by_leaf[node.name].astype(float)
+            inside[node] = _log_probabilities(
+                likelihood_by_leaf[node.name].astype(float)
+            )
             log_scales[node] = 0.0
             continue
 
-        likelihood = np.ones(num_states, dtype=float)
+        likelihood = np.zeros(num_states, dtype=float)
         log_scale = 0.0
         child_terms[node] = dict()
         for child in node.get_children():
             branch_length = float(child.dist)
             if branch_length not in transition_matrix_cache:
-                transition_matrix_cache[branch_length] = _transition_matrix(
-                    rate_matrix, branch_length
+                matrix = _transition_matrix(rate_matrix, branch_length)
+                transition_matrix_cache[branch_length] = (
+                    matrix,
+                    _log_probabilities(matrix),
                 )
-            matrix = transition_matrix_cache[branch_length]
+            matrix, log_matrix = transition_matrix_cache[branch_length]
             transition_matrices[child] = matrix
-            term = matrix.dot(inside[child])
+            term = logsumexp(log_matrix + inside[child][None, :], axis=1)
             child_terms[node][child] = term
-            likelihood *= term
+            likelihood += term
             log_scale += log_scales[child]
         scale = float(np.max(likelihood))
-        if scale <= 0.0:
+        if not math.isfinite(scale):
             inside[node] = likelihood
             log_scales[node] = -math.inf
             continue
-        inside[node] = likelihood / scale
-        log_scales[node] = log_scale + math.log(scale)
+        inside[node] = likelihood - scale
+        log_scales[node] = log_scale + scale
     return inside, log_scales, child_terms, transition_matrices
 
 
@@ -421,11 +451,10 @@ def _log_likelihood(tree, likelihood_by_leaf, root_prior, rate_matrix):
         tree=tree,
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=rate_matrix,
+        log_space=True,
     )
-    root_term = float(np.dot(root_prior, inside[tree]))
-    if root_term <= 0.0:
-        return -math.inf
-    return log_scales[tree] + math.log(root_term)
+    root_term = float(logsumexp(_log_probabilities(root_prior) + inside[tree]))
+    return log_scales[tree] + root_term
 
 
 def _initial_rate_value(tree, rate, rate_bounds):
@@ -530,27 +559,47 @@ def _fit_rate_matrix(
     }
 
 
-def _compute_outside_likelihoods(tree, child_terms, transition_matrices, root_prior):
-    outside = {tree: root_prior.copy()}
+def _compute_outside_likelihoods(
+    tree, child_terms, transition_matrices, root_prior, *, log_space=False
+):
+    if not log_space:
+        child_terms = {
+            node: {child: _log_probabilities(term) for child, term in terms.items()}
+            for node, terms in child_terms.items()
+        }
+    outside = _compute_log_outside_likelihoods(
+        tree, child_terms, transition_matrices, root_prior
+    )
+    return (
+        outside
+        if log_space
+        else {node: np.exp(values) for node, values in outside.items()}
+    )
+
+
+def _compute_log_outside_likelihoods(
+    tree, child_terms, transition_matrices, root_prior
+):
+    outside = {tree: _log_probabilities(root_prior)}
     for node in tree.traverse(strategy="preorder"):
         children = list(node.get_children())
         if len(children) == 0:
             continue
         terms = [child_terms[node][child] for child in children]
-        prefix_products = [np.ones_like(outside[node], dtype=float)]
+        prefix_log_sums = [np.zeros_like(outside[node], dtype=float)]
         for term in terms:
-            prefix_products.append(prefix_products[-1] * term)
-        suffix_product = np.ones_like(outside[node], dtype=float)
+            prefix_log_sums.append(prefix_log_sums[-1] + term)
+        suffix_log_sum = np.zeros_like(outside[node], dtype=float)
         for child_index in range(len(children) - 1, -1, -1):
             child = children[child_index]
-            sibling_product = prefix_products[child_index] * suffix_product
-            parent_weight = outside[node] * sibling_product
-            matrix = transition_matrices[child]
-            outside[child] = matrix.T.dot(parent_weight)
-            total = float(outside[child].sum())
-            if total > 0.0:
-                outside[child] = outside[child] / total
-            suffix_product = suffix_product * terms[child_index]
+            sibling_log_sum = prefix_log_sums[child_index] + suffix_log_sum
+            parent_log_weight = outside[node] + sibling_log_sum
+            matrix = _log_probabilities(transition_matrices[child])
+            outside[child] = logsumexp(matrix.T + parent_log_weight[None, :], axis=1)
+            total = float(logsumexp(outside[child]))
+            if math.isfinite(total):
+                outside[child] -= total
+            suffix_log_sum = suffix_log_sum + terms[child_index]
     return outside
 
 
@@ -585,24 +634,23 @@ def compute_mk_marginals(
         tree=tree,
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=fit["rate_matrix"],
+        log_space=True,
     )
     outside = _compute_outside_likelihoods(
         tree=tree,
         child_terms=child_terms,
         transition_matrices=transition_matrices,
         root_prior=root_prior,
+        log_space=True,
     )
     posterior_by_node = dict()
     for node in tree.traverse():
-        posterior = inside[node] * outside[node]
-        total = float(posterior.sum())
-        if total <= 0.0:
-            raise ValueError("Failed to calculate posterior state probabilities.")
-        posterior_by_node[node] = posterior / total
+        posterior_by_node[node] = _probabilities_from_logs(inside[node] + outside[node])
     fit.update(
         {
             "root_prior": root_prior,
-            "inside": inside,
+            "inside": {node: np.exp(values) for node, values in inside.items()},
+            "log_inside": inside,
             "transition_matrices": transition_matrices,
             "posterior_by_node": posterior_by_node,
         }
@@ -935,8 +983,11 @@ def _sample_node_states(tree, states, fit, rng):
         for child in node.get_children():
             parent_state = sampled_states[node]
             transition_matrix = fit["transition_matrices"][child]
-            weights = transition_matrix[parent_state, :] * fit["inside"][child]
-            probabilities = _normalize_probability_vector(weights)
+            weights = (
+                _log_probabilities(transition_matrix[parent_state, :])
+                + fit["log_inside"][child]
+            )
+            probabilities = _probabilities_from_logs(weights)
             sampled_states[child] = int(
                 rng.choice(np.arange(len(states)), p=probabilities)
             )
@@ -964,7 +1015,7 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
     )
     inside = np.zeros((len(nodes), fit["rate_matrix"].shape[0]), dtype=float)
     for node, node_index in node_to_index.items():
-        inside[node_index, :] = fit["inside"][node]
+        inside[node_index, :] = fit["log_inside"][node]
         if node.is_root:
             continue
         parent_index = node_to_index[node.up]
@@ -978,8 +1029,8 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
         "parent_indices": parent_indices,
         "branch_ids": branch_ids,
         "branch_lengths": branch_lengths,
-        "inside": inside,
-        "transition_matrices": transition_matrices,
+        "log_inside": inside,
+        "log_transition_matrices": _log_probabilities(transition_matrices),
         "rate_matrix": fit["rate_matrix"],
         "root_posterior": fit["posterior_by_node"][tree],
         "uniformization_contexts": uniformization_contexts,
@@ -994,9 +1045,11 @@ def _sample_node_states_from_spec(spec, rng):
     for parent_index, child_indices in enumerate(spec["children_by_index"]):
         parent_state = sampled_states[parent_index]
         for child_index in child_indices:
-            transition_matrix = spec["transition_matrices"][child_index]
-            weights = transition_matrix[parent_state, :] * spec["inside"][child_index]
-            probabilities = _normalize_probability_vector(weights)
+            transition_matrix = spec["log_transition_matrices"][child_index]
+            weights = (
+                transition_matrix[parent_state, :] + spec["log_inside"][child_index]
+            )
+            probabilities = _probabilities_from_logs(weights)
             sampled_states[child_index] = int(
                 rng.choice(state_indices, p=probabilities)
             )
@@ -1193,7 +1246,12 @@ def asr_main(args):
         ]
     )
     settings = AsrSettings.from_args(args)
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     _validate_tree_for_asr(tree)
     leaf_names = list(tree.leaf_names())
     states, observed_state_by_leaf, likelihood_by_leaf = _read_tip_states(

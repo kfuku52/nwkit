@@ -789,7 +789,12 @@ def draw_main(args):
             "--species-map-tsv": getattr(args, "species_map_tsv", None),
         },
     )
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     prepare_time_tree_annotations(tree)
     densitree_mode = str(getattr(args, "densitree", "none")).strip().lower()
     if posterior_path not in (None, "") and densitree_tree_path not in (None, ""):
@@ -857,6 +862,7 @@ def draw_main(args):
             args.format,
             args.quoted_node_names,
             quiet=True,
+            rooted=getattr(args, "densitree_trees_rooted", "auto"),
         )
         densitree_sample_trees = all_sample_trees[burnin::thin]
         if not densitree_sample_trees:

@@ -4,6 +4,26 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Shared `--input-rooted auto|yes|no` interpretation and independent auxiliary-tree
+  overrides. Leading `[&R]`/`[&U]` tokens and root NHX declarations distinguish
+  rooted polytomies from unrooted or unknown inputs without using names or
+  support values as rooting evidence. Explicit/forced interpretations survive
+  Newick and node-table round-trips, copies, and topology-preserving operations.
+- Rooting state/source columns in validation and declaration/override provenance
+  in audit summaries. See the rooting section of `CLI_TSV_CONVENTIONS.md`.
+
+### Fixed
+
+- ASR accepts declared or explicitly forced root polytomies and uses log-space
+  likelihood, outside, and sampling messages to prevent underflow at high-degree
+  nodes, including zero-length branches. Binary-only analyses retain their
+  existing restrictions.
+- Rooted RF distance, root comparisons in `diff`, and same-root validation handle
+  all root-child clades without assuming a binary root. Tree-stream readers preserve
+  per-tree NEXUS rooting tokens for files, inline input, and standard input.
+
 ## [0.40.9] - 2026-08-31
 
 ### Fixed

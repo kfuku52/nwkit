@@ -42,6 +42,80 @@ This normalization happens before command-specific processing, including for
 STDIN, so a header-bearing `nwkit mcmctree --add-header` result remains valid
 input to other NWKIT commands.
 
+### Rootedness and root polytomies
+
+Tree inputs accept `--input-rooted auto|yes|no` (default `auto`). This controls
+how the current top-level node is interpreted; it does not move the root or
+resolve any polytomy.
+
+- `auto` respects an explicit leading `[&R]` (rooted) or `[&U]` (unrooted),
+  including tokens in supported NEXUS tree statements. It also accepts the
+  root-only NHX property `nwkit_rooted=yes|no|unknown`.
+- Without a declaration, roots with at most two children retain the legacy
+  rooted interpretation. Roots with three or more children are `unknown`, not
+  necessarily unrooted. A root name, numeric support (including `0`, `1`, or
+  `100`), or stem length is not evidence of rootedness.
+- `yes` treats the current top-level node as the root, including a multifurcating
+  root. `no` treats the tree as unrooted, even when that node has two children.
+  Overriding an explicit opposite declaration emits a warning. Malformed or
+  mutually conflicting declarations still fail, as do other input-validation
+  errors.
+
+Auxiliary trees have independent options: `--infile2-rooted`,
+`--reference-rooted`, `--species-tree-rooted`, `--reconciliation-tree-rooted`,
+`--root-source-rooted`, `--name-source-rooted`, `--support-source-rooted`,
+`--length-source-rooted`, `--property-source-rooted`, and
+`--densitree-trees-rooted`, wherever the corresponding input exists. In
+`regress`, `--input-rooted` applies to the primary `--tree`, `--gene-tree`, or
+every member of `--gene-tree-ensemble`; it does not override the species tree.
+Collection inputs apply their selected mode to every tree, while `auto` reads
+each tree's declaration independently.
+
+For example, either input below enables ASR at a multifurcating root:
+
+```sh
+nwkit asr -i '[&R](A:1,B:1,C:1);' --trait traits.tsv --state-column state
+nwkit asr -i '(A:1,B:1,C:1);' --input-rooted yes --trait traits.tsv --state-column state
+```
+
+ASR supports both internal and root polytomies. Rooted RF distance compares the
+displayed nontrivial descendant clades without inventing binary resolutions;
+normalized RF divides by the sum of the two displayed-clade counts (zero when
+both counts are zero). Contrasts and reconciliation retain their strictly
+bifurcating-tree requirement. Conventional phylogenetic regression, root transfer,
+and MCMCtree output still require exactly two root children. A rooting override
+does not waive any of these structural requirements.
+`consensus --comparison rooted|unrooted` continues to select the comparison for
+unmarked inputs; an explicit unrooted declaration is incompatible with rooted
+comparison unless the corresponding input override is used.
+
+Shared Newick writers preserve explicit or forced states, and any state that
+would otherwise be lost through an operation such as collapsing or pruning,
+using `[&&NHX:nwkit_rooted=yes]` (or `no`/`unknown`) on the root. This is readable
+by ETE's Newick parser and independent of the selected annotation properties.
+Legacy unmarked binary output is unchanged. Rooting operations replace the
+input interpretation with rooted status; label and support changes do not.
+The `nwkit_rooted` property and private `_nwkit_rooting_*` bookkeeping properties
+are reserved and cannot be reassigned through annotation/property transfer.
+The Python `read_tree` and `read_trees` helpers expose the same policy through
+the keyword-only `rooted="auto"|"yes"|"no"` argument.
+
+`validate` retains the boolean `is_rooted` column and adds `rooting_state`
+(`rooted`, `unrooted`, or `unknown`) and `rooting_source` (for input trees:
+`marker`, `nhx`, `override`, `topology`, or `unknown`).
+`--require-same-rooting yes` compares all immediate root-child clades, independent
+of their order, rather than assuming two root children, and distinguishes unknown
+from explicitly unrooted trees. `diff --comparison rooted` likewise compares the
+full root partition when both trees are rooted; its existing `root_split` summary
+row uses `reason=projected_root_partition` for multifurcating roots and lists all
+sides separated by `|`. Binary roots retain `reason=projected_root_bipartition`.
+An explicitly unrooted input instead produces an unresolved root summary with
+`reason=input_explicitly_unrooted`. Audit JSON's
+`primary_input` additionally records `first_tree_rooting_state`,
+`first_tree_rooting_source`, and `first_tree_rooting_declared`; the latter retains
+the original `yes`/`no`/`unknown` declaration, or an empty string if absent, even
+when a CLI override changes its interpretation.
+
 ## Tip-keyed TSV files
 
 `annotate --table` and the `--trait` files used by `asr`, `contrast`, `draw`,
@@ -85,7 +159,7 @@ input to other NWKIT commands.
 | `regress --predictor-contrasts` | Species-tree output columns from `nwkit contrast` | Selected predictor traits must uniquely identify every joined `branch_clade_id`; event taxa and signed orientation must exactly match the response table. |
 | `regress --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings, as described below. Required when response contrasts contain replicate metadata. |
 | `regress --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings for every selected predictor. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
-| `table2nwk` input | `branch_id`, `parent` | Optional `name`, `dist`, and `support`; exactly one root has `parent = -1`. |
+| `table2nwk` input | `branch_id`, `parent` | Optional `name`, `dist`, `support`, and `rooted`; exactly one root has `parent = -1`. Only its row may set `rooted` to `yes`, `no`, or `unknown`; all other rows must leave it empty. |
 
 All supported input TSV options may use `-` for standard input, subject to the
 single-standard-input rule.
@@ -139,6 +213,9 @@ uncertainty.
 - Missing output cells are empty. Literal names that resemble missing markers
   remain intact in identifier columns and in `nwk2table`/`table2nwk`
   round-trips.
+- `nwk2table` adds the optional root-only `rooted` column when needed to preserve
+  a rooting interpretation. Without this column, `table2nwk` uses the legacy
+  root-degree inference described above.
 - `reconcile` qualifies gene- and species-tree IDs as `gene_branch_id` and
   `species_branch_id`. It retains repeated species-tree IDs when distinct
   paralog lineages map to the same speciation event. `tree_id` plus
@@ -206,6 +283,9 @@ uncertainty.
 ## ASR defaults and Newick annotations
 
 `asr` uses equal root-state probabilities when `--root-prior` is omitted.
+Likelihoods, marginals, and conditional node-state sampling use log-space
+messages to avoid child-product underflow at large polytomies; zero-length
+branches retain their exact no-transition constraint.
 Annotated Newick uses the shared writer, preserving quoted numeric internal
 names and suppressing internal missing-support sentinels. Stochastic maps
 distinguish exactly zero rates from small positive rates: scaling branch lengths

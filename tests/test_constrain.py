@@ -351,7 +351,7 @@ class TestConstrainMain:
         tree = Tree(outfile.read_text(), parser=9)
         assert tree.is_leaf
         assert tree.name == "A_a_g1"
-        assert outfile.read_text() == "A_a_g1;"
+        assert outfile.read_text() == "A_a_g1[&&NHX:nwkit_rooted=unknown];"
 
     def test_collapse_removes_singletons_created_by_duplicate_gene_removal(
         self, tmp_path

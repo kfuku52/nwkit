@@ -155,7 +155,12 @@ def rename_main(args):
         )
     if has_pattern and (replacement is None):
         raise ValueError("'--replacement' is required when '--pattern' is specified.")
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     if has_name_tsv:
         tree, renamed_count, matched_count = _rename_by_mapping(tree=tree, args=args)
         mapping_label = "{} mapping row(s)".format(matched_count)

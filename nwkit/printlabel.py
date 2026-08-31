@@ -5,7 +5,12 @@ from nwkit.util import get_target_nodes, read_tree
 
 
 def printlabel_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     nodes = get_target_nodes(tree=tree, target=args.target)
     lines = list()
     for node in nodes:

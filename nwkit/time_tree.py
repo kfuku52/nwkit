@@ -11,6 +11,7 @@ from io import StringIO
 import numpy as np
 import pandas as pd
 
+from nwkit.rooting_state import require_rooted
 from nwkit.util import read_input_text
 
 AGE_PROPERTY_NAMES = (
@@ -245,6 +246,7 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
         len(node.get_children()) != 2 for node in tree.traverse() if not node.is_leaf
     ):
         raise ValueError("MCMCtree posterior topology must be rooted and binary.")
+    require_rooted(tree, "MCMCtree posterior topology must be rooted and binary.")
     burnin = int(burnin)
     thin = int(thin)
     if burnin < 0:

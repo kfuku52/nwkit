@@ -3,6 +3,8 @@ import sys
 
 import ete4
 
+from nwkit.rf_distance import robinson_foulds
+from nwkit.rooting_state import copy_rooting_info
 from nwkit.util import copy_tree_iteratively, is_rooted, read_tree, write_tree
 
 
@@ -29,17 +31,7 @@ def print_rf_dist(tree1, tree2):
         )
         return
     use_unrooted_rf = (not is_rooted(tree1)) or (not is_rooted(tree2))
-    out = tree1.robinson_foulds(t2=tree2, unrooted_trees=use_unrooted_rf)
-    (
-        rf,
-        rf_max,
-        common_attrs,
-        edges_t1,
-        edges_t2,
-        discarded_edges_t1,
-        discarded_edges_t2,
-    ) = out
-    rf_max = max(0, rf_max)
+    rf, rf_max = robinson_foulds(tree1, tree2, rooted=not use_unrooted_rf)
     sys.stderr.write(
         "Robinson-Foulds distance = {:,} (max = {:,})\n".format(rf, rf_max)
     )
@@ -51,7 +43,12 @@ def shuffle_main(args):
     if seed is not None:
         random.seed(seed)
     try:
-        tree = read_tree(args.infile, args.format, args.quoted_node_names)
+        tree = read_tree(
+            args.infile,
+            args.format,
+            args.quoted_node_names,
+            rooted=getattr(args, "input_rooted", "auto"),
+        )
         tree_original = copy_tree_iteratively(tree)
         if args.topology:
             num_leaf = len(list(tree.leaves()))
@@ -71,6 +68,7 @@ def shuffle_main(args):
             leaf_names = list(tree.leaf_names())
             for leaf, leaf_name in zip(new_tree.leaves(), leaf_names, strict=True):
                 leaf.name = leaf_name
+            copy_rooting_info(tree, new_tree)
             tree = new_tree
         if args.topology or args.branch_length:
             nodes = [n for n in tree.traverse() if not n.is_root]

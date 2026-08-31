@@ -31,10 +31,10 @@ from nwkit.root_evaluation import (
     format_taxa,
     root_split_id,
 )
+from nwkit.rooting_state import require_rooted
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
     get_subtree_leaf_name_sets,
-    is_rooted,
     read_tree,
     remove_singleton,
     validate_distinct_output_paths,
@@ -280,14 +280,18 @@ def _read_transfer_tree(args, cache):
             args.infile2,
             getattr(args, "format2", "auto"),
             args.quoted_node_names,
+            rooted=getattr(args, "infile2_rooted", "auto"),
         )
         source = remove_singleton(
             source,
             verbose=False,
             preserve_branch_length=True,
         )
-        if not is_rooted(source):
-            raise ValueError("'--infile2' must be rooted for root comparison.")
+        require_rooted(
+            source,
+            "'--infile2' must be rooted for root comparison.",
+            "--infile2-rooted",
+        )
         if len(list(source.leaves())) > 1 and len(source.get_children()) != 2:
             raise ValueError(
                 "'--infile2' root must have exactly two children for root comparison."
@@ -366,6 +370,7 @@ def _read_species_tree(args, cache):
             args.species_tree,
             getattr(args, "species_tree_format", "auto"),
             args.quoted_node_names,
+            rooted=getattr(args, "species_tree_rooted", "auto"),
         )
     return cache["species_tree"]
 
@@ -953,7 +958,12 @@ def _write_successful_outputs(tree, evaluations, args, rows):
 
 def root_compare_main(args):
     _validate_root_compare_paths(args)
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     validate_unique_named_leaves(
         tree,
         option_name="--infile",

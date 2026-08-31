@@ -229,7 +229,12 @@ def skim_main(args):
             ),
         ]
     )
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     validate_unique_named_leaves(tree, option_name="--infile", context=" for 'skim'")
     trait_df = read_trait(args, tree)
     marked_tree = mark_traits_to_nodes(tree, trait_df, args)

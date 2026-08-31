@@ -68,9 +68,9 @@ from nwkit.regress import (
     validate_dense_gaussian_size,
 )
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
+from nwkit.rooting_state import require_rooted
 from nwkit.sparse_laplace import GmrfPredictorUncertainty
 from nwkit.util import (
-    is_rooted,
     normalized_missing_path_key,
     read_tip_table,
     read_tree,
@@ -200,7 +200,8 @@ def _validate_ordinary_tree(tree, branch_length: str) -> None:
     )
     if len(list(tree.leaves())) < 3:
         raise ValueError("'--tree' must contain at least three tips for regression.")
-    if not is_rooted(tree) or len(tree.children) != 2:
+    require_rooted(tree, "'--tree' must be rooted with two root descendants.")
+    if len(tree.children) != 2:
         raise ValueError("'--tree' must be rooted with two root descendants.")
     if branch_length not in {"original", "unit"}:
         raise ValueError("Unsupported ordinary regression branch-length mode.")
@@ -3138,6 +3139,7 @@ def build_ordinary_regression(
         effective.tree,
         effective.tree_format,
         effective.quoted_node_names,
+        rooted=getattr(effective, "input_rooted", "auto"),
     )
     evolution_spec = evolution_model_spec(effective.evolution_model)
     _validate_ordinary_tree(

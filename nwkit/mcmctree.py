@@ -8,6 +8,7 @@ from typing import Any
 
 import requests
 
+from nwkit.rooting_state import require_rooted
 from nwkit.time_tree import (
     AGE_PROPERTY_NAMES,
     CALIBRATION_PROPERTY_NAMES,
@@ -772,9 +773,17 @@ def apply_min_clade_prop(tree, min_clade_prop):
 
 
 def mcmctree_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     if len(tree.get_children()) != 2:
-        raise ValueError("The input tree should be rooted.")
+        raise ValueError(
+            "The input tree should be rooted with exactly two root children."
+        )
+    require_rooted(tree, "The input tree should be rooted.")
     posterior_path = getattr(args, "posterior", None)
     if posterior_path not in (None, ""):
         if posterior_path == "-" and args.infile == "-":

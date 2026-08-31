@@ -15,7 +15,12 @@ def _output_properties(tree, args):
 
 
 def prune_main(args):
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     compiled_pattern = re.compile(args.pattern)
     prune_flags = dict()
     leaf_nodes = list(tree.leaves())

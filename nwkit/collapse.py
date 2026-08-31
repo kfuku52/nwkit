@@ -43,7 +43,12 @@ def _preserve_deleted_branch_length(node):
 def collapse_main(args):
     if (args.min_support is None) and (args.max_dist is None):
         raise ValueError("Specify at least one of '--min-support' or '--max-dist'.")
-    tree = read_tree(args.infile, args.format, args.quoted_node_names)
+    tree = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
     if args.min_support is not None:
         support_values = [
             _get_support_value(node)

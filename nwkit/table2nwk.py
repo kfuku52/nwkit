@@ -5,6 +5,7 @@ from typing import Any
 import pandas as pd
 from ete4 import Tree
 
+from nwkit.rooting_state import ROOTED_PROP, apply_input_rooting
 from nwkit.util import (
     MISSING_SUPPORT_VALUE,
     TREE_FORMAT_PROP,
@@ -115,6 +116,13 @@ def _resolve_output_format(args, child_ids, records_by_id):
     return 1
 
 
+def _restore_table_rooting(nodes, records, root_id):
+    for record in records:
+        if record["rooted"]:
+            nodes[record["branch_id"]].props[ROOTED_PROP] = record["rooted"]
+    apply_input_rooting(nodes[root_id])
+
+
 def table2nwk_main(args):
     table = _read_table(args.infile)
     if table.empty:
@@ -152,6 +160,7 @@ def table2nwk_main(args):
             if "support" in row
             else None,
             "row_order": row_idx,
+            "rooted": str(row.get("rooted", "")).strip(),
         }
         records.append(record)
     if len(root_ids) != 1:
@@ -196,6 +205,7 @@ def table2nwk_main(args):
             continue
         nodes[parent_id].add_child(child=nodes[record["branch_id"]])
     output_tree = nodes[root_id]
+    _restore_table_rooting(nodes, records, root_id)
     output_format = _resolve_output_format(args, child_ids, records_by_id)
     output_tree.props[TREE_FORMAT_PROP] = int(output_format)
     for node in output_tree.traverse():

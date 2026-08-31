@@ -9,15 +9,16 @@ import time
 from datetime import datetime, timezone
 from typing import Any
 
-from ete4 import Tree
-
 from nwkit import __version__
 from nwkit.conventions import get_stdin_input_options
+from nwkit.rooting_state import get_rooting_info
 from nwkit.util import (
     acquire_exclusive_lock,
     inspect_tree_text,
     is_rooted,
+    normalize_phylogenetic_tree_text,
     normalized_missing_path_key,
+    read_tree,
     split_newick_stream,
     validate_distinct_output_paths,
 )
@@ -554,7 +555,9 @@ def _input_summary(text, args):
     if truncated:
         text = text[:INPUT_SUMMARY_MAX_CHARS]
     try:
-        tree_strings = split_newick_stream(text)
+        tree_strings = split_newick_stream(
+            normalize_phylogenetic_tree_text(text, collection=True)
+        )
     except ValueError:
         first_line = text.splitlines()[0] if text.splitlines() else ""
         if "\t" in first_line:
@@ -599,11 +602,21 @@ def _input_summary(text, args):
         summary["truncated"] = True
     if inspection["parse_ok"]:
         try:
-            tree = Tree(tree_strings[0], parser=int(inspection["input_format"]))
+            tree = read_tree(
+                tree_strings[0],
+                inspection["input_format"],
+                getattr(args, "quoted_node_names", True),
+                quiet=True,
+                rooted=getattr(args, "input_rooted", "auto"),
+                warn_rooting=False,
+            )
             summary.update(
                 {
                     "first_tree_tip_count": len(list(tree.leaves())),
                     "first_tree_rooted": is_rooted(tree),
+                    "first_tree_rooting_state": get_rooting_info(tree).state,
+                    "first_tree_rooting_source": get_rooting_info(tree).source,
+                    "first_tree_rooting_declared": get_rooting_info(tree).declared,
                 }
             )
         except Exception:

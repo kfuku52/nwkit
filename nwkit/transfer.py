@@ -12,6 +12,7 @@ from nwkit.clade_mapping import (
     projected_root_split,
 )
 from nwkit.root import transfer_root_with_taxon_mode
+from nwkit.rooting_state import ROOTING_PROPERTIES
 from nwkit.util import (
     TREE_FORMAT_PROP,
     assign_branch_ids,
@@ -28,6 +29,7 @@ from nwkit.util import (
 )
 
 SPECIAL_PROPERTIES = frozenset(("name", "support", "length"))
+RESERVED_PROPERTIES = ROOTING_PROPERTIES | {TREE_FORMAT_PROP}
 PROPERTY_NAME_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.-]*$")
 ROOT_EDGE_POLICIES = frozenset(
     (
@@ -85,7 +87,7 @@ def _format_split(split):
 
 
 def _validate_property_name(prop):
-    if prop == TREE_FORMAT_PROP:
+    if prop in RESERVED_PROPERTIES:
         raise ValueError(
             "Property '{}' is reserved for internal NWKIT use.".format(prop)
         )
@@ -1243,8 +1245,18 @@ def transfer_main(args):
         include_support=bool(getattr(args, "support", False)),
         include_length=bool(getattr(args, "length", False)),
     )
-    target = read_tree(args.infile, args.format, args.quoted_node_names)
-    source = read_tree(args.infile2, args.format2, args.quoted_node_names)
+    target = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
+    source = read_tree(
+        args.infile2,
+        args.format2,
+        args.quoted_node_names,
+        rooted=getattr(args, "infile2_rooted", "auto"),
+    )
     result = transfer_properties(
         target=target,
         source=source,

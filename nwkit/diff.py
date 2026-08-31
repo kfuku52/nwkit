@@ -7,8 +7,10 @@ import pandas as pd
 from nwkit.clade_mapping import (
     build_clade_mapping,
     node_projected_split,
+    projected_root_partition,
     projected_root_split,
 )
+from nwkit.rooting_state import get_rooting_info, is_rooted
 from nwkit.transfer import _get_property, parse_property_specs
 from nwkit.util import (
     assign_branch_ids,
@@ -541,6 +543,40 @@ def _unrooted_rows(
     return rows
 
 
+def _root_summary(target, source, shared_taxa, comparison):
+    project = projected_root_split
+    reason = "projected_root_bipartition"
+    if comparison == "rooted" and is_rooted(target) and is_rooted(source):
+        project = projected_root_partition
+        if len(target.get_children()) > 2 or len(source.get_children()) > 2:
+            reason = "projected_root_partition"
+    target_partition = project(target, shared_taxa)
+    source_partition = project(source, shared_taxa)
+    status = "same" if target_partition == source_partition else "different"
+    if target_partition is None or source_partition is None:
+        status = "unresolved"
+    if comparison == "rooted" and any(
+        get_rooting_info(tree).rooted is False for tree in (target, source)
+    ):
+        status, reason = "unresolved", "input_explicitly_unrooted"
+
+    def format_partition(partition):
+        return (
+            ""
+            if partition is None
+            else "|".join(_format_taxa(side) for side in partition)
+        )
+
+    return _summary_row(
+        comparison="root_split",
+        status=status,
+        reason=reason,
+        shared_key="target={};source={}".format(
+            format_partition(target_partition), format_partition(source_partition)
+        ),
+    )
+
+
 def compare_trees(
     target,
     source,
@@ -574,26 +610,7 @@ def compare_trees(
             source_taxa=_format_taxa(mapping.source_only_taxa),
         )
     ]
-    target_root_split = projected_root_split(target, mapping.shared_taxa)
-    source_root_split = projected_root_split(source, mapping.shared_taxa)
-    root_status = (
-        "same"
-        if target_root_split == source_root_split and target_root_split is not None
-        else "different"
-    )
-    if target_root_split is None or source_root_split is None:
-        root_status = "unresolved"
-    rows.append(
-        _summary_row(
-            comparison="root_split",
-            status=root_status,
-            reason="projected_root_bipartition",
-            shared_key="target={};source={}".format(
-                _format_split(target_root_split),
-                _format_split(source_root_split),
-            ),
-        )
-    )
+    rows.append(_root_summary(target, source, mapping.shared_taxa, comparison))
     if comparison == "rooted":
         rows.extend(
             _rooted_rows(
@@ -628,8 +645,18 @@ def compare_trees(
 def diff_main(args):
     if args.infile2 in ("", None):
         raise ValueError("'--infile2' is required for 'diff'.")
-    target = read_tree(args.infile, args.format, args.quoted_node_names)
-    source = read_tree(args.infile2, args.format2, args.quoted_node_names)
+    target = read_tree(
+        args.infile,
+        args.format,
+        args.quoted_node_names,
+        rooted=getattr(args, "input_rooted", "auto"),
+    )
+    source = read_tree(
+        args.infile2,
+        args.format2,
+        args.quoted_node_names,
+        rooted=getattr(args, "infile2_rooted", "auto"),
+    )
     properties = parse_property_specs(properties=getattr(args, "property", None))
     rows = compare_trees(
         target=target,
