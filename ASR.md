@@ -1,11 +1,12 @@
 # Ancestral trait reconstruction
 
 `nwkit asr` reconstructs a single trait at every node and imputes missing tip
-values. It supports discrete Mk models (ER, SYM, ARD) and continuous Brownian
-motion (BM). The tree must be rooted under the
+values. It supports structured or fixed-generator discrete Mk models (ER, SYM,
+ARD, CUSTOM) and continuous Brownian motion (BM) or single-optimum stationary
+Ornstein-Uhlenbeck (OU) models. The tree must be rooted under the
 [shared rootedness contract](CLI_TSV_CONVENTIONS.md#rootedness-and-root-polytomies).
 Root and internal polytomies, non-ultrametric trees, and finite non-negative
-non-root branch lengths are supported. Root stem length is not part of either
+non-root branch lengths are supported. Root stem length is not part of any
 model. No rerooting, arbitrary binary resolution, or automatic trait
 transformation is performed.
 
@@ -42,12 +43,12 @@ codes require explicit discrete mode.
 
 | Option | Discrete | Continuous |
 |---|---|---|
-| `--model` | ER (default), SYM, ARD | BM (default) |
-| `--root-prior` | equal (default), empirical | flat (default) |
+| `--model` | ER (default), SYM, ARD, CUSTOM | BM (default), OU |
+| `--root-prior` | equal (default), empirical, stationary | flat for BM; stationary for OU |
 | `--output` | probabilities (default), map | summary (default) |
 | `--tree-annotation` | map (default), state, probability, all | summary (default), mean, all |
-| Rate controls | `--rate`, `--rate-bounds` | `--sigma2` |
-| State-specific controls | `--states`, `--ambiguous-separator` | Not applicable |
+| Rate controls | `--rate`, `--rate-bounds`, `--rate-matrix` | `--sigma2`; OU also `--alpha`, `--alpha-bounds`, `--theta` |
+| State-specific controls | `--states`, `--ambiguous-separator`, `--transition-graph` | Not applicable |
 | Observation uncertainty | Ambiguous states | `--standard-error-column` |
 | Interval coverage | Not applicable | `--ci-level` (default 0.95) |
 | Stochastic mapping | `--stochastic-map-out`, `--n-sim`, `--threads`, `--seed` | Not applicable |
@@ -55,6 +56,62 @@ codes require explicit discrete mode.
 Model/output/prior defaults are selected after trait detection. The continuous
 root prior describes uncertainty about a numeric root value; it is independent
 of `--input-rooted`, which describes the interpretation of the tree.
+
+## Discrete Mk models and transition structure
+
+ER shares one rate across all allowed directed transitions, SYM fits one rate
+per allowed unordered pair, and ARD fits every allowed directed rate separately.
+The default `--transition-graph complete` reproduces the original complete Mk
+models. `--transition-graph ordered` requires an explicit `--states` order and
+allows only bidirectional transitions between adjacent states. A path instead
+reads a directed TSV edge list:
+
+```tsv
+from_state	to_state
+juvenile	adult
+adult	senescent
+```
+
+This supports irreversible ARD models by listing only forward edges. SYM
+requires a symmetric edge set. For ER, `--rate` fixes the shared rate; for SYM
+and ARD it remains the common optimizer starting value. All fitted rates use
+`--rate-bounds`. Fitted models use deterministic homogeneous, patterned, and
+coordinate multistarts, retain the best converged likelihood, and report start
+counts, failures, and lower/upper-bound rates in `--model-out`.
+
+`--model CUSTOM --rate-matrix Q.tsv` uses a fixed labelled generator instead:
+
+```tsv
+state	x	y
+x	0	0.2
+y	0.4	0
+```
+
+The `state` rows must exactly match the state columns in order. State order is
+inferred from this matrix unless `--states` is supplied, in which case it must
+match exactly. Off-diagonal entries must be finite and non-negative. If every
+diagonal is zero, nwkit derives each diagonal as the negative off-diagonal row
+sum; otherwise the supplied diagonals must already satisfy that generator
+constraint. CUSTOM does not fit or rescale Q.
+Generator residual tolerances scale with each Q row, so a malformed very small
+Q is not accepted merely because its absolute entries are small. Matrix
+exponentiation repairs only roundoff-sized probability errors, with a tolerance
+that scales conservatively with the exponent norm for long branches; material
+negative entries or invalid row sums fail explicitly.
+
+`--root-prior stationary` derives root frequencies from the current Q, including
+inside each fitted-rate likelihood evaluation. It requires a unique valid
+stationary distribution; reducible generators with multiple stationary
+distributions fail explicitly. Equal and empirical root priors remain available.
+Marginal reconstruction, missing-tip imputation, zero-length branches,
+polytomies, and stochastic transition-count mapping all use the selected graph
+or fixed Q without binary tree resolution.
+
+Uniformization caches small branch calculations, but does not retain every dense
+matrix power or every state-pair event-count distribution for high-rate branches.
+It instead constructs the required endpoint-specific backward vectors. A single
+branch requiring more than 2,000,000 potential events is rejected before a large
+allocation; reduce the rate/time scale or fitted rate bounds in that case.
 
 ## Continuous BM model
 
@@ -124,6 +181,56 @@ the analyst must choose an appropriate scale before running BM.
 the rate was fitted or fixed. Use `sigma2_estimated` or `estimation_method` to
 distinguish those cases.
 
+## Continuous OU model
+
+`--model OU` implements a single-optimum process with a stationary root
+distribution:
+
+```text
+X_root ~ Normal(theta, sigma2 / (2 * alpha))
+X_child | X_parent ~ Normal(
+    theta + exp(-alpha * t) * (X_parent - theta),
+    sigma2 * (1 - exp(-2 * alpha * t)) / (2 * alpha)
+)
+```
+
+Here `alpha` is the attraction strength per branch-length unit, `theta` is the
+trait optimum, and `sigma2` is the diffusion variance per branch-length unit.
+Each parameter is fixed when its corresponding `--alpha`, `--theta`, or
+`--sigma2` option is supplied and fitted by ordinary ML when omitted. Stationary
+OU requires strictly positive alpha and sigma2. The default positive alpha
+bounds are `1e-6 / max_root_to_tip_depth` through
+`50 / max_root_to_tip_depth`; override them with `--alpha-bounds MIN,MAX`.
+Theta is profiled exactly from its quadratic tree likelihood in one linear pass.
+The remaining zero-, one-, or two-dimensional covariance likelihood is searched
+on a deterministic log grid, including exact boundaries, and polished from
+competing local/boundary starts. Boundary-adjacent grid intervals are polished
+before a boundary is accepted. In two dimensions, Powell fallback is reserved
+for cases where all primary starts fail or a failed endpoint remains competitive
+with the best converged likelihood, avoiding expensive work in inferior basins.
+The free stationary variance is optimized over a reported data-scaled range
+spanning 24 orders of magnitude. Alpha or stationary-variance boundary solutions
+are reported in `fit_status` rather than silently treated as interior optima.
+Optimizer convergence/failure and grid/start counts are retained; a coarse-grid
+fallback is explicitly marked rather than reported as `ok`.
+
+The number of distinct observed tree positions must be at least the number of
+free OU parameters. Replicate noisy observations at one zero-length-contracted
+position remain separate likelihood observations, but do not create additional
+phylogenetic positions for this identifiability check.
+
+OU uses the same O(nodes)-time/O(nodes)-memory upward and downward Gaussian
+passes as BM for each parameter evaluation. It supports rooted polytomies,
+non-ultrametric trees, exact observations, known measurement SEs, missing tips,
+and exact zero-length contraction. Reported Gaussian intervals condition on the
+fixed/fitted alpha, theta, sigma2, and tree; parameter and tree uncertainty are
+not integrated. Unlike BM's flat-root REML quantity, OU reports an ordinary ML
+log likelihood under its finite stationary root prior. The two likelihoods
+therefore do not share an interchangeable AIC convention.
+Fitting requires many such linear passes for grid evaluation and local polishing;
+fixing alpha, theta, or sigma2 reduces that work, and fixing all three requires
+only the final pruning/smoothing passes.
+
 ## Output schemas
 
 Both modes retain shared `branch_id`, `parent` (`-1` for root), `node_class`, and
@@ -142,11 +249,20 @@ Continuous summary columns additionally contain:
 | `mean`, `variance`, `sd` | Conditional latent-trait moments in original units |
 | `ci_lower`, `ci_upper`, `ci_level` | Equal-tail conditional interval and its coverage |
 
-`--model-out` records `trait_type`, `trait_type_requested`, the trait/model,
-`root_prior`, `sigma2`, `sigma2_estimated`, `estimation_method` (`REML` or `fixed`),
-`restricted_log_likelihood`, `num_observed`, `num_effective_observations`,
-`residual_df`, `fit_status`, SE-column selection, and the interval's conditioning
-contract. Rate and tree uncertainty flags are false.
+For BM, `--model-out` records `trait_type`, `trait_type_requested`, the
+trait/model, `root_prior`, `sigma2`, `sigma2_estimated`, `estimation_method`
+(`REML` or `fixed`), `restricted_log_likelihood`, `num_observed`,
+`num_effective_observations`, `residual_df`, and `fit_status`. OU instead records
+alpha/theta/sigma2 values and estimated flags, stationary root variance, alpha
+bounds (including the stationary-variance fitting bounds), ordinary
+`log_likelihood`, separate effective-observation and distinct-position counts,
+optimizer status/message/grid/start/converged/failed counts, and
+`likelihood_kind=stationary_root_ml`. Both report SE-column selection and the
+interval conditioning contract; parameter and tree uncertainty flags are false.
+
+Discrete `--model-out` records the transition graph, `q_source` (`estimated`,
+`fixed:--rate`, or `fixed:PATH`), fit/boundary status, optimizer start/convergence
+counts, and every directed Q entry. CUSTOM has an empty fitted-rate-bounds field.
 
 For nondegenerate observations `y` with covariance `V`, the reported residual
 log-likelihood uses the flat-root integral convention:
@@ -166,11 +282,13 @@ residual likelihood convention.
 
 `--tree-out` uses the shared Newick/NHX writer, preserving rooting metadata,
 quoted numeric internal names, and missing-support conventions. Continuous
-annotations include `asr_trait_type=continuous` and:
+annotations include `asr_trait_type=continuous`; OU additionally includes
+`asr_model=OU`. BM retains its prior NHX property set. Annotation levels are:
 
 - `mean`: `asr_mean` only.
 - `summary` (default): also `asr_variance`, `asr_sd`, `asr_ci_lower`,
-  `asr_ci_upper`, `asr_ci_level`, and `asr_interval_kind=conditional_on_sigma2`.
+  `asr_ci_upper`, `asr_ci_level`, and `asr_interval_kind` (`conditional_on_sigma2`
+  for BM or `conditional_on_parameters` for OU).
 - `all`: also tip `asr_observed_value`, `asr_observed_se`, and `asr_is_imputed`.
 
 Discrete primary schemas and stochastic mapping remain unchanged. Optional
@@ -203,6 +321,13 @@ nwkit asr -i tree.nwk --trait traits.tsv --state-column body_mass \
   --trait-type continuous --sigma2 0.5 --target missing-leaf -o imputed.tsv
 ```
 
+Stationary OU with alpha fixed and theta/sigma2 fitted by ML:
+
+```sh
+nwkit asr -i tree.nwk --trait traits.tsv --state-column body_mass \
+  --model OU --alpha 0.8 --model-out ou-model.tsv -o ou-ancestral.tsv
+```
+
 Numeric categories must explicitly select discrete inference:
 
 ```sh
@@ -210,19 +335,30 @@ nwkit asr -i tree.nwk --trait categories.tsv --state-column state \
   --trait-type discrete --states 0,1,2 --model ER -o discrete.tsv
 ```
 
-BM is currently the only continuous model. OU, correlated multiple traits,
+Ordered discrete states can restrict the complete Mk graph:
+
+```sh
+nwkit asr -i tree.nwk --trait stages.tsv --state-column stage \
+  --trait-type discrete --states juvenile,adult,senescent \
+  --model ARD --transition-graph ordered -o stages-asr.tsv
+```
+
+Correlated multiple continuous traits, branch/regime-specific OU parameters,
 parameter/tree uncertainty integration, and continuous conditional trajectory
-sampling are not implemented. Discrete transition-count stochastic maps are
-not repurposed as continuous trajectories.
+sampling are not implemented. Discrete transition-count stochastic maps are not
+repurposed as continuous trajectories.
 
 ## Method references
 
 - [ape ancestral character estimation](https://search.r-project.org/CRAN/refmans/ape/html/ace.html): BM and REML conventions.
 - [phytools fastAnc](https://search.r-project.org/CRAN/refmans/phytools/html/fastAnc.html): continuous ancestral estimates and uncertainty.
+- [Hansen 1997](https://doi.org/10.2307/2411186): OU comparative models and adaptive optima.
 
 Tests compare the Gaussian passes against an independently assembled full-tree
 precision matrix and tip-covariance residual likelihood, plus analytic stars,
 zero-edge equivalences, and unit/offset invariance. External-package comparisons
 must match rate estimation, root treatment, and interval conventions first.
 A recorded `phytools 2.3.0 fastAnc` fixture checks exact-data means and variances
-without adding R as a runtime or test dependency.
+without adding R as a runtime or test dependency. OU tests independently assemble
+the stationary patristic covariance and compare ordinary likelihood and all-node
+conditional moments.

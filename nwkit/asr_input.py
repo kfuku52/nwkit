@@ -4,18 +4,15 @@ import math
 from copy import copy
 from dataclasses import dataclass
 
+from nwkit.asr_models import default_model, model_definition, model_names
 from nwkit.util import is_missing_table_value, read_tip_table
 
 _MODE_OPTIONS = {
     "discrete": {
-        "model": ("ER", "SYM", "ARD"),
-        "root_prior": ("equal", "empirical"),
         "output": ("probabilities", "map"),
         "tree_annotation": ("map", "state", "probability", "all"),
     },
     "continuous": {
-        "model": ("BM",),
-        "root_prior": ("flat",),
         "output": ("summary",),
         "tree_annotation": ("summary", "mean", "all"),
     },
@@ -24,13 +21,22 @@ _DISCRETE_ONLY = (
     "states",
     "rate",
     "rate_bounds",
+    "rate_matrix",
+    "transition_graph",
     "ambiguous_separator",
     "stochastic_map_out",
     "n_sim",
     "threads",
     "seed",
 )
-_CONTINUOUS_ONLY = ("sigma2", "standard_error_column", "ci_level")
+_CONTINUOUS_ONLY = (
+    "sigma2",
+    "standard_error_column",
+    "ci_level",
+    "alpha",
+    "alpha_bounds",
+    "theta",
+)
 
 
 def _mode_switch_hint(trait_type):
@@ -52,6 +58,7 @@ class AsrSettings:
     def from_args(cls, args, trait_type="discrete"):
         options = _resolve_mode_options(args, trait_type)
         _validate_mode_arguments(args, trait_type)
+        _validate_model_arguments(args, trait_type, options["model"])
         ci_level = _confidence_level(args) if trait_type == "continuous" else None
         return cls(trait_type=trait_type, ci_level=ci_level, **options)
 
@@ -59,7 +66,21 @@ class AsrSettings:
 def _resolve_mode_options(args, trait_type):
     if trait_type not in _MODE_OPTIONS:
         raise ValueError(f"Unsupported resolved trait type: {trait_type}.")
-    resolved = {}
+    model = getattr(args, "model", None) or default_model(trait_type)
+    definition = model_definition(model)
+    if definition.trait_type != trait_type:
+        raise ValueError(
+            f"--model={model} is not supported for {trait_type} traits; choose "
+            f"{', '.join(model_names(trait_type))}. {_mode_switch_hint(trait_type)}"
+        )
+    root_prior = getattr(args, "root_prior", None) or definition.default_root_prior
+    if root_prior not in definition.root_priors:
+        raise ValueError(
+            f"--root-prior={root_prior} is not supported for {trait_type} traits "
+            f"with --model={model}; "
+            f"choose {', '.join(definition.root_priors)}."
+        )
+    resolved = {"model": model, "root_prior": root_prior}
     for name, choices in _MODE_OPTIONS[trait_type].items():
         value = getattr(args, name, None)
         value = choices[0] if value is None else value
@@ -71,6 +92,43 @@ def _resolve_mode_options(args, trait_type):
             )
         resolved[name] = value
     return resolved
+
+
+def _validate_model_arguments(args, trait_type, model):
+    if trait_type == "discrete":
+        rate_matrix = getattr(args, "rate_matrix", None)
+        transition_graph = getattr(args, "transition_graph", None)
+        if model == "CUSTOM" and rate_matrix in (None, ""):
+            raise ValueError("--model CUSTOM requires --rate-matrix.")
+        if model != "CUSTOM" and rate_matrix not in (None, ""):
+            raise ValueError("--rate-matrix requires --model CUSTOM.")
+        if model == "CUSTOM" and transition_graph not in (None, ""):
+            raise ValueError(
+                "--transition-graph cannot be combined with --model CUSTOM."
+            )
+        if model == "CUSTOM" and getattr(args, "rate", None) is not None:
+            raise ValueError("--rate cannot be combined with --model CUSTOM.")
+        if model == "CUSTOM" and getattr(args, "rate_bounds", None) is not None:
+            raise ValueError("--rate-bounds cannot be combined with --model CUSTOM.")
+        if transition_graph == "ordered" and getattr(args, "states", None) in (
+            None,
+            "",
+        ):
+            raise ValueError("--transition-graph ordered requires explicit --states.")
+        return
+    if model == "BM":
+        supplied = [
+            "--" + name.replace("_", "-")
+            for name in ("alpha", "alpha_bounds", "theta")
+            if getattr(args, name, None) is not None
+        ]
+        if supplied:
+            raise ValueError(f"Options requiring --model OU: {', '.join(supplied)}.")
+    elif (
+        getattr(args, "alpha", None) is not None
+        and getattr(args, "alpha_bounds", None) is not None
+    ):
+        raise ValueError("--alpha-bounds cannot be combined with fixed --alpha.")
 
 
 def _validate_mode_arguments(args, trait_type):

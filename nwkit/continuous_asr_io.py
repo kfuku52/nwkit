@@ -72,6 +72,59 @@ def continuous_output_table(
 
 
 def continuous_model_table(fit, args, ci_level):
+    model = getattr(args, "model", "BM")
+    if model == "OU":
+        return pd.DataFrame(
+            [
+                {
+                    "trait_type": "continuous",
+                    "trait_type_requested": getattr(args, "trait_type", "auto"),
+                    "trait": args.state_column,
+                    "model": "OU",
+                    "root_prior": "stationary",
+                    "alpha": fit.alpha,
+                    "alpha_estimated": fit.alpha_estimated,
+                    "alpha_bounds": f"{fit.alpha_bounds[0]},{fit.alpha_bounds[1]}",
+                    "theta": fit.theta,
+                    "theta_estimated": fit.theta_estimated,
+                    "sigma2": fit.sigma2,
+                    "sigma2_estimated": fit.sigma2_estimated,
+                    "root_variance": fit.root_variance,
+                    "root_variance_bounds": ""
+                    if fit.root_variance_bounds is None
+                    else f"{fit.root_variance_bounds[0]},{fit.root_variance_bounds[1]}",
+                    "estimation_method": "ML"
+                    if any(
+                        (
+                            fit.alpha_estimated,
+                            fit.theta_estimated,
+                            fit.sigma2_estimated,
+                        )
+                    )
+                    else "fixed",
+                    "log_likelihood": fit.log_likelihood,
+                    "likelihood_kind": "stationary_root_ml",
+                    "num_observed": fit.num_observed,
+                    "num_effective_observations": fit.num_effective_observations,
+                    "num_observed_positions": fit.num_observed_positions,
+                    "fit_status": fit.fit_status,
+                    "optimizer_success": fit.optimizer_success,
+                    "optimizer_message": fit.optimizer_message,
+                    "optimizer_starts": fit.optimizer_starts,
+                    "optimizer_converged_starts": fit.optimizer_converged_starts,
+                    "optimizer_failed_starts": fit.optimizer_failed_starts,
+                    "optimizer_grid_evaluations": fit.optimizer_grid_evaluations,
+                    "standard_error_column": getattr(
+                        args, "standard_error_column", None
+                    )
+                    or "",
+                    "ci_level": ci_level,
+                    "interval_kind": "conditional_on_parameters",
+                    "parameter_uncertainty_included": False,
+                    "tree_uncertainty_included": False,
+                }
+            ]
+        )
     return pd.DataFrame(
         [
             {
@@ -103,11 +156,17 @@ def continuous_model_table(fit, args, ci_level):
 def write_continuous_tree(tree, observed, errors, posterior, args, ci_level):
     if getattr(args, "tree_out", None) in (None, ""):
         return
+    model = getattr(args, "model", "BM")
+    interval_kind = (
+        "conditional_on_parameters" if model == "OU" else "conditional_on_sigma2"
+    )
     for node in tree.traverse():
         summary = _summary(posterior[node], ci_level)
         node.add_props(**{"asr_" + key: value for key, value in summary.items()})
         node.add_props(
-            asr_trait_type="continuous", asr_interval_kind="conditional_on_sigma2"
+            asr_trait_type="continuous",
+            asr_model=model,
+            asr_interval_kind=interval_kind,
         )
         if node.is_leaf:
             value = observed.get(str(node.name))
@@ -118,6 +177,8 @@ def write_continuous_tree(tree, observed, errors, posterior, args, ci_level):
                 asr_is_imputed="yes" if value is None else "no",
             )
     props = ["asr_mean", "asr_trait_type"]
+    if model == "OU":
+        props.append("asr_model")
     if args.tree_annotation != "mean":
         props += [
             "asr_variance",

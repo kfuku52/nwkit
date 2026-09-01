@@ -20,6 +20,15 @@ from nwkit.asr_input import (
     read_asr_table,
     resolve_trait_type,
 )
+from nwkit.asr_models import model_names
+from nwkit.discrete_asr_models import build_rate_matrix as _build_structured_rate_matrix
+from nwkit.discrete_asr_models import parameter_labels as _structured_parameter_labels
+from nwkit.discrete_asr_models import (
+    read_rate_matrix,
+    read_transition_graph,
+    stationary_distribution,
+    validate_rate_matrix,
+)
 from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     assign_branch_ids,
@@ -35,7 +44,9 @@ from nwkit.util import (
 DEFAULT_RATE_BOUNDS = (10**-9, 10**3)
 DEFAULT_AMBIGUOUS_SEPARATOR = "|"
 DEFAULT_TARGET = "all"
-SUPPORTED_MODELS = ("ER", "SYM", "ARD")
+SUPPORTED_MODELS = model_names("discrete")
+_MAX_UNIFORMIZATION_TERMS = 2_000_000
+_MAX_CACHED_BACKWARD_BYTES = 256 * 1024
 
 
 def _parse_comma_list(value, option_name):
@@ -51,11 +62,20 @@ def _parse_missing_values(value):
     return parse_table_missing_values(value)
 
 
-def _parse_states(value):
-    states = _parse_comma_list(value, "--states")
+def _validate_states(states):
     if len(states) != len(set(states)):
         raise ValueError("'--states' contains duplicated states.")
     return states
+
+
+def _parse_states(value):
+    return _validate_states(_parse_comma_list(value, "--states"))
+
+
+def _parse_state_argument(value):
+    if isinstance(value, (list, tuple)):
+        return _validate_states([str(state) for state in value])
+    return _parse_states(value)
 
 
 def _parse_rate_bounds(value):
@@ -138,6 +158,7 @@ def _read_tip_states(
     unmatched="warn",
     *,
     trait_df=None,
+    state_source="--states",
 ):
     if trait_df is None:
         trait_df = read_asr_table(
@@ -167,7 +188,7 @@ def _read_tip_states(
         observed_state_by_leaf_input[leaf_name] = separator.join(state_set)
         observed_state_sets.append(state_set)
 
-    states = _parse_states(states_arg)
+    states = _parse_state_argument(states_arg)
     observed_states = [
         state for state_set in observed_state_sets for state in state_set
     ]
@@ -175,9 +196,8 @@ def _read_tip_states(
         unknown_states = sorted(set(observed_states) - set(states))
         if unknown_states:
             raise ValueError(
-                "State(s) in '--trait' were not listed in '--states': {}".format(
-                    ", ".join(unknown_states)
-                )
+                "State(s) in '--trait' are absent from the state space defined by "
+                "'{}': {}".format(state_source, ", ".join(unknown_states))
             )
     else:
         seen_states = set()
@@ -253,86 +273,64 @@ def _get_root_prior(root_prior, states, observed_state_by_leaf, likelihood_by_le
     raise ValueError("Unsupported '--root-prior': {}".format(root_prior))
 
 
-def _num_rate_parameters(model, num_states):
-    if num_states <= 1:
-        return 0
-    if model == "ER":
-        return 1
-    if model == "SYM":
-        return num_states * (num_states - 1) // 2
-    if model == "ARD":
-        return num_states * (num_states - 1)
-    raise ValueError("Unsupported '--model': {}".format(model))
+def _root_prior_for_matrix(
+    root_prior, states, observed_state_by_leaf, likelihood_by_leaf, rate_matrix
+):
+    if root_prior == "stationary":
+        return stationary_distribution(rate_matrix)
+    return _get_root_prior(
+        root_prior, states, observed_state_by_leaf, likelihood_by_leaf
+    )
 
 
-def _rate_parameter_labels(model, states):
-    if len(states) <= 1:
-        return list()
-    labels = list()
-    if model == "ER":
-        return [("all", "all")]
-    if model == "SYM":
-        for i, from_state in enumerate(states):
-            for to_state in states[i + 1 :]:
-                labels.append((from_state, to_state))
-        return labels
-    if model == "ARD":
-        for from_state in states:
-            for to_state in states:
-                if from_state != to_state:
-                    labels.append((from_state, to_state))
-        return labels
-    raise ValueError("Unsupported '--model': {}".format(model))
+def _num_rate_parameters(model, num_states, transition_graph=None):
+    states = [str(index) for index in range(num_states)]
+    return len(_structured_parameter_labels(model, states, transition_graph))
 
 
-def _build_rate_matrix(model, states, rates):
-    num_states = len(states)
-    matrix = np.zeros((num_states, num_states), dtype=float)
-    if num_states <= 1:
-        return matrix
-    rates = np.asarray(rates, dtype=float)
-    if len(rates) != _num_rate_parameters(model, num_states):
-        raise ValueError(
-            "Unexpected number of rate parameters for model '{}'.".format(model)
-        )
-    if np.any(~np.isfinite(rates)) or np.any(rates < 0.0):
-        raise ValueError("Mk rates must be non-negative finite numbers.")
-    rate_index = 0
-    if model == "ER":
-        matrix[:] = rates[0]
-        np.fill_diagonal(matrix, 0.0)
-    elif model == "SYM":
-        for i in range(num_states):
-            for j in range(i + 1, num_states):
-                matrix[i, j] = rates[rate_index]
-                matrix[j, i] = rates[rate_index]
-                rate_index += 1
-    elif model == "ARD":
-        for i in range(num_states):
-            for j in range(num_states):
-                if i == j:
-                    continue
-                matrix[i, j] = rates[rate_index]
-                rate_index += 1
-    else:
-        raise ValueError("Unsupported '--model': {}".format(model))
-    np.fill_diagonal(matrix, -matrix.sum(axis=1))
-    return matrix
+def _rate_parameter_labels(model, states, transition_graph=None):
+    return _structured_parameter_labels(model, states, transition_graph)
+
+
+def _build_rate_matrix(model, states, rates, transition_graph=None):
+    return _build_structured_rate_matrix(model, states, rates, transition_graph)
 
 
 def _transition_matrix(rate_matrix, branch_length):
-    if float(branch_length) == 0.0:
+    branch_length = float(branch_length)
+    if not math.isfinite(branch_length) or branch_length < 0.0:
+        raise ValueError("Mk branch lengths must be non-negative and finite.")
+    if branch_length == 0.0:
         return np.eye(rate_matrix.shape[0], dtype=float)
     er_rate = _get_er_rate_from_matrix(rate_matrix)
     if er_rate is not None:
         return _er_transition_matrix(branch_length, er_rate, rate_matrix.shape[0])
-    matrix = expm(rate_matrix * float(branch_length))
-    matrix[matrix < 0.0] = np.maximum(matrix[matrix < 0.0], -(10**-12))
-    matrix = np.maximum(matrix, 0.0)
+    matrix = expm(rate_matrix * branch_length)
+    exponent_norm = float(np.linalg.norm(rate_matrix, ord=np.inf)) * branch_length
+    return _validated_transition_matrix(matrix, exponent_norm)
+
+
+def _validated_transition_matrix(matrix, exponent_norm):
+    if np.any(~np.isfinite(matrix)):
+        raise ValueError("Failed to calculate a finite Mk transition matrix.")
+    tolerance = min(
+        1e-8,
+        max(
+            1e-12,
+            512.0 * np.finfo(float).eps * max(1.0, exponent_norm),
+        ),
+    )
+    if float(np.min(matrix)) < -tolerance:
+        raise ValueError(
+            "Mk matrix exponentiation produced materially negative probabilities."
+        )
     row_sums = matrix.sum(axis=1)
-    for row_index, row_sum in enumerate(row_sums):
-        if row_sum > 0.0:
-            matrix[row_index, :] /= row_sum
+    if np.any(row_sums <= 0.0) or np.any(np.abs(row_sums - 1.0) > tolerance):
+        raise ValueError(
+            "Mk matrix exponentiation produced invalid transition-probability rows."
+        )
+    matrix = np.maximum(matrix, 0.0)
+    matrix /= matrix.sum(axis=1, keepdims=True)
     return matrix
 
 
@@ -457,17 +455,54 @@ def _initial_rate_value(tree, rate, rate_bounds):
     return min(max(value, lower), upper)
 
 
-def _fit_rate_matrix(
-    tree, model, states, likelihood_by_leaf, root_prior, rate=None, rate_bounds=None
+def _fit_custom_rate_matrix(
+    tree,
+    states,
+    likelihood_by_leaf,
+    rate_bounds,
+    fixed_rate_matrix,
+    prior_for,
 ):
-    if model not in SUPPORTED_MODELS:
-        raise ValueError("Unsupported '--model': {}".format(model))
-    rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
-    num_params = _num_rate_parameters(model, len(states))
+    if fixed_rate_matrix is None:
+        raise ValueError("--model CUSTOM requires --rate-matrix.")
+    rate_matrix = validate_rate_matrix(fixed_rate_matrix, num_states=len(states))
+    final_prior = prior_for(rate_matrix)
+    return {
+        "model": "CUSTOM",
+        "rates": np.array([], dtype=float),
+        "rate_matrix": rate_matrix,
+        "log_likelihood": _log_likelihood(
+            tree, likelihood_by_leaf, final_prior, rate_matrix
+        ),
+        "rate_estimated": False,
+        "rate_bounds": rate_bounds,
+        "root_prior": final_prior,
+        "fit_status": "fixed",
+    }
+
+
+def _fit_parametric_rate_matrix(
+    tree,
+    model,
+    states,
+    likelihood_by_leaf,
+    root_prior,
+    rate=None,
+    rate_bounds=None,
+    transition_graph=None,
+    root_prior_factory=None,
+):
+    def prior_for(matrix):
+        if root_prior_factory is None:
+            return root_prior
+        return root_prior_factory(matrix)
+
+    num_params = _num_rate_parameters(model, len(states), transition_graph)
     if num_params == 0:
-        rate_matrix = _build_rate_matrix(model, states, [])
+        rate_matrix = _build_rate_matrix(model, states, [], transition_graph)
+        final_prior = prior_for(rate_matrix)
         log_likelihood = _log_likelihood(
-            tree, likelihood_by_leaf, root_prior, rate_matrix
+            tree, likelihood_by_leaf, final_prior, rate_matrix
         )
         return {
             "model": model,
@@ -476,15 +511,18 @@ def _fit_rate_matrix(
             "log_likelihood": log_likelihood,
             "rate_estimated": False,
             "rate_bounds": rate_bounds,
+            "root_prior": final_prior,
+            "fit_status": "fixed",
         }
 
     if model == "ER" and rate is not None:
         fixed_rate = float(rate)
         if (not math.isfinite(fixed_rate)) or fixed_rate < 0.0:
             raise ValueError("'--rate' must be a non-negative finite number.")
-        rate_matrix = _build_rate_matrix(model, states, [fixed_rate])
+        rate_matrix = _build_rate_matrix(model, states, [fixed_rate], transition_graph)
+        final_prior = prior_for(rate_matrix)
         log_likelihood = _log_likelihood(
-            tree, likelihood_by_leaf, root_prior, rate_matrix
+            tree, likelihood_by_leaf, final_prior, rate_matrix
         )
         return {
             "model": model,
@@ -493,38 +531,144 @@ def _fit_rate_matrix(
             "log_likelihood": log_likelihood,
             "rate_estimated": False,
             "rate_bounds": rate_bounds,
+            "root_prior": final_prior,
+            "fit_status": "fixed",
         }
 
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
     lower_log = math.log(rate_bounds[0])
     upper_log = math.log(rate_bounds[1])
-    initial_log_rates = np.full(num_params, math.log(initial_rate), dtype=float)
+    initial_log_rate = math.log(initial_rate)
+
+    initial_matrix = _build_rate_matrix(
+        model, states, np.full(num_params, initial_rate), transition_graph
+    )
+    try:
+        initial_prior = prior_for(initial_matrix)
+        initial_log_likelihood = _log_likelihood(
+            tree, likelihood_by_leaf, initial_prior, initial_matrix
+        )
+    except (ValueError, ArithmeticError):
+        initial_log_likelihood = None
+    if initial_log_likelihood is not None and not math.isfinite(initial_log_likelihood):
+        raise ValueError(
+            "Observed states have zero likelihood under the selected transition "
+            "graph and root prior."
+        )
 
     def objective(log_rates):
-        rates = np.exp(log_rates)
-        rate_matrix = _build_rate_matrix(model, states, rates)
-        log_likelihood = _log_likelihood(
-            tree, likelihood_by_leaf, root_prior, rate_matrix
-        )
+        try:
+            rates = np.exp(log_rates)
+            rate_matrix = _build_rate_matrix(model, states, rates, transition_graph)
+            current_prior = prior_for(rate_matrix)
+            log_likelihood = _log_likelihood(
+                tree, likelihood_by_leaf, current_prior, rate_matrix
+            )
+        except (ValueError, ArithmeticError):
+            return 1e100
         if not math.isfinite(log_likelihood):
-            return 10**100
+            return 1e100
         return -log_likelihood
 
-    result = minimize(
-        objective,
-        initial_log_rates,
-        method="L-BFGS-B",
-        bounds=[(lower_log, upper_log)] * num_params,
-    )
-    if not result.success:
-        raise ValueError(
-            "Failed to estimate Mk model parameters: {}".format(result.message)
+    global_levels = list(np.linspace(lower_log, upper_log, 7))
+    starts = [np.full(num_params, value, dtype=float) for value in global_levels]
+    starts.append(np.full(num_params, initial_log_rate, dtype=float))
+    if num_params > 1:
+        lower_quartile = lower_log + 0.25 * (upper_log - lower_log)
+        upper_quartile = lower_log + 0.75 * (upper_log - lower_log)
+        starts.extend(
+            [
+                np.asarray(
+                    [
+                        lower_quartile if index % 2 == 0 else upper_quartile
+                        for index in range(num_params)
+                    ],
+                    dtype=float,
+                ),
+                np.asarray(
+                    [
+                        upper_quartile if index % 2 == 0 else lower_quartile
+                        for index in range(num_params)
+                    ],
+                    dtype=float,
+                ),
+                np.linspace(lower_quartile, upper_quartile, num_params),
+                np.linspace(upper_quartile, lower_quartile, num_params),
+            ]
         )
+        if num_params <= 4:
+            for index in range(num_params):
+                for value in (lower_quartile, upper_quartile):
+                    start = np.full(num_params, initial_log_rate, dtype=float)
+                    start[index] = value
+                    starts.append(start)
+    unique_starts = []
+    seen_starts = set()
+    for start in starts:
+        key = tuple(float(value) for value in start)
+        if key not in seen_starts:
+            unique_starts.append(start)
+            seen_starts.add(key)
+
+    candidates = []
+    failed_messages = []
+    for start in unique_starts:
+        result = minimize(
+            objective,
+            start,
+            method="L-BFGS-B",
+            bounds=[(lower_log, upper_log)] * num_params,
+        )
+        messages = [str(result.message)]
+        success = (
+            bool(result.success)
+            and math.isfinite(float(result.fun))
+            and np.all(np.isfinite(result.x))
+            and float(result.fun) < 1e99
+        )
+        if not success:
+            fallback = minimize(
+                objective,
+                start,
+                method="Powell",
+                bounds=[(lower_log, upper_log)] * num_params,
+                options={"xtol": 1e-8, "ftol": 1e-10, "maxiter": 500},
+            )
+            messages.append("Powell fallback: {}".format(fallback.message))
+            if (
+                bool(fallback.success)
+                and math.isfinite(float(fallback.fun))
+                and np.all(np.isfinite(fallback.x))
+                and float(fallback.fun) < 1e99
+            ):
+                result = fallback
+                success = True
+        if success:
+            candidates.append((float(result.fun), result, "; ".join(messages)))
+        else:
+            failed_messages.append("; ".join(messages))
+    if not candidates:
+        failure_summary = "; ".join(dict.fromkeys(failed_messages))
+        raise ValueError(
+            "Failed to estimate Mk model parameters: {}".format(
+                failure_summary or "no finite fit"
+            )
+        )
+    _, result, selected_message = min(candidates, key=lambda item: item[0])
     if (not math.isfinite(float(result.fun))) or np.any(~np.isfinite(result.x)):
         raise ValueError("Failed to estimate finite Mk model parameters.")
     rates = np.exp(result.x)
-    rate_matrix = _build_rate_matrix(model, states, rates)
-    log_likelihood = _log_likelihood(tree, likelihood_by_leaf, root_prior, rate_matrix)
+    rate_matrix = _build_rate_matrix(model, states, rates, transition_graph)
+    final_prior = prior_for(rate_matrix)
+    log_likelihood = _log_likelihood(tree, likelihood_by_leaf, final_prior, rate_matrix)
+    tolerance = 1e-5
+    num_rates_at_lower_bound = int(np.sum(rates <= rate_bounds[0] * (1.0 + tolerance)))
+    num_rates_at_upper_bound = int(np.sum(rates >= rate_bounds[1] * (1.0 - tolerance)))
+    statuses = []
+    if num_rates_at_lower_bound:
+        statuses.append("rate_lower_boundary")
+    if num_rates_at_upper_bound:
+        statuses.append("rate_upper_boundary")
     return {
         "model": model,
         "rates": rates,
@@ -533,8 +677,61 @@ def _fit_rate_matrix(
         "rate_estimated": True,
         "rate_bounds": rate_bounds,
         "optimizer_success": bool(result.success),
-        "optimizer_message": str(result.message),
+        "optimizer_message": (
+            f"deterministic multistart: {len(candidates)}/{len(unique_starts)} "
+            f"starts converged; {selected_message}"
+        ),
+        "optimizer_starts": len(unique_starts),
+        "optimizer_converged_starts": len(candidates),
+        "optimizer_failed_starts": len(failed_messages),
+        "num_rates_at_lower_bound": num_rates_at_lower_bound,
+        "num_rates_at_upper_bound": num_rates_at_upper_bound,
+        "fit_status": "+".join(statuses) if statuses else "ok",
+        "root_prior": final_prior,
     }
+
+
+def _fit_rate_matrix(
+    tree,
+    model,
+    states,
+    likelihood_by_leaf,
+    root_prior,
+    rate=None,
+    rate_bounds=None,
+    transition_graph=None,
+    fixed_rate_matrix=None,
+    root_prior_factory=None,
+):
+    if model not in SUPPORTED_MODELS:
+        raise ValueError("Unsupported '--model': {}".format(model))
+    rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
+
+    def prior_for(matrix):
+        if root_prior_factory is None:
+            return root_prior
+        return root_prior_factory(matrix)
+
+    if model == "CUSTOM":
+        return _fit_custom_rate_matrix(
+            tree,
+            states,
+            likelihood_by_leaf,
+            rate_bounds,
+            fixed_rate_matrix,
+            prior_for,
+        )
+    return _fit_parametric_rate_matrix(
+        tree=tree,
+        model=model,
+        states=states,
+        likelihood_by_leaf=likelihood_by_leaf,
+        root_prior=root_prior,
+        rate=rate,
+        rate_bounds=rate_bounds,
+        transition_graph=transition_graph,
+        root_prior_factory=root_prior_factory,
+    )
 
 
 def _compute_outside_likelihoods(
@@ -581,6 +778,33 @@ def _compute_log_outside_likelihoods(
     return outside
 
 
+def _root_prior_configuration(
+    root_prior_mode, states, observed_state_by_leaf, likelihood_by_leaf
+):
+    if root_prior_mode != "stationary":
+        return (
+            _get_root_prior(
+                root_prior_mode,
+                states,
+                observed_state_by_leaf,
+                likelihood_by_leaf,
+            ),
+            None,
+        )
+    root_prior = np.full(len(states), 1.0 / float(len(states)), dtype=float)
+
+    def root_prior_factory(matrix):
+        return _root_prior_for_matrix(
+            root_prior_mode,
+            states,
+            observed_state_by_leaf,
+            likelihood_by_leaf,
+            matrix,
+        )
+
+    return root_prior, root_prior_factory
+
+
 def compute_mk_marginals(
     tree,
     states,
@@ -590,8 +814,10 @@ def compute_mk_marginals(
     rate=None,
     root_prior_mode="equal",
     rate_bounds=None,
+    transition_graph=None,
+    fixed_rate_matrix=None,
 ):
-    root_prior = _get_root_prior(
+    root_prior, root_prior_factory = _root_prior_configuration(
         root_prior_mode, states, observed_state_by_leaf, likelihood_by_leaf
     )
     fit = _fit_rate_matrix(
@@ -602,7 +828,11 @@ def compute_mk_marginals(
         root_prior=root_prior,
         rate=rate,
         rate_bounds=DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds,
+        transition_graph=transition_graph,
+        fixed_rate_matrix=fixed_rate_matrix,
+        root_prior_factory=root_prior_factory,
     )
+    root_prior = fit.get("root_prior", root_prior)
     if not math.isfinite(fit["log_likelihood"]):
         raise ValueError(
             "The observed tip states have zero likelihood under the Mk model."
@@ -719,6 +949,12 @@ def _safe_column_state(state):
     return "{}{}".format(escape_prefix, state_text.encode("utf-8").hex())
 
 
+def _model_rate_bounds_text(fit):
+    if fit["model"] == "CUSTOM":
+        return ""
+    return "{},{}".format(fit["rate_bounds"][0], fit["rate_bounds"][1])
+
+
 def _build_model_table(states, root_prior_mode, fit):
     state_ids = [_safe_column_state(state) for state in states]
     row = {
@@ -731,7 +967,17 @@ def _build_model_table(states, root_prior_mode, fit):
         "root_prior_values": ",".join(str(float(value)) for value in fit["root_prior"]),
         "rate_estimated": bool(fit["rate_estimated"]),
         "log_likelihood": float(fit["log_likelihood"]),
-        "rate_bounds": "{},{}".format(fit["rate_bounds"][0], fit["rate_bounds"][1]),
+        "rate_bounds": _model_rate_bounds_text(fit),
+        "transition_graph": fit.get("transition_graph", "complete"),
+        "q_source": fit.get("rate_matrix_source", "estimated"),
+        "fit_status": fit.get("fit_status", ""),
+        "optimizer_success": fit.get("optimizer_success", ""),
+        "optimizer_message": fit.get("optimizer_message", ""),
+        "optimizer_starts": fit.get("optimizer_starts", ""),
+        "optimizer_converged_starts": fit.get("optimizer_converged_starts", ""),
+        "optimizer_failed_starts": fit.get("optimizer_failed_starts", ""),
+        "num_rates_at_lower_bound": fit.get("num_rates_at_lower_bound", 0),
+        "num_rates_at_upper_bound": fit.get("num_rates_at_upper_bound", 0),
     }
     if fit["model"] == "ER" and len(fit["rates"]) == 1:
         row["rate"] = float(fit["rates"][0])
@@ -831,45 +1077,33 @@ def _build_uniformization_context(rate_matrix, branch_length):
         raise ValueError(
             "Stochastic mapping requires a finite non-negative rate × time."
         )
-    max_n = int(max(10, num_states - 1, poisson.ppf(1.0 - 10**-12, lam)))
+    poisson_limit = float(poisson.ppf(1.0 - 10**-12, lam))
+    if not math.isfinite(poisson_limit):
+        raise ValueError(
+            "Stochastic mapping requires too many uniformization terms for "
+            "floating-point indexing."
+        )
+    max_n = int(max(10, num_states - 1, poisson_limit))
+    if max_n > _MAX_UNIFORMIZATION_TERMS:
+        raise ValueError(
+            "Stochastic mapping would require more than "
+            f"{_MAX_UNIFORMIZATION_TERMS:,} potential events on one branch; "
+            "reduce the rate/time scale or fitted rate bounds."
+        )
     r_matrix = np.eye(num_states, dtype=float) + (rate_matrix / omega)
     r_matrix = np.maximum(r_matrix, 0.0)
     r_matrix = r_matrix / r_matrix.sum(axis=1, keepdims=True)
-    powers = [np.eye(num_states, dtype=float)]
-    for _ in range(max_n):
-        powers.append(powers[-1].dot(r_matrix))
-    event_counts = np.arange(max_n + 1)
+    event_counts = np.arange(max_n + 1, dtype=np.int64)
     log_poisson = poisson.logpmf(event_counts, lam)
-    event_count_probabilities = dict()
-    for start_state in range(num_states):
-        for end_state in range(num_states):
-            bridge_probabilities = np.asarray(
-                [
-                    powers[event_count][start_state, end_state]
-                    for event_count in event_counts
-                ],
-                dtype=float,
-            )
-            valid = bridge_probabilities > 0.0
-            if not np.any(valid):
-                continue
-            log_weights = np.full(max_n + 1, -math.inf, dtype=float)
-            log_weights[valid] = log_poisson[valid] + np.log(
-                bridge_probabilities[valid]
-            )
-            normalizer = logsumexp(log_weights)
-            if not math.isfinite(normalizer):
-                continue
-            probabilities = np.exp(log_weights - normalizer)
-            event_count_probabilities[(start_state, end_state)] = (
-                _normalize_probability_vector(probabilities)
-            )
+    full_cache_bytes = 2 * (max_n + 1) * num_states * num_states * 8
+    cache_small_context = full_cache_bytes <= _MAX_CACHED_BACKWARD_BYTES
     return {
         "no_events": False,
         "r_matrix": r_matrix,
-        "powers": powers,
         "event_counts": event_counts,
-        "event_count_probabilities": event_count_probabilities,
+        "log_poisson": log_poisson,
+        "backward_by_end": {} if cache_small_context else None,
+        "bridge_probability_cache": {} if cache_small_context else None,
     }
 
 
@@ -895,12 +1129,8 @@ def _sample_bridge_event_count(
         context = _build_uniformization_context(rate_matrix, branch_length)
     else:
         context = uniformization_contexts[branch_length]
-    if context.get("no_events"):
-        return _constant_bridge_event_count(start_state, end_state)
-    probabilities = context["event_count_probabilities"].get((start_state, end_state))
-    if probabilities is None:
-        raise ValueError("No feasible stochastic bridge connects the requested states.")
-    return int(rng.choice(context["event_counts"], p=probabilities))
+    event_count, _ = _draw_bridge_event_count(start_state, end_state, context, rng)
+    return event_count
 
 
 def _constant_bridge_event_count(start_state, end_state):
@@ -915,6 +1145,53 @@ def _bridge_probabilities(weights):
     return _normalize_probability_vector(weights)
 
 
+def _backward_bridge_messages(context, end_state):
+    cache = context.get("backward_by_end")
+    if cache is not None and end_state in cache:
+        return cache[end_state]
+    r_matrix = context["r_matrix"]
+    num_states = r_matrix.shape[0]
+    max_n = len(context["event_counts"]) - 1
+    backward = np.empty((max_n + 1, num_states), dtype=float)
+    backward[0, :] = 0.0
+    backward[0, end_state] = 1.0
+    for event_count in range(max_n):
+        backward[event_count + 1, :] = r_matrix.dot(backward[event_count, :])
+    if cache is not None:
+        cache[end_state] = backward
+    return backward
+
+
+def _draw_bridge_event_count(start_state, end_state, context, rng):
+    if context.get("no_events"):
+        return _constant_bridge_event_count(start_state, end_state), None
+    cache = context.get("bridge_probability_cache")
+    cache_key = (start_state, end_state)
+    probabilities = None if cache is None else cache.get(cache_key)
+    backward = _backward_bridge_messages(context, end_state)
+    if probabilities is None:
+        bridge_probabilities = backward[:, start_state]
+        valid = bridge_probabilities > 0.0
+        if not np.any(valid):
+            raise ValueError(
+                "No feasible stochastic bridge connects the requested states."
+            )
+        log_weights = np.full(len(bridge_probabilities), -math.inf, dtype=float)
+        log_weights[valid] = context["log_poisson"][valid] + np.log(
+            bridge_probabilities[valid]
+        )
+        normalizer = float(logsumexp(log_weights))
+        if not math.isfinite(normalizer):
+            raise ValueError(
+                "No feasible stochastic bridge connects the requested states."
+            )
+        probabilities = _normalize_probability_vector(np.exp(log_weights - normalizer))
+        if cache is not None:
+            cache[cache_key] = probabilities
+    event_count = int(rng.choice(context["event_counts"], p=probabilities))
+    return event_count, backward
+
+
 def _sample_bridge_transition_counts(
     start_state,
     end_state,
@@ -924,28 +1201,22 @@ def _sample_bridge_transition_counts(
     uniformization_contexts=None,
 ):
     branch_length = float(branch_length)
-    event_count = _sample_bridge_event_count(
-        start_state,
-        end_state,
-        branch_length,
-        rate_matrix,
-        rng,
-        uniformization_contexts=uniformization_contexts,
+    if uniformization_contexts is None:
+        context = _build_uniformization_context(rate_matrix, branch_length)
+    else:
+        context = uniformization_contexts[branch_length]
+    event_count, backward = _draw_bridge_event_count(
+        start_state, end_state, context, rng
     )
     num_states = rate_matrix.shape[0]
     counts: defaultdict[Any, int] = defaultdict(int)
     if event_count == 0:
         return counts
-    if uniformization_contexts is None:
-        context = _build_uniformization_context(rate_matrix, branch_length)
-    else:
-        context = uniformization_contexts[branch_length]
     r_matrix = context["r_matrix"]
-    powers = context["powers"]
     current_state = start_state
     for step_index in range(event_count):
         remaining = event_count - step_index - 1
-        weights = r_matrix[current_state, :] * powers[remaining][:, end_state]
+        weights = r_matrix[current_state, :] * backward[remaining, :]
         probabilities = _bridge_probabilities(weights)
         next_state = int(rng.choice(np.arange(num_states), p=probabilities))
         if next_state != current_state:
@@ -1261,18 +1532,46 @@ def asr_main(args):
 
 def _run_discrete_asr(tree, trait_df, args, settings, targets):
     leaf_names = list(tree.leaf_names())
+    fixed_rate_matrix = None
+    states_arg = getattr(args, "states", None)
+    rate_matrix_source = (
+        "fixed:--rate"
+        if settings.model == "ER" and getattr(args, "rate", None) is not None
+        else "estimated"
+    )
+    if settings.model == "CUSTOM":
+        matrix_states, fixed_rate_matrix = read_rate_matrix(args.rate_matrix)
+        if (
+            states_arg not in (None, "")
+            and _parse_state_argument(states_arg) != matrix_states
+        ):
+            raise ValueError(
+                "--states must exactly match the state order in --rate-matrix."
+            )
+        states_arg = matrix_states
+        rate_matrix_source = f"fixed:{args.rate_matrix}"
     states, observed_state_by_leaf, likelihood_by_leaf = _read_tip_states(
         trait_path=args.trait,
         state_column=args.state_column,
         tree_leaf_names=leaf_names,
-        states_arg=getattr(args, "states", None),
+        states_arg=states_arg,
         missing_values_arg=getattr(args, "missing_values", None),
         ambiguous_separator=getattr(
             args, "ambiguous_separator", DEFAULT_AMBIGUOUS_SEPARATOR
         ),
         unmatched=getattr(args, "unmatched", "warn"),
         trait_df=trait_df,
+        state_source="--rate-matrix" if settings.model == "CUSTOM" else "--states",
     )
+    if settings.model == "CUSTOM":
+        transition_graph = None
+        transition_graph_source = "fixed-Q"
+    else:
+        transition_graph, transition_graph_source = read_transition_graph(
+            getattr(args, "transition_graph", None),
+            states,
+            state_source="--states" if states_arg not in (None, "") else "--trait",
+        )
     rate_bounds = _parse_rate_bounds(getattr(args, "rate_bounds", None))
     posterior_by_node, fit = compute_mk_marginals(
         tree=tree,
@@ -1283,8 +1582,22 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
         rate=getattr(args, "rate", None),
         root_prior_mode=settings.root_prior,
         rate_bounds=rate_bounds,
+        transition_graph=transition_graph,
+        fixed_rate_matrix=fixed_rate_matrix,
     )
+    fit["transition_graph"] = transition_graph_source
+    fit["rate_matrix_source"] = rate_matrix_source
     fit["trait_type_requested"] = getattr(args, "trait_type", "auto")
+    if fit["rate_estimated"] and (
+        fit.get("fit_status") != "ok" or fit.get("optimizer_failed_starts", 0)
+    ):
+        sys.stderr.write(
+            "Discrete ASR: Mk fit status={}; {}/{} optimizer starts converged.\n".format(
+                fit.get("fit_status", "unknown"),
+                fit.get("optimizer_converged_starts", 0),
+                fit.get("optimizer_starts", 0),
+            )
+        )
     table = _build_output_table(
         tree=tree,
         states=states,
@@ -1318,13 +1631,29 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
         list(tree.leaf_names()),
         getattr(args, "standard_error_column", None),
     )
-    posterior, fit = compute_bm_marginals(
-        tree,
-        observed,
-        sigma2=getattr(args, "sigma2", None),
-        standard_errors=errors,
-        _tree_validated=True,
-    )
+    if settings.model == "BM":
+        posterior, fit = compute_bm_marginals(
+            tree,
+            observed,
+            sigma2=getattr(args, "sigma2", None),
+            standard_errors=errors,
+            _tree_validated=True,
+        )
+    elif settings.model == "OU":
+        from nwkit.ou_asr import compute_ou_marginals, parse_alpha_bounds
+
+        posterior, fit = compute_ou_marginals(
+            tree,
+            observed,
+            alpha=getattr(args, "alpha", None),
+            sigma2=getattr(args, "sigma2", None),
+            theta=getattr(args, "theta", None),
+            alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
+            standard_errors=errors,
+            _tree_validated=True,
+        )
+    else:
+        raise ValueError(f"Unsupported continuous ASR model: {settings.model}.")
     selected = [
         node for node in tree.traverse() if _should_output_node(node, observed, targets)
     ]
@@ -1337,10 +1666,17 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
         trait=args.state_column,
         ci_level=settings.ci_level,
     )
-    if fit.sigma2_estimated and fit.fit_status != "ok":
+    if settings.model == "BM" and fit.sigma2_estimated and fit.fit_status != "ok":
         sys.stderr.write(
             f"Continuous ASR: sigma2=0 ({fit.fit_status}); intervals condition on this rate "
             "and exclude rate-estimation uncertainty.\n"
+        )
+    elif settings.model == "OU" and (
+        fit.fit_status != "ok" or not fit.optimizer_success
+    ):
+        sys.stderr.write(
+            f"Continuous ASR: OU fit status={fit.fit_status}; intervals condition "
+            "on fitted parameters and exclude parameter-estimation uncertainty.\n"
         )
     _write_table(table, args.outfile)
     if getattr(args, "model_out", None) not in (None, ""):

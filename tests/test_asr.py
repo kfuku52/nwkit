@@ -131,6 +131,38 @@ def test_unreachable_stochastic_bridge_is_rejected():
         asr._sample_bridge_event_count(0, 2, 1.0, matrix, np.random.default_rng(0))
 
 
+def test_uniformization_context_avoids_dense_power_history_at_high_event_count():
+    matrix = np.full((4, 4), 1.0 / 3.0)
+    np.fill_diagonal(matrix, -1.0)
+    context = asr._build_uniformization_context(matrix, 10_000.0)
+    assert "powers" not in context
+    assert "event_count_probabilities" not in context
+    assert context["backward_by_end"] is None
+    assert len(context["event_counts"]) > 10_000
+
+
+def test_uniformization_rejects_intractable_single_branch_event_history():
+    matrix = np.array([[-1.0, 1.0], [1.0, -1.0]])
+    with pytest.raises(ValueError, match="more than 2,000,000 potential events"):
+        asr._build_uniformization_context(matrix, 2_000_001.0)
+
+
+def test_uniformized_two_state_bridge_samples_only_feasible_event_parity():
+    matrix = np.array([[-1.0, 1.0], [1.0, -1.0]])
+    contexts = {2.0: asr._build_uniformization_context(matrix, 2.0)}
+    rng = np.random.default_rng(123)
+    draws = np.array(
+        [
+            asr._sample_bridge_event_count(
+                0, 1, 2.0, matrix, rng, uniformization_contexts=contexts
+            )
+            for _ in range(5_000)
+        ]
+    )
+    assert np.all(draws % 2 == 1)
+    assert float(np.mean(draws)) == pytest.approx(2.0 / math.tanh(2.0), abs=0.06)
+
+
 @pytest.mark.parametrize(
     "tree_text, expected_names",
     [

@@ -1,0 +1,252 @@
+"""Transition structures and fixed generators for discrete ASR."""
+
+import math
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+
+_ROUNDOFF_FACTOR = 128.0
+
+
+def _roundoff_close(residual, scale):
+    residual = np.asarray(residual, dtype=float)
+    scale = np.asarray(scale, dtype=float)
+    tolerance = _ROUNDOFF_FACTOR * np.finfo(float).eps * scale
+    return np.abs(residual) <= tolerance
+
+
+def _validated_graph(graph, num_states):
+    graph = np.asarray(graph, dtype=bool)
+    if graph.shape != (num_states, num_states):
+        raise ValueError("Transition graph dimensions do not match the state space.")
+    if np.any(np.diag(graph)):
+        raise ValueError("A transition graph cannot contain self edges.")
+    return graph
+
+
+def complete_transition_graph(num_states):
+    graph = np.ones((num_states, num_states), dtype=bool)
+    np.fill_diagonal(graph, False)
+    return graph
+
+
+def ordered_transition_graph(num_states):
+    graph = np.zeros((num_states, num_states), dtype=bool)
+    for index in range(max(0, num_states - 1)):
+        graph[index, index + 1] = True
+        graph[index + 1, index] = True
+    return graph
+
+
+def read_transition_graph(specification, states, *, state_source="--states"):
+    """Return an allowed directed-edge mask and a reproducible source label."""
+
+    if specification in (None, "", "complete"):
+        return complete_transition_graph(len(states)), "complete"
+    if specification == "ordered":
+        return ordered_transition_graph(len(states)), "ordered"
+
+    path = Path(str(specification))
+    try:
+        table = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.ParserError) as exc:
+        raise ValueError(f"Failed to read '--transition-graph': {path}") from exc
+    required = {"from_state", "to_state"}
+    if not required.issubset(table.columns):
+        raise ValueError(
+            "'--transition-graph' must be a TSV edge list with from_state and "
+            "to_state columns."
+        )
+    state_to_index = {state: index for index, state in enumerate(states)}
+    graph = np.zeros((len(states), len(states)), dtype=bool)
+    seen = set()
+    for row in table.itertuples(index=False):
+        source = str(row.from_state)
+        target = str(row.to_state)
+        if source not in state_to_index or target not in state_to_index:
+            unknown = source if source not in state_to_index else target
+            raise ValueError(
+                "State in '--transition-graph' is absent from the state space "
+                f"defined by '{state_source}': {unknown}"
+            )
+        if source == target:
+            raise ValueError("'--transition-graph' cannot contain self edges.")
+        edge = (source, target)
+        if edge in seen:
+            raise ValueError(
+                f"'--transition-graph' contains a duplicated edge: {source} -> {target}"
+            )
+        seen.add(edge)
+        graph[state_to_index[source], state_to_index[target]] = True
+    if not np.any(graph):
+        raise ValueError("'--transition-graph' must contain at least one edge.")
+    return graph, str(path)
+
+
+def parameter_labels(model, states, graph=None):
+    graph = (
+        complete_transition_graph(len(states))
+        if graph is None
+        else _validated_graph(graph, len(states))
+    )
+    if model == "ER":
+        return [("all", "all")] if np.any(graph) else []
+    if model == "SYM":
+        if not np.array_equal(graph, graph.T):
+            raise ValueError("SYM requires a symmetric '--transition-graph'.")
+        return [
+            (states[i], states[j])
+            for i in range(len(states))
+            for j in range(i + 1, len(states))
+            if graph[i, j]
+        ]
+    if model == "ARD":
+        return [
+            (states[i], states[j])
+            for i in range(len(states))
+            for j in range(len(states))
+            if graph[i, j]
+        ]
+    if model == "CUSTOM":
+        return []
+    raise ValueError(f"Unsupported '--model': {model}")
+
+
+def build_rate_matrix(model, states, rates, graph=None):
+    graph = (
+        complete_transition_graph(len(states))
+        if graph is None
+        else _validated_graph(graph, len(states))
+    )
+    labels = parameter_labels(model, states, graph)
+    rates = np.asarray(rates, dtype=float)
+    if len(rates) != len(labels):
+        raise ValueError(f"Unexpected number of rate parameters for model '{model}'.")
+    if np.any(~np.isfinite(rates)) or np.any(rates < 0.0):
+        raise ValueError("Mk rates must be non-negative finite numbers.")
+    matrix = np.zeros((len(states), len(states)), dtype=float)
+    if model == "ER" and labels:
+        matrix[graph] = rates[0]
+    elif model == "SYM":
+        state_to_index = {state: index for index, state in enumerate(states)}
+        for rate, (source, target) in zip(rates, labels, strict=True):
+            i, j = state_to_index[source], state_to_index[target]
+            matrix[i, j] = matrix[j, i] = rate
+    elif model == "ARD":
+        state_to_index = {state: index for index, state in enumerate(states)}
+        for rate, (source, target) in zip(rates, labels, strict=True):
+            matrix[state_to_index[source], state_to_index[target]] = rate
+    elif model != "CUSTOM":
+        raise ValueError(f"Unsupported '--model': {model}")
+    np.fill_diagonal(matrix, -matrix.sum(axis=1))
+    return matrix
+
+
+def read_rate_matrix(path):
+    """Read a labelled TSV generator, deriving zero diagonals when requested."""
+
+    try:
+        table = pd.read_csv(path, sep="\t", dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.ParserError) as exc:
+        raise ValueError(f"Failed to read '--rate-matrix': {path}") from exc
+    if len(table.columns) < 2 or table.columns[0] != "state":
+        raise ValueError(
+            "'--rate-matrix' must have 'state' as its first column followed by "
+            "one column per state."
+        )
+    states = [str(column) for column in table.columns[1:]]
+    row_states = [str(value) for value in table["state"]]
+    if len(states) == 0 or len(states) != len(set(states)):
+        raise ValueError("'--rate-matrix' state columns must be non-empty and unique.")
+    if row_states != states:
+        raise ValueError(
+            "'--rate-matrix' row states must exactly match its state columns in order."
+        )
+    try:
+        matrix = table[states].to_numpy(dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("'--rate-matrix' entries must be numeric.") from exc
+    if matrix.shape != (len(states), len(states)) or np.any(~np.isfinite(matrix)):
+        raise ValueError("'--rate-matrix' must contain a finite square matrix.")
+    off_diagonal = matrix.copy()
+    np.fill_diagonal(off_diagonal, 0.0)
+    if np.any(off_diagonal < 0.0):
+        raise ValueError("'--rate-matrix' off-diagonal rates must be non-negative.")
+    expected_diagonal = -off_diagonal.sum(axis=1)
+    diagonal = np.diag(matrix)
+    if np.all(diagonal == 0.0):
+        matrix = off_diagonal
+        np.fill_diagonal(matrix, expected_diagonal)
+    else:
+        diagonal_scale = np.abs(diagonal) + np.abs(expected_diagonal)
+        valid_diagonal = _roundoff_close(diagonal - expected_diagonal, diagonal_scale)
+        if np.all(valid_diagonal):
+            return states, validate_rate_matrix(matrix)
+        raise ValueError(
+            "'--rate-matrix' diagonals must be zero (to derive them) or the "
+            "negative row sums of off-diagonal rates."
+        )
+    return states, validate_rate_matrix(matrix)
+
+
+def validate_rate_matrix(rate_matrix, *, num_states=None):
+    """Validate and copy a finite continuous-time Markov generator."""
+
+    try:
+        matrix = np.asarray(rate_matrix, dtype=float)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("The rate matrix must be numeric.") from exc
+    if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1] or matrix.shape[0] == 0:
+        raise ValueError("A non-empty square rate matrix is required.")
+    if num_states is not None and matrix.shape != (num_states, num_states):
+        raise ValueError("'--rate-matrix' dimensions do not match the state space.")
+    if np.any(~np.isfinite(matrix)):
+        raise ValueError("The rate matrix must be finite.")
+    off_diagonal = matrix.copy()
+    np.fill_diagonal(off_diagonal, 0.0)
+    if np.any(off_diagonal < 0.0) or np.any(np.diag(matrix) > 0.0):
+        raise ValueError(
+            "A rate matrix requires non-negative off-diagonals and non-positive diagonals."
+        )
+    row_scale = np.sum(np.abs(matrix), axis=1)
+    if not np.all(_roundoff_close(matrix.sum(axis=1), row_scale)):
+        raise ValueError("Rate-matrix rows must sum to zero.")
+    return matrix.copy()
+
+
+def stationary_distribution(rate_matrix):
+    """Return the unique stationary distribution of a finite CTMC generator."""
+
+    matrix = validate_rate_matrix(rate_matrix)
+    system = matrix.T.copy()
+    system[-1, :] = 1.0
+    target = np.zeros(matrix.shape[0], dtype=float)
+    target[-1] = 1.0
+    try:
+        distribution = np.linalg.solve(system, target)
+    except np.linalg.LinAlgError as exc:
+        raise ValueError(
+            "--root-prior stationary requires a unique stationary distribution."
+        ) from exc
+    probability_tolerance = _ROUNDOFF_FACTOR * np.finfo(float).eps
+    residual_scale = float(np.linalg.norm(distribution, ord=1)) * float(
+        np.linalg.norm(matrix, ord=np.inf)
+    )
+    residual_tolerance = _ROUNDOFF_FACTOR * np.finfo(float).eps * residual_scale
+    residual = float(np.linalg.norm(distribution @ matrix, ord=np.inf))
+    if (
+        np.any(distribution < -probability_tolerance)
+        or not math.isclose(
+            float(distribution.sum()),
+            1.0,
+            rel_tol=0.0,
+            abs_tol=probability_tolerance,
+        )
+        or residual > residual_tolerance
+    ):
+        raise ValueError(
+            "--root-prior stationary requires a unique valid stationary distribution."
+        )
+    distribution = np.maximum(distribution, 0.0)
+    return distribution / distribution.sum()

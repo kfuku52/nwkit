@@ -60,6 +60,35 @@ def _minimize_variance_components(*args, **kwargs):
         return minimize(*args, **kwargs)
 
 
+def _select_converged_variance_result(evaluate, candidates, bounds):
+    best_finite = min(candidates, key=lambda candidate: float(candidate.fun))
+    if not best_finite.success:
+        fallback = _minimize_variance_components(
+            evaluate,
+            best_finite.x,
+            method="Powell",
+            bounds=bounds,
+            options={"maxiter": 5000},
+        )
+        if math.isfinite(float(fallback.fun)) and np.isfinite(fallback.x).all():
+            candidates.append(fallback)
+    converged = [
+        candidate
+        for candidate in candidates
+        if candidate.success
+        and math.isfinite(float(candidate.fun))
+        and np.isfinite(candidate.x).all()
+    ]
+    if not converged:
+        messages = "; ".join(
+            dict.fromkeys(str(candidate.message) for candidate in candidates)
+        )
+        raise ValueError(
+            "Variance-component optimization did not converge: {}".format(messages)
+        )
+    return min(converged, key=lambda candidate: float(candidate.fun))
+
+
 RESPONSE_REQUIRED_COLUMNS = {
     "tree_id",
     "gene_clade_id",
@@ -1756,25 +1785,7 @@ def _profile_covariance_fit(
             candidates.append(result)
     if not candidates:
         raise ValueError("Variance-component optimization failed to find a finite fit.")
-    result = min(candidates, key=lambda candidate: float(candidate.fun))
-    if not result.success:
-        fallback = _minimize_variance_components(
-            evaluate,
-            result.x,
-            method="Powell",
-            bounds=bounds,
-            options={"maxiter": 5000},
-        )
-        if math.isfinite(float(fallback.fun)) and float(fallback.fun) <= float(
-            result.fun
-        ):
-            result = fallback
-    if not result.success:
-        raise ValueError(
-            "Variance-component optimization did not converge: {}".format(
-                result.message
-            )
-        )
+    result = _select_converged_variance_result(evaluate, candidates, bounds)
     details = evaluate(result.x, return_details=True)
     if not isinstance(details, dict):
         raise ValueError("Variance-component optimization produced an invalid fit.")

@@ -4,6 +4,41 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.42.0] - 2026-09-01
+
+### Added
+
+- Stationary-root OU1 ancestral reconstruction for continuous traits, with
+  fixed or ML-estimated attraction, optimum, and diffusion parameters; known
+  measurement errors; linear-time all-node Gaussian smoothing; transparent
+  optimizer/boundary metadata; and conditional TSV/NHX intervals.
+- Ordered or directed transition graphs for discrete ER/SYM/ARD models, fixed
+  labelled custom Q matrices, and stationary discrete root priors derived from
+  the fitted or fixed generator. These structures also drive stochastic maps.
+
+### Changed
+
+- ASR model defaults, valid priors, and trait-mode compatibility now come from
+  one registry. Existing complete-graph ER/SYM/ARD and flat-root BM defaults and
+  outputs remain compatible.
+- OU theta is profiled exactly and covariance fitting now searches deterministic
+  grids, competing basins, and exact boundaries; strong-attraction propagation,
+  constant traits, competitive-only optimizer fallbacks, and observation/position
+  metadata are handled explicitly.
+- Structured Mk rate fitting now uses deterministic multistart optimization and
+  reports convergence and rate-boundary metadata. Fixed-Q validation uses
+  scale-relative generator tolerances, and long-branch matrix-exponential
+  roundoff is distinguished from material invalid probabilities.
+- Stochastic mapping no longer stores every dense uniformization power and all
+  endpoint distributions for high-event branches, reducing persistent memory
+  while retaining seeded results in the cached low-event path.
+
+### Fixed
+
+- Variance-component multistart fitting now selects the best converged result,
+  so a marginally lower non-converged endpoint cannot mask valid primary or
+  Powell solutions on different Python/SciPy platforms.
+
 ## [0.41.0] - 2026-09-01
 
 ### Added

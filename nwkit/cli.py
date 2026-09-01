@@ -3,6 +3,7 @@ import math
 import sys
 
 from nwkit import __version__
+from nwkit.asr_models import model_names
 from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES_CSV, get_stdin_input_options
 from nwkit.model_specs import (
     CONTRAST_EVOLUTION_MODELS,
@@ -474,7 +475,7 @@ def command_asr(args):
 
 pasr = subparsers.add_parser(
     "asr",
-    help="Infer ancestral traits and impute missing tips under discrete Mk or continuous Brownian models",
+    help="Infer ancestral traits and impute missing tips under discrete Mk or continuous BM/OU models",
     parents=[p_tree_input, p_table_output, p_tip_table_policy],
 )
 pasr.add_argument(
@@ -515,18 +516,20 @@ pasr.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Optional comma-separated state order. Unlisted observed states are rejected.",
+    help="default=%(default)s: Optional comma-separated state order. Unlisted observed states are rejected; "
+    "required with --transition-graph ordered.",
 )
 pasr.add_argument(
     "--model",
-    metavar="ER|SYM|ARD|BM",
+    metavar="ER|SYM|ARD|CUSTOM|BM|OU",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["ER", "SYM", "ARD", "BM"],
+    choices=model_names(),
     help="default=ER for discrete, BM for continuous: ER uses one shared off-diagonal rate, "
-    "SYM uses symmetric pairwise rates, ARD uses all rates different, and BM is Brownian motion.",
+    "SYM uses symmetric pairwise rates, ARD uses all rates different, CUSTOM reads a fixed Q, "
+    "BM is Brownian motion, and OU is a single-optimum Ornstein-Uhlenbeck model.",
 )
 pasr.add_argument(
     "--rate",
@@ -549,17 +552,38 @@ pasr.add_argument(
     help="default=1e-9,1e3: Positive bounds used when estimating Mk rates.",
 )
 pasr.add_argument(
+    "--transition-graph",
+    "--transition_graph",
+    dest="transition_graph",
+    metavar="complete|ordered|PATH",
+    default=None,
+    type=str,
+    help="Discrete ER/SYM/ARD only: Allowed transitions. 'ordered' connects adjacent "
+    "explicit --states bidirectionally; PATH is a TSV edge list with from_state and to_state columns.",
+)
+pasr.add_argument(
+    "--rate-matrix",
+    "--rate_matrix",
+    dest="rate_matrix",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Discrete CUSTOM only: Labelled TSV Q matrix. The first column is state; "
+    "zero diagonals are replaced by negative off-diagonal row sums.",
+)
+pasr.add_argument(
     "--root-prior",
     "--root_prior",
     dest="root_prior",
-    metavar="equal|empirical|flat",
+    metavar="equal|empirical|stationary|flat",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["equal", "empirical", "flat"],
-    help="default=equal for discrete, flat for continuous: Discrete root-state frequencies "
-    "or a flat prior on the continuous root value; independent of --input-rooted.",
+    choices=["equal", "empirical", "stationary", "flat"],
+    help="default=equal for discrete, flat for BM, stationary for OU: Discrete root-state frequencies "
+    "or a model-specific continuous root prior; stationary uses the fitted/fixed process equilibrium. "
+    "Independent of --input-rooted.",
 )
 pasr.add_argument(
     "--ambiguous-separator",
@@ -599,8 +623,31 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="Continuous only: Fixed Brownian variance rate in squared trait units per branch-length unit. "
-    "If omitted, estimate it by REML, including the zero boundary.",
+    help="Continuous only: Fixed diffusion variance rate in squared trait units per branch-length unit. "
+    "If omitted, estimate it (BM uses REML, including the zero boundary).",
+)
+pasr.add_argument(
+    "--alpha",
+    metavar="FLOAT",
+    default=None,
+    type=nonnegative_finite_float,
+    help="OU only: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
+)
+pasr.add_argument(
+    "--alpha-bounds",
+    "--alpha_bounds",
+    dest="alpha_bounds",
+    metavar="MIN,MAX",
+    default=None,
+    type=str,
+    help="OU only: Positive bounds for estimating alpha. Default scales to tree depth.",
+)
+pasr.add_argument(
+    "--theta",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="OU only: Fixed process optimum in trait units. If omitted, estimate it.",
 )
 pasr.add_argument(
     "--standard-error-column",
@@ -620,7 +667,8 @@ pasr.add_argument(
     default=None,
     type=finite_float,
     help="default=0.95 for continuous: Interval coverage strictly between zero and one. "
-    "Intervals condition on sigma2 and the input tree; rate/tree uncertainty is excluded.",
+    "Intervals condition on fitted/fixed model parameters and the input tree; "
+    "parameter/tree uncertainty is excluded.",
 )
 pasr.add_argument(
     "--model-out",
@@ -632,7 +680,7 @@ pasr.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Optional TSV reporting the selected trait type, model, rates, "
-    "and likelihood metadata (restricted likelihood for BM).",
+    "and likelihood metadata (restricted likelihood for BM, ordinary ML for OU).",
 )
 pasr.add_argument(
     "--tree-out",

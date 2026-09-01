@@ -248,6 +248,8 @@ def test_all_missing_explicit_continuous_fails_even_with_fixed_rate(tmp_path):
         ["--root-prior", "equal"],
         ["--rate", "0.2"],
         ["--rate-bounds", "0.01,1"],
+        ["--transition-graph", "ordered"],
+        ["--rate-matrix", "q.tsv"],
         ["--output", "map"],
         ["--ambiguous-separator", "|"],
         ["--stochastic-map-out", "maps.tsv"],
@@ -271,6 +273,9 @@ def test_discrete_options_are_not_silently_ignored_in_continuous_mode(
         ["--sigma2", "1"],
         ["--standard-error-column", "se"],
         ["--ci-level", "0.95"],
+        ["--alpha", "0.5"],
+        ["--alpha-bounds", "0.01,1"],
+        ["--theta", "0"],
         ["--model", "BM"],
         ["--root-prior", "flat"],
         ["--output", "summary"],
@@ -405,6 +410,7 @@ def test_nhx_roundtrip_preserves_rooting_numeric_names_and_uncertainties(
         row = table[table.name.astype(str) == str(node.name)].iloc[0]
         assert float(node.props["asr_mean"]) == pytest.approx(row["mean"], rel=1e-5)
         assert node.props["asr_trait_type"] == "continuous"
+        assert "asr_model" not in node.props
         if annotation == "mean":
             assert "asr_sd" not in node.props
         else:

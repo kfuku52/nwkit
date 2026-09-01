@@ -11,6 +11,7 @@ import pandas as pd
 import pytest
 from ete4 import Tree
 from scipy import sparse
+from scipy.optimize import OptimizeResult
 
 import nwkit.output_transaction as output_transaction_mod
 from nwkit import regress as regression_mod
@@ -122,6 +123,40 @@ def _response_row(event_index, value, *, gene_index=1, tree_id="OG1"):
         "raw_contrast": value,
         "contrast_variance": 1.0,
     }
+
+
+def test_variance_optimizer_selects_a_converged_candidate(monkeypatch):
+    converged = OptimizeResult(
+        success=True,
+        fun=1.0,
+        x=np.asarray([0.0]),
+        message="converged primary",
+    )
+    failed = OptimizeResult(
+        success=False,
+        fun=0.9,
+        x=np.asarray([0.1]),
+        message="abnormal primary",
+    )
+    fallback = OptimizeResult(
+        success=True,
+        fun=1.1,
+        x=np.asarray([0.2]),
+        message="converged fallback",
+    )
+    monkeypatch.setattr(
+        regression_mod,
+        "_minimize_variance_components",
+        lambda *args, **kwargs: fallback,
+    )
+
+    selected = regression_mod._select_converged_variance_result(
+        lambda values: float(np.sum(np.square(values))),
+        [converged, failed],
+        [(-1.0, 1.0)],
+    )
+
+    assert selected is converged
 
 
 def _sampling_covariance_table(response, matrix):
