@@ -20,10 +20,27 @@ _MODEL_DEFINITIONS = (
         "ARD", "discrete", "equal", ("equal", "empirical", "stationary")
     ),
     AsrModelDefinition(
+        "F81", "discrete", "stationary", ("equal", "empirical", "stationary")
+    ),
+    AsrModelDefinition(
+        "GTR", "discrete", "stationary", ("equal", "empirical", "stationary")
+    ),
+    AsrModelDefinition(
+        "MK-REGIME", "discrete", "equal", ("equal", "empirical", "stationary")
+    ),
+    AsrModelDefinition(
+        "HRM", "discrete", "equal", ("equal", "empirical", "stationary")
+    ),
+    AsrModelDefinition(
         "CUSTOM", "discrete", "equal", ("equal", "empirical", "stationary")
     ),
     AsrModelDefinition("BM", "continuous", "flat", ("flat",)),
+    AsrModelDefinition("BMS", "continuous", "flat", ("flat",)),
+    AsrModelDefinition("EB", "continuous", "flat", ("flat",)),
+    AsrModelDefinition("BM-DRIFT", "continuous", "flat", ("flat",)),
+    AsrModelDefinition("MV-BM", "continuous", "flat", ("flat",)),
     AsrModelDefinition("OU", "continuous", "stationary", ("stationary",)),
+    AsrModelDefinition("OUM", "continuous", "stationary", ("stationary",)),
 )
 
 MODEL_REGISTRY = {definition.name: definition for definition in _MODEL_DEFINITIONS}

@@ -4,6 +4,30 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Expanded discrete ASR with F81 and GTR frequency models, jointly fitted
+  branch-regime Mk generators, and hidden-rate models whose latent classes are
+  marginalized in standard output and projected out of stochastic maps.
+- Expanded continuous ASR with branch-regime Brownian rates (BMS),
+  branch-regime OU optima (OUM), exponential early-burst rates, directional
+  Brownian drift, and complete-case multivariate Brownian covariance inference.
+  New regime, covariance, model, and NHX outputs retain parameter, likelihood,
+  boundary, optimizer, and conditional-uncertainty metadata.
+
+### Changed
+
+- Continuous ASR and phylogenetic regression now derive BM, OU, and
+  exponential rate-change branches from one linear-Gaussian tree-process layer.
+  Flat, fixed, and stationary root semantics and optional covariance
+  normalization remain explicit, so ASR polytomies/zero edges and regression
+  covariance conventions retain their existing behavior.
+- `nwkit asr --state-column` accepts comma-separated traits for MV-BM, while
+  scalar/discrete behavior and automatic trait-type selection remain unchanged.
+- Regime models use one validated branch-ID map shared across discrete and
+  continuous inference, including an explicit root regime for stationary-root
+  definitions.
+
 ## [0.42.0] - 2026-09-01
 
 ### Added

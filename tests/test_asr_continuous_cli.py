@@ -256,6 +256,7 @@ def test_all_missing_explicit_continuous_fails_even_with_fixed_rate(tmp_path):
         ["--n-sim", "100"],
         ["--threads", "1"],
         ["--seed", "1"],
+        ["--hidden-categories", "2"],
         ["--tree-annotation", "map"],
     ],
 )
@@ -276,6 +277,10 @@ def test_discrete_options_are_not_silently_ignored_in_continuous_mode(
         ["--alpha", "0.5"],
         ["--alpha-bounds", "0.01,1"],
         ["--theta", "0"],
+        ["--eb-rate", "-0.2"],
+        ["--eb-rate-bounds=-1,1"],
+        ["--drift", "0.1"],
+        ["--covariance-out", "covariance.tsv"],
         ["--model", "BM"],
         ["--root-prior", "flat"],
         ["--output", "summary"],
@@ -304,6 +309,29 @@ def test_mode_mismatch_guidance_points_to_the_other_trait_type(tmp_path):
             "leaf_name\tvalue\nA\tx\nB\ty\nC\tx\n",
             "--sigma2",
             "1",
+        )
+
+
+@pytest.mark.parametrize(
+    "model,text",
+    [
+        ("MK-REGIME", "leaf_name\tvalue\nA\tx\nB\ty\nC\tx\n"),
+        ("BMS", "leaf_name\tvalue\nA\t0\nB\t1\nC\t2\n"),
+        ("OUM", "leaf_name\tvalue\nA\t0\nB\t1\nC\t2\n"),
+    ],
+)
+def test_regime_models_require_an_explicit_branch_map(tmp_path, model, text):
+    with pytest.raises(ValueError, match="requires --regime-map"):
+        run_asr(tmp_path, text, "--model", model)
+
+
+def test_regime_map_is_not_silently_accepted_by_nonregime_model(tmp_path):
+    with pytest.raises(ValueError, match="requires a regime model"):
+        run_asr(
+            tmp_path,
+            "leaf_name\tvalue\nA\t0\nB\t1\nC\t2\n",
+            "--regime-map",
+            str(tmp_path / "regimes.tsv"),
         )
 
 

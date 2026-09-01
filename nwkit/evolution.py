@@ -7,9 +7,14 @@ from typing import Any, Callable
 
 import numpy as np
 import pandas as pd
-from scipy import sparse
 
-from nwkit.clade_index import LcaIndex
+from nwkit.gaussian_tree import (
+    GaussianRootPrior,
+    GaussianTreeProcess,
+    brownian_transition,
+    exponential_rate_edge_variance,
+    ou_transition,
+)
 from nwkit.model_specs import (
     CONTRAST_EVOLUTION_MODELS as CONTRAST_EVOLUTION_MODELS,
 )
@@ -63,8 +68,32 @@ class EvolutionaryCovarianceFactory:
             branch_length=self.branch_length,
         )
 
+    def process(
+        self,
+        parameter: float | None,
+        *,
+        root_mode: str = "fixed",
+        root_mean: float = 0.0,
+        root_variance: float | None = None,
+    ) -> GaussianTreeProcess:
+        """Return the shared branch-process representation behind this factory."""
 
-def _base_edge_lengths(tree, branch_length: str) -> dict[Any, float]:
+        if self.model == "custom":
+            raise ValueError("Custom covariance has no tree-process representation.")
+        return build_evolutionary_process(
+            self.tree,
+            model=self.model,
+            parameter=parameter,
+            branch_length=self.branch_length,
+            root_mode=root_mode,
+            root_mean=root_mean,
+            root_variance=root_variance,
+        )
+
+
+def _base_edge_lengths(
+    tree, branch_length: str, *, allow_zero: bool = False
+) -> dict[Any, float]:
     if branch_length not in {"original", "unit"}:
         raise ValueError("Unsupported branch-length mode: {}.".format(branch_length))
     lengths: dict[Any, float] = {}
@@ -79,10 +108,12 @@ def _base_edge_lengths(tree, branch_length: str) -> dict[Any, float]:
             value = float(node.dist)
         except (TypeError, ValueError, OverflowError) as exc:
             raise ValueError("Tree branch lengths must be numeric.") from exc
-        if not math.isfinite(value) or value <= 0.0:
+        if not math.isfinite(value) or value < 0.0 or (value == 0.0 and not allow_zero):
             raise ValueError(
-                "Evolutionary models require positive finite non-root branch lengths; "
-                "use unit branch lengths to ignore input lengths."
+                "Evolutionary models require {} finite non-root branch lengths; "
+                "use unit branch lengths to ignore input lengths.".format(
+                    "non-negative" if allow_zero else "positive"
+                )
             )
         lengths[node] = value
     return lengths
@@ -216,6 +247,7 @@ def transformed_edge_variances(
     model: str = "brownian",
     parameter: float | None = None,
     branch_length: str = "original",
+    allow_zero: bool = False,
 ) -> dict[Any, float]:
     """Return Brownian edge variances equivalent to a supported model."""
     if branch_length not in {"original", "unit"}:
@@ -233,7 +265,7 @@ def transformed_edge_variances(
             node: 0.0 if node.is_root or not node.is_leaf else 1.0
             for node in tree.traverse()
         }
-    base_edges = _base_edge_lengths(tree, branch_length)
+    base_edges = _base_edge_lengths(tree, branch_length, allow_zero=allow_zero)
     if model == "brownian":
         return base_edges
     if model == "kappa":
@@ -265,6 +297,18 @@ def transformed_edge_variances(
                 transformed[node] = parameter * base_edges[node]
         return transformed
     assert parameter is not None
+    if model in {"eb", "acdc"}:
+        base_depths = _depths_from_edges(tree, base_edges)
+        return {
+            node: (
+                0.0
+                if node.is_root
+                else exponential_rate_edge_variance(
+                    base_depths[node.up], base_edges[node], parameter
+                )
+            )
+            for node in tree.traverse()
+        }
     transformed_depths = _transformed_node_depths(
         tree,
         model,
@@ -291,29 +335,6 @@ def transformed_edge_variances(
         if value < 0.0:
             edges[node] = 0.0
     return edges
-
-
-def _direct_ou_covariance(
-    tree,
-    leaves,
-    base_depths: dict[Any, float],
-    alpha: float,
-) -> np.ndarray:
-    lca = LcaIndex(tree)
-    size = len(leaves)
-    covariance = np.zeros((size, size), dtype=float)
-    for first, first_leaf in enumerate(leaves):
-        for second in range(first, size):
-            second_leaf = leaves[second]
-            shared = base_depths[lca.common_ancestor(first_leaf, second_leaf)]
-            ancestral_variance = -math.expm1(-2.0 * alpha * shared) / (2.0 * alpha)
-            independent_distance = (
-                base_depths[first_leaf] + base_depths[second_leaf] - 2.0 * shared
-            )
-            value = ancestral_variance * math.exp(-alpha * independent_distance)
-            covariance[first, second] = value
-            covariance[second, first] = value
-    return covariance
 
 
 def validate_custom_covariance(matrix, leaf_names) -> np.ndarray:
@@ -399,6 +420,98 @@ def read_custom_covariance(path: str, leaf_names) -> np.ndarray:
     return validate_custom_covariance(numeric, leaf_names)
 
 
+def build_evolutionary_process(
+    tree,
+    *,
+    model: str = "brownian",
+    parameter: float | None = None,
+    branch_length: str = "original",
+    root_mode: str = "fixed",
+    root_mean: float = 0.0,
+    root_variance: float | None = None,
+    variance_scale: float = 1.0,
+    allow_zero: bool = False,
+) -> GaussianTreeProcess:
+    """Build the shared linear-Gaussian branch process for one tree model.
+
+    Regression normally requests a fixed root and subsequently profiles its
+    fixed-effect mean.  Continuous ASR can instead request a flat Brownian root
+    or the stationary OU root.  ``variance_scale`` remains in original process
+    units; covariance consumers may normalize only when they explicitly ask.
+    """
+
+    if branch_length not in {"original", "unit"}:
+        raise ValueError("Unsupported branch-length mode: {}.".format(branch_length))
+    if model == "custom":
+        raise ValueError("Custom covariance has no tree-process representation.")
+    parameter = validate_evolution_parameter(model, parameter)
+    root_mean = float(root_mean)
+    if not math.isfinite(root_mean):
+        raise ValueError("Gaussian process root means must be finite.")
+
+    if model == "ou":
+        assert parameter is not None
+        lengths = _base_edge_lengths(
+            tree, branch_length, allow_zero=allow_zero
+        )
+        transitions = {}
+        stationary_variance = None
+        for node in tree.traverse():
+            if node.is_root:
+                continue
+            transition, stationary_variance = ou_transition(
+                lengths[node], parameter, 1.0, root_mean
+            )
+            transitions[node] = transition
+        if stationary_variance is None:
+            stationary_variance = 1.0 / (2.0 * parameter)
+    else:
+        edge_variances = transformed_edge_variances(
+            tree,
+            model=model,
+            parameter=parameter,
+            branch_length=branch_length,
+            allow_zero=allow_zero,
+        )
+        transitions = {
+            node: brownian_transition(edge_variances[node])
+            for node in tree.traverse()
+            if not node.is_root
+        }
+        stationary_variance = None
+
+    if root_mode == "fixed":
+        if root_variance not in {None, 0}:
+            raise ValueError("A fixed Gaussian root cannot take root_variance.")
+        root = GaussianRootPrior("fixed", root_mean, 0.0)
+    elif root_mode == "flat":
+        if root_variance is not None:
+            raise ValueError("A flat Gaussian root cannot take root_variance.")
+        root = GaussianRootPrior("flat", root_mean, None)
+    elif root_mode == "stationary":
+        if model != "ou":
+            raise ValueError("A stationary root is currently defined only for OU.")
+        if root_variance is not None:
+            raise ValueError("OU stationary root variance is determined by alpha and sigma2.")
+        assert stationary_variance is not None
+        root = GaussianRootPrior("stationary", root_mean, stationary_variance)
+    elif root_mode == "gaussian":
+        if root_variance is None:
+            raise ValueError("A Gaussian root requires root_variance.")
+        root = GaussianRootPrior("gaussian", root_mean, root_variance)
+    else:
+        raise ValueError("Unsupported Gaussian root-prior mode: {}.".format(root_mode))
+
+    process = GaussianTreeProcess(
+        tree=tree,
+        transitions=transitions,
+        root=root,
+        model=model,
+        parameter=parameter,
+    )
+    return process if variance_scale == 1.0 else process.scaled_variance(variance_scale)
+
+
 def build_evolutionary_covariance(
     tree,
     leaf_names,
@@ -427,28 +540,14 @@ def build_evolutionary_covariance(
         return validate_custom_covariance(custom_covariance, leaf_names)
     if custom_covariance is not None:
         raise ValueError("A custom covariance is only valid with model 'custom'.")
-    parameter = validate_evolution_parameter(model, parameter)
-    leaves = [leaf_by_name[name] for name in leaf_names]
-    if model == "ou":
-        assert parameter is not None
-        base_depths = tree_depths(tree, branch_length)
-        covariance = _direct_ou_covariance(tree, leaves, base_depths, parameter)
-    else:
-        edge_variances = transformed_edge_variances(
-            tree,
-            model=model,
-            parameter=parameter,
-            branch_length=branch_length,
-        )
-        depths = _depths_from_edges(tree, edge_variances)
-        lca = LcaIndex(tree)
-        size = len(leaves)
-        covariance = np.zeros((size, size), dtype=float)
-        for first, first_leaf in enumerate(leaves):
-            for second in range(first, size):
-                value = depths[lca.common_ancestor(first_leaf, leaves[second])]
-                covariance[first, second] = value
-                covariance[second, first] = value
+    process = build_evolutionary_process(
+        tree,
+        model=model,
+        parameter=parameter,
+        branch_length=branch_length,
+        root_mode="fixed",
+    )
+    covariance = process.tip_covariance(leaf_names)
     try:
         np.linalg.cholesky(covariance)
     except np.linalg.LinAlgError as exc:
@@ -478,53 +577,6 @@ def evolutionary_covariance_factory(
     )
 
 
-def _sparse_edge_process(tree, model, parameter, branch_length):
-    if model != "ou":
-        variances = transformed_edge_variances(
-            tree,
-            model=model,
-            parameter=parameter,
-            branch_length=branch_length,
-        )
-        transitions = {node: 1.0 for node in tree.traverse()}
-        return transitions, variances
-    assert parameter is not None
-    lengths = _base_edge_lengths(tree, branch_length)
-    transitions = {}
-    variances = {}
-    for node in tree.traverse():
-        if node.is_root:
-            transitions[node] = 0.0
-            variances[node] = 0.0
-            continue
-        length = lengths[node]
-        transitions[node] = math.exp(-parameter * length)
-        variances[node] = -math.expm1(-2.0 * parameter * length) / (2.0 * parameter)
-    return transitions, variances
-
-
-def _required_tree_nodes(leaves) -> set[Any]:
-    required = set()
-    for leaf in leaves:
-        node = leaf
-        while node is not None and node not in required:
-            required.add(node)
-            node = node.up
-    return required
-
-
-def _independent_sparse_covariance(size: int) -> SparseCovarianceModel:
-    identity = sparse.eye(size, format="csc")
-    return SparseCovarianceModel(
-        precision=identity,
-        tip_loading=identity.tocsr(),
-        logdet_covariance=0.0,
-        sampling_parent=np.full(size, -1, dtype=int),
-        sampling_transition=np.zeros(size, dtype=float),
-        sampling_variance=np.ones(size, dtype=float),
-    )
-
-
 def build_sparse_evolutionary_model(
     tree,
     leaf_names,
@@ -536,7 +588,6 @@ def build_sparse_evolutionary_model(
     """Build an O(nodes)-storage latent GMRF for a tip covariance."""
     if model == "custom":
         raise ValueError("Custom evolutionary covariance has no sparse tree model.")
-    parameter = validate_evolution_parameter(model, parameter)
     names = tuple(str(name) for name in leaf_names)
     leaf_by_name = {str(leaf.name): leaf for leaf in tree.leaves()}
     missing = sorted(set(names) - set(leaf_by_name))
@@ -546,92 +597,14 @@ def build_sparse_evolutionary_model(
                 ", ".join(missing)
             )
         )
-    if model == "independent":
-        return _independent_sparse_covariance(len(names))
-    leaves = [leaf_by_name[name] for name in names]
-    required = _required_tree_nodes(leaves)
-    transitions, innovations = _sparse_edge_process(
-        tree, model, parameter, branch_length
+    process = build_evolutionary_process(
+        tree,
+        model=model,
+        parameter=parameter,
+        branch_length=branch_length,
+        root_mode="fixed",
     )
-    state_by_node = {tree: -1}
-    marginal_variance = {tree: 0.0}
-    state_parent: list[int] = []
-    state_transition: list[float] = []
-    state_innovation: list[float] = []
-    for node in tree.traverse(strategy="preorder"):
-        if node.is_root or node not in required:
-            continue
-        parent_state = state_by_node[node.up]
-        transition = float(transitions[node])
-        innovation = float(innovations[node])
-        parent_variance = marginal_variance[node.up]
-        marginal_variance[node] = transition**2 * parent_variance + innovation
-        if innovation == 0.0:
-            if transition != 1.0:
-                raise ValueError(
-                    "A zero-variance evolutionary edge has a non-unit transition."
-                )
-            state_by_node[node] = parent_state
-            continue
-        if not np.isfinite(innovation) or innovation < 0.0:
-            raise ValueError("Sparse evolutionary innovations must be non-negative.")
-        state_by_node[node] = len(state_parent)
-        state_parent.append(parent_state)
-        state_transition.append(transition)
-        state_innovation.append(innovation)
-    tip_variances = np.asarray([marginal_variance[leaf] for leaf in leaves])
-    normalization = float(np.mean(tip_variances))
-    if not np.isfinite(normalization) or normalization <= 0.0:
-        raise ValueError("Sparse evolutionary covariance has zero tip variance.")
-    normalized_innovation = np.asarray(state_innovation, dtype=float) / normalization
-    rows = []
-    columns = []
-    values = []
-
-    def add(row, column, value):
-        rows.append(row)
-        columns.append(column)
-        values.append(value)
-
-    for child, (parent, transition, innovation) in enumerate(
-        zip(
-            state_parent,
-            state_transition,
-            normalized_innovation,
-            strict=True,
-        )
-    ):
-        inverse = 1.0 / innovation
-        add(child, child, inverse)
-        if parent >= 0:
-            add(parent, parent, transition**2 * inverse)
-            add(child, parent, -transition * inverse)
-            add(parent, child, -transition * inverse)
-    n_states = len(state_parent)
-    precision = sparse.coo_matrix(
-        (values, (rows, columns)), shape=(n_states, n_states)
-    ).tocsc()
-    tip_states = np.asarray([state_by_node[leaf] for leaf in leaves], dtype=int)
-    if np.any(tip_states < 0):
-        raise ValueError(
-            "Every requested tip must have positive evolutionary variance."
-        )
-    tip_loading = sparse.csr_matrix(
-        (
-            np.ones(len(names), dtype=float),
-            (np.arange(len(names), dtype=int), tip_states),
-        ),
-        shape=(len(names), n_states),
-    )
-    return SparseCovarianceModel(
-        precision=precision,
-        tip_loading=tip_loading,
-        logdet_covariance=float(np.sum(np.log(normalized_innovation))),
-        sampling_parent=np.asarray(state_parent, dtype=int),
-        sampling_transition=np.asarray(state_transition, dtype=float),
-        sampling_variance=normalized_innovation,
-        covariance_scale=normalization,
-    )
+    return process.sparse_tip_model(names, normalize=True)
 
 
 def optimization_parameterization(

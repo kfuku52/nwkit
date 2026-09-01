@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 
 _ROUNDOFF_FACTOR = 128.0
+FREQUENCY_RATIO_BOUNDS = (1e-8, 1e8)
 
 
 def _roundoff_close(residual, scale):
@@ -108,9 +109,51 @@ def parameter_labels(model, states, graph=None):
             for j in range(len(states))
             if graph[i, j]
         ]
+    if model == "F81":
+        _require_complete_graph(model, graph)
+        return [("target", state) for state in states] if len(states) > 1 else []
+    if model == "GTR":
+        _require_complete_graph(model, graph)
+        exchangeabilities = [
+            ("exchangeability", f"{states[i]}<->{states[j]}")
+            for i in range(len(states))
+            for j in range(i + 1, len(states))
+        ]
+        frequency_ratios = [
+            ("frequency_ratio", state) for state in states[1:]
+        ]
+        return exchangeabilities + frequency_ratios
     if model == "CUSTOM":
         return []
     raise ValueError(f"Unsupported '--model': {model}")
+
+
+def _require_complete_graph(model, graph):
+    expected = complete_transition_graph(graph.shape[0])
+    if not np.array_equal(graph, expected):
+        raise ValueError(f"{model} requires a complete '--transition-graph'.")
+
+
+def parameter_kinds(model, states, graph=None):
+    """Return optimizer-bound classes parallel to :func:`parameter_labels`."""
+
+    labels = parameter_labels(model, states, graph)
+    if model == "GTR":
+        return [
+            "frequency_ratio" if source == "frequency_ratio" else "rate"
+            for source, _ in labels
+        ]
+    return ["rate"] * len(labels)
+
+
+def initial_parameters(model, states, initial_rate, graph=None):
+    """Return a homogeneous, neutral-frequency optimizer starting point."""
+
+    kinds = parameter_kinds(model, states, graph)
+    return np.asarray(
+        [1.0 if kind == "frequency_ratio" else initial_rate for kind in kinds],
+        dtype=float,
+    )
 
 
 def build_rate_matrix(model, states, rates, graph=None):
@@ -137,6 +180,26 @@ def build_rate_matrix(model, states, rates, graph=None):
         state_to_index = {state: index for index, state in enumerate(states)}
         for rate, (source, target) in zip(rates, labels, strict=True):
             matrix[state_to_index[source], state_to_index[target]] = rate
+    elif model == "F81":
+        for target_index, target_rate in enumerate(rates):
+            matrix[:, target_index] = target_rate
+        np.fill_diagonal(matrix, 0.0)
+    elif model == "GTR":
+        num_exchangeabilities = len(states) * (len(states) - 1) // 2
+        exchangeabilities = rates[:num_exchangeabilities]
+        frequency_weights = np.concatenate(
+            (np.ones(1, dtype=float), rates[num_exchangeabilities:])
+        )
+        if not np.any(frequency_weights > 0.0):
+            raise ValueError("GTR stationary-frequency weights cannot all be zero.")
+        frequencies = frequency_weights / frequency_weights.sum()
+        parameter_index = 0
+        for i in range(len(states)):
+            for j in range(i + 1, len(states)):
+                exchangeability = exchangeabilities[parameter_index]
+                matrix[i, j] = exchangeability * frequencies[j]
+                matrix[j, i] = exchangeability * frequencies[i]
+                parameter_index += 1
     elif model != "CUSTOM":
         raise ValueError(f"Unsupported '--model': {model}")
     np.fill_diagonal(matrix, -matrix.sum(axis=1))

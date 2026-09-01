@@ -475,7 +475,7 @@ def command_asr(args):
 
 pasr = subparsers.add_parser(
     "asr",
-    help="Infer ancestral traits and impute missing tips under discrete Mk or continuous BM/OU models",
+    help="Infer ancestral traits and impute missing tips under discrete Mk or continuous Gaussian models",
     parents=[p_tree_input, p_table_output, p_tip_table_policy],
 )
 pasr.add_argument(
@@ -485,7 +485,7 @@ pasr.add_argument(
     type=str,
     required=True,
     action="store",
-    help='TSV file containing a "leaf_name" column and a discrete or continuous trait column.',
+    help='TSV containing "leaf_name" and trait columns.',
 )
 pasr.add_argument(
     "--state-column",
@@ -496,7 +496,7 @@ pasr.add_argument(
     type=str,
     required=True,
     action="store",
-    help="Column name in --trait containing discrete states or continuous values.",
+    help="Trait column in --trait; MV-BM requires two or more comma-separated columns.",
 )
 pasr.add_argument(
     "--trait-type",
@@ -521,15 +521,14 @@ pasr.add_argument(
 )
 pasr.add_argument(
     "--model",
-    metavar="ER|SYM|ARD|CUSTOM|BM|OU",
+    metavar="MODEL",
     default=None,
     type=str,
     required=False,
     action="store",
     choices=model_names(),
-    help="default=ER for discrete, BM for continuous: ER uses one shared off-diagonal rate, "
-    "SYM uses symmetric pairwise rates, ARD uses all rates different, CUSTOM reads a fixed Q, "
-    "BM is Brownian motion, and OU is a single-optimum Ornstein-Uhlenbeck model.",
+    help="default=ER for discrete, BM for continuous: Discrete ER/SYM/ARD/F81/GTR/"
+    "MK-REGIME/HRM/CUSTOM or continuous BM/BMS/EB/BM-DRIFT/MV-BM/OU/OUM.",
 )
 pasr.add_argument(
     "--rate",
@@ -538,7 +537,7 @@ pasr.add_argument(
     type=finite_float,
     required=False,
     action="store",
-    help="default=%(default)s: Fixed ER off-diagonal transition rate. For SYM/ARD, this value is used as the initial rate for ML optimization.",
+    help="default=%(default)s: Fixed ER off-diagonal rate; optimizer starting rate for other fitted discrete models.",
 )
 pasr.add_argument(
     "--rate-bounds",
@@ -549,7 +548,7 @@ pasr.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=1e-9,1e3: Positive bounds used when estimating Mk rates.",
+    help="default=1e-9,1e3: Positive bounds for fitted Mk rates and GTR exchangeabilities.",
 )
 pasr.add_argument(
     "--transition-graph",
@@ -558,8 +557,45 @@ pasr.add_argument(
     metavar="complete|ordered|PATH",
     default=None,
     type=str,
-    help="Discrete ER/SYM/ARD only: Allowed transitions. 'ordered' connects adjacent "
-    "explicit --states bidirectionally; PATH is a TSV edge list with from_state and to_state columns.",
+    help="ER/SYM/ARD, MK-REGIME, or HRM: Allowed observed transitions. 'ordered' connects "
+    "adjacent explicit --states bidirectionally; PATH is a TSV from_state/to_state edge list. "
+    "F81/GTR require complete.",
+)
+pasr.add_argument(
+    "--regime-map",
+    "--regime_map",
+    dest="regime_map",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Regime models only: TSV assigning every branch_id, including root 0, to a regime.",
+)
+pasr.add_argument(
+    "--regime-model",
+    "--regime_model",
+    dest="regime_model",
+    metavar="ER|SYM|ARD|F81|GTR",
+    default=None,
+    choices=["ER", "SYM", "ARD", "F81", "GTR"],
+    help="default=ER for MK-REGIME: Rate-matrix structure fitted independently in each regime.",
+)
+pasr.add_argument(
+    "--regime-parameters",
+    "--regime_parameters",
+    dest="regime_parameters",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="BMS/OUM only: Optional complete TSV of fixed regime parameters.",
+)
+pasr.add_argument(
+    "--hidden-categories",
+    "--hidden_categories",
+    dest="hidden_categories",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=2 for HRM: Number of latent rate classes; must be at least two.",
 )
 pasr.add_argument(
     "--rate-matrix",
@@ -581,9 +617,9 @@ pasr.add_argument(
     required=False,
     action="store",
     choices=["equal", "empirical", "stationary", "flat"],
-    help="default=equal for discrete, flat for BM, stationary for OU: Discrete root-state frequencies "
-    "or a model-specific continuous root prior; stationary uses the fitted/fixed process equilibrium. "
-    "Independent of --input-rooted.",
+    help="model-specific default: Discrete equal (F81/GTR stationary), flat for BM-family "
+    "models, and stationary for OU/OUM. Stationary uses the fitted/fixed process equilibrium; "
+    "independent of --input-rooted.",
 )
 pasr.add_argument(
     "--ambiguous-separator",
@@ -623,15 +659,15 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="Continuous only: Fixed diffusion variance rate in squared trait units per branch-length unit. "
-    "If omitted, estimate it (BM uses REML, including the zero boundary).",
+    help="Scalar continuous models: Fixed diffusion variance rate per branch-length unit. "
+    "If omitted, estimate it; MV-BM estimates a covariance matrix instead.",
 )
 pasr.add_argument(
     "--alpha",
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="OU only: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
+    help="OU/OUM only: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
 )
 pasr.add_argument(
     "--alpha-bounds",
@@ -640,14 +676,40 @@ pasr.add_argument(
     metavar="MIN,MAX",
     default=None,
     type=str,
-    help="OU only: Positive bounds for estimating alpha. Default scales to tree depth.",
+    help="OU/OUM only: Positive bounds for estimating alpha. Default scales to tree depth.",
 )
 pasr.add_argument(
     "--theta",
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="OU only: Fixed process optimum in trait units. If omitted, estimate it.",
+    help="OU/OUM only: Fixed shared process optimum. OUM can instead read regime optima from a table.",
+)
+pasr.add_argument(
+    "--eb-rate",
+    "--eb_rate",
+    dest="eb_rate",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="EB only: Fixed exponential change in diffusion rate per branch-length unit. If omitted, estimate it.",
+)
+pasr.add_argument(
+    "--eb-rate-bounds",
+    "--eb_rate_bounds",
+    dest="eb_rate_bounds",
+    metavar="MIN,MAX",
+    default=None,
+    type=str,
+    help="EB only: Bounds for estimating the exponential rate; defaults to -10/depth,10/depth. "
+    "Use --eb-rate-bounds=MIN,MAX when MIN is negative.",
+)
+pasr.add_argument(
+    "--drift",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="BM-DRIFT only: Fixed directional trend per branch-length unit. If omitted, estimate it from heterochronous tips.",
 )
 pasr.add_argument(
     "--standard-error-column",
@@ -656,8 +718,8 @@ pasr.add_argument(
     metavar="COLUMN",
     default=None,
     type=str,
-    help="Continuous only: Known non-negative measurement SEs for observed tips. "
-    "If omitted, observed values are exact.",
+    help="Scalar continuous models: Known non-negative measurement SEs for observed tips. "
+    "If omitted, observations are exact; not supported by MV-BM.",
 )
 pasr.add_argument(
     "--ci-level",
@@ -679,8 +741,17 @@ pasr.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Optional TSV reporting the selected trait type, model, rates, "
-    "and likelihood metadata (restricted likelihood for BM, ordinary ML for OU).",
+    help="default=%(default)s: Optional TSV reporting the selected model, parameters, "
+    "likelihood convention, optimizer diagnostics, and uncertainty contract.",
+)
+pasr.add_argument(
+    "--covariance-out",
+    "--covariance_out",
+    dest="covariance_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="MV-BM only: Optional tidy TSV of conditional trait covariances for selected nodes.",
 )
 pasr.add_argument(
     "--tree-out",

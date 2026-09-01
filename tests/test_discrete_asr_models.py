@@ -9,6 +9,7 @@ from nwkit.asr_models import default_model
 from nwkit.cli import main
 from nwkit.discrete_asr_models import (
     build_rate_matrix,
+    parameter_labels,
     read_rate_matrix,
     read_transition_graph,
     stationary_distribution,
@@ -19,6 +20,79 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_f81_uses_target_specific_rates_and_stationary_frequencies():
+    states = ["a", "b", "c"]
+    matrix = build_rate_matrix("F81", states, [1.0, 2.0, 3.0])
+    np.testing.assert_allclose(
+        matrix,
+        [[-5.0, 2.0, 3.0], [1.0, -4.0, 3.0], [1.0, 2.0, -3.0]],
+    )
+    np.testing.assert_allclose(stationary_distribution(matrix), [1 / 6, 2 / 6, 3 / 6])
+
+
+def test_single_state_f81_has_no_unidentifiable_rate_parameter():
+    assert parameter_labels("F81", ["only"]) == []
+    np.testing.assert_array_equal(build_rate_matrix("F81", ["only"], []), [[0.0]])
+
+
+def test_gtr_satisfies_detailed_balance_with_fitted_frequency_ratios():
+    states = ["a", "b", "c"]
+    # Three pair exchangeabilities followed by pi_b/pi_a and pi_c/pi_a.
+    matrix = build_rate_matrix("GTR", states, [2.0, 3.0, 5.0, 4.0, 2.0])
+    equilibrium = stationary_distribution(matrix)
+    np.testing.assert_allclose(equilibrium, [1 / 7, 4 / 7, 2 / 7])
+    flux = equilibrium[:, None] * matrix
+    np.testing.assert_allclose(flux, flux.T, atol=1e-15)
+
+
+@pytest.mark.parametrize("model", ["F81", "GTR"])
+def test_frequency_models_require_complete_transition_graph(model):
+    graph, _ = read_transition_graph("ordered", ["a", "b", "c"])
+    with pytest.raises(ValueError, match="requires a complete"):
+        build_rate_matrix(model, ["a", "b", "c"], [1.0], graph)
+
+
+@pytest.mark.integration
+@pytest.mark.parametrize("model", ["F81", "GTR"])
+def test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium(
+    model, tmp_path
+):
+    trait = tmp_path / "traits.tsv"
+    output = tmp_path / "asr.tsv"
+    metadata = tmp_path / "model.tsv"
+    trait.write_text(
+        "leaf_name\tstate\nA\tx\nB\ty\nC\tz\nD\tx\nE\ty\nF\tz\nG\tx\nH\tz\n"
+    )
+    main(
+        [
+            "asr",
+            "-i",
+            "[&R]((A:0.2,B:0.4):0.3,(C:0.7,D:1.1):0.5,E:0.6,F:1.3,G:1.7,H:2)R;",
+            "--trait",
+            str(trait),
+            "--state-column",
+            "state",
+            "--model",
+            model,
+            "--rate-bounds",
+            "0.001,20",
+            "--model-out",
+            str(metadata),
+            "-o",
+            str(output),
+        ]
+    )
+    result = pd.read_csv(output, sep="\t")
+    fit = pd.read_csv(metadata, sep="\t").iloc[0]
+    assert np.allclose(result[["p_x", "p_y", "p_z"]].sum(axis=1), 1.0)
+    assert fit["model"] == model
+    assert fit["root_prior"] == "stationary"
+    equilibrium = np.asarray([fit[f"equilibrium_{state}"] for state in "xyz"])
+    assert np.all(equilibrium > 0.0)
+    assert equilibrium.sum() == pytest.approx(1.0)
+    assert math.isfinite(fit["log_likelihood"])
 
 
 def test_ordered_graph_uses_state_order_and_removes_nonadjacent_rates():

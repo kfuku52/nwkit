@@ -14,6 +14,7 @@ from nwkit.continuous_asr import (
     _observations_by_group,
     _tree_groups,
 )
+from nwkit.gaussian_tree import ou_transition
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -293,27 +294,17 @@ def _prepare_data(
 
 
 def _transition(alpha, sigma2, theta, length):
-    exponent = alpha * length
-    if not math.isfinite(exponent):
-        raise ValueError(
-            "alpha multiplied by a branch length exceeds floating-point range."
-        )
-    decay = math.exp(-exponent)
-    root_variance = sigma2 / (2.0 * alpha)
+    transition, root_variance = ou_transition(length, alpha, sigma2, theta)
     if not math.isfinite(root_variance) or root_variance <= 0.0:
         raise ValueError(
             "The stationary OU variance is outside floating-point range; rescale units."
         )
-    innovation_fraction = -math.expm1(-2.0 * exponent)
-    innovation_variance = root_variance * innovation_fraction
-    if length > 0.0 and innovation_variance <= 0.0:
-        raise ValueError(
-            "A positive OU branch variance underflowed; rescale trait or branch units."
-        )
-    intercept = (-math.expm1(-exponent)) * theta
-    if not math.isfinite(intercept):
-        raise ValueError("An OU transition mean exceeds floating-point range.")
-    return decay, intercept, innovation_variance, root_variance
+    return (
+        transition.slope,
+        transition.intercept,
+        transition.variance,
+        root_variance,
+    )
 
 
 def _propagate_up(factor, alpha, sigma2, theta, length):

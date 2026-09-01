@@ -23,6 +23,7 @@ _DISCRETE_ONLY = (
     "rate_bounds",
     "rate_matrix",
     "transition_graph",
+    "hidden_categories",
     "ambiguous_separator",
     "stochastic_map_out",
     "n_sim",
@@ -36,6 +37,10 @@ _CONTINUOUS_ONLY = (
     "alpha",
     "alpha_bounds",
     "theta",
+    "eb_rate",
+    "eb_rate_bounds",
+    "drift",
+    "covariance_out",
 )
 
 
@@ -95,6 +100,18 @@ def _resolve_mode_options(args, trait_type):
 
 
 def _validate_model_arguments(args, trait_type, model):
+    regime_map = getattr(args, "regime_map", None)
+    regime_model = getattr(args, "regime_model", None)
+    regime_parameters = getattr(args, "regime_parameters", None)
+    regime_models = {"MK-REGIME", "BMS", "OUM"}
+    if model in regime_models and regime_map in (None, ""):
+        raise ValueError(f"--model {model} requires --regime-map.")
+    if model not in regime_models and regime_map not in (None, ""):
+        raise ValueError("--regime-map requires a regime model.")
+    if model != "MK-REGIME" and regime_model not in (None, ""):
+        raise ValueError("--regime-model requires --model MK-REGIME.")
+    if model not in {"BMS", "OUM"} and regime_parameters not in (None, ""):
+        raise ValueError("--regime-parameters requires --model BMS or OUM.")
     if trait_type == "discrete":
         rate_matrix = getattr(args, "rate_matrix", None)
         transition_graph = getattr(args, "transition_graph", None)
@@ -110,25 +127,57 @@ def _validate_model_arguments(args, trait_type, model):
             raise ValueError("--rate cannot be combined with --model CUSTOM.")
         if model == "CUSTOM" and getattr(args, "rate_bounds", None) is not None:
             raise ValueError("--rate-bounds cannot be combined with --model CUSTOM.")
+        if model == "MK-REGIME" and getattr(args, "rate_matrix", None) not in (
+            None,
+            "",
+        ):
+            raise ValueError("--rate-matrix is not supported with --model MK-REGIME.")
         if transition_graph == "ordered" and getattr(args, "states", None) in (
             None,
             "",
         ):
             raise ValueError("--transition-graph ordered requires explicit --states.")
+        hidden_categories = getattr(args, "hidden_categories", None)
+        if model != "HRM" and hidden_categories is not None:
+            raise ValueError("--hidden-categories requires --model HRM.")
         return
-    if model == "BM":
+    if model in {"BM", "BMS", "EB", "BM-DRIFT", "MV-BM"}:
         supplied = [
             "--" + name.replace("_", "-")
             for name in ("alpha", "alpha_bounds", "theta")
             if getattr(args, name, None) is not None
         ]
         if supplied:
-            raise ValueError(f"Options requiring --model OU: {', '.join(supplied)}.")
+            raise ValueError(
+                f"Options requiring --model OU or OUM: {', '.join(supplied)}."
+            )
     elif (
         getattr(args, "alpha", None) is not None
         and getattr(args, "alpha_bounds", None) is not None
     ):
         raise ValueError("--alpha-bounds cannot be combined with fixed --alpha.")
+    if model != "EB" and any(
+        getattr(args, name, None) is not None
+        for name in ("eb_rate", "eb_rate_bounds")
+    ):
+        raise ValueError("--eb-rate and --eb-rate-bounds require --model EB.")
+    if (
+        model == "EB"
+        and getattr(args, "eb_rate", None) is not None
+        and getattr(args, "eb_rate_bounds", None) is not None
+    ):
+        raise ValueError("--eb-rate-bounds cannot be combined with fixed --eb-rate.")
+    if model != "BM-DRIFT" and getattr(args, "drift", None) is not None:
+        raise ValueError("--drift requires --model BM-DRIFT.")
+    if model == "MV-BM":
+        if getattr(args, "sigma2", None) is not None:
+            raise ValueError("--sigma2 is not supported for --model MV-BM.")
+        if getattr(args, "standard_error_column", None) not in (None, ""):
+            raise ValueError(
+                "--standard-error-column is not yet supported for --model MV-BM."
+            )
+    elif getattr(args, "covariance_out", None) not in (None, ""):
+        raise ValueError("--covariance-out requires --model MV-BM.")
 
 
 def _validate_mode_arguments(args, trait_type):
@@ -174,6 +223,7 @@ def effective_asr_args(args, settings):
             ("ambiguous_separator", "|"),
             ("n_sim", 100),
             ("threads", 1),
+            ("hidden_categories", 2),
         ):
             if getattr(effective, name, None) is None:
                 setattr(effective, name, default)
@@ -193,16 +243,21 @@ def read_asr_table(
         raise ValueError("'--trait' is required.")
     if state_column in ("", None):
         raise ValueError("'--state-column' is required.")
+    state_columns = (
+        tuple(state_column)
+        if isinstance(state_column, (list, tuple))
+        else (state_column,)
+    )
     dataframe, _, _ = read_tip_table(
         trait_path,
         option_name="--trait",
         tree_leaf_names=tree_leaf_names,
-        required_columns=(state_column,),
+        required_columns=state_columns,
         unmatched=unmatched,
         missing_values=missing_values,
         preserve_columns=tuple(
             column
-            for column in (state_column, standard_error_column)
+            for column in (*state_columns, standard_error_column)
             if column is not None
         ),
     )
@@ -226,9 +281,15 @@ def resolve_trait_type(requested, dataframe, state_column):
         raise ValueError(f"Unsupported --trait-type: {requested}.")
     if requested != "auto":
         return requested
+    state_columns = (
+        tuple(state_column)
+        if isinstance(state_column, (list, tuple))
+        else (state_column,)
+    )
     observed = [
         value
-        for value in dataframe[state_column]
+        for column in state_columns
+        for value in dataframe[column]
         if not is_missing_table_value(value, set())
     ]
     if not observed:
@@ -240,6 +301,35 @@ def resolve_trait_type(requested, dataframe, state_column):
     # first text category and could hide a later numeric-looking infinity.
     numeric = [_numeric_value(value) for value in observed]
     return "continuous" if all(numeric) else "discrete"
+
+
+def asr_trait_columns(state_column, model):
+    if model != "MV-BM":
+        return (state_column,)
+    columns = tuple(item.strip() for item in str(state_column).split(","))
+    if len(columns) < 2 or any(item == "" for item in columns):
+        raise ValueError(
+            "--model MV-BM requires at least two comma-separated --state-column values."
+        )
+    if len(columns) != len(set(columns)):
+        raise ValueError("MV-BM --state-column contains duplicated trait columns.")
+    return columns
+
+
+def continuous_tip_vectors(dataframe, state_columns, leaf_names):
+    vectors = dict.fromkeys(leaf_names)
+    for _, row in dataframe.iterrows():
+        name = str(row["leaf_name"])
+        vector = []
+        for column in state_columns:
+            raw = row[column]
+            vector.append(
+                None
+                if is_missing_table_value(raw, set())
+                else _continuous_number(raw, f"Trait '{column}' for '{name}'")
+            )
+        vectors[name] = None if all(value is None for value in vector) else tuple(vector)
+    return vectors
 
 
 def _continuous_number(value, label, *, nonnegative=False):
