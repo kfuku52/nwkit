@@ -1,15 +1,15 @@
 # Direct development-tool constraints. Runtime dependency ranges remain in
 # pyproject.toml so published packages are not coupled to this local/CI lock.
 bandit==1.9.4
-build==1.5.0
+build==1.6.0
 CairoSVG==2.9.0
 check-wheel-contents==0.6.3
-coverage==7.15.4
+coverage==7.16.0
 diff-cover==10.5.1
 hypothesis==6.165.10
 mypy==2.3.1
 pip-audit==2.10.1
 pytest==9.1.1
 radon==6.0.1
-ruff==0.16.4
+ruff==0.16.5
 twine==7.0.0
