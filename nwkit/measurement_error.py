@@ -34,7 +34,7 @@ from nwkit.sparse_laplace import (
     JointPredictorUncertainty,
     SparseCovarianceModel,
     continuous_predictor_loading,
-    factor_sparse_nonsingular,
+    factor_sparse_positive_definite,
     grouped_predictor_loading,
     joint_predictor_loading,
 )
@@ -380,7 +380,7 @@ def fit_factor_latent_predictor(
             sparse.eye(loading.shape[1], format="csc")
             + weighted_loading.T @ weighted_loading
         ).tocsc()
-        precision_factor = factor_sparse_nonsingular(posterior_precision)
+        precision_factor = factor_sparse_positive_definite(posterior_precision)
         posterior_loading = loading
         posterior_precision_factor = sparse.vstack(
             [sparse.eye(loading.shape[1], format="csr"), weighted_loading],
@@ -396,7 +396,7 @@ def fit_factor_latent_predictor(
         sampling_variance=np.empty(0, dtype=float),
         sampling_precision_factor=posterior_precision_factor,
     )
-    factor = factor_sparse_nonsingular(posterior_precision)
+    factor = factor_sparse_positive_definite(posterior_precision)
     posterior_marginal_variance = sparse_precision_update_diagonal(
         posterior_loading,
         posterior_precision,
@@ -552,7 +552,7 @@ def fit_sparse_latent_predictor(
             observation_information,
         )
         try:
-            factor = factor_sparse_nonsingular(posterior_precision)
+            factor = factor_sparse_positive_definite(posterior_precision)
         except (RuntimeError, np.linalg.LinAlgError):
             return float("inf")
 
@@ -711,7 +711,7 @@ def _predictor_error_covariance(beta, uncertainty, columns, n_observations):
         loading, precision, _ = _gmrf_uncertainty_update(
             beta, int(columns), uncertainty
         )
-        factor = factor_sparse_nonsingular(precision)
+        factor = factor_sparse_positive_definite(precision)
         solved = factor.solve(loading.T.toarray())
         covariance = np.asarray(loading @ solved)
         return (covariance + covariance.T) / 2.0

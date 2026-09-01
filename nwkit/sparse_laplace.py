@@ -5,7 +5,9 @@ from typing import Mapping
 
 import numpy as np
 from scipy import sparse
-from scipy.sparse.linalg import SuperLU, eigsh, splu
+from scipy.sparse.linalg import SuperLU, splu
+
+from nwkit.gaussian import _factor_sparse_lu_with_pivots, _sparse_lu_logdet
 
 
 @dataclass(frozen=True)
@@ -175,39 +177,12 @@ class GmrfPredictorUncertainty:
 def factor_sparse_positive_definite(
     matrix: sparse.spmatrix,
 ) -> SparsePositiveDefiniteFactor:
-    """Factor a symmetric positive-definite sparse matrix with SuperLU.
-
-    SuperLU itself accepts nonsingular indefinite matrices.  Check symmetry and
-    the smallest algebraic eigenvalue explicitly before using its absolute
-    determinant as an SPD log-determinant.
-    """
+    """Factor a symmetric positive-definite sparse matrix with SuperLU."""
     values = sparse.csc_matrix(matrix, dtype=float)
-    if values.shape[0] != values.shape[1] or values.shape[0] == 0:
-        raise np.linalg.LinAlgError("Sparse SPD matrix must be non-empty and square.")
-    difference = values - values.T
-    scale = max(1.0, float(np.max(np.abs(values.data), initial=0.0)))
-    tolerance = np.finfo(float).eps * scale * max(1, values.shape[0]) * 100.0
-    if difference.nnz and float(np.max(np.abs(difference.data))) > tolerance:
-        raise np.linalg.LinAlgError("Sparse SPD matrix must be symmetric.")
-    symmetric = ((values + values.T) * 0.5).tocsc()
-    if values.shape[0] == 1:
-        smallest = float(symmetric[0, 0])
-    else:
-        try:
-            smallest = float(
-                eigsh(
-                    symmetric,
-                    k=1,
-                    which="SA",
-                    return_eigenvectors=False,
-                    tol=1e-7,
-                )[0]
-            )
-        except Exception as exc:  # pragma: no cover - backend-specific failures
-            raise np.linalg.LinAlgError("Sparse SPD eigenvalue check failed.") from exc
-    if not np.isfinite(smallest) or smallest <= tolerance:
-        raise np.linalg.LinAlgError("Sparse matrix is not positive definite.")
-    return factor_sparse_nonsingular(symmetric)
+    factor, pivots = _factor_sparse_lu_with_pivots(values, "Sparse matrix")
+    return SparsePositiveDefiniteFactor(
+        factor, _sparse_lu_logdet(factor, "Sparse matrix", pivots)
+    )
 
 
 def factor_sparse_nonsingular(

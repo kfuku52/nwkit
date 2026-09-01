@@ -181,11 +181,72 @@ def _positive_diagonal(values: np.ndarray) -> np.ndarray:
     return diagonal
 
 
-def _sparse_lu_logdet(solver: SuperLU, label: str) -> float:
+def _factor_sparse_lu(matrix, label: str) -> SuperLU:
+    solver, _ = _factor_sparse_lu_with_pivots(matrix, label)
+    return solver
+
+
+def _factor_sparse_lu_with_pivots(matrix, label: str) -> tuple[SuperLU, np.ndarray]:
+    """Factor an expected symmetric positive-definite sparse matrix.
+
+    SuperLU raises RuntimeError for a singular trial covariance. Optimizers
+    must be able to reject that proposal just like a failed Cholesky factor,
+    without catching unrelated backend errors or adding covariance jitter.
+    A symmetric ordering with diagonal pivoting disabled also preserves the
+    positive-pivot test: general row pivoting can otherwise make a rounded,
+    indefinite covariance look invertible.
+    """
+    matrix = sparse.csc_matrix(matrix, dtype=float)
+    if matrix.shape[0] != matrix.shape[1] or matrix.shape[0] == 0:
+        raise np.linalg.LinAlgError("{} must be non-empty and square.".format(label))
+    if not np.isfinite(matrix.data).all():
+        raise np.linalg.LinAlgError("{} contains non-finite values.".format(label))
+    difference = matrix - matrix.T
+    scale = max(1.0, float(np.max(np.abs(matrix.data), initial=0.0)))
+    tolerance = np.finfo(float).eps * scale * matrix.shape[0] * 100.0
+    if difference.nnz and float(np.max(np.abs(difference.data))) > tolerance:
+        raise np.linalg.LinAlgError("{} is not symmetric.".format(label))
+    matrix = ((matrix + matrix.T) * 0.5).tocsc()
+    if np.any(matrix.diagonal() <= 0.0):
+        raise np.linalg.LinAlgError("{} is not positive definite.".format(label))
+    try:
+        solver = splu(
+            matrix,
+            permc_spec="MMD_AT_PLUS_A",
+            diag_pivot_thresh=0.0,
+            # Do not enable SuperLU equilibration: unequal row/column scaling
+            # would break the symmetric-congruence inertia argument below.
+            options={"SymmetricMode": True, "Equil": False},
+        )
+    except RuntimeError as exc:
+        if "exactly singular" not in str(exc).lower():
+            raise
+        raise np.linalg.LinAlgError("{} is singular.".format(label)) from exc
+    pivots = _sparse_lu_pivots(solver, label)
+    return solver, pivots
+
+
+def _sparse_lu_pivots(solver: SuperLU, label: str) -> np.ndarray:
+    # Symmetric no-pivot elimination uses the same row and column ordering.
+    # SuperLU may still row-pivot around a zero diagonal even when the threshold
+    # is zero; accepting that factor would lose the inertia information and can
+    # make an indefinite matrix appear to have only positive U pivots.
+    if not np.array_equal(solver.perm_r, solver.perm_c):
+        raise np.linalg.LinAlgError("{} is not positive definite.".format(label))
     pivots = np.asarray(solver.U.diagonal(), dtype=float)
     if np.any(pivots == 0.0) or not np.isfinite(pivots).all():
         raise np.linalg.LinAlgError("{} is singular.".format(label))
-    return float(np.log(np.abs(pivots)).sum())
+    if np.any(pivots < 0.0):
+        raise np.linalg.LinAlgError("{} is not positive definite.".format(label))
+    return pivots
+
+
+def _sparse_lu_logdet(
+    solver: SuperLU, label: str, pivots: np.ndarray | None = None
+) -> float:
+    if pivots is None:
+        pivots = _sparse_lu_pivots(solver, label)
+    return float(np.log(pivots).sum())
 
 
 def is_diagonal(matrix: np.ndarray) -> bool:
@@ -242,16 +303,18 @@ def factor_diagonal_sparse_low_rank(
         covariance = (
             sparse.diags(diagonal, format="csc") + loading @ loading.T
         ).tocsc()
-        solver = splu(covariance, permc_spec="COLAMD")
-        logdet = _sparse_lu_logdet(solver, "Sparse covariance matrix")
+        solver, pivots = _factor_sparse_lu_with_pivots(
+            covariance, "Sparse covariance matrix"
+        )
+        logdet = _sparse_lu_logdet(solver, "Sparse covariance matrix", pivots)
         return SparseCovarianceFactor(diagonal, loading, solver, logdet)
     weighted = loading.multiply((1.0 / diagonal)[:, None])
     woodbury = (
         sparse.eye(loading.shape[1], format="csc") + loading.T @ weighted
     ).tocsc()
-    solver = splu(woodbury, permc_spec="COLAMD")
+    solver, pivots = _factor_sparse_lu_with_pivots(woodbury, "Sparse Woodbury matrix")
     logdet = float(np.log(diagonal).sum()) + _sparse_lu_logdet(
-        solver, "Sparse Woodbury matrix"
+        solver, "Sparse Woodbury matrix", pivots
     )
     return SparseDiagonalLowRankFactor(diagonal, loading, solver, logdet)
 
@@ -283,17 +346,23 @@ def factor_diagonal_sparse_precision_updates(
     loading = sparse.hstack(loadings, format="csr")
     prior_precision = sparse.block_diag(precisions, format="csc")
     prior_precision_factor = sparse.block_diag(precision_factors, format="csr")
-    prior_factor = splu(prior_precision, permc_spec="COLAMD")
+    prior_factor, prior_pivots = _factor_sparse_lu_with_pivots(
+        prior_precision, "Sparse prior precision"
+    )
     inverse_diagonal = 1.0 / diagonal
     posterior_precision = (
         prior_precision
         + loading.T @ sparse.diags(inverse_diagonal, format="csc") @ loading
     ).tocsc()
-    posterior_factor = splu(posterior_precision, permc_spec="COLAMD")
+    posterior_factor, posterior_pivots = _factor_sparse_lu_with_pivots(
+        posterior_precision, "Sparse posterior precision"
+    )
     logdet = (
         float(np.log(diagonal).sum())
-        + _sparse_lu_logdet(posterior_factor, "Sparse posterior precision")
-        - _sparse_lu_logdet(prior_factor, "Sparse prior precision")
+        + _sparse_lu_logdet(
+            posterior_factor, "Sparse posterior precision", posterior_pivots
+        )
+        - _sparse_lu_logdet(prior_factor, "Sparse prior precision", prior_pivots)
     )
     return DiagonalSparsePrecisionFactor(
         diagonal=diagonal,
@@ -782,7 +851,9 @@ def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.n
     """
     loading = sparse.csr_matrix(loading, dtype=float)
     solver = (
-        splu(sparse.csc_matrix(precision, dtype=float), permc_spec="COLAMD")
+        _factor_sparse_lu(
+            sparse.csc_matrix(precision, dtype=float), "Sparse prior precision"
+        )
         if solver is None
         else solver
     )
@@ -955,7 +1026,7 @@ def grouped_average_marginal_logdet(
 
 
 def _materialize_sparse_precision_covariance(covariance):
-    solver = splu(covariance.precision, permc_spec="COLAMD")
+    solver = _factor_sparse_lu(covariance.precision, "Sparse prior precision")
     solved = solver.solve(covariance.loading.T.toarray())
     update = np.asarray(covariance.loading @ solved)
     return np.diag(covariance.diagonal) + (update + update.T) / 2.0

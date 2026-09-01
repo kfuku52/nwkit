@@ -12,6 +12,7 @@ from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
 from nwkit.sparse_laplace import (
     SparseCovarianceModel,
     factor_sparse_nonsingular,
+    factor_sparse_positive_definite,
 )
 
 MAX_DENSE_MULTIVARIATE_DIMENSION = 2000
@@ -33,7 +34,7 @@ class SparseFittedCovariance:
 
     def materialize(self) -> np.ndarray:
         """Materialize the covariance when a caller explicitly requests it."""
-        factor = factor_sparse_nonsingular(self.precision)
+        factor = factor_sparse_positive_definite(self.precision)
         solved = factor.solve(self.loading.T.toarray())
         covariance = np.asarray(self.loading @ solved, dtype=float)
         return (covariance + covariance.T) / 2.0

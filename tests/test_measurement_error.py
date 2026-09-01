@@ -171,6 +171,20 @@ def test_sparse_positive_definite_factor_rejects_indefinite_matrix():
         factor_sparse_positive_definite(sparse.diags([-1.0, 2.0]))
 
 
+def test_sparse_positive_definite_factor_rejects_roundoff_rank_deficiency():
+    loading = np.asarray(
+        [[-20.749325931793987], [167.02490282686168], [165.85872694090048]]
+    )
+    low_rank = loading @ loading.T
+    represented = sparse.csc_matrix(np.diag(np.full(3, 1e-16)) + low_rank)
+    # The positive diagonal is below one ULP at this scale and disappears.
+    # Dense eigensolvers disagree on the sign of the resulting near-zero
+    # eigenvalues, so assert the portable floating-point failure directly.
+    np.testing.assert_array_equal(represented.toarray(), low_rank)
+    with pytest.raises(np.linalg.LinAlgError, match="singular|positive definite"):
+        factor_sparse_positive_definite(represented)
+
+
 def test_conditional_eiv_rejects_pseudo_reml_objective():
     with pytest.raises(ValueError, match="no standard REML objective"):
         fit_conditional_eiv_gaussian(

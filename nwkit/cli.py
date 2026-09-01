@@ -474,7 +474,7 @@ def command_asr(args):
 
 pasr = subparsers.add_parser(
     "asr",
-    help="Infer categorical ancestral states and impute missing tip states under an Mk model",
+    help="Infer ancestral traits and impute missing tips under discrete Mk or continuous Brownian models",
     parents=[p_tree_input, p_table_output, p_tip_table_policy],
 )
 pasr.add_argument(
@@ -484,7 +484,7 @@ pasr.add_argument(
     type=str,
     required=True,
     action="store",
-    help='TSV file containing a "leaf_name" column and a categorical state column.',
+    help='TSV file containing a "leaf_name" column and a discrete or continuous trait column.',
 )
 pasr.add_argument(
     "--state-column",
@@ -495,7 +495,18 @@ pasr.add_argument(
     type=str,
     required=True,
     action="store",
-    help="Column name in --trait containing categorical states.",
+    help="Column name in --trait containing discrete states or continuous values.",
+)
+pasr.add_argument(
+    "--trait-type",
+    "--trait_type",
+    dest="trait_type",
+    metavar="auto|discrete|continuous",
+    default="auto",
+    choices=["auto", "discrete", "continuous"],
+    help="default=%(default)s: Infer the type from non-missing values on tree tips. "
+    "Numeric values select continuous; other values select discrete. "
+    "Use discrete explicitly for numeric category codes.",
 )
 pasr.add_argument(
     "--states",
@@ -508,14 +519,14 @@ pasr.add_argument(
 )
 pasr.add_argument(
     "--model",
-    metavar="ER|SYM|ARD",
-    default="ER",
+    metavar="ER|SYM|ARD|BM",
+    default=None,
     type=str,
     required=False,
     action="store",
-    choices=["ER", "SYM", "ARD"],
-    help="default=%(default)s: Mk rate model. ER uses one shared off-diagonal rate, "
-    "SYM uses symmetric pairwise rates, and ARD uses all rates different.",
+    choices=["ER", "SYM", "ARD", "BM"],
+    help="default=ER for discrete, BM for continuous: ER uses one shared off-diagonal rate, "
+    "SYM uses symmetric pairwise rates, ARD uses all rates different, and BM is Brownian motion.",
 )
 pasr.add_argument(
     "--rate",
@@ -541,24 +552,25 @@ pasr.add_argument(
     "--root-prior",
     "--root_prior",
     dest="root_prior",
-    metavar="equal|empirical",
-    default="equal",
+    metavar="equal|empirical|flat",
+    default=None,
     type=str,
     required=False,
     action="store",
-    choices=["equal", "empirical"],
-    help="default=%(default)s: Prior state frequencies at the root.",
+    choices=["equal", "empirical", "flat"],
+    help="default=equal for discrete, flat for continuous: Discrete root-state frequencies "
+    "or a flat prior on the continuous root value; independent of --input-rooted.",
 )
 pasr.add_argument(
     "--ambiguous-separator",
     "--ambiguous_separator",
     dest="ambiguous_separator",
     metavar="STR",
-    default="|",
+    default=None,
     type=str,
     required=False,
     action="store",
-    help='default=%(default)s: Separator for ambiguous or polymorphic states such as "A|B".',
+    help='default=| for discrete: Separator for ambiguous or polymorphic states such as "A|B".',
 )
 pasr.add_argument(
     "--target",
@@ -573,13 +585,42 @@ pasr.add_argument(
 )
 pasr.add_argument(
     "--output",
-    metavar="probabilities|map",
-    default="probabilities",
+    metavar="probabilities|map|summary",
+    default=None,
     type=str,
     required=False,
     action="store",
-    choices=["probabilities", "map"],
-    help="default=%(default)s: Report posterior probabilities or only the maximum a posteriori state.",
+    choices=["probabilities", "map", "summary"],
+    help="default=probabilities for discrete, summary for continuous: "
+    "Report discrete probabilities/MAP states or continuous means, variances, and intervals.",
+)
+pasr.add_argument(
+    "--sigma2",
+    metavar="FLOAT",
+    default=None,
+    type=nonnegative_finite_float,
+    help="Continuous only: Fixed Brownian variance rate in squared trait units per branch-length unit. "
+    "If omitted, estimate it by REML, including the zero boundary.",
+)
+pasr.add_argument(
+    "--standard-error-column",
+    "--standard_error_column",
+    dest="standard_error_column",
+    metavar="COLUMN",
+    default=None,
+    type=str,
+    help="Continuous only: Known non-negative measurement SEs for observed tips. "
+    "If omitted, observed values are exact.",
+)
+pasr.add_argument(
+    "--ci-level",
+    "--ci_level",
+    dest="ci_level",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="default=0.95 for continuous: Interval coverage strictly between zero and one. "
+    "Intervals condition on sigma2 and the input tree; rate/tree uncertainty is excluded.",
 )
 pasr.add_argument(
     "--model-out",
@@ -590,7 +631,8 @@ pasr.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Optional TSV reporting fitted Mk model metadata, rates, and log-likelihood.",
+    help="default=%(default)s: Optional TSV reporting the selected trait type, model, rates, "
+    "and likelihood metadata (restricted likelihood for BM).",
 )
 pasr.add_argument(
     "--tree-out",
@@ -601,7 +643,8 @@ pasr.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Optional Newick/NHX tree annotated with ASR state and probability properties.",
+    help="default=%(default)s: Optional Newick/NHX tree annotated with discrete states/probabilities "
+    "or continuous means/uncertainties.",
 )
 pasr.add_argument(
     "--tree-outformat",
@@ -618,14 +661,15 @@ pasr.add_argument(
     "--tree-annotation",
     "--tree_annotation",
     dest="tree_annotation",
-    metavar="state|probability|map|all",
-    default="map",
+    metavar="state|probability|map|mean|summary|all",
+    default=None,
     type=str,
     required=False,
     action="store",
-    choices=["state", "probability", "map", "all"],
-    help="default=%(default)s: NHX properties written to --tree-out. "
-    'map writes ASR state and MAP probability; "all" also writes per-state posterior probabilities.',
+    choices=["state", "probability", "map", "mean", "summary", "all"],
+    help="default=map for discrete, summary for continuous: NHX properties written to --tree-out. "
+    "Discrete accepts state/probability/map/all; continuous accepts mean/summary/all. "
+    '"all" additionally includes observed values and, for discrete, per-state probabilities.',
 )
 pasr.add_argument(
     "--stochastic-map-out",
@@ -643,20 +687,20 @@ pasr.add_argument(
     "--n_sim",
     dest="n_sim",
     metavar="INT",
-    default=100,
+    default=None,
     type=int,
     required=False,
     action="store",
-    help="default=%(default)s: Number of stochastic maps sampled when --stochastic-map-out is specified.",
+    help="default=100 for discrete: Number of stochastic maps sampled when --stochastic-map-out is specified.",
 )
 pasr.add_argument(
     "--threads",
     metavar="INT",
-    default=1,
+    default=None,
     type=int,
     required=False,
     action="store",
-    help="default=%(default)s: Number of parallel workers used for stochastic mapping simulations.",
+    help="default=1 for discrete: Number of parallel workers used for stochastic mapping simulations.",
 )
 pasr.add_argument(
     "--seed",

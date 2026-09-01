@@ -1,9 +1,9 @@
 import math
 import multiprocessing
+import sys
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from copy import copy
-from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -13,13 +13,19 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats import poisson
 
+from nwkit.asr_input import (
+    AsrSettings,
+    continuous_tip_values,
+    effective_asr_args,
+    read_asr_table,
+    resolve_trait_type,
+)
 from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     assign_branch_ids,
     get_node_class,
     is_missing_table_value,
     parse_table_missing_values,
-    read_tip_table,
     read_tree,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
@@ -30,30 +36,6 @@ DEFAULT_RATE_BOUNDS = (10**-9, 10**3)
 DEFAULT_AMBIGUOUS_SEPARATOR = "|"
 DEFAULT_TARGET = "all"
 SUPPORTED_MODELS = ("ER", "SYM", "ARD")
-
-
-@dataclass(frozen=True)
-class AsrSettings:
-    """Normalized CLI settings shared by inference and its output metadata."""
-
-    model: str
-    root_prior: str
-    output: str
-
-    @classmethod
-    def from_args(cls, args):
-        model = getattr(args, "model", "ER")
-        output = getattr(args, "output", "probabilities")
-        root_prior = getattr(args, "root_prior", None)
-        if root_prior is None:
-            root_prior = "equal"
-        if model not in SUPPORTED_MODELS:
-            raise ValueError("Unsupported '--model': {}".format(model))
-        if output not in {"probabilities", "map"}:
-            raise ValueError("Unsupported '--output': {}".format(output))
-        if root_prior not in {"equal", "empirical"}:
-            raise ValueError("Unsupported '--root-prior': {}".format(root_prior))
-        return cls(model=model, root_prior=root_prior, output=output)
 
 
 def _parse_comma_list(value, option_name):
@@ -154,21 +136,17 @@ def _read_tip_states(
     missing_values_arg=None,
     ambiguous_separator=DEFAULT_AMBIGUOUS_SEPARATOR,
     unmatched="warn",
+    *,
+    trait_df=None,
 ):
-    if trait_path in ["", None]:
-        raise ValueError("'--trait' is required.")
-    if state_column in ["", None]:
-        raise ValueError("'--state-column' is required.")
-    trait_df, _, _ = read_tip_table(
-        trait_path,
-        option_name="--trait",
-        tree_leaf_names=tree_leaf_names,
-        required_columns=(state_column,),
-        unmatched=unmatched,
-        missing_values=missing_values_arg,
-    )
-    tree_leaf_name_set = set(tree_leaf_names)
-    trait_df = trait_df[trait_df["leaf_name"].isin(tree_leaf_name_set)].copy()
+    if trait_df is None:
+        trait_df = read_asr_table(
+            trait_path,
+            state_column,
+            tree_leaf_names,
+            unmatched=unmatched,
+            missing_values=missing_values_arg,
+        )
 
     missing_values = _parse_missing_values(missing_values_arg)
     observed_state_by_leaf_input: dict[str, str | None] = {}
@@ -744,6 +722,8 @@ def _safe_column_state(state):
 def _build_model_table(states, root_prior_mode, fit):
     state_ids = [_safe_column_state(state) for state in states]
     row = {
+        "trait_type": "discrete",
+        "trait_type_requested": fit.get("trait_type_requested", "discrete"),
         "model": fit["model"],
         "num_states": len(states),
         "states": ",".join(states),
@@ -1222,7 +1202,7 @@ def _write_stochastic_map(tree, states, fit, args):
     _write_table(table, stochastic_map_out)
 
 
-def asr_main(args):
+def _validate_asr_output_paths(args):
     auxiliary_outputs = {
         "--model-out": getattr(args, "model_out", None),
         "--tree-out": getattr(args, "tree_out", None),
@@ -1245,7 +1225,10 @@ def asr_main(args):
             ("--stochastic-map-out", getattr(args, "stochastic_map_out", None)),
         ]
     )
-    settings = AsrSettings.from_args(args)
+
+
+def asr_main(args):
+    _validate_asr_output_paths(args)
     tree = read_tree(
         args.infile,
         args.format,
@@ -1253,6 +1236,30 @@ def asr_main(args):
         rooted=getattr(args, "input_rooted", "auto"),
     )
     _validate_tree_for_asr(tree)
+    trait_df = read_asr_table(
+        args.trait,
+        args.state_column,
+        list(tree.leaf_names()),
+        missing_values=getattr(args, "missing_values", None),
+        unmatched=getattr(args, "unmatched", "warn"),
+        standard_error_column=getattr(args, "standard_error_column", None),
+    )
+    requested_type = getattr(args, "trait_type", "auto")
+    trait_type = resolve_trait_type(requested_type, trait_df, args.state_column)
+    settings = AsrSettings.from_args(args, trait_type)
+    effective = effective_asr_args(args, settings)
+    sys.stderr.write(f"ASR trait type: {trait_type} ({requested_type}).\n")
+    if requested_type == "auto" and trait_type == "continuous":
+        sys.stderr.write(
+            "ASR auto-detection treats numeric columns as continuous; use "
+            "--trait-type discrete for numeric category codes.\n"
+        )
+    targets = _parse_targets(getattr(args, "target", DEFAULT_TARGET))
+    handlers = {"discrete": _run_discrete_asr, "continuous": _run_continuous_asr}
+    handlers[trait_type](tree, trait_df, effective, settings, targets)
+
+
+def _run_discrete_asr(tree, trait_df, args, settings, targets):
     leaf_names = list(tree.leaf_names())
     states, observed_state_by_leaf, likelihood_by_leaf = _read_tip_states(
         trait_path=args.trait,
@@ -1264,6 +1271,7 @@ def asr_main(args):
             args, "ambiguous_separator", DEFAULT_AMBIGUOUS_SEPARATOR
         ),
         unmatched=getattr(args, "unmatched", "warn"),
+        trait_df=trait_df,
     )
     rate_bounds = _parse_rate_bounds(getattr(args, "rate_bounds", None))
     posterior_by_node, fit = compute_mk_marginals(
@@ -1276,7 +1284,7 @@ def asr_main(args):
         root_prior_mode=settings.root_prior,
         rate_bounds=rate_bounds,
     )
-    targets = _parse_targets(getattr(args, "target", DEFAULT_TARGET))
+    fit["trait_type_requested"] = getattr(args, "trait_type", "auto")
     table = _build_output_table(
         tree=tree,
         states=states,
@@ -1294,3 +1302,49 @@ def asr_main(args):
     )
     _write_annotated_tree(tree, states, posterior_by_node, observed_state_by_leaf, args)
     _write_stochastic_map(tree, states, fit, args)
+
+
+def _run_continuous_asr(tree, trait_df, args, settings, targets):
+    from nwkit.continuous_asr import compute_bm_marginals
+    from nwkit.continuous_asr_io import (
+        continuous_model_table,
+        continuous_output_table,
+        write_continuous_tree,
+    )
+
+    observed, errors = continuous_tip_values(
+        trait_df,
+        args.state_column,
+        list(tree.leaf_names()),
+        getattr(args, "standard_error_column", None),
+    )
+    posterior, fit = compute_bm_marginals(
+        tree,
+        observed,
+        sigma2=getattr(args, "sigma2", None),
+        standard_errors=errors,
+        _tree_validated=True,
+    )
+    selected = [
+        node for node in tree.traverse() if _should_output_node(node, observed, targets)
+    ]
+    table = continuous_output_table(
+        tree,
+        selected,
+        observed,
+        errors,
+        posterior,
+        trait=args.state_column,
+        ci_level=settings.ci_level,
+    )
+    if fit.sigma2_estimated and fit.fit_status != "ok":
+        sys.stderr.write(
+            f"Continuous ASR: sigma2=0 ({fit.fit_status}); intervals condition on this rate "
+            "and exclude rate-estimation uncertainty.\n"
+        )
+    _write_table(table, args.outfile)
+    if getattr(args, "model_out", None) not in (None, ""):
+        _write_table(
+            continuous_model_table(fit, args, settings.ci_level), args.model_out
+        )
+    write_continuous_tree(tree, observed, errors, posterior, args, settings.ci_level)

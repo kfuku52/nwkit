@@ -4,8 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.41.0] - 2026-09-01
+
 ### Added
 
+- Continuous ancestral reconstruction and missing-tip imputation under Brownian
+  motion, with fixed or REML-estimated variance rates, optional known measurement
+  SEs, and conditional mean/variance/interval TSV and NHX outputs. Gaussian tree
+  passes handle root/internal polytomies, non-ultrametric trees, and exact
+  zero-length constraints without fixing the inferred root value. Zero-rate and
+  non-identifiable cases are reported explicitly. See `ASR.md`.
 - Shared `--input-rooted auto|yes|no` interpretation and independent auxiliary-tree
   overrides. Leading `[&R]`/`[&U]` tokens and root NHX declarations distinguish
   rooted polytomies from unrooted or unknown inputs without using names or
@@ -14,8 +22,38 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Rooting state/source columns in validation and declaration/override provenance
   in audit summaries. See the rooting section of `CLI_TSV_CONVENTIONS.md`.
 
+### Changed
+
+- ASR now defaults to `--trait-type auto`, detecting numeric versus categorical
+  data from matched non-missing tip values. Use `--trait-type discrete` to retain
+  categorical inference for numeric codes, or `continuous` to require numeric
+  values. Detection is reported on STDERR and in model metadata; type-specific
+  options are validated instead of overriding the inferred type. Existing
+  discrete ER/SYM/ARD models, root priors, and stochastic mapping remain available.
+
 ### Fixed
 
+- Continuous ASR retains centered confidence intervals at extremely small valid
+  confidence levels, rejects numeric-looking infinities during automatic trait
+  detection even when text categories are also present, preserves resolvable
+  subnormal branches through numerical scaling, and avoids redundant local REML
+  searches and transient per-edge messages while retaining the exhaustive
+  likelihood bound.
+- Sparse Gaussian covariance and precision factors now share a symmetric,
+  no-pivot inertia check across regression, EIV, and GLMM paths. They reject
+  floating-point-indefinite matrices, including zero-Schur-pivot row swaps and
+  even negative inertia, instead of accepting `log(abs(det))` as an SPD result.
+- Continuous ASR checks competing REML likelihood modes with a bounded global
+  rate search. Large rate-independent measurement residuals no longer mask the
+  optimum, and unresolvable dynamic ranges fail instead of returning a spurious
+  rate at a floating-point boundary.
+- ASR applies custom missing markers to the original standard-error text before
+  numeric conversion, including numeric-looking markers.
+- Stabilized negative-binomial hurdle derivatives at extremely small means on
+  platforms with inaccurate extended-precision `log1p` tails. Sparse Gaussian
+  factorization now reports singular trial matrices with the same exception as
+  dense factorization, allowing EIV optimization to reject those candidates
+  without hiding unrelated backend failures or adding covariance jitter.
 - ASR accepts declared or explicitly forced root polytomies and uses log-space
   likelihood, outside, and sampling messages to prevent underflow at high-degree
   nodes, including zero-length branches. Binary-only analyses retain their

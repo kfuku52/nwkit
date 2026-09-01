@@ -79,6 +79,7 @@ def main() -> int:
     with tarfile.open(sdist, "r:gz") as archive:
         sdist_members = set(archive.getnames())
     required_sdist = {"/" + member for member in required_wheel} | {
+        "/ASR.md",
         "/CHANGELOG.md",
         "/CLI_TSV_CONVENTIONS.md",
         "/DEVELOPMENT.md",

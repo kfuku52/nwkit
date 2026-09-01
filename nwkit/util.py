@@ -231,7 +231,7 @@ def _duplicated_tsv_headers(header):
     )
 
 
-def read_tsv_preserving_leaf_name(path):
+def read_tsv_preserving_leaf_name(path, *, preserve_columns=()):
     import pandas as pd
 
     text = read_input_text(path)
@@ -247,7 +247,12 @@ def read_tsv_preserving_leaf_name(path):
                 ", ".join(duplicates)
             )
         )
-    dataframe = pd.read_csv(StringIO(text), sep="\t", keep_default_na=False)
+    dataframe = pd.read_csv(
+        StringIO(text),
+        sep="\t",
+        keep_default_na=False,
+        dtype=dict.fromkeys(preserve_columns, str),
+    )
     if "leaf_name" not in dataframe.columns:
         return dataframe
     raw_leaf_names = _read_raw_tsv_column_values(text, "leaf_name")
@@ -293,10 +298,12 @@ def read_tip_table(
     unmatched="warn",
     missing_values=None,
     duplicate_leaf_names="error",
+    *,
+    preserve_columns=(),
 ):
     import pandas as pd
 
-    dataframe = read_tsv_preserving_leaf_name(path)
+    dataframe = read_tsv_preserving_leaf_name(path, preserve_columns=preserve_columns)
     if "leaf_name" not in dataframe.columns:
         raise ValueError("Column 'leaf_name' is required in '{}'.".format(option_name))
     missing_columns = [

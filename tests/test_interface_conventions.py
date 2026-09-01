@@ -479,6 +479,22 @@ def test_tip_table_unmatched_policy_is_shared(tmp_path, capsys):
     assert capsys.readouterr().err == ""
 
 
+def test_tip_table_can_preserve_selected_category_spellings_without_changing_numeric_columns(
+    tmp_path,
+):
+    path = tmp_path / "traits.tsv"
+    path.write_text("leaf_name\tcategory\tvalue\n001\t001\t1.5\nNA\t01\t2.5\n")
+    table, _, _ = read_tip_table(
+        str(path),
+        tree_leaf_names=["001", "NA"],
+        unmatched="error",
+        preserve_columns=("category",),
+    )
+    assert table["leaf_name"].tolist() == ["001", "NA"]
+    assert table["category"].tolist() == ["001", "01"]
+    assert table["value"].tolist() == [1.5, 2.5]
+
+
 def test_specialized_tsv_inputs_support_standard_input(monkeypatch, tmp_path):
     monkeypatch.setattr(sys, "stdin", io.StringIO("leaf_name\tgroup\nA\tx\n"))
     tip_table, _, _ = read_tip_table("-", required_columns=("group",))

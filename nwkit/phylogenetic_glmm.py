@@ -34,7 +34,6 @@ from nwkit.sparse_laplace import (
     append_latent_component,
     combine_sparse_covariance_models,
     continuous_predictor_loading,
-    factor_sparse_nonsingular,
     factor_sparse_positive_definite,
     gmrf_predictor_loading,
     grouped_predictor_loading,
@@ -587,18 +586,7 @@ def _sparse_latent_mode(
         gradient += precision @ candidate
         weight_matrix = _sparse_weight_matrix(weights)
         hessian = precision + loading.T @ weight_matrix @ loading
-        if weights.ndim == 1:
-            likelihood_hessian_psd = bool(np.all(weights >= -1e-12))
-        else:
-            likelihood_hessian_psd = all(
-                float(np.min(np.linalg.eigvalsh((block + block.T) / 2.0))) >= -1e-12
-                for block in weights
-            )
-        factor = (
-            factor_sparse_nonsingular(hessian)
-            if likelihood_hessian_psd
-            else factor_sparse_positive_definite(hessian)
-        )
+        factor = factor_sparse_positive_definite(hessian)
         value = -log_likelihood + 0.5 * float(candidate @ (precision @ candidate))
         return value, gradient, weights, factor
 
@@ -1170,6 +1158,31 @@ def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     return gradient, curvature
 
 
+def _softplus_extended(values):
+    """Extended-precision softplus, including sub-epsilon exponential tails.
+
+    Some NumPy/platform long-double log1p implementations lose the entire
+    leading term for tiny positive arguments (logaddexp uses it too). Evaluate
+    log(1+t) by its alternating series there, rather than rounding 1+t to 1
+    or reducing the rest of the calculation to double precision.
+    """
+    with np.errstate(under="ignore"):
+        tail = np.exp(-np.abs(values))
+    small = tail < np.longdouble("1e-4")
+    log_tail = np.empty_like(tail)
+    if np.any(small):
+        small_tail = tail[small]
+        series = np.zeros_like(small_tail)
+        # Twelve terms bound relative truncation error below 1e-48 here,
+        # including platforms where longdouble is IEEE quadruple precision.
+        for order in range(12, 0, -1):
+            coefficient = np.longdouble(1 if order % 2 else -1) / order
+            series = coefficient + small_tail * series
+        log_tail[small] = small_tail * series
+    log_tail[~small] = np.log1p(tail[~small])
+    return np.maximum(values, 0.0) + log_tail
+
+
 def _zero_truncation_terms(eta, dispersion):
     """Stable zero-truncation score correction and its derivative.
 
@@ -1185,9 +1198,9 @@ def _zero_truncation_terms(eta, dispersion):
     else:
         size = np.longdouble(1.0) / np.longdouble(dispersion)
         log_relative_mean = eta - np.log(size)
-        fraction = np.exp(-np.logaddexp(0.0, -log_relative_mean))
+        fraction = np.exp(-_softplus_extended(-log_relative_mean))
         q = size * fraction
-        exponent = size * np.logaddexp(0.0, log_relative_mean)
+        exponent = size * _softplus_extended(log_relative_mean)
         leading_derivative = 1.0 - fraction
     correction = np.zeros_like(q)
     small = exponent <= 1.0

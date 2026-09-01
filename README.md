@@ -64,7 +64,7 @@ minimal worked example, in
 [the mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).
 
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
-- [`asr`](https://github.com/kfuku52/nwkit/wiki/nwkit-asr): Inferring categorical ancestral states and imputing missing tip states under an Mk model
+- [`asr`](https://github.com/kfuku52/nwkit/blob/master/ASR.md): Inferring discrete (Mk) or continuous (Brownian) ancestral traits and imputing missing tips with automatic trait-type detection
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`collapse`](https://github.com/kfuku52/nwkit/wiki/nwkit-collapse): Collapsing internal branches by support and/or branch length
 - [`compose`](https://github.com/kfuku52/nwkit/wiki/nwkit-compose): Assembling compatible roots, values, and annotations from multiple trees

@@ -282,16 +282,41 @@ uncertainty.
 
 ## ASR defaults and Newick annotations
 
-`asr` uses equal root-state probabilities when `--root-prior` is omitted.
-Likelihoods, marginals, and conditional node-state sampling use log-space
+`asr --trait-type auto` is the default. Only non-missing values in the selected
+column for tips present in the tree determine the type: numeric values select
+continuous BM; otherwise the trait is discrete Mk. Non-finite numeric inputs
+are rejected on the continuous path, not reclassified as categories. An
+all-missing column cannot be auto-classified. Use `--trait-type discrete` for
+numeric category codes, which retain their original spelling, or explicitly
+select `continuous` to reject nonnumeric data. Detection is reported on STDERR
+and in optional model metadata. Incompatible mode-specific options are errors;
+they do not override automatic type detection.
+
+Discrete ASR defaults to ER, equal root-state probabilities, and probability
+output. Likelihoods, marginals, and conditional node-state sampling use log-space
 messages to avoid child-product underflow at large polytomies; zero-length
 branches retain their exact no-transition constraint.
-Annotated Newick uses the shared writer, preserving quoted numeric internal
-names and suppressing internal missing-support sentinels. Stochastic maps
-distinguish exactly zero rates from small positive rates: scaling branch lengths
+Stochastic maps distinguish exactly zero rates from small positive rates: scaling branch lengths
 and inversely scaling a fixed rate matrix preserves the process and seeded map
 counts. Bounds for estimated rates remain expressed in inverse branch-length
 units; adjust `--rate-bounds` when changing those units.
+
+Continuous ASR defaults to BM, a flat prior on the root value, REML rate
+estimation, and mean/variance/interval summaries. `--sigma2` fixes the rate;
+`--standard-error-column` optionally provides finite, non-negative known SEs for
+observed tips. Absent SE input means exact observations. Intervals include root
+uncertainty but condition on the fixed/fitted rate and input tree. Zero-length
+edges enforce identical latent values; identical exact observations at one such
+position count once. A singular zero-rate boundary has an empty residual
+log-likelihood field and an explicit fit status, never a substituted finite
+density. See [ASR.md](ASR.md) for schemas, boundary rules, and examples.
+
+Both modes use the existing rootedness contract, including declared/forced root
+polytomies. Rootedness is separate from the prior on the root's trait value.
+Annotated Newick uses the shared writer, preserving quoted numeric internal
+names, root declarations, and missing-support handling. Discrete NHX fields use
+`asr_state`/`asr_probability`; continuous fields use `asr_mean`, `asr_variance`,
+`asr_sd`, and interval properties.
 
 ## Protecting related outputs
 

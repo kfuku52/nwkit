@@ -1,6 +1,7 @@
 """Invariance and resource-limit contracts at numerical model boundaries."""
 
 import weakref
+from decimal import Decimal, localcontext
 
 import numpy as np
 import pytest
@@ -353,3 +354,25 @@ def test_hurdle_derivatives_are_stable_at_small_and_large_means(dispersion):
     plus, _ = _zero_truncation_terms(middle + 1e-5, dispersion)
     minus, _ = _zero_truncation_terms(middle - 1e-5, dispersion)
     assert derivative[2:5] == pytest.approx((plus - minus) / 2e-5, rel=1e-7)
+
+
+@pytest.mark.parametrize("dispersion", [0.01, 0.2, 1.0, 5.0])
+def test_negative_binomial_zero_truncation_matches_decimal_reference(dispersion):
+    eta = np.asarray([-100.0, -60.0, -40.0, -25.0, -12.0, -10.0, -5.0, 0.0, 5.0, 100.0])
+    expected_correction, expected_derivative = [], []
+    with localcontext() as context:
+        context.prec = 100
+        size = 1 / Decimal.from_float(dispersion)
+        for value in eta:
+            mean = Decimal.from_float(float(value)).exp()
+            fraction = mean / (size + mean)
+            q = size * fraction
+            exponent = size * (1 + mean / size).ln()
+            correction = q / (exponent.exp() - 1)
+            derivative = correction * (1 - fraction - q - correction)
+            expected_correction.append(float(correction))
+            expected_derivative.append(float(derivative))
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        correction, derivative = _zero_truncation_terms(eta, dispersion)
+    np.testing.assert_allclose(correction, expected_correction, rtol=5e-13, atol=5e-15)
+    np.testing.assert_allclose(derivative, expected_derivative, rtol=5e-13, atol=5e-15)
