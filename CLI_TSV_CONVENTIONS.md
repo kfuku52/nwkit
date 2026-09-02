@@ -118,8 +118,9 @@ when a CLI override changes its interpretation.
 
 ## Tip-keyed TSV files
 
-`annotate --table` and the `--trait` files used by `asr`, `contrast`, `draw`,
-`monophyly`, `sample`, and `skim` follow one shared contract:
+`annotate --table` and the `--trait` files used by `asr`, `asrcompare`,
+`contrast`, `draw`, `monophyly`, `sample`, and `skim` follow one shared
+contract:
 
 - The first-class key is `leaf_name`.
 - `leaf_name` values are exact tree tip labels and must be non-empty. They are
@@ -282,15 +283,29 @@ uncertainty.
 
 ## ASR defaults and Newick annotations
 
-`asr --trait-type auto` is the default. Only non-missing values in the selected
-column for tips present in the tree determine the type: numeric values select
-continuous BM; otherwise the trait is discrete Mk. Non-finite numeric inputs
-are rejected on the continuous path, not reclassified as categories. An
-all-missing column cannot be auto-classified. Use `--trait-type discrete` for
-numeric category codes, which retain their original spelling, or explicitly
-select `continuous` to reject nonnumeric data. Detection is reported on STDERR
-and in optional model metadata. Incompatible mode-specific options are errors;
-they do not override automatic type detection.
+`asr --trait-type auto` and `asrcompare --trait-type auto` are the defaults.
+Only non-missing values in the selected column for tips present in the tree
+determine the type: numeric values select continuous BM; otherwise the trait is
+discrete Mk. Non-finite numeric inputs are rejected on the continuous path, not
+reclassified as categories. An all-missing column cannot be auto-classified.
+Use `--trait-type discrete` for numeric category codes, which retain their
+original spelling, or explicitly select `continuous` to reject nonnumeric data.
+Detection is reported on STDERR and in optional model metadata. Incompatible
+mode-specific options are errors; they do not override automatic type detection.
+
+`asrcompare` routes model-specific options only to applicable candidates that
+consume them. Its TSV retains one row per requested candidate, including
+not-applicable, not-fitted, failed, nonregular, and statistically equivalent
+rows. Compatibility groups include trait dimensionality, likelihood convention,
+and root prior. Count and rank fields are integral when present; unavailable
+values are empty. Shared input-preparation and per-candidate fit durations are
+reported separately; shared preparation includes tree/trait parsing and cached
+auxiliary inputs. Structurally equivalent rows identify their fitted
+representative in `equivalent_to` and do not duplicate criterion weights. The
+equivalence contract distinguishes binary GTR from directly bounded ARD/F81,
+and collapses exact neutral/fixed or one-regime reductions only when every
+relevant option and root contract matches. MV-BM and MV-OU sample sizes count
+distinct observed phylogenetic positions rather than scalar coordinates.
 
 Discrete ASR defaults to ER, equal root-state probabilities, and probability
 output. Likelihoods, marginals, and conditional node-state sampling use log-space
@@ -320,12 +335,12 @@ names, root declarations, and missing-support handling. Discrete NHX fields use
 
 ## Protecting related outputs
 
-`draw`, `rootcompare`, `regress`, and `intersection` share recoverable output
-installation. All file destinations are validated before writing, staged beside
-their targets, and installed after generation succeeds. Handled write/rename
-failures restore existing outputs and remove newly installed files. Recovery
-backups are retained if restoration itself fails. Existing file modes and the
-process creation mask are respected.
+`draw`, `asrcompare`, `rootcompare`, `regress`, and `intersection` share
+recoverable output installation. All file destinations are validated before
+writing, staged beside their targets, and installed after generation succeeds.
+Handled write/rename failures restore existing outputs and remove newly
+installed files. Recovery backups are retained if restoration itself fails.
+Existing file modes and the process creation mask are respected.
 
 `draw` rejects outputs that alias each other or any input, including species maps
 and referenced tip images. Checks cover symbolic links, hard links, and equivalent

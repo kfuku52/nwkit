@@ -182,6 +182,19 @@ def compute_mvbm_marginals(
         and not all(value is None for value in vector)
         for vector in values_by_leaf.values()
     )
+    if standard_errors is not None:
+        try:
+            has_nonzero_error = any(
+                error is not None and float(error) != 0.0
+                for vector in standard_errors.values()
+                if vector is not None
+                for error in vector
+            )
+        except (TypeError, ValueError, OverflowError):
+            # Let the dense implementation report the precise validation error.
+            has_nonzero_error = True
+        if not has_nonzero_error:
+            standard_errors = None
     if partial or standard_errors is not None:
         from nwkit.multivariate_gaussian_asr import fit_dense_mvbm
 

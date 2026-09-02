@@ -231,13 +231,16 @@ def _run_drift(
     tree,
     values_by_leaf,
     depths,
+    leaf_by_name,
     drift,
     sigma2,
     standard_errors,
     tree_validated,
 ):
     residual_values = {
-        name: None if value is None else float(value) - drift * depths[tree[name]]
+        name: None
+        if value is None
+        else float(value) - drift * depths[leaf_by_name[name]]
         for name, value in values_by_leaf.items()
     }
     residual_posterior, fit = compute_bm_marginals(
@@ -340,8 +343,9 @@ def compute_bm_drift_marginals(
         None if sigma2 is None else _finite_number(sigma2, "--sigma2", nonnegative=True)
     )
     depths = _node_depths(tree)
+    leaf_by_name = {str(leaf.name): leaf for leaf in tree.leaves()}
     observed = [
-        (tree[name], _finite_number(value, f"Trait value for '{name}'"))
+        (leaf_by_name[name], _finite_number(value, f"Trait value for '{name}'"))
         for name, value in values_by_leaf.items()
         if value is not None
     ]
@@ -351,6 +355,7 @@ def compute_bm_drift_marginals(
             tree,
             values_by_leaf,
             depths,
+            leaf_by_name,
             fitted_drift,
             fixed_sigma2,
             standard_errors,
@@ -384,6 +389,7 @@ def compute_bm_drift_marginals(
                 tree,
                 values_by_leaf,
                 depths,
+                leaf_by_name,
                 ordinary_slope,
                 fixed_sigma2,
                 standard_errors,
@@ -414,6 +420,7 @@ def compute_bm_drift_marginals(
                             tree,
                             values_by_leaf,
                             depths,
+                            leaf_by_name,
                             key,
                             fixed_sigma2,
                             standard_errors,
@@ -438,6 +445,7 @@ def compute_bm_drift_marginals(
                 tree,
                 values_by_leaf,
                 depths,
+                leaf_by_name,
                 fitted_drift,
                 fixed_sigma2,
                 standard_errors,

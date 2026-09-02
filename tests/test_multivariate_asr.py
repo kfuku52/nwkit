@@ -95,10 +95,38 @@ def test_mvbm_supports_partial_tip_vectors():
         {"A": (0.0, 1.0), "B": (2.0, None), "C": (1.0, 3.0)},
         ("x", "y"),
     )
-    assert fit.num_effective_observations == 5
+    assert fit.num_effective_observations == 3
     imputed = posterior[next(node for node in posterior if node.name == "B")]
     assert np.isfinite(imputed.mean[1])
     assert imputed.covariance[1, 1] > 0.0
+
+
+def test_mvbm_all_zero_measurement_errors_keep_the_linear_complete_case_path():
+    tree = tree_from("((A:1,B:1):1,(C:1,D:1):1,E:2)R;")
+    values = {
+        "A": (0.0, 1.0),
+        "B": (0.5, 1.8),
+        "C": (1.2, 0.4),
+        "D": (2.1, -0.2),
+        "E": (2.8, 0.9),
+    }
+    expected, expected_fit = compute_mvbm_marginals(tree, values, ("x", "y"))
+    zero_errors = {name: (0.0, 0.0) for name in values}
+    actual, actual_fit = compute_mvbm_marginals(
+        tree,
+        values,
+        ("x", "y"),
+        standard_errors=zero_errors,
+    )
+    assert type(actual_fit) is type(expected_fit)
+    assert actual_fit.num_effective_observations == 5
+    assert actual_fit.sigma == pytest.approx(expected_fit.sigma)
+    assert actual_fit.restricted_log_likelihood == pytest.approx(
+        expected_fit.restricted_log_likelihood
+    )
+    for node in tree.traverse():
+        assert actual[node].mean == pytest.approx(expected[node].mean)
+        assert actual[node].covariance == pytest.approx(expected[node].covariance)
 
 
 def test_trait_rescaling_and_offsets_transform_mvbm_results():

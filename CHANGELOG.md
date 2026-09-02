@@ -4,8 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.0] - 2026-09-02
+
 ### Added
 
+- Added `nwkit asrcompare`, a `rootcompare`-style batch interface that resolves
+  every applicable discrete or continuous ASR model, isolates automatic-fit
+  failures, records non-rankable candidates, separates flat/stationary/proper
+  root likelihood conventions, and writes grouped AIC/AICc/BIC rankings with an
+  optional single-page, rank-sorted table that places every candidate under an
+  explicit compatible-comparison-set heading.
 - Added continuous ASR for Pagel lambda/kappa/delta, separate declining EB and
   two-sided ACDC transforms, fixed/Gaussian-root OU, stationary correlated
   MV-OU, OUMA/OUMV/OUMVA regime variants, and regime-specific Brownian drift.
@@ -28,6 +36,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Changed
 
+- `asrcompare --models all` now records HRM without fitting it because HRM is
+  non-rankable; explicitly naming HRM still runs the diagnostic fit. Shared
+  input preparation is timed separately from candidate fits, and model-specific
+  options are routed only to applicable consumers.
 - Scalar Gaussian ASR extensions now use one compiled topology, generic affine
   branch-conditioner, shared deterministic scalar/multistart optimizers, and the
   same evolutionary model registry/process builders as regression. Across-
@@ -46,6 +58,23 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Fixed
 
+- ASR batch comparison now keeps discrete root priors in separate likelihood
+  groups, preserves flat-root semantics for singular fits, uses dense joint-best
+  ranks for exact IC ties, counts finite candidates for the selected criterion,
+  and excludes structurally equivalent parameterizations from duplicate IC
+  weights. Its TSV preserves integer count fields, and its single-page PDF
+  aligns headers and values while safely shortening long diagnostics.
+- Tightened ASR comparison equivalence to keep bounded binary GTR independent
+  from ARD/F81 while deduplicating exact neutral and one-regime reductions;
+  made IC tie clustering offset-invariant and non-transitive; left finite-
+  likelihood-free fits unassigned; and included tree/trait parsing in shared
+  preparation timing. Unicode-aware font selection and rendered-width fitting
+  prevent missing or clipped PDF text.
+- Unified MV-BM/MV-OU comparison sample sizes on distinct observed phylogenetic
+  positions, retained the linear MV-BM path for explicit all-zero SE input, and
+  removed repeated tree-name traversals from BM-DRIFT without changing output.
+- Audit provenance and output-collision checks now include ASR rate matrices,
+  regime maps, regime-parameter tables, and transition-graph files.
 - Constrained COVARION hidden-class effective rates to the requested rate bounds,
   rejected boundary-degenerate information-criterion fits, and added an aggregate
   stochastic-mapping work guard. Symmetric Mk generators now reuse one stable

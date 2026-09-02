@@ -483,12 +483,14 @@ select a dense observed-coordinate likelihood, with one comma-separated
 identify its mean/covariance; an implementation guard rejects more
 than 1,000 dense observed coordinates. This measured cap bounds cubic covariance
 factorization and repeated all-node solves; complete error-free MV-BM remains on
-the linear-time path and is not subject to the dense-coordinate cap.
-Consistent exact observations at one zero-length-contracted position count as
-one effective coordinate; conflicting values at that position have zero
-likelihood and are rejected. A covariance component is also rejected explicitly
-when the observed trait/branch overlap leaves it absent from every independent
-flat-root contrast.
+the linear-time path and is not subject to the dense-coordinate cap. Explicit
+all-zero SE columns are normalized to the same exact-observation path. MV-BM and
+MV-OU both report sample size as the number of distinct observed phylogenetic
+positions, independent of trait dimension or dense/fast implementation path.
+Consistent exact observations at one zero-length-contracted position count once;
+conflicting values at that position have zero likelihood and are rejected. A
+covariance component is also rejected explicitly when the observed trait/branch
+overlap leaves it absent from every independent flat-root contrast.
 
 `--model MV-OU` fits a stationary separable process with one shared positive
 alpha, a full stationary trait covariance `Sigma`, and one optimum per trait:
@@ -508,8 +510,96 @@ currently rejected for multivariate fits rather than silently approximated.
 
 ### Model comparison and simulation diagnostics
 
+`nwkit asrcompare` is the batch model-selection interface corresponding to
+`rootcompare`. It reads the tree and trait table once, resolves the trait type,
+fits every applicable requested candidate, and writes one row per candidate:
+
+```sh
+nwkit asrcompare -i tree.nwk --trait traits.tsv \
+  --state-column body_mass --models all \
+  --exclude-models BM-DRIFT -o comparison.tsv \
+  --figure-out comparison.pdf --criterion aic
+```
+
+`--models all` is the default. It includes every registered model for the
+resolved trait type. Models needing unavailable inputs, such as BMS without a
+`--regime-map`, are retained with `status=not_applicable`; failures in one
+automatically selected model are retained with `status=failed` and do not hide
+successful fits. Automatic comparison records HRM as `status=not_fitted` rather
+than spending most of the run on a hidden-class fit that cannot participate in
+regular-model IC ranking; naming HRM explicitly requests that diagnostic fit.
+A named `--models M1,M2,...` request is strict and stops on an inapplicable
+candidate or fit exception; numerical diagnostic outcomes such as
+non-convergence remain visible as result rows. `--exclude-models` accepts
+families or an individual OU root variant.
+
+The command calculates IC values only from finite fits marked as rankable. It
+retains non-converged fits, singular fits, HRM label-switching fits, nonregular
+COVARION boundaries, and models without a marginal likelihood, but does not rank
+them. Other finite boundary fits remain rankable and are labeled for inspection.
+THRESHOLD is reported as `no_likelihood` without running its MCMC because its
+posterior diagnostics do not define AIC/AICc/BIC. Structurally identical
+parameterizations are retained as `status=equivalent`, but only one
+representative contributes IC weight. This includes binary ER/SYM and binary
+ARD/F81 under matching transition/root contracts, neutral fixed
+lambda/kappa/delta or zero EB/drift reductions to BM, and one-regime reductions
+to the corresponding ordinary Mk, BM, BM-DRIFT, or stationary OU model. Binary
+GTR is not merged with ARD/F81: its bounded exchangeability/frequency-ratio
+parameterization defines a different feasible rate space. EB and ACDC are
+merged only when a shared fixed rate or explicit nonpositive bounds make their
+complete parameter spaces equal; a coincident point estimate alone does not
+merge them. Criterion ties use a small absolute numerical tolerance, dense
+ranks, and mark every tied minimum as best; the rule is invariant to a common IC
+offset and cannot chain through adjacent near-ties.
+
+Model-specific options are routed only to candidates that consume them and are
+rejected if no applicable selected model does. A shared transform value or bound
+must be valid for every selected transformed model. Because fixed regime tables
+have model-specific exact column schemas, one `--regime-parameters` file cannot
+be shared across selected regime models requiring different columns.
+
+Comparisons are partitioned by trait dimensionality, likelihood convention, and
+root prior. Equal, empirical, stationary, and Gaussian discrete roots therefore
+remain distinct, as do continuous roots. Flat-root integrated BM-family fits,
+stationary-root OU fits, and proper fixed/Gaussian-root OU fits never receive a
+shared delta or weight. Proper-root variants are also kept separate from one
+another. Use `--models 'OU[stationary],OU[fixed],OU[gaussian]'` to request
+variants explicitly; fixed and Gaussian candidates require `--root-mean`, and
+Gaussian additionally requires positive `--root-variance`. Each criterion needs
+at least two finite values in a group before its deltas or weights are emitted;
+the selected criterion independently controls ranks and winners.
+The optional PDF is a single-page table containing every evaluated candidate.
+Shaded section headers visibly separate compatible comparison sets, and models
+within each set are sorted from `#1` onward. Rows report fit status, sample and
+parameter counts, log likelihood, selected criterion, delta, weight, and notes;
+no-likelihood, not-fitted, failed, or input-inapplicable candidates appear in a
+final unassigned section.
+No bar plot or cross-set ranking is shown. `--criterion aic|aicc|bic` selects
+the displayed ranking while all three criteria remain in the TSV. Unicode text
+uses an installed font with verified glyph coverage, and rendered-width fitting
+prevents wide titles or diagnostics from clipping; if no installed font covers
+the requested text, PDF creation fails explicitly instead of emitting tofu.
+
+The TSV includes candidate identity and root provenance; compatibility group;
+fit, optimizer, and parameter-contract diagnostics; log likelihood and all IC
+values/deltas/weights; selected-criterion rank and joint-best flag; and
+`equivalent_to` for retained aliases. Count columns are written as integers when
+present. `num_comparable_models` is the number with a finite value for the
+selected criterion in that row's group. `shared_preparation_seconds` reports
+one-time input preparation, including tree and trait parsing plus shared
+auxiliary inputs, repeated on each row; `elapsed_seconds` contains only that
+candidate's fit/evaluation time. Alias rows have zero fit time.
+
+Multiple discrete columns currently select the joint MK-MIXTURE contract; other
+discrete models are not fitted separately and summed. Multiple continuous
+columns select MV-BM/MV-OU candidates. Numeric categorical columns still need
+explicit `--trait-type discrete`.
+
 `--compare-models M1,M2,... --model-comparison-out FILE` fits compatible models
-and reports log likelihood, parameter count, AIC/AICc/BIC, deltas, and weights.
+alongside a normal `nwkit asr` reconstruction and reports log likelihood,
+parameter count, AIC/AICc/BIC, deltas, and weights. It remains available as the
+compact backward-compatible interface when every requested model already shares
+one likelihood convention.
 Only models sharing one likelihood convention may be compared: discrete ML
 models are separate from proper-root OU ML and flat-root integrated BM-family
 fits. Discrete BIC/AICc use the number of informative observed tip-character
@@ -686,6 +776,14 @@ nwkit asr -i tree.nwk --trait traits.tsv --state-column body_mass \
   --model-comparison-out comparison.tsv --profile-ci-level 0.95 \
   --posterior-samples-out draws.tsv --posterior-predictive-out ppc.tsv \
   --seed 42 -o lambda.tsv
+```
+
+Compare ordinary discrete likelihood models and retain a diagnostic PDF:
+
+```sh
+nwkit asrcompare -i tree.nwk --trait states.tsv --state-column state \
+  --trait-type discrete --models ER,SYM,ARD,F81,GTR,COVARION \
+  -o model-comparison.tsv --figure-out model-comparison.pdf
 ```
 
 Lévy/jump processes, tree-uncertainty integration, correlated measurement-error

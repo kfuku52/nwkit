@@ -10,7 +10,11 @@ import pytest
 
 from nwkit import provenance as provenance_mod
 from nwkit.cli import main
-from nwkit.provenance import _argument_dict, _TeeTextWriter
+from nwkit.provenance import (
+    _argument_dict,
+    _declared_input_path_candidates,
+    _TeeTextWriter,
+)
 
 
 def _sha256(path):
@@ -408,6 +412,81 @@ def test_audit_path_cannot_modify_an_input_file(tmp_path):
     if os.name != "nt":
         assert stat.S_IMODE(infile.stat().st_mode) == 0o640
     assert not outfile.exists()
+
+
+def test_asrcompare_audit_hashes_auxiliary_model_inputs(tmp_path):
+    trait = tmp_path / "traits.tsv"
+    matrix = tmp_path / "q.tsv"
+    output = tmp_path / "comparison.tsv"
+    audit = tmp_path / "audit.jsonl"
+    trait.write_text("leaf_name\tx\nA\ta\nB\ta\nC\tb\nD\tb\nE\ta\n")
+    matrix.write_text("state\ta\tb\na\t0\t0.2\nb\t0.3\t0\n")
+
+    main(
+        [
+            "asrcompare",
+            "-i",
+            "[&R](A:1,B:1,C:1,D:1,E:1)R;",
+            "--trait",
+            str(trait),
+            "--state-column",
+            "x",
+            "--models",
+            "CUSTOM",
+            "--rate-matrix",
+            str(matrix),
+            "-o",
+            str(output),
+            "--audit",
+            str(audit),
+        ]
+    )
+
+    record = json.loads(audit.read_text())
+    records = {item["path"]: item for item in record["inputs"]}
+    assert records[str(matrix.resolve())]["argument"] == "rate_matrix"
+    assert records[str(matrix.resolve())]["sha256"] == _sha256(matrix)
+
+
+def test_asrcompare_audit_cannot_modify_auxiliary_model_input(tmp_path):
+    trait = tmp_path / "traits.tsv"
+    matrix = tmp_path / "q.tsv"
+    output = tmp_path / "comparison.tsv"
+    trait.write_text("leaf_name\tx\nA\ta\nB\ta\nC\tb\nD\tb\nE\ta\n")
+    original = "state\ta\tb\na\t0\t0.2\nb\t0.3\t0\n"
+    matrix.write_text(original)
+    matrix.chmod(0o640)
+
+    with pytest.raises(ValueError, match="distinct from input"):
+        main(
+            [
+                "asrcompare",
+                "-i",
+                "[&R](A:1,B:1,C:1,D:1,E:1)R;",
+                "--trait",
+                str(trait),
+                "--state-column",
+                "x",
+                "--models",
+                "CUSTOM",
+                "--rate-matrix",
+                str(matrix),
+                "-o",
+                str(output),
+                "--audit",
+                str(matrix),
+            ]
+        )
+
+    assert matrix.read_text() == original
+    if os.name != "nt":
+        assert stat.S_IMODE(matrix.stat().st_mode) == 0o640
+    assert not output.exists()
+
+
+def test_transition_graph_keywords_are_not_audit_input_paths():
+    candidates = _declared_input_path_candidates(Namespace(transition_graph="ordered"))
+    assert candidates == []
 
 
 def test_audit_path_cannot_create_a_declared_missing_input(tmp_path):

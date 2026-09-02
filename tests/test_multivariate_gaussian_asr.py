@@ -35,7 +35,7 @@ def test_dense_mvbm_accepts_partial_vectors_and_errors():
     }
     posterior, fit = fit_dense_mvbm(tree, values, ("x", "y"), standard_errors=errors)
     assert fit.restricted_log_likelihood is not None
-    assert fit.num_effective_observations == 8
+    assert fit.num_effective_observations == 5
     assert fit.sigma.shape == (2, 2)
     assert np.all(np.linalg.eigvalsh(fit.sigma) > 0.0)
     assert posterior[tree["B"]].covariance[1, 1] > 0.0
@@ -74,6 +74,7 @@ def test_correlated_mvou_supports_partial_observations():
     assert fit.log_likelihood is not None
     assert fit.alpha == 0.7
     assert fit.theta is not None and len(fit.theta) == 2
+    assert fit.num_effective_observations == 5
     assert posterior[tree].covariance.shape == (2, 2)
 
 
@@ -90,7 +91,7 @@ def test_dense_multivariate_models_contract_duplicate_exact_zero_length_tips(fit
     options = {"alpha": 0.7} if fitter is fit_dense_mvou else {}
     posterior, fit = fitter(tree, values, ("x", "y"), **options)
     assert fit.num_observed == 5
-    assert fit.num_effective_observations == 8
+    assert fit.num_effective_observations == 4
     assert posterior[tree["A"]].mean == pytest.approx(posterior[tree["B"]].mean)
     assert posterior[tree["A"]].covariance == pytest.approx(
         posterior[tree["B"]].covariance

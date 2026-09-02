@@ -517,7 +517,7 @@ pasr.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Optional comma-separated state order. Unlisted observed states are rejected; "
-    "required with --transition-graph ordered.",
+    "required with --transition-graph ordered and with THRESHOLD.",
 )
 pasr.add_argument(
     "--model",
@@ -558,7 +558,7 @@ pasr.add_argument(
     metavar="complete|ordered|PATH",
     default=None,
     type=str,
-    help="ER/SYM/ARD, MK-REGIME, HRM, or COVARION: Allowed observed transitions. 'ordered' connects "
+    help="ER/SYM/ARD, MK-REGIME, HRM, COVARION, or MK-MIXTURE: Allowed observed transitions. 'ordered' connects "
     "adjacent explicit --states bidirectionally; PATH is a TSV from_state/to_state edge list. "
     "F81/GTR require complete.",
 )
@@ -786,7 +786,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="OU regime models: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
+    help="OU-family models, including MV-OU and regime variants: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
 )
 pasr.add_argument(
     "--alpha-bounds",
@@ -802,7 +802,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="OU models: Fixed shared process optimum. Regime models can instead read regime optima from a table.",
+    help="Scalar OU and OUM-family models: Fixed shared process optimum. Regime models can instead read regime optima from a table; MV-OU estimates one optimum per trait.",
 )
 pasr.add_argument(
     "--eb-rate",
@@ -1030,6 +1030,111 @@ pasr.add_argument(
     help="default=%(default)s: Random seed for stochastic mapping, liability MCMC, or continuous simulation diagnostics.",
 )
 pasr.set_defaults(handler=command_asr)
+
+
+def command_asrcompare(args):
+    from nwkit.asr_compare import asr_compare_main
+
+    asr_compare_main(args)
+
+
+def _copy_store_options(source, target, destinations):
+    """Reuse selected store-option contracts without sharing argparse actions."""
+
+    actions = {action.dest: action for action in source._actions}
+    for destination in destinations:
+        action = actions[destination]
+        if not action.option_strings or action.nargs == 0:
+            raise RuntimeError(
+                f"Cannot reuse non-store ASR option contract: {destination}."
+            )
+        target.add_argument(
+            *action.option_strings,
+            dest=action.dest,
+            nargs=action.nargs,
+            default=action.default,
+            type=action.type,
+            choices=action.choices,
+            required=action.required,
+            help=action.help,
+            metavar=action.metavar,
+        )
+
+
+pasrcompare = subparsers.add_parser(
+    "asrcompare",
+    help="Compare the fit of applicable ancestral-trait models",
+    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+)
+_copy_store_options(
+    pasr,
+    pasrcompare,
+    (
+        "trait",
+        "state_column",
+        "trait_type",
+        "states",
+        "rate",
+        "rate_bounds",
+        "transition_graph",
+        "regime_map",
+        "regime_model",
+        "regime_parameters",
+        "hidden_categories",
+        "mixture_model",
+        "rate_mixture",
+        "rate_categories",
+        "rate_matrix",
+        "root_prior",
+        "root_mean",
+        "root_variance",
+        "ambiguous_separator",
+        "sigma2",
+        "evolution_parameter",
+        "evolution_parameter_bounds",
+        "alpha",
+        "alpha_bounds",
+        "theta",
+        "eb_rate",
+        "eb_rate_bounds",
+        "drift",
+        "standard_error_column",
+    ),
+)
+pasrcompare.add_argument(
+    "--models",
+    metavar="all|MODEL[,MODEL,...]",
+    default="all",
+    type=str,
+    help="default=%(default)s: Models to evaluate. Automatic comparison records but does not fit non-rankable HRM; name HRM explicitly for a diagnostic fit. OU root variants may be written as OU[stationary], OU[fixed], or OU[gaussian].",
+)
+pasrcompare.add_argument(
+    "--exclude-models",
+    "--exclude_models",
+    dest="exclude_models",
+    metavar="MODEL[,MODEL,...]",
+    default=None,
+    type=str,
+    help="Exclude model families or individual OU root variants from the resolved set.",
+)
+pasrcompare.add_argument(
+    "--criterion",
+    metavar="aic|aicc|bic",
+    default="aic",
+    choices=["aic", "aicc", "bic"],
+    help="default=%(default)s: Criterion used for ranks, winners, and the optional figure. All three criteria are written to the TSV.",
+)
+pasrcompare.add_argument(
+    "--figure-out",
+    "--figure_out",
+    dest="figure_out",
+    metavar="PATH.pdf",
+    default=None,
+    type=str,
+    help="Optional single-page, rank-sorted table showing every candidate in "
+    "clearly separated compatible comparison sets.",
+)
+pasrcompare.set_defaults(handler=command_asrcompare)
 
 
 def command_constrain(args):

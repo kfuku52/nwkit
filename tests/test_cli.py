@@ -106,7 +106,7 @@ def test_regress_has_no_hidden_underscore_option_aliases():
 
 @pytest.mark.parametrize(
     "command",
-    ["annotate", "asr", "draw", "monophyly", "sample", "skim"],
+    ["annotate", "asr", "asrcompare", "draw", "monophyly", "sample", "skim"],
 )
 def test_shared_tip_table_commands_default_to_unmatched_warn(command):
     assert _subcommand_parser(command).get_default("unmatched") == "warn"

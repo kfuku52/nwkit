@@ -14,6 +14,16 @@ pytestmark = pytest.mark.integration
 CASES = {
     "annotate": ["--table", "{data}"],
     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
+    "asrcompare": [
+        "--trait",
+        "{data}",
+        "--state-column",
+        "state",
+        "--models",
+        "ER,ARD",
+        "--figure-out",
+        "{pdf}",
+    ],
     "constrain": ["--backbone", "user", "--species-list", "{species}"],
     "collapse": ["--max-dist", "0.5"],
     "compose": ["--length-source", "{other}"],
@@ -79,6 +89,7 @@ CASES = {
 
 TABLE_COLUMNS = {
     "asr": "map_state",
+    "asrcompare": "model",
     "cladefreq": "frequency",
     "contrast": "standardized_contrast",
     "diff": "status",
@@ -161,7 +172,7 @@ def test_command_parser_reaches_its_real_handler(
     if command in TABLE_COLUMNS:
         frame = pd.read_csv(output, sep="\t")
         assert TABLE_COLUMNS[command] in frame.columns
-        if command == "rootcompare":
+        if command in {"asrcompare", "rootcompare"}:
             assert paths["pdf"].read_bytes().startswith(b"%PDF")
     elif command == "draw":
         assert "<svg" in output.read_text()

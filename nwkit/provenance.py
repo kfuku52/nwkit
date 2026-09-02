@@ -69,9 +69,12 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "property_source",
         "predictor_contrasts",
         "predictor_sampling_covariance",
+        "rate_matrix",
         "reconciliation",
         "reconciliation_tree",
         "reference",
+        "regime_map",
+        "regime_parameters",
         "response_contrasts",
         "response_sampling_covariance",
         "root_source",
@@ -86,6 +89,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "taxid_tsv",
         "tip_image_manifest",
         "trait",
+        "transition_graph",
         "tree",
         "weight_tsv",
         "densitree_trees",
@@ -279,19 +283,30 @@ def _path_candidates_from_value(value):
     return []
 
 
+def _skip_declared_input_argument(args, argument):
+    return (
+        argument in ("manifest", "attribution")
+        and getattr(args, "command", None) == "image"
+    )
+
+
+def _normalized_argument_path_values(args, argument):
+    values = _path_candidates_from_value(getattr(args, argument))
+    if argument == "property_source":
+        return [value.rsplit("@", 1)[1] for value in values if "@" in value]
+    if argument == "transition_graph":
+        return [value for value in values if value not in ("complete", "ordered")]
+    return values
+
+
 def _declared_input_path_candidates(args):
     candidates: list[tuple[str, str]] = []
     for argument in sorted(INPUT_PATH_ARGUMENTS):
         if not hasattr(args, argument):
             continue
-        if (
-            argument in ("manifest", "attribution")
-            and getattr(args, "command", None) == "image"
-        ):
+        if _skip_declared_input_argument(args, argument):
             continue
-        values = _path_candidates_from_value(getattr(args, argument))
-        if argument == "property_source":
-            values = [value.rsplit("@", 1)[1] for value in values if "@" in value]
+        values = _normalized_argument_path_values(args, argument)
         candidates.extend((argument, value) for value in values)
     return candidates
 

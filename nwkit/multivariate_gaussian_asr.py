@@ -51,6 +51,7 @@ class _ObservationData:
     scales: np.ndarray
     count_by_trait: np.ndarray
     num_observed_tips: int
+    num_effective_positions: int
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,7 @@ def _prepare_observations(
     raw_records = []
     exact_by_position: dict[tuple[int, int], float] = {}
     observed_tips = set()
+    observed_positions = set()
     for name, node_index in compiled.leaf_index_by_name.items():
         vector = values_by_leaf.get(name)
         if vector is None:
@@ -137,6 +139,7 @@ def _prepare_observations(
                 exact_by_position[key] = value
             raw_records.append((node_index, trait_index, value, error))
             observed_tips.add(name)
+            observed_positions.add(int(contracted_positions[node_index]))
     if not raw_records:
         raise ValueError("A multivariate model requires at least one observed value.")
     if len(raw_records) > _MAX_DENSE_OBSERVATIONS:
@@ -190,6 +193,7 @@ def _prepare_observations(
         scales,
         count_by_trait,
         len(observed_tips),
+        len(observed_positions),
     )
 
 
@@ -604,7 +608,7 @@ def fit_dense_mvbm(
         restricted_log_likelihood=likelihood,
         log_likelihood=None,
         num_observed=data.num_observed_tips,
-        num_effective_observations=len(data.values),
+        num_effective_observations=data.num_effective_positions,
         residual_df=len(data.values) - dimension,
         fit_status="ok" if rank == dimension else "singular_covariance",
         optimizer_success=optimized.success,
@@ -734,7 +738,7 @@ def fit_dense_mvou(
         restricted_log_likelihood=None,
         log_likelihood=likelihood,
         num_observed=data.num_observed_tips,
-        num_effective_observations=len(data.values),
+        num_effective_observations=data.num_effective_positions,
         residual_df=len(data.values),
         fit_status=status if rank == dimension else "singular_covariance",
         optimizer_success=optimized.success,

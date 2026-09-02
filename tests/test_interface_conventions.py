@@ -127,6 +127,7 @@ def test_non_newick_outputs_do_not_expose_outformat():
     commands = _command_parsers()
     for command in (
         "asr",
+        "asrcompare",
         "cladefreq",
         "contrast",
         "diff",
