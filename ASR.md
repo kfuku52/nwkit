@@ -2,9 +2,11 @@
 
 `nwkit asr` reconstructs traits at every node and imputes missing tip values.
 Discrete inference includes ER, SYM, ARD, F81, GTR, fixed-generator CUSTOM,
-branch-regime Mk, and hidden-rates models. Continuous inference includes BM,
-branch-rate BMS, early burst, directional drift, multivariate BM, stationary OU,
-and branch-optimum OUM. The tree must be rooted under the
+branch-regime Mk, hidden/covarion rates, across-character rate mixtures, and a
+Bayesian threshold/liability model. Continuous inference includes BM,
+Pagel lambda/kappa/delta transforms, EB/ACDC, directional and regime drift,
+multivariate BM/OU, flexible-root OU, and OUM/OUMA/OUMV/OUMVA regime models.
+The tree must be rooted under the
 [shared rootedness contract](CLI_TSV_CONVENTIONS.md#rootedness-and-root-polytomies).
 Root and internal polytomies, non-ultrametric trees, and finite non-negative
 non-root branch lengths are supported. Root stem length is not part of any
@@ -35,8 +37,9 @@ names such as `NA`. Duplicate names or column headers are errors. The shared
   `--states` can perform a prior-only analysis only with a fully fixed process:
   ER plus `--rate`, or CUSTOM plus `--rate-matrix`. Fitted ER, SYM, ARD, F81,
   GTR, MK-REGIME, and HRM parameters have no likelihood information and are
-  rejected. Continuous mode requires at least one observed value even when the
-  rate is fixed.
+  rejected. COVARION, MK-MIXTURE, THRESHOLD, and fitted continuous models are
+  also rejected without informative observations. Continuous mode requires at
+  least one observed value even when the rate is fixed.
 
 Override with `--trait-type discrete` or `--trait-type continuous`. In particular,
 numeric category codes such as `0,1,2` **require explicit discrete mode**.
@@ -49,15 +52,15 @@ codes require explicit discrete mode.
 
 | Option | Discrete | Continuous |
 |---|---|---|
-| `--model` | ER (default), SYM, ARD, F81, GTR, MK-REGIME, HRM, CUSTOM | BM (default), BMS, EB, BM-DRIFT, MV-BM, OU, OUM |
-| `--root-prior` | model default; equal, empirical, or stationary | flat for BM-family models; stationary for OU/OUM |
+| `--model` | ER (default), SYM, ARD, F81, GTR, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, OU, OUM/OUMA/OUMV/OUMVA |
+| `--root-prior` | equal/empirical/stationary for CTMCs; identified Gaussian for THRESHOLD | flat for BM-family models; stationary for OU-family models; OU also supports fixed or Gaussian |
 | `--output` | probabilities (default), map | summary (default) |
 | `--tree-annotation` | map (default), state, probability, all | summary (default), mean, all |
-| Rate controls | `--rate`, `--rate-bounds`, `--rate-matrix` | `--sigma2`; OU/OUM also `--alpha`, `--alpha-bounds`, `--theta`; EB uses `--eb-rate`; BM-DRIFT uses `--drift` |
-| Structure controls | `--states`, `--ambiguous-separator`, `--transition-graph`, `--regime-map`, `--regime-model`, `--hidden-categories` | `--regime-map`, `--regime-parameters`; comma-separated trait columns for MV-BM |
-| Observation uncertainty | Ambiguous states | `--standard-error-column` except MV-BM |
-| Interval coverage | Not applicable | `--ci-level` (default 0.95) |
-| Stochastic mapping | `--stochastic-map-out`, `--n-sim`, `--threads`, `--seed` | Not applicable |
+| Rate controls | `--rate`, `--rate-bounds`, `--rate-matrix`; mixture/covarion controls | `--sigma2`, transform parameters, `--alpha`, `--theta`, and `--drift` as applicable |
+| Structure controls | states/graph/regime/hidden controls; multiple columns for MK-MIXTURE | regime map/parameters; multiple trait and SE columns for MV-BM/MV-OU |
+| Observation uncertainty | Ambiguous states; THRESHOLD MCMC | Known per-trait measurement SEs for every continuous model |
+| Interval/parameter uncertainty | THRESHOLD posterior probabilities and liability moments | Conditional Gaussian intervals; optional transform profile CI, joint posterior samples, PPC, and bootstrap |
+| Simulation | CTMC stochastic maps except MK-MIXTURE/THRESHOLD | `--posterior-samples-out`, `--posterior-predictive-out`, `--bootstrap-out`, and `--seed` |
 
 Model/output/prior defaults are selected after trait detection. The continuous
 root prior describes uncertainty about a numeric root value; it is independent
@@ -146,7 +149,51 @@ gets its own ARD rate. Tip likelihoods sum over hidden classes; normal output an
 stochastic maps are projected back to observed states, so hidden-only changes do
 not appear as observed transitions. The expanded fit is subject to hidden-class
 label switching and can be parameter-rich; nwkit rejects configurations requiring
-more than 256 free rates.
+more than 256 free rates or 64 expanded states.
+
+`--model COVARION` uses the same expanded state space with an identifiable,
+parsimonious parameterization: ordered log-spaced hidden rate multipliers have
+geometric mean one, observed-state changes share a base rate, and hidden classes
+switch at one fitted rate. This removes arbitrary class-label and scale
+confounding. Every effective hidden-class observed-transition rate is constrained
+to `--rate-bounds`; a fixed `--rate` must lie strictly inside those bounds so the
+spread remains identifiable. Model metadata reports both multipliers and effective
+rates, and boundary-saturated fits are excluded from regular AIC/AICc/BIC ranking.
+Standard output marginalizes hidden classes and stochastic maps project away
+hidden-only changes.
+To bound dense matrix-exponential cost, observed states times hidden classes may
+not exceed 64 expanded states in either hidden model; the HRM 256-rate guard is
+likewise evaluated before allocating its expanded transition graph.
+
+`--model MK-MIXTURE --state-column c1,c2,...` jointly fits at least two
+characters under one ER/SYM/ARD/F81/GTR base generator. `--rate-mixture gamma`
+(default) estimates a mean-one discrete-gamma shape using equal-probability
+bins represented by their conditional means; `free` estimates ordered mean-one
+category rates and weights. `--rate-categories` accepts 2 through 8.
+Each character gets its own posterior rate-category probabilities before node
+states are averaged over categories. Primary output is stacked by `trait`.
+Because the mixture is across characters rather than along branches, a single
+branchwise stochastic map is undefined and rejected. Transition matrices are
+computed once per category/unique branch length and reused across characters.
+
+`--model THRESHOLD --states low,medium,high` treats the ordered categories as
+intervals of a latent Brownian liability. Scale and location are not jointly
+identifiable from categories, so the process is fixed to unit diffusion with
+`X_root ~ Normal(0,1)`. Binary data use threshold zero. Ordinal data fix the
+first threshold at zero and sample the remaining ordered thresholds; all states
+must then be observed. `--thresholds` instead fixes every threshold. Data-
+augmentation MCMC samples all node liabilities, with retained draws, burn-in,
+thinning and chains controlled by `--liability-samples`,
+`--liability-burnin`, `--liability-thin`, and `--liability-chains`.
+Ambiguous ordered observations constrain liabilities to the union of their
+allowed category intervals and remain valid as estimated thresholds move.
+`--liability-out` reports posterior liability moments; `--model-out` reports
+maximum R-hat, minimum lag-one ESS, and diagnostic status. Threshold inference
+requires positive branch lengths and does not report a marginal likelihood or
+support CTMC stochastic mapping.
+R-hat requires at least two chains and two retained draws per chain; otherwise
+it is reported as unavailable rather than as apparent convergence. Burn-in may
+be zero, while retained draws, thinning, and chain counts must be positive.
 
 `--root-prior stationary` derives root frequencies from the current Q, including
 inside each fitted-rate likelihood evaluation. It requires a unique valid
@@ -160,7 +207,11 @@ Uniformization caches small branch calculations, but does not retain every dense
 matrix power or every state-pair event-count distribution for high-rate branches.
 It instead constructs the required endpoint-specific backward vectors. A single
 branch requiring more than 2,000,000 potential events is rejected before a large
-allocation; reduce the rate/time scale or fitted rate bounds in that case.
+allocation, and one endpoint history is capped at 256 MiB after accounting for
+the expanded state count; reduce the state/rate/time scale or fitted rate bounds
+in that case. A requested simulation set is also rejected when its conservative
+preparation-plus-sampling bound exceeds 2,000,000 uniformization steps; reduce
+`--n-sim`, rates, or the rate/time scale instead of starting an unbounded job.
 
 ## Continuous BM model
 
@@ -232,8 +283,8 @@ distinguish those cases.
 
 ## Continuous OU model
 
-`--model OU` implements a single-optimum process with a stationary root
-distribution:
+`--model OU` implements a single-optimum process. Its default stationary root
+distribution is:
 
 ```text
 X_root ~ Normal(theta, sigma2 / (2 * alpha))
@@ -280,11 +331,25 @@ Fitting requires many such linear passes for grid evaluation and local polishing
 fixing alpha, theta, or sigma2 reduces that work, and fixing all three requires
 only the final pruning/smoothing passes.
 
+`--root-prior fixed --root-mean M` instead fixes the root state. A proper
+nonstationary prior is selected with
+`--root-prior gaussian --root-mean M --root-variance V`. These modes fit alpha,
+sigma2 and theta by ordinary proper-root ML through the shared affine-Gaussian
+engine; the user-supplied root variance is not multiplied by sigma2.
+Stationary-root OU rejects root mean/variance options. The biological root
+assumption is therefore explicit rather than silently forcing equilibrium at
+the beginning of a short or nonstationary tree.
+Before optimization, free proper-root OU parameters are checked for local rank
+through their induced observed-tip mean vector and covariance matrix. For
+example, free alpha and sigma2 on an equal-depth fixed-root star are rejected
+because only one variance combination is identified.
+
 ## Continuous model extensions
 
 All scalar extensions retain the Gaussian all-node smoothing and conditional
-interval contract described above. Known measurement SEs are supported by BMS,
-EB, BM-DRIFT, and OUM as well as BM and OU.
+interval contract described above. Known per-tip measurement SEs are supported
+by every scalar model; MV-BM and MV-OU accept one comma-separated SE column per
+trait and allow trait-level missingness.
 
 ### BMS: branch-regime Brownian rates
 
@@ -311,7 +376,20 @@ profiled, so a lower-bound result is explicitly retained as a boundary fit.
 Model-induced exact equalities from fixed zero rates retain an explicit singular
 support status and do not report a density on a reduced observation space.
 
-### OUM: branch-regime OU optima
+### BMS-DRIFT: regime rates and directional trends
+
+`--model BMS-DRIFT` uses
+`X_child = X_parent + drift_regime*t + error` with
+`Var(error)=sigma2_regime*t`. A complete `--regime-parameters` table has
+`regime`, `sigma2`, and `drift` columns. Without it, `--sigma2` or `--drift`
+can fix one shared component while the other component is estimated per regime;
+omitting both estimates both maps. Before optimization, nwkit verifies full rank
+of the root-to-tip regime-time design for drift and the pairwise path-regime
+design for diffusion. This catches ultrametric/global-drift and unrepresented-
+regime confounding explicitly. The model uses the same flat-root integrated
+likelihood convention as BM/BMS.
+
+### OUM/OUMA/OUMV/OUMVA: branch-regime OU
 
 OUM shares one positive `alpha` and one positive `sigma2`, but assigns an optimum
 `theta_regime` to each branch. The transition on a branch uses its incoming-branch
@@ -327,27 +405,56 @@ warm	2.5
 
 When omitted, all regime optima are estimated with alpha and sigma2 unless those
 parameters are fixed separately. OUM uses ordinary stationary-root ML,
-deterministic covariance multistarts, and explicit alpha/root-variance bounds.
-The number of distinct observed positions must be at least the total number of
-free parameters, and the regime-optimum mean design must have full column rank.
-Per-regime alpha or sigma2 values are not part of this model.
+deterministic covariance multistarts, and explicit alpha/diffusion bounds.
+The number of observed tips must exceed the total number of free parameters;
+non-identifiable regime designs should instead use fixed parameters.
+The related models vary additional branch parameters while retaining a
+stationary root under the root regime:
 
-### EB and BM-DRIFT
+- OUM: theta varies; alpha and sigma2 are shared.
+- OUMA: theta and alpha vary; sigma2 is shared.
+- OUMV: theta and sigma2 vary; alpha is shared.
+- OUMVA: theta, alpha, and sigma2 all vary.
 
-EB allows the Brownian diffusion rate to change exponentially with root depth
-`d`. For a branch from depth `d` to `d+t`, its effective Brownian length is
+The complete parameter table therefore uses `theta`; `theta,alpha`;
+`theta,sigma2`; or `theta,alpha,sigma2`, respectively. A shared CLI parameter
+may be fixed only when its regime-specific counterpart is not in that table.
+All four models use the same generic affine-Gaussian pruning/smoothing engine,
+positive parameterization, deterministic multistarts, and boundary reporting.
+Each free non-root regime parameter must affect a positive-length branch
+ancestral to an observation. In OUMVA, a regime appearing only at the root
+cannot have both alpha and sigma2 free because only their stationary-variance
+ratio is identified.
+
+### LAMBDA, KAPPA, DELTA, EB/ACDC, and BM-DRIFT
+
+The transformed-time Brownian models use one shared implementation and profile
+their shape parameter jointly with sigma2:
+
+- LAMBDA applies Pagel's lambda in `[0,1]` to shared/internal covariance while
+  preserving each tip variance.
+- KAPPA replaces every positive branch length `t` by `t^kappa`
+  (`kappa >= 0`); zero-length contractions remain zero, including at kappa 0.
+- DELTA transforms ultrametric node depth to
+  `height * (depth/height)^delta` (`delta > 0`) and rejects non-ultrametric trees.
+- EB and ACDC let diffusion change exponentially with root depth. EB is
+  constrained to non-positive early-burst change; ACDC permits either decline
+  or acceleration.
+
+For EB/ACDC, a branch from depth `d` to `d+t` has effective Brownian length
 
 ```text
 exp(eb_rate * d) * expm1(eb_rate * t) / eb_rate
 ```
 
-with the continuous limit `t` at `eb_rate=0`. Negative rates describe a decline
-in diffusion away from the root; positive rates describe acceleration.
-`--eb-rate` fixes the exponent. Otherwise nwkit profiles it on
-`--eb-rate-bounds` (default `-10/max_depth,10/max_depth`) while fitting or using
-the supplied sigma2. Use the equals form for a negative lower CLI bound, for
-example `--eb-rate-bounds=-1,1`. A flat profile, such as an equal-depth star
-where rate and sigma2 are confounded, is rejected; bound optima are reported.
+with the continuous limit `t` at zero. `--evolution-parameter` and
+`--evolution-parameter-bounds` are the common controls; `--eb-rate` and
+`--eb-rate-bounds` remain aliases for EB/ACDC. A flat profile, such as an
+equal-depth star where shape and sigma2 are confounded, is rejected; bound
+optima are reported against the active user-supplied bounds. `--profile-ci-level`
+optionally inverts the one-parameter
+likelihood-ratio profile and records bounds plus boundary-limited flags in
+`--model-out`.
 
 BM-DRIFT uses transition mean `X_parent + drift * t` and Brownian variance
 `sigma2 * t`. `--drift` fixes the directional trend. A free trend is profiled
@@ -366,23 +473,62 @@ as a second fixed effect. Consequently, its reported flat-root likelihood and
 `n_effective - 2` convention of a two-fixed-effect REML analysis. Output records
 this treatment explicitly, and intervals condition on the fitted drift.
 
-### MV-BM: correlated continuous traits
+### MV-BM and MV-OU: correlated continuous traits
 
 `--model MV-BM --state-column trait1,trait2,...` models each branch increment as
-`MultivariateNormal(0, Sigma * t)`. It estimates the evolutionary covariance-rate
-matrix `Sigma` from generalized independent contrasts, then performs separable
-all-node smoothing in linear tree time per trait. Primary output is long-form,
-with one row per selected node and trait. `--covariance-out` writes the upper
-triangle of each selected node's conditional covariance and correlation matrix;
-`--model-out` records the fitted Sigma.
+`MultivariateNormal(0, Sigma * t)`. Complete exact vectors use the linear-time
+contrast/smoothing path. Trait-level missingness or known errors automatically
+select a dense observed-coordinate likelihood, with one comma-separated
+`--standard-error-column` per trait. Every trait needs enough observations to
+identify its mean/covariance; an implementation guard rejects more
+than 1,000 dense observed coordinates. This measured cap bounds cubic covariance
+factorization and repeated all-node solves; complete error-free MV-BM remains on
+the linear-time path and is not subject to the dense-coordinate cap.
+Consistent exact observations at one zero-length-contracted position count as
+one effective coordinate; conflicting values at that position have zero
+likelihood and are rejected. A covariance component is also rejected explicitly
+when the observed trait/branch overlap leaves it absent from every independent
+flat-root contrast.
 
-An observed tip must provide either every selected trait or none; partial vectors
-are rejected, and arbitrary measurement-error covariance is not yet supported.
-At least two distinct observed positions are needed. If there are too few
-contrasts for a full-rank Sigma, marginal reconstruction remains available with
-`fit_status=singular_covariance`, but the ordinary multivariate likelihood is
-left empty. Intervals condition on the fitted covariance and exclude covariance
-and tree uncertainty.
+`--model MV-OU` fits a stationary separable process with one shared positive
+alpha, a full stationary trait covariance `Sigma`, and one optimum per trait:
+`Cov(X_i,X_j) = Sigma * exp(-alpha * patristic_distance(i,j))`. Its equivalent
+diffusion covariance is `2*alpha*Sigma`. Alpha may be fixed; Sigma and optima are
+estimated by proper stationary-root ML. MV-OU supports the same partial vectors
+and diagonal known measurement errors as dense MV-BM. A free alpha is rejected
+when every observed pair within each trait combination has only one constant
+phylogenetic distance, because alpha can then be absorbed into `Sigma`.
+
+Primary output is long-form with one row per node/trait. `--covariance-out`
+writes each selected node's conditional covariance and correlation upper
+triangle; `--model-out` records Sigma, rank, optimizer diagnostics, and alpha/
+theta for MV-OU. Intervals condition on fitted parameters and exclude parameter
+and tree uncertainty. Scalar posterior-sampling/PPC/bootstrap outputs are
+currently rejected for multivariate fits rather than silently approximated.
+
+### Model comparison and simulation diagnostics
+
+`--compare-models M1,M2,... --model-comparison-out FILE` fits compatible models
+and reports log likelihood, parameter count, AIC/AICc/BIC, deltas, and weights.
+Only models sharing one likelihood convention may be compared: discrete ML
+models are separate from proper-root OU ML and flat-root integrated BM-family
+fits. Discrete BIC/AICc use the number of informative observed tip-character
+entries (fully missing or all-state observations contribute no sample). Singular,
+non-finite, and structurally non-regular COVARION boundary fits are rejected
+instead of being ranked under regular-model information criteria; other boundary
+statuses remain visible in the comparison table for interpretation.
+
+For any scalar Gaussian model, `--posterior-samples-out` writes exact joint
+all-node conditional draws using forward-filter/backward sampling.
+`--posterior-predictive-out` simulates replicated observed tips and reports
+mean/variance/range discrepancy summaries with tail probabilities.
+`--bootstrap-out` simulates the fitted process, preserves the original missing
+pattern and known SEs, refits the same fixed/free parameter specification, and
+writes successful and failed replicates. Associated count options default to
+1,000 posterior draws, 1,000 predictive replicates, and 100 bootstrap refits;
+`--seed` makes all paths reproducible. For a flat root, bootstrap simulation
+fixes the fitted posterior root mean; proper-root models draw from their root
+prior.
 
 ## Output schemas
 
@@ -396,7 +542,7 @@ Continuous summary columns additionally contain:
 
 | Columns | Meaning |
 |---|---|
-| `trait` | Selected input column; MV-BM emits one row for each selected trait |
+| `trait` | Selected input column; MV-BM/MV-OU emit one row for each selected trait |
 | `observed_value`, `observed_se` | Original observation and its SE; empty for internal/missing nodes, SE zero for exact observations |
 | `is_imputed` | Whether this is an unobserved tip |
 | `mean`, `variance`, `sd` | Conditional latent-trait moments in original units |
@@ -413,18 +559,21 @@ optimizer status/message/grid/start/converged/failed counts, and
 `likelihood_kind=stationary_root_ml`. Both report SE-column selection and the
 interval conditioning contract; parameter and tree uncertainty flags are false.
 
-BMS and OUM additionally report regime order, root regime, source paths, each
-regime parameter, optimizer counts, and data-scaled bounds where applicable. EB
-and BM-DRIFT report the extension parameter, whether it was estimated, profile
-search details, and the underlying sigma2 fit. MV-BM reports covariance rank and
-every Sigma element under collision-safe hex-encoded trait identifiers; its
-optional covariance sidecar contains readable trait names.
+BMS, BMS-DRIFT, and OUM-family fits additionally report regime order, root
+regime, source paths, each regime parameter, optimizer counts, and data-scaled
+bounds where applicable. Transformed BM and BM-DRIFT report extension
+parameters, estimated flags, search details, and the underlying sigma2 fit.
+MV-BM/MV-OU report covariance rank and every Sigma element under collision-safe
+hex-encoded trait identifiers; the optional covariance sidecar retains readable
+trait names.
 
 Discrete `--model-out` records the transition graph, `q_source` (`estimated`,
 `fixed:--rate`, or `fixed:PATH`), fit/boundary status, optimizer start/convergence
 counts, and every directed Q entry. CUSTOM has an empty fitted-rate-bounds field.
 F81/GTR also report equilibrium frequencies; MK-REGIME reports every regime Q;
-HRM reports every expanded-state Q entry.
+HRM/COVARION report expanded-state details; MK-MIXTURE reports category rates,
+weights and gamma shape; THRESHOLD reports its identified process, thresholds,
+MCMC settings and diagnostics.
 
 For nondegenerate observations `y` with covariance `V`, the reported residual
 log-likelihood uses the flat-root integral convention:
@@ -450,14 +599,15 @@ includes `asr_model`. BM retains its prior NHX property set. Annotation levels a
 - `mean`: `asr_mean` only.
 - `summary` (default): also variance, SD, interval limits/level, and
   `asr_interval_kind` (`conditional_on_sigma2`, `conditional_on_parameters`, or
-  `conditional_on_covariance`). MV-BM suffixes per-trait properties with the
+  `conditional_on_covariance`). MV-BM/MV-OU suffix per-trait properties with the
   UTF-8 hexadecimal trait identifier and includes cross-trait covariances.
 - `all`: also tip `asr_observed_value`, `asr_observed_se`, and `asr_is_imputed`.
 
-Discrete primary schemas and stochastic mapping remain unchanged. Optional
-discrete model metadata additionally records selected/requested trait types.
-Auxiliary output paths must be distinct and cannot be STDOUT; only the primary
-TSV may be written to `-`.
+MK-MIXTURE additionally stacks a `trait` column; THRESHOLD otherwise uses the
+normal discrete probability/MAP schema. Optional discrete model metadata records
+selected/requested trait types. Every auxiliary output path (model, comparison,
+tree, map, covariance, liability, samples, PPC, or bootstrap) must be distinct
+and cannot be STDOUT; only the primary TSV may be written to `-`.
 
 ## Examples
 
@@ -520,10 +670,28 @@ nwkit asr -i tree.nwk --trait traits.tsv --state-column height,mass \
   --model MV-BM --covariance-out node-covariance.tsv -o mvbm.tsv
 ```
 
-Multivariate OU, threshold/liability and Lévy/jump processes,
-parameter/tree-uncertainty integration, and continuous conditional trajectory
-sampling are not implemented. Discrete transition-count stochastic maps are not
-repurposed as continuous trajectories.
+Ordinal threshold reconstruction with explicit MCMC size:
+
+```sh
+nwkit asr -i tree.nwk --trait stages.tsv --state-column stage \
+  --trait-type discrete --model THRESHOLD --states juvenile,adult,senescent \
+  --liability-samples 2000 --liability-out liability.tsv -o threshold.tsv
+```
+
+Compare flat-root models and write continuous simulation diagnostics:
+
+```sh
+nwkit asr -i tree.nwk --trait traits.tsv --state-column body_mass \
+  --model LAMBDA --compare-models BM,LAMBDA,KAPPA,DELTA \
+  --model-comparison-out comparison.tsv --profile-ci-level 0.95 \
+  --posterior-samples-out draws.tsv --posterior-predictive-out ppc.tsv \
+  --seed 42 -o lambda.tsv
+```
+
+Lévy/jump processes, tree-uncertainty integration, correlated measurement-error
+matrices, and branchwise continuous stochastic trajectories remain outside the
+current model set. Joint Gaussian node samples are provided instead of
+repurposing discrete transition-count maps.
 
 ## Method references
 
@@ -533,6 +701,7 @@ repurposed as continuous trajectories.
 - [Butler and King 2004](https://doi.org/10.1086/426002): multi-optimum OU models.
 - [Beaulieu et al. 2013](https://doi.org/10.1093/sysbio/syt034): hidden-rate models for discrete traits.
 - [Harmon et al. 2010](https://doi.org/10.1111/j.1558-5646.2010.01025.x): early-burst comparative models.
+- [Felsenstein 2012](https://doi.org/10.1086/664553): threshold-model comparative inference.
 
 Tests compare the Gaussian passes against an independently assembled full-tree
 precision matrix and tip-covariance residual likelihood, plus analytic stars,
@@ -542,5 +711,6 @@ A recorded `phytools 2.3.0 fastAnc` fixture checks exact-data means and variance
 without adding R as a runtime or test dependency. OU tests independently assemble
 the stationary patristic covariance and compare ordinary likelihood and all-node
 conditional moments. Extension tests additionally compare equal-regime limits to
-BM/OU, OUM smoothing to independent dense conditioning, and MV-BM covariance to
-generalized independent contrasts and analytic stars.
+BM/OU, generic Gaussian smoothing to independent dense conditioning,
+MV-BM/MV-OU covariance to dense matrix or contrast oracles, threshold constraints
+and seeded sampling, and cached versus uncached discrete-mixture likelihoods.

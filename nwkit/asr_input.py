@@ -24,14 +24,24 @@ _DISCRETE_ONLY = (
     "rate_matrix",
     "transition_graph",
     "hidden_categories",
+    "mixture_model",
+    "rate_mixture",
+    "rate_categories",
+    "thresholds",
+    "liability_samples",
+    "liability_burnin",
+    "liability_thin",
+    "liability_chains",
+    "liability_out",
     "ambiguous_separator",
     "stochastic_map_out",
     "n_sim",
     "threads",
-    "seed",
 )
 _CONTINUOUS_ONLY = (
     "sigma2",
+    "evolution_parameter",
+    "evolution_parameter_bounds",
     "standard_error_column",
     "ci_level",
     "alpha",
@@ -41,7 +51,22 @@ _CONTINUOUS_ONLY = (
     "eb_rate_bounds",
     "drift",
     "covariance_out",
+    "root_mean",
+    "root_variance",
+    "profile_ci_level",
+    "posterior_samples_out",
+    "posterior_samples",
+    "posterior_predictive_out",
+    "posterior_predictive_simulations",
+    "bootstrap_out",
+    "bootstrap_simulations",
 )
+_REGIME_MODELS = frozenset(
+    {"MK-REGIME", "BMS", "BMS-DRIFT", "OUM", "OUMA", "OUMV", "OUMVA"}
+)
+_CONTINUOUS_REGIME_MODELS = frozenset(_REGIME_MODELS - {"MK-REGIME"})
+_TRANSFORMED_MODELS = frozenset({"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"})
+_OU_MODELS = frozenset({"OU", "MV-OU", "OUM", "OUMA", "OUMV", "OUMVA"})
 
 
 def _mode_switch_hint(trait_type):
@@ -63,7 +88,9 @@ class AsrSettings:
     def from_args(cls, args, trait_type="discrete"):
         options = _resolve_mode_options(args, trait_type)
         _validate_mode_arguments(args, trait_type)
-        _validate_model_arguments(args, trait_type, options["model"])
+        _validate_model_arguments(
+            args, trait_type, options["model"], options["root_prior"]
+        )
         ci_level = _confidence_level(args) if trait_type == "continuous" else None
         return cls(trait_type=trait_type, ci_level=ci_level, **options)
 
@@ -99,49 +126,257 @@ def _resolve_mode_options(args, trait_type):
     return resolved
 
 
-def _validate_model_arguments(args, trait_type, model):
+def _validate_regime_arguments(args, model):
     regime_map = getattr(args, "regime_map", None)
     regime_model = getattr(args, "regime_model", None)
     regime_parameters = getattr(args, "regime_parameters", None)
-    regime_models = {"MK-REGIME", "BMS", "OUM"}
-    if model in regime_models and regime_map in (None, ""):
+    if model in _REGIME_MODELS and regime_map in (None, ""):
         raise ValueError(f"--model {model} requires --regime-map.")
-    if model not in regime_models and regime_map not in (None, ""):
+    if model not in _REGIME_MODELS and regime_map not in (None, ""):
         raise ValueError("--regime-map requires a regime model.")
     if model != "MK-REGIME" and regime_model not in (None, ""):
         raise ValueError("--regime-model requires --model MK-REGIME.")
-    if model not in {"BMS", "OUM"} and regime_parameters not in (None, ""):
-        raise ValueError("--regime-parameters requires --model BMS or OUM.")
-    if trait_type == "discrete":
-        rate_matrix = getattr(args, "rate_matrix", None)
-        transition_graph = getattr(args, "transition_graph", None)
-        if model == "CUSTOM" and rate_matrix in (None, ""):
-            raise ValueError("--model CUSTOM requires --rate-matrix.")
-        if model != "CUSTOM" and rate_matrix not in (None, ""):
-            raise ValueError("--rate-matrix requires --model CUSTOM.")
-        if model == "CUSTOM" and transition_graph not in (None, ""):
-            raise ValueError(
-                "--transition-graph cannot be combined with --model CUSTOM."
-            )
-        if model == "CUSTOM" and getattr(args, "rate", None) is not None:
-            raise ValueError("--rate cannot be combined with --model CUSTOM.")
-        if model == "CUSTOM" and getattr(args, "rate_bounds", None) is not None:
-            raise ValueError("--rate-bounds cannot be combined with --model CUSTOM.")
-        if model == "MK-REGIME" and getattr(args, "rate_matrix", None) not in (
-            None,
-            "",
-        ):
-            raise ValueError("--rate-matrix is not supported with --model MK-REGIME.")
-        if transition_graph == "ordered" and getattr(args, "states", None) in (
-            None,
-            "",
-        ):
-            raise ValueError("--transition-graph ordered requires explicit --states.")
-        hidden_categories = getattr(args, "hidden_categories", None)
-        if model != "HRM" and hidden_categories is not None:
-            raise ValueError("--hidden-categories requires --model HRM.")
+    if model not in _CONTINUOUS_REGIME_MODELS and regime_parameters not in (None, ""):
+        raise ValueError("--regime-parameters requires a continuous regime model.")
+
+
+def _validate_custom_and_graph_options(args, model):
+    rate_matrix = getattr(args, "rate_matrix", None)
+    transition_graph = getattr(args, "transition_graph", None)
+    if model == "CUSTOM" and rate_matrix in (None, ""):
+        raise ValueError("--model CUSTOM requires --rate-matrix.")
+    if model != "CUSTOM" and rate_matrix not in (None, ""):
+        raise ValueError("--rate-matrix requires --model CUSTOM.")
+    if model == "CUSTOM" and transition_graph not in (None, ""):
+        raise ValueError("--transition-graph cannot be combined with --model CUSTOM.")
+    if model == "CUSTOM" and getattr(args, "rate", None) is not None:
+        raise ValueError("--rate cannot be combined with --model CUSTOM.")
+    if model == "CUSTOM" and getattr(args, "rate_bounds", None) is not None:
+        raise ValueError("--rate-bounds cannot be combined with --model CUSTOM.")
+    if model == "MK-REGIME" and rate_matrix not in (None, ""):
+        raise ValueError("--rate-matrix is not supported with --model MK-REGIME.")
+    if transition_graph == "ordered" and getattr(args, "states", None) in (None, ""):
+        raise ValueError("--transition-graph ordered requires explicit --states.")
+    hidden_categories = getattr(args, "hidden_categories", None)
+    if model not in {"HRM", "COVARION"} and hidden_categories is not None:
+        raise ValueError("--hidden-categories requires --model HRM or COVARION.")
+
+
+def _validate_mixture_options(args, model):
+    option_names = ("mixture_model", "rate_mixture", "rate_categories")
+    supplied = [name for name in option_names if getattr(args, name, None) is not None]
+    if model != "MK-MIXTURE" and supplied:
+        raise ValueError(
+            "--mixture-model, --rate-mixture, and --rate-categories require "
+            "--model MK-MIXTURE."
+        )
+    if model == "MK-MIXTURE" and getattr(args, "stochastic_map_out", None) not in (
+        None,
+        "",
+    ):
+        raise ValueError(
+            "--stochastic-map-out is not defined for a jointly fitted "
+            "across-character rate mixture."
+        )
+    if model == "MK-MIXTURE" and getattr(args, "compare_models", None) not in (
+        None,
+        "",
+    ):
+        raise ValueError(
+            "--compare-models is not defined for the multi-character "
+            "--model MK-MIXTURE input contract."
+        )
+
+
+def _validate_threshold_options(args, model):
+    option_names = (
+        "thresholds",
+        "liability_samples",
+        "liability_burnin",
+        "liability_thin",
+        "liability_chains",
+        "liability_out",
+    )
+    if model != "THRESHOLD" and any(
+        getattr(args, name, None) is not None for name in option_names
+    ):
+        raise ValueError(
+            "--thresholds and --liability-* options require --model THRESHOLD."
+        )
+    if model != "THRESHOLD":
         return
-    if model in {"BM", "BMS", "EB", "BM-DRIFT", "MV-BM"}:
+    if getattr(args, "states", None) in (None, ""):
+        raise ValueError("--model THRESHOLD requires ordered categories in --states.")
+    forbidden = [
+        "--" + name.replace("_", "-")
+        for name in (
+            "rate",
+            "rate_bounds",
+            "rate_matrix",
+            "transition_graph",
+            "hidden_categories",
+            "mixture_model",
+            "rate_mixture",
+            "rate_categories",
+        )
+        if getattr(args, name, None) is not None
+    ]
+    if forbidden:
+        raise ValueError(
+            "Options not defined for --model THRESHOLD: " + ", ".join(forbidden) + "."
+        )
+    if getattr(args, "stochastic_map_out", None) not in (None, ""):
+        raise ValueError("--stochastic-map-out is not defined for --model THRESHOLD.")
+    if getattr(args, "compare_models", None) not in (None, ""):
+        raise ValueError("--compare-models is not defined for --model THRESHOLD.")
+
+
+def _validate_discrete_model_arguments(args, model):
+    _validate_custom_and_graph_options(args, model)
+    _validate_mixture_options(args, model)
+    _validate_threshold_options(args, model)
+    if getattr(args, "stochastic_map_out", None) in (None, ""):
+        supplied = [
+            "--" + name.replace("_", "-")
+            for name in ("n_sim", "threads")
+            if getattr(args, name, None) is not None
+        ]
+        if supplied:
+            raise ValueError(
+                "These options require --stochastic-map-out: "
+                + ", ".join(supplied)
+                + "."
+            )
+
+
+def _validate_transformed_options(args, model):
+    if model not in {"EB", "ACDC"} and any(
+        getattr(args, name, None) is not None for name in ("eb_rate", "eb_rate_bounds")
+    ):
+        raise ValueError("--eb-rate and --eb-rate-bounds require --model EB or ACDC.")
+    if model in {"EB", "ACDC"} and all(
+        getattr(args, name, None) is not None for name in ("eb_rate", "eb_rate_bounds")
+    ):
+        raise ValueError("--eb-rate-bounds cannot be combined with fixed --eb-rate.")
+    parameter = getattr(args, "evolution_parameter", None)
+    bounds = getattr(args, "evolution_parameter_bounds", None)
+    if model not in _TRANSFORMED_MODELS and any(
+        value is not None for value in (parameter, bounds)
+    ):
+        raise ValueError(
+            "--evolution-parameter and --evolution-parameter-bounds require "
+            "--model LAMBDA, KAPPA, DELTA, EB, or ACDC."
+        )
+    if parameter is not None and bounds is not None:
+        raise ValueError(
+            "--evolution-parameter-bounds cannot be combined with fixed "
+            "--evolution-parameter."
+        )
+    if (
+        model in {"EB", "ACDC"}
+        and parameter is not None
+        and getattr(args, "eb_rate", None) is not None
+    ):
+        raise ValueError("--evolution-parameter cannot be combined with --eb-rate.")
+    if (
+        model in {"EB", "ACDC"}
+        and bounds is not None
+        and getattr(args, "eb_rate_bounds", None) is not None
+    ):
+        raise ValueError(
+            "--evolution-parameter-bounds cannot be combined with --eb-rate-bounds."
+        )
+    _validate_profile_options(args, model, parameter)
+
+
+def _validate_profile_options(args, model, evolution_parameter):
+    level = getattr(args, "profile_ci_level", None)
+    if level is None:
+        return
+    if model not in _TRANSFORMED_MODELS:
+        raise ValueError(
+            "--profile-ci-level requires --model LAMBDA, KAPPA, DELTA, EB, or ACDC."
+        )
+    if not 0.0 < float(level) < 1.0:
+        raise ValueError("--profile-ci-level must be strictly between zero and one.")
+    if evolution_parameter is not None or getattr(args, "eb_rate", None) is not None:
+        raise ValueError(
+            "--profile-ci-level requires the evolution parameter to be estimated."
+        )
+
+
+def _validate_ou_root_options(args, model, root_prior):
+    root_mean = getattr(args, "root_mean", None)
+    root_variance = getattr(args, "root_variance", None)
+    if model != "OU" and any(value is not None for value in (root_mean, root_variance)):
+        raise ValueError(
+            "--root-mean and --root-variance currently require --model OU."
+        )
+    if model != "OU":
+        return
+    if root_prior == "stationary" and any(
+        value is not None for value in (root_mean, root_variance)
+    ):
+        raise ValueError(
+            "Stationary OU determines its root distribution; remove "
+            "--root-mean and --root-variance."
+        )
+    if root_prior in {"fixed", "gaussian"} and root_mean is None:
+        raise ValueError(f"--root-prior {root_prior} requires --root-mean.")
+    if root_prior == "fixed" and root_variance is not None:
+        raise ValueError("--root-prior fixed cannot take --root-variance.")
+    if root_prior == "gaussian" and root_variance is None:
+        raise ValueError("--root-prior gaussian requires --root-variance.")
+
+
+def _validate_multivariate_options(args, model):
+    diagnostic_options = (
+        "posterior_samples_out",
+        "posterior_samples",
+        "posterior_predictive_out",
+        "posterior_predictive_simulations",
+        "bootstrap_out",
+        "bootstrap_simulations",
+    )
+    if model in {"MV-BM", "MV-OU"}:
+        if getattr(args, "sigma2", None) is not None:
+            raise ValueError("--sigma2 is not supported for multivariate ASR models.")
+        if model == "MV-OU" and getattr(args, "theta", None) is not None:
+            raise ValueError(
+                "--theta is scalar; MV-OU estimates one optimum per trait."
+            )
+        if any(getattr(args, name, None) is not None for name in diagnostic_options):
+            raise ValueError(
+                "Simulation diagnostics currently support scalar continuous models, "
+                "not MV-BM or MV-OU."
+            )
+        if getattr(args, "compare_models", None) not in (None, ""):
+            raise ValueError(
+                "--compare-models currently supports scalar continuous traits, "
+                "not MV-BM or MV-OU."
+            )
+    elif getattr(args, "covariance_out", None) not in (None, ""):
+        raise ValueError("--covariance-out requires --model MV-BM or MV-OU.")
+
+
+def _validate_diagnostic_counts(args):
+    for count_name, output_name in (
+        ("posterior_samples", "posterior_samples_out"),
+        ("posterior_predictive_simulations", "posterior_predictive_out"),
+        ("bootstrap_simulations", "bootstrap_out"),
+    ):
+        if getattr(args, count_name, None) is not None and getattr(
+            args, output_name, None
+        ) in (None, ""):
+            raise ValueError(
+                "--{} requires --{}.".format(
+                    count_name.replace("_", "-"), output_name.replace("_", "-")
+                )
+            )
+
+
+def _validate_continuous_model_arguments(args, model, root_prior):
+    if model not in _OU_MODELS:
         supplied = [
             "--" + name.replace("_", "-")
             for name in ("alpha", "alpha_bounds", "theta")
@@ -149,35 +384,30 @@ def _validate_model_arguments(args, trait_type, model):
         ]
         if supplied:
             raise ValueError(
-                f"Options requiring --model OU or OUM: {', '.join(supplied)}."
+                "Options requiring an OU model: " + ", ".join(supplied) + "."
             )
     elif (
         getattr(args, "alpha", None) is not None
         and getattr(args, "alpha_bounds", None) is not None
     ):
         raise ValueError("--alpha-bounds cannot be combined with fixed --alpha.")
-    if model != "EB" and any(
-        getattr(args, name, None) is not None
-        for name in ("eb_rate", "eb_rate_bounds")
-    ):
-        raise ValueError("--eb-rate and --eb-rate-bounds require --model EB.")
+    _validate_transformed_options(args, model)
     if (
-        model == "EB"
-        and getattr(args, "eb_rate", None) is not None
-        and getattr(args, "eb_rate_bounds", None) is not None
+        model not in {"BM-DRIFT", "BMS-DRIFT"}
+        and getattr(args, "drift", None) is not None
     ):
-        raise ValueError("--eb-rate-bounds cannot be combined with fixed --eb-rate.")
-    if model != "BM-DRIFT" and getattr(args, "drift", None) is not None:
-        raise ValueError("--drift requires --model BM-DRIFT.")
-    if model == "MV-BM":
-        if getattr(args, "sigma2", None) is not None:
-            raise ValueError("--sigma2 is not supported for --model MV-BM.")
-        if getattr(args, "standard_error_column", None) not in (None, ""):
-            raise ValueError(
-                "--standard-error-column is not yet supported for --model MV-BM."
-            )
-    elif getattr(args, "covariance_out", None) not in (None, ""):
-        raise ValueError("--covariance-out requires --model MV-BM.")
+        raise ValueError("--drift requires --model BM-DRIFT or BMS-DRIFT.")
+    _validate_ou_root_options(args, model, root_prior)
+    _validate_multivariate_options(args, model)
+    _validate_diagnostic_counts(args)
+
+
+def _validate_model_arguments(args, trait_type, model, root_prior=None):
+    _validate_regime_arguments(args, model)
+    if trait_type == "discrete":
+        _validate_discrete_model_arguments(args, model)
+        return
+    _validate_continuous_model_arguments(args, model, root_prior)
 
 
 def _validate_mode_arguments(args, trait_type):
@@ -227,6 +457,15 @@ def effective_asr_args(args, settings):
         ):
             if getattr(effective, name, None) is None:
                 setattr(effective, name, default)
+        if settings.model == "THRESHOLD":
+            for name, default in (
+                ("liability_samples", 1000),
+                ("liability_burnin", 500),
+                ("liability_thin", 1),
+                ("liability_chains", 4),
+            ):
+                if getattr(effective, name, None) is None:
+                    setattr(effective, name, default)
     return effective
 
 
@@ -248,6 +487,13 @@ def read_asr_table(
         if isinstance(state_column, (list, tuple))
         else (state_column,)
     )
+    standard_error_columns = (
+        tuple(standard_error_column)
+        if isinstance(standard_error_column, (list, tuple))
+        else ()
+        if standard_error_column is None
+        else (standard_error_column,)
+    )
     dataframe, _, _ = read_tip_table(
         trait_path,
         option_name="--trait",
@@ -257,7 +503,7 @@ def read_asr_table(
         missing_values=missing_values,
         preserve_columns=tuple(
             column
-            for column in (*state_columns, standard_error_column)
+            for column in (*state_columns, *standard_error_columns)
             if column is not None
         ),
     )
@@ -304,15 +550,51 @@ def resolve_trait_type(requested, dataframe, state_column):
 
 
 def asr_trait_columns(state_column, model):
-    if model != "MV-BM":
+    if model == "MK-MIXTURE":
+        columns = tuple(item.strip() for item in str(state_column).split(","))
+        if len(columns) < 2 or any(item == "" for item in columns):
+            raise ValueError(
+                "--model MK-MIXTURE requires at least two comma-separated "
+                "--state-column values."
+            )
+        if len(columns) != len(set(columns)):
+            raise ValueError(
+                "MK-MIXTURE --state-column contains duplicated character columns."
+            )
+        return columns
+    if model not in {"MV-BM", "MV-OU"}:
         return (state_column,)
     columns = tuple(item.strip() for item in str(state_column).split(","))
     if len(columns) < 2 or any(item == "" for item in columns):
         raise ValueError(
-            "--model MV-BM requires at least two comma-separated --state-column values."
+            "A multivariate ASR model requires at least two comma-separated "
+            "--state-column values."
         )
     if len(columns) != len(set(columns)):
-        raise ValueError("MV-BM --state-column contains duplicated trait columns.")
+        raise ValueError(
+            "Multivariate --state-column contains duplicated trait columns."
+        )
+    return columns
+
+
+def asr_standard_error_columns(value, model, trait_columns):
+    if value in (None, ""):
+        return None
+    if model not in {"MV-BM", "MV-OU"}:
+        return value
+    columns = tuple(item.strip() for item in str(value).split(","))
+    if len(columns) != len(trait_columns) or any(item == "" for item in columns):
+        raise ValueError(
+            "Multivariate --standard-error-column must list one column per trait."
+        )
+    if len(columns) != len(set(columns)):
+        raise ValueError(
+            "Multivariate --standard-error-column contains duplicated columns."
+        )
+    if set(columns) & set(trait_columns):
+        raise ValueError(
+            "Multivariate standard-error columns must differ from trait columns."
+        )
     return columns
 
 
@@ -320,7 +602,7 @@ def continuous_tip_vectors(dataframe, state_columns, leaf_names):
     vectors = dict.fromkeys(leaf_names)
     for _, row in dataframe.iterrows():
         name = str(row["leaf_name"])
-        vector = []
+        vector: list[float | None] = []
         for column in state_columns:
             raw = row[column]
             vector.append(
@@ -328,8 +610,46 @@ def continuous_tip_vectors(dataframe, state_columns, leaf_names):
                 if is_missing_table_value(raw, set())
                 else _continuous_number(raw, f"Trait '{column}' for '{name}'")
             )
-        vectors[name] = None if all(value is None for value in vector) else tuple(vector)
+        vectors[name] = (
+            None if all(value is None for value in vector) else tuple(vector)
+        )
     return vectors
+
+
+def continuous_tip_vector_errors(dataframe, error_columns, state_columns, leaf_names):
+    if error_columns is None:
+        return None
+    missing = [column for column in error_columns if column not in dataframe.columns]
+    if missing:
+        raise ValueError(
+            "Missing required standard-error column(s): " + ", ".join(missing)
+        )
+    errors = dict.fromkeys(leaf_names)
+    for _, row in dataframe.iterrows():
+        name = str(row["leaf_name"])
+        vector: list[float | None] = []
+        for trait_column, error_column in zip(
+            state_columns, error_columns, strict=True
+        ):
+            trait_missing = is_missing_table_value(row[trait_column], set())
+            error_missing = is_missing_table_value(row[error_column], set())
+            if trait_missing:
+                vector.append(None)
+            elif error_missing:
+                raise ValueError(
+                    f"Missing standard error '{error_column}' for observed trait "
+                    f"'{trait_column}' at '{name}'."
+                )
+            else:
+                vector.append(
+                    _continuous_number(
+                        row[error_column],
+                        f"Standard error '{error_column}' for '{name}'",
+                        nonnegative=True,
+                    )
+                )
+        errors[name] = tuple(vector)
+    return errors
 
 
 def _continuous_number(value, label, *, nonnegative=False):

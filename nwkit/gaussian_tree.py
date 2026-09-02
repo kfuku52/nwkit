@@ -57,7 +57,9 @@ class GaussianRootPrior:
 
     def __post_init__(self) -> None:
         if self.mode not in {"fixed", "flat", "gaussian", "stationary"}:
-            raise ValueError("Unsupported Gaussian root-prior mode: {}.".format(self.mode))
+            raise ValueError(
+                "Unsupported Gaussian root-prior mode: {}.".format(self.mode)
+            )
         mean = float(self.mean)
         if not math.isfinite(mean):
             raise ValueError("Gaussian root-prior means must be finite.")
@@ -70,11 +72,15 @@ class GaussianRootPrior:
             raise ValueError("A proper Gaussian root prior requires a variance.")
         variance = float(self.variance)
         if not math.isfinite(variance) or variance < 0.0:
-            raise ValueError("Gaussian root-prior variances must be non-negative and finite.")
+            raise ValueError(
+                "Gaussian root-prior variances must be non-negative and finite."
+            )
         if self.mode == "fixed" and variance != 0.0:
             raise ValueError("A fixed Gaussian root prior must have zero variance.")
         if self.mode in {"gaussian", "stationary"} and variance <= 0.0:
-            raise ValueError("A proper Gaussian root prior must have positive variance.")
+            raise ValueError(
+                "A proper Gaussian root prior must have positive variance."
+            )
         object.__setattr__(self, "variance", variance)
 
     @property
@@ -86,6 +92,234 @@ class GaussianRootPrior:
             return self
         assert self.variance is not None
         return replace(self, variance=self.variance * scale)
+
+
+@dataclass
+class _SparseTreeState:
+    state_by_node: dict[Any, int]
+    state_scale_by_node: dict[Any, float]
+    marginal_variance: dict[Any, float]
+    parents: list[int]
+    coefficients: list[float]
+    innovations: list[float]
+
+
+def _required_ancestry(tree, leaves, all_leaves_requested):
+    if all_leaves_requested:
+        return None
+    required = set()
+    for leaf in leaves:
+        node = leaf
+        while node is not None and node not in required:
+            required.add(node)
+            node = node.up
+    return required
+
+
+def _initial_sparse_state(process, required):
+    assert process.root.variance is not None
+    state = _SparseTreeState(
+        state_by_node={process.tree: -1},
+        state_scale_by_node={process.tree: 0.0},
+        marginal_variance={process.tree: process.root.variance},
+        parents=[],
+        coefficients=[],
+        innovations=[],
+    )
+    if process.root.variance > 0.0:
+        state.state_by_node[process.tree] = 0
+        state.state_scale_by_node[process.tree] = 1.0
+        state.parents.append(-1)
+        state.coefficients.append(0.0)
+        state.innovations.append(process.root.variance)
+    for node in process.tree.traverse(strategy="preorder"):
+        if node.is_root or (required is not None and node not in required):
+            continue
+        transition = process.transitions[node]
+        parent_state = state.state_by_node[node.up]
+        parent_scale = state.state_scale_by_node[node.up]
+        state.marginal_variance[node] = (
+            transition.slope * transition.slope * state.marginal_variance[node.up]
+            + transition.variance
+        )
+        if transition.variance == 0.0:
+            state.state_by_node[node] = parent_state
+            state.state_scale_by_node[node] = transition.slope * parent_scale
+            continue
+        state.state_by_node[node] = len(state.parents)
+        state.state_scale_by_node[node] = 1.0
+        state.parents.append(parent_state)
+        state.coefficients.append(
+            transition.slope * parent_scale if parent_state >= 0 else 0.0
+        )
+        state.innovations.append(transition.variance)
+    return state
+
+
+def _tip_variance_normalization(state, leaves, normalize):
+    tip_variances = np.asarray(
+        [state.marginal_variance[leaf] for leaf in leaves], dtype=float
+    )
+    if (
+        not len(tip_variances)
+        or np.any(~np.isfinite(tip_variances))
+        or np.any(tip_variances < 0.0)
+    ):
+        raise ValueError("Sparse Gaussian tree covariance has invalid tip variance.")
+    maximum = float(np.max(tip_variances))
+    if maximum <= 0.0:
+        raise ValueError("Sparse Gaussian tree covariance has zero tip variance.")
+    normalization = (
+        maximum * float(np.mean(tip_variances / maximum)) if normalize else 1.0
+    )
+    if not math.isfinite(normalization) or normalization <= 0.0:
+        raise ValueError("Sparse Gaussian tree covariance has zero tip variance.")
+    return normalization
+
+
+def _build_sparse_precision(parents, coefficients, innovations):
+    parent_values = np.asarray(parents, dtype=int)
+    coefficient_values = np.asarray(coefficients, dtype=float)
+    innovation_values = np.asarray(innovations, dtype=float)
+    size = len(parent_values)
+    if (
+        len(coefficient_values) != size
+        or len(innovation_values) != size
+        or np.any(~np.isfinite(coefficient_values))
+        or np.any(~np.isfinite(innovation_values))
+        or np.any(innovation_values < 1.0 / np.finfo(float).max)
+    ):
+        return None
+    inverse = 1.0 / innovation_values
+    children = np.arange(size, dtype=int)
+    has_parent = parent_values >= 0
+    child_with_parent = children[has_parent]
+    parents_with_child = parent_values[has_parent]
+    coefficients_with_parent = coefficient_values[has_parent]
+    inverse_with_parent = inverse[has_parent]
+    parent_diagonal = (
+        coefficients_with_parent * coefficients_with_parent * inverse_with_parent
+    )
+    cross = -coefficients_with_parent * inverse_with_parent
+    if any(
+        np.any(~np.isfinite(values)) for values in (inverse, parent_diagonal, cross)
+    ):
+        return None
+    rows = np.concatenate(
+        (children, parents_with_child, child_with_parent, parents_with_child)
+    )
+    columns = np.concatenate(
+        (children, parents_with_child, parents_with_child, child_with_parent)
+    )
+    values = np.concatenate((inverse, parent_diagonal, cross, cross))
+    result = sparse.coo_matrix((values, (rows, columns)), shape=(size, size)).tocsc()
+    return result if np.isfinite(result.data).all() else None
+
+
+def _normal_sparse_precision(state, normalization):
+    with np.errstate(over="ignore", under="ignore", divide="ignore"):
+        innovations = np.asarray(state.innovations, dtype=float) / normalization
+    representable = (
+        len(innovations) > 0
+        and np.all(np.isfinite(innovations))
+        and np.all(innovations > 0.0)
+        and np.all(np.isfinite(state.coefficients))
+        and np.all(np.isfinite(list(state.state_scale_by_node.values())))
+    )
+    precision = (
+        _build_sparse_precision(state.parents, state.coefficients, innovations)
+        if representable
+        else None
+    )
+    return precision, innovations
+
+
+def _normalized_standard_deviation(variance, normalization):
+    log_sd = 0.5 * (math.log(float(variance)) - math.log(normalization))
+    try:
+        value = math.exp(log_sd)
+    except OverflowError as exc:
+        raise ValueError(
+            "Sparse Gaussian covariance exceeds floating-point dynamic range."
+        ) from exc
+    if not math.isfinite(value) or value <= 0.0:
+        raise ValueError(
+            "Sparse Gaussian covariance exceeds floating-point dynamic range."
+        )
+    return value
+
+
+def _rescaled_sparse_state(process, required, normalization):
+    assert process.root.variance is not None
+    state = _SparseTreeState(
+        state_by_node={process.tree: -1},
+        state_scale_by_node={process.tree: 0.0},
+        marginal_variance={},
+        parents=[],
+        coefficients=[],
+        innovations=[],
+    )
+    if process.root.variance > 0.0:
+        state.state_by_node[process.tree] = 0
+        state.state_scale_by_node[process.tree] = _normalized_standard_deviation(
+            process.root.variance, normalization
+        )
+        state.parents.append(-1)
+        state.coefficients.append(0.0)
+        state.innovations.append(1.0)
+    for node in process.tree.traverse(strategy="preorder"):
+        if node.is_root or (required is not None and node not in required):
+            continue
+        transition = process.transitions[node]
+        parent_state = state.state_by_node[node.up]
+        parent_scale = state.state_scale_by_node[node.up]
+        if transition.variance == 0.0:
+            state.state_by_node[node] = parent_state
+            state.state_scale_by_node[node] = transition.slope * parent_scale
+            continue
+        child_scale = _normalized_standard_deviation(transition.variance, normalization)
+        coefficient = (
+            transition.slope * parent_scale / child_scale if parent_state >= 0 else 0.0
+        )
+        state.state_by_node[node] = len(state.parents)
+        state.state_scale_by_node[node] = child_scale
+        state.parents.append(parent_state)
+        state.coefficients.append(coefficient)
+        state.innovations.append(1.0)
+    return state
+
+
+def _sparse_covariance_model(state, leaves, precision, innovations, normalization):
+    tip_states = np.asarray([state.state_by_node[leaf] for leaf in leaves], dtype=int)
+    if np.any(tip_states < 0):
+        raise ValueError(
+            "Every requested tip must have positive evolutionary variance."
+        )
+    tip_scales = np.asarray(
+        [state.state_scale_by_node[leaf] for leaf in leaves], dtype=float
+    )
+    if np.any(~np.isfinite(tip_scales)):
+        raise ValueError(
+            "Sparse Gaussian covariance exceeds floating-point dynamic range."
+        )
+    tip_loading = sparse.csr_matrix(
+        (tip_scales, (np.arange(len(leaves), dtype=int), tip_states)),
+        shape=(len(leaves), len(state.parents)),
+    )
+    logdet_covariance = float(np.sum(np.log(innovations)))
+    if not math.isfinite(logdet_covariance):
+        raise ValueError(
+            "Sparse Gaussian covariance log-determinant exceeds floating-point range."
+        )
+    return SparseCovarianceModel(
+        precision=precision,
+        tip_loading=tip_loading,
+        logdet_covariance=logdet_covariance,
+        sampling_parent=np.asarray(state.parents, dtype=int),
+        sampling_transition=np.asarray(state.coefficients, dtype=float),
+        sampling_variance=innovations,
+        covariance_scale=normalization,
+    )
 
 
 @dataclass(frozen=True)
@@ -104,7 +338,9 @@ class GaussianTreeProcess:
         missing = expected - set(transitions)
         extra = set(transitions) - expected
         if missing or extra:
-            raise ValueError("Gaussian tree transitions must cover every non-root node exactly.")
+            raise ValueError(
+                "Gaussian tree transitions must cover every non-root node exactly."
+            )
         object.__setattr__(self, "transitions", transitions)
 
     def scaled_variance(self, scale: float) -> "GaussianTreeProcess":
@@ -112,9 +348,13 @@ class GaussianTreeProcess:
 
         scale = float(scale)
         if not math.isfinite(scale) or scale < 0.0:
-            raise ValueError("Gaussian process variance scales must be non-negative and finite.")
+            raise ValueError(
+                "Gaussian process variance scales must be non-negative and finite."
+            )
         if scale == 0.0 and self.root.mode in {"gaussian", "stationary"}:
-            raise ValueError("A proper Gaussian root prior cannot be scaled to zero variance.")
+            raise ValueError(
+                "A proper Gaussian root prior cannot be scaled to zero variance."
+            )
         return replace(
             self,
             transitions={
@@ -153,7 +393,9 @@ class GaussianTreeProcess:
             raise ValueError("A flat-root process has no finite unconditional moments.")
         lca = LcaIndex(self.tree)
         if any(node not in lca.index_by_node for node in nodes):
-            raise ValueError("Gaussian covariance requested a node outside the process tree.")
+            raise ValueError(
+                "Gaussian covariance requested a node outside the process tree."
+            )
         requested = [lca.index_by_node[node] for node in nodes]
         assert self.root.variance is not None
         variances = np.empty(len(lca.nodes), dtype=float)
@@ -168,9 +410,7 @@ class GaussianTreeProcess:
             parent = lca.ancestors[0][index]
             transition = self.transitions[node]
             slope = transition.slope
-            variances[index] = (
-                slope * slope * variances[parent] + transition.variance
-            )
+            variances[index] = slope * slope * variances[parent] + transition.variance
             cumulative_loading[index] = cumulative_loading[parent] * slope
             unit_loadings = unit_loadings and slope == 1.0
             direct_loadings = direct_loadings and (
@@ -207,10 +447,7 @@ class GaussianTreeProcess:
                 value = math.exp(log_value)
             except OverflowError:
                 return math.inf
-            negative = (
-                path_negative_parity[first]
-                ^ path_negative_parity[second]
-            )
+            negative = path_negative_parity[first] ^ path_negative_parity[second]
             return -value if negative else value
 
         covariance = np.empty((len(nodes), len(nodes)), dtype=float)
@@ -225,9 +462,7 @@ class GaussianTreeProcess:
                     covariance[second, first] = value
         elif direct_loadings:
             with np.errstate(over="ignore", under="ignore", divide="ignore"):
-                ancestor_factor = variances / (
-                    cumulative_loading * cumulative_loading
-                )
+                ancestor_factor = variances / (cumulative_loading * cumulative_loading)
             direct_loadings = bool(np.isfinite(ancestor_factor).all())
             if direct_loadings:
                 for first, first_index in enumerate(requested):
@@ -303,135 +538,13 @@ class GaussianTreeProcess:
                 )
             )
         leaves = tuple(leaf_by_name[name] for name in names)
-        all_leaves_requested = len(leaves) == len(leaf_by_name)
-        required: set[Any] | None = None
-        if not all_leaves_requested:
-            required = set()
-            for leaf in leaves:
-                node = leaf
-                while node is not None and node not in required:
-                    required.add(node)
-                    node = node.up
-
-        assert self.root.variance is not None
-        state_by_node: dict[Any, int] = {self.tree: -1}
-        state_scale_by_node: dict[Any, float] = {self.tree: 0.0}
-        marginal_variance = {self.tree: self.root.variance}
-        state_parent: list[int] = []
-        state_transition: list[float] = []
-        state_innovation: list[float] = []
-        if self.root.variance > 0.0:
-            state_by_node[self.tree] = 0
-            state_scale_by_node[self.tree] = 1.0
-            state_parent.append(-1)
-            state_transition.append(0.0)
-            state_innovation.append(self.root.variance)
-
-        for node in self.tree.traverse(strategy="preorder"):
-            if node.is_root or (required is not None and node not in required):
-                continue
-            transition = self.transitions[node]
-            parent_state = state_by_node[node.up]
-            parent_scale = state_scale_by_node[node.up]
-            marginal_variance[node] = (
-                transition.slope * transition.slope * marginal_variance[node.up]
-                + transition.variance
-            )
-            if transition.variance == 0.0:
-                state_by_node[node] = parent_state
-                state_scale_by_node[node] = transition.slope * parent_scale
-                continue
-            state_by_node[node] = len(state_parent)
-            state_scale_by_node[node] = 1.0
-            state_parent.append(parent_state)
-            state_transition.append(
-                transition.slope * parent_scale if parent_state >= 0 else 0.0
-            )
-            state_innovation.append(transition.variance)
-
-        tip_variances = np.asarray(
-            [marginal_variance[leaf] for leaf in leaves], dtype=float
+        required = _required_ancestry(
+            self.tree, leaves, len(leaves) == len(leaf_by_name)
         )
-        if (
-            not len(tip_variances)
-            or np.any(~np.isfinite(tip_variances))
-            or np.any(tip_variances < 0.0)
-        ):
-            raise ValueError("Sparse Gaussian tree covariance has invalid tip variance.")
-        maximum_tip_variance = float(np.max(tip_variances))
-        if maximum_tip_variance <= 0.0:
-            raise ValueError("Sparse Gaussian tree covariance has zero tip variance.")
-        normalization = (
-            maximum_tip_variance
-            * float(np.mean(tip_variances / maximum_tip_variance))
-            if normalize
-            else 1.0
-        )
-        if not math.isfinite(normalization) or normalization <= 0.0:
-            raise ValueError("Sparse Gaussian tree covariance has zero tip variance.")
-
-        with np.errstate(over="ignore", under="ignore", divide="ignore"):
-            normalized_innovation = (
-                np.asarray(state_innovation, dtype=float) / normalization
-            )
-
-        def build_precision(parents, coefficients, innovations):
-            parent_values = np.asarray(parents, dtype=int)
-            coefficient_values = np.asarray(coefficients, dtype=float)
-            innovation_values = np.asarray(innovations, dtype=float)
-            size = len(parent_values)
-            if (
-                len(coefficient_values) != size
-                or len(innovation_values) != size
-                or np.any(~np.isfinite(coefficient_values))
-                or np.any(~np.isfinite(innovation_values))
-                or np.any(innovation_values < 1.0 / np.finfo(float).max)
-            ):
-                return None
-            inverse = 1.0 / innovation_values
-            children = np.arange(size, dtype=int)
-            has_parent = parent_values >= 0
-            child_with_parent = children[has_parent]
-            parents_with_child = parent_values[has_parent]
-            coefficients_with_parent = coefficient_values[has_parent]
-            inverse_with_parent = inverse[has_parent]
-            parent_diagonal = (
-                coefficients_with_parent
-                * coefficients_with_parent
-                * inverse_with_parent
-            )
-            cross = -coefficients_with_parent * inverse_with_parent
-            if (
-                np.any(~np.isfinite(inverse))
-                or np.any(~np.isfinite(parent_diagonal))
-                or np.any(~np.isfinite(cross))
-            ):
-                return None
-            rows = np.concatenate(
-                (children, parents_with_child, child_with_parent, parents_with_child)
-            )
-            columns = np.concatenate(
-                (children, parents_with_child, parents_with_child, child_with_parent)
-            )
-            values = np.concatenate((inverse, parent_diagonal, cross, cross))
-            result = sparse.coo_matrix(
-                (values, (rows, columns)), shape=(size, size)
-            ).tocsc()
-            return result if np.isfinite(result.data).all() else None
-
-        normal_representation = (
-            len(normalized_innovation) > 0
-            and np.all(np.isfinite(normalized_innovation))
-            and np.all(normalized_innovation > 0.0)
-            and np.all(np.isfinite(state_transition))
-            and np.all(np.isfinite(list(state_scale_by_node.values())))
-        )
-        precision = (
-            build_precision(
-                state_parent, state_transition, normalized_innovation
-            )
-            if normal_representation
-            else None
+        state = _initial_sparse_state(self, required)
+        normalization = _tip_variance_normalization(state, leaves, normalize)
+        precision, normalized_innovation = _normal_sparse_precision(
+            state, normalization
         )
         if precision is None:
             # A single global normalization can make a positive innovation
@@ -439,94 +552,19 @@ class GaussianTreeProcess:
             # stochastic node in units of its own normalized standard deviation;
             # all innovation variances then equal one while tip loadings preserve
             # the exact normalized covariance.
-            def normalized_sd(variance):
-                log_sd = 0.5 * (
-                    math.log(float(variance)) - math.log(normalization)
-                )
-                try:
-                    value = math.exp(log_sd)
-                except OverflowError as exc:
-                    raise ValueError(
-                        "Sparse Gaussian covariance exceeds floating-point dynamic range."
-                    ) from exc
-                if not math.isfinite(value) or value <= 0.0:
-                    raise ValueError(
-                        "Sparse Gaussian covariance exceeds floating-point dynamic range."
-                    )
-                return value
-
-            state_by_node = {self.tree: -1}
-            state_scale_by_node = {self.tree: 0.0}
-            state_parent = []
-            state_transition = []
-            state_innovation = []
-            if self.root.variance > 0.0:
-                state_by_node[self.tree] = 0
-                state_scale_by_node[self.tree] = normalized_sd(self.root.variance)
-                state_parent.append(-1)
-                state_transition.append(0.0)
-                state_innovation.append(1.0)
-            for node in self.tree.traverse(strategy="preorder"):
-                if node.is_root or (required is not None and node not in required):
-                    continue
-                transition = self.transitions[node]
-                parent_state = state_by_node[node.up]
-                parent_scale = state_scale_by_node[node.up]
-                if transition.variance == 0.0:
-                    state_by_node[node] = parent_state
-                    state_scale_by_node[node] = transition.slope * parent_scale
-                    continue
-                child_scale = normalized_sd(transition.variance)
-                coefficient = (
-                    transition.slope * parent_scale / child_scale
-                    if parent_state >= 0
-                    else 0.0
-                )
-                state_by_node[node] = len(state_parent)
-                state_scale_by_node[node] = child_scale
-                state_parent.append(parent_state)
-                state_transition.append(coefficient)
-                state_innovation.append(1.0)
-            normalized_innovation = np.asarray(state_innovation, dtype=float)
-            precision = build_precision(
-                state_parent, state_transition, normalized_innovation
+            state = _rescaled_sparse_state(self, required, normalization)
+            normalized_innovation = np.asarray(state.innovations, dtype=float)
+            precision = _build_sparse_precision(
+                state.parents, state.coefficients, normalized_innovation
             )
             if precision is None or not np.all(
-                np.isfinite(list(state_scale_by_node.values()))
+                np.isfinite(list(state.state_scale_by_node.values()))
             ):
                 raise ValueError(
                     "Sparse Gaussian covariance exceeds floating-point dynamic range."
                 )
-
-        n_states = len(state_parent)
-        tip_states = np.asarray([state_by_node[leaf] for leaf in leaves], dtype=int)
-        if np.any(tip_states < 0):
-            raise ValueError("Every requested tip must have positive evolutionary variance.")
-        tip_scales = np.asarray([state_scale_by_node[leaf] for leaf in leaves], dtype=float)
-        if np.any(~np.isfinite(tip_scales)):
-            raise ValueError(
-                "Sparse Gaussian covariance exceeds floating-point dynamic range."
-            )
-        tip_loading = sparse.csr_matrix(
-            (
-                tip_scales,
-                (np.arange(len(leaves), dtype=int), tip_states),
-            ),
-            shape=(len(leaves), n_states),
-        )
-        logdet_covariance = float(np.sum(np.log(normalized_innovation)))
-        if not math.isfinite(logdet_covariance):
-            raise ValueError(
-                "Sparse Gaussian covariance log-determinant exceeds floating-point range."
-            )
-        return SparseCovarianceModel(
-            precision=precision,
-            tip_loading=tip_loading,
-            logdet_covariance=logdet_covariance,
-            sampling_parent=np.asarray(state_parent, dtype=int),
-            sampling_transition=np.asarray(state_transition, dtype=float),
-            sampling_variance=normalized_innovation,
-            covariance_scale=normalization,
+        return _sparse_covariance_model(
+            state, leaves, precision, normalized_innovation, normalization
         )
 
 
@@ -571,7 +609,9 @@ def ou_transition_from_root_variance(
     alpha = float(alpha)
     root_variance = float(root_variance)
     optimum = float(optimum)
-    if not all(math.isfinite(value) for value in (length, alpha, root_variance, optimum)):
+    if not all(
+        math.isfinite(value) for value in (length, alpha, root_variance, optimum)
+    ):
         raise ValueError("OU transition parameters must be finite.")
     if length < 0.0 or alpha <= 0.0 or root_variance < 0.0:
         raise ValueError(
@@ -579,7 +619,9 @@ def ou_transition_from_root_variance(
         )
     exponent = alpha * length
     if not math.isfinite(exponent):
-        raise ValueError("OU alpha multiplied by a branch length exceeds floating-point range.")
+        raise ValueError(
+            "OU alpha multiplied by a branch length exceeds floating-point range."
+        )
     decay = math.exp(-exponent)
     innovation = root_variance * (-math.expm1(-2.0 * exponent))
     if root_variance > 0.0 and length > 0.0 and innovation <= 0.0:
@@ -603,11 +645,15 @@ def exponential_rate_edge_variance(start: float, length: float, rate: float) -> 
     start_exponent = rate * start
     edge_exponent = rate * length
     if not math.isfinite(start_exponent) or not math.isfinite(edge_exponent):
-        raise ValueError("Rate change multiplied by tree depth exceeds floating-point range.")
+        raise ValueError(
+            "Rate change multiplied by tree depth exceeds floating-point range."
+        )
     try:
         variance = math.exp(start_exponent) * math.expm1(edge_exponent) / rate
     except OverflowError as exc:
-        raise ValueError("A rate-change branch variance exceeds floating-point range.") from exc
+        raise ValueError(
+            "A rate-change branch variance exceeds floating-point range."
+        ) from exc
     if not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("A positive rate-change branch variance is not finite.")
     return variance

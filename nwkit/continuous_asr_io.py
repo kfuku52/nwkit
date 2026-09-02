@@ -85,7 +85,7 @@ def continuous_output_table(
 
 def continuous_model_table(fit, args, ci_level):
     model = getattr(args, "model", "BM")
-    if model in {"OU", "OUM"}:
+    if model in {"OU", "OUM", "OUMA", "OUMV", "OUMVA"}:
         theta = getattr(fit, "theta", None)
         theta_by_regime = getattr(fit, "theta_by_regime", None)
         row = {
@@ -93,7 +93,8 @@ def continuous_model_table(fit, args, ci_level):
             "trait_type_requested": getattr(args, "trait_type", "auto"),
             "trait": args.state_column,
             "model": model,
-            "root_prior": "stationary",
+            "root_prior": getattr(fit, "root_prior", "stationary"),
+            "root_mean": getattr(fit, "root_mean", ""),
             "alpha": fit.alpha,
             "alpha_estimated": fit.alpha_estimated,
             "alpha_bounds": f"{fit.alpha_bounds[0]},{fit.alpha_bounds[1]}",
@@ -109,7 +110,11 @@ def continuous_model_table(fit, args, ci_level):
             if any((fit.alpha_estimated, fit.theta_estimated, fit.sigma2_estimated))
             else "fixed",
             "log_likelihood": fit.log_likelihood,
-            "likelihood_kind": "stationary_root_ml",
+            "likelihood_kind": (
+                "stationary_root_ml"
+                if getattr(fit, "root_prior", "stationary") == "stationary"
+                else "proper_root_ml"
+            ),
             "num_observed": fit.num_observed,
             "num_effective_observations": fit.num_effective_observations,
             "num_observed_positions": fit.num_observed_positions,
@@ -125,10 +130,8 @@ def continuous_model_table(fit, args, ci_level):
             "regimes": ",".join(getattr(fit, "regimes", ())),
             "root_regime": getattr(fit, "root_regime", ""),
             "regime_map": getattr(fit, "regime_map_source", ""),
-            "regime_parameters": getattr(fit, "regime_parameters_source", "")
-            or "",
-            "standard_error_column": getattr(args, "standard_error_column", None)
-            or "",
+            "regime_parameters": getattr(fit, "regime_parameters_source", "") or "",
+            "standard_error_column": getattr(args, "standard_error_column", None) or "",
             "ci_level": ci_level,
             "interval_kind": "conditional_on_parameters",
             "parameter_uncertainty_included": False,
@@ -137,13 +140,21 @@ def continuous_model_table(fit, args, ci_level):
         if theta_by_regime is not None:
             for regime, value in theta_by_regime.items():
                 row[f"theta_{_safe_parameter_id(regime)}"] = value
+        alpha_by_regime = getattr(fit, "alpha_by_regime", None)
+        if alpha_by_regime is not None and model in {"OUMA", "OUMVA"}:
+            for regime, value in alpha_by_regime.items():
+                row[f"alpha_{_safe_parameter_id(regime)}"] = value
+        sigma2_by_regime = getattr(fit, "sigma2_by_regime", None)
+        if sigma2_by_regime is not None and model in {"OUMV", "OUMVA"}:
+            for regime, value in sigma2_by_regime.items():
+                row[f"sigma2_{_safe_parameter_id(regime)}"] = value
         return pd.DataFrame([row])
-    if model == "BMS":
+    if model in {"BMS", "BMS-DRIFT"}:
         row = {
             "trait_type": "continuous",
             "trait_type_requested": getattr(args, "trait_type", "auto"),
             "trait": args.state_column,
-            "model": "BMS",
+            "model": model,
             "root_prior": "flat",
             "sigma2_estimated": fit.sigma2_estimated,
             "estimation_method": "REML" if fit.sigma2_estimated else "fixed",
@@ -163,8 +174,7 @@ def continuous_model_table(fit, args, ci_level):
             "root_regime": fit.root_regime,
             "regime_map": fit.regime_map_source,
             "regime_parameters": fit.regime_parameters_source or "",
-            "standard_error_column": getattr(args, "standard_error_column", None)
-            or "",
+            "standard_error_column": getattr(args, "standard_error_column", None) or "",
             "ci_level": ci_level,
             "interval_kind": "conditional_on_parameters",
             "parameter_uncertainty_included": False,
@@ -181,8 +191,12 @@ def continuous_model_table(fit, args, ci_level):
             row[f"sigma2_bounds_{regime_id}"] = (
                 "" if bounds is None else f"{bounds[0]},{bounds[1]}"
             )
+        if model == "BMS-DRIFT":
+            row["drift_estimated"] = fit.drift_estimated
+            for regime, value in fit.drift_by_regime.items():
+                row[f"drift_{_safe_parameter_id(regime)}"] = value
         return pd.DataFrame([row])
-    if model in {"EB", "BM-DRIFT"}:
+    if model in {"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC", "BM-DRIFT"}:
         row = {
             "trait_type": "continuous",
             "trait_type_requested": getattr(args, "trait_type", "auto"),
@@ -192,7 +206,8 @@ def continuous_model_table(fit, args, ci_level):
             "sigma2": fit.sigma2,
             "sigma2_estimated": fit.sigma2_estimated,
             "estimation_method": "profile flat-root likelihood"
-            if getattr(fit, "eb_rate_estimated", False)
+            if getattr(fit, "evolution_parameter_estimated", False)
+            or getattr(fit, "eb_rate_estimated", False)
             or getattr(fit, "drift_estimated", False)
             else "REML"
             if fit.sigma2_estimated
@@ -206,21 +221,44 @@ def continuous_model_table(fit, args, ci_level):
             "optimizer_success": fit.optimizer_success,
             "optimizer_message": fit.optimizer_message,
             "optimizer_grid_evaluations": fit.optimizer_grid_evaluations,
-            "standard_error_column": getattr(args, "standard_error_column", None)
-            or "",
+            "standard_error_column": getattr(args, "standard_error_column", None) or "",
             "ci_level": ci_level,
             "interval_kind": "conditional_on_parameters",
             "parameter_uncertainty_included": False,
             "tree_uncertainty_included": False,
         }
-        if model == "EB":
+        if model in {"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"}:
             row.update(
                 {
-                    "eb_rate": fit.eb_rate,
-                    "eb_rate_estimated": fit.eb_rate_estimated,
-                    "eb_rate_bounds": f"{fit.eb_rate_bounds[0]},{fit.eb_rate_bounds[1]}",
+                    "evolution_parameter_name": fit.evolution_parameter_name,
+                    "evolution_parameter": fit.evolution_parameter,
+                    "evolution_parameter_estimated": fit.evolution_parameter_estimated,
+                    "evolution_parameter_bounds": (
+                        f"{fit.evolution_parameter_bounds[0]},"
+                        f"{fit.evolution_parameter_bounds[1]}"
+                    ),
+                    "profile_ci_level": fit.profile_ci_level,
+                    "evolution_parameter_ci_lower": (fit.evolution_parameter_ci_lower),
+                    "evolution_parameter_ci_upper": (fit.evolution_parameter_ci_upper),
+                    "profile_ci_lower_boundary_limited": (
+                        fit.profile_ci_lower_boundary_limited
+                    ),
+                    "profile_ci_upper_boundary_limited": (
+                        fit.profile_ci_upper_boundary_limited
+                    ),
                 }
             )
+            if model in {"EB", "ACDC"}:
+                row.update(
+                    {
+                        "eb_rate": fit.evolution_parameter,
+                        "eb_rate_estimated": fit.evolution_parameter_estimated,
+                        "eb_rate_bounds": (
+                            f"{fit.evolution_parameter_bounds[0]},"
+                            f"{fit.evolution_parameter_bounds[1]}"
+                        ),
+                    }
+                )
         else:
             row.update(
                 {
@@ -267,9 +305,7 @@ def write_continuous_tree(tree, observed, errors, posterior, args, ci_level):
         return
     model = getattr(args, "model", "BM")
     interval_kind = (
-        "conditional_on_sigma2"
-        if model == "BM"
-        else "conditional_on_parameters"
+        "conditional_on_sigma2" if model == "BM" else "conditional_on_parameters"
     )
     for node in tree.traverse():
         summary = _summary(posterior[node], ci_level)

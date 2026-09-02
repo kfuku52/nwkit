@@ -98,7 +98,9 @@ def test_stationary_process_covariance_is_the_ou_asr_dense_oracle():
     nodes = list(tree.traverse())
     means, _ = process.marginal_moments()
     covariance = process.covariance(nodes)
-    observed = [node for node in tree.leaves() if values.get(str(node.name)) is not None]
+    observed = [
+        node for node in tree.leaves() if values.get(str(node.name)) is not None
+    ]
     observed_indices = [nodes.index(node) for node in observed]
     observed_covariance = covariance[np.ix_(observed_indices, observed_indices)]
     observed_covariance += np.diag([errors[str(node.name)] ** 2 for node in observed])

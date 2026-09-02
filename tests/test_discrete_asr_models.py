@@ -200,9 +200,7 @@ def test_transition_matrix_accepts_roundoff_on_valid_long_branches():
 
 def test_transition_matrix_preserves_slow_changes_on_extreme_long_branches():
     rate = 1e-20
-    matrix = np.array(
-        [[-rate, rate, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, -1.0]]
-    )
+    matrix = np.array([[-rate, rate, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, -1.0]])
     transition = asr._transition_matrix(matrix, 1e20)
     np.testing.assert_allclose(
         transition[0], [math.exp(-1.0), -math.expm1(-1.0), 0.0], rtol=2e-13

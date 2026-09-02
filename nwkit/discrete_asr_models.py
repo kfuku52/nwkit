@@ -119,9 +119,7 @@ def parameter_labels(model, states, graph=None):
             for i in range(len(states))
             for j in range(i + 1, len(states))
         ]
-        frequency_ratios = [
-            ("frequency_ratio", state) for state in states[1:]
-        ]
+        frequency_ratios = [("frequency_ratio", state) for state in states[1:]]
         return exchangeabilities + frequency_ratios
     if model == "CUSTOM":
         return []

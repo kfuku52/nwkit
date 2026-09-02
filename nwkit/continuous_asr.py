@@ -156,7 +156,9 @@ def _tree_groups(tree, *, validated=False, process=None):
                 length = float(node.dist)
             else:
                 if node.dist is None:
-                    raise ValueError("ASR requires branch lengths for all non-root nodes.")
+                    raise ValueError(
+                        "ASR requires branch lengths for all non-root nodes."
+                    )
                 length = _finite_number(node.dist, "Branch lengths", nonnegative=True)
             raw_lengths[node] = length
         process = GaussianTreeProcess(
@@ -179,7 +181,9 @@ def _tree_groups(tree, *, validated=False, process=None):
             continue
         transition = process.transitions[node]
         if transition.slope != 1.0 or transition.intercept != 0.0:
-            raise ValueError("Brownian ASR requires unit-slope zero-intercept branches.")
+            raise ValueError(
+                "Brownian ASR requires unit-slope zero-intercept branches."
+            )
         length = transition.variance
         parent = node_groups[node.up]
         if length == 0.0:

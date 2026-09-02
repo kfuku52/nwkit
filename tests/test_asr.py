@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
+from scipy.linalg import expm
 
 import nwkit.asr as asr
 from nwkit import rsc_diagnostics
@@ -80,6 +81,16 @@ def test_tiny_asymmetric_rates_are_not_misclassified_as_er():
     )
 
 
+def test_symmetric_generator_batch_matches_independent_matrix_exponential():
+    tree = Tree("((A:0.2,B:0.7):0.4,C:1.3);", parser=1)
+    off_diagonal = np.asarray([[0.0, 0.3, 0.8], [0.3, 0.0, 0.5], [0.8, 0.5, 0.0]])
+    matrix = off_diagonal.copy()
+    np.fill_diagonal(matrix, -matrix.sum(axis=1))
+    transitions = asr._transition_matrices_for_tree(tree, matrix)
+    for node, transition in transitions.items():
+        assert transition == pytest.approx(expm(matrix * float(node.dist)), abs=2e-15)
+
+
 def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypatch):
     original_fit = asr.compute_mk_marginals
     results, omissions = [], []
@@ -145,6 +156,22 @@ def test_uniformization_rejects_intractable_single_branch_event_history():
     matrix = np.array([[-1.0, 1.0], [1.0, -1.0]])
     with pytest.raises(ValueError, match="more than 2,000,000 potential events"):
         asr._build_uniformization_context(matrix, 2_000_001.0)
+
+
+def test_uniformization_rejects_oversized_endpoint_history_before_allocation():
+    matrix = np.full((64, 64), 1.0 / 63.0)
+    np.fill_diagonal(matrix, -1.0)
+    with pytest.raises(ValueError, match="more than 256 MiB"):
+        asr._build_uniformization_context(matrix, 600_000.0)
+
+
+def test_stochastic_mapping_rejects_excessive_aggregate_work():
+    tree = Tree("(A:1,B:1);", parser=1)
+    matrix = np.asarray([[-250_000.0, 250_000.0], [250_000.0, -250_000.0]])
+    with pytest.raises(ValueError, match="2,000,000 bounded uniformization steps"):
+        asr._validate_stochastic_map_work(
+            {"rate_matrix": matrix}, list(tree.leaves()), num_simulations=5
+        )
 
 
 def test_uniformized_two_state_bridge_samples_only_feasible_event_parity():
@@ -897,3 +924,68 @@ class TestAsrMain:
         )
         with pytest.raises(ValueError, match="--threads"):
             asr_main(args)
+
+    @pytest.mark.parametrize("option,value", [("threads", 2.5), ("n_sim", 2.5)])
+    def test_stochastic_map_rejects_fractional_counts(
+        self, tmp_nwk, tmp_path, option, value
+    ):
+        infile = tmp_nwk("(A:1,B:1);", "tree.nwk")
+        trait = _write_trait(
+            tmp_path,
+            [
+                {"leaf_name": "A", "state": "red"},
+                {"leaf_name": "B", "state": "blue"},
+            ],
+        )
+        settings = {
+            "infile": infile,
+            "outfile": str(tmp_path / "asr.tsv"),
+            "trait": trait,
+            "state_column": "state",
+            "states": "red,blue",
+            "missing_values": None,
+            "model": "ER",
+            "rate": 0.5,
+            "rate_bounds": None,
+            "root_prior": "equal",
+            "target": "all",
+            "output": "map",
+            "stochastic_map_out": str(tmp_path / "smap.tsv"),
+            "n_sim": 5,
+            "seed": 1,
+            "threads": 1,
+        }
+        settings[option] = value
+        with pytest.raises(ValueError, match="must be an integer"):
+            asr_main(make_args(**settings))
+
+    @pytest.mark.parametrize("option", ["n_sim", "threads"])
+    def test_stochastic_map_controls_require_output(self, tmp_nwk, tmp_path, option):
+        infile = tmp_nwk("(A:1,B:1);", "tree.nwk")
+        trait = _write_trait(
+            tmp_path,
+            [
+                {"leaf_name": "A", "state": "red"},
+                {"leaf_name": "B", "state": "blue"},
+            ],
+        )
+        settings = {
+            "infile": infile,
+            "outfile": str(tmp_path / "asr.tsv"),
+            "trait": trait,
+            "state_column": "state",
+            "states": "red,blue",
+            "missing_values": None,
+            "model": "ER",
+            "rate": 0.5,
+            "rate_bounds": None,
+            "root_prior": "equal",
+            "target": "all",
+            "output": "map",
+            "stochastic_map_out": None,
+            "n_sim": None,
+            "threads": None,
+        }
+        settings[option] = 2
+        with pytest.raises(ValueError, match="require --stochastic-map-out"):
+            asr_main(make_args(**settings))

@@ -25,7 +25,6 @@ from nwkit.ou_asr import (
     _Factor,
     _log_normal_density,
     _prepare_data,
-    default_alpha_bounds,
 )
 
 _LOG_2 = math.log(2.0)
@@ -131,8 +130,7 @@ def _predict_down(factor, transition):
     marginal = factor.marginal
     mean = transition.slope * marginal.mean + transition.intercept
     variance = (
-        transition.slope * transition.slope * marginal.variance
-        + transition.variance
+        transition.slope * transition.slope * marginal.variance + transition.variance
     )
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A regime-model smoothing message is not finite.")
@@ -157,7 +155,9 @@ def _prune(data, transitions, root_prior):
         posterior_root = _combine(_Factor(root_prior), inside[0])
         log_likelihood = posterior_root.log_weight
     if not math.isfinite(log_likelihood):
-        raise ValueError("The observations have zero likelihood under the regime model.")
+        raise ValueError(
+            "The observations have zero likelihood under the regime model."
+        )
     return tuple(inside), tuple(upward), log_likelihood
 
 
@@ -204,7 +204,9 @@ def _restore_posterior(data, smoothed):
         or item.variance < 0.0
         for item in posterior.values()
     ):
-        raise ValueError("A regime-model ancestral marginal is outside floating-point range.")
+        raise ValueError(
+            "A regime-model ancestral marginal is outside floating-point range."
+        )
     return posterior
 
 
@@ -220,9 +222,7 @@ def _rate_scale(data):
 
 def _bms_regime_design_rank(tree, data, regime_assignment):
     observed_groups = {
-        group
-        for group, local in enumerate(data.local)
-        if local.marginal is not None
+        group for group, local in enumerate(data.local) if local.marginal is not None
     }
     representative: dict[int, Any] = {}
     for leaf in tree.leaves():
@@ -261,9 +261,7 @@ def _bms_regime_design_rank(tree, data, regime_assignment):
             if node.is_root or float(node.dist) == 0.0:
                 continue
             index = regime_index[regime_assignment.by_node[node]]
-            row[index] += (
-                float(node.dist) / length_scale * descendant[node] ** 2
-            )
+            row[index] += float(node.dist) / length_scale * descendant[node] ** 2
         signatures.append(row)
     matrix = np.vstack(signatures)
     norms = np.linalg.norm(matrix, axis=0)
@@ -349,8 +347,8 @@ def _fixed_bms_marginals(
     for node in tree.traverse(strategy="preorder"):
         if node.is_root:
             continue
-        transformed_length = (
-            sigma2_by_regime[regime_assignment.by_node[node]] * float(node.dist)
+        transformed_length = sigma2_by_regime[regime_assignment.by_node[node]] * float(
+            node.dist
         )
         if not math.isfinite(transformed_length) or transformed_length < 0.0:
             raise ValueError(
@@ -467,9 +465,8 @@ def compute_bms_marginals(
             "BMS regime rates are not separately identifiable: the number of "
             "regimes must not exceed distinct observed positions minus one."
         )
-    if (
-        _bms_regime_design_rank(tree, data, regime_assignment)
-        < len(regime_assignment.regimes)
+    if _bms_regime_design_rank(tree, data, regime_assignment) < len(
+        regime_assignment.regimes
     ):
         raise ValueError(
             "BMS regime rates are not separately identifiable from the "
@@ -494,9 +491,7 @@ def compute_bms_marginals(
     del objective_value
     values = np.exp(selected.x)
     scaled_rates = dict(zip(regime_assignment.regimes, values, strict=True))
-    _, upward, log_likelihood = _prune(
-        data, transitions_for(scaled_rates), None
-    )
+    _, upward, log_likelihood = _prune(data, transitions_for(scaled_rates), None)
     fitted = {
         regime: _ldexp(value, 2 * data.trait_exponent, "Fitted BMS sigma2")
         for regime, value in scaled_rates.items()
@@ -608,290 +603,64 @@ def compute_oum_marginals(
     standard_errors=None,
     _tree_validated=False,
 ):
-    """Return stationary-root OU marginals with regime-specific optima."""
+    """Return stationary-root OUM marginals via the shared Gaussian engine."""
 
     if theta is not None and theta_by_regime is not None:
         raise ValueError("--theta cannot be combined with --regime-parameters.")
-    bounds = default_alpha_bounds(tree) if alpha_bounds is None else alpha_bounds
-    bounds = float(bounds[0]), float(bounds[1])
-    if (
-        not all(math.isfinite(value) and value > 0.0 for value in bounds)
-        or bounds[0] >= bounds[1]
-    ):
-        raise ValueError("OUM alpha bounds must be two increasing positive finite values.")
-    fixed_alpha = None if alpha is None else _finite_number(alpha, "--alpha")
-    fixed_sigma2 = None if sigma2 is None else _finite_number(sigma2, "--sigma2")
-    if fixed_alpha is not None and fixed_alpha <= 0.0:
-        raise ValueError("--alpha must be strictly positive for stationary OUM.")
-    if fixed_sigma2 is not None and fixed_sigma2 <= 0.0:
-        raise ValueError("--sigma2 must be strictly positive for stationary OUM.")
-    if theta is not None:
-        theta = _finite_number(theta, "--theta")
-        theta_by_regime = dict.fromkeys(regime_assignment.regimes, theta)
-    elif theta_by_regime is not None:
+    fixed_parameters = None
+    if theta_by_regime is not None:
         if set(theta_by_regime) != set(regime_assignment.regimes):
             raise ValueError(
                 "OUM fixed-optimum regimes must exactly match the regime assignment."
             )
-        theta_by_regime = {
-            regime: _finite_number(theta_by_regime[regime], f"theta for '{regime}'")
-            for regime in regime_assignment.regimes
+        fixed_parameters = {
+            regime: {"theta": value} for regime, value in theta_by_regime.items()
         }
-    theta_estimated = theta_by_regime is None
-    process_sd = 0.0
-    if fixed_alpha and fixed_sigma2:
-        process_sd = math.sqrt(fixed_sigma2 / (2.0 * fixed_alpha))
-    data = _prepare_data(
+    from nwkit.regime_gaussian_asr import compute_regime_ou_marginals
+
+    posterior, shared_fit = compute_regime_ou_marginals(
         tree,
         values_by_leaf,
-        standard_errors,
-        process_sd=process_sd,
-        tree_validated=_tree_validated,
-    )
-    regimes_by_group = _regime_by_group(tree, data, regime_assignment)
-    if theta_estimated:
-        design_alpha = (
-            fixed_alpha
-            if fixed_alpha is not None
-            else math.exp(
-                0.5 * (math.log(bounds[0]) + math.log(bounds[1]))
-            )
-        )
-        if (
-            _oum_theta_design_rank(tree, data, regime_assignment, design_alpha)
-            < len(regime_assignment.regimes)
-        ):
-            raise ValueError(
-                "OUM regime optima are not separately identifiable from the "
-                "observed branch-regime design; fix theta values or revise the regime map."
-            )
-    scaled_fixed_sigma2 = (
-        None
-        if fixed_sigma2 is None
-        else _ldexp(fixed_sigma2, -2 * data.trait_exponent, "--sigma2")
-    )
-    scaled_fixed_theta = None
-    if theta_by_regime is not None:
-        scaled_fixed_theta = {}
-        for regime, value in theta_by_regime.items():
-            difference = value - data.trait_center
-            if not math.isfinite(difference):
-                raise ValueError("OUM theta minus the trait center is not finite.")
-            scaled_fixed_theta[regime] = _ldexp(
-                difference, -data.trait_exponent, "OUM theta"
-            )
-    free_names = []
-    initial = []
-    parameter_bounds: list[tuple[float | None, float | None]] = []
-    if fixed_alpha is None:
-        free_names.append("log_alpha")
-        initial.append(0.5 * (math.log(bounds[0]) + math.log(bounds[1])))
-        parameter_bounds.append((math.log(bounds[0]), math.log(bounds[1])))
-    values = np.asarray(data.observed_values, dtype=float)
-    errors = np.asarray(data.observed_errors, dtype=float)
-    variance_scale = max(
-        float(np.var(values)) + float(np.mean(errors * errors)),
-        float(np.ptp(values)) ** 2 if len(values) > 1 else 0.0,
-        np.finfo(float).eps,
-    )
-    root_variance_bounds = (variance_scale / 1e10, variance_scale * 1e10)
-    if fixed_sigma2 is None:
-        free_names.append("log_root_variance")
-        initial.append(math.log(max(float(np.var(values)), variance_scale * 1e-3)))
-        parameter_bounds.append(
-            (math.log(root_variance_bounds[0]), math.log(root_variance_bounds[1]))
-        )
-    if theta_estimated:
-        global_mean = float(np.mean(values))
-        for regime in regime_assignment.regimes:
-            free_names.append(f"theta:{regime}")
-            initial.append(global_mean)
-            parameter_bounds.append((None, None))
-    if data.num_observed_positions < len(free_names):
-        raise ValueError(
-            "OUM free parameters are not separately identifiable: fix alpha, "
-            "sigma2, or regime theta values, or supply more observed positions."
-        )
-
-    def unpack(parameters):
-        supplied = dict(zip(free_names, parameters, strict=True))
-        current_alpha = (
-            math.exp(supplied["log_alpha"])
-            if fixed_alpha is None
-            else fixed_alpha
-        )
-        if fixed_sigma2 is None:
-            root_variance = math.exp(supplied["log_root_variance"])
-        else:
-            assert scaled_fixed_sigma2 is not None
-            root_variance = scaled_fixed_sigma2 / (2.0 * current_alpha)
-        current_sigma2 = 2.0 * current_alpha * root_variance
-        current_theta = (
-            {regime: supplied[f"theta:{regime}"] for regime in regime_assignment.regimes}
-            if theta_estimated
-            else scaled_fixed_theta
-        )
-        return current_alpha, current_sigma2, root_variance, current_theta
-
-    def objective(parameters):
-        try:
-            current_alpha, _, root_variance, current_theta = unpack(parameters)
-            transitions = _ou_transitions(
-                data,
-                regimes_by_group,
-                current_alpha,
-                root_variance,
-                current_theta,
-            )
-            root_prior = GaussianMarginal(
-                current_theta[regime_assignment.root_regime], root_variance
-            )
-            return -_prune(data, transitions, root_prior)[2]
-        except (ValueError, ArithmeticError):
-            return 1e100
-
-    starts = [np.asarray(initial, dtype=float)]
-    candidates = []
-    failures = []
-    if free_names:
-        covariance_indices = [
-            index
-            for index, name in enumerate(free_names)
-            if name in {"log_alpha", "log_root_variance"}
-        ]
-        for fraction in (0.1, 0.5, 0.9):
-            start = np.asarray(initial, dtype=float)
-            for index in covariance_indices:
-                lower, upper = parameter_bounds[index]
-                assert lower is not None and upper is not None
-                start[index] = lower + fraction * (upper - lower)
-            starts.append(start)
-        starts = _unique_starts(starts)
-        for start in starts:
-            result = minimize(
-                objective,
-                start,
-                method="L-BFGS-B",
-                bounds=parameter_bounds,
-                options={"maxiter": 1000, "ftol": 1e-12},
-            )
-            messages = [str(result.message)]
-            success = (
-                bool(result.success)
-                and math.isfinite(float(result.fun))
-                and float(result.fun) < 1e99
-                and np.all(np.isfinite(result.x))
-            )
-            if not success:
-                fallback = minimize(
-                    objective,
-                    start,
-                    method="Powell",
-                    bounds=parameter_bounds,
-                    options={"maxiter": 1500, "xtol": 1e-8, "ftol": 1e-10},
-                )
-                messages.append(f"Powell fallback: {fallback.message}")
-                if (
-                    bool(fallback.success)
-                    and math.isfinite(float(fallback.fun))
-                    and float(fallback.fun) < 1e99
-                    and np.all(np.isfinite(fallback.x))
-                ):
-                    result, success = fallback, True
-            if success:
-                candidates.append((float(result.fun), result, "; ".join(messages)))
-            else:
-                failures.append("; ".join(messages))
-        if not candidates:
-            raise ValueError(
-                "Failed to estimate OUM parameters: "
-                + ("; ".join(dict.fromkeys(failures)) or "no finite fit")
-            )
-        _, selected, selected_message = min(candidates, key=lambda item: item[0])
-        selected_parameters = selected.x
-        selected_success = bool(selected.success)
-    else:
-        selected_parameters = np.asarray([], dtype=float)
-        selected_message = "all parameters fixed"
-        selected_success = True
-        candidates.append((objective(selected_parameters), None, selected_message))
-    fitted_alpha, fitted_sigma2, root_variance, fitted_theta = unpack(
-        selected_parameters
-    )
-    if theta_estimated and (
-        _oum_theta_design_rank(tree, data, regime_assignment, fitted_alpha)
-        < len(regime_assignment.regimes)
-    ):
-        raise ValueError(
-            "OUM regime optima are not separately identifiable at the fitted alpha."
-        )
-    transitions = _ou_transitions(
-        data, regimes_by_group, fitted_alpha, root_variance, fitted_theta
-    )
-    root_prior = GaussianMarginal(
-        fitted_theta[regime_assignment.root_regime], root_variance
-    )
-    _, upward, log_likelihood = _prune(data, transitions, root_prior)
-    smoothed = _smooth(data, transitions, root_prior, upward)
-    posterior = _restore_posterior(data, smoothed)
-    restored_theta = {
-        regime: data.trait_center
-        + _ldexp(value, data.trait_exponent, "Fitted OUM theta")
-        for regime, value in fitted_theta.items()
-    }
-    restored_sigma2 = _ldexp(
-        fitted_sigma2, 2 * data.trait_exponent, "Fitted OUM sigma2"
-    )
-    restored_root_variance = _ldexp(
-        root_variance, 2 * data.trait_exponent, "Fitted OUM root variance"
-    )
-    restored_bounds = (
-        None
-        if fixed_sigma2 is not None
-        else tuple(
-            _ldexp(value, 2 * data.trait_exponent, "OUM root variance bound")
-            for value in root_variance_bounds
-        )
-    )
-    statuses = []
-    tolerance = 1e-5
-    if fixed_alpha is None:
-        if fitted_alpha <= bounds[0] * (1.0 + tolerance):
-            statuses.append("alpha_lower_boundary")
-        elif fitted_alpha >= bounds[1] * (1.0 - tolerance):
-            statuses.append("alpha_upper_boundary")
-    if fixed_sigma2 is None:
-        if root_variance <= root_variance_bounds[0] * (1.0 + tolerance):
-            statuses.append("root_variance_lower_boundary")
-        elif root_variance >= root_variance_bounds[1] * (1.0 - tolerance):
-            statuses.append("root_variance_upper_boundary")
-    fit = OrnsteinUhlenbeckRegimeFit(
-        alpha=fitted_alpha,
-        alpha_estimated=fixed_alpha is None,
-        theta_by_regime=restored_theta,
-        theta_estimated=theta_estimated,
-        sigma2=restored_sigma2,
-        sigma2_estimated=fixed_sigma2 is None,
-        root_variance=restored_root_variance,
-        log_likelihood=log_likelihood
-        - data.likelihood_dimensions * data.trait_exponent * _LOG_2,
-        num_observed=data.num_observed,
-        num_effective_observations=data.num_effective_observations,
-        num_observed_positions=data.num_observed_positions,
-        regimes=regime_assignment.regimes,
-        root_regime=regime_assignment.root_regime,
-        regime_map_source=regime_assignment.source,
+        regime_assignment,
+        model="OUM",
+        alpha=alpha,
+        sigma2=sigma2,
+        theta=theta,
+        regime_parameters=fixed_parameters,
         regime_parameters_source=regime_parameters_source,
-        fit_status="+".join(statuses) if statuses else "ok",
-        optimizer_success=selected_success,
-        optimizer_message=(
-            f"deterministic multistart: {len(candidates)}/{len(starts)} starts "
-            f"converged; {selected_message}"
-        ),
-        optimizer_starts=len(starts),
-        optimizer_converged_starts=len(candidates),
-        optimizer_failed_starts=len(failures),
-        alpha_bounds=bounds,
-        root_variance_bounds=restored_bounds,
+        alpha_bounds=alpha_bounds,
+        standard_errors=standard_errors,
+        _tree_validated=_tree_validated,
+    )
+    posterior = {
+        node: GaussianMarginal(marginal.mean, marginal.variance)
+        for node, marginal in posterior.items()
+    }
+    assert shared_fit.alpha is not None
+    assert shared_fit.sigma2 is not None
+    fit = OrnsteinUhlenbeckRegimeFit(
+        alpha=shared_fit.alpha,
+        alpha_estimated=shared_fit.alpha_estimated,
+        theta_by_regime=dict(shared_fit.theta_by_regime),
+        theta_estimated=shared_fit.theta_estimated,
+        sigma2=shared_fit.sigma2,
+        sigma2_estimated=shared_fit.sigma2_estimated,
+        root_variance=shared_fit.root_variance,
+        log_likelihood=shared_fit.log_likelihood,
+        num_observed=shared_fit.num_observed,
+        num_effective_observations=shared_fit.num_effective_observations,
+        num_observed_positions=shared_fit.num_observed_positions,
+        regimes=shared_fit.regimes,
+        root_regime=shared_fit.root_regime,
+        regime_map_source=shared_fit.regime_map_source,
+        regime_parameters_source=shared_fit.regime_parameters_source,
+        fit_status=shared_fit.fit_status,
+        optimizer_success=shared_fit.optimizer_success,
+        optimizer_message=shared_fit.optimizer_message,
+        optimizer_starts=shared_fit.optimizer_starts,
+        optimizer_converged_starts=shared_fit.optimizer_converged_starts,
+        optimizer_failed_starts=shared_fit.optimizer_failed_starts,
+        alpha_bounds=shared_fit.alpha_bounds,
+        root_variance_bounds=shared_fit.root_variance_bounds,
     )
     return posterior, fit

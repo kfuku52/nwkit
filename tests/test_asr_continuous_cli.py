@@ -267,7 +267,6 @@ def test_all_missing_explicit_continuous_fails_even_with_fixed_rate(tmp_path):
         ["--stochastic-map-out", "maps.tsv"],
         ["--n-sim", "100"],
         ["--threads", "1"],
-        ["--seed", "1"],
         ["--hidden-categories", "2"],
         ["--tree-annotation", "map"],
     ],

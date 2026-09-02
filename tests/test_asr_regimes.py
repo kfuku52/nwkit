@@ -42,9 +42,7 @@ def test_regime_map_requires_one_assignment_for_every_branch(tmp_path):
 def test_regime_parameters_are_complete_finite_and_ordered(tmp_path):
     path = tmp_path / "parameters.tsv"
     path.write_text("regime\tsigma2\nfast\t2\nslow\t0.5\n")
-    parameters, source = read_regime_parameters(
-        path, ("slow", "fast"), ("sigma2",)
-    )
+    parameters, source = read_regime_parameters(path, ("slow", "fast"), ("sigma2",))
     assert list(parameters) == ["slow", "fast"]
     assert parameters["slow"]["sigma2"] == 0.5
     assert source == str(path)
@@ -72,9 +70,9 @@ def test_edge_specific_q_likelihood_matches_direct_star_calculation(tmp_path):
     for root_state in range(2):
         probability = 0.5
         for child, state in zip(tree.children, observed, strict=True):
-            probability *= asr._transition_matrix(
-                by_node[child], child.dist
-            )[root_state, state]
+            probability *= asr._transition_matrix(by_node[child], child.dist)[
+                root_state, state
+            ]
         expected += probability
     assert asr._log_likelihood(
         tree, observations, np.array([0.5, 0.5]), by_node
@@ -156,6 +154,45 @@ def test_prior_only_hrm_rejects_fitted_hidden_rates():
         )
 
 
+def test_hrm_validates_hidden_category_count_before_expansion():
+    tree = tree_from("(A:1,B:1)R;")
+    observed = {"A": "0", "B": "1"}
+    likelihoods = {"A": np.array([1.0, 0.0]), "B": np.array([0.0, 1.0])}
+    with pytest.raises(ValueError, match="must be an integer"):
+        asr.compute_hrm_marginals(
+            tree,
+            ["0", "1"],
+            observed,
+            likelihoods,
+            hidden_categories=2.5,
+        )
+    with pytest.raises(ValueError, match="more than 256 free transition rates"):
+        asr.compute_hrm_marginals(
+            tree,
+            ["0", "1"],
+            observed,
+            likelihoods,
+            hidden_categories=1000,
+        )
+
+    many_states = [str(index) for index in range(33)]
+    sparse_graph = np.zeros((33, 33), dtype=bool)
+    sparse_observed = {"A": "0", "B": "1"}
+    sparse_likelihoods = {
+        "A": np.eye(33)[0],
+        "B": np.eye(33)[1],
+    }
+    with pytest.raises(ValueError, match="more than 64 expanded states"):
+        asr.compute_hrm_marginals(
+            tree,
+            many_states,
+            sparse_observed,
+            sparse_likelihoods,
+            hidden_categories=2,
+            transition_graph=sparse_graph,
+        )
+
+
 @pytest.mark.integration
 def test_mk_regime_cli_fits_and_reports_each_regime_q(tmp_path):
     tree = tmp_path / "tree.nwk"
@@ -168,7 +205,16 @@ def test_mk_regime_cli_fits_and_reports_each_regime_q(tmp_path):
     traits.write_text("leaf_name\tstate\nA\t0\nB\t0\nC\t1\nD\t1\n")
     # level order: root, two internals, then four leaves
     write_regime_map(
-        regimes, ["background", "background", "foreground", "background", "background", "foreground", "foreground"]
+        regimes,
+        [
+            "background",
+            "background",
+            "foreground",
+            "background",
+            "background",
+            "foreground",
+            "foreground",
+        ],
     )
     main(
         [
@@ -220,9 +266,7 @@ def test_hrm_cli_marginalizes_hidden_classes_and_maps_observed_changes(tmp_path)
     output = tmp_path / "asr.tsv"
     model = tmp_path / "model.tsv"
     stochastic = tmp_path / "maps.tsv"
-    trait.write_text(
-        "leaf_name\tstate\nA\t0\nB\t0\nC\t1\nD\t1\nE\t0\nF\t1\n"
-    )
+    trait.write_text("leaf_name\tstate\nA\t0\nB\t0\nC\t1\nD\t1\nE\t0\nF\t1\n")
     main(
         [
             "asr",

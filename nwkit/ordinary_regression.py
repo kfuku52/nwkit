@@ -2,14 +2,12 @@
 
 import math
 import os
-import warnings
 from dataclasses import dataclass
 from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from scipy.optimize import minimize_scalar
 from scipy.stats import chi2, norm
 from scipy.stats import t as student_t
 
@@ -55,6 +53,9 @@ from nwkit.model_matrix import (
 )
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.optimization import ScalarFitCache
+from nwkit.optimization import (
+    global_bounded_scalar_minimize as _global_bounded_scalar_minimize,
+)
 from nwkit.phylogenetic_glmm import (
     SCALAR_RESPONSE_FAMILIES,
     fit_phylogenetic_glmm,
@@ -275,87 +276,6 @@ def _ordinary_covariance_builder(
         return covariance
 
     return lambda_covariance
-
-
-def _bounded_scalar_minimize(function, bounds):
-    with warnings.catch_warnings():
-        warnings.filterwarnings(
-            "ignore",
-            message="invalid value encountered in scalar subtract",
-            category=RuntimeWarning,
-            module=r"scipy\.optimize\._optimize",
-        )
-        return minimize_scalar(
-            function,
-            bounds=bounds,
-            method="bounded",
-            options={"xatol": 1e-7, "maxiter": 500},
-        )
-
-
-def _global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
-    """Search a bounded 1-D objective without assuming it is globally unimodal."""
-    lower, upper = (float(bounds[0]), float(bounds[1]))
-    grid = np.linspace(lower, upper, grid_size)
-    grid_values = np.asarray([float(function(value)) for value in grid], dtype=float)
-    finite_indices = np.flatnonzero(np.isfinite(grid_values))
-    if not len(finite_indices):
-        return SimpleNamespace(
-            x=(lower + upper) / 2.0,
-            fun=float("inf"),
-            success=False,
-            message="global grid search found no finite objective",
-        )
-
-    local_indices = []
-    for index in finite_indices:
-        if index == 0 or index == grid_size - 1:
-            continue
-        left = grid_values[index - 1]
-        right = grid_values[index + 1]
-        if grid_values[index] <= left and grid_values[index] <= right:
-            local_indices.append(int(index))
-    ranked_indices = sorted(
-        (int(index) for index in finite_indices if 0 < index < grid_size - 1),
-        key=lambda index: grid_values[index],
-    )
-    refinement_indices = []
-    for index in local_indices + ranked_indices:
-        if index not in refinement_indices:
-            refinement_indices.append(index)
-        if len(refinement_indices) == 4:
-            break
-
-    candidates = [
-        SimpleNamespace(
-            x=float(grid[index]),
-            fun=float(grid_values[index]),
-            success=index in {0, grid_size - 1},
-            message="global grid point",
-        )
-        for index in finite_indices
-    ]
-    successful_refinements = 0
-    for index in refinement_indices:
-        refined = _bounded_scalar_minimize(
-            function,
-            (float(grid[index - 1]), float(grid[index + 1])),
-        )
-        if math.isfinite(float(refined.fun)):
-            candidates.append(refined)
-            successful_refinements += int(bool(refined.success))
-    best = min(candidates, key=lambda candidate: float(candidate.fun))
-    best_is_boundary = math.isclose(float(best.x), lower) or math.isclose(
-        float(best.x), upper
-    )
-    return SimpleNamespace(
-        x=float(best.x),
-        fun=float(best.fun),
-        success=bool(best_is_boundary or successful_refinements),
-        message=(
-            "global grid search ({} points; {} successful local refinement(s))"
-        ).format(grid_size, successful_refinements),
-    )
 
 
 def _ordinary_covariance_may_be_dense(

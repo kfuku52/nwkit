@@ -9,18 +9,63 @@ class EvolutionModelSpec:
     parameter_name: str | None
     contrast_supported: bool = True
     branch_lengths_used: bool = True
+    asr_name: str | None = None
+    asr_default_root_prior: str | None = None
+    asr_root_priors: tuple[str, ...] = ()
 
 
 EVOLUTION_MODEL_SPECS = {
     spec.name: spec
     for spec in [
-        EvolutionModelSpec("brownian", None),
-        EvolutionModelSpec("lambda", "lambda"),
-        EvolutionModelSpec("ou", "alpha"),
-        EvolutionModelSpec("kappa", "kappa"),
-        EvolutionModelSpec("delta", "delta"),
-        EvolutionModelSpec("eb", "rate_change"),
-        EvolutionModelSpec("acdc", "rate_change"),
+        EvolutionModelSpec(
+            "brownian",
+            None,
+            asr_name="BM",
+            asr_default_root_prior="flat",
+            asr_root_priors=("flat",),
+        ),
+        EvolutionModelSpec(
+            "lambda",
+            "lambda",
+            asr_name="LAMBDA",
+            asr_default_root_prior="flat",
+            asr_root_priors=("flat",),
+        ),
+        EvolutionModelSpec(
+            "ou",
+            "alpha",
+            asr_name="OU",
+            asr_default_root_prior="stationary",
+            asr_root_priors=("stationary", "fixed", "gaussian"),
+        ),
+        EvolutionModelSpec(
+            "kappa",
+            "kappa",
+            asr_name="KAPPA",
+            asr_default_root_prior="flat",
+            asr_root_priors=("flat",),
+        ),
+        EvolutionModelSpec(
+            "delta",
+            "delta",
+            asr_name="DELTA",
+            asr_default_root_prior="flat",
+            asr_root_priors=("flat",),
+        ),
+        EvolutionModelSpec(
+            "eb",
+            "rate_change",
+            asr_name="EB",
+            asr_default_root_prior="flat",
+            asr_root_priors=("flat",),
+        ),
+        EvolutionModelSpec(
+            "acdc",
+            "rate_change",
+            asr_name="ACDC",
+            asr_default_root_prior="flat",
+            asr_root_priors=("flat",),
+        ),
         EvolutionModelSpec("independent", None, branch_lengths_used=False),
         EvolutionModelSpec(
             "custom", None, contrast_supported=False, branch_lengths_used=False

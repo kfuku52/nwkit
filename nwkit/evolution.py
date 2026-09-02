@@ -96,27 +96,30 @@ def _base_edge_lengths(
 ) -> dict[Any, float]:
     if branch_length not in {"original", "unit"}:
         raise ValueError("Unsupported branch-length mode: {}.".format(branch_length))
-    lengths: dict[Any, float] = {}
-    for node in tree.traverse():
-        if node.is_root:
-            lengths[node] = 0.0
-            continue
-        if branch_length == "unit":
-            lengths[node] = 1.0
-            continue
-        try:
-            value = float(node.dist)
-        except (TypeError, ValueError, OverflowError) as exc:
-            raise ValueError("Tree branch lengths must be numeric.") from exc
-        if not math.isfinite(value) or value < 0.0 or (value == 0.0 and not allow_zero):
-            raise ValueError(
-                "Evolutionary models require {} finite non-root branch lengths; "
-                "use unit branch lengths to ignore input lengths.".format(
-                    "non-negative" if allow_zero else "positive"
-                )
+    return {
+        node: _base_edge_length(node, branch_length, allow_zero)
+        for node in tree.traverse()
+    }
+
+
+def _base_edge_length(node, branch_length, allow_zero):
+    if node.is_root:
+        return 0.0
+    if branch_length == "unit":
+        return 1.0
+    try:
+        value = float(node.dist)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("Tree branch lengths must be numeric.") from exc
+    invalid = not math.isfinite(value) or value < 0.0
+    if invalid or (value == 0.0 and not allow_zero):
+        raise ValueError(
+            "Evolutionary models require {} finite non-root branch lengths; "
+            "use unit branch lengths to ignore input lengths.".format(
+                "non-negative" if allow_zero else "positive"
             )
-        lengths[node] = value
-    return lengths
+        )
+    return value
 
 
 def _depths_from_edges(tree, edge_lengths: dict[Any, float]) -> dict[Any, float]:
@@ -129,9 +132,13 @@ def _depths_from_edges(tree, edge_lengths: dict[Any, float]) -> dict[Any, float]
     return depths
 
 
-def tree_depths(tree, branch_length: str = "original") -> dict[Any, float]:
+def tree_depths(
+    tree, branch_length: str = "original", *, allow_zero: bool = False
+) -> dict[Any, float]:
     """Return root-to-node depths under original or unit branch lengths."""
-    return _depths_from_edges(tree, _base_edge_lengths(tree, branch_length))
+    return _depths_from_edges(
+        tree, _base_edge_lengths(tree, branch_length, allow_zero=allow_zero)
+    )
 
 
 def _tree_height(tree, depths: dict[Any, float]) -> float:
@@ -270,35 +277,13 @@ def transformed_edge_variances(
         return base_edges
     if model == "kappa":
         assert parameter is not None
-        try:
-            edges = {
-                node: 0.0 if node.is_root else base_edges[node] ** parameter
-                for node in tree.traverse()
-            }
-        except OverflowError as exc:
-            raise ValueError(
-                "Pagel's kappa produces non-finite transformed branches."
-            ) from exc
-        if not all(math.isfinite(value) for value in edges.values()):
-            raise ValueError("Pagel's kappa produces non-finite transformed branches.")
-        return edges
+        return _kappa_edge_variances(tree, base_edges, parameter)
     base_depths = _depths_from_edges(tree, base_edges)
     if model == "lambda":
         assert parameter is not None
-        transformed = {}
-        for node in tree.traverse():
-            if node.is_root:
-                transformed[node] = 0.0
-            elif node.is_leaf:
-                transformed[node] = (
-                    base_edges[node] + (1.0 - parameter) * base_depths[node.up]
-                )
-            else:
-                transformed[node] = parameter * base_edges[node]
-        return transformed
+        return _lambda_edge_variances(tree, base_edges, base_depths, parameter)
     assert parameter is not None
     if model in {"eb", "acdc"}:
-        base_depths = _depths_from_edges(tree, base_edges)
         return {
             node: (
                 0.0
@@ -309,6 +294,43 @@ def transformed_edge_variances(
             )
             for node in tree.traverse()
         }
+    return _node_transform_edge_variances(tree, model, parameter, base_depths)
+
+
+def _kappa_edge_variances(tree, base_edges, parameter):
+    try:
+        edges = {
+            node: (
+                0.0
+                if node.is_root or base_edges[node] == 0.0
+                else base_edges[node] ** parameter
+            )
+            for node in tree.traverse()
+        }
+    except OverflowError as exc:
+        raise ValueError(
+            "Pagel's kappa produces non-finite transformed branches."
+        ) from exc
+    if not all(math.isfinite(value) for value in edges.values()):
+        raise ValueError("Pagel's kappa produces non-finite transformed branches.")
+    return edges
+
+
+def _lambda_edge_variances(tree, base_edges, base_depths, parameter):
+    transformed = {}
+    for node in tree.traverse():
+        if node.is_root:
+            transformed[node] = 0.0
+        elif node.is_leaf:
+            transformed[node] = (
+                base_edges[node] + (1.0 - parameter) * base_depths[node.up]
+            )
+        else:
+            transformed[node] = parameter * base_edges[node]
+    return transformed
+
+
+def _node_transform_edge_variances(tree, model, parameter, base_depths):
     transformed_depths = _transformed_node_depths(
         tree,
         model,
@@ -451,9 +473,7 @@ def build_evolutionary_process(
 
     if model == "ou":
         assert parameter is not None
-        lengths = _base_edge_lengths(
-            tree, branch_length, allow_zero=allow_zero
-        )
+        lengths = _base_edge_lengths(tree, branch_length, allow_zero=allow_zero)
         transitions = {}
         stationary_variance = None
         for node in tree.traverse():
@@ -492,7 +512,9 @@ def build_evolutionary_process(
         if model != "ou":
             raise ValueError("A stationary root is currently defined only for OU.")
         if root_variance is not None:
-            raise ValueError("OU stationary root variance is determined by alpha and sigma2.")
+            raise ValueError(
+                "OU stationary root variance is determined by alpha and sigma2."
+            )
         assert stationary_variance is not None
         root = GaussianRootPrior("stationary", root_mean, stationary_variance)
     elif root_mode == "gaussian":
@@ -617,6 +639,7 @@ def optimization_parameterization(
     model: str,
     *,
     branch_length: str = "original",
+    allow_zero: bool = False,
 ) -> tuple[tuple[float, float], Callable[[float], float]]:
     """Return bounded optimizer coordinates and their decoder."""
     spec = evolution_model_spec(model)
@@ -624,7 +647,7 @@ def optimization_parameterization(
         raise ValueError(
             "Evolutionary model '{}' has no shape parameter.".format(model)
         )
-    depths = tree_depths(tree, branch_length)
+    depths = tree_depths(tree, branch_length, allow_zero=allow_zero)
     height = _tree_height(tree, depths)
     if model == "lambda":
         return (0.0, 1.0), float
@@ -648,17 +671,45 @@ def encoded_evolution_parameter(model: str, parameter: float) -> float:
     return parameter
 
 
+def _encoded_boundary_bounds(
+    tree,
+    model,
+    branch_length,
+    allow_zero,
+    parameter_bounds,
+):
+    if parameter_bounds is None:
+        return optimization_parameterization(
+            tree,
+            model,
+            branch_length=branch_length,
+            allow_zero=allow_zero,
+        )[0]
+    lower, upper = parameter_bounds
+    lower = validate_evolution_parameter(model, lower)
+    upper = validate_evolution_parameter(model, upper)
+    assert lower is not None and upper is not None
+    encoded_bounds = (
+        encoded_evolution_parameter(model, lower),
+        encoded_evolution_parameter(model, upper),
+    )
+    bounds = min(encoded_bounds), max(encoded_bounds)
+    if bounds[0] >= bounds[1]:
+        raise ValueError("Evolution-parameter bounds must be increasing.")
+    return bounds
+
+
 def parameter_near_boundary(
     tree,
     model: str,
     parameter: float,
     *,
     branch_length: str = "original",
+    allow_zero: bool = False,
+    parameter_bounds: tuple[float, float] | None = None,
 ) -> bool:
-    bounds, _ = optimization_parameterization(
-        tree,
-        model,
-        branch_length=branch_length,
+    bounds = _encoded_boundary_bounds(
+        tree, model, branch_length, allow_zero, parameter_bounds
     )
     encoded = encoded_evolution_parameter(model, parameter)
     tolerance = max(1e-5, (bounds[1] - bounds[0]) * 1e-5)

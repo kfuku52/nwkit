@@ -62,7 +62,9 @@ def dense_oum(tree, observed, alpha, sigma2, theta_by_regime, regimes):
             for left in nodes
         ]
     )
-    observed_nodes = [tree[name] for name, value in observed.items() if value is not None]
+    observed_nodes = [
+        tree[name] for name, value in observed.items() if value is not None
+    ]
     observed_indices = [index[node] for node in observed_nodes]
     response = np.asarray([observed[node.name] for node in observed_nodes])
     observed_covariance = covariance[np.ix_(observed_indices, observed_indices)]
@@ -81,7 +83,10 @@ def dense_oum(tree, observed, alpha, sigma2, theta_by_regime, regimes):
         + residual @ np.linalg.solve(observed_covariance, residual)
     )
     return {
-        node: (conditional_mean[index[node]], conditional_covariance[index[node], index[node]])
+        node: (
+            conditional_mean[index[node]],
+            conditional_covariance[index[node], index[node]],
+        )
         for node in nodes
     }, log_likelihood
 
@@ -136,7 +141,9 @@ def test_fixed_zero_bms_preserves_singular_boundary_semantics():
         sigma2_by_regime={"r0": 0.0, "r1": 0.0},
     )
     assert fit.fit_status == expected_fit.fit_status == "singular_zero_boundary"
-    assert fit.restricted_log_likelihood is expected_fit.restricted_log_likelihood is None
+    assert (
+        fit.restricted_log_likelihood is expected_fit.restricted_log_likelihood is None
+    )
     assert fit.residual_df == expected_fit.residual_df
     for node in tree.traverse():
         assert observed[node] == expected[node]
@@ -207,22 +214,19 @@ def test_equal_optimum_oum_matches_single_optimum_ou():
     )
     assert fit.log_likelihood == pytest.approx(expected_fit.log_likelihood, abs=1e-12)
     for node in tree.traverse():
-        assert observed[node] == pytest.approx(expected[node], abs=1e-12)
+        assert observed[node].mean == pytest.approx(expected[node].mean, abs=1e-12)
+        assert observed[node].variance == pytest.approx(
+            expected[node].variance, abs=1e-12
+        )
 
 
 def test_estimated_single_regime_theta_matches_existing_ou_fit():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8,E:2)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": 1.0, "E": 3.0}
     regimes = assignment(tree, ["shared"] * len(list(tree.traverse())))
-    expected, expected_fit = compute_ou_marginals(
-        tree, values, alpha=0.7, sigma2=1.4
-    )
-    observed, fit = compute_oum_marginals(
-        tree, values, regimes, alpha=0.7, sigma2=1.4
-    )
-    assert fit.theta_by_regime["shared"] == pytest.approx(
-        expected_fit.theta, abs=2e-7
-    )
+    expected, expected_fit = compute_ou_marginals(tree, values, alpha=0.7, sigma2=1.4)
+    observed, fit = compute_oum_marginals(tree, values, regimes, alpha=0.7, sigma2=1.4)
+    assert fit.theta_by_regime["shared"] == pytest.approx(expected_fit.theta, abs=2e-7)
     assert fit.optimizer_starts == 1
     assert fit.log_likelihood == pytest.approx(expected_fit.log_likelihood, abs=1e-10)
     for node in tree.traverse():
@@ -264,9 +268,7 @@ def test_oum_rejects_collinear_regime_optimum_design():
 def test_fixed_multi_optimum_oum_matches_independent_dense_conditioning():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
-    regimes = assignment(
-        tree, ["cold", "cold", "warm", "cold", "warm", "warm"]
-    )
+    regimes = assignment(tree, ["cold", "cold", "warm", "cold", "warm", "warm"])
     theta = {"cold": -0.5, "warm": 2.0}
     posterior, fit = compute_oum_marginals(
         tree,
@@ -299,10 +301,8 @@ def test_regime_continuous_cli_fixed_parameters(model, tmp_path):
         "branch_id\tregime\n0\tlow\n1\tlow\n2\thigh\n3\tlow\n4\tlow\n5\thigh\n6\thigh\n"
     )
     column = "sigma2" if model == "BMS" else "theta"
-    first, second = ((0.5, 2.0) if model == "BMS" else (0.0, 3.0))
-    parameters.write_text(
-        f"regime\t{column}\nlow\t{first}\nhigh\t{second}\n"
-    )
+    first, second = (0.5, 2.0) if model == "BMS" else (0.0, 3.0)
+    parameters.write_text(f"regime\t{column}\nlow\t{first}\nhigh\t{second}\n")
     options = [] if model == "BMS" else ["--alpha", "0.7", "--sigma2", "1.2"]
     main(
         [

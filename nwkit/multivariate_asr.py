@@ -79,7 +79,9 @@ def _scaled_vectors(vectors, trait_names):
     center = observed[0].copy()
     differences = [value - center for value in observed]
     if any(np.any(~np.isfinite(value)) for value in differences):
-        raise ValueError("MV-BM trait ranges exceed floating-point range; rescale units.")
+        raise ValueError(
+            "MV-BM trait ranges exceed floating-point range; rescale units."
+        )
     exponents = []
     for trait_index in range(len(trait_names)):
         size = max(abs(value[trait_index]) for value in differences)
@@ -150,12 +152,22 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
         matrix = np.vstack(contrasts)
     else:
         matrix = np.empty((0, dimension), dtype=float)
-    return matrix, math.fsum(log_variances), num_observed, sum(
-        value is not None for value in local
+    return (
+        matrix,
+        math.fsum(log_variances),
+        num_observed,
+        sum(value is not None for value in local),
     )
 
 
-def compute_mvbm_marginals(tree, values_by_leaf, trait_names, *, _tree_validated=False):
+def compute_mvbm_marginals(
+    tree,
+    values_by_leaf,
+    trait_names,
+    *,
+    standard_errors=None,
+    _tree_validated=False,
+):
     """Estimate a trait covariance and return all-node MV-BM marginals.
 
     Observed tips must contain either every selected trait or none. Known
@@ -164,6 +176,21 @@ def compute_mvbm_marginals(tree, values_by_leaf, trait_names, *, _tree_validated
     """
 
     trait_names = tuple(str(value) for value in trait_names)
+    partial = any(
+        vector is not None
+        and any(value is None for value in vector)
+        and not all(value is None for value in vector)
+        for vector in values_by_leaf.values()
+    )
+    if partial or standard_errors is not None:
+        from nwkit.multivariate_gaussian_asr import fit_dense_mvbm
+
+        return fit_dense_mvbm(
+            tree,
+            values_by_leaf,
+            trait_names,
+            standard_errors=standard_errors,
+        )
     vectors = _validated_vectors(values_by_leaf, trait_names)
     scaled, exponents = _scaled_vectors(vectors, trait_names)
     contrasts, log_variance, num_observed, num_effective = _independent_contrasts(
@@ -179,10 +206,14 @@ def compute_mvbm_marginals(tree, values_by_leaf, trait_names, *, _tree_validated
     scales = np.asarray([math.ldexp(1.0, int(value)) for value in exponents])
     sigma = sigma_scaled * scales[:, None] * scales[None, :]
     if np.any(~np.isfinite(sigma)):
-        raise ValueError("MV-BM covariance exceeds floating-point range; rescale units.")
+        raise ValueError(
+            "MV-BM covariance exceeds floating-point range; rescale units."
+        )
     eigenvalues = np.linalg.eigvalsh(sigma_scaled)
-    tolerance = np.finfo(float).eps * max(1.0, float(np.max(eigenvalues))) * max(
-        sigma_scaled.shape
+    tolerance = (
+        np.finfo(float).eps
+        * max(1.0, float(np.max(eigenvalues)))
+        * max(sigma_scaled.shape)
     )
     rank = int(np.sum(eigenvalues > tolerance))
     if rank < len(trait_names):
@@ -216,9 +247,7 @@ def compute_mvbm_marginals(tree, values_by_leaf, trait_names, *, _tree_validated
         scalar_results.append(posterior)
     posterior = {}
     for node in tree.traverse():
-        mean = np.asarray(
-            [result[node].mean for result in scalar_results], dtype=float
-        )
+        mean = np.asarray([result[node].mean for result in scalar_results], dtype=float)
         variance_factor = scalar_results[0][node].variance
         posterior[node] = MultivariateGaussianMarginal(
             mean=mean, covariance=variance_factor * sigma
@@ -242,7 +271,14 @@ def _trait_id(trait):
 
 
 def multivariate_output_table(
-    tree, selected_nodes, observed, posterior, trait_names, ci_level
+    tree,
+    selected_nodes,
+    observed,
+    posterior,
+    trait_names,
+    ci_level,
+    *,
+    errors=None,
 ):
     ids = assign_branch_ids(tree)
     rows = []
@@ -250,11 +286,9 @@ def multivariate_output_table(
         observed_vector = observed.get(str(node.name)) if node.is_leaf else None
         marginal = posterior[node]
         for trait_index, trait in enumerate(trait_names):
-            value = (
-                None
-                if observed_vector is None
-                else observed_vector[trait_index]
-            )
+            value = None if observed_vector is None else observed_vector[trait_index]
+            error_vector = errors.get(str(node.name)) if errors is not None else None
+            error = None if error_vector is None else error_vector[trait_index]
             scalar = GaussianMarginal(
                 float(marginal.mean[trait_index]),
                 float(marginal.covariance[trait_index, trait_index]),
@@ -267,8 +301,10 @@ def multivariate_output_table(
                     "name": "" if node.name in (None, "") else str(node.name),
                     "trait": trait,
                     "observed_value": "" if value is None else value,
-                    "observed_se": "",
-                    "is_imputed": bool(node.is_leaf and observed_vector is None),
+                    "observed_se": ""
+                    if value is None
+                    else (0.0 if error is None else error),
+                    "is_imputed": bool(node.is_leaf and value is None),
                     **_summary(scalar, ci_level),
                 }
             )
@@ -304,9 +340,7 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
                 if denominator == 0.0:
                     correlation = ""
                 else:
-                    raw_correlation = float(
-                        covariance[first, second] / denominator
-                    )
+                    raw_correlation = float(covariance[first, second] / denominator)
                     correlation = min(1.0, max(-1.0, raw_correlation))
                 rows.append(
                     {
@@ -336,37 +370,49 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
 
 
 def multivariate_model_table(fit, args, ci_level):
+    model = getattr(fit, "model", "MV-BM")
+    is_ou = model == "MV-OU"
     row = {
         "trait_type": "continuous",
         "trait_type_requested": getattr(args, "trait_type", "auto"),
         "trait": ",".join(fit.trait_names),
-        "model": "MV-BM",
-        "root_prior": "flat",
+        "model": model,
+        "root_prior": "stationary" if is_ou else "flat",
         "sigma_estimated": fit.sigma_estimated,
-        "estimation_method": "REML",
+        "estimation_method": "ML" if is_ou else "REML",
         "restricted_log_likelihood": fit.restricted_log_likelihood,
-        "likelihood_kind": "multivariate_flat_root_integrated",
+        "log_likelihood": getattr(fit, "log_likelihood", None),
+        "likelihood_kind": (
+            "multivariate_stationary_root_ml"
+            if is_ou
+            else "multivariate_flat_root_integrated"
+        ),
         "num_observed": fit.num_observed,
         "num_effective_observations": fit.num_effective_observations,
         "residual_df": fit.residual_df,
         "sigma_rank": fit.sigma_rank,
         "fit_status": fit.fit_status,
-        "standard_error_column": "",
+        "standard_error_column": getattr(args, "standard_error_column", None) or "",
         "ci_level": ci_level,
         "interval_kind": "conditional_on_covariance",
         "parameter_uncertainty_included": False,
         "tree_uncertainty_included": False,
     }
+    if is_ou:
+        row["alpha"] = fit.alpha
+        row["alpha_estimated"] = fit.alpha_estimated
+        for index, trait in enumerate(fit.trait_names):
+            row[f"theta_{_trait_id(trait)}"] = float(fit.theta[index])
     for first, first_trait in enumerate(fit.trait_names):
         for second, second_trait in enumerate(fit.trait_names):
-            row[
-                f"sigma_{_trait_id(first_trait)}_to_{_trait_id(second_trait)}"
-            ] = float(fit.sigma[first, second])
+            row[f"sigma_{_trait_id(first_trait)}_to_{_trait_id(second_trait)}"] = float(
+                fit.sigma[first, second]
+            )
     return pd.DataFrame([row])
 
 
 def write_multivariate_tree(
-    tree, observed, posterior, trait_names, args, ci_level
+    tree, observed, posterior, trait_names, args, ci_level, *, errors=None
 ):
     if getattr(args, "tree_out", None) in (None, ""):
         return
@@ -377,7 +423,7 @@ def write_multivariate_tree(
         marginal = posterior[node]
         node.add_props(
             asr_trait_type="continuous",
-            asr_model="MV-BM",
+            asr_model=getattr(args, "model", "MV-BM"),
             asr_ci_level=ci_level,
             asr_interval_kind="conditional_on_covariance",
         )
@@ -403,12 +449,27 @@ def write_multivariate_tree(
                     **{
                         prop: ""
                         if observed_vector is None
+                        or observed_vector[trait_index] is None
                         else float(observed_vector[trait_index])
                     }
                 )
+                if errors is not None:
+                    error_prop = f"asr_observed_se_{trait_id}"
+                    observed_props.append(error_prop)
+                    error_vector = errors.get(str(node.name))
+                    node.add_props(
+                        **{
+                            error_prop: ""
+                            if error_vector is None or error_vector[trait_index] is None
+                            else float(error_vector[trait_index])
+                        }
+                    )
         if node.is_leaf:
             node.add_props(
-                asr_is_imputed="yes" if observed_vector is None else "no"
+                asr_is_imputed="yes"
+                if observed_vector is None
+                or any(value is None for value in observed_vector)
+                else "no"
             )
         for first in range(len(trait_names)):
             for second in range(first + 1, len(trait_names)):
@@ -417,9 +478,7 @@ def write_multivariate_tree(
                     f"{_trait_id(trait_names[second])}"
                 )
                 summary_props.append(prop)
-                node.add_props(
-                    **{prop: float(marginal.covariance[first, second])}
-                )
+                node.add_props(**{prop: float(marginal.covariance[first, second])})
     props = ["asr_trait_type", "asr_model", *dict.fromkeys(mean_props)]
     if args.tree_annotation != "mean":
         props.extend(dict.fromkeys(summary_props))

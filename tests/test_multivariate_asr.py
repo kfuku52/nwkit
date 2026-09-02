@@ -18,9 +18,7 @@ def test_star_mvbm_matches_sample_covariance_and_root_distribution():
     matrix = np.asarray(
         [[0.0, 0.0], [1.0, 2.0], [2.0, 1.0], [3.0, 5.0], [4.0, 3.0], [6.0, 7.0]]
     )
-    values = {
-        name: row for name, row in zip("ABCDEF", matrix, strict=True)
-    }
+    values = {name: row for name, row in zip("ABCDEF", matrix, strict=True)}
     posterior, fit = compute_mvbm_marginals(tree, values, ("x", "y"))
     expected = np.cov(matrix, rowvar=False, ddof=1)
     np.testing.assert_allclose(fit.sigma, expected, atol=1e-14)
@@ -91,13 +89,16 @@ def test_mvbm_covariance_and_flat_root_likelihood_match_dense_gls():
     )
 
 
-def test_mvbm_rejects_partial_tip_vectors():
-    with pytest.raises(ValueError, match="partially missing"):
-        compute_mvbm_marginals(
-            tree_from("(A:1,B:1,C:1)R;"),
-            {"A": (0.0, 1.0), "B": (2.0, None), "C": (1.0, 3.0)},
-            ("x", "y"),
-        )
+def test_mvbm_supports_partial_tip_vectors():
+    posterior, fit = compute_mvbm_marginals(
+        tree_from("(A:1,B:1,C:1)R;"),
+        {"A": (0.0, 1.0), "B": (2.0, None), "C": (1.0, 3.0)},
+        ("x", "y"),
+    )
+    assert fit.num_effective_observations == 5
+    imputed = posterior[next(node for node in posterior if node.name == "B")]
+    assert np.isfinite(imputed.mean[1])
+    assert imputed.covariance[1, 1] > 0.0
 
 
 def test_trait_rescaling_and_offsets_transform_mvbm_results():
@@ -115,9 +116,7 @@ def test_trait_rescaling_and_offsets_transform_mvbm_results():
     transformed = {
         name: offset + transform @ np.asarray(value) for name, value in values.items()
     }
-    second, second_fit = compute_mvbm_marginals(
-        tree, transformed, ("x", "y")
-    )
+    second, second_fit = compute_mvbm_marginals(tree, transformed, ("x", "y"))
     np.testing.assert_allclose(
         second_fit.sigma, transform @ first_fit.sigma @ transform, rtol=1e-10
     )
@@ -170,7 +169,9 @@ def test_mvbm_cli_writes_long_marginals_covariances_and_model(tmp_path):
     metadata = pd.read_csv(model, sep="\t").iloc[0]
     assert set(result["trait"]) == {"x", "y"}
     assert len(result) == 18
-    assert set(covariances[["trait_1", "trait_2"]].itertuples(index=False, name=None)) == {
+    assert set(
+        covariances[["trait_1", "trait_2"]].itertuples(index=False, name=None)
+    ) == {
         ("x", "x"),
         ("x", "y"),
         ("y", "y"),
@@ -185,9 +186,14 @@ def test_mvbm_cli_writes_long_marginals_covariances_and_model(tmp_path):
     assert float(restored["E"].props["asr_ci_level"]) == pytest.approx(0.95)
 
 
-def test_mvbm_cli_rejects_measurement_error_and_partial_rows(tmp_path):
+def test_mvbm_cli_supports_measurement_error_and_partial_rows(tmp_path):
     trait = tmp_path / "traits.tsv"
-    trait.write_text("leaf_name\tx\ty\tse\nA\t0\t0\t1\nB\t1\tNA\t1\nC\t2\t1\t1\n")
+    trait.write_text(
+        "leaf_name\tx\ty\tse_x\tse_y\n"
+        "A\t0\t0\t0.1\t0.2\n"
+        "B\t1\tNA\t0.1\tNA\n"
+        "C\t2\t1\t0.2\t0.1\n"
+    )
     base = [
         "asr",
         "-i",
@@ -201,10 +207,14 @@ def test_mvbm_cli_rejects_measurement_error_and_partial_rows(tmp_path):
         "-o",
         str(tmp_path / "out.tsv"),
     ]
-    with pytest.raises(ValueError, match="partially missing"):
-        main(base)
-    with pytest.raises(ValueError, match="not yet supported"):
-        main([*base, "--standard-error-column", "se"])
+    main([*base, "--standard-error-column", "se_x,se_y"])
+    result = pd.read_csv(tmp_path / "out.tsv", sep="\t")
+    assert set(result["trait"]) == {"x", "y"}
+    assert result.loc[
+        (result["name"] == "B") & (result["trait"] == "y"), "is_imputed"
+    ].all()
+    with pytest.raises(ValueError, match="one column per trait"):
+        main([*base, "--standard-error-column", "se_x"])
 
 
 @pytest.mark.integration

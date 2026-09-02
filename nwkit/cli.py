@@ -496,7 +496,7 @@ pasr.add_argument(
     type=str,
     required=True,
     action="store",
-    help="Trait column in --trait; MV-BM requires two or more comma-separated columns.",
+    help="Trait column in --trait; MV-BM/MV-OU require two or more comma-separated columns.",
 )
 pasr.add_argument(
     "--trait-type",
@@ -528,7 +528,8 @@ pasr.add_argument(
     action="store",
     choices=model_names(),
     help="default=ER for discrete, BM for continuous: Discrete ER/SYM/ARD/F81/GTR/"
-    "MK-REGIME/HRM/CUSTOM or continuous BM/BMS/EB/BM-DRIFT/MV-BM/OU/OUM.",
+    "MK-REGIME/HRM/COVARION/MK-MIXTURE/THRESHOLD/CUSTOM or continuous BM/BMS/LAMBDA/KAPPA/DELTA/EB/ACDC/"
+    "BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/OU/OUM/OUMA/OUMV/OUMVA.",
 )
 pasr.add_argument(
     "--rate",
@@ -557,7 +558,7 @@ pasr.add_argument(
     metavar="complete|ordered|PATH",
     default=None,
     type=str,
-    help="ER/SYM/ARD, MK-REGIME, or HRM: Allowed observed transitions. 'ordered' connects "
+    help="ER/SYM/ARD, MK-REGIME, HRM, or COVARION: Allowed observed transitions. 'ordered' connects "
     "adjacent explicit --states bidirectionally; PATH is a TSV from_state/to_state edge list. "
     "F81/GTR require complete.",
 )
@@ -586,7 +587,9 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="BMS/OUM only: Optional complete TSV of fixed regime parameters.",
+    help="Continuous regime models: Optional complete TSV of fixed regime parameters. "
+    "BMS uses sigma2; BMS-DRIFT uses sigma2/drift; OUM uses theta; "
+    "OUMA adds alpha; OUMV adds sigma2; OUMVA uses all three.",
 )
 pasr.add_argument(
     "--hidden-categories",
@@ -595,7 +598,34 @@ pasr.add_argument(
     metavar="INT",
     default=None,
     type=int,
-    help="default=2 for HRM: Number of latent rate classes; must be at least two.",
+    help="default=2 for HRM/COVARION: Number of latent rate classes; must be at least two.",
+)
+pasr.add_argument(
+    "--mixture-model",
+    "--mixture_model",
+    dest="mixture_model",
+    metavar="ER|SYM|ARD|F81|GTR",
+    default=None,
+    choices=["ER", "SYM", "ARD", "F81", "GTR"],
+    help="default=ER for MK-MIXTURE: Shared base rate-matrix parameterization.",
+)
+pasr.add_argument(
+    "--rate-mixture",
+    "--rate_mixture",
+    dest="rate_mixture",
+    metavar="gamma|free",
+    default=None,
+    choices=["gamma", "free"],
+    help="default=gamma for MK-MIXTURE: Across-character rate distribution.",
+)
+pasr.add_argument(
+    "--rate-categories",
+    "--rate_categories",
+    dest="rate_categories",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=4 for MK-MIXTURE: Number of discrete-gamma or ordered free-rate categories.",
 )
 pasr.add_argument(
     "--rate-matrix",
@@ -608,18 +638,89 @@ pasr.add_argument(
     "zero diagonals are replaced by negative off-diagonal row sums.",
 )
 pasr.add_argument(
+    "--thresholds",
+    metavar="T1,T2,...",
+    default=None,
+    type=str,
+    help="THRESHOLD only: Fixed increasing liability thresholds. If omitted, binary uses zero; ordinal fixes the first at zero and samples the rest.",
+)
+pasr.add_argument(
+    "--liability-samples",
+    "--liability_samples",
+    dest="liability_samples",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=1000 for THRESHOLD: Retained liability draws per MCMC chain.",
+)
+pasr.add_argument(
+    "--liability-burnin",
+    "--liability_burnin",
+    dest="liability_burnin",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=500 for THRESHOLD: Burn-in sweeps per chain.",
+)
+pasr.add_argument(
+    "--liability-thin",
+    "--liability_thin",
+    dest="liability_thin",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=1 for THRESHOLD: Sweeps between retained draws.",
+)
+pasr.add_argument(
+    "--liability-chains",
+    "--liability_chains",
+    dest="liability_chains",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=4 for THRESHOLD: Independent MCMC chains used for R-hat and ESS diagnostics.",
+)
+pasr.add_argument(
+    "--liability-out",
+    "--liability_out",
+    dest="liability_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="THRESHOLD only: Optional TSV of posterior latent-liability moments.",
+)
+pasr.add_argument(
     "--root-prior",
     "--root_prior",
     dest="root_prior",
-    metavar="equal|empirical|stationary|flat",
+    metavar="equal|empirical|stationary|flat|fixed|gaussian",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["equal", "empirical", "stationary", "flat"],
+    choices=["equal", "empirical", "stationary", "flat", "fixed", "gaussian"],
     help="model-specific default: Discrete equal (F81/GTR stationary), flat for BM-family "
-    "models, and stationary for OU/OUM. Stationary uses the fitted/fixed process equilibrium; "
+    "models, and stationary for OU/OUM. OU also supports fixed or Gaussian roots. "
+    "Stationary uses the fitted/fixed process equilibrium; "
     "independent of --input-rooted.",
+)
+pasr.add_argument(
+    "--root-mean",
+    "--root_mean",
+    dest="root_mean",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="OU with --root-prior fixed/gaussian: Required fixed root-state mean.",
+)
+pasr.add_argument(
+    "--root-variance",
+    "--root_variance",
+    dest="root_variance",
+    metavar="FLOAT",
+    default=None,
+    type=nonnegative_finite_float,
+    help="OU with --root-prior gaussian: Required positive root-state variance.",
 )
 pasr.add_argument(
     "--ambiguous-separator",
@@ -663,11 +764,29 @@ pasr.add_argument(
     "If omitted, estimate it; MV-BM estimates a covariance matrix instead.",
 )
 pasr.add_argument(
+    "--evolution-parameter",
+    "--evolution_parameter",
+    dest="evolution_parameter",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="LAMBDA/KAPPA/DELTA/EB/ACDC only: Fix the model's branch-transform parameter; otherwise estimate it.",
+)
+pasr.add_argument(
+    "--evolution-parameter-bounds",
+    "--evolution_parameter_bounds",
+    dest="evolution_parameter_bounds",
+    metavar="MIN,MAX",
+    default=None,
+    type=str,
+    help="LAMBDA/KAPPA/DELTA/EB/ACDC only: Bounds in natural parameter units for estimation.",
+)
+pasr.add_argument(
     "--alpha",
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="OU/OUM only: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
+    help="OU regime models: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
 )
 pasr.add_argument(
     "--alpha-bounds",
@@ -676,14 +795,14 @@ pasr.add_argument(
     metavar="MIN,MAX",
     default=None,
     type=str,
-    help="OU/OUM only: Positive bounds for estimating alpha. Default scales to tree depth.",
+    help="OU models: Positive bounds for estimating alpha. Default scales to tree depth.",
 )
 pasr.add_argument(
     "--theta",
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="OU/OUM only: Fixed shared process optimum. OUM can instead read regime optima from a table.",
+    help="OU models: Fixed shared process optimum. Regime models can instead read regime optima from a table.",
 )
 pasr.add_argument(
     "--eb-rate",
@@ -692,7 +811,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="EB only: Fixed exponential change in diffusion rate per branch-length unit. If omitted, estimate it.",
+    help="EB/ACDC alias for --evolution-parameter: Fixed exponential change in diffusion rate per branch-length unit.",
 )
 pasr.add_argument(
     "--eb-rate-bounds",
@@ -701,15 +820,15 @@ pasr.add_argument(
     metavar="MIN,MAX",
     default=None,
     type=str,
-    help="EB only: Bounds for estimating the exponential rate; defaults to -10/depth,10/depth. "
-    "Use --eb-rate-bounds=MIN,MAX when MIN is negative.",
+    help="EB/ACDC alias for --evolution-parameter-bounds. EB defaults to declining rates only; ACDC permits acceleration.",
 )
 pasr.add_argument(
     "--drift",
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="BM-DRIFT only: Fixed directional trend per branch-length unit. If omitted, estimate it from heterochronous tips.",
+    help="BM-DRIFT: Fixed directional trend. BMS-DRIFT: Fix one shared drift or "
+    "use regime parameters; otherwise estimate each regime drift.",
 )
 pasr.add_argument(
     "--standard-error-column",
@@ -718,8 +837,7 @@ pasr.add_argument(
     metavar="COLUMN",
     default=None,
     type=str,
-    help="Scalar continuous models: Known non-negative measurement SEs for observed tips. "
-    "If omitted, observations are exact; not supported by MV-BM.",
+    help="Known non-negative measurement SEs. Multivariate models require a comma-separated SE column per trait.",
 )
 pasr.add_argument(
     "--ci-level",
@@ -731,6 +849,15 @@ pasr.add_argument(
     help="default=0.95 for continuous: Interval coverage strictly between zero and one. "
     "Intervals condition on fitted/fixed model parameters and the input tree; "
     "parameter/tree uncertainty is excluded.",
+)
+pasr.add_argument(
+    "--profile-ci-level",
+    "--profile_ci_level",
+    dest="profile_ci_level",
+    metavar="FLOAT",
+    default=None,
+    type=finite_float,
+    help="LAMBDA/KAPPA/DELTA/EB/ACDC: Likelihood-ratio profile interval level for the fitted shape parameter.",
 )
 pasr.add_argument(
     "--model-out",
@@ -745,13 +872,85 @@ pasr.add_argument(
     "likelihood convention, optimizer diagnostics, and uncertainty contract.",
 )
 pasr.add_argument(
+    "--compare-models",
+    "--compare_models",
+    dest="compare_models",
+    metavar="MODEL1,MODEL2,...",
+    default=None,
+    type=str,
+    help="Fit compatible ASR models and calculate AIC, AICc, BIC, and criterion weights.",
+)
+pasr.add_argument(
+    "--model-comparison-out",
+    "--model_comparison_out",
+    dest="model_comparison_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Model-comparison TSV; required with --compare-models.",
+)
+pasr.add_argument(
     "--covariance-out",
     "--covariance_out",
     dest="covariance_out",
     metavar="PATH",
     default=None,
     type=str,
-    help="MV-BM only: Optional tidy TSV of conditional trait covariances for selected nodes.",
+    help="MV-BM/MV-OU only: Optional tidy TSV of conditional trait covariances for selected nodes.",
+)
+pasr.add_argument(
+    "--posterior-samples-out",
+    "--posterior_samples_out",
+    dest="posterior_samples_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Scalar continuous models: Optional long-form TSV of joint all-node posterior draws.",
+)
+pasr.add_argument(
+    "--posterior-samples",
+    "--posterior_samples",
+    dest="posterior_samples",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=1000 with --posterior-samples-out: Number of joint posterior draws.",
+)
+pasr.add_argument(
+    "--posterior-predictive-out",
+    "--posterior_predictive_out",
+    dest="posterior_predictive_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Scalar continuous models: Optional posterior-predictive check TSV.",
+)
+pasr.add_argument(
+    "--posterior-predictive-simulations",
+    "--posterior_predictive_simulations",
+    dest="posterior_predictive_simulations",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=1000 with --posterior-predictive-out: Replicated datasets.",
+)
+pasr.add_argument(
+    "--bootstrap-out",
+    "--bootstrap_out",
+    dest="bootstrap_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="Scalar continuous models: Optional parametric-bootstrap refit TSV.",
+)
+pasr.add_argument(
+    "--bootstrap-simulations",
+    "--bootstrap_simulations",
+    dest="bootstrap_simulations",
+    metavar="INT",
+    default=None,
+    type=int,
+    help="default=100 with --bootstrap-out: Number of simulated refits.",
 )
 pasr.add_argument(
     "--tree-out",
@@ -828,7 +1027,7 @@ pasr.add_argument(
     type=int,
     required=False,
     action="store",
-    help="default=%(default)s: Random seed for stochastic mapping.",
+    help="default=%(default)s: Random seed for stochastic mapping, liability MCMC, or continuous simulation diagnostics.",
 )
 pasr.set_defaults(handler=command_asr)
 

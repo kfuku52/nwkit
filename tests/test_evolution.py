@@ -7,6 +7,7 @@ from nwkit.contrast import calculate_contrasts
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
+    parameter_near_boundary,
     read_custom_covariance,
     transformed_edge_variances,
     validate_custom_covariance,
@@ -124,6 +125,22 @@ def test_kappa_covariance_raises_each_branch_length_to_power():
     np.testing.assert_allclose(covariance, expected)
 
 
+def test_kappa_zero_preserves_zero_length_contractions():
+    tree = _tree(TREE_TEXT.replace("A:1", "A:0"))
+    edges = transformed_edge_variances(
+        tree,
+        model="kappa",
+        parameter=0.0,
+        allow_zero=True,
+    )
+    assert edges[tree["A"]] == 0.0
+    assert all(
+        value == 1.0
+        for node, value in edges.items()
+        if not node.is_root and node is not tree["A"]
+    )
+
+
 def test_delta_covariance_raises_ultrametric_node_depths_to_power():
     covariance = build_evolutionary_covariance(
         _tree(), LEAF_NAMES, model="delta", parameter=2.0
@@ -171,6 +188,16 @@ def test_ou_tends_to_brownian_as_alpha_approaches_zero():
     brownian = build_evolutionary_covariance(_tree(), LEAF_NAMES)
     ou = build_evolutionary_covariance(_tree(), LEAF_NAMES, model="ou", parameter=1e-9)
     np.testing.assert_allclose(ou, brownian, rtol=1e-7, atol=1e-7)
+
+
+def test_parameter_boundary_uses_explicit_natural_bounds():
+    assert not parameter_near_boundary(_tree(), "kappa", 0.5)
+    assert parameter_near_boundary(
+        _tree(),
+        "kappa",
+        0.5,
+        parameter_bounds=(0.5, 1.5),
+    )
 
 
 def test_ultrametric_ou_contrast_tree_reproduces_tip_covariance():

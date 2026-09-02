@@ -70,14 +70,10 @@ def read_regime_map(path, tree):
             )
         node = nodes_by_id[branch_id]
         if node in by_node:
-            raise ValueError(
-                f"Duplicated branch_id in '--regime-map': {branch_id}"
-            )
+            raise ValueError(f"Duplicated branch_id in '--regime-map': {branch_id}")
         regime = str(row.regime).strip()
         if regime == "":
-            raise ValueError(
-                f"Empty regime in '--regime-map' row {row_number}."
-            )
+            raise ValueError(f"Empty regime in '--regime-map' row {row_number}.")
         by_node[node] = regime
         if regime not in seen_regimes:
             regimes.append(regime)
@@ -106,8 +102,7 @@ def read_regime_parameters(path, regimes, columns):
     extras = set(table.columns) - required
     if extras:
         raise ValueError(
-            "Unsupported '--regime-parameters' column(s): "
-            + ", ".join(sorted(extras))
+            "Unsupported '--regime-parameters' column(s): " + ", ".join(sorted(extras))
         )
     records = {}
     for row_number, row in enumerate(table.itertuples(index=False), start=2):

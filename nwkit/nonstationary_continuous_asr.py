@@ -112,13 +112,9 @@ def compute_eb_marginals(
     """Return flat-root marginals under exponential time-varying BM rates."""
 
     fixed_sigma2 = (
-        None
-        if sigma2 is None
-        else _finite_number(sigma2, "--sigma2", nonnegative=True)
+        None if sigma2 is None else _finite_number(sigma2, "--sigma2", nonnegative=True)
     )
-    bounds = (
-        default_eb_rate_bounds(tree) if eb_rate_bounds is None else eb_rate_bounds
-    )
+    bounds = default_eb_rate_bounds(tree) if eb_rate_bounds is None else eb_rate_bounds
     bounds = float(bounds[0]), float(bounds[1])
     if not all(math.isfinite(value) for value in bounds) or bounds[0] >= bounds[1]:
         raise ValueError("EB rate bounds must be two increasing finite values.")
@@ -166,7 +162,10 @@ def compute_eb_marginals(
             and float(objectives[index]) < 1e99
         ]
         for index in range(1, len(grid) - 1):
-            if objectives[index] <= objectives[index - 1] and objectives[index] <= objectives[index + 1]:
+            if (
+                objectives[index] <= objectives[index - 1]
+                and objectives[index] <= objectives[index + 1]
+            ):
                 result = minimize_scalar(
                     evaluate,
                     bounds=(float(grid[index - 1]), float(grid[index + 1])),
@@ -174,7 +173,9 @@ def compute_eb_marginals(
                     options={"xatol": 1e-10},
                 )
                 if result.success and math.isfinite(float(result.fun)):
-                    candidates.append((float(result.fun), float(result.x), str(result.message)))
+                    candidates.append(
+                        (float(result.fun), float(result.x), str(result.message))
+                    )
         zero = 0.0
         if bounds[0] <= zero <= bounds[1]:
             candidates.append((evaluate(zero), zero, "BM boundary candidate"))
@@ -236,9 +237,7 @@ def _run_drift(
     tree_validated,
 ):
     residual_values = {
-        name: None
-        if value is None
-        else float(value) - drift * depths[tree[name]]
+        name: None if value is None else float(value) - drift * depths[tree[name]]
         for name, value in values_by_leaf.items()
     }
     residual_posterior, fit = compute_bm_marginals(
@@ -249,9 +248,7 @@ def _run_drift(
         _tree_validated=tree_validated,
     )
     posterior = {
-        node: GaussianMarginal(
-            marginal.mean + drift * depths[node], marginal.variance
-        )
+        node: GaussianMarginal(marginal.mean + drift * depths[node], marginal.variance)
         for node, marginal in residual_posterior.items()
     }
     return posterior, fit
@@ -290,15 +287,11 @@ def _minimize_unbounded_profile(evaluate, center, scale, *, quadratic=False):
                 candidates = [(best_objective, best_point, "adaptive grid")]
                 if quadratic:
                     center_objective = sampled[float(center)]
-                    curvature = (
-                        sampled[left]
-                        - 2.0 * center_objective
-                        + sampled[right]
-                    )
+                    curvature = sampled[left] - 2.0 * center_objective + sampled[right]
                     if math.isfinite(curvature) and curvature > 0.0:
-                        vertex = center + radius * (
-                            sampled[left] - sampled[right]
-                        ) / (2.0 * curvature)
+                        vertex = center + radius * (sampled[left] - sampled[right]) / (
+                            2.0 * curvature
+                        )
                         if left < vertex < right:
                             vertex_objective = float(evaluate(vertex))
                             if (
@@ -344,9 +337,7 @@ def compute_bm_drift_marginals(
     """Return Brownian marginals with a fixed or fitted directional trend."""
 
     fixed_sigma2 = (
-        None
-        if sigma2 is None
-        else _finite_number(sigma2, "--sigma2", nonnegative=True)
+        None if sigma2 is None else _finite_number(sigma2, "--sigma2", nonnegative=True)
     )
     depths = _node_depths(tree)
     observed = [

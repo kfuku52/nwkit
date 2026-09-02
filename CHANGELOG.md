@@ -6,17 +6,33 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
+- Added continuous ASR for Pagel lambda/kappa/delta, separate declining EB and
+  two-sided ACDC transforms, fixed/Gaussian-root OU, stationary correlated
+  MV-OU, OUMA/OUMV/OUMVA regime variants, and regime-specific Brownian drift.
+  Multivariate BM/OU now support per-trait missingness and known diagonal
+  measurement errors.
+- Added discrete COVARION, joint multi-character gamma/free Mk rate mixtures,
+  and an identified Bayesian threshold/liability model with seeded MCMC,
+  R-hat/ESS diagnostics, and optional latent-liability output.
+- Added compatible-model AIC/AICc/BIC comparison, transformed-parameter profile
+  intervals, exact joint Gaussian node samples, posterior-predictive checks, and
+  missingness/measurement-error-preserving parametric bootstrap outputs.
 - Expanded discrete ASR with F81 and GTR frequency models, jointly fitted
   branch-regime Mk generators, and hidden-rate models whose latent classes are
   marginalized in standard output and projected out of stochastic maps.
 - Expanded continuous ASR with branch-regime Brownian rates (BMS),
   branch-regime OU optima (OUM), exponential early-burst rates, directional
-  Brownian drift, and complete-case multivariate Brownian covariance inference.
+  Brownian drift, and multivariate Brownian covariance inference.
   New regime, covariance, model, and NHX outputs retain parameter, likelihood,
   boundary, optimizer, and conditional-uncertainty metadata.
 
 ### Changed
 
+- Scalar Gaussian ASR extensions now use one compiled topology, generic affine
+  branch-conditioner, shared deterministic scalar/multistart optimizers, and the
+  same evolutionary model registry/process builders as regression. Across-
+  character Mk mixtures cache transition matrices per category and unique
+  branch length instead of exponentiating them once per character.
 - Continuous ASR and phylogenetic regression now derive BM, OU, and
   exponential rate-change branches from one linear-Gaussian tree-process layer.
   Flat, fixed, and stationary root semantics and optional covariance
@@ -27,6 +43,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Regime models use one validated branch-ID map shared across discrete and
   continuous inference, including an explicit root regime for stationary-root
   definitions.
+
+### Fixed
+
+- Constrained COVARION hidden-class effective rates to the requested rate bounds,
+  rejected boundary-degenerate information-criterion fits, and added an aggregate
+  stochastic-mapping work guard. Symmetric Mk generators now reuse one stable
+  eigendecomposition across branch lengths.
+- Preserved DELTA's non-ultrametric diagnostic through parameter search, corrected
+  MV-OU boundary warnings when a finite likelihood exists, and reduced the dense
+  multivariate coordinate cap to a measured practical limit.
 
 ## [0.42.0] - 2026-09-01
 

@@ -23,13 +23,9 @@ def test_zero_extension_parameter_is_exactly_brownian(model):
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
     expected, expected_fit = compute_bm_marginals(tree, values, sigma2=0.8)
     if model == "EB":
-        posterior, fit = compute_eb_marginals(
-            tree, values, sigma2=0.8, eb_rate=0.0
-        )
+        posterior, fit = compute_eb_marginals(tree, values, sigma2=0.8, eb_rate=0.0)
     else:
-        posterior, fit = compute_bm_drift_marginals(
-            tree, values, sigma2=0.8, drift=0.0
-        )
+        posterior, fit = compute_bm_drift_marginals(tree, values, sigma2=0.8, drift=0.0)
     assert fit.restricted_log_likelihood == pytest.approx(
         expected_fit.restricted_log_likelihood, abs=1e-12
     )
@@ -82,9 +78,7 @@ def test_drift_search_expands_beyond_ordinary_least_squares_scale():
     design = np.column_stack((np.ones(4), depths))
     weighted_design = design / np.sqrt(variances)[:, None]
     weighted_response = np.asarray(list(values.values())) / np.sqrt(variances)
-    expected = np.linalg.lstsq(
-        weighted_design, weighted_response, rcond=None
-    )[0]
+    expected = np.linalg.lstsq(weighted_design, weighted_response, rcond=None)[0]
 
     posterior, fit = compute_bm_drift_marginals(
         tree,
