@@ -84,6 +84,11 @@ class LcaIndex:
     def common_ancestor(self, node1, node2):
         index1 = self.index_by_node[node1]
         index2 = self.index_by_node[node2]
+        return self.nodes[self.common_ancestor_indices(index1, index2)]
+
+    def common_ancestor_indices(self, index1, index2):
+        """Return the LCA index for two indices already resolved by this index."""
+
         if self.depth[index1] < self.depth[index2]:
             index1, index2 = index2, index1
         depth_difference = self.depth[index1] - self.depth[index2]
@@ -91,9 +96,9 @@ class LcaIndex:
             if depth_difference & (1 << level):
                 index1 = ancestors[index1]
         if index1 == index2:
-            return self.nodes[index1]
+            return index1
         for ancestors in reversed(self.ancestors):
             if ancestors[index1] != ancestors[index2]:
                 index1 = ancestors[index1]
                 index2 = ancestors[index2]
-        return self.nodes[self.ancestors[0][index1]]
+        return self.ancestors[0][index1]

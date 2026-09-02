@@ -198,6 +198,54 @@ def test_transition_matrix_accepts_roundoff_on_valid_long_branches():
     )
 
 
+def test_transition_matrix_preserves_slow_changes_on_extreme_long_branches():
+    rate = 1e-20
+    matrix = np.array(
+        [[-rate, rate, 0.0], [0.0, 0.0, 0.0], [0.0, 1.0, -1.0]]
+    )
+    transition = asr._transition_matrix(matrix, 1e20)
+    np.testing.assert_allclose(
+        transition[0], [math.exp(-1.0), -math.expm1(-1.0), 0.0], rtol=2e-13
+    )
+    np.testing.assert_allclose(transition[1], [0.0, 1.0, 0.0])
+    np.testing.assert_allclose(transition[2], [0.0, 1.0, 0.0], atol=1e-15)
+    np.testing.assert_allclose(transition.sum(axis=1), 1.0, atol=1e-15)
+
+
+@pytest.mark.parametrize("model", ["ER", "F81", "GTR"])
+def test_prior_only_asr_rejects_fitted_transition_processes(model):
+    tree = tree_from("(A:1,B:2,C:3)R;")
+    states = ["0", "1"]
+    observed = dict.fromkeys(["A", "B", "C"])
+    likelihood = {name: np.ones(2) for name in observed}
+    with pytest.raises(ValueError, match="fully fixed transition process"):
+        asr.compute_mk_marginals(
+            tree,
+            states,
+            observed,
+            likelihood,
+            model=model,
+        )
+
+
+def test_prior_only_asr_accepts_fixed_er_and_custom_generators():
+    tree = tree_from("(A:1,B:2,C:3)R;")
+    states = ["0", "1"]
+    observed = dict.fromkeys(["A", "B", "C"])
+    likelihood = {name: np.ones(2) for name in observed}
+    fixed = np.array([[-0.2, 0.2], [0.4, -0.4]])
+    for options in (
+        {"model": "ER", "rate": 0.2},
+        {"model": "CUSTOM", "fixed_rate_matrix": fixed},
+    ):
+        posterior, fit = asr.compute_mk_marginals(
+            tree, states, observed, likelihood, **options
+        )
+        assert not fit["rate_estimated"]
+        for probabilities in posterior.values():
+            assert probabilities.sum() == pytest.approx(1.0)
+
+
 def test_custom_q_and_stationary_root_match_direct_likelihood():
     tree = tree_from("(A:0.3,B:0.7,C:1.1)R;")
     states = ["x", "y"]

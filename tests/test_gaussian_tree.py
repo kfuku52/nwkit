@@ -11,6 +11,11 @@ from nwkit.evolution import (
     build_evolutionary_process,
     evolutionary_covariance_factory,
 )
+from nwkit.gaussian_tree import (
+    GaussianRootPrior,
+    GaussianTransition,
+    GaussianTreeProcess,
+)
 from nwkit.nonstationary_continuous_asr import compute_eb_marginals
 from nwkit.ordinary_regression import _fit_ordinary_gaussian
 from nwkit.ou_asr import compute_ou_marginals
@@ -165,6 +170,41 @@ def test_process_supports_root_polytomy_and_zero_edges_before_adapter_policy():
         rtol=2e-12,
         atol=2e-12,
     )
+
+
+@pytest.mark.parametrize(
+    "variances",
+    [
+        (np.nextafter(0.0, 1.0), 1.0),
+        (np.finfo(float).max, np.finfo(float).max),
+    ],
+)
+def test_sparse_process_handles_extreme_finite_variance_scales(variances):
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree=tree,
+        transitions={
+            tree["A"]: GaussianTransition(1.0, 0.0, variances[0]),
+            tree["B"]: GaussianTransition(1.0, 0.0, variances[1]),
+        },
+        root=GaussianRootPrior("fixed", 0.0, 0.0),
+        model="test",
+    )
+    dense = process.tip_covariance(["A", "B"])
+    maximum = max(variances)
+    normalization = maximum * np.mean(np.asarray(variances) / maximum)
+    sparse_model = process.sparse_tip_model(["A", "B"])
+    materialized = sparse_model.materialize()
+
+    assert np.isfinite(sparse_model.precision.data).all()
+    assert sparse_model.covariance_scale == normalization
+    np.testing.assert_allclose(
+        materialized,
+        dense / normalization,
+        rtol=5e-14,
+        atol=0.0,
+    )
+    assert materialized[0, 0] > 0.0
 
 
 def test_flat_root_process_refuses_finite_covariance_views():

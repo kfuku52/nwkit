@@ -52,6 +52,7 @@ DEFAULT_TARGET = "all"
 SUPPORTED_MODELS = model_names("discrete")
 _MAX_UNIFORMIZATION_TERMS = 2_000_000
 _MAX_CACHED_BACKWARD_BYTES = 256 * 1024
+_MAX_DIRECT_EXPONENT_NORM = 32.0
 
 
 def _parse_comma_list(value, option_name):
@@ -310,9 +311,50 @@ def _transition_matrix(rate_matrix, branch_length):
     er_rate = _get_er_rate_from_matrix(rate_matrix)
     if er_rate is not None:
         return _er_transition_matrix(branch_length, er_rate, rate_matrix.shape[0])
-    matrix = expm(rate_matrix * branch_length)
-    exponent_norm = float(np.linalg.norm(rate_matrix, ord=np.inf)) * branch_length
-    return _validated_transition_matrix(matrix, exponent_norm)
+    absolute_rates = np.abs(rate_matrix)
+    rate_scale = float(np.max(absolute_rates))
+    if rate_scale == 0.0:
+        return np.eye(rate_matrix.shape[0], dtype=float)
+    scaled_rate_norm = float(
+        np.max(np.sum(absolute_rates / rate_scale, axis=1))
+    )
+    log2_rate_norm = math.log2(rate_scale) + math.log2(scaled_rate_norm)
+    log2_exponent_norm = log2_rate_norm + math.log2(branch_length)
+    if log2_exponent_norm <= math.log2(_MAX_DIRECT_EXPONENT_NORM):
+        exponent_norm = 2.0**log2_exponent_norm
+        return _validated_transition_matrix(
+            expm(rate_matrix * branch_length), exponent_norm
+        )
+
+    # scipy.linalg.expm is backward stable, but on very long CTMC branches its
+    # generic scaling-and-squaring path can accumulate row-sum error large
+    # enough to destroy stochasticity.  Exponentiate a moderate time interval,
+    # then use the Markov semigroup while projecting only roundoff-sized row
+    # errors after every square.  Computing the scale in log space also avoids
+    # overflowing rate_norm * branch_length for finite inputs.
+    squarings = max(
+        1,
+        int(math.ceil(log2_exponent_norm - math.log2(_MAX_DIRECT_EXPONENT_NORM))),
+    )
+    scaled_length = math.ldexp(branch_length, -squarings)
+    scaled_norm = rate_scale * scaled_length * scaled_rate_norm
+    matrix = _validated_transition_matrix(
+        expm(rate_matrix * scaled_length), scaled_norm
+    )
+    exponent_norm = (
+        2.0**log2_exponent_norm
+        if log2_exponent_norm < 1023.0
+        else math.inf
+    )
+    for _ in range(squarings):
+        previous = matrix
+        matrix = _validated_transition_matrix(matrix @ matrix, exponent_norm)
+        # Once a finite-state CTMC has reached its idempotent long-time limit,
+        # further squaring cannot change the result beyond floating-point
+        # roundoff.  This also bounds work for extreme finite rate-time scales.
+        if np.array_equal(matrix, previous):
+            break
+    return matrix
 
 
 def _validated_transition_matrix(matrix, exponent_norm):
@@ -444,6 +486,34 @@ def _log_likelihood(tree, likelihood_by_leaf, root_prior, rate_matrix):
     )
     root_term = float(logsumexp(_log_probabilities(root_prior) + inside[tree]))
     return log_scales[tree] + root_term
+
+
+def _is_informative_tip_likelihood(likelihood):
+    """Return whether a tip likelihood distinguishes at least two states."""
+
+    values = np.asarray(likelihood, dtype=float)
+    return values.ndim == 1 and len(values) > 1 and bool(
+        np.any(values != values[0])
+    )
+
+
+def _has_informative_tip_likelihood(likelihood_by_leaf):
+    return any(
+        _is_informative_tip_likelihood(likelihood)
+        for likelihood in likelihood_by_leaf.values()
+    )
+
+
+def _informative_descendants(tree, likelihood_by_leaf):
+    informative = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            informative[node] = _is_informative_tip_likelihood(
+                likelihood_by_leaf[node.name]
+            )
+        else:
+            informative[node] = any(informative[child] for child in node.children)
+    return informative
 
 
 def _initial_rate_value(tree, rate, rate_bounds):
@@ -781,6 +851,17 @@ def _fit_rate_matrix(
             fixed_rate_matrix,
             prior_for,
         )
+    num_parameters = (
+        1
+        if model == "MK-REGIME"
+        else _num_rate_parameters(model, len(states), transition_graph)
+    )
+    fully_fixed = num_parameters == 0 or (model == "ER" and rate is not None)
+    if not _has_informative_tip_likelihood(likelihood_by_leaf) and not fully_fixed:
+        raise ValueError(
+            "Prior-only discrete ASR requires a fully fixed transition process; "
+            "use ER with --rate or CUSTOM with --rate-matrix."
+        )
     if model == "MK-REGIME":
         return _fit_regime_rate_matrices(
             tree=tree,
@@ -826,16 +907,22 @@ def _fit_regime_rate_matrices(
             "--regime-model must be one of ER, SYM, ARD, F81, or GTR."
         )
     regimes = regime_assignment.regimes
+    informative_descendant = _informative_descendants(tree, likelihood_by_leaf)
     represented_edges = {
         regime_assignment.by_node[node]
         for node in tree.traverse()
-        if not node.is_root
+        if (
+            not node.is_root
+            and float(node.dist) > 0.0
+            and informative_descendant[node]
+        )
     }
-    root_only = sorted(set(regimes) - represented_edges)
-    if root_only:
+    uninformative = sorted(set(regimes) - represented_edges)
+    if uninformative:
         raise ValueError(
-            "Every estimated regime must label at least one non-root branch; "
-            "root-only regime(s): " + ", ".join(root_only)
+            "Every estimated regime must label at least one positive-length "
+            "branch ancestral to an informative observation; uninformative "
+            "regime(s): " + ", ".join(uninformative)
         )
     labels = _rate_parameter_labels(regime_model, states, transition_graph)
     if not labels:
@@ -1184,7 +1271,7 @@ def compute_hrm_marginals(
     observed_graph = (
         np.ones((len(states), len(states)), dtype=bool)
         if transition_graph is None
-        else np.asarray(transition_graph, dtype=bool)
+        else np.array(transition_graph, dtype=bool, copy=True)
     )
     np.fill_diagonal(observed_graph, False)
     expanded_graph = expanded_transition_graph(observed_graph, hidden_categories)

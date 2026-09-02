@@ -273,6 +273,17 @@ def _bms_regime_design_rank(tree, data, regime_assignment):
     return int(np.linalg.matrix_rank(matrix / norms))
 
 
+def _unique_starts(starts):
+    unique = []
+    seen = set()
+    for start in starts:
+        key = tuple(float(value) for value in start)
+        if key not in seen:
+            seen.add(key)
+            unique.append(np.asarray(start, dtype=float))
+    return unique
+
+
 def _positive_multistart(objective, initial, lower, upper):
     initial_log = np.log(initial)
     lower_log = np.log(lower)
@@ -289,13 +300,7 @@ def _positive_multistart(objective, initial, lower, upper):
                 np.where(np.arange(len(initial)) % 2, upper_log, lower_log),
             ]
         )
-    unique = []
-    seen = set()
-    for start in starts:
-        key = tuple(float(value) for value in start)
-        if key not in seen:
-            seen.add(key)
-            unique.append(np.asarray(start, dtype=float))
+    unique = _unique_starts(starts)
     bounds = list(zip(lower_log, upper_log, strict=True))
     candidates = []
     failures = []
@@ -761,6 +766,7 @@ def compute_oum_marginals(
                 assert lower is not None and upper is not None
                 start[index] = lower + fraction * (upper - lower)
             starts.append(start)
+        starts = _unique_starts(starts)
         for start in starts:
             result = minimize(
                 objective,

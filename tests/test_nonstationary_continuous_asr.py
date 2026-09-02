@@ -73,6 +73,32 @@ def test_drift_is_estimated_from_heterochronous_tips():
     assert posterior[tree].mean == pytest.approx(1.0, abs=2e-7)
 
 
+def test_drift_search_expands_beyond_ordinary_least_squares_scale():
+    tree = tree_from("(A:1,B:2,C:1.00001,D:1.00002)R;")
+    values = {"A": 0.0, "B": 0.0, "C": 0.0, "D": 1.0}
+    errors = {"A": 1000.0, "B": 1000.0, "C": 0.0, "D": 0.0}
+    depths = np.asarray([1.0, 2.0, 1.00001, 1.00002])
+    variances = 1e-6 * depths + np.asarray([1e6, 1e6, 0.0, 0.0])
+    design = np.column_stack((np.ones(4), depths))
+    weighted_design = design / np.sqrt(variances)[:, None]
+    weighted_response = np.asarray(list(values.values())) / np.sqrt(variances)
+    expected = np.linalg.lstsq(
+        weighted_design, weighted_response, rcond=None
+    )[0]
+
+    posterior, fit = compute_bm_drift_marginals(
+        tree,
+        values,
+        sigma2=1e-6,
+        standard_errors=errors,
+    )
+
+    assert fit.drift == pytest.approx(expected[1], rel=2e-8)
+    assert fit.drift > 10_000.0
+    assert posterior[tree].mean == pytest.approx(expected[0], rel=2e-8)
+    assert "adaptive unbounded profile" in fit.optimizer_message
+
+
 def test_exact_linear_trend_prefers_explicit_zero_diffusion_boundary():
     tree = tree_from("(A:1,B:2,C:3,D:4)R;")
     values = {

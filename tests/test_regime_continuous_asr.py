@@ -223,6 +223,7 @@ def test_estimated_single_regime_theta_matches_existing_ou_fit():
     assert fit.theta_by_regime["shared"] == pytest.approx(
         expected_fit.theta, abs=2e-7
     )
+    assert fit.optimizer_starts == 1
     assert fit.log_likelihood == pytest.approx(expected_fit.log_likelihood, abs=1e-10)
     for node in tree.traverse():
         assert observed[node].mean == pytest.approx(expected[node].mean, abs=2e-7)

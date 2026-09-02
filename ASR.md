@@ -32,8 +32,11 @@ names such as `NA`. Duplicate names or column headers are errors. The shared
   select explicit discrete mode to retain such a literal category, or explicit
   continuous mode when unexpected text should fail.
 - An all-missing column cannot be classified. Explicit discrete mode with
-  `--states` can perform a prior-only analysis; continuous mode requires at
-  least one observed value even when the rate is fixed.
+  `--states` can perform a prior-only analysis only with a fully fixed process:
+  ER plus `--rate`, or CUSTOM plus `--rate-matrix`. Fitted ER, SYM, ARD, F81,
+  GTR, MK-REGIME, and HRM parameters have no likelihood information and are
+  rejected. Continuous mode requires at least one observed value even when the
+  rate is fixed.
 
 Override with `--trait-type discrete` or `--trait-type continuous`. In particular,
 numeric category codes such as `0,1,2` **require explicit discrete mode**.
@@ -108,9 +111,11 @@ sum; otherwise the supplied diagonals must already satisfy that generator
 constraint. CUSTOM does not fit or rescale Q.
 Generator residual tolerances scale with each Q row, so a malformed very small
 Q is not accepted merely because its absolute entries are small. Matrix
-exponentiation repairs only roundoff-sized probability errors, with a tolerance
-that scales conservatively with the exponent norm for long branches; material
-negative entries or invalid row sums fail explicitly.
+exponentiation repairs only roundoff-sized probability errors. Long branches
+are exponentiated at a moderate time scale and repeatedly squared with
+stochastic-row validation, avoiding generic `expm` row-sum drift while
+retaining slow modes. Material negative entries or invalid row sums fail
+explicitly.
 
 ### Branch regimes and hidden rates
 
@@ -127,9 +132,12 @@ branch_id	regime
 ```
 
 Branch IDs are the same deterministic IDs used in normal ASR output. Every
-estimated regime must occur on a non-root branch. The root assignment selects
-which regime Q defines a stationary root prior; it has no stem branch. Marginal
-inference and stochastic mapping use the Q assigned to each incoming branch.
+estimated regime must occur on a positive-length non-root branch whose
+descendant subtree contains an informative observation. A regime confined to
+zero-length branches or wholly missing subtrees has no likelihood information
+and is rejected. The root assignment selects which regime Q defines a
+stationary root prior; it has no stem branch. Marginal inference and stochastic
+mapping use the Q assigned to each incoming branch.
 
 `--model HRM --hidden-categories H` expands each observed state into `H` latent
 rate classes. Observed-state changes occur within a class, hidden-class changes
@@ -343,12 +351,14 @@ where rate and sigma2 are confounded, is rejected; bound optima are reported.
 
 BM-DRIFT uses transition mean `X_parent + drift * t` and Brownian variance
 `sigma2 * t`. `--drift` fixes the directional trend. A free trend is profiled
-from observed tips at different root depths; it is confounded with the unknown
-flat-prior root value on contemporaneous tips, so ultrametric observations
-require a fixed drift. Both models reduce exactly to BM when their extension
-parameter is zero. An exactly linear, error-free fitted trend is retained as an
-explicit `sigma2=0`, `singular_zero_boundary` result rather than a spurious tiny
-positive diffusion estimate.
+from observed tips at different root depths. The search expands geometrically
+until the likelihood optimum is bracketed instead of imposing artificial drift
+bounds, which is important with strongly unequal observation errors. Drift is
+confounded with the unknown flat-prior root value on contemporaneous tips, so
+ultrametric observations require a fixed drift. Both models reduce exactly to
+BM when their extension parameter is zero. An exactly linear, error-free fitted
+trend is retained as an explicit `sigma2=0`, `singular_zero_boundary` result
+rather than a spurious tiny positive diffusion estimate.
 
 A free drift is profiled *after* integrating the flat root; it is not integrated
 as a second fixed effect. Consequently, its reported flat-root likelihood and

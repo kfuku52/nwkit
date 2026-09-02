@@ -257,6 +257,81 @@ def _run_drift(
     return posterior, fit
 
 
+def _minimize_unbounded_profile(evaluate, center, scale, *, quadratic=False):
+    """Bracket a finite profile minimum without imposing parameter bounds."""
+
+    sampled = {float(center): float(evaluate(center))}
+    exponent = 0
+    while True:
+        try:
+            radius = math.ldexp(float(scale), exponent)
+        except OverflowError:
+            break
+        if not math.isfinite(radius):
+            break
+        left = center - radius
+        right = center + radius
+        if not math.isfinite(left) or not math.isfinite(right):
+            break
+        sampled.setdefault(float(left), float(evaluate(left)))
+        sampled.setdefault(float(right), float(evaluate(right)))
+        finite = [
+            (objective, point)
+            for point, objective in sampled.items()
+            if math.isfinite(objective) and objective < 1e99
+        ]
+        if finite:
+            best_objective, best_point = min(finite)
+            if (
+                left < best_point < right
+                and sampled[left] > best_objective
+                and sampled[right] > best_objective
+            ):
+                candidates = [(best_objective, best_point, "adaptive grid")]
+                if quadratic:
+                    center_objective = sampled[float(center)]
+                    curvature = (
+                        sampled[left]
+                        - 2.0 * center_objective
+                        + sampled[right]
+                    )
+                    if math.isfinite(curvature) and curvature > 0.0:
+                        vertex = center + radius * (
+                            sampled[left] - sampled[right]
+                        ) / (2.0 * curvature)
+                        if left < vertex < right:
+                            vertex_objective = float(evaluate(vertex))
+                            if (
+                                math.isfinite(vertex_objective)
+                                and vertex_objective < 1e99
+                            ):
+                                return (
+                                    float(vertex),
+                                    vertex_objective,
+                                    "quadratic profile interpolation",
+                                )
+                result = minimize_scalar(
+                    evaluate,
+                    bounds=(left, right),
+                    method="bounded",
+                    options={"xatol": 1e-10},
+                )
+                if (
+                    result.success
+                    and math.isfinite(float(result.fun))
+                    and float(result.fun) < 1e99
+                ):
+                    candidates.append(
+                        (float(result.fun), float(result.x), str(result.message))
+                    )
+                objective, point, message = min(candidates)
+                return point, objective, message
+        exponent += 1
+    raise ValueError(
+        "Failed to bracket a finite BM-DRIFT trend; rescale trait or time units."
+    )
+
+
 def compute_bm_drift_marginals(
     tree,
     values_by_leaf,
@@ -291,6 +366,7 @@ def compute_bm_drift_marginals(
             _tree_validated,
         )
         evaluations = 1
+        success = True
         message = "drift fixed"
     else:
         tip_depths = np.asarray([depths[node] for node, _ in observed], dtype=float)
@@ -332,14 +408,9 @@ def compute_bm_drift_marginals(
             fitted_drift = ordinary_slope
             posterior, bm_fit = boundary_candidate
             evaluations = 1
+            success = True
             message = "exact zero-diffusion boundary"
         else:
-            lower = ordinary_slope - 100.0 * scale
-            upper = ordinary_slope + 100.0 * scale
-            if not math.isfinite(lower) or not math.isfinite(upper):
-                raise ValueError(
-                    "BM-DRIFT search bounds exceed floating-point range; rescale units."
-                )
             cache = {}
             if boundary_candidate is not None:
                 cache[ordinary_slope] = boundary_candidate
@@ -364,19 +435,14 @@ def compute_bm_drift_marginals(
                     return 1e100
                 return -result[1].restricted_log_likelihood
 
-            result = minimize_scalar(
+            fitted_drift, objective, optimizer_message = _minimize_unbounded_profile(
                 evaluate,
-                bounds=(lower, upper),
-                method="bounded",
-                options={"xatol": 1e-10},
+                ordinary_slope,
+                scale,
+                quadratic=fixed_sigma2 is not None,
             )
-            if (
-                not result.success
-                or not math.isfinite(float(result.fun))
-                or result.fun >= 1e99
-            ):
+            if not math.isfinite(objective) or objective >= 1e99:
                 raise ValueError("Failed to estimate a finite BM-DRIFT trend.")
-            fitted_drift = float(result.x)
             posterior, bm_fit = _run_drift(
                 tree,
                 values_by_leaf,
@@ -387,7 +453,8 @@ def compute_bm_drift_marginals(
                 _tree_validated,
             )
             evaluations = len(cache)
-            message = str(result.message)
+            success = True
+            message = f"adaptive unbounded profile; {optimizer_message}"
     fit = BrownianDriftFit(
         sigma2=bm_fit.sigma2,
         sigma2_estimated=bm_fit.sigma2_estimated,
@@ -398,7 +465,7 @@ def compute_bm_drift_marginals(
         num_effective_observations=bm_fit.num_effective_observations,
         residual_df=bm_fit.residual_df,
         fit_status=bm_fit.fit_status,
-        optimizer_success=True,
+        optimizer_success=success,
         optimizer_message=message,
         optimizer_grid_evaluations=evaluations,
     )

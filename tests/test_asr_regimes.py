@@ -81,6 +81,81 @@ def test_edge_specific_q_likelihood_matches_direct_star_calculation(tmp_path):
     ) == pytest.approx(math.log(expected))
 
 
+@pytest.mark.parametrize(
+    "tree_source,regime_by_branch",
+    [
+        ("(A:1,B:1,M:1)R;", ["background", "background", "background", "missing"]),
+        ("(A:1,B:1,M:0)R;", ["background", "background", "background", "zero"]),
+    ],
+)
+def test_mk_regime_rejects_branches_without_informative_likelihood_effect(
+    tree_source, regime_by_branch, tmp_path
+):
+    tree = tree_from(tree_source)
+    path = tmp_path / "regimes.tsv"
+    write_regime_map(path, regime_by_branch)
+    assignment = read_regime_map(path, tree)
+    states = ["0", "1"]
+    observed = {"A": "0", "B": "1", "M": None}
+    likelihood = {
+        "A": np.array([1.0, 0.0]),
+        "B": np.array([0.0, 1.0]),
+        "M": np.ones(2),
+    }
+    if tree_source.endswith("M:0)R;"):
+        observed["M"] = "0"
+        likelihood["M"] = np.array([1.0, 0.0])
+
+    with pytest.raises(ValueError, match="uninformative regime"):
+        asr.compute_mk_marginals(
+            tree,
+            states,
+            observed,
+            likelihood,
+            model="MK-REGIME",
+            regime_assignment=assignment,
+        )
+
+
+def test_hrm_does_not_mutate_a_read_only_transition_graph(monkeypatch):
+    tree = tree_from("(A:1,B:1)R;")
+    graph = np.array([[True, True], [True, True]], dtype=bool)
+    original = graph.copy()
+    graph.setflags(write=False)
+    captured = {}
+
+    def fake_compute_mk_marginals(
+        tree, states, observed_state_by_leaf, likelihood_by_leaf, **options
+    ):
+        captured["graph"] = options["transition_graph"]
+        prior = np.full(len(states), 1.0 / len(states))
+        posterior = {node: prior.copy() for node in tree.traverse()}
+        return posterior, {"root_prior": prior, "posterior_by_node": posterior}
+
+    monkeypatch.setattr(asr, "compute_mk_marginals", fake_compute_mk_marginals)
+    asr.compute_hrm_marginals(
+        tree,
+        ["0", "1"],
+        {"A": "0", "B": "1"},
+        {"A": np.array([1.0, 0.0]), "B": np.array([0.0, 1.0])},
+        transition_graph=graph,
+    )
+
+    np.testing.assert_array_equal(graph, original)
+    assert not np.any(np.diag(captured["graph"]))
+
+
+def test_prior_only_hrm_rejects_fitted_hidden_rates():
+    tree = tree_from("(A:1,B:1)R;")
+    with pytest.raises(ValueError, match="fully fixed transition process"):
+        asr.compute_hrm_marginals(
+            tree,
+            ["0", "1"],
+            {"A": None, "B": None},
+            {"A": np.ones(2), "B": np.ones(2)},
+        )
+
+
 @pytest.mark.integration
 def test_mk_regime_cli_fits_and_reports_each_regime_q(tmp_path):
     tree = tmp_path / "tree.nwk"

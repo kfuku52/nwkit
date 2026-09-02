@@ -228,6 +228,18 @@ def test_all_missing_explicit_discrete_can_use_a_declared_state_space(tmp_path):
     np.testing.assert_allclose(table[["p_0", "p_1"]], 0.5)
 
 
+def test_all_missing_explicit_discrete_rejects_a_fitted_process(tmp_path):
+    with pytest.raises(ValueError, match="fully fixed transition process"):
+        run_asr(
+            tmp_path,
+            "leaf_name\tvalue\nA\tNA\nB\t\nC\t?\n",
+            "--trait-type",
+            "discrete",
+            "--states",
+            "0,1",
+        )
+
+
 def test_all_missing_explicit_continuous_fails_even_with_fixed_rate(tmp_path):
     with pytest.raises(ValueError, match="at least one observed"):
         run_asr(

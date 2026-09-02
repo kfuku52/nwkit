@@ -589,14 +589,6 @@ def build_sparse_evolutionary_model(
     if model == "custom":
         raise ValueError("Custom evolutionary covariance has no sparse tree model.")
     names = tuple(str(name) for name in leaf_names)
-    leaf_by_name = {str(leaf.name): leaf for leaf in tree.leaves()}
-    missing = sorted(set(names) - set(leaf_by_name))
-    if missing:
-        raise ValueError(
-            "Sparse evolutionary covariance requested absent tree tips: {}.".format(
-                ", ".join(missing)
-            )
-        )
     process = build_evolutionary_process(
         tree,
         model=model,
@@ -604,7 +596,20 @@ def build_sparse_evolutionary_model(
         branch_length=branch_length,
         root_mode="fixed",
     )
-    return process.sparse_tip_model(names, normalize=True)
+    try:
+        return process.sparse_tip_model(names, normalize=True)
+    except ValueError as exc:
+        message = str(exc)
+        prefix = "Gaussian covariance requested absent tree tips:"
+        if message.startswith(prefix):
+            raise ValueError(
+                message.replace(
+                    prefix,
+                    "Sparse evolutionary covariance requested absent tree tips:",
+                    1,
+                )
+            ) from exc
+        raise
 
 
 def optimization_parameterization(
