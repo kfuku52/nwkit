@@ -14,9 +14,14 @@ import pandas as pd
 
 from nwkit.asr_compare_figure import (
     _criterion_label,
+    _font_family_for_text,
     draw_comparison_figure,
 )
-from nwkit.asr_comparison import grouped_model_comparison_table, summarize_fit
+from nwkit.asr_comparison import (
+    grouped_model_comparison_table,
+    has_nonregular_variance_boundary,
+    summarize_fit,
+)
 from nwkit.asr_input import (
     AsrSettings,
     continuous_tip_values,
@@ -26,6 +31,7 @@ from nwkit.asr_input import (
     resolve_trait_type,
 )
 from nwkit.asr_models import model_definition, model_names
+from nwkit.discrete_asr_models import model_equivalence_family
 from nwkit.output_transaction import output_transaction
 from nwkit.util import (
     read_tree,
@@ -960,6 +966,12 @@ def _classify_fit(candidate, fit, summary):
         )
     if "singular" in fit_status:
         return "nonregular", "no", f"Non-regular fit status: {fit_status}."
+    if has_nonregular_variance_boundary(fit_status):
+        return (
+            "nonregular",
+            "no",
+            f"A fitted variance component reached zero: {fit_status}.",
+        )
     if candidate.model == "COVARION" and "boundary" in fit_status:
         return "nonregular", "no", f"Non-regular covarion boundary: {fit_status}."
     optimizer_success = _fit_value(fit, "optimizer_success", None)
@@ -1280,19 +1292,9 @@ def _discrete_equivalence_contract(context, candidate, states, graph):
         # For ordinary ER --rate is fixed, whereas it is only an optimizer
         # starting value for every other fitted structured model.
         return None
-    complete = np.ones((len(states), len(states)), dtype=bool)
-    np.fill_diagonal(complete, False)
-    if len(states) == 2 and model in {"ER", "SYM"} and np.array_equal(graph, graph.T):
-        family = "binary-symmetric"
-    elif (
-        len(states) == 2 and model in {"ARD", "F81"} and np.array_equal(graph, complete)
-    ):
-        # ARD and F81 both optimize the two directed q_ij values under the
-        # same direct rate bounds. GTR does not: it bounds an exchangeability
-        # and a separate stationary-frequency ratio.
-        family = "binary-general-direct-rates"
-    else:
-        family = model
+    # ARD/F81 share direct q_ij bounds for two states. GTR deliberately remains
+    # distinct because it bounds exchangeability and frequency-ratio coordinates.
+    family = model_equivalence_family(model, states, graph)
     source = "a one-regime MK model" if is_regime else "this transition model"
     return (
         (
@@ -1570,6 +1572,20 @@ def _has_completed_fit(table):
     )
 
 
+def _preflight_comparison_figure(context, candidates, criterion):
+    if getattr(context.args, "figure_out", None) in (None, ""):
+        return
+    predictable_text = [
+        "ASR model comparison",
+        _criterion_label(criterion),
+        "Comparison set Not assigned Rank Model Fit status Notes",
+        context.trait_type,
+        *context.trait_columns,
+        *(candidate.model_id for candidate in candidates),
+    ]
+    _font_family_for_text("\n".join(predictable_text))
+
+
 def asr_compare_main(args):
     from nwkit.asr import _validate_tree_for_asr
     from nwkit.asr_input import _validate_mode_arguments
@@ -1610,6 +1626,8 @@ def asr_compare_main(args):
     )
     context.cache["_shared_preparation_started"] = shared_preparation_started
     _validate_comparison_options(context, candidates, automatic=automatic)
+    criterion = getattr(args, "criterion", "aic")
+    _preflight_comparison_figure(context, candidates, criterion)
     sys.stderr.write(
         f"ASR comparison trait type: {trait_type} ({requested_type}); "
         f"{len(candidates)} candidate(s).\n"
@@ -1619,7 +1637,6 @@ def asr_compare_main(args):
             "ASR comparison auto-detection treats numeric columns as continuous; "
             "use --trait-type discrete for numeric category codes.\n"
         )
-    criterion = getattr(args, "criterion", "aic")
     table = comparison_table(
         context,
         candidates,

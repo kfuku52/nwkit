@@ -1,10 +1,12 @@
 import math
 
+import numpy as np
 import pandas as pd
 import pytest
 
 from nwkit.asr_regimes import RegimeAssignment
 from nwkit.cli import main
+from nwkit.gaussian_inference import _relative_parameter_rank
 from nwkit.ou_asr import compute_ou_marginals
 from nwkit.regime_gaussian_asr import (
     build_regime_ou_process,
@@ -69,6 +71,40 @@ def test_fixed_equal_regime_process_reduces_to_single_optimum_ou():
         assert observed[node].variance == pytest.approx(
             expected[node].variance, abs=2e-12
         )
+
+
+@pytest.mark.parametrize("model", ["OUM", "OUMA", "OUMV", "OUMVA"])
+def test_single_regime_ou_variants_use_the_canonical_ou_fit(model):
+    tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8,E:2)R;")
+    values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": 1.0, "E": 3.0}
+    regimes = assignment(tree, ["shared"] * len(list(tree.traverse())))
+    expected_posterior, expected_fit = compute_ou_marginals(tree, values, theta=0.3)
+    observed_posterior, observed_fit = compute_regime_ou_marginals(
+        tree,
+        values,
+        regimes,
+        model=model,
+        theta=0.3,
+    )
+    assert observed_fit.alpha_by_regime["shared"] == expected_fit.alpha
+    assert observed_fit.sigma2_by_regime["shared"] == expected_fit.sigma2
+    assert observed_fit.theta_by_regime["shared"] == expected_fit.theta
+    assert observed_fit.log_likelihood == expected_fit.log_likelihood
+    assert observed_fit.fit_status == expected_fit.fit_status
+    assert observed_fit.optimizer_starts == expected_fit.optimizer_starts
+    assert "single-regime reduction" in observed_fit.optimizer_message
+    for node in tree.traverse():
+        assert observed_posterior[node].mean == expected_posterior[node].mean
+        assert observed_posterior[node].variance == expected_posterior[node].variance
+
+
+def test_parameter_rank_tolerance_does_not_grow_with_summary_row_count():
+    normalized = np.zeros((100_000, 2), dtype=float)
+    normalized[0, 0] = 1.0
+    normalized[0, 1] = 1.0
+    normalized[1, 1] = 1e-4
+    normalized[:, 1] /= np.linalg.norm(normalized[:, 1])
+    assert _relative_parameter_rank(normalized) == 2
 
 
 def test_regime_process_uses_incoming_edge_alpha_sigma_and_theta():

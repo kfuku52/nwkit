@@ -209,7 +209,7 @@ def test_ou_rejects_more_free_parameters_than_observed_positions():
 
 def test_ou_rejects_standard_error_lost_during_power_of_two_scaling():
     tree = tree_from("[&R](A:1,B:1)R;")
-    with pytest.raises(ValueError, match="OU standard error exceeds"):
+    with pytest.raises(ValueError, match="OU standard error underflows"):
         compute_ou_marginals(
             tree,
             {"A": 0.0, "B": 1e308},

@@ -1,6 +1,7 @@
 """Linear-time complete-case multivariate Brownian ancestral reconstruction."""
 
 import math
+from collections.abc import Mapping
 from copy import copy
 from dataclasses import dataclass
 
@@ -160,6 +161,55 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
     )
 
 
+def _measurement_errors_are_all_zero(
+    tree, values_by_leaf, trait_names, standard_errors
+):
+    """Validate complete-case errors before deciding whether the fast path applies."""
+
+    if not isinstance(standard_errors, Mapping):
+        raise ValueError("MV-BM measurement errors must be supplied as a tip mapping.")
+    dimension = len(trait_names)
+    has_nonzero = False
+    for leaf in tree.leaves():
+        name = str(leaf.name)
+        vector = values_by_leaf.get(name)
+        if vector is None:
+            continue
+        try:
+            vector_dimension = len(vector)
+        except TypeError as exc:
+            raise ValueError(
+                f"MV-BM trait dimension mismatch for tip '{name}'."
+            ) from exc
+        if vector_dimension != dimension:
+            raise ValueError(f"MV-BM trait dimension mismatch for tip '{name}'.")
+        error_vector = standard_errors.get(name)
+        if error_vector is None:
+            raise ValueError(
+                f"Measurement errors are required for observed tip '{name}'."
+            )
+        try:
+            error_dimension = len(error_vector)
+        except TypeError as exc:
+            raise ValueError(
+                f"Measurement-error dimension mismatch for tip '{name}'."
+            ) from exc
+        if error_dimension != dimension:
+            raise ValueError(f"Measurement-error dimension mismatch for tip '{name}'.")
+        for trait, raw_value, raw_error in zip(
+            trait_names, vector, error_vector, strict=True
+        ):
+            if raw_value is None:
+                continue
+            error = _finite_number(
+                raw_error,
+                f"Standard error for trait '{trait}' at '{name}'",
+                nonnegative=True,
+            )
+            has_nonzero = has_nonzero or error != 0.0
+    return not has_nonzero
+
+
 def compute_mvbm_marginals(
     tree,
     values_by_leaf,
@@ -170,9 +220,9 @@ def compute_mvbm_marginals(
 ):
     """Estimate a trait covariance and return all-node MV-BM marginals.
 
-    Observed tips must contain either every selected trait or none. Known
-    measurement errors are intentionally excluded because arbitrary errors
-    break the Kronecker structure used by the linear-time implementation.
+    Complete exact observations use the linear-time path. Partial vectors or
+    non-zero known measurement errors use the dense Gaussian implementation;
+    complete all-zero error mappings retain the linear-time path after validation.
     """
 
     trait_names = tuple(str(value) for value in trait_names)
@@ -183,17 +233,9 @@ def compute_mvbm_marginals(
         for vector in values_by_leaf.values()
     )
     if standard_errors is not None:
-        try:
-            has_nonzero_error = any(
-                error is not None and float(error) != 0.0
-                for vector in standard_errors.values()
-                if vector is not None
-                for error in vector
-            )
-        except (TypeError, ValueError, OverflowError):
-            # Let the dense implementation report the precise validation error.
-            has_nonzero_error = True
-        if not has_nonzero_error:
+        if _measurement_errors_are_all_zero(
+            tree, values_by_leaf, trait_names, standard_errors
+        ):
             standard_errors = None
     if partial or standard_errors is not None:
         from nwkit.multivariate_gaussian_asr import fit_dense_mvbm

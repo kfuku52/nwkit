@@ -40,6 +40,22 @@ def ordered_transition_graph(num_states):
     return graph
 
 
+def model_equivalence_family(model, states, graph=None):
+    """Return the exact structured-rate family used for duplicate-fit detection."""
+
+    graph = (
+        complete_transition_graph(len(states))
+        if graph is None
+        else _validated_graph(graph, len(states))
+    )
+    complete = complete_transition_graph(len(states))
+    if len(states) == 2 and model in {"ER", "SYM"} and np.array_equal(graph, graph.T):
+        return "binary-symmetric"
+    if len(states) == 2 and model in {"ARD", "F81"} and np.array_equal(graph, complete):
+        return "binary-general-direct-rates"
+    return model
+
+
 def read_transition_graph(specification, states, *, state_source="--states"):
     """Return an allowed directed-edge mask and a reproducible source label."""
 
@@ -167,8 +183,9 @@ def build_rate_matrix(model, states, rates, graph=None):
     if np.any(~np.isfinite(rates)) or np.any(rates < 0.0):
         raise ValueError("Mk rates must be non-negative finite numbers.")
     matrix = np.zeros((len(states), len(states)), dtype=float)
-    if model == "ER" and labels:
-        matrix[graph] = rates[0]
+    if model == "ER":
+        if labels:
+            matrix[graph] = rates[0]
     elif model == "SYM":
         state_to_index = {state: index for index, state in enumerate(states)}
         for rate, (source, target) in zip(rates, labels, strict=True):

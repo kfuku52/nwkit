@@ -28,6 +28,7 @@ from nwkit.asr_input import (
 from nwkit.asr_models import model_names
 from nwkit.discrete_asr_models import (
     FREQUENCY_RATIO_BOUNDS,
+    model_equivalence_family,
     read_rate_matrix,
     read_transition_graph,
     stationary_distribution,
@@ -61,6 +62,7 @@ _MAX_BACKWARD_BYTES = 256 * 1024 * 1024
 _MAX_DIRECT_EXPONENT_NORM = 32.0
 _MAX_HIDDEN_EXPANDED_STATES = 64
 _MAX_COVARION_LOG_SPREAD = math.log(1e4)
+_MAX_FREE_TRANSITION_PARAMETERS = 256
 
 
 def _parse_comma_list(value, option_name):
@@ -93,6 +95,14 @@ def _validate_states(states):
     if len(states) != len(set(states)):
         raise ValueError("'--states' contains duplicated states.")
     return states
+
+
+def _require_multiple_discrete_states(states):
+    if len(states) < 2:
+        raise ValueError(
+            "Discrete ASR requires at least two states; provide an explicit "
+            "multi-state space with --states when only one state is observed."
+        )
 
 
 def _parse_states(value):
@@ -236,6 +246,7 @@ def _read_tip_states(
         raise ValueError(
             "At least one observed or explicitly listed state is required."
         )
+    _require_multiple_discrete_states(states)
 
     state_to_index = {state: index for index, state in enumerate(states)}
     observed_state_by_leaf = {
@@ -275,8 +286,11 @@ def _er_transition_matrix(branch_length, rate, num_states):
         return np.ones((1, 1), dtype=float)
     if rate < 0.0:
         raise ValueError("Mk transition rate must be non-negative.")
-    decay = math.exp(-float(num_states) * float(rate) * float(branch_length))
-    off_diagonal = (1.0 - decay) / float(num_states)
+    exponent = -float(num_states) * float(rate) * float(branch_length)
+    decay = math.exp(exponent)
+    # exp() rounds to one for tiny negative exponents.  expm1() preserves the
+    # correspondingly tiny but non-zero transition probabilities.
+    off_diagonal = -math.expm1(exponent) / float(num_states)
     matrix = np.full((num_states, num_states), off_diagonal, dtype=float)
     diagonal = off_diagonal + decay
     np.fill_diagonal(matrix, diagonal)
@@ -735,6 +749,12 @@ def _fit_parametric_rate_matrix(
         return _rate_root_prior(root_prior, root_prior_factory, matrix)
 
     num_params = _num_rate_parameters(model, len(states), transition_graph)
+    if num_params > _MAX_FREE_TRANSITION_PARAMETERS:
+        raise ValueError(
+            f"{model} would require more than {_MAX_FREE_TRANSITION_PARAMETERS} "
+            "free transition parameters; reduce the state space or constrain "
+            "the transition graph."
+        )
     if num_params == 0:
         return _fixed_parametric_rate_fit(
             tree,
@@ -963,6 +983,13 @@ def _fit_regime_rate_matrices(
         raise ValueError("MK-REGIME requires at least one rate per regime.")
     kinds = _structured_parameter_kinds(regime_model, states, transition_graph)
     per_regime = len(labels)
+    total_parameters = per_regime * len(regimes)
+    if total_parameters > _MAX_FREE_TRANSITION_PARAMETERS:
+        raise ValueError(
+            "MK-REGIME would require more than "
+            f"{_MAX_FREE_TRANSITION_PARAMETERS} free transition parameters; reduce "
+            "the state space, number of regimes, or transition graph."
+        )
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
     base_initial = _initial_model_parameters(
         regime_model, states, initial_rate, transition_graph
@@ -1152,6 +1179,7 @@ def compute_mk_marginals(
     regime_assignment=None,
     regime_model="ER",
 ):
+    _require_multiple_discrete_states(states)
     root_prior, root_prior_factory = _root_prior_configuration(
         root_prior_mode, states, observed_state_by_leaf, likelihood_by_leaf
     )
@@ -1330,6 +1358,7 @@ def compute_mk_mixture_marginals(
 
     from nwkit.optimization import deterministic_multistart
 
+    _require_multiple_discrete_states(states)
     if base_model not in {"ER", "SYM", "ARD", "F81", "GTR"}:
         raise ValueError("MK-MIXTURE base model must be ER, SYM, ARD, F81, or GTR.")
     if mixture not in {"gamma", "free"}:
@@ -1341,6 +1370,12 @@ def compute_mk_mixture_marginals(
         raise ValueError("MK-MIXTURE requires at least two character columns.")
     rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
     labels = _rate_parameter_labels(base_model, states, transition_graph)
+    if len(labels) > _MAX_FREE_TRANSITION_PARAMETERS:
+        raise ValueError(
+            f"MK-MIXTURE {base_model} would require more than "
+            f"{_MAX_FREE_TRANSITION_PARAMETERS} free transition parameters; reduce "
+            "the state space or constrain the transition graph."
+        )
     kinds = _structured_parameter_kinds(base_model, states, transition_graph)
     if not labels:
         raise ValueError("MK-MIXTURE requires at least one base-rate parameter.")
@@ -1620,6 +1655,7 @@ def compute_hrm_marginals(
         state_projection,
     )
 
+    _require_multiple_discrete_states(states)
     hidden_categories = _integer_option(hidden_categories, "--hidden-categories")
     if hidden_categories < 2:
         raise ValueError("--hidden-categories must be at least 2 for HRM.")
@@ -1632,9 +1668,10 @@ def compute_hrm_marginals(
     num_parameters = hidden_categories * int(np.sum(observed_graph)) + len(
         states
     ) * hidden_categories * (hidden_categories - 1)
-    if num_parameters > 256:
+    if num_parameters > _MAX_FREE_TRANSITION_PARAMETERS:
         raise ValueError(
-            "HRM would require more than 256 free transition rates; reduce the "
+            "HRM would require more than "
+            f"{_MAX_FREE_TRANSITION_PARAMETERS} free transition rates; reduce the "
             "observed state space or --hidden-categories."
         )
     expanded_size = len(states) * hidden_categories
@@ -1776,6 +1813,7 @@ def compute_covarion_marginals(
     )
     from nwkit.optimization import deterministic_multistart
 
+    _require_multiple_discrete_states(states)
     hidden_categories = _integer_option(hidden_categories, "--hidden-categories")
     if hidden_categories < 2:
         raise ValueError("--hidden-categories must be at least 2 for COVARION.")
@@ -3048,7 +3086,38 @@ def _write_discrete_model_comparison(
             "GTR, and COVARION; unsupported: " + ", ".join(unsupported)
         )
     summaries = []
+    representatives: dict[tuple[Any, ...], tuple[str, dict[str, Any]]] = {}
+    has_equivalent_alias = False
     for model in models:
+        equivalence_key = None
+        if model != "COVARION" and not (
+            model == "ER" and getattr(args, "rate", None) is not None
+        ):
+            family = model_equivalence_family(model, states, transition_graph)
+            equivalence_key = (
+                family,
+                settings.root_prior,
+                transition_graph.shape,
+                transition_graph.tobytes(),
+            )
+        if equivalence_key is not None and equivalence_key in representatives:
+            representative_model, fit = representatives[equivalence_key]
+            summary = summarize_fit(model, fit, trait_type="discrete")
+            summary.update(
+                {
+                    "status": "equivalent",
+                    "rankable": "no",
+                    "equivalent_to": representative_model,
+                    "message": (
+                        f"Statistically equivalent to {representative_model} for "
+                        "the same binary transition/root contract; excluded from "
+                        "duplicate IC weighting."
+                    ),
+                }
+            )
+            summaries.append(summary)
+            has_equivalent_alias = True
+            continue
         if model == settings.model:
             fit = primary_fit
         elif model == "COVARION":
@@ -3078,7 +3147,17 @@ def _write_discrete_model_comparison(
                 rate_bounds=_parse_rate_bounds(getattr(args, "rate_bounds", None)),
                 transition_graph=transition_graph,
             )
-        summaries.append(summarize_fit(model, fit, trait_type="discrete"))
+        if equivalence_key is not None:
+            representatives[equivalence_key] = (model, fit)
+        summary = summarize_fit(model, fit, trait_type="discrete")
+        summary.update(
+            {"status": "ok", "rankable": "yes", "equivalent_to": "", "message": ""}
+        )
+        summaries.append(summary)
+    if not has_equivalent_alias:
+        for summary in summaries:
+            for column in ("status", "rankable", "equivalent_to", "message"):
+                summary.pop(column, None)
     _write_table(
         model_comparison_table(summaries),
         args.model_comparison_out,

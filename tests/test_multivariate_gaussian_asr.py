@@ -61,6 +61,53 @@ def test_dense_mvbm_exact_complete_case_agrees_with_fast_path_reasonably():
     )
 
 
+@pytest.mark.parametrize("fitter", [fit_dense_mvbm, fit_dense_mvou])
+def test_dense_covariance_rank_is_invariant_to_trait_units(fitter):
+    tree = tree_from("((A:.5,B:.7):.4,(C:.6,D:.8):.3,E:1,F:1.2)R;")
+    values = {
+        "A": (0.0, 1.0),
+        "B": (0.4, 0.8),
+        "C": (1.2, 0.2),
+        "D": (1.5, -0.3),
+        "E": (1.7, 0.8),
+        "F": (2.3, -0.6),
+    }
+    errors = {name: (0.05, 0.08) for name in values}
+    options = {"alpha": 0.7} if fitter is fit_dense_mvou else {}
+    _, original = fitter(tree, values, ("x", "y"), standard_errors=errors, **options)
+    multiplier = 1e10
+    transformed_values = {
+        name: (vector[0] * multiplier, vector[1]) for name, vector in values.items()
+    }
+    transformed_errors = {
+        name: (vector[0] * multiplier, vector[1]) for name, vector in errors.items()
+    }
+    _, transformed = fitter(
+        tree,
+        transformed_values,
+        ("x", "y"),
+        standard_errors=transformed_errors,
+        **options,
+    )
+    assert transformed.sigma_rank == original.sigma_rank == 2
+    assert transformed.fit_status == original.fit_status == "ok"
+    original_likelihood = (
+        original.log_likelihood
+        if fitter is fit_dense_mvou
+        else original.restricted_log_likelihood
+    )
+    transformed_likelihood = (
+        transformed.log_likelihood
+        if fitter is fit_dense_mvou
+        else transformed.restricted_log_likelihood
+    )
+    likelihood_dimensions = len(values) if fitter is fit_dense_mvou else len(values) - 1
+    assert transformed_likelihood == pytest.approx(
+        original_likelihood - likelihood_dimensions * math.log(multiplier),
+        abs=2e-4,
+    )
+
+
 def test_correlated_mvou_supports_partial_observations():
     tree = tree_from("((A:0.5,B:0.7)I:0.4,(C:0.6,D:0.8)J:0.3,E:1.0)R;")
     values = {

@@ -17,6 +17,14 @@ def tree_from(text):
     return read_tree(text, "1", True, rooted="yes", quiet=True)
 
 
+def test_ldexp_distinguishes_underflow_from_overflow():
+    smallest_subnormal = math.ldexp(1.0, -1074)
+    with pytest.raises(ValueError, match="underflows floating-point range"):
+        continuous._ldexp(smallest_subnormal, -1, "Scaled value")
+    with pytest.raises(ValueError, match="exceeds floating-point range"):
+        continuous._ldexp(1.0, 2048, "Scaled value")
+
+
 def dense_marginals(tree, values, sigma2, errors=None):
     """Invert the full graph Laplacian after conditioning on exact tips."""
     nodes = list(tree.traverse())

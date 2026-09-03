@@ -8,7 +8,9 @@ from nwkit.asr_compare import (
     ComparisonCandidate,
     ComparisonContext,
     _candidate_args,
+    _classify_fit,
     _comparison_group,
+    _preflight_comparison_figure,
     _successful_row,
     _validate_comparison_options,
     comparison_table,
@@ -267,6 +269,34 @@ def test_comparison_retains_boundary_status_for_other_regular_model_families():
     ]
     table = model_comparison_table(rows)
     assert set(table["fit_status"]) == {"rate_upper_boundary", "ok"}
+
+
+@pytest.mark.parametrize(
+    "status", ["sigma2_lower_boundary", "root_variance_lower_boundary"]
+)
+def test_zero_variance_boundaries_are_not_rankable(status):
+    classification, rankable, message = _classify_fit(
+        ComparisonCandidate("BMS", "flat", "model-default"),
+        SimpleNamespace(optimizer_success=True),
+        {"fit_status": status, "log_likelihood": -1.0},
+    )
+    assert classification == "nonregular"
+    assert rankable == "no"
+    assert "variance component reached zero" in message
+
+    rows = [
+        {
+            "model": model,
+            "likelihood_kind": "flat_root_integrated",
+            "log_likelihood": -1.0,
+            "num_parameters": 1,
+            "sample_size": 10,
+            "fit_status": status if model == "BMS" else "ok",
+        }
+        for model in ("BM", "BMS")
+    ]
+    with pytest.raises(ValueError, match="non-regular fit status"):
+        model_comparison_table(rows)
 
 
 def test_grouped_comparison_never_ranks_different_root_likelihoods_together():
@@ -658,6 +688,46 @@ def test_comparison_pdf_selects_a_font_covering_japanese_text(tmp_path):
     path = tmp_path / "japanese.pdf"
     draw_comparison_figure(table, path, "aic")
     assert path.read_bytes().startswith(b"%PDF")
+
+
+def test_font_error_reports_the_actually_missing_codepoint(monkeypatch):
+    from matplotlib import font_manager, ft2font
+
+    entry = SimpleNamespace(name="ASCII Test", fname="ascii-test.ttf")
+    monkeypatch.setattr(font_manager.fontManager, "ttflist", [entry])
+
+    class AsciiFont:
+        def get_charmap(self):
+            return {codepoint: codepoint for codepoint in range(128)}
+
+    monkeypatch.setattr(ft2font, "FT2Font", lambda _path: AsciiFont())
+    with pytest.raises(ValueError) as error:
+        _font_family_for_text("A🐍")
+    assert "U+1F40D" in str(error.value)
+    assert "U+0041" not in str(error.value)
+
+
+def test_figure_font_preflight_runs_before_model_fitting(monkeypatch):
+    context = ComparisonContext(
+        tree=None,
+        trait_df=pd.DataFrame(),
+        trait_type="continuous",
+        trait_columns=("trait🐍",),
+        error_columns=None,
+        args=SimpleNamespace(figure_out="comparison.pdf"),
+    )
+
+    def reject_font(text):
+        assert "trait🐍" in text
+        raise ValueError("missing U+1F40D")
+
+    monkeypatch.setattr("nwkit.asr_compare._font_family_for_text", reject_font)
+    with pytest.raises(ValueError, match=r"U\+1F40D"):
+        _preflight_comparison_figure(
+            context,
+            [ComparisonCandidate("BM", "flat", "model-default")],
+            "aic",
+        )
 
 
 def test_candidate_overview_numeric_headers_share_value_alignment():
@@ -1241,6 +1311,36 @@ def test_discrete_asr_cli_writes_model_comparison(tmp_path):
     assert set(table["model"]) == {"ER", "ARD"}
     assert set(table["sample_size"]) == {5}
     assert table["bic_weight"].sum() == pytest.approx(1.0)
+
+
+def test_legacy_discrete_comparison_excludes_equivalent_alias_weight(tmp_path):
+    trait = tmp_path / "traits.tsv"
+    output = tmp_path / "asr.tsv"
+    comparison = tmp_path / "comparison.tsv"
+    trait.write_text("leaf_name\tx\nA\ta\nB\ta\nC\tb\nD\tb\nE\ta\n")
+    main(
+        [
+            "asr",
+            "-i",
+            "[&R](((A:1,B:1):1,C:2):1,(D:1,E:1):2)R;",
+            "--trait",
+            str(trait),
+            "--state-column",
+            "x",
+            "--compare-models",
+            "ER,SYM,ARD",
+            "--model-comparison-out",
+            str(comparison),
+            "-o",
+            str(output),
+        ]
+    )
+    table = pd.read_csv(comparison, sep="\t").set_index("model")
+    assert table.loc["SYM", "status"] == "equivalent"
+    assert table.loc["SYM", "equivalent_to"] == "ER"
+    assert table.loc["SYM", "rankable"] == "no"
+    assert pd.isna(table.loc["SYM", "aic_weight"])
+    assert table.loc[["ER", "ARD"], "aic_weight"].sum() == pytest.approx(1.0)
 
 
 def test_asrcompare_cli_groups_flat_and_stationary_root_models(tmp_path):

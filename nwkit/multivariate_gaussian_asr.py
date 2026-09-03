@@ -595,7 +595,10 @@ def fit_dense_mvbm(
     )
     sigma = _restore_sigma(data, sigma_scaled)
     likelihood -= _likelihood_scale_adjustment(data, reml=True)
-    eigenvalues = np.linalg.eigvalsh(sigma)
+    # Rank is invariant to trait units.  ``sigma_scaled`` is the covariance in
+    # independently normalized trait coordinates; using the restored covariance
+    # would let one large-unit trait hide valid directions in smaller-unit traits.
+    eigenvalues = np.linalg.eigvalsh(sigma_scaled)
     tolerance = (
         np.finfo(float).eps * max(1.0, float(np.max(eigenvalues))) * max(100, dimension)
     )
@@ -718,7 +721,8 @@ def fit_dense_mvou(
     sigma = _restore_sigma(data, sigma_scaled)
     theta = data.centers + data.scales * theta_scaled
     likelihood -= _likelihood_scale_adjustment(data, reml=False)
-    eigenvalues = np.linalg.eigvalsh(sigma)
+    # Determine rank before restoring heterogeneous trait units (see MV-BM above).
+    eigenvalues = np.linalg.eigvalsh(sigma_scaled)
     tolerance = (
         np.finfo(float).eps * max(1.0, float(np.max(eigenvalues))) * max(100, dimension)
     )

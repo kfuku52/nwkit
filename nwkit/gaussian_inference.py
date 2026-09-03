@@ -579,8 +579,17 @@ def gaussian_process_parameter_rank(process_for, parameters, observed_nodes, bou
     if not np.any(nonzero):
         return 0
     normalized[:, nonzero] /= column_scales[nonzero]
-    singular_values = np.linalg.svd(normalized[:, nonzero], compute_uv=False)
-    tolerance = max(normalized.shape) * 1e-7 * float(singular_values[0])
+    return _relative_parameter_rank(normalized[:, nonzero])
+
+
+def _relative_parameter_rank(normalized):
+    singular_values = np.linalg.svd(normalized, compute_uv=False)
+    if not len(singular_values) or singular_values[0] == 0.0:
+        return 0
+    # Rows contain all observed means and covariance entries, so their count grows
+    # quadratically with the number of tips.  It must not inflate the relative
+    # finite-difference tolerance and make an otherwise unchanged model lose rank.
+    tolerance = max(1, normalized.shape[1]) * 1e-7 * float(singular_values[0])
     return int(np.sum(singular_values > tolerance))
 
 

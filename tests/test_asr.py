@@ -32,8 +32,33 @@ def test_initial_rate_stays_scaled_for_huge_finite_branch_lengths():
         rate=None,
         rate_bounds=(1e-320, 1e3),
     )
-
     assert rate == pytest.approx(1e-308, rel=1e-12, abs=0.0)
+
+
+def test_er_transition_preserves_tiny_positive_probabilities():
+    matrix = _er_transition_matrix(1.0, 1e-300, 2)
+    assert matrix[0, 1] == pytest.approx(1e-300)
+    assert matrix[1, 0] == pytest.approx(1e-300)
+    assert matrix[0, 0] == matrix[1, 1] == 1.0
+
+
+def test_fixed_tiny_er_rate_has_a_finite_likelihood():
+    tree = read_tree("[&R](A:1,B:1)R;", "1", True, quiet=True, rooted="yes")
+    states = ["0", "1"]
+    observed = {"A": "0", "B": "1"}
+    likelihood = {
+        name: np.asarray([state == value for state in states], dtype=float)
+        for name, value in observed.items()
+    }
+    _, fit = asr.compute_mk_marginals(
+        tree,
+        states,
+        observed,
+        likelihood,
+        model="ER",
+        rate=1e-300,
+    )
+    assert math.isfinite(fit["log_likelihood"])
 
 
 def test_cli_defaults_and_stochastic_maps_do_not_depend_on_time_units(tmp_path):

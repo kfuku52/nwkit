@@ -4,6 +4,31 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.1] - 2026-09-03
+
+### Changed
+
+- One-regime OUM/OUMA/OUMV/OUMVA fits now reduce to the canonical stationary OU
+  implementation, removing duplicate optimization and guaranteeing identical
+  parameters, likelihoods, boundary status, and posterior marginals.
+- Structured Mk fitting now stops before optimization above 256 free transition
+  parameters, and every discrete ASR entry point requires at least two model
+  states while low-level one-state generator construction remains consistent.
+
+### Fixed
+
+- Excluded fitted diffusion/stationary-variance lower-bound limits from regular
+  information-criterion ranking, including the legacy comparison interface;
+  legacy binary ER/SYM and ARD/F81 aliases are now retained without duplicate
+  IC weight.
+- Made dense multivariate covariance-rank diagnostics invariant to trait units,
+  validated complete all-zero measurement-error mappings before selecting the
+  MV-BM fast path, and removed observation-count growth from Gaussian process
+  identifiability tolerance.
+- Preserved tiny positive ER transition probabilities with `expm1`, distinguished
+  floating-point underflow from overflow diagnostics, and corrected ASR PDF font
+  errors to name genuinely missing glyphs with predictable-text preflight.
+
 ## [0.43.0] - 2026-09-02
 
 ### Added

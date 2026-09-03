@@ -129,6 +129,46 @@ def test_mvbm_all_zero_measurement_errors_keep_the_linear_complete_case_path():
         assert actual[node].covariance == pytest.approx(expected[node].covariance)
 
 
+@pytest.mark.parametrize(
+    "errors, message",
+    [
+        ({}, "required for observed tip"),
+        ({"A": (0.0,)}, "dimension mismatch"),
+        (False, "must be supplied as a tip mapping"),
+    ],
+)
+def test_mvbm_validates_all_zero_measurement_error_mappings(errors, message):
+    tree = tree_from("(A:1,B:1,C:1,D:1,E:1)R;")
+    values = {
+        "A": (0.0, 1.0),
+        "B": (0.5, 1.8),
+        "C": (1.2, 0.4),
+        "D": (2.1, -0.2),
+        "E": (2.8, 0.9),
+    }
+    with pytest.raises(ValueError, match=message):
+        compute_mvbm_marginals(
+            tree,
+            values,
+            ("x", "y"),
+            standard_errors=errors,
+        )
+
+
+def test_mvbm_rejects_incomplete_or_invalid_zero_error_entries():
+    tree = tree_from("(A:1,B:1,C:1,D:1,E:1)R;")
+    values = {
+        name: (float(index), float(index + 1)) for index, name in enumerate("ABCDE")
+    }
+    incomplete = {name: (0.0, 0.0) for name in "ABCD"}
+    with pytest.raises(ValueError, match="required for observed tip 'E'"):
+        compute_mvbm_marginals(tree, values, ("x", "y"), standard_errors=incomplete)
+    invalid = {name: (0.0, 0.0) for name in "ABCDE"}
+    invalid["A"] = (None, 0.0)
+    with pytest.raises(ValueError, match="must be numeric and finite"):
+        compute_mvbm_marginals(tree, values, ("x", "y"), standard_errors=invalid)
+
+
 def test_trait_rescaling_and_offsets_transform_mvbm_results():
     tree = tree_from("((A:1,B:2):1,C:2,D:1,E:3)R;")
     values = {

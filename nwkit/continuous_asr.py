@@ -96,9 +96,13 @@ def _ldexp(value, exponent, label):
         raise ValueError(
             f"{label} exceeds floating-point range; rescale the input units."
         ) from exc
-    if not math.isfinite(result) or (value != 0.0 and result == 0.0):
+    if not math.isfinite(result):
         raise ValueError(
             f"{label} exceeds floating-point range; rescale the input units."
+        )
+    if value != 0.0 and result == 0.0:
+        raise ValueError(
+            f"{label} underflows floating-point range; rescale the input units."
         )
     return result
 

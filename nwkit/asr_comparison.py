@@ -10,6 +10,13 @@ from nwkit.asr_models import model_definition
 INFORMATION_CRITERIA = ("aic", "aicc", "bic")
 IC_TIE_ABS_TOLERANCE = 1e-9
 IC_TIE_REL_TOLERANCE = 0.0
+NONREGULAR_VARIANCE_BOUNDARIES = frozenset(
+    {"sigma2_lower_boundary", "root_variance_lower_boundary"}
+)
+
+
+def has_nonregular_variance_boundary(fit_status):
+    return bool(NONREGULAR_VARIANCE_BOUNDARIES.intersection(str(fit_status).split("+")))
 
 
 def _estimated_mapping_count(fit, value_name, flag_name, *, shared_name=None):
@@ -282,31 +289,59 @@ def model_comparison_table(summaries):
     rows = [dict(summary) for summary in summaries]
     if len(rows) < 2:
         raise ValueError("ASR model comparison requires at least two fitted models.")
-    kinds = {row["likelihood_kind"] for row in rows}
+    rankable_indices = [
+        index
+        for index, row in enumerate(rows)
+        if str(row.get("rankable", "yes")).lower() in {"yes", "true", "1"}
+    ]
+    if len(rankable_indices) < 2:
+        raise ValueError(
+            "ASR model comparison requires at least two non-equivalent fitted models."
+        )
+    kinds = {rows[index]["likelihood_kind"] for index in rankable_indices}
     if len(kinds) != 1:
         raise ValueError(
             "ASR models with different likelihood conventions cannot be compared: "
             + ", ".join(sorted(kinds))
         )
-    for row in rows:
+    for index in rankable_indices:
+        row = rows[index]
         fit_status = str(row.get("fit_status", "ok"))
         singular = "singular" in fit_status
         covarion_boundary = row["model"] == "COVARION" and "boundary" in fit_status
-        if singular or covarion_boundary:
+        variance_boundary = has_nonregular_variance_boundary(fit_status)
+        if singular or covarion_boundary or variance_boundary:
             raise ValueError(
                 f"Model {row['model']} has non-regular fit status {fit_status!r} "
                 "and cannot be ranked by regular-model information criteria."
             )
         row.update(_information_criteria(row))
+    representatives = {row["model"]: row for row in rows}
+    for index, row in enumerate(rows):
+        if index in rankable_indices:
+            continue
+        representative_name = str(row.get("equivalent_to", ""))
+        if not representative_name or representative_name not in representatives:
+            raise ValueError(
+                f"Non-rankable model {row['model']} does not name a fitted equivalent."
+            )
+        representative = representatives[representative_name]
+        for criterion in INFORMATION_CRITERIA:
+            row[criterion] = representative[criterion]
     for criterion in INFORMATION_CRITERIA:
-        weights = _criterion_weights(rows, criterion)
+        rankable_rows = [rows[index] for index in rankable_indices]
+        weights = _criterion_weights(rankable_rows, criterion)
         if weights is None:
             for row in rows:
                 row[f"delta_{criterion}"] = np.nan
                 row[f"{criterion}_weight"] = np.nan
             continue
-        for index, row in enumerate(rows):
-            delta, weight = weights.get(index, (np.nan, 0.0))
+        for row in rows:
+            row[f"delta_{criterion}"] = np.nan
+            row[f"{criterion}_weight"] = np.nan
+        for relative_index, index in enumerate(rankable_indices):
+            row = rows[index]
+            delta, weight = weights.get(relative_index, (np.nan, 0.0))
             row[f"delta_{criterion}"] = delta
             row[f"{criterion}_weight"] = weight
     return pd.DataFrame(rows).sort_values("aic", kind="stable").reset_index(drop=True)

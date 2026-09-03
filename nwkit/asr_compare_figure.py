@@ -165,6 +165,9 @@ def _font_family_for_text(text):
         ),
     )
     seen = set()
+    covered_by_any: set[int] = set()
+    closest_supported: set[int] = set()
+    closest_name = None
     for entry in entries:
         if entry.fname in seen:
             continue
@@ -173,12 +176,28 @@ def _font_family_for_text(text):
             supported = set(ft2font.FT2Font(entry.fname).get_charmap())
         except (OSError, RuntimeError, ValueError):
             continue
+        covered = required.intersection(supported)
+        covered_by_any.update(covered)
+        if len(covered) > len(closest_supported):
+            closest_supported = covered
+            closest_name = entry.name
         if required <= supported:
             return entry.name
-    missing = ", ".join(f"U+{codepoint:04X}" for codepoint in sorted(required)[:12])
+    globally_missing = required - covered_by_any
+    missing_codepoints = (
+        globally_missing if globally_missing else required - closest_supported
+    )
+    missing = ", ".join(
+        f"U+{codepoint:04X}" for codepoint in sorted(missing_codepoints)[:12]
+    )
+    detail = (
+        "no installed font contains these characters"
+        if globally_missing
+        else f"the closest single font ({closest_name}) is missing them"
+    )
     raise ValueError(
-        "The ASR comparison PDF contains characters for which no installed font "
-        f"has complete coverage ({missing}). Install a Unicode/CJK font such as "
+        "The ASR comparison PDF has no single installed font with complete "
+        f"coverage; {detail} ({missing}). Install a Unicode/CJK font such as "
         "Noto Sans CJK and retry."
     )
 

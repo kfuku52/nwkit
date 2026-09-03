@@ -46,6 +46,10 @@ numeric category codes such as `0,1,2` **require explicit discrete mode**.
 Category spelling is preserved: `001`, `01`, and `1` remain different discrete
 states. Supplying `--states`, `--model ER`, or another discrete-only option does
 not override numeric detection; incompatible combinations fail with guidance.
+Discrete ASR requires a model state space containing at least two states. If an
+invariant sample observes only one category, provide the biologically valid
+larger state space explicitly with `--states`; a one-state CTMC has no estimable
+transition process and is rejected consistently by every discrete model.
 The selected/requested types are reported on STDERR and in `--model-out`.
 Automatic continuous selection also prints a reminder that numeric category
 codes require explicit discrete mode.
@@ -87,6 +91,11 @@ and ARD it remains the common optimizer starting value. All fitted rates use
 `--rate-bounds`. Fitted models use deterministic homogeneous, patterned, and
 coordinate multistarts, retain the best converged likelihood, and report start
 counts, failures, and lower/upper-bound rates in `--model-out`.
+Structured models are rejected before optimization when they would require more
+than 256 free transition parameters; the same total-parameter guard applies to
+MK-REGIME and the base generator of MK-MIXTURE. ER transition probabilities use
+a cancellation-safe formula, so positive rates remain positive even far below
+the precision at which `exp(-x)` can be distinguished from one.
 
 F81 and GTR require the complete transition graph. F81 uses target-specific
 rates `q_ij = r_j`; equivalently, its equilibrium frequencies are
@@ -276,6 +285,11 @@ the analyst must choose an appropriate scale before running BM.
   is substituted, and optimizer failure is an error. Unresolvable input dynamic
   ranges or an exhausted global-search budget also fail explicitly; a numerical
   lower limit is never reported as a successful rate estimate.
+- A fitted `sigma2_lower_boundary` or `root_variance_lower_boundary` denotes a
+  nonregular zero-variance-component limit. Its numerical likelihood remains a
+  diagnostic, but `asrcompare` and legacy IC comparison exclude it because the
+  result depends on an artificial positive optimizer bound and regular-model
+  AIC/AICc/BIC assumptions do not apply.
 
 `fit_status` describes the numerical rate value and likelihood support, whether
 the rate was fitted or fixed. Use `sigma2_estimated` or `estimation_method` to
@@ -419,8 +433,12 @@ stationary root under the root regime:
 The complete parameter table therefore uses `theta`; `theta,alpha`;
 `theta,sigma2`; or `theta,alpha,sigma2`, respectively. A shared CLI parameter
 may be fixed only when its regime-specific counterpart is not in that table.
-All four models use the same generic affine-Gaussian pruning/smoothing engine,
+Multi-regime fits use the same generic affine-Gaussian pruning/smoothing engine,
 positive parameterization, deterministic multistarts, and boundary reporting.
+With exactly one mapped regime, every OUM-family variant is the same statistical
+model as ordinary stationary OU, so nwkit instead delegates to the canonical OU fitter.
+This gives exactly identical parameters, likelihood, status, and marginals while
+avoiding a second generic optimization.
 Each free non-root regime parameter must affect a positive-length branch
 ancestral to an observation. In OUMVA, a regime appearing only at the root
 cannot have both alpha and sigma2 free because only their stationary-variance
@@ -487,6 +505,10 @@ the linear-time path and is not subject to the dense-coordinate cap. Explicit
 all-zero SE columns are normalized to the same exact-observation path. MV-BM and
 MV-OU both report sample size as the number of distinct observed phylogenetic
 positions, independent of trait dimension or dense/fast implementation path.
+Even an all-zero SE mapping is validated for complete tip coverage, vector
+dimension, finite numeric values, and non-negativity before the fast path is
+selected. Dense covariance rank is calculated in normalized trait coordinates,
+so changing trait/SE units cannot turn a full-rank fit into a singular one.
 Consistent exact observations at one zero-length-contracted position count once;
 conflicting values at that position have zero likelihood and are rejected. A
 covariance component is also rejected explicitly when the observed trait/branch
@@ -535,8 +557,9 @@ families or an individual OU root variant.
 
 The command calculates IC values only from finite fits marked as rankable. It
 retains non-converged fits, singular fits, HRM label-switching fits, nonregular
-COVARION boundaries, and models without a marginal likelihood, but does not rank
-them. Other finite boundary fits remain rankable and are labeled for inspection.
+COVARION boundaries, zero-variance-component boundaries, and models without a
+marginal likelihood, but does not rank them. Other finite boundary fits remain
+rankable and are labeled for inspection.
 THRESHOLD is reported as `no_likelihood` without running its MCMC because its
 posterior diagnostics do not define AIC/AICc/BIC. Structurally identical
 parameterizations are retained as `status=equivalent`, but only one
@@ -578,7 +601,9 @@ No bar plot or cross-set ranking is shown. `--criterion aic|aicc|bic` selects
 the displayed ranking while all three criteria remain in the TSV. Unicode text
 uses an installed font with verified glyph coverage, and rendered-width fitting
 prevents wide titles or diagnostics from clipping; if no installed font covers
-the requested text, PDF creation fails explicitly instead of emitting tofu.
+the requested text, predictable labels are rejected before model fitting and PDF
+creation fails explicitly instead of emitting tofu. The error lists the glyphs
+actually missing from installed font coverage.
 
 The TSV includes candidate identity and root provenance; compatibility group;
 fit, optimizer, and parameter-contract diagnostics; log likelihood and all IC
@@ -600,13 +625,18 @@ alongside a normal `nwkit asr` reconstruction and reports log likelihood,
 parameter count, AIC/AICc/BIC, deltas, and weights. It remains available as the
 compact backward-compatible interface when every requested model already shares
 one likelihood convention.
+For binary data it retains ER/SYM and ARD/F81 aliases as explicit
+`status=equivalent` rows but fits each exact transition/root contract once and
+leaves alias weights empty, preventing duplicate parameterizations from
+receiving multiple shares of the IC weight.
 Only models sharing one likelihood convention may be compared: discrete ML
 models are separate from proper-root OU ML and flat-root integrated BM-family
 fits. Discrete BIC/AICc use the number of informative observed tip-character
 entries (fully missing or all-state observations contribute no sample). Singular,
-non-finite, and structurally non-regular COVARION boundary fits are rejected
-instead of being ranked under regular-model information criteria; other boundary
-statuses remain visible in the comparison table for interpretation.
+non-finite, zero-variance-component, and structurally non-regular COVARION
+boundary fits are rejected instead of being ranked under regular-model
+information criteria; other boundary statuses remain visible in the comparison
+table for interpretation.
 
 For any scalar Gaussian model, `--posterior-samples-out` writes exact joint
 all-node conditional draws using forward-filter/backward sampling.

@@ -32,9 +32,52 @@ def test_f81_uses_target_specific_rates_and_stationary_frequencies():
     np.testing.assert_allclose(stationary_distribution(matrix), [1 / 6, 2 / 6, 3 / 6])
 
 
-def test_single_state_f81_has_no_unidentifiable_rate_parameter():
-    assert parameter_labels("F81", ["only"]) == []
-    np.testing.assert_array_equal(build_rate_matrix("F81", ["only"], []), [[0.0]])
+@pytest.mark.parametrize("model", ["ER", "SYM", "ARD", "F81", "GTR"])
+def test_single_state_rate_matrix_builders_are_consistent(model):
+    assert parameter_labels(model, ["only"]) == []
+    np.testing.assert_array_equal(build_rate_matrix(model, ["only"], []), [[0.0]])
+
+
+@pytest.mark.parametrize("model,num_states", [("ARD", 17), ("GTR", 23)])
+def test_large_structured_models_stop_before_optimization(
+    model, num_states, monkeypatch
+):
+    tree = tree_from("(A:1,B:1)R;")
+    states = [f"s{index}" for index in range(num_states)]
+    observed = {"A": states[0], "B": states[1]}
+    likelihood = {
+        name: np.asarray([state == value for state in states], dtype=float)
+        for name, value in observed.items()
+    }
+
+    def unexpected_optimizer(*_args, **_kwargs):
+        raise AssertionError("optimizer should not run above the parameter cap")
+
+    monkeypatch.setattr(asr, "deterministic_multistart", unexpected_optimizer)
+    with pytest.raises(ValueError, match="more than 256 free transition parameters"):
+        asr.compute_mk_marginals(
+            tree,
+            states,
+            observed,
+            likelihood,
+            model=model,
+            root_prior_mode="equal",
+        )
+
+
+@pytest.mark.parametrize("model", ["ER", "SYM", "ARD", "F81", "GTR", "CUSTOM"])
+def test_mk_models_reject_a_one_state_asr_problem_consistently(model):
+    tree = tree_from("(A:1,B:1)R;")
+    options = {"fixed_rate_matrix": np.zeros((1, 1))} if model == "CUSTOM" else {}
+    with pytest.raises(ValueError, match="Discrete ASR requires at least two states"):
+        asr.compute_mk_marginals(
+            tree,
+            ["only"],
+            {"A": "only", "B": "only"},
+            {"A": np.ones(1), "B": np.ones(1)},
+            model=model,
+            **options,
+        )
 
 
 def test_gtr_satisfies_detailed_balance_with_fitted_frequency_ratios():

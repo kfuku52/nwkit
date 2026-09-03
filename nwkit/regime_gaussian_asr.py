@@ -24,7 +24,7 @@ from nwkit.gaussian_tree import (
     ou_transition,
 )
 from nwkit.optimization import MultistartResult, deterministic_multistart
-from nwkit.ou_asr import default_alpha_bounds
+from nwkit.ou_asr import compute_ou_marginals, default_alpha_bounds
 from nwkit.rooting_state import require_rooted
 from nwkit.util import validate_unique_named_leaves
 
@@ -602,6 +602,67 @@ def _validate_regime_theta_design(
         )
 
 
+def _single_regime_ou_reduction(
+    tree,
+    values_by_leaf,
+    regime_assignment,
+    setup,
+    *,
+    regime_parameters_source,
+    standard_errors,
+):
+    """Use the canonical OU1 fitter when every regime parameter is shared."""
+
+    regime = setup.regimes[0]
+
+    def fixed_value(values):
+        return None if values is None else values[regime]
+
+    marginals, ordinary = compute_ou_marginals(
+        tree,
+        values_by_leaf,
+        alpha=fixed_value(setup.fixed_alpha),
+        sigma2=fixed_value(setup.fixed_sigma),
+        theta=fixed_value(setup.fixed_theta),
+        alpha_bounds=setup.alpha_bounds,
+        standard_errors=standard_errors,
+        _tree_validated=True,
+    )
+    alpha_by_regime = {regime: ordinary.alpha}
+    sigma_by_regime = {regime: ordinary.sigma2}
+    theta_by_regime = {regime: ordinary.theta}
+    return marginals, RegimeOUFit(
+        model=setup.model,
+        alpha=None if setup.varying_alpha else ordinary.alpha,
+        alpha_by_regime=alpha_by_regime,
+        alpha_estimated=ordinary.alpha_estimated,
+        theta_by_regime=theta_by_regime,
+        theta_estimated=ordinary.theta_estimated,
+        sigma2=None if setup.varying_sigma else ordinary.sigma2,
+        sigma2_by_regime=sigma_by_regime,
+        sigma2_estimated=ordinary.sigma2_estimated,
+        root_variance=ordinary.root_variance,
+        log_likelihood=ordinary.log_likelihood,
+        num_observed=ordinary.num_observed,
+        num_effective_observations=ordinary.num_effective_observations,
+        num_observed_positions=ordinary.num_observed_positions,
+        regimes=setup.regimes,
+        root_regime=regime_assignment.root_regime,
+        regime_map_source=regime_assignment.source,
+        regime_parameters_source=regime_parameters_source,
+        fit_status=ordinary.fit_status,
+        optimizer_success=ordinary.optimizer_success,
+        optimizer_message=(
+            "single-regime reduction to stationary OU; " + ordinary.optimizer_message
+        ),
+        optimizer_starts=ordinary.optimizer_starts,
+        optimizer_converged_starts=ordinary.optimizer_converged_starts,
+        optimizer_failed_starts=ordinary.optimizer_failed_starts,
+        alpha_bounds=ordinary.alpha_bounds,
+        root_variance_bounds=ordinary.root_variance_bounds,
+    )
+
+
 def compute_regime_ou_marginals(
     tree,
     values_by_leaf,
@@ -631,6 +692,15 @@ def compute_regime_ou_marginals(
         alpha_bounds,
         _tree_validated,
     )
+    if len(setup.regimes) == 1:
+        return _single_regime_ou_reduction(
+            tree,
+            values_by_leaf,
+            regime_assignment,
+            setup,
+            regime_parameters_source=regime_parameters_source,
+            standard_errors=standard_errors,
+        )
     names, initial, parameter_bounds = _regime_ou_parameter_vectors(
         tree, values_by_leaf, regime_assignment, setup
     )
