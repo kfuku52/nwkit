@@ -22,6 +22,7 @@ _DISCRETE_ONLY = (
     "rate",
     "rate_bounds",
     "rate_matrix",
+    "rate_design",
     "transition_graph",
     "hidden_categories",
     "mixture_model",
@@ -45,6 +46,7 @@ _CONTINUOUS_ONLY = (
     "standard_error_column",
     "ci_level",
     "alpha",
+    "alpha_by_trait",
     "alpha_bounds",
     "theta",
     "eb_rate",
@@ -66,7 +68,9 @@ _REGIME_MODELS = frozenset(
 )
 _CONTINUOUS_REGIME_MODELS = frozenset(_REGIME_MODELS - {"MK-REGIME"})
 _TRANSFORMED_MODELS = frozenset({"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"})
-_OU_MODELS = frozenset({"OU", "MV-OU", "OUM", "OUMA", "OUMV", "OUMVA"})
+_OU_MODELS = frozenset({"OU", "MV-OU", "MV-OU-DIAG", "OUM", "OUMA", "OUMV", "OUMVA"})
+_MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU", "MV-OU-DIAG"})
+_PAGEL_MODELS = frozenset({"PAGEL-INDEPENDENT", "PAGEL-DEPENDENT"})
 
 
 def _mode_switch_hint(trait_type):
@@ -142,6 +146,7 @@ def _validate_regime_arguments(args, model):
 
 def _validate_custom_and_graph_options(args, model):
     rate_matrix = getattr(args, "rate_matrix", None)
+    rate_design = getattr(args, "rate_design", None)
     transition_graph = getattr(args, "transition_graph", None)
     if model == "CUSTOM" and rate_matrix in (None, ""):
         raise ValueError("--model CUSTOM requires --rate-matrix.")
@@ -155,6 +160,20 @@ def _validate_custom_and_graph_options(args, model):
         raise ValueError("--rate-bounds cannot be combined with --model CUSTOM.")
     if model == "MK-REGIME" and rate_matrix not in (None, ""):
         raise ValueError("--rate-matrix is not supported with --model MK-REGIME.")
+    if model == "MK-DESIGN" and rate_design in (None, ""):
+        raise ValueError("--model MK-DESIGN requires --rate-design.")
+    if model != "MK-DESIGN" and rate_design not in (None, ""):
+        raise ValueError("--rate-design requires --model MK-DESIGN.")
+    if model == "MK-DESIGN" and transition_graph not in (None, ""):
+        raise ValueError(
+            "--transition-graph cannot be combined with --model MK-DESIGN; "
+            "the rate design defines its allowed edges."
+        )
+    if model in _PAGEL_MODELS and transition_graph not in (None, ""):
+        raise ValueError(
+            "--transition-graph is not supported by Pagel models; their "
+            "four-state transition graph is fixed."
+        )
     if transition_graph == "ordered" and getattr(args, "states", None) in (None, ""):
         raise ValueError("--transition-graph ordered requires explicit --states.")
     hidden_categories = getattr(args, "hidden_categories", None)
@@ -338,25 +357,31 @@ def _validate_multivariate_options(args, model):
         "bootstrap_out",
         "bootstrap_simulations",
     )
-    if model in {"MV-BM", "MV-OU"}:
+    if model in _MULTIVARIATE_MODELS:
         if getattr(args, "sigma2", None) is not None:
             raise ValueError("--sigma2 is not supported for multivariate ASR models.")
-        if model == "MV-OU" and getattr(args, "theta", None) is not None:
+        if (
+            model in {"MV-OU", "MV-OU-DIAG"}
+            and getattr(args, "theta", None) is not None
+        ):
             raise ValueError(
-                "--theta is scalar; MV-OU estimates one optimum per trait."
+                "--theta is scalar; multivariate OU models estimate one optimum "
+                "per trait."
             )
         if any(getattr(args, name, None) is not None for name in diagnostic_options):
             raise ValueError(
                 "Simulation diagnostics currently support scalar continuous models, "
-                "not MV-BM or MV-OU."
+                "not MV-BM, MV-OU, or MV-OU-DIAG."
             )
         if getattr(args, "compare_models", None) not in (None, ""):
             raise ValueError(
                 "--compare-models currently supports scalar continuous traits, "
-                "not MV-BM or MV-OU."
+                "not MV-BM, MV-OU, or MV-OU-DIAG."
             )
     elif getattr(args, "covariance_out", None) not in (None, ""):
-        raise ValueError("--covariance-out requires --model MV-BM or MV-OU.")
+        raise ValueError(
+            "--covariance-out requires --model MV-BM, MV-OU, or MV-OU-DIAG."
+        )
 
 
 def _validate_diagnostic_counts(args):
@@ -379,18 +404,28 @@ def _validate_continuous_model_arguments(args, model, root_prior):
     if model not in _OU_MODELS:
         supplied = [
             "--" + name.replace("_", "-")
-            for name in ("alpha", "alpha_bounds", "theta")
+            for name in ("alpha", "alpha_by_trait", "alpha_bounds", "theta")
             if getattr(args, name, None) is not None
         ]
         if supplied:
             raise ValueError(
                 "Options requiring an OU model: " + ", ".join(supplied) + "."
             )
-    elif (
-        getattr(args, "alpha", None) is not None
-        and getattr(args, "alpha_bounds", None) is not None
-    ):
-        raise ValueError("--alpha-bounds cannot be combined with fixed --alpha.")
+    else:
+        alpha = getattr(args, "alpha", None)
+        alpha_by_trait = getattr(args, "alpha_by_trait", None)
+        alpha_bounds = getattr(args, "alpha_bounds", None)
+        if alpha_by_trait is not None and model != "MV-OU-DIAG":
+            raise ValueError("--alpha-by-trait requires --model MV-OU-DIAG.")
+        if alpha is not None and alpha_by_trait is not None:
+            raise ValueError("--alpha cannot be combined with --alpha-by-trait.")
+        if alpha_bounds is not None and (
+            alpha is not None or alpha_by_trait is not None
+        ):
+            raise ValueError(
+                "--alpha-bounds cannot be combined with fixed --alpha or "
+                "--alpha-by-trait."
+            )
     _validate_transformed_options(args, model)
     if (
         model not in {"BM-DRIFT", "BMS-DRIFT"}
@@ -562,7 +597,19 @@ def asr_trait_columns(state_column, model):
                 "MK-MIXTURE --state-column contains duplicated character columns."
             )
         return columns
-    if model not in {"MV-BM", "MV-OU"}:
+    if model in _PAGEL_MODELS:
+        columns = tuple(item.strip() for item in str(state_column).split(","))
+        if len(columns) != 2 or any(item == "" for item in columns):
+            raise ValueError(
+                "Pagel models require exactly two comma-separated "
+                "--state-column values."
+            )
+        if columns[0] == columns[1]:
+            raise ValueError(
+                "Pagel --state-column values must name two distinct traits."
+            )
+        return columns
+    if model not in _MULTIVARIATE_MODELS:
         return (state_column,)
     columns = tuple(item.strip() for item in str(state_column).split(","))
     if len(columns) < 2 or any(item == "" for item in columns):
@@ -580,7 +627,7 @@ def asr_trait_columns(state_column, model):
 def asr_standard_error_columns(value, model, trait_columns):
     if value in (None, ""):
         return None
-    if model not in {"MV-BM", "MV-OU"}:
+    if model not in _MULTIVARIATE_MODELS:
         return value
     columns = tuple(item.strip() for item in str(value).split(","))
     if len(columns) != len(trait_columns) or any(item == "" for item in columns):

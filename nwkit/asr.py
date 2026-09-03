@@ -29,6 +29,7 @@ from nwkit.asr_models import model_names
 from nwkit.discrete_asr_models import (
     FREQUENCY_RATIO_BOUNDS,
     model_equivalence_family,
+    read_rate_design,
     read_rate_matrix,
     read_transition_graph,
     stationary_distribution,
@@ -324,17 +325,25 @@ def _root_prior_for_matrix(
     )
 
 
-def _num_rate_parameters(model, num_states, transition_graph=None):
+def _num_rate_parameters(model, num_states, transition_graph=None, rate_design=None):
     states = [str(index) for index in range(num_states)]
+    if model == "MK-DESIGN":
+        if rate_design is None:
+            raise ValueError("--model MK-DESIGN requires --rate-design.")
+        return len(rate_design.class_names)
     return len(_structured_parameter_labels(model, states, transition_graph))
 
 
-def _rate_parameter_labels(model, states, transition_graph=None):
-    return _structured_parameter_labels(model, states, transition_graph)
+def _rate_parameter_labels(model, states, transition_graph=None, rate_design=None):
+    return _structured_parameter_labels(
+        model, states, transition_graph, rate_design=rate_design
+    )
 
 
-def _build_rate_matrix(model, states, rates, transition_graph=None):
-    return _build_structured_rate_matrix(model, states, rates, transition_graph)
+def _build_rate_matrix(model, states, rates, transition_graph=None, rate_design=None):
+    return _build_structured_rate_matrix(
+        model, states, rates, transition_graph, rate_design=rate_design
+    )
 
 
 def _transition_matrix(rate_matrix, branch_length):
@@ -646,9 +655,12 @@ def _fixed_parametric_rate_fit(
     rates,
     rate_bounds,
     transition_graph,
+    rate_design,
     prior_for,
 ):
-    rate_matrix = _build_rate_matrix(model, states, rates, transition_graph)
+    rate_matrix = _build_rate_matrix(
+        model, states, rates, transition_graph, rate_design
+    )
     final_prior = prior_for(rate_matrix)
     return {
         "model": model,
@@ -665,9 +677,16 @@ def _fixed_parametric_rate_fit(
 
 
 def _validate_initial_rate_likelihood(
-    tree, states, likelihood_by_leaf, model, values, transition_graph, prior_for
+    tree,
+    states,
+    likelihood_by_leaf,
+    model,
+    values,
+    transition_graph,
+    rate_design,
+    prior_for,
 ):
-    matrix = _build_rate_matrix(model, states, values, transition_graph)
+    matrix = _build_rate_matrix(model, states, values, transition_graph, rate_design)
     try:
         value = _log_likelihood(tree, likelihood_by_leaf, prior_for(matrix), matrix)
     except (ValueError, ArithmeticError):
@@ -743,12 +762,13 @@ def _fit_parametric_rate_matrix(
     rate=None,
     rate_bounds=None,
     transition_graph=None,
+    rate_design=None,
     root_prior_factory=None,
 ):
     def prior_for(matrix):
         return _rate_root_prior(root_prior, root_prior_factory, matrix)
 
-    num_params = _num_rate_parameters(model, len(states), transition_graph)
+    num_params = _num_rate_parameters(model, len(states), transition_graph, rate_design)
     if num_params > _MAX_FREE_TRANSITION_PARAMETERS:
         raise ValueError(
             f"{model} would require more than {_MAX_FREE_TRANSITION_PARAMETERS} "
@@ -764,6 +784,7 @@ def _fit_parametric_rate_matrix(
             [],
             rate_bounds,
             transition_graph,
+            rate_design,
             prior_for,
         )
 
@@ -779,11 +800,14 @@ def _fit_parametric_rate_matrix(
             [fixed_rate],
             rate_bounds,
             transition_graph,
+            rate_design,
             prior_for,
         )
 
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
-    parameter_kinds = _structured_parameter_kinds(model, states, transition_graph)
+    parameter_kinds = _structured_parameter_kinds(
+        model, states, transition_graph, rate_design=rate_design
+    )
     parameter_bounds = [
         FREQUENCY_RATIO_BOUNDS if kind == "frequency_ratio" else rate_bounds
         for kind in parameter_kinds
@@ -791,7 +815,7 @@ def _fit_parametric_rate_matrix(
     lower_logs = np.log([bounds[0] for bounds in parameter_bounds])
     upper_logs = np.log([bounds[1] for bounds in parameter_bounds])
     initial_values = _initial_model_parameters(
-        model, states, initial_rate, transition_graph
+        model, states, initial_rate, transition_graph, rate_design=rate_design
     )
     initial_logs = np.log(initial_values)
 
@@ -802,13 +826,16 @@ def _fit_parametric_rate_matrix(
         model,
         initial_values,
         transition_graph,
+        rate_design,
         prior_for,
     )
 
     def objective(log_rates):
         try:
             rates = np.exp(log_rates)
-            rate_matrix = _build_rate_matrix(model, states, rates, transition_graph)
+            rate_matrix = _build_rate_matrix(
+                model, states, rates, transition_graph, rate_design
+            )
             current_prior = prior_for(rate_matrix)
             log_likelihood = _log_likelihood(
                 tree, likelihood_by_leaf, current_prior, rate_matrix
@@ -819,6 +846,9 @@ def _fit_parametric_rate_matrix(
             return 1e100
         return -log_likelihood
 
+    is_pagel_design = rate_design is not None and rate_design.source.startswith(
+        "PAGEL-"
+    )
     try:
         optimized = deterministic_multistart(
             objective,
@@ -827,14 +857,21 @@ def _fit_parametric_rate_matrix(
             maxiter=500,
             minimizer=minimize,
             ftol=None,
-            additional_starts=_parametric_rate_starts(
-                lower_logs, upper_logs, initial_logs
+            additional_starts=(
+                ()
+                if is_pagel_design
+                else _parametric_rate_starts(lower_logs, upper_logs, initial_logs)
             ),
+            fractions=(0.2, 0.5, 0.8)
+            if is_pagel_design
+            else (0.1, 0.25, 0.5, 0.75, 0.9),
         )
     except ValueError as exc:
         raise ValueError(f"Failed to estimate Mk model parameters: {exc}") from exc
     rates = np.exp(optimized.x)
-    rate_matrix = _build_rate_matrix(model, states, rates, transition_graph)
+    rate_matrix = _build_rate_matrix(
+        model, states, rates, transition_graph, rate_design
+    )
     final_prior = prior_for(rate_matrix)
     log_likelihood = _log_likelihood(tree, likelihood_by_leaf, final_prior, rate_matrix)
     result = {
@@ -864,6 +901,7 @@ def _fit_rate_matrix(
     rate=None,
     rate_bounds=None,
     transition_graph=None,
+    rate_design=None,
     fixed_rate_matrix=None,
     root_prior_factory=None,
     regime_assignment=None,
@@ -890,7 +928,7 @@ def _fit_rate_matrix(
     num_parameters = (
         1
         if model == "MK-REGIME"
-        else _num_rate_parameters(model, len(states), transition_graph)
+        else _num_rate_parameters(model, len(states), transition_graph, rate_design)
     )
     fully_fixed = num_parameters == 0 or (model == "ER" and rate is not None)
     if not _has_informative_tip_likelihood(likelihood_by_leaf) and not fully_fixed:
@@ -920,6 +958,7 @@ def _fit_rate_matrix(
         rate=rate,
         rate_bounds=rate_bounds,
         transition_graph=transition_graph,
+        rate_design=rate_design,
         root_prior_factory=root_prior_factory,
     )
 
@@ -1165,6 +1204,16 @@ def _root_prior_configuration(
     return root_prior, root_prior_factory
 
 
+def _add_rate_design_fit_metadata(fit, rate_design):
+    if rate_design is not None:
+        fit.update(
+            {
+                "rate_class_names": rate_design.class_names,
+                "rate_design_source": rate_design.source,
+            }
+        )
+
+
 def compute_mk_marginals(
     tree,
     states,
@@ -1175,6 +1224,7 @@ def compute_mk_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    rate_design=None,
     fixed_rate_matrix=None,
     regime_assignment=None,
     regime_model="ER",
@@ -1192,6 +1242,7 @@ def compute_mk_marginals(
         rate=rate,
         rate_bounds=DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds,
         transition_graph=transition_graph,
+        rate_design=rate_design,
         fixed_rate_matrix=fixed_rate_matrix,
         root_prior_factory=root_prior_factory,
         regime_assignment=regime_assignment,
@@ -1229,6 +1280,7 @@ def compute_mk_marginals(
             "posterior_by_node": posterior_by_node,
         }
     )
+    _add_rate_design_fit_metadata(fit, rate_design)
     return posterior_by_node, fit
 
 
@@ -1960,6 +2012,8 @@ def _is_missing_tip(node, observed_state_by_leaf):
 def _is_missing_observation(value):
     if value is None:
         return True
+    if bool(getattr(value, "is_partial_missing", False)):
+        return True
     return isinstance(value, (tuple, list)) and any(item is None for item in value)
 
 
@@ -2092,6 +2146,7 @@ def _base_discrete_model_row(states, root_prior_mode, fit):
         "root_prior_values": ",".join(str(float(value)) for value in fit["root_prior"]),
         "rate_estimated": bool(fit["rate_estimated"]),
         "log_likelihood": float(fit["log_likelihood"]),
+        "likelihood_kind": fit.get("likelihood_kind", "discrete_ml"),
         "rate_bounds": _model_rate_bounds_text(fit),
         "transition_graph": fit.get("transition_graph", "complete"),
         "regime_model": fit.get("regime_model", ""),
@@ -2177,6 +2232,17 @@ def _augment_discrete_model_row(row, fit, state_ids):
             row[f"equilibrium_{state_id}"] = float(probability)
     if fit["model"] == "MK-MIXTURE":
         _add_mixture_metadata(row, fit)
+    if fit.get("rate_class_names") is not None:
+        class_names = tuple(fit["rate_class_names"])
+        row["rate_design"] = fit.get("rate_design_source", "")
+        row["rate_classes"] = ",".join(class_names)
+        for class_name, rate in zip(class_names, fit["rates"], strict=True):
+            row[f"rate_class_{_safe_column_state(class_name)}"] = float(rate)
+    if fit.get("pagel_trait_columns") is not None:
+        row["pagel_trait_columns"] = ",".join(fit["pagel_trait_columns"])
+        row["pagel_trait1_states"] = ",".join(fit["pagel_trait_states"][0])
+        row["pagel_trait2_states"] = ",".join(fit["pagel_trait_states"][1])
+        row["pagel_joint_states"] = fit["pagel_joint_states_json"]
     if fit["model"] == "MK-REGIME":
         _add_regime_matrix_metadata(row, fit, state_ids)
     if fit["model"] in {"HRM", "COVARION"}:
@@ -2854,10 +2920,16 @@ def asr_main(args):
     standard_error_columns = asr_standard_error_columns(
         getattr(args, "standard_error_column", None), model, trait_columns
     )
+    multi_column_models = {
+        "MV-BM",
+        "MV-OU",
+        "MV-OU-DIAG",
+        "MK-MIXTURE",
+        "PAGEL-INDEPENDENT",
+        "PAGEL-DEPENDENT",
+    }
     state_column_input = (
-        trait_columns
-        if model in {"MV-BM", "MV-OU", "MK-MIXTURE"}
-        else args.state_column
+        trait_columns if model in multi_column_models else args.state_column
     )
     trait_df = read_asr_table(
         args.trait,
@@ -2882,11 +2954,26 @@ def asr_main(args):
     handlers[trait_type](tree, trait_df, effective, settings, targets)
 
 
+def _warn_discrete_rate_fit(fit):
+    if fit["rate_estimated"] and (
+        fit.get("fit_status") != "ok" or fit.get("optimizer_failed_starts", 0)
+    ):
+        sys.stderr.write(
+            "Discrete ASR: Mk fit status={}; {}/{} optimizer starts converged.\n".format(
+                fit.get("fit_status", "unknown"),
+                fit.get("optimizer_converged_starts", 0),
+                fit.get("optimizer_starts", 0),
+            )
+        )
+
+
 def _run_discrete_asr(tree, trait_df, args, settings, targets):
     from nwkit.asr_regimes import read_regime_map
 
     if settings.model == "MK-MIXTURE":
         return _run_discrete_mixture_asr(tree, trait_df, args, settings, targets)
+    if settings.model in {"PAGEL-INDEPENDENT", "PAGEL-DEPENDENT"}:
+        return _run_pagel_asr(tree, trait_df, args, settings, targets)
     leaf_names = list(tree.leaf_names())
     fixed_rate_matrix = None
     states_arg = getattr(args, "states", None)
@@ -2968,9 +3055,14 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
                 f"min ESS={threshold_fit.ess_min:.4g}.\n"
             )
         return
+    rate_design = None
     if settings.model == "CUSTOM":
         transition_graph = None
         transition_graph_source = "fixed-Q"
+    elif settings.model == "MK-DESIGN":
+        rate_design = read_rate_design(args.rate_design, states)
+        transition_graph = None
+        transition_graph_source = f"rate-design:{rate_design.source}"
     else:
         transition_graph, transition_graph_source = read_transition_graph(
             getattr(args, "transition_graph", None),
@@ -3007,6 +3099,7 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
         posterior_by_node, fit = compute_mk_marginals(
             **common_options,
             model=settings.model,
+            rate_design=rate_design,
             fixed_rate_matrix=fixed_rate_matrix,
             regime_assignment=regime_assignment,
             regime_model=getattr(args, "regime_model", None) or "ER",
@@ -3014,22 +3107,14 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
     fit["transition_graph"] = transition_graph_source
     fit["rate_matrix_source"] = rate_matrix_source
     fit["trait_type_requested"] = getattr(args, "trait_type", "auto")
-    if fit["rate_estimated"] and (
-        fit.get("fit_status") != "ok" or fit.get("optimizer_failed_starts", 0)
-    ):
-        sys.stderr.write(
-            "Discrete ASR: Mk fit status={}; {}/{} optimizer starts converged.\n".format(
-                fit.get("fit_status", "unknown"),
-                fit.get("optimizer_converged_starts", 0),
-                fit.get("optimizer_starts", 0),
-            )
-        )
+    _warn_discrete_rate_fit(fit)
     _write_discrete_model_comparison(
         tree,
         states,
         observed_state_by_leaf,
         likelihood_by_leaf,
         transition_graph,
+        rate_design,
         args,
         settings,
         fit,
@@ -3068,6 +3153,7 @@ def _write_discrete_model_comparison(
     observed_state_by_leaf,
     likelihood_by_leaf,
     transition_graph,
+    rate_design,
     args,
     settings,
     primary_fit,
@@ -3077,14 +3163,17 @@ def _write_discrete_model_comparison(
         return
     from nwkit.asr_comparison import model_comparison_table, summarize_fit
 
-    supported = {"ER", "SYM", "ARD", "F81", "GTR", "COVARION"}
+    supported = {"ER", "SYM", "ARD", "F81", "GTR", "MK-DESIGN", "COVARION"}
     models = _comparison_model_names(value)
     unsupported = [model for model in models if model not in supported]
     if unsupported:
         raise ValueError(
             "Discrete ASR comparison currently supports ER, SYM, ARD, F81, "
-            "GTR, and COVARION; unsupported: " + ", ".join(unsupported)
+            "GTR, MK-DESIGN, and COVARION; unsupported: " + ", ".join(unsupported)
         )
+    comparison_graph = (
+        rate_design.graph if rate_design is not None else transition_graph
+    )
     summaries = []
     representatives: dict[tuple[Any, ...], tuple[str, dict[str, Any]]] = {}
     has_equivalent_alias = False
@@ -3093,12 +3182,17 @@ def _write_discrete_model_comparison(
         if model != "COVARION" and not (
             model == "ER" and getattr(args, "rate", None) is not None
         ):
-            family = model_equivalence_family(model, states, transition_graph)
+            candidate_design = rate_design if model == "MK-DESIGN" else None
+            candidate_graph = None if candidate_design is not None else comparison_graph
+            family = model_equivalence_family(
+                model,
+                states,
+                candidate_graph,
+                rate_design=candidate_design,
+            )
             equivalence_key = (
                 family,
                 settings.root_prior,
-                transition_graph.shape,
-                transition_graph.tobytes(),
             )
         if equivalence_key is not None and equivalence_key in representatives:
             representative_model, fit = representatives[equivalence_key]
@@ -3133,9 +3227,10 @@ def _write_discrete_model_comparison(
                 rate=getattr(args, "rate", None),
                 root_prior_mode=settings.root_prior,
                 rate_bounds=_parse_rate_bounds(getattr(args, "rate_bounds", None)),
-                transition_graph=transition_graph,
+                transition_graph=comparison_graph,
             )
         else:
+            candidate_design = rate_design if model == "MK-DESIGN" else None
             _, fit = compute_mk_marginals(
                 tree,
                 states,
@@ -3145,7 +3240,10 @@ def _write_discrete_model_comparison(
                 rate=getattr(args, "rate", None),
                 root_prior_mode=settings.root_prior,
                 rate_bounds=_parse_rate_bounds(getattr(args, "rate_bounds", None)),
-                transition_graph=transition_graph,
+                transition_graph=(
+                    None if candidate_design is not None else comparison_graph
+                ),
+                rate_design=candidate_design,
             )
         if equivalence_key is not None:
             representatives[equivalence_key] = (model, fit)
@@ -3223,6 +3321,95 @@ def _write_mixture_tree(
         quiet=True,
         props=props,
     )
+
+
+def _write_pagel_model_comparison(tree, data, args, settings, primary_fit):
+    value = getattr(args, "compare_models", None)
+    if value in (None, ""):
+        return
+    from nwkit.asr_comparison import model_comparison_table, summarize_fit
+    from nwkit.pagel_asr import PAGEL_MODELS, compute_pagel_marginals
+
+    models = _comparison_model_names(value)
+    unsupported = [model for model in models if model not in PAGEL_MODELS]
+    if unsupported:
+        raise ValueError(
+            "Pagel ASR comparison supports PAGEL-INDEPENDENT and "
+            "PAGEL-DEPENDENT only; unsupported: " + ", ".join(unsupported)
+        )
+    summaries = []
+    for model in models:
+        if model == settings.model:
+            fit = primary_fit
+        else:
+            _, fit = compute_pagel_marginals(
+                tree,
+                data,
+                model=model,
+                rate=getattr(args, "rate", None),
+                root_prior_mode=settings.root_prior,
+                rate_bounds=_parse_rate_bounds(getattr(args, "rate_bounds", None)),
+            )
+        summaries.append(summarize_fit(model, fit, trait_type="discrete"))
+    _write_table(model_comparison_table(summaries), args.model_comparison_out)
+
+
+def _run_pagel_asr(tree, trait_df, args, settings, targets):
+    from nwkit.pagel_asr import compute_pagel_marginals, prepare_pagel_data
+
+    trait_columns = asr_trait_columns(args.state_column, settings.model)
+    data = prepare_pagel_data(
+        args.trait,
+        trait_columns,
+        list(tree.leaf_names()),
+        states_arg=getattr(args, "states", None),
+        missing_values_arg=getattr(args, "missing_values", None),
+        ambiguous_separator=getattr(
+            args, "ambiguous_separator", DEFAULT_AMBIGUOUS_SEPARATOR
+        ),
+        unmatched=getattr(args, "unmatched", "warn"),
+        trait_df=trait_df,
+    )
+    posterior_by_node, fit = compute_pagel_marginals(
+        tree,
+        data,
+        model=settings.model,
+        rate=getattr(args, "rate", None),
+        root_prior_mode=settings.root_prior,
+        rate_bounds=_parse_rate_bounds(getattr(args, "rate_bounds", None)),
+    )
+    fit.update(
+        {
+            "transition_graph": "pagel-single-trait-changes",
+            "rate_matrix_source": "estimated",
+            "trait_type_requested": getattr(args, "trait_type", "auto"),
+        }
+    )
+    _warn_discrete_rate_fit(fit)
+    _write_pagel_model_comparison(tree, data, args, settings, fit)
+    table = _build_output_table(
+        tree,
+        data.joint_states,
+        data.observed_state_by_leaf,
+        posterior_by_node,
+        targets,
+        settings.output,
+    )
+    _write_table(table, args.outfile)
+    _write_model_table(
+        data.joint_states,
+        settings.root_prior,
+        fit,
+        getattr(args, "model_out", None),
+    )
+    _write_annotated_tree(
+        tree,
+        data.joint_states,
+        posterior_by_node,
+        data.observed_state_by_leaf,
+        args,
+    )
+    _write_stochastic_map(tree, data.joint_states, fit, args)
 
 
 def _run_discrete_mixture_asr(tree, trait_df, args, settings, targets):
@@ -3321,7 +3508,7 @@ def _run_discrete_mixture_asr(tree, trait_df, args, settings, targets):
 
 
 def _continuous_observations(tree, trait_df, args, settings):
-    if settings.model in {"MV-BM", "MV-OU"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
         trait_columns = asr_trait_columns(args.state_column, settings.model)
         observed = continuous_tip_vectors(
             trait_df, trait_columns, list(tree.leaf_names())
@@ -3450,6 +3637,19 @@ def _fit_continuous_model(
             observed,
             trait_columns,
             alpha=getattr(args, "alpha", None),
+            alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
+            standard_errors=errors,
+        )
+    if model == "MV-OU-DIAG":
+        from nwkit.multivariate_gaussian_asr import fit_dense_mvou_diag
+        from nwkit.ou_asr import parse_alpha_bounds
+
+        return fit_dense_mvou_diag(
+            tree,
+            observed,
+            trait_columns,
+            alpha=getattr(args, "alpha", None),
+            alpha_by_trait=getattr(args, "alpha_by_trait", None),
             alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
             standard_errors=errors,
         )
@@ -3606,7 +3806,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     selected = [
         node for node in tree.traverse() if _should_output_node(node, observed, targets)
     ]
-    if settings.model in {"MV-BM", "MV-OU"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
         from nwkit.multivariate_asr import (
             multivariate_covariance_table,
             multivariate_model_table,
@@ -3638,7 +3838,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
             f"Continuous ASR: sigma2=0 ({fit.fit_status}); intervals condition on this rate "
             "and exclude rate-estimation uncertainty.\n"
         )
-    elif settings.model in {"MV-BM", "MV-OU"} and fit.fit_status != "ok":
+    elif settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"} and fit.fit_status != "ok":
         sys.stderr.write(_multivariate_fit_status_message(settings.model, fit))
     elif settings.model in {
         "BMS",
@@ -3660,7 +3860,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
             "on fitted parameters and exclude parameter-estimation uncertainty.\n"
         )
     _write_table(table, args.outfile)
-    if settings.model in {"MV-BM", "MV-OU"} and getattr(
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"} and getattr(
         args, "covariance_out", None
     ) not in (None, ""):
         _write_table(
@@ -3670,11 +3870,11 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     if getattr(args, "model_out", None) not in (None, ""):
         model_table = (
             multivariate_model_table(fit, args, settings.ci_level)
-            if settings.model in {"MV-BM", "MV-OU"}
+            if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}
             else continuous_model_table(fit, args, settings.ci_level)
         )
         _write_table(model_table, args.model_out)
-    if settings.model in {"MV-BM", "MV-OU"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
         write_multivariate_tree(
             tree,
             observed,

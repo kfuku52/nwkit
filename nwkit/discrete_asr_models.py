@@ -1,6 +1,7 @@
 """Transition structures and fixed generators for discrete ASR."""
 
 import math
+from dataclasses import dataclass
 from pathlib import Path
 
 import numpy as np
@@ -8,6 +9,20 @@ import pandas as pd
 
 _ROUNDOFF_FACTOR = 128.0
 FREQUENCY_RATIO_BOUNDS = (1e-8, 1e8)
+
+
+@dataclass(frozen=True, slots=True)
+class RateDesign:
+    """A fitted direct-rate partition over directed CTMC edges."""
+
+    states: tuple[str, ...]
+    class_names: tuple[str, ...]
+    class_by_edge: np.ndarray
+    source: str
+
+    @property
+    def graph(self):
+        return self.class_by_edge >= 0
 
 
 def _roundoff_close(residual, scale):
@@ -40,20 +55,142 @@ def ordered_transition_graph(num_states):
     return graph
 
 
-def model_equivalence_family(model, states, graph=None):
+def _canonical_rate_partition(class_by_edge):
+    groups = []
+    for class_index in sorted(set(int(value) for value in class_by_edge.ravel())):
+        if class_index < 0:
+            continue
+        edges = tuple(
+            sorted(
+                (int(source), int(target))
+                for source, target in zip(
+                    *np.nonzero(class_by_edge == class_index), strict=True
+                )
+            )
+        )
+        groups.append(edges)
+    return tuple(sorted(groups))
+
+
+def _direct_rate_partition(model, states, graph, rate_design):
+    size = len(states)
+    classes = np.full((size, size), -1, dtype=int)
+    if model == "MK-DESIGN":
+        if rate_design is None:
+            return None
+        return _canonical_rate_partition(rate_design.class_by_edge)
+    if model == "ER":
+        classes[graph] = 0
+    elif model == "SYM":
+        if not np.array_equal(graph, graph.T):
+            return None
+        class_index = 0
+        for source in range(size):
+            for target in range(source + 1, size):
+                if graph[source, target]:
+                    classes[source, target] = classes[target, source] = class_index
+                    class_index += 1
+    elif model == "ARD":
+        for class_index, (source, target) in enumerate(
+            zip(*np.nonzero(graph), strict=True)
+        ):
+            classes[source, target] = class_index
+    elif model == "F81":
+        if not np.array_equal(graph, complete_transition_graph(size)):
+            return None
+        for target in range(size):
+            classes[:, target] = target
+        np.fill_diagonal(classes, -1)
+    else:
+        return None
+    return _canonical_rate_partition(classes)
+
+
+def model_equivalence_family(model, states, graph=None, rate_design=None):
     """Return the exact structured-rate family used for duplicate-fit detection."""
 
-    graph = (
-        complete_transition_graph(len(states))
-        if graph is None
-        else _validated_graph(graph, len(states))
-    )
-    complete = complete_transition_graph(len(states))
-    if len(states) == 2 and model in {"ER", "SYM"} and np.array_equal(graph, graph.T):
-        return "binary-symmetric"
-    if len(states) == 2 and model in {"ARD", "F81"} and np.array_equal(graph, complete):
-        return "binary-general-direct-rates"
+    if model == "MK-DESIGN":
+        if rate_design is None:
+            return model
+        graph = rate_design.graph
+    else:
+        graph = (
+            complete_transition_graph(len(states))
+            if graph is None
+            else _validated_graph(graph, len(states))
+        )
+    partition = _direct_rate_partition(model, states, graph, rate_design)
+    if partition is not None:
+        return ("direct-rate-partition", partition)
     return model
+
+
+def rate_design_from_edges(states, edges, *, source):
+    """Build and validate a rate design from ``(from, to, class)`` triples."""
+
+    states = tuple(str(state) for state in states)
+    if not states or len(states) != len(set(states)):
+        raise ValueError("A rate design requires a non-empty unique state space.")
+    state_to_index = {state: index for index, state in enumerate(states)}
+    class_names: list[str] = []
+    class_to_index = {}
+    class_by_edge = np.full((len(states), len(states)), -1, dtype=int)
+    seen_edges = set()
+    for raw_source, raw_target, raw_class in edges:
+        from_state = str(raw_source)
+        to_state = str(raw_target)
+        class_name = str(raw_class).strip()
+        if from_state not in state_to_index or to_state not in state_to_index:
+            unknown = from_state if from_state not in state_to_index else to_state
+            raise ValueError(
+                "State in the rate design is absent from the model state space: "
+                f"{unknown}"
+            )
+        if from_state == to_state:
+            raise ValueError("A rate design cannot contain self edges.")
+        if class_name == "":
+            raise ValueError("A rate design cannot contain an empty rate_class.")
+        edge = (from_state, to_state)
+        if edge in seen_edges:
+            raise ValueError(
+                f"A rate design contains a duplicated edge: {from_state} -> {to_state}"
+            )
+        seen_edges.add(edge)
+        if class_name not in class_to_index:
+            class_to_index[class_name] = len(class_names)
+            class_names.append(class_name)
+        class_by_edge[state_to_index[from_state], state_to_index[to_state]] = (
+            class_to_index[class_name]
+        )
+    if not seen_edges:
+        raise ValueError("A rate design must contain at least one directed edge.")
+    return RateDesign(
+        states,
+        tuple(class_names),
+        class_by_edge,
+        str(source),
+    )
+
+
+def read_rate_design(path, states):
+    """Read a fitted edge/rate-class design TSV."""
+
+    source = Path(str(path))
+    try:
+        table = pd.read_csv(source, sep="\t", dtype=str, keep_default_na=False)
+    except (OSError, pd.errors.ParserError) as exc:
+        raise ValueError(f"Failed to read '--rate-design': {source}") from exc
+    required = ("from_state", "to_state", "rate_class")
+    if tuple(table.columns) != required:
+        raise ValueError(
+            "'--rate-design' must contain exactly these TSV columns in order: "
+            "from_state, to_state, rate_class."
+        )
+    return rate_design_from_edges(
+        states,
+        table.itertuples(index=False, name=None),
+        source=str(source),
+    )
 
 
 def read_transition_graph(specification, states, *, state_source="--states"):
@@ -101,7 +238,15 @@ def read_transition_graph(specification, states, *, state_source="--states"):
     return graph, str(path)
 
 
-def parameter_labels(model, states, graph=None):
+def parameter_labels(model, states, graph=None, rate_design=None):
+    if model == "MK-DESIGN":
+        if rate_design is None:
+            raise ValueError("--model MK-DESIGN requires --rate-design.")
+        if tuple(states) != rate_design.states:
+            raise ValueError("Rate-design states do not match the model state space.")
+        if graph is not None:
+            raise ValueError("MK-DESIGN cannot use a separate transition graph.")
+        return [("rate_class", name) for name in rate_design.class_names]
     graph = (
         complete_transition_graph(len(states))
         if graph is None
@@ -148,10 +293,10 @@ def _require_complete_graph(model, graph):
         raise ValueError(f"{model} requires a complete '--transition-graph'.")
 
 
-def parameter_kinds(model, states, graph=None):
+def parameter_kinds(model, states, graph=None, rate_design=None):
     """Return optimizer-bound classes parallel to :func:`parameter_labels`."""
 
-    labels = parameter_labels(model, states, graph)
+    labels = parameter_labels(model, states, graph, rate_design)
     if model == "GTR":
         return [
             "frequency_ratio" if source == "frequency_ratio" else "rate"
@@ -160,17 +305,32 @@ def parameter_kinds(model, states, graph=None):
     return ["rate"] * len(labels)
 
 
-def initial_parameters(model, states, initial_rate, graph=None):
+def initial_parameters(model, states, initial_rate, graph=None, rate_design=None):
     """Return a homogeneous, neutral-frequency optimizer starting point."""
 
-    kinds = parameter_kinds(model, states, graph)
+    kinds = parameter_kinds(model, states, graph, rate_design)
     return np.asarray(
         [1.0 if kind == "frequency_ratio" else initial_rate for kind in kinds],
         dtype=float,
     )
 
 
-def build_rate_matrix(model, states, rates, graph=None):
+def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
+    if model == "MK-DESIGN":
+        labels = parameter_labels(model, states, graph, rate_design)
+        rates = np.asarray(rates, dtype=float)
+        if len(rates) != len(labels):
+            raise ValueError(
+                f"Unexpected number of rate parameters for model '{model}'."
+            )
+        if np.any(~np.isfinite(rates)) or np.any(rates < 0.0):
+            raise ValueError("Mk rates must be non-negative finite numbers.")
+        assert rate_design is not None
+        matrix = np.zeros((len(states), len(states)), dtype=float)
+        for class_index, rate in enumerate(rates):
+            matrix[rate_design.class_by_edge == class_index] = rate
+        np.fill_diagonal(matrix, -matrix.sum(axis=1))
+        return matrix
     graph = (
         complete_transition_graph(len(states))
         if graph is None

@@ -4,6 +4,29 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.2] - 2026-09-03
+
+### Added
+
+- Added `MK-DESIGN`, which reads a directed edge/rate-class TSV and jointly fits
+  arbitrary shared transition rates, with class-aware metadata and exact
+  duplicate-model detection.
+- Added Pagel independent and dependent models for two binary traits as nested
+  four-state CTMCs with four or eight rates, partial-trait missingness,
+  stochastic maps, and isolated joint-likelihood comparison groups.
+- Added stationary `MV-OU-DIAG` with one attraction rate per trait, a full
+  positive-definite diffusion covariance, fixed shared or per-trait alpha
+  controls, complete conditional reconstruction, and covariance/model outputs.
+
+### Changed
+
+- Specialized Pagel's structured-rate multistart schedule from 17--21 redundant
+  starts to six deterministic homogeneous/patterned starts, reducing a
+  representative independent-plus-dependent fit from median 54.3 to 13.3
+  seconds (4.1x across two runs). Maximum differences were `4.3e-7` in log
+  likelihood and `8.2e-4` in any node-state posterior probability along
+  near-flat high/low-rate directions.
+
 ## [0.43.1] - 2026-09-03
 
 ### Changed

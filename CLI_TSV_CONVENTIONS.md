@@ -304,8 +304,10 @@ auxiliary inputs. Structurally equivalent rows identify their fitted
 representative in `equivalent_to` and do not duplicate criterion weights. The
 equivalence contract distinguishes binary GTR from directly bounded ARD/F81,
 and collapses exact neutral/fixed or one-regime reductions only when every
-relevant option and root contract matches. MV-BM and MV-OU sample sizes count
-distinct observed phylogenetic positions rather than scalar coordinates.
+relevant option and root contract matches. MV-BM, MV-OU, and MV-OU-DIAG sample
+sizes count distinct observed phylogenetic positions rather than scalar
+coordinates. Pagel's two-binary-trait joint likelihood is grouped separately
+from the across-character MK-MIXTURE likelihood.
 
 Discrete ASR defaults to ER, equal root-state probabilities, and probability
 output. Likelihoods, marginals, and conditional node-state sampling use log-space

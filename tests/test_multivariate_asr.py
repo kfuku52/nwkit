@@ -286,6 +286,47 @@ def test_mvbm_cli_supports_measurement_error_and_partial_rows(tmp_path):
 
 
 @pytest.mark.integration
+def test_mvou_diag_cli_reports_trait_alphas_and_diffusion_covariance(tmp_path):
+    trait = tmp_path / "traits.tsv"
+    output = tmp_path / "asr.tsv"
+    model = tmp_path / "model.tsv"
+    trait.write_text(
+        "leaf_name\tx\ty\n"
+        "A\t0\t1\nB\t0.4\t0.8\nC\t1.2\t0.2\n"
+        "D\t1.5\t-0.3\nE\t1.7\t0.8\nF\t2.3\t-0.6\n"
+    )
+    main(
+        [
+            "asr",
+            "-i",
+            "[&R]((A:.5,B:.7):.4,(C:.6,D:.8):.3,E:1,F:1.2)R;",
+            "--trait",
+            str(trait),
+            "--state-column",
+            "x,y",
+            "--trait-type",
+            "continuous",
+            "--model",
+            "MV-OU-DIAG",
+            "--alpha-by-trait",
+            "0.3,1.2",
+            "--model-out",
+            str(model),
+            "-o",
+            str(output),
+        ]
+    )
+    result = pd.read_csv(output, sep="\t")
+    metadata = pd.read_csv(model, sep="\t").iloc[0]
+    assert set(result["trait"]) == {"x", "y"}
+    assert metadata["model"] == "MV-OU-DIAG"
+    assert metadata["alpha_78"] == pytest.approx(0.3)
+    assert metadata["alpha_79"] == pytest.approx(1.2)
+    assert metadata["sigma_interpretation"] == "stationary_trait_covariance"
+    assert math.isfinite(metadata["diffusion_sigma_78_to_79"])
+
+
+@pytest.mark.integration
 def test_mvbm_cli_warns_when_joint_covariance_is_singular(tmp_path, capsys):
     trait = tmp_path / "traits.tsv"
     output = tmp_path / "asr.tsv"

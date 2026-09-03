@@ -69,6 +69,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "property_source",
         "predictor_contrasts",
         "predictor_sampling_covariance",
+        "rate_design",
         "rate_matrix",
         "reconciliation",
         "reconciliation_tree",

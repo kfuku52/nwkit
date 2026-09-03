@@ -44,6 +44,21 @@ _MODEL_DEFINITIONS = (
         "GTR", "discrete", "stationary", ("equal", "empirical", "stationary")
     ),
     AsrModelDefinition(
+        "MK-DESIGN", "discrete", "equal", ("equal", "empirical", "stationary")
+    ),
+    AsrModelDefinition(
+        "PAGEL-INDEPENDENT",
+        "discrete",
+        "equal",
+        ("equal", "empirical", "stationary"),
+    ),
+    AsrModelDefinition(
+        "PAGEL-DEPENDENT",
+        "discrete",
+        "equal",
+        ("equal", "empirical", "stationary"),
+    ),
+    AsrModelDefinition(
         "MK-REGIME", "discrete", "equal", ("equal", "empirical", "stationary")
     ),
     AsrModelDefinition(
@@ -70,6 +85,7 @@ _MODEL_DEFINITIONS = (
     AsrModelDefinition("BM-DRIFT", "continuous", "flat", ("flat",)),
     AsrModelDefinition("MV-BM", "continuous", "flat", ("flat",)),
     AsrModelDefinition("MV-OU", "continuous", "stationary", ("stationary",)),
+    AsrModelDefinition("MV-OU-DIAG", "continuous", "stationary", ("stationary",)),
     _evolution_definition("ou"),
     AsrModelDefinition("OUM", "continuous", "stationary", ("stationary",)),
     AsrModelDefinition("OUMA", "continuous", "stationary", ("stationary",)),

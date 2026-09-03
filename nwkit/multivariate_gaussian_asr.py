@@ -34,7 +34,9 @@ class DenseMultivariateFit:
     optimizer_failed_starts: int
     model: str
     alpha: float | None = None
+    alpha_by_trait: np.ndarray | None = None
     alpha_estimated: bool = False
+    diffusion_sigma: np.ndarray | None = None
     theta: np.ndarray | None = None
     theta_estimated: bool = False
 
@@ -329,6 +331,33 @@ def _validate_mvou_alpha_design(data, observed_distance):
     )
 
 
+def _validate_mvou_diag_alpha_design(data, geometry):
+    """Require each trait-specific decay to span distinct tree positions."""
+
+    positions = _contracted_positions(data.compiled)
+    unidentified = []
+    for trait_index, trait_name in enumerate(data.trait_names):
+        observed = np.flatnonzero(data.trait_indices == trait_index)
+        trait_positions = {
+            int(positions[int(data.node_indices[index])]) for index in observed
+        }
+        if len(trait_positions) < 2:
+            unidentified.append(trait_name)
+            continue
+        block = geometry.observed_distance[np.ix_(observed, observed)]
+        scale = float(np.max(np.abs(block), initial=0.0))
+        tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(observed))
+        if not np.any(block > tolerance):
+            unidentified.append(trait_name)
+    if unidentified:
+        raise ValueError(
+            "MV-OU-DIAG cannot estimate trait-specific alpha without at least "
+            "two observations at distinct phylogenetic positions for each trait: "
+            + ", ".join(unidentified)
+            + ". Fix --alpha/--alpha-by-trait or add observations."
+        )
+
+
 def _observation_covariance(data, scalar_covariance, sigma):
     covariance = (
         scalar_covariance
@@ -521,6 +550,93 @@ def _posterior(
             restored_mean, restored_covariance
         )
     return posterior
+
+
+def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
+    observed_depths = geometry.depths[data.node_indices]
+    left = np.maximum(0.0, observed_depths[:, None] - geometry.observed_shared_depth)
+    right = np.maximum(0.0, observed_depths[None, :] - geometry.observed_shared_depth)
+    observed_beta = beta[data.trait_indices]
+    decay = np.exp(-observed_beta[:, None] * left - observed_beta[None, :] * right)
+    covariance = (
+        decay
+        * stationary_sigma[data.trait_indices[:, None], data.trait_indices[None, :]]
+    )
+    covariance[np.diag_indices_from(covariance)] += data.errors * data.errors
+    return (covariance + covariance.T) / 2.0
+
+
+def _diagonal_ou_cross_covariance(data, geometry, node_index, beta, stationary_sigma):
+    observed_depths = geometry.depths[data.node_indices]
+    shared = geometry.node_shared_depth[node_index]
+    left = np.maximum(0.0, geometry.depths[node_index] - shared)
+    right = np.maximum(0.0, observed_depths - shared)
+    observed_beta = beta[data.trait_indices]
+    decay = np.exp(-beta[:, None] * left - observed_beta[None, :] * right)
+    return decay * stationary_sigma[:, data.trait_indices]
+
+
+def _diagonal_ou_posterior(
+    data,
+    geometry,
+    beta,
+    stationary_sigma,
+    mean,
+    residual,
+    factor,
+):
+    solved_residual = cho_solve(factor, residual, check_finite=False)
+    posterior = {}
+    dimension = len(data.trait_names)
+    for node_index, node in enumerate(geometry.compiled.nodes):
+        cross = _diagonal_ou_cross_covariance(
+            data, geometry, node_index, beta, stationary_sigma
+        )
+        scaled_mean = mean + cross @ solved_residual
+        solved_cross = cho_solve(factor, cross.T, check_finite=False)
+        covariance = stationary_sigma - cross @ solved_cross
+        covariance = (covariance + covariance.T) / 2.0
+        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+        tolerance = (
+            np.finfo(float).eps
+            * max(1.0, float(np.max(np.abs(eigenvalues))))
+            * max(100, dimension)
+        )
+        if float(np.min(eigenvalues)) < -tolerance:
+            raise ValueError(
+                "A multivariate posterior covariance is not positive semidefinite."
+            )
+        covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)) @ eigenvectors.T
+        posterior[node] = MultivariateGaussianMarginal(
+            data.centers + data.scales * scaled_mean,
+            _restore_sigma(data, covariance),
+        )
+    return posterior
+
+
+def parse_alpha_by_trait(value, trait_names):
+    """Parse one fixed positive attraction rate per named trait."""
+
+    if value is None or (isinstance(value, str) and value == ""):
+        return None
+    raw = (
+        value if isinstance(value, (tuple, list, np.ndarray)) else str(value).split(",")
+    )
+    if len(raw) != len(trait_names):
+        raise ValueError(
+            "--alpha-by-trait must contain exactly one value per --state-column "
+            f"trait ({len(trait_names)} expected)."
+        )
+    result = np.asarray(
+        [
+            _finite(item, f"--alpha-by-trait for '{trait}'")
+            for item, trait in zip(raw, trait_names, strict=True)
+        ],
+        dtype=float,
+    )
+    if np.any(result <= 0.0):
+        raise ValueError("--alpha-by-trait values must be strictly positive.")
+    return result
 
 
 def fit_dense_mvbm(
@@ -753,6 +869,210 @@ def fit_dense_mvou(
         model="MV-OU",
         alpha=fitted_alpha,
         alpha_estimated=fixed_alpha is None,
+        theta=theta,
+        theta_estimated=True,
+    )
+    return posterior, fit
+
+
+def fit_dense_mvou_diag(
+    tree,
+    values_by_leaf,
+    trait_names,
+    *,
+    alpha=None,
+    alpha_by_trait=None,
+    alpha_bounds=None,
+    standard_errors=None,
+):
+    """Fit stationary MV-OU with diagonal trait-specific attraction rates."""
+
+    data = _prepare_observations(
+        tree, values_by_leaf, trait_names, standard_errors=standard_errors
+    )
+    dimension = len(data.trait_names)
+    geometry = _geometry(data)
+    maximum_depth = float(np.max(geometry.depths))
+    time_scale = maximum_depth if maximum_depth > 0.0 else 1.0
+    scaled_geometry = replace(
+        geometry,
+        depths=geometry.depths / time_scale,
+        observed_shared_depth=geometry.observed_shared_depth / time_scale,
+        observed_distance=geometry.observed_distance / time_scale,
+        node_shared_depth=geometry.node_shared_depth / time_scale,
+        node_distance=geometry.node_distance / time_scale,
+    )
+
+    has_alpha_by_trait = alpha_by_trait is not None and not (
+        isinstance(alpha_by_trait, str) and alpha_by_trait == ""
+    )
+    if alpha is not None and has_alpha_by_trait:
+        raise ValueError("--alpha cannot be combined with --alpha-by-trait.")
+    shared_alpha = None
+    fixed_alpha = None
+    if alpha is not None:
+        shared_alpha = _finite(alpha, "--alpha")
+        if shared_alpha <= 0.0:
+            raise ValueError("MV-OU-DIAG alpha must be positive.")
+        fixed_alpha = np.full(dimension, shared_alpha, dtype=float)
+    elif has_alpha_by_trait:
+        fixed_alpha = parse_alpha_by_trait(alpha_by_trait, data.trait_names)
+
+    physical_bounds = (
+        (1e-6 / time_scale, 50.0 / time_scale)
+        if alpha_bounds is None
+        else (float(alpha_bounds[0]), float(alpha_bounds[1]))
+    )
+    if (
+        not all(math.isfinite(value) and value > 0.0 for value in physical_bounds)
+        or physical_bounds[0] >= physical_bounds[1]
+    ):
+        raise ValueError("MV-OU-DIAG alpha bounds must be increasing and positive.")
+    beta_bounds = (
+        physical_bounds[0] * time_scale,
+        physical_bounds[1] * time_scale,
+    )
+    if not all(math.isfinite(value) and value > 0.0 for value in beta_bounds):
+        raise ValueError("MV-OU-DIAG scaled alpha bounds exceed floating-point range.")
+
+    free_alpha = fixed_alpha is None
+    if free_alpha:
+        _validate_mvou_diag_alpha_design(data, geometry)
+    covariance_parameters = dimension * (dimension + 1) // 2
+    free_parameters = (
+        dimension + covariance_parameters + (dimension if free_alpha else 0)
+    )
+    if len(data.values) < free_parameters:
+        raise ValueError(
+            "MV-OU-DIAG has too few effective observed coordinates to estimate "
+            "all optima, diffusion-covariance parameters, and trait-specific "
+            "attraction rates."
+        )
+
+    if free_alpha:
+        initial_beta = np.full(
+            dimension, math.sqrt(beta_bounds[0] * beta_bounds[1]), dtype=float
+        )
+        initial = [math.log(value) for value in initial_beta]
+        bounds = [
+            (math.log(beta_bounds[0]), math.log(beta_bounds[1]))
+            for _ in range(dimension)
+        ]
+    else:
+        assert fixed_alpha is not None
+        initial_beta = fixed_alpha * time_scale
+        if np.any(~np.isfinite(initial_beta)):
+            raise ValueError(
+                "MV-OU-DIAG fixed alpha values exceed floating-point range after "
+                "tree-time scaling."
+            )
+        initial = []
+        bounds = []
+    diffusion_initial, diffusion_bounds = _initial_cholesky(dimension)
+    triangular_index = 0
+    for row in range(dimension):
+        for column in range(row + 1):
+            if row == column:
+                log_diagonal = 0.5 * math.log(2.0 * initial_beta[row])
+                diffusion_initial[triangular_index] = log_diagonal
+                lower, upper = diffusion_bounds[triangular_index]
+                assert lower is not None and upper is not None
+                diffusion_bounds[triangular_index] = (
+                    min(lower, log_diagonal - 10.0),
+                    max(upper, log_diagonal + 10.0),
+                )
+            triangular_index += 1
+    initial.extend(diffusion_initial)
+    bounds.extend(diffusion_bounds)
+
+    def evaluate(parameters):
+        offset = 0
+        if free_alpha:
+            beta = np.exp(np.asarray(parameters[:dimension], dtype=float))
+            offset = dimension
+        else:
+            beta = initial_beta
+        diffusion_scaled_time, _ = _decode_cholesky(parameters, dimension, offset)
+        stationary_sigma = diffusion_scaled_time / (beta[:, None] + beta[None, :])
+        stationary_sigma = (stationary_sigma + stationary_sigma.T) / 2.0
+        covariance = _diagonal_ou_observation_covariance(
+            data, scaled_geometry, beta, stationary_sigma
+        )
+        return (
+            beta,
+            diffusion_scaled_time,
+            stationary_sigma,
+            covariance,
+            _profile_mean(data, covariance, reml=False),
+        )
+
+    def objective(parameters):
+        try:
+            return -evaluate(parameters)[4][0]
+        except (ValueError, ArithmeticError, OverflowError):
+            return 1e100
+
+    optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
+    beta, diffusion_scaled_time, sigma_scaled, _covariance, profile = evaluate(
+        optimized.x
+    )
+    (
+        likelihood,
+        theta_scaled,
+        residual,
+        factor,
+        _mean_factor,
+        _free_mean_indices,
+    ) = profile
+    posterior = _diagonal_ou_posterior(
+        data,
+        scaled_geometry,
+        beta,
+        sigma_scaled,
+        theta_scaled,
+        residual,
+        factor,
+    )
+    sigma = _restore_sigma(data, sigma_scaled)
+    diffusion_sigma = _restore_sigma(data, diffusion_scaled_time / time_scale)
+    fitted_alpha = beta / time_scale
+    theta = data.centers + data.scales * theta_scaled
+    likelihood -= _likelihood_scale_adjustment(data, reml=False)
+    eigenvalues = np.linalg.eigvalsh(sigma_scaled)
+    tolerance = (
+        np.finfo(float).eps * max(1.0, float(np.max(eigenvalues))) * max(100, dimension)
+    )
+    rank = int(np.sum(eigenvalues > tolerance))
+    statuses = []
+    if rank < dimension:
+        statuses.append("singular_covariance")
+    if free_alpha:
+        boundary_tolerance = 1e-5
+        if np.any(fitted_alpha <= physical_bounds[0] * (1.0 + boundary_tolerance)):
+            statuses.append("alpha_lower_boundary")
+        if np.any(fitted_alpha >= physical_bounds[1] * (1.0 - boundary_tolerance)):
+            statuses.append("alpha_upper_boundary")
+    fit = DenseMultivariateFit(
+        trait_names=data.trait_names,
+        sigma=sigma,
+        sigma_rank=rank,
+        sigma_estimated=True,
+        restricted_log_likelihood=None,
+        log_likelihood=likelihood,
+        num_observed=data.num_observed_tips,
+        num_effective_observations=data.num_effective_positions,
+        residual_df=len(data.values),
+        fit_status="+".join(statuses) if statuses else "ok",
+        optimizer_success=optimized.success,
+        optimizer_message=optimized.message,
+        optimizer_starts=optimized.starts,
+        optimizer_converged_starts=optimized.converged_starts,
+        optimizer_failed_starts=optimized.failed_starts,
+        model="MV-OU-DIAG",
+        alpha=shared_alpha,
+        alpha_by_trait=fitted_alpha,
+        alpha_estimated=free_alpha,
+        diffusion_sigma=diffusion_sigma,
         theta=theta,
         theta_estimated=True,
     )

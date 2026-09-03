@@ -42,7 +42,8 @@ from nwkit.util import (
 REGIME_MODELS = frozenset(
     {"MK-REGIME", "BMS", "BMS-DRIFT", "OUM", "OUMA", "OUMV", "OUMVA"}
 )
-MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU"})
+MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU", "MV-OU-DIAG"})
+PAGEL_MODELS = frozenset({"PAGEL-INDEPENDENT", "PAGEL-DEPENDENT"})
 ROOT_VARIANT_MODEL = "OU"
 ROOT_VARIANTS = frozenset({"stationary", "fixed", "gaussian"})
 MODEL_TOKEN = re.compile(r"^([A-Z][A-Z0-9-]*)(?:\[([a-z]+)\])?$", re.IGNORECASE)
@@ -97,7 +98,7 @@ INTEGER_COLUMNS = (
 )
 
 TRANSFORMED_MODELS = frozenset({"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"})
-OU_MODELS = frozenset({"OU", "MV-OU", "OUM", "OUMA", "OUMV", "OUMVA"})
+OU_MODELS = frozenset({"OU", "MV-OU", "MV-OU-DIAG", "OUM", "OUMA", "OUMV", "OUMVA"})
 DISCRETE_RATE_MODELS = frozenset(
     {
         "ER",
@@ -105,6 +106,9 @@ DISCRETE_RATE_MODELS = frozenset(
         "ARD",
         "F81",
         "GTR",
+        "MK-DESIGN",
+        "PAGEL-INDEPENDENT",
+        "PAGEL-DEPENDENT",
         "MK-REGIME",
         "HRM",
         "COVARION",
@@ -116,7 +120,9 @@ CONTINUOUS_SCALAR_MODELS = frozenset(model_names("continuous")) - MULTIVARIATE_M
 MODEL_OPTION_CONSUMERS = {
     "rate": DISCRETE_RATE_MODELS,
     "rate_bounds": DISCRETE_RATE_MODELS,
-    "transition_graph": DISCRETE_RATE_MODELS,
+    "rate_design": frozenset({"MK-DESIGN"}),
+    "transition_graph": DISCRETE_RATE_MODELS
+    - {"MK-DESIGN", "PAGEL-INDEPENDENT", "PAGEL-DEPENDENT"},
     "regime_map": REGIME_MODELS,
     "regime_model": frozenset({"MK-REGIME"}),
     "regime_parameters": REGIME_MODELS - {"MK-REGIME"},
@@ -129,8 +135,9 @@ MODEL_OPTION_CONSUMERS = {
     "evolution_parameter": TRANSFORMED_MODELS,
     "evolution_parameter_bounds": TRANSFORMED_MODELS,
     "alpha": OU_MODELS,
+    "alpha_by_trait": frozenset({"MV-OU-DIAG"}),
     "alpha_bounds": OU_MODELS,
-    "theta": OU_MODELS - {"MV-OU"},
+    "theta": OU_MODELS - {"MV-OU", "MV-OU-DIAG"},
     "eb_rate": frozenset({"EB", "ACDC"}),
     "eb_rate_bounds": frozenset({"EB", "ACDC"}),
     "drift": frozenset({"BM-DRIFT", "BMS-DRIFT"}),
@@ -461,11 +468,15 @@ def _validate_root_options(context, candidates):
 
 
 def _validate_mutually_exclusive_options(args):
+    alpha_by_trait = getattr(args, "alpha_by_trait", None)
+    if getattr(args, "alpha", None) is not None and alpha_by_trait is not None:
+        raise ValueError("--alpha cannot be combined with --alpha-by-trait.")
     if (
-        getattr(args, "alpha", None) is not None
-        and getattr(args, "alpha_bounds", None) is not None
-    ):
-        raise ValueError("--alpha-bounds cannot be combined with fixed --alpha.")
+        getattr(args, "alpha", None) is not None or alpha_by_trait is not None
+    ) and getattr(args, "alpha_bounds", None) is not None:
+        raise ValueError(
+            "--alpha-bounds cannot be combined with fixed --alpha or --alpha-by-trait."
+        )
     if (
         getattr(args, "evolution_parameter", None) is not None
         and getattr(args, "evolution_parameter_bounds", None) is not None
@@ -576,17 +587,21 @@ def _candidate_inapplicability(context, candidate):
         return f"root prior {candidate.root_prior} is unsupported; choose " + ", ".join(
             definition.root_priors
         )
-    multiple = len(context.trait_columns) > 1
+    num_traits = len(context.trait_columns)
+    multiple = num_traits > 1
     if context.trait_type == "discrete":
-        if multiple and candidate.model != "MK-MIXTURE":
+        if multiple and candidate.model not in {"MK-MIXTURE", *PAGEL_MODELS}:
             return (
-                "multiple character columns are currently compared only by MK-MIXTURE"
+                "multiple character columns require MK-MIXTURE or a two-trait "
+                "Pagel model"
             )
         if not multiple and candidate.model == "MK-MIXTURE":
             return "MK-MIXTURE requires at least two character columns"
+        if num_traits != 2 and candidate.model in PAGEL_MODELS:
+            return "Pagel models require exactly two binary trait columns"
     else:
         if multiple and candidate.model not in MULTIVARIATE_MODELS:
-            return "multiple continuous traits require MV-BM or MV-OU"
+            return "multiple continuous traits require MV-BM, MV-OU, or MV-OU-DIAG"
         if not multiple and candidate.model in MULTIVARIATE_MODELS:
             return "multivariate models require at least two trait columns"
     if candidate.model in REGIME_MODELS and getattr(
@@ -598,6 +613,10 @@ def _candidate_inapplicability(context, candidate):
         "",
     ):
         return "CUSTOM requires --rate-matrix"
+    if candidate.model == "MK-DESIGN" and getattr(
+        context.args, "rate_design", None
+    ) in (None, ""):
+        return "MK-DESIGN requires --rate-design"
     if candidate.model == "THRESHOLD" and getattr(context.args, "states", None) in (
         None,
         "",
@@ -658,6 +677,15 @@ def _discrete_transition_graph(context, states):
         )[0]
 
     return _cached(context, "discrete_transition_graph", build)
+
+
+def _discrete_rate_design(context, states):
+    def build():
+        from nwkit.discrete_asr_models import read_rate_design
+
+        return read_rate_design(context.args.rate_design, states)
+
+    return _cached(context, "discrete_rate_design", build)
 
 
 def _regime_assignment(context):
@@ -721,9 +749,14 @@ def _fit_single_discrete(context, candidate):
         states, observed, likelihoods = _single_discrete_data(context)
         fixed_rate_matrix = None
     rate_bounds = _parse_rate_bounds(getattr(candidate_args, "rate_bounds", None))
+    rate_design = (
+        _discrete_rate_design(context, states)
+        if candidate.model == "MK-DESIGN"
+        else None
+    )
     graph = (
         None
-        if candidate.model == "CUSTOM"
+        if candidate.model in {"CUSTOM", "MK-DESIGN"}
         else _discrete_transition_graph(context, states)
     )
     common = {
@@ -753,6 +786,7 @@ def _fit_single_discrete(context, candidate):
     return compute_mk_marginals(
         **common,
         model=candidate.model,
+        rate_design=rate_design,
         fixed_rate_matrix=fixed_rate_matrix,
         regime_assignment=(
             _regime_assignment(context) if candidate.model == "MK-REGIME" else None
@@ -841,6 +875,41 @@ def _fit_mk_mixture(context, candidate):
     )[1]
 
 
+def _pagel_data(context):
+    def build():
+        from nwkit.pagel_asr import prepare_pagel_data
+
+        return prepare_pagel_data(
+            context.args.trait,
+            context.trait_columns,
+            context.leaf_names,
+            states_arg=getattr(context.args, "states", None),
+            missing_values_arg=getattr(context.args, "missing_values", None),
+            ambiguous_separator=_option_or_default(
+                context.args, "ambiguous_separator", "|"
+            ),
+            unmatched=getattr(context.args, "unmatched", "warn"),
+            trait_df=context.trait_df,
+        )
+
+    return _cached(context, "pagel_data", build)
+
+
+def _fit_pagel(context, candidate):
+    from nwkit.asr import _parse_rate_bounds
+    from nwkit.pagel_asr import compute_pagel_marginals
+
+    candidate_args = _candidate_args(context.args, candidate)
+    return compute_pagel_marginals(
+        context.tree,
+        _pagel_data(context),
+        model=candidate.model,
+        rate=getattr(candidate_args, "rate", None),
+        root_prior_mode=candidate.root_prior,
+        rate_bounds=_parse_rate_bounds(getattr(candidate_args, "rate_bounds", None)),
+    )[1]
+
+
 def _continuous_data(context):
     def build():
         if len(context.trait_columns) == 1:
@@ -897,6 +966,8 @@ def _fit_candidate(context, candidate):
         return _fit_continuous(context, candidate)
     if candidate.model == "MK-MIXTURE":
         return _fit_mk_mixture(context, candidate)
+    if candidate.model in PAGEL_MODELS:
+        return _fit_pagel(context, candidate)
     return _fit_single_discrete(context, candidate)
 
 
@@ -1023,9 +1094,16 @@ def _continuous_parameter_contract(candidate, fit):
     fixed: list[str] = []
     model = candidate.model
     if model in MULTIVARIATE_MODELS:
-        estimated.append("trait_covariance")
-        if model == "MV-OU":
-            _route_parameters(fit, ["alpha"], "alpha_estimated", estimated, fixed)
+        estimated.append(
+            "diffusion_covariance" if model == "MV-OU-DIAG" else "trait_covariance"
+        )
+        if model in {"MV-OU", "MV-OU-DIAG"}:
+            alpha_names = (
+                ["alpha"]
+                if model == "MV-OU" or _fit_value(fit, "alpha", None) is not None
+                else [f"alpha[{name}]" for name in _fit_value(fit, "trait_names", ())]
+            )
+            _route_parameters(fit, alpha_names, "alpha_estimated", estimated, fixed)
             theta_names = [
                 f"theta[{name}]" for name in _fit_value(fit, "trait_names", ())
             ]
@@ -1166,14 +1244,19 @@ def _prepare_shared_inputs(context, candidates, *, automatic):
                 if any(candidate.model == "MK-MIXTURE" for candidate in applicable):
                     states, _observed, _likelihoods = _multi_discrete_data(context)
                     _discrete_transition_graph(context, states)
+                if any(candidate.model in PAGEL_MODELS for candidate in applicable):
+                    _pagel_data(context)
             else:
                 if any(candidate.model != "CUSTOM" for candidate in applicable):
                     states, _observed, _likelihoods = _single_discrete_data(context)
                     if any(
-                        candidate.model in DISCRETE_RATE_MODELS
+                        candidate.model
+                        in DISCRETE_RATE_MODELS - {"MK-DESIGN", *PAGEL_MODELS}
                         for candidate in applicable
                     ):
                         _discrete_transition_graph(context, states)
+                    if any(candidate.model == "MK-DESIGN" for candidate in applicable):
+                        _discrete_rate_design(context, states)
                 if any(candidate.model == "CUSTOM" for candidate in applicable):
                     _custom_discrete_data(context)
                 if any(candidate.model == "MK-REGIME" for candidate in applicable):
@@ -1208,11 +1291,22 @@ def _one_regime(context):
 
 
 def _continuous_equivalence_contract(context, candidate):
-    if context.trait_type != "continuous" or len(context.trait_columns) != 1:
+    if context.trait_type != "continuous":
         return None
     model = candidate.model
     root = candidate.root_prior
     args = context.args
+    if len(context.trait_columns) > 1:
+        if (
+            model in {"MV-OU", "MV-OU-DIAG"}
+            and getattr(args, "alpha", None) is not None
+        ):
+            return (
+                ("continuous", "MV-OU", root, "fixed", float(args.alpha)),
+                "because fixed shared alpha makes the diagonal-attraction model "
+                "identical to MV-OU",
+            )
+        return None
     bm_key = ("continuous", "BM", root)
     if model == "BM":
         return bm_key, "under the same Brownian process contract"
@@ -1276,7 +1370,7 @@ def _continuous_equivalence_contract(context, candidate):
     return None
 
 
-def _discrete_equivalence_contract(context, candidate, states, graph):
+def _discrete_equivalence_contract(context, candidate, states, graph, rate_design):
     if context.trait_type != "discrete" or len(context.trait_columns) != 1:
         return None
     model = candidate.model
@@ -1285,7 +1379,7 @@ def _discrete_equivalence_contract(context, candidate, states, graph):
         if _one_regime(context) is None:
             return None
         model = getattr(context.args, "regime_model", None) or "ER"
-    if model not in {"ER", "SYM", "ARD", "F81", "GTR"}:
+    if model not in {"ER", "SYM", "ARD", "F81", "GTR", "MK-DESIGN"}:
         return None
     rate = getattr(context.args, "rate", None)
     if candidate.model == "ER" and rate is not None:
@@ -1294,26 +1388,30 @@ def _discrete_equivalence_contract(context, candidate, states, graph):
         return None
     # ARD/F81 share direct q_ij bounds for two states. GTR deliberately remains
     # distinct because it bounds exchangeability and frequency-ratio coordinates.
-    family = model_equivalence_family(model, states, graph)
+    candidate_design = rate_design if model == "MK-DESIGN" else None
+    candidate_graph = None if candidate_design is not None else graph
+    family = model_equivalence_family(
+        model, states, candidate_graph, rate_design=candidate_design
+    )
     source = "a one-regime MK model" if is_regime else "this transition model"
     return (
         (
             "discrete",
             family,
             candidate.root_prior,
-            graph.shape,
-            graph.tobytes(),
         ),
         f"for {source} and the same transition/root contract",
     )
 
 
 def _equivalent_candidate_representatives(context, candidates):
-    states = graph = None
+    states = graph = rate_design = None
     if context.trait_type == "discrete" and len(context.trait_columns) == 1:
         try:
             states, _observed, _likelihoods = _single_discrete_data(context)
             graph = _discrete_transition_graph(context, states)
+            if any(candidate.model == "MK-DESIGN" for candidate in candidates):
+                rate_design = _discrete_rate_design(context, states)
         except Exception:
             return {}
     representatives: dict[str, tuple[str, str]] = {}
@@ -1327,6 +1425,7 @@ def _equivalent_candidate_representatives(context, candidates):
                 candidate,
                 states,
                 graph,  # type: ignore[arg-type]
+                rate_design,
             )
         )
         if contract is None:
@@ -1351,6 +1450,16 @@ def _equivalent_parameter_contract(context, candidate):
         estimated.append("transition_rates")
     else:
         model = candidate.model
+        if model in MULTIVARIATE_MODELS:
+            estimated.append(
+                "diffusion_covariance" if model == "MV-OU-DIAG" else "trait_covariance"
+            )
+            if model in {"MV-OU", "MV-OU-DIAG"}:
+                fixed.append("alpha")
+                estimated.extend(f"theta[{trait}]" for trait in context.trait_columns)
+            if context.error_columns is not None:
+                fixed.append("measurement_error")
+            return ",".join(estimated), ",".join(fixed)
         assignment = _one_regime(context) if model in REGIME_MODELS else None
         regime = None if assignment is None else assignment.regimes[0]
         sigma_name = f"sigma2[{regime}]" if model in {"BMS", "BMS-DRIFT"} else "sigma2"
@@ -1539,6 +1648,7 @@ def _validate_output_paths(args):
         ("--regime-map", getattr(args, "regime_map", None)),
         ("--regime-parameters", getattr(args, "regime_parameters", None)),
         ("--rate-matrix", getattr(args, "rate_matrix", None)),
+        ("--rate-design", getattr(args, "rate_design", None)),
     ]
     transition_graph = getattr(args, "transition_graph", None)
     if transition_graph not in (None, "", "complete", "ordered"):

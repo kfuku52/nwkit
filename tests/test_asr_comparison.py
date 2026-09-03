@@ -184,6 +184,8 @@ def test_regime_parameter_counts_include_each_free_map_value(fit, expected):
         ("MV-BM", False, False, 3),
         ("MV-OU", True, True, 6),
         ("MV-OU", False, True, 5),
+        ("MV-OU-DIAG", True, True, 7),
+        ("MV-OU-DIAG", False, True, 5),
     ],
 )
 def test_dense_multivariate_parameter_counts(
@@ -195,7 +197,7 @@ def test_dense_multivariate_parameter_counts(
         alpha_estimated=alpha_estimated,
         theta_estimated=theta_estimated,
         restricted_log_likelihood=-3.0 if model == "MV-BM" else None,
-        log_likelihood=-3.0 if model == "MV-OU" else None,
+        log_likelihood=(-3.0 if model in {"MV-OU", "MV-OU-DIAG"} else None),
         num_effective_observations=20,
         root_prior="stationary",
     )
@@ -1770,16 +1772,54 @@ def test_asrcompare_multivariate_root_conventions_are_not_cross_ranked(tmp_path)
             "--trait-type",
             "continuous",
             "--models",
-            "MV-BM,MV-OU",
+            "MV-BM,MV-OU,MV-OU-DIAG",
             "-o",
             str(comparison),
         ]
     )
     table = pd.read_csv(comparison, sep="\t")
-    assert set(table["status"]) == {"ok"}
+    assert set(table["status"]) <= {"ok", "boundary"}
     assert set(table["sample_size"]) == {8}
     assert table["comparison_group"].nunique() == 2
-    assert table["criterion_rank"].isna().all()
+    stationary = table[table["model"].isin({"MV-OU", "MV-OU-DIAG"})]
+    assert stationary["criterion_rank"].notna().all()
+    assert stationary["aic_weight"].sum() == pytest.approx(1.0)
+    assert table.loc[table["model"] == "MV-BM", "criterion_rank"].isna().all()
+
+
+def test_asrcompare_deduplicates_fixed_shared_mvou_diag(tmp_path):
+    trait = tmp_path / "traits.tsv"
+    comparison = tmp_path / "comparison.tsv"
+    trait.write_text(
+        "leaf_name\tx\ty\n"
+        "A\t0.0\t0.0\nB\t0.9\t1.0\nC\t1.4\t2.3\nD\t2.3\t3.2\n"
+        "E\t3.0\t4.5\nF\t3.8\t5.2\nG\t4.1\t6.7\nH\t5.3\t7.5\n"
+    )
+    main(
+        [
+            "asrcompare",
+            "-i",
+            "[&R]((((A:.5,B:.7):.4,(C:.6,D:.8):.3):.5,"
+            "((E:.4,F:.9):.4,G:.7):.5):.2,H:1.2)R;",
+            "--trait",
+            str(trait),
+            "--state-column",
+            "x,y",
+            "--trait-type",
+            "continuous",
+            "--models",
+            "MV-OU,MV-OU-DIAG",
+            "--alpha",
+            "0.7",
+            "-o",
+            str(comparison),
+        ]
+    )
+    table = pd.read_csv(comparison, sep="\t").set_index("model")
+    assert table.loc["MV-OU-DIAG", "status"] == "equivalent"
+    assert table.loc["MV-OU-DIAG", "equivalent_to"] == "MV-OU"
+    assert table.loc["MV-OU", "num_parameters"] == 5
+    assert table.loc["MV-OU-DIAG", "num_parameters"] == 5
 
 
 def test_asrcompare_reports_single_mk_mixture_without_fake_winner(tmp_path):

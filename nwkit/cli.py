@@ -496,7 +496,8 @@ pasr.add_argument(
     type=str,
     required=True,
     action="store",
-    help="Trait column in --trait; MV-BM/MV-OU require two or more comma-separated columns.",
+    help="Trait column in --trait. Pagel models require exactly two comma-separated "
+    "binary-trait columns; multivariate Gaussian models require two or more columns.",
 )
 pasr.add_argument(
     "--trait-type",
@@ -516,8 +517,9 @@ pasr.add_argument(
     type=str,
     required=False,
     action="store",
-    help="default=%(default)s: Optional comma-separated state order. Unlisted observed states are rejected; "
-    "required with --transition-graph ordered and with THRESHOLD.",
+    help="default=%(default)s: Optional comma-separated state order. Pagel models "
+    "accept TRAIT1_STATE1,TRAIT1_STATE2;TRAIT2_STATE1,TRAIT2_STATE2. Unlisted "
+    "observed states are rejected; required with --transition-graph ordered and THRESHOLD.",
 )
 pasr.add_argument(
     "--model",
@@ -528,8 +530,10 @@ pasr.add_argument(
     action="store",
     choices=model_names(),
     help="default=ER for discrete, BM for continuous: Discrete ER/SYM/ARD/F81/GTR/"
-    "MK-REGIME/HRM/COVARION/MK-MIXTURE/THRESHOLD/CUSTOM or continuous BM/BMS/LAMBDA/KAPPA/DELTA/EB/ACDC/"
-    "BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/OU/OUM/OUMA/OUMV/OUMVA.",
+    "MK-DESIGN/PAGEL-INDEPENDENT/PAGEL-DEPENDENT/MK-REGIME/HRM/COVARION/"
+    "MK-MIXTURE/THRESHOLD/CUSTOM or continuous BM/BMS/LAMBDA/KAPPA/DELTA/"
+    "EB/ACDC/BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/MV-OU-DIAG/OU/OUM/OUMA/"
+    "OUMV/OUMVA.",
 )
 pasr.add_argument(
     "--rate",
@@ -550,6 +554,16 @@ pasr.add_argument(
     required=False,
     action="store",
     help="default=1e-9,1e3: Positive bounds for fitted Mk rates and GTR exchangeabilities.",
+)
+pasr.add_argument(
+    "--rate-design",
+    "--rate_design",
+    dest="rate_design",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="MK-DESIGN only: TSV with exactly from_state, to_state, and rate_class "
+    "columns. Edges sharing rate_class share one fitted direct transition rate.",
 )
 pasr.add_argument(
     "--transition-graph",
@@ -786,7 +800,9 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="OU-family models, including MV-OU and regime variants: Fixed attraction strength per branch-length unit. If omitted, estimate it.",
+    help="OU-family models, including both multivariate variants and regime "
+    "models: Fixed shared attraction strength per branch-length unit. If "
+    "omitted, estimate it.",
 )
 pasr.add_argument(
     "--alpha-bounds",
@@ -798,11 +814,23 @@ pasr.add_argument(
     help="OU models: Positive bounds for estimating alpha. Default scales to tree depth.",
 )
 pasr.add_argument(
+    "--alpha-by-trait",
+    "--alpha_by_trait",
+    dest="alpha_by_trait",
+    metavar="FLOAT[,FLOAT,...]",
+    default=None,
+    type=str,
+    help="MV-OU-DIAG only: Fixed positive attraction strength for each trait in "
+    "--state-column order. Omit both this and --alpha to estimate one per trait.",
+)
+pasr.add_argument(
     "--theta",
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="Scalar OU and OUM-family models: Fixed shared process optimum. Regime models can instead read regime optima from a table; MV-OU estimates one optimum per trait.",
+    help="Scalar OU and OUM-family models: Fixed shared process optimum. Regime "
+    "models can instead read regime optima from a table; multivariate OU models "
+    "estimate one optimum per trait.",
 )
 pasr.add_argument(
     "--eb-rate",
@@ -896,7 +924,8 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="MV-BM/MV-OU only: Optional tidy TSV of conditional trait covariances for selected nodes.",
+    help="MV-BM/MV-OU/MV-OU-DIAG only: Optional tidy TSV of conditional trait "
+    "covariances for selected nodes.",
 )
 pasr.add_argument(
     "--posterior-samples-out",
@@ -1076,6 +1105,7 @@ _copy_store_options(
         "states",
         "rate",
         "rate_bounds",
+        "rate_design",
         "transition_graph",
         "regime_map",
         "regime_model",
@@ -1093,6 +1123,7 @@ _copy_store_options(
         "evolution_parameter",
         "evolution_parameter_bounds",
         "alpha",
+        "alpha_by_trait",
         "alpha_bounds",
         "theta",
         "eb_rate",

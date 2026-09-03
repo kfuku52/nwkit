@@ -32,15 +32,16 @@ def _estimated_mapping_count(fit, value_name, flag_name, *, shared_name=None):
 
 def _continuous_parameter_count(fit):
     model = getattr(fit, "model", "")
-    if model in {"MV-BM", "MV-OU"}:
+    if model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
         dimension = len(fit.trait_names)
         covariance_count = dimension * (dimension + 1) // 2
         if model == "MV-BM":
             return covariance_count
         theta_count = dimension if getattr(fit, "theta_estimated", False) else 0
-        return (
-            covariance_count + theta_count + int(getattr(fit, "alpha_estimated", False))
-        )
+        alpha_count = 0
+        if getattr(fit, "alpha_estimated", False):
+            alpha_count = dimension if model == "MV-OU-DIAG" else 1
+        return covariance_count + theta_count + alpha_count
     if hasattr(fit, "evolution_parameter_estimated"):
         return int(fit.sigma2_estimated) + int(fit.evolution_parameter_estimated)
     if hasattr(fit, "eb_rate_estimated"):
@@ -116,7 +117,7 @@ def summarize_fit(model, fit, *, trait_type, root_prior=None):
         likelihood = fit.get("log_likelihood")
         return {
             "model": model,
-            "likelihood_kind": "discrete_ml",
+            "likelihood_kind": fit.get("likelihood_kind", "discrete_ml"),
             "log_likelihood": likelihood,
             "num_parameters": _discrete_parameter_count(fit),
             "sample_size": int(fit.get("sample_size", fit.get("num_characters", 1))),

@@ -182,6 +182,8 @@ def deterministic_multistart(
     additional_starts=(),
     minimizer=minimize,
     ftol=1e-12,
+    fractions=(0.1, 0.25, 0.5, 0.75, 0.9),
+    patterned_starts=True,
 ):
     """Run reproducible L-BFGS-B starts with an optional Powell fallback."""
 
@@ -204,20 +206,20 @@ def deterministic_multistart(
         and math.isfinite(float(lower))
         and math.isfinite(float(upper))
     ]
-    for fraction in (0.1, 0.25, 0.5, 0.75, 0.9):
+    for fraction in fractions:
         start = initial.copy()
         for index in finite_indices:
             lower, upper = bounds[index]
             assert lower is not None and upper is not None
             start[index] = float(lower) + fraction * (float(upper) - float(lower))
         starts.append(start)
-    if len(finite_indices) > 1:
+    if patterned_starts and len(finite_indices) > 1:
         for reverse in (False, True):
             start = initial.copy()
-            fractions = np.linspace(0.2, 0.8, len(finite_indices))
+            pattern_fractions = np.linspace(0.2, 0.8, len(finite_indices))
             if reverse:
-                fractions = fractions[::-1]
-            for fraction, index in zip(fractions, finite_indices, strict=True):
+                pattern_fractions = pattern_fractions[::-1]
+            for fraction, index in zip(pattern_fractions, finite_indices, strict=True):
                 lower, upper = bounds[index]
                 assert lower is not None and upper is not None
                 start[index] = float(lower) + float(fraction) * (

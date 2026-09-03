@@ -1,11 +1,13 @@
 # Ancestral trait reconstruction
 
 `nwkit asr` reconstructs traits at every node and imputes missing tip values.
-Discrete inference includes ER, SYM, ARD, F81, GTR, fixed-generator CUSTOM,
+Discrete inference includes ER, SYM, ARD, F81, GTR, fitted rate-class designs,
+Pagel independent/dependent binary-trait models, fixed-generator CUSTOM,
 branch-regime Mk, hidden/covarion rates, across-character rate mixtures, and a
 Bayesian threshold/liability model. Continuous inference includes BM,
 Pagel lambda/kappa/delta transforms, EB/ACDC, directional and regime drift,
-multivariate BM/OU, flexible-root OU, and OUM/OUMA/OUMV/OUMVA regime models.
+multivariate BM/shared-OU/diagonal-attraction OU, flexible-root OU, and
+OUM/OUMA/OUMV/OUMVA regime models.
 The tree must be rooted under the
 [shared rootedness contract](CLI_TSV_CONVENTIONS.md#rootedness-and-root-polytomies).
 Root and internal polytomies, non-ultrametric trees, and finite non-negative
@@ -16,8 +18,9 @@ transformation is performed.
 ## Input and automatic type selection
 
 The TSV requires `leaf_name` and the column selected by `--state-column`.
-`MV-BM` instead accepts two or more comma-separated columns, for example
+Multivariate Gaussian models instead accept two or more comma-separated columns, for example
 `--state-column height,mass`.
+Pagel discrete models require exactly two comma-separated binary-trait columns.
 Tip names are matched exactly, including numeric-looking names and literal
 names such as `NA`. Duplicate names or column headers are errors. The shared
 `--missing-values` and `--unmatched warn|error|ignore` policies apply.
@@ -56,12 +59,12 @@ codes require explicit discrete mode.
 
 | Option | Discrete | Continuous |
 |---|---|---|
-| `--model` | ER (default), SYM, ARD, F81, GTR, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, OU, OUM/OUMA/OUMV/OUMVA |
+| `--model` | ER (default), SYM, ARD, F81, GTR, MK-DESIGN, PAGEL-INDEPENDENT/DEPENDENT, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, MV-OU-DIAG, OU, OUM/OUMA/OUMV/OUMVA |
 | `--root-prior` | equal/empirical/stationary for CTMCs; identified Gaussian for THRESHOLD | flat for BM-family models; stationary for OU-family models; OU also supports fixed or Gaussian |
 | `--output` | probabilities (default), map | summary (default) |
 | `--tree-annotation` | map (default), state, probability, all | summary (default), mean, all |
-| Rate controls | `--rate`, `--rate-bounds`, `--rate-matrix`; mixture/covarion controls | `--sigma2`, transform parameters, `--alpha`, `--theta`, and `--drift` as applicable |
-| Structure controls | states/graph/regime/hidden controls; multiple columns for MK-MIXTURE | regime map/parameters; multiple trait and SE columns for MV-BM/MV-OU |
+| Rate controls | `--rate`, `--rate-bounds`, `--rate-design`, `--rate-matrix`; mixture/covarion controls | `--sigma2`, transform parameters, `--alpha`, `--alpha-by-trait`, `--theta`, and `--drift` as applicable |
+| Structure controls | states/graph/design/regime/hidden controls; multiple columns for MK-MIXTURE or Pagel | regime map/parameters; multiple trait and SE columns for MV-BM/MV-OU/MV-OU-DIAG |
 | Observation uncertainty | Ambiguous states; THRESHOLD MCMC | Known per-trait measurement SEs for every continuous model |
 | Interval/parameter uncertainty | THRESHOLD posterior probabilities and liability moments | Conditional Gaussian intervals; optional transform profile CI, joint posterior samples, PPC, and bootstrap |
 | Simulation | CTMC stochastic maps except MK-MIXTURE/THRESHOLD | `--posterior-samples-out`, `--posterior-predictive-out`, `--bootstrap-out`, and `--seed` |
@@ -106,6 +109,43 @@ otherwise redundant frequency scale. Exchangeabilities use `--rate-bounds`;
 frequency ratios use fixed numerical bounds reported in `--model-out`. F81 and
 GTR default to a stationary root prior, while equal and empirical priors remain
 selectable.
+
+`--model MK-DESIGN --rate-design design.tsv` fits an arbitrary partition of
+direct transition rates. The TSV must contain exactly these columns in order:
+
+```tsv
+from_state	to_state	rate_class
+juvenile	adult	forward
+adult	senescent	forward
+senescent	adult	reverse
+adult	juvenile	reverse
+```
+
+Only listed directed edges are allowed, and every edge sharing a `rate_class`
+uses one fitted rate. State names must belong to the inferred or explicit model
+state space; self edges, duplicate edges, empty classes, and an empty design are
+rejected. The design therefore expresses ordered, irreversible, symmetric, or
+other biologically motivated rate-sharing hypotheses without supplying fixed
+rate values. `--rate` is a common optimizer starting value, while
+`--rate-bounds` constrains every class. A separate `--transition-graph` is
+invalid because the design already specifies both edges and sharing. Model
+metadata reports the design path, class order, fitted class rates, and full Q.
+
+`PAGEL-INDEPENDENT` and `PAGEL-DEPENDENT` model the correlated evolution of two
+binary traits supplied as `--state-column trait1,trait2`. The four joint states
+form one CTMC in which exactly one trait may change per instantaneous event;
+simultaneous two-trait jumps are excluded. The independent model has four rates
+(two directions for each trait, shared across the other trait's background).
+The dependent model has eight rates because each direction may depend on the
+other trait's state. Each column must resolve to exactly two model states. To
+include an unobserved state or fix ordering, use
+`--states 'A0,A1;B0,B1'`. If one tip trait is missing, its two compatible joint
+states remain in that tip's likelihood, so information from the observed trait
+is retained. Standard output, tree annotations, and stochastic maps use four
+unambiguous JSON-encoded joint-state labels. The two Pagel models share
+`likelihood_kind=pagel_joint_ml` and can be compared to each other; this
+joint-tip likelihood is kept separate from the across-character MK-MIXTURE
+likelihood.
 
 `--model CUSTOM --rate-matrix Q.tsv` uses a fixed labelled generator instead:
 
@@ -362,8 +402,8 @@ because only one variance combination is identified.
 
 All scalar extensions retain the Gaussian all-node smoothing and conditional
 interval contract described above. Known per-tip measurement SEs are supported
-by every scalar model; MV-BM and MV-OU accept one comma-separated SE column per
-trait and allow trait-level missingness.
+by every scalar model; all multivariate models accept one comma-separated SE
+column per trait and allow trait-level missingness.
 
 ### BMS: branch-regime Brownian rates
 
@@ -491,7 +531,7 @@ as a second fixed effect. Consequently, its reported flat-root likelihood and
 `n_effective - 2` convention of a two-fixed-effect REML analysis. Output records
 this treatment explicitly, and intervals condition on the fitted drift.
 
-### MV-BM and MV-OU: correlated continuous traits
+### MV-BM, MV-OU, and MV-OU-DIAG: correlated continuous traits
 
 `--model MV-BM --state-column trait1,trait2,...` models each branch increment as
 `MultivariateNormal(0, Sigma * t)`. Complete exact vectors use the linear-time
@@ -502,8 +542,8 @@ identify its mean/covariance; an implementation guard rejects more
 than 1,000 dense observed coordinates. This measured cap bounds cubic covariance
 factorization and repeated all-node solves; complete error-free MV-BM remains on
 the linear-time path and is not subject to the dense-coordinate cap. Explicit
-all-zero SE columns are normalized to the same exact-observation path. MV-BM and
-MV-OU both report sample size as the number of distinct observed phylogenetic
+all-zero SE columns are normalized to the same exact-observation path. All three
+multivariate models report sample size as the number of distinct observed phylogenetic
 positions, independent of trait dimension or dense/fast implementation path.
 Even an all-zero SE mapping is validated for complete tip coverage, vector
 dimension, finite numeric values, and non-negativity before the fast path is
@@ -523,10 +563,28 @@ and diagonal known measurement errors as dense MV-BM. A free alpha is rejected
 when every observed pair within each trait combination has only one constant
 phylogenetic distance, because alpha can then be absorbed into `Sigma`.
 
+`--model MV-OU-DIAG` replaces the shared attraction rate by a positive rate for
+each trait. With `A = diag(alpha_1,...,alpha_d)` and positive-definite diffusion
+covariance `D`, its stationary covariance is
+`C_ij = D_ij / (alpha_i + alpha_j)`. For nodes `p,q` with LCA depth `s`,
+`Cov(X_p,i, X_q,j)` is
+`exp[-alpha_i(depth_p-s)-alpha_j(depth_q-s)] * C_ij`. This permits traits to
+lose ancestral signal at different speeds while retaining correlated process
+noise. Omit alpha options to estimate all `d` rates, use `--alpha FLOAT` to fix
+one shared rate, or use `--alpha-by-trait a1,a2,...` in state-column order to
+fix distinct rates. These fixed forms are mutually exclusive and cannot be
+combined with `--alpha-bounds`. Every freely estimated trait alpha requires at
+least two observations at distinct phylogenetic positions. The optimizer
+parameterizes `D` by its Cholesky factor, so invalid diffusion covariances are
+not searched. With fixed shared alpha, MV-OU-DIAG is exactly MV-OU and
+`asrcompare` retains the former as an equivalent row rather than assigning
+duplicate IC weight.
+
 Primary output is long-form with one row per node/trait. `--covariance-out`
 writes each selected node's conditional covariance and correlation upper
-triangle; `--model-out` records Sigma, rank, optimizer diagnostics, and alpha/
-theta for MV-OU. Intervals condition on fitted parameters and exclude parameter
+triangle; `--model-out` records stationary Sigma, rank, optimizer diagnostics,
+and alpha/theta for OU models. MV-OU-DIAG additionally records every trait alpha
+and diffusion-covariance element. Intervals condition on fitted parameters and exclude parameter
 and tree uncertainty. Scalar posterior-sampling/PPC/bootstrap outputs are
 currently rejected for multivariate fits rather than silently approximated.
 
@@ -615,10 +673,11 @@ one-time input preparation, including tree and trait parsing plus shared
 auxiliary inputs, repeated on each row; `elapsed_seconds` contains only that
 candidate's fit/evaluation time. Alias rows have zero fit time.
 
-Multiple discrete columns currently select the joint MK-MIXTURE contract; other
-discrete models are not fitted separately and summed. Multiple continuous
-columns select MV-BM/MV-OU candidates. Numeric categorical columns still need
-explicit `--trait-type discrete`.
+Multiple discrete columns select MK-MIXTURE; exactly two columns also make the
+two Pagel models applicable when both traits are binary. Their different
+likelihood kinds form separate comparison sets rather than a false cross-model
+ranking. Multiple continuous columns select MV-BM/MV-OU/MV-OU-DIAG candidates.
+Numeric categorical columns still need explicit `--trait-type discrete`.
 
 `--compare-models M1,M2,... --model-comparison-out FILE` fits compatible models
 alongside a normal `nwkit asr` reconstruction and reports log likelihood,
@@ -662,7 +721,7 @@ Continuous summary columns additionally contain:
 
 | Columns | Meaning |
 |---|---|
-| `trait` | Selected input column; MV-BM/MV-OU emit one row for each selected trait |
+| `trait` | Selected input column; multivariate Gaussian models emit one row for each selected trait |
 | `observed_value`, `observed_se` | Original observation and its SE; empty for internal/missing nodes, SE zero for exact observations |
 | `is_imputed` | Whether this is an unobserved tip |
 | `mean`, `variance`, `sd` | Conditional latent-trait moments in original units |
@@ -683,17 +742,18 @@ BMS, BMS-DRIFT, and OUM-family fits additionally report regime order, root
 regime, source paths, each regime parameter, optimizer counts, and data-scaled
 bounds where applicable. Transformed BM and BM-DRIFT report extension
 parameters, estimated flags, search details, and the underlying sigma2 fit.
-MV-BM/MV-OU report covariance rank and every Sigma element under collision-safe
-hex-encoded trait identifiers; the optional covariance sidecar retains readable
-trait names.
+Multivariate models report covariance rank and every stationary/diffusion Sigma
+element under collision-safe hex-encoded trait identifiers; the optional
+covariance sidecar retains readable trait names.
 
 Discrete `--model-out` records the transition graph, `q_source` (`estimated`,
 `fixed:--rate`, or `fixed:PATH`), fit/boundary status, optimizer start/convergence
 counts, and every directed Q entry. CUSTOM has an empty fitted-rate-bounds field.
 F81/GTR also report equilibrium frequencies; MK-REGIME reports every regime Q;
-HRM/COVARION report expanded-state details; MK-MIXTURE reports category rates,
-weights and gamma shape; THRESHOLD reports its identified process, thresholds,
-MCMC settings and diagnostics.
+MK-DESIGN and Pagel report fitted rate classes; Pagel also reports both trait
+columns and binary state orders. HRM/COVARION report expanded-state details;
+MK-MIXTURE reports category rates, weights and gamma shape; THRESHOLD reports its
+identified process, thresholds, MCMC settings and diagnostics.
 
 For nondegenerate observations `y` with covariance `V`, the reported residual
 log-likelihood uses the flat-root integral convention:
@@ -719,7 +779,7 @@ includes `asr_model`. BM retains its prior NHX property set. Annotation levels a
 - `mean`: `asr_mean` only.
 - `summary` (default): also variance, SD, interval limits/level, and
   `asr_interval_kind` (`conditional_on_sigma2`, `conditional_on_parameters`, or
-  `conditional_on_covariance`). MV-BM/MV-OU suffix per-trait properties with the
+  `conditional_on_covariance`). Multivariate models suffix per-trait properties with the
   UTF-8 hexadecimal trait identifier and includes cross-trait covariances.
 - `all`: also tip `asr_observed_value`, `asr_observed_se`, and `asr_is_imputed`.
 
@@ -790,6 +850,30 @@ nwkit asr -i tree.nwk --trait traits.tsv --state-column height,mass \
   --model MV-BM --covariance-out node-covariance.tsv -o mvbm.tsv
 ```
 
+Trait-specific multivariate OU attraction rates:
+
+```sh
+nwkit asr -i tree.nwk --trait traits.tsv --state-column height,mass \
+  --model MV-OU-DIAG --alpha-by-trait 0.2,0.8 \
+  --model-out mvou-diag-model.tsv -o mvou-diag.tsv
+```
+
+Pagel correlated evolution for two binary traits:
+
+```sh
+nwkit asrcompare -i tree.nwk --trait traits.tsv \
+  --state-column habitat,behavior --trait-type discrete \
+  --models PAGEL-INDEPENDENT,PAGEL-DEPENDENT -o pagel-comparison.tsv
+```
+
+Custom fitted rate sharing:
+
+```sh
+nwkit asr -i tree.nwk --trait stages.tsv --state-column stage \
+  --trait-type discrete --model MK-DESIGN --rate-design design.tsv \
+  --model-out design-model.tsv -o design-asr.tsv
+```
+
 Ordinal threshold reconstruction with explicit MCMC size:
 
 ```sh
@@ -840,5 +924,6 @@ without adding R as a runtime or test dependency. OU tests independently assembl
 the stationary patristic covariance and compare ordinary likelihood and all-node
 conditional moments. Extension tests additionally compare equal-regime limits to
 BM/OU, generic Gaussian smoothing to independent dense conditioning,
-MV-BM/MV-OU covariance to dense matrix or contrast oracles, threshold constraints
+multivariate covariance to dense matrix or contrast oracles, shared-alpha
+MV-OU-DIAG reduction to MV-OU, Pagel nested rate partitions, threshold constraints
 and seeded sampling, and cached versus uncached discrete-mixture likelihoods.

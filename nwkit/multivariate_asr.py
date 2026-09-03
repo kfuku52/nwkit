@@ -426,7 +426,7 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
 
 def multivariate_model_table(fit, args, ci_level):
     model = getattr(fit, "model", "MV-BM")
-    is_ou = model == "MV-OU"
+    is_ou = model in {"MV-OU", "MV-OU-DIAG"}
     row = {
         "trait_type": "continuous",
         "trait_type_requested": getattr(args, "trait_type", "auto"),
@@ -458,11 +458,21 @@ def multivariate_model_table(fit, args, ci_level):
         row["alpha_estimated"] = fit.alpha_estimated
         for index, trait in enumerate(fit.trait_names):
             row[f"theta_{_trait_id(trait)}"] = float(fit.theta[index])
+            if model == "MV-OU-DIAG":
+                row[f"alpha_{_trait_id(trait)}"] = float(fit.alpha_by_trait[index])
+    row["sigma_interpretation"] = (
+        "stationary_trait_covariance" if is_ou else "diffusion_covariance"
+    )
     for first, first_trait in enumerate(fit.trait_names):
         for second, second_trait in enumerate(fit.trait_names):
             row[f"sigma_{_trait_id(first_trait)}_to_{_trait_id(second_trait)}"] = float(
                 fit.sigma[first, second]
             )
+            if model == "MV-OU-DIAG":
+                row[
+                    f"diffusion_sigma_{_trait_id(first_trait)}_to_"
+                    f"{_trait_id(second_trait)}"
+                ] = float(fit.diffusion_sigma[first, second])
     return pd.DataFrame([row])
 
 
