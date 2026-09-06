@@ -967,9 +967,10 @@ def _expand_trait_estimates(
     expanded_means = np.full(len(leaf_names), np.nan, dtype=float)
     expanded_counts = np.zeros(len(leaf_names), dtype=int)
     expanded_within_sd = np.full(len(leaf_names), np.nan, dtype=float)
+    index_by_name = {name: index for index, name in enumerate(leaf_names)}
+    selected = [index_by_name[name] for name in fitted_leaf_names]
     if isinstance(covariance, DiagonalLowRankCovariance):
         expanded_diagonal = np.zeros(len(leaf_names), dtype=float)
-        selected = [leaf_names.index(name) for name in fitted_leaf_names]
         expanded_diagonal[selected] = covariance.diagonal
         loading = covariance.low_rank
         if sparse.issparse(loading):
@@ -1003,7 +1004,6 @@ def _expand_trait_estimates(
         len(leaf_names) if covariance.ndim == 1 else (len(leaf_names), len(leaf_names)),
         dtype=float,
     )
-    selected = [leaf_names.index(name) for name in fitted_leaf_names]
     expanded_means[selected] = means
     if covariance.ndim == 1:
         expanded_covariance[selected] = covariance

@@ -539,9 +539,13 @@ contrast/smoothing path. Trait-level missingness or known errors automatically
 select a dense observed-coordinate likelihood, with one comma-separated
 `--standard-error-column` per trait. Every trait needs enough observations to
 identify its mean/covariance; an implementation guard rejects more
-than 1,000 dense observed coordinates. This measured cap bounds cubic covariance
-factorization and repeated all-node solves; complete error-free MV-BM remains on
-the linear-time path and is not subject to the dense-coordinate cap. Explicit
+than 1,000 dense observed coordinates. This cap bounds covariance factorization
+size. Dense reconstruction computes node cross-covariances one node at a time,
+without allocating a nodes-by-observations matrix, and rejects estimated
+posterior result storage above 256 MiB. Multivariate `asrcompare` fits share
+observed geometry and skip ancestral reconstruction entirely. Complete
+error-free MV-BM remains on the linear-time path and is not subject to the
+dense-coordinate cap. Explicit
 all-zero SE columns are normalized to the same exact-observation path. All three
 multivariate models report sample size as the number of distinct observed phylogenetic
 positions, independent of trait dimension or dense/fast implementation path.
@@ -549,6 +553,9 @@ Even an all-zero SE mapping is validated for complete tip coverage, vector
 dimension, finite numeric values, and non-negativity before the fast path is
 selected. Dense covariance rank is calculated in normalized trait coordinates,
 so changing trait/SE units cannot turn a full-rank fit into a singular one.
+Brownian fitting also normalizes tree time, and identifiability/rank checks are
+invariant to a uniform change of branch-length units. Distances are accumulated
+along ancestor paths instead of subtracting large root depths.
 Consistent exact observations at one zero-length-contracted position count once;
 conflicting values at that position have zero likelihood and are rejected. A
 covariance component is also rejected explicitly when the observed trait/branch
@@ -562,6 +569,10 @@ estimated by proper stationary-root ML. MV-OU supports the same partial vectors
 and diagonal known measurement errors as dense MV-BM. A free alpha is rejected
 when every observed pair within each trait combination has only one constant
 phylogenetic distance, because alpha can then be absorbed into `Sigma`.
+For both multivariate OU variants, default alpha bounds are `1e-6/T,50/T`,
+where `T` is half the largest observed-coordinate patristic distance (or 1 if
+all observed positions coincide). A shared stem above the observed MRCA does
+not change this scale. Explicit `--alpha-bounds` still override these defaults.
 
 `--model MV-OU-DIAG` replaces the shared attraction rate by a positive rate for
 each trait. With `A = diag(alpha_1,...,alpha_d)` and positive-definite diffusion

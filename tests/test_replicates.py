@@ -10,6 +10,33 @@ from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
 from nwkit.replicates import estimate_likelihood_replicates, estimate_replicate_traits
 
 
+@pytest.mark.parametrize("sparse_loading", [True, False])
+def test_partial_replicate_expansion_preserves_correlated_observations(sparse_loading):
+    from scipy import sparse
+
+    from nwkit.replicates import _expand_trait_estimates
+
+    loading = np.array([[1.0, 2.0], [3.0, 4.0]])
+    covariance = DiagonalLowRankCovariance(
+        np.array([0.2, 0.3]), sparse.csr_matrix(loading) if sparse_loading else loading
+    )
+    means, expanded, counts, sd = _expand_trait_estimates(
+        ["C", "A", "B", "D"],
+        ["B", "C"],
+        np.array([2.0, 3.0]),
+        covariance,
+        np.array([4, 5]),
+        np.array([0.1, 0.2]),
+    )
+    np.testing.assert_allclose(means, [3.0, np.nan, 2.0, np.nan], equal_nan=True)
+    np.testing.assert_array_equal(counts, [5, 0, 4, 0])
+    np.testing.assert_allclose(sd, [0.2, np.nan, 0.1, np.nan], equal_nan=True)
+    expected = np.zeros((4, 4))
+    expected[0, 0], expected[2, 2] = 25.3, 5.2
+    expected[0, 2] = expected[2, 0] = 11.0
+    np.testing.assert_allclose(materialize_covariance(expanded), expected)
+
+
 def _raw_replicates():
     return pd.DataFrame(
         [

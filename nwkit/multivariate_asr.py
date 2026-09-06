@@ -217,6 +217,8 @@ def compute_mvbm_marginals(
     *,
     standard_errors=None,
     _tree_validated=False,
+    compute_posterior=True,
+    _geometry_cache=None,
 ):
     """Estimate a trait covariance and return all-node MV-BM marginals.
 
@@ -245,6 +247,8 @@ def compute_mvbm_marginals(
             values_by_leaf,
             trait_names,
             standard_errors=standard_errors,
+            compute_posterior=compute_posterior,
+            _geometry_cache=_geometry_cache,
         )
     vectors = _validated_vectors(values_by_leaf, trait_names)
     scaled, exponents = _scaled_vectors(vectors, trait_names)
@@ -266,9 +270,7 @@ def compute_mvbm_marginals(
         )
     eigenvalues = np.linalg.eigvalsh(sigma_scaled)
     tolerance = (
-        np.finfo(float).eps
-        * max(1.0, float(np.max(eigenvalues)))
-        * max(sigma_scaled.shape)
+        np.finfo(float).eps * float(np.max(eigenvalues)) * max(sigma_scaled.shape)
     )
     rank = int(np.sum(eigenvalues > tolerance))
     if rank < len(trait_names):
@@ -290,6 +292,24 @@ def compute_mvbm_marginals(
             int(value) * _LOG_2 for value in exponents
         )
         fit_status = "ok"
+    posterior = (
+        _mvbm_posterior(tree, vectors, trait_names, sigma) if compute_posterior else {}
+    )
+    fit = MultivariateBrownianFit(
+        trait_names=trait_names,
+        sigma=sigma,
+        sigma_rank=rank,
+        sigma_estimated=True,
+        restricted_log_likelihood=log_likelihood,
+        num_observed=num_observed,
+        num_effective_observations=num_effective,
+        residual_df=residual_df,
+        fit_status=fit_status,
+    )
+    return posterior, fit
+
+
+def _mvbm_posterior(tree, vectors, trait_names, sigma):
     scalar_results = []
     for trait_index in range(len(trait_names)):
         scalar_values = {
@@ -307,18 +327,7 @@ def compute_mvbm_marginals(
         posterior[node] = MultivariateGaussianMarginal(
             mean=mean, covariance=variance_factor * sigma
         )
-    fit = MultivariateBrownianFit(
-        trait_names=trait_names,
-        sigma=sigma,
-        sigma_rank=rank,
-        sigma_estimated=True,
-        restricted_log_likelihood=log_likelihood,
-        num_observed=num_observed,
-        num_effective_observations=num_effective,
-        residual_df=residual_df,
-        fit_status=fit_status,
-    )
-    return posterior, fit
+    return posterior
 
 
 def _trait_id(trait):

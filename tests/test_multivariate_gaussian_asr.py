@@ -210,7 +210,7 @@ def test_mvou_diag_posterior_matches_direct_dense_conditioning():
         observed_covariance, observed_values - observed_mean
     )
     for node_index, node in enumerate(geometry.compiled.nodes):
-        shared = geometry.node_shared_depth[node_index]
+        shared, _, _ = geometry.cross(node_index)
         node_distance = geometry.depths[node_index] - shared
         observed_distance = observed_depths - shared
         cross = (

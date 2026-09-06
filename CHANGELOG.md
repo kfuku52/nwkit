@@ -4,6 +4,39 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.3] - 2026-09-06
+
+### Fixed
+
+- Reject multivariate PGLS coefficients that are not identifiable after
+  response-specific missingness, for both ML/REML and dense/sparse fits; remove
+  implicit diagonal jitter that changed singular covariance models without
+  reporting the added noise.
+- Make multivariate Brownian covariance/rank and Gaussian identifiability
+  checks invariant to tree-time units. Accumulate OU path lengths without
+  subtracting large root depths, and use observed distances for multivariate
+  OU time normalization and default alpha bounds.
+- Preserve covariance scale when a sparse covariance component is fitted by
+  the dense multivariate PGLS path.
+
+### Changed
+
+- Reuse validated PGLS covariance components and use Cholesky/triangular solves
+  instead of repeated general matrix factorizations. Replace quadratic tip-name
+  searches in partial replicate expansion with a single index mapping.
+  In `tools/benchmark_multivariate.py` workloads, warmup plus three-run medians
+  changed from 74.69 to 18.24 ms for 80-tip/two-response PGLS and from 182.03 to
+  1.21 ms for 8,000-tip half-observed replicate expansion (4.1x and 149.9x).
+  macOS x86_64, Python 3.10.14, NumPy 1.26.4, SciPy 1.15.2, and one BLAS thread
+  were used for both revisions. Maximum PGLS differences were `7.2e-13` in
+  log likelihood, `2.5e-16` in coefficients, and `2.0e-8` in covariance elements;
+  the fixed-alpha multivariate comparison workload returned identical fits.
+  These are workload-specific measurements, not general speedup guarantees.
+- Multivariate ASR comparison now skips ancestral reconstruction and shares
+  observed tree geometry. Dense ASR generates node cross-covariances on demand
+  instead of storing nodes-by-observations matrices, with an explicit 256 MiB
+  estimated posterior-result storage guard.
+
 ## [0.43.2] - 2026-09-03
 
 ### Added

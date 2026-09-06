@@ -2,10 +2,12 @@
 
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache
 from typing import Callable, Mapping
 
 import numpy as np
 from scipy import sparse
+from scipy.linalg import cho_solve, solve_triangular
 from scipy.optimize import minimize
 
 from nwkit.gaussian import DiagonalLowRankCovariance, materialize_covariance
@@ -60,15 +62,9 @@ class MultivariatePglsFit:
 
 def _positive_cholesky(matrix: np.ndarray) -> np.ndarray:
     symmetric = (matrix + matrix.T) / 2.0
-    scale = max(1.0, float(np.max(np.diag(symmetric))))
-    for multiplier in (0.0, 1e-12, 1e-10, 1e-8, 1e-6):
-        try:
-            return np.linalg.cholesky(
-                symmetric + np.eye(len(matrix)) * multiplier * scale
-            )
-        except np.linalg.LinAlgError:
-            continue
-    raise np.linalg.LinAlgError("Multivariate covariance is not positive definite.")
+    # A diagonal nugget changes the statistical model and can be exploited by
+    # the variance optimizer. Singular exact observations must not acquire noise.
+    return np.linalg.cholesky(symmetric)
 
 
 def _trait_cholesky(parameters: np.ndarray, dimension: int) -> np.ndarray:
@@ -208,6 +204,20 @@ def _validate_multivariate_fixed_covariance(fixed_covariance, size):
     return fixed_array.astype(float)
 
 
+def _validate_observed_design(responses, design, observed):
+    if np.isinf(responses).any():
+        raise ValueError("Multivariate responses must be finite or missing (NaN).")
+    for trait in range(responses.shape[1]):
+        if (
+            design.shape[1]
+            and np.linalg.matrix_rank(design[observed[:, trait]]) < design.shape[1]
+        ):
+            raise ValueError(
+                f"Multivariate response {trait + 1} has a rank-deficient observed "
+                "design; its coefficients are not identifiable after missingness."
+            )
+
+
 def _validate_multivariate_inputs(
     responses: np.ndarray,
     design: np.ndarray,
@@ -230,6 +240,7 @@ def _validate_multivariate_inputs(
         )
     if np.any(observed.sum(axis=1) == 0):
         raise ValueError("Every retained tip needs at least one observed response.")
+    _validate_observed_design(responses, design, observed)
     if not components:
         raise ValueError("Multivariate PGLS requires a covariance component.")
     for name, component in components.items():
@@ -363,7 +374,10 @@ def _sparse_multivariate_state(
 
     inverse_design = inverse(observed_design)
     information = observed_design.T @ inverse_design
-    beta_covariance = np.linalg.pinv(information, hermitian=True)
+    information_factor = _positive_cholesky(information)
+    beta_covariance = cho_solve(
+        (information_factor, True), np.eye(len(information)), check_finite=False
+    )
     coefficients = beta_covariance @ (observed_design.T @ inverse(observed_response))
     residual = observed_response - observed_design @ coefficients
     quadratic = float(residual @ inverse(residual))
@@ -390,6 +404,30 @@ def _sparse_multivariate_state(
         beta_covariance,
         SparseFittedCovariance(precision=precision, loading=loading),
     )
+
+
+def _dense_covariance_inputs(components, n_tips, fixed_covariance, use_sparse):
+    fixed_dense = (
+        materialize_covariance(fixed_covariance)
+        if not use_sparse and fixed_covariance is not None
+        else None
+    )
+
+    @lru_cache(maxsize=max(1, 2 * len(components)))
+    def component_covariance(name, parameter):
+        component = components[name]
+        matrix = (
+            component.materialize() * component.covariance_scale
+            if isinstance(component, SparseCovarianceModel)
+            else component(parameter)
+            if callable(component)
+            else component
+        )
+        return _validate_psd_covariance(
+            matrix, n_tips, f"Covariance component '{name}'"
+        )
+
+    return component_covariance, fixed_dense
 
 
 def fit_multivariate_pgls(
@@ -453,6 +491,9 @@ def fit_multivariate_pgls(
     observed_response = response_vector[observed_indices]
     full_design = np.kron(np.eye(n_traits), design)
     observed_design = full_design[observed_indices]
+    dense_component, fixed_dense = _dense_covariance_inputs(
+        covariance_components, n_tips, fixed_covariance, use_sparse
+    )
 
     def unpack(parameters: np.ndarray):
         component_covariances = {}
@@ -485,54 +526,30 @@ def fit_multivariate_pgls(
             )
         full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
         for name, component in covariance_components.items():
-            if isinstance(component, SparseCovarianceModel):
-                tip_covariance = component.materialize()
-            else:
-                tip_covariance = (
-                    component(decoded) if callable(component) else component
-                )
-            tip_covariance = np.asarray(tip_covariance, dtype=float)
-            if (
-                tip_covariance.shape != (n_tips, n_tips)
-                or not np.isfinite(tip_covariance).all()
-            ):
-                raise ValueError(
-                    "Covariance component '{}' has invalid dimensions or values.".format(
-                        name
-                    )
-                )
-            asymmetry = float(np.max(np.abs(tip_covariance - tip_covariance.T)))
-            scale = max(1.0, float(np.max(np.abs(tip_covariance))))
-            tolerance = np.finfo(float).eps * scale * max(1, n_tips) * 100.0
-            if asymmetry > tolerance:
-                raise ValueError(
-                    "Covariance component '{}' must be symmetric.".format(name)
-                )
-            tip_covariance = (tip_covariance + tip_covariance.T) / 2.0
-            if float(np.min(np.linalg.eigvalsh(tip_covariance))) < -tolerance:
-                raise ValueError(
-                    "Covariance component '{}' must be positive semidefinite.".format(
-                        name
-                    )
-                )
+            tip_covariance = dense_component(
+                name, decoded if callable(component) else None
+            )
             full_covariance += np.kron(trait_covariances[name], tip_covariance)
-        if fixed_covariance is not None:
-            full_covariance += materialize_covariance(fixed_covariance)
+        if fixed_dense is not None:
+            full_covariance += fixed_dense
         observed_covariance = full_covariance[
             np.ix_(observed_indices, observed_indices)
         ]
         cholesky = _positive_cholesky(observed_covariance)
-        inverse_design = np.linalg.solve(
-            cholesky.T, np.linalg.solve(cholesky, observed_design)
+        inverse = cho_solve(
+            (cholesky, True),
+            np.column_stack([observed_design, observed_response]),
+            check_finite=False,
         )
+        inverse_design = inverse[:, :-1]
         information = observed_design.T @ inverse_design
-        beta_covariance = np.linalg.pinv(information, hermitian=True)
-        coefficients = beta_covariance @ (
-            observed_design.T
-            @ np.linalg.solve(cholesky.T, np.linalg.solve(cholesky, observed_response))
+        information_factor = _positive_cholesky(information)
+        beta_covariance = cho_solve(
+            (information_factor, True), np.eye(len(information)), check_finite=False
         )
+        coefficients = beta_covariance @ (observed_design.T @ inverse[:, -1])
         residual = observed_response - observed_design @ coefficients
-        whitened = np.linalg.solve(cholesky, residual)
+        whitened = solve_triangular(cholesky, residual, lower=True, check_finite=False)
         degrees_of_freedom = len(observed_response) - observed_design.shape[1]
         if reml and degrees_of_freedom <= 0:
             raise ValueError(

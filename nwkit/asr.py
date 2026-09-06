@@ -3543,7 +3543,16 @@ def _continuous_regime_assignment(tree, args, model):
 
 
 def _fit_continuous_model(
-    tree, observed, errors, trait_columns, args, settings, regime_assignment
+    tree,
+    observed,
+    errors,
+    trait_columns,
+    args,
+    settings,
+    regime_assignment,
+    *,
+    compute_posterior=True,
+    geometry_cache=None,
 ):
     from nwkit.asr_regimes import read_regime_parameters
     from nwkit.continuous_asr import compute_bm_marginals
@@ -3627,6 +3636,8 @@ def _fit_continuous_model(
             trait_columns,
             standard_errors=errors,
             _tree_validated=True,
+            compute_posterior=compute_posterior,
+            _geometry_cache=geometry_cache,
         )
     if model == "MV-OU":
         from nwkit.multivariate_gaussian_asr import fit_dense_mvou
@@ -3637,8 +3648,14 @@ def _fit_continuous_model(
             observed,
             trait_columns,
             alpha=getattr(args, "alpha", None),
-            alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
+            alpha_bounds=(
+                parse_alpha_bounds(args.alpha_bounds, tree)
+                if getattr(args, "alpha_bounds", None) not in (None, "")
+                else None
+            ),
             standard_errors=errors,
+            compute_posterior=compute_posterior,
+            _geometry_cache=geometry_cache,
         )
     if model == "MV-OU-DIAG":
         from nwkit.multivariate_gaussian_asr import fit_dense_mvou_diag
@@ -3650,8 +3667,14 @@ def _fit_continuous_model(
             trait_columns,
             alpha=getattr(args, "alpha", None),
             alpha_by_trait=getattr(args, "alpha_by_trait", None),
-            alpha_bounds=parse_alpha_bounds(getattr(args, "alpha_bounds", None), tree),
+            alpha_bounds=(
+                parse_alpha_bounds(args.alpha_bounds, tree)
+                if getattr(args, "alpha_bounds", None) not in (None, "")
+                else None
+            ),
             standard_errors=errors,
+            compute_posterior=compute_posterior,
+            _geometry_cache=geometry_cache,
         )
     raise ValueError(f"Unsupported continuous ASR model: {model}.")
 

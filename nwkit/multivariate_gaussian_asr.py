@@ -9,10 +9,11 @@ from scipy.linalg import cho_factor, cho_solve
 from nwkit.clade_index import LcaIndex
 from nwkit.compiled_tree import CompiledTree
 from nwkit.multivariate_asr import MultivariateGaussianMarginal
-from nwkit.optimization import deterministic_multistart
+from nwkit.optimization import FitResourceError, deterministic_multistart
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _MAX_DENSE_OBSERVATIONS = 1000
+_MAX_POSTERIOR_BYTES = 256 * 1024**2
 
 
 @dataclass(frozen=True)
@@ -62,8 +63,44 @@ class _Geometry:
     depths: np.ndarray
     observed_shared_depth: np.ndarray
     observed_distance: np.ndarray
-    node_shared_depth: np.ndarray
-    node_distance: np.ndarray
+    observed_left: np.ndarray
+    observed_right: np.ndarray
+    observed_nodes: np.ndarray
+    lca: LcaIndex
+    jump_lengths: tuple[np.ndarray, ...]
+    time_scale: float = 1.0
+
+    def path_length(self, node, ancestor):
+        steps = self.lca.depth[node] - self.lca.depth[ancestor]
+        terms = []
+        for level in range(steps.bit_length()):
+            if steps & (1 << level):
+                terms.append(float(self.jump_lengths[level][node]))
+                node = self.lca.ancestors[level][node]
+        return math.fsum(terms) / self.time_scale
+
+    def cross(self, node):
+        """One node's geometry, using O(observations) temporary storage."""
+        shared = np.empty(len(self.observed_nodes))
+        left = np.empty_like(shared)
+        right = np.empty_like(shared)
+        for index, observed in enumerate(self.observed_nodes):
+            ancestor = self.lca.common_ancestor_indices(node, int(observed))
+            shared[index] = self.depths[ancestor]
+            left[index] = self.path_length(node, ancestor)
+            right[index] = self.path_length(int(observed), ancestor)
+        return shared, left, right
+
+    def rescaled(self, scale):
+        return replace(
+            self,
+            depths=self.depths / scale,
+            observed_shared_depth=self.observed_shared_depth / scale,
+            observed_distance=self.observed_distance / scale,
+            observed_left=self.observed_left / scale,
+            observed_right=self.observed_right / scale,
+            time_scale=self.time_scale * scale,
+        )
 
 
 def _finite(value, label, *, nonnegative=False):
@@ -203,6 +240,7 @@ def _geometry(data: _ObservationData) -> _Geometry:
     compiled = data.compiled
     lca = LcaIndex(compiled.tree)
     depths = np.zeros(len(compiled.nodes), dtype=float)
+    lengths = np.zeros(len(compiled.nodes), dtype=float)
     for index in range(1, len(compiled.nodes)):
         length = _finite(
             compiled.nodes[index].dist,
@@ -210,36 +248,67 @@ def _geometry(data: _ObservationData) -> _Geometry:
             nonnegative=True,
         )
         depths[index] = depths[compiled.parents[index]] + length
+        lengths[index] = length
+    if np.any(~np.isfinite(depths)):
+        raise ValueError("Multivariate tree depths exceed floating-point range.")
+    jumps = [lengths]
+    for ancestors in lca.ancestors[:-1]:
+        previous = jumps[-1]
+        jumps.append(previous + previous[np.asarray(ancestors)])
 
     observed_nodes = data.node_indices
     count = len(observed_nodes)
     shared = np.empty((count, count), dtype=float)
     distance = np.empty((count, count), dtype=float)
+    left = np.empty_like(distance)
+    right = np.empty_like(distance)
+    geometry = _Geometry(
+        compiled,
+        depths,
+        shared,
+        distance,
+        left,
+        right,
+        observed_nodes,
+        lca,
+        tuple(jumps),
+    )
     for first in range(count):
         first_index = int(observed_nodes[first])
         for second in range(first + 1):
             second_index = int(observed_nodes[second])
             ancestor = lca.common_ancestor_indices(first_index, second_index)
             shared_value = depths[ancestor]
-            distance_value = (
-                depths[first_index] + depths[second_index] - 2.0 * shared_value
-            )
+            left_value = geometry.path_length(first_index, ancestor)
+            right_value = geometry.path_length(second_index, ancestor)
+            distance_value = left_value + right_value
             shared[first, second] = shared[second, first] = shared_value
-            distance[first, second] = distance[second, first] = max(0.0, distance_value)
+            distance[first, second] = distance[second, first] = distance_value
+            left[first, second] = right[second, first] = left_value
+            right[first, second] = left[second, first] = right_value
+    if np.any(~np.isfinite(distance)):
+        raise ValueError("Multivariate tree distances exceed floating-point range.")
+    return geometry
 
-    node_shared = np.empty((len(compiled.nodes), count), dtype=float)
-    node_distance = np.empty_like(node_shared)
-    for node_index in range(len(compiled.nodes)):
-        for observed_index, observed_node in enumerate(observed_nodes):
-            observed_node = int(observed_node)
-            ancestor = lca.common_ancestor_indices(node_index, observed_node)
-            shared_value = depths[ancestor]
-            node_shared[node_index, observed_index] = shared_value
-            node_distance[node_index, observed_index] = max(
-                0.0,
-                depths[node_index] + depths[observed_node] - 2.0 * shared_value,
-            )
-    return _Geometry(compiled, depths, shared, distance, node_shared, node_distance)
+
+def _cached_geometry(data, cache):
+    if cache is None:
+        return _geometry(data)
+    key = (data.compiled.tree, tuple(data.node_indices))
+    if key not in cache:
+        cache[key] = _geometry(data)
+    return cache[key]
+
+
+def _validate_posterior_size(data, compute_posterior):
+    dimension = len(data.trait_names)
+    estimated_bytes = len(data.compiled.nodes) * (256 + 8 * (dimension + dimension**2))
+    if compute_posterior and estimated_bytes > _MAX_POSTERIOR_BYTES:
+        raise FitResourceError(
+            "Multivariate all-node posterior exceeds the 256 MiB estimated "
+            "result-storage limit; use asrcompare for likelihood-only fits "
+            "or reduce the reconstruction tree."
+        )
 
 
 def _design(data):
@@ -274,7 +343,7 @@ def _validate_mvbm_covariance_design(data, scalar_covariance, fixed_mean):
     """Require every trait-covariance component to affect an error contrast."""
 
     scale = float(np.max(np.abs(scalar_covariance), initial=0.0))
-    tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(data.values))
+    tolerance = np.finfo(float).eps * scale * 100
     rows = [
         _trait_covariance_rows(data, trait_index, fixed_mean)
         for trait_index in range(len(data.trait_names))
@@ -316,7 +385,7 @@ def _validate_mvou_alpha_design(data, observed_distance):
     """Detect alpha/Sigma confounding when trait-pair distances are constant."""
 
     scale = float(np.max(np.abs(observed_distance), initial=0.0))
-    tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(data.values))
+    tolerance = np.finfo(float).eps * scale * 100
     for first in range(len(data.trait_names)):
         left = np.flatnonzero(data.trait_indices == first)
         for second in range(first, len(data.trait_names)):
@@ -346,7 +415,7 @@ def _validate_mvou_diag_alpha_design(data, geometry):
             continue
         block = geometry.observed_distance[np.ix_(observed, observed)]
         scale = float(np.max(np.abs(block), initial=0.0))
-        tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(observed))
+        tolerance = np.finfo(float).eps * scale * 100
         if not np.any(block > tolerance):
             unidentified.append(trait_name)
     if unidentified:
@@ -495,9 +564,6 @@ def _mvbm_analysis_data(data):
 def _posterior(
     data,
     geometry,
-    scalar_observed,
-    scalar_cross,
-    scalar_variance,
     sigma,
     mean,
     residual,
@@ -506,6 +572,7 @@ def _posterior(
     free_mean_indices,
     *,
     flat_root,
+    alpha=None,
 ):
     dimension = len(data.trait_names)
     design = _design(data)[:, free_mean_indices]
@@ -522,10 +589,13 @@ def _posterior(
     )
     posterior = {}
     for node_index, node in enumerate(geometry.compiled.nodes):
-        cross = scalar_cross[node_index][None, :] * sigma[:, data.trait_indices]
+        shared, left, right = geometry.cross(node_index)
+        scalar_cross = shared if flat_root else np.exp(-alpha * (left + right))
+        scalar_variance = geometry.depths[node_index] if flat_root else 1.0
+        cross = scalar_cross[None, :] * sigma[:, data.trait_indices]
         scaled_mean = mean + cross @ solved_residual
         solved_cross = cho_solve(factor, cross.T, check_finite=False)
-        covariance = scalar_variance[node_index] * sigma - cross @ solved_cross
+        covariance = scalar_variance * sigma - cross @ solved_cross
         if flat_root and len(free_mean_indices):
             adjustment = np.zeros((dimension, len(free_mean_indices)), dtype=float)
             adjustment[free_mean_indices, np.arange(len(free_mean_indices))] = 1.0
@@ -553,9 +623,8 @@ def _posterior(
 
 
 def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
-    observed_depths = geometry.depths[data.node_indices]
-    left = np.maximum(0.0, observed_depths[:, None] - geometry.observed_shared_depth)
-    right = np.maximum(0.0, observed_depths[None, :] - geometry.observed_shared_depth)
+    left = geometry.observed_left
+    right = geometry.observed_right
     observed_beta = beta[data.trait_indices]
     decay = np.exp(-observed_beta[:, None] * left - observed_beta[None, :] * right)
     covariance = (
@@ -567,10 +636,7 @@ def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
 
 
 def _diagonal_ou_cross_covariance(data, geometry, node_index, beta, stationary_sigma):
-    observed_depths = geometry.depths[data.node_indices]
-    shared = geometry.node_shared_depth[node_index]
-    left = np.maximum(0.0, geometry.depths[node_index] - shared)
-    right = np.maximum(0.0, observed_depths - shared)
+    _, left, right = geometry.cross(node_index)
     observed_beta = beta[data.trait_indices]
     decay = np.exp(-beta[:, None] * left - observed_beta[None, :] * right)
     return decay * stationary_sigma[:, data.trait_indices]
@@ -645,6 +711,8 @@ def fit_dense_mvbm(
     trait_names,
     *,
     standard_errors=None,
+    compute_posterior=True,
+    _geometry_cache=None,
 ):
     """Fit flat-root MV-BM with arbitrary per-trait missingness and errors."""
 
@@ -652,6 +720,7 @@ def fit_dense_mvbm(
         tree, values_by_leaf, trait_names, standard_errors=standard_errors
     )
     dimension = len(data.trait_names)
+    _validate_posterior_size(data, compute_posterior)
     if np.any(data.count_by_trait < 2):
         missing = [
             data.trait_names[index]
@@ -669,7 +738,9 @@ def fit_dense_mvbm(
             "trait means and covariance parameters."
         )
     analysis_data, fixed_mean = _mvbm_analysis_data(data)
-    geometry = _geometry(analysis_data)
+    geometry = _cached_geometry(analysis_data, _geometry_cache)
+    time_scale = float(np.max(geometry.observed_shared_depth)) or 1.0
+    geometry = geometry.rescaled(time_scale)
     _validate_mvbm_covariance_design(
         analysis_data, geometry.observed_shared_depth, fixed_mean
     )
@@ -695,21 +766,22 @@ def fit_dense_mvbm(
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1200)
     sigma_scaled, covariance, profile = evaluate(optimized.x)
     likelihood, mean, residual, factor, mean_factor, free_mean_indices = profile
-    posterior = _posterior(
-        analysis_data,
-        geometry,
-        geometry.observed_shared_depth,
-        geometry.node_shared_depth,
-        geometry.depths,
-        sigma_scaled,
-        mean,
-        residual,
-        factor,
-        mean_factor,
-        free_mean_indices,
-        flat_root=True,
+    posterior = (
+        _posterior(
+            analysis_data,
+            geometry,
+            sigma_scaled,
+            mean,
+            residual,
+            factor,
+            mean_factor,
+            free_mean_indices,
+            flat_root=True,
+        )
+        if compute_posterior
+        else {}
     )
-    sigma = _restore_sigma(data, sigma_scaled)
+    sigma = _restore_sigma(data, sigma_scaled / time_scale)
     likelihood -= _likelihood_scale_adjustment(data, reml=True)
     # Rank is invariant to trait units.  ``sigma_scaled`` is the covariance in
     # independently normalized trait coordinates; using the restored covariance
@@ -748,6 +820,8 @@ def fit_dense_mvou(
     alpha=None,
     alpha_bounds=None,
     standard_errors=None,
+    compute_posterior=True,
+    _geometry_cache=None,
 ):
     """Fit stationary correlated-trait MV-OU with one shared attraction rate."""
 
@@ -755,9 +829,11 @@ def fit_dense_mvou(
         tree, values_by_leaf, trait_names, standard_errors=standard_errors
     )
     dimension = len(data.trait_names)
-    geometry = _geometry(data)
-    maximum_depth = float(np.max(geometry.depths))
-    time_scale = maximum_depth if maximum_depth > 0.0 else 1.0
+    _validate_posterior_size(data, compute_posterior)
+    geometry = _cached_geometry(data, _geometry_cache)
+    # Stationary tip likelihoods do not depend on a shared stem above their
+    # MRCA. Use observable distances for units and default attraction bounds.
+    time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
     bounds_alpha = (
         (1e-6 / time_scale, 50.0 / time_scale)
         if alpha_bounds is None
@@ -817,22 +893,21 @@ def fit_dense_mvou(
         mean_factor,
         free_mean_indices,
     ) = profile
-    scalar_observed = np.exp(-fitted_alpha * geometry.observed_distance)
-    scalar_cross = np.exp(-fitted_alpha * geometry.node_distance)
-    scalar_variance = np.ones(len(geometry.compiled.nodes), dtype=float)
-    posterior = _posterior(
-        data,
-        geometry,
-        scalar_observed,
-        scalar_cross,
-        scalar_variance,
-        sigma_scaled,
-        theta_scaled,
-        residual,
-        factor,
-        mean_factor,
-        free_mean_indices,
-        flat_root=False,
+    posterior = (
+        _posterior(
+            data,
+            geometry,
+            sigma_scaled,
+            theta_scaled,
+            residual,
+            factor,
+            mean_factor,
+            free_mean_indices,
+            flat_root=False,
+            alpha=fitted_alpha,
+        )
+        if compute_posterior
+        else {}
     )
     sigma = _restore_sigma(data, sigma_scaled)
     theta = data.centers + data.scales * theta_scaled
@@ -884,6 +959,8 @@ def fit_dense_mvou_diag(
     alpha_by_trait=None,
     alpha_bounds=None,
     standard_errors=None,
+    compute_posterior=True,
+    _geometry_cache=None,
 ):
     """Fit stationary MV-OU with diagonal trait-specific attraction rates."""
 
@@ -891,17 +968,10 @@ def fit_dense_mvou_diag(
         tree, values_by_leaf, trait_names, standard_errors=standard_errors
     )
     dimension = len(data.trait_names)
-    geometry = _geometry(data)
-    maximum_depth = float(np.max(geometry.depths))
-    time_scale = maximum_depth if maximum_depth > 0.0 else 1.0
-    scaled_geometry = replace(
-        geometry,
-        depths=geometry.depths / time_scale,
-        observed_shared_depth=geometry.observed_shared_depth / time_scale,
-        observed_distance=geometry.observed_distance / time_scale,
-        node_shared_depth=geometry.node_shared_depth / time_scale,
-        node_distance=geometry.node_distance / time_scale,
-    )
+    _validate_posterior_size(data, compute_posterior)
+    geometry = _cached_geometry(data, _geometry_cache)
+    time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
+    scaled_geometry = geometry.rescaled(time_scale)
 
     has_alpha_by_trait = alpha_by_trait is not None and not (
         isinstance(alpha_by_trait, str) and alpha_by_trait == ""
@@ -1024,14 +1094,18 @@ def fit_dense_mvou_diag(
         _mean_factor,
         _free_mean_indices,
     ) = profile
-    posterior = _diagonal_ou_posterior(
-        data,
-        scaled_geometry,
-        beta,
-        sigma_scaled,
-        theta_scaled,
-        residual,
-        factor,
+    posterior = (
+        _diagonal_ou_posterior(
+            data,
+            scaled_geometry,
+            beta,
+            sigma_scaled,
+            theta_scaled,
+            residual,
+            factor,
+        )
+        if compute_posterior
+        else {}
     )
     sigma = _restore_sigma(data, sigma_scaled)
     diffusion_sigma = _restore_sigma(data, diffusion_scaled_time / time_scale)

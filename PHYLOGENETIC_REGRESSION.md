@@ -245,6 +245,13 @@ least one response, and each response needs more observed tips than fixed
 coefficients. This also applies to raw biological replicates and known-SE
 input: replicate means and sampling variances are estimated for observed
 trait-tip combinations, while the joint likelihood omits missing components.
+Each response's design matrix must remain full rank after its missing values
+are removed, in both ML and REML and in dense and sparse fits. For example, a
+response observed only in one predictor group cannot estimate a between-group
+coefficient; NWKIT rejects that fit instead of reporting a zero standard error.
+The observed covariance must be positive definite: no undocumented diagonal
+noise is added to make singular exact observations fit. Known measurement
+errors must be supplied as part of the model when appropriate.
 For example:
 
 ```sh
