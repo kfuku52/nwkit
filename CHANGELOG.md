@@ -6,6 +6,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Fixed
 
+- Sampling keeps missing text ranks last and retains metadata whose names
+  resemble internal sort keys. Tree/report writes now stage and restore both
+  outputs together on handled failures, including broken standard output.
+- Node-table and MCMCtree posterior readers reject duplicate raw column headers
+  before pandas can silently rename and ignore conflicting topology or age data.
 - Single-state ER ancestral reconstruction now returns unit posterior
   probabilities. ER transitions retain tiny positive rates and avoid intermediate
   overflow when large rates are paired with short branches.

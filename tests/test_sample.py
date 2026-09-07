@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 import pytest
 from ete4 import Tree
@@ -31,6 +32,30 @@ def make_sample_args(**kwargs):
 
 
 class TestFilterAndRankParsing:
+    @pytest.mark.parametrize("missing", [None, np.nan, pd.NA])
+    @pytest.mark.parametrize(
+        "direction,expected", [("asc", ["B", "C", "A"]), ("desc", ["C", "B", "A"])]
+    )
+    def test_text_ranks_keep_missing_values_last(self, missing, direction, expected):
+        dataframe = pd.DataFrame(
+            {"leaf_name": ["A", "B", "C"], "quality": [missing, "apple", "zebra"]}
+        )
+        ranked = sort_candidates(dataframe, [f"quality:{direction}"])
+        assert ranked["leaf_name"].tolist() == expected
+        assert pd.isna(ranked.iloc[-1]["quality"])
+
+    def test_rank_helpers_do_not_overwrite_metadata_or_duplicate_indices(self):
+        dataframe = pd.DataFrame(
+            {
+                "leaf_name": ["A", "B"],
+                "score": [2, 1],
+                "__nwkit_rank_0_score": ["keep A", "keep B"],
+            },
+            index=[5, 5],
+        )
+        ranked = sort_candidates(dataframe, ["score:asc"])
+        pd.testing.assert_frame_equal(ranked, dataframe.iloc[[1, 0]])
+
     def test_parse_filter_spec_accepts_threshold_expression(self):
         assert parse_filter_spec("busco_complete_pct:ge:80") == (
             "busco_complete_pct",
@@ -72,6 +97,104 @@ class TestFilterAndRankParsing:
 
 
 class TestSampleMain:
+    @pytest.mark.parametrize("stdout_fails", [False, True])
+    def test_report_and_stdout_are_committed_together(
+        self, monkeypatch, tmp_path, capsys, stdout_fails
+    ):
+        import nwkit.sample as sample_module
+
+        infile = tmp_path / "input.nwk"
+        infile.write_text("(A:1,B:2)R;")
+        report = tmp_path / "report.tsv"
+        report.write_text("original report")
+        args = make_sample_args(infile=str(infile), outfile="-", report=str(report))
+        if stdout_fails:
+
+            class BrokenStdout:
+                def write(self, text):
+                    raise BrokenPipeError("injected broken stdout")
+
+            monkeypatch.setattr(sample_module.sys, "stdout", BrokenStdout())
+            with pytest.raises(BrokenPipeError, match="injected broken stdout"):
+                sample_main(args)
+            assert report.read_text() == "original report"
+        else:
+            sample_main(args)
+            tree_text = capsys.readouterr().out
+            assert tree_text.endswith("\n")
+            tree = read_tree(tree_text, "auto", True, quiet=True)
+            assert list(tree.leaf_names()) == ["B"]
+            assert pd.read_csv(report, sep="\t")["leaf_name"].tolist() == ["B"]
+        assert set(tmp_path.iterdir()) == {infile, report}
+
+    def test_commit_failure_restores_both_outputs(self, monkeypatch, tmp_path):
+        from nwkit import output_transaction as transaction_module
+
+        infile = tmp_path / "input.nwk"
+        infile.write_text("(A:1,B:2)R;")
+        outfile = tmp_path / "output.nwk"
+        outfile.write_text("original tree")
+        report = tmp_path / "report.tsv"
+        report.write_text("original report")
+        original_replace = transaction_module.replace_output
+        calls = 0
+
+        def fail_second(source, target):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("injected second output failure")
+            original_replace(source, target)
+
+        monkeypatch.setattr(transaction_module, "replace_output", fail_second)
+        with pytest.raises(OSError, match="injected second output failure"):
+            sample_main(
+                make_sample_args(
+                    infile=str(infile), outfile=str(outfile), report=str(report)
+                )
+            )
+        assert outfile.read_text() == "original tree"
+        assert report.read_text() == "original report"
+        assert set(tmp_path.iterdir()) == {infile, outfile, report}
+
+    def test_report_survives_invalid_tree_destination(self, tmp_path):
+        infile = tmp_path / "input.nwk"
+        infile.write_text("(A:1,B:2)R;")
+        outfile = tmp_path / "tree-directory"
+        outfile.mkdir()
+        report = tmp_path / "report.tsv"
+        report.write_text("original report")
+        with pytest.raises((ValueError, OSError)):
+            sample_main(
+                make_sample_args(
+                    infile=str(infile), outfile=str(outfile), report=str(report)
+                )
+            )
+        assert report.read_text() == "original report"
+
+    def test_outputs_survive_tree_serialization_failure(self, monkeypatch, tmp_path):
+        import nwkit.tree_outputs as sample_module
+
+        infile = tmp_path / "input.nwk"
+        infile.write_text("(A:1,B:2)R;")
+        outfile = tmp_path / "output.nwk"
+        outfile.write_text("original tree")
+        report = tmp_path / "report.tsv"
+        report.write_text("original report")
+
+        def fail_write(*args, **kwargs):
+            raise OSError("injected tree serialization failure")
+
+        monkeypatch.setattr(sample_module, "write_tree", fail_write)
+        with pytest.raises(OSError, match="injected tree serialization"):
+            sample_main(
+                make_sample_args(
+                    infile=str(infile), outfile=str(outfile), report=str(report)
+                )
+            )
+        assert report.read_text() == "original report"
+        assert outfile.read_text() == "original tree"
+
     def test_select_max_pd_matches_reference_greedy_order(self):
         tree = Tree("(((A:1.5,B:0.5):2,C:1):1,(D:3,(E:1,F:1):2):1);", parser=1)
         candidate_order = ["C", "E", "A", "F", "D", "B"]

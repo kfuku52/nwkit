@@ -158,31 +158,28 @@ def sort_candidates(dataframe, rank_specs):
     if dataframe.empty:
         return dataframe.copy()
 
-    sorted_df = dataframe.copy()
-    helper_columns = []
-    sort_columns = []
+    # Keep sort keys separate from user metadata, including its column names
+    # and potentially duplicated row index.
+    sort_keys = pd.DataFrame(index=range(len(dataframe)))
     ascending = []
     for index, (column, direction) in enumerate(parsed_ranks):
-        helper_column = "__nwkit_rank_{}_{}".format(index, column)
-        numeric_values = pd.to_numeric(sorted_df[column], errors="coerce")
-        non_missing = sorted_df[column].notna()
+        numeric_values = pd.to_numeric(dataframe[column], errors="coerce")
+        non_missing = dataframe[column].notna()
         if non_missing.any() and numeric_values[non_missing].notna().all():
-            sorted_df[helper_column] = numeric_values
+            sort_keys[index] = numeric_values.to_numpy()
         else:
-            sorted_df[helper_column] = sorted_df[column].astype(str)
-        helper_columns.append(helper_column)
-        sort_columns.append(helper_column)
+            sort_keys[index] = dataframe[column].astype("string").to_numpy()
         ascending.append(direction == "asc")
 
-    sort_columns.append("leaf_name")
+    sort_keys[len(parsed_ranks)] = dataframe["leaf_name"].to_numpy()
     ascending.append(True)
-    sorted_df = sorted_df.sort_values(
-        by=sort_columns,
+    order = sort_keys.sort_values(
+        by=list(sort_keys.columns),
         ascending=ascending,
         kind="mergesort",
         na_position="last",
-    )
-    return sorted_df.drop(columns=helper_columns)
+    ).index
+    return dataframe.iloc[order].copy()
 
 
 def _edge_length(node):

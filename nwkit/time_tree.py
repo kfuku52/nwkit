@@ -212,6 +212,32 @@ def paml_node_mapping(tree):
     return mapping
 
 
+def _validate_mcmctree_header(table_source):
+    try:
+        # Read the raw header as data: pandas otherwise silently renames
+        # duplicate node-age columns before the validation can inspect them.
+        header = pd.read_csv(
+            table_source,
+            sep=r"\s+",
+            comment="#",
+            header=None,
+            nrows=1,
+            dtype=str,
+            keep_default_na=False,
+        ).iloc[0]
+    except Exception as exc:
+        raise ValueError("Failed to parse the MCMCtree posterior table.") from exc
+    duplicates = header[header.duplicated()].tolist()
+    if duplicates:
+        raise ValueError(
+            "MCMCtree posterior table contains duplicate columns: {}".format(
+                ", ".join(str(value) for value in duplicates),
+            )
+        )
+    if isinstance(table_source, StringIO):
+        table_source.seek(0)
+
+
 def _read_mcmctree_dataframe(source):
     is_file = source != "-" and os.path.isfile(source)
     if is_file:
@@ -223,19 +249,13 @@ def _read_mcmctree_dataframe(source):
         if text.strip() == "":
             raise ValueError("MCMCtree posterior file is empty.")
         table_source = StringIO(text)
+    _validate_mcmctree_header(table_source)
     try:
         dataframe = pd.read_csv(table_source, sep=r"\s+", comment="#")
     except Exception as exc:
         raise ValueError("Failed to parse the MCMCtree posterior table.") from exc
     if dataframe.empty:
         raise ValueError("MCMCtree posterior table contains no samples.")
-    if dataframe.columns.duplicated().any():
-        duplicates = dataframe.columns[dataframe.columns.duplicated()].tolist()
-        raise ValueError(
-            "MCMCtree posterior table contains duplicate columns: {}".format(
-                ", ".join(str(value) for value in duplicates),
-            )
-        )
     return dataframe
 
 

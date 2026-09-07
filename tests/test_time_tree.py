@@ -21,6 +21,17 @@ def test_mcmctree_interval_indices_match_paml_order_statistics():
     assert _credible_interval(values, 0.8, "equal-tail") == (1.0, 9.0)
 
 
+@pytest.mark.parametrize("use_file", [False, True])
+def test_posterior_rejects_duplicate_node_age_headers(tmp_path, use_file):
+    source = "# posterior samples\n\nGen t_n3 t_n3\n1 2 99\n2 3 100\n"
+    if use_file:
+        path = tmp_path / "mcmc.txt"
+        path.write_text(source)
+        source = path
+    with pytest.raises(ValueError, match="duplicate columns"):
+        read_mcmctree_posterior(source, Tree("(A,B);", parser=1))
+
+
 @pytest.mark.parametrize(
     ("text", "kind", "lower", "upper"),
     [

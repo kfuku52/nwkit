@@ -156,6 +156,12 @@ contract:
   commands listed above. Table-only rows are not applied to the tree; commands
   that can operate on absent metadata treat tree-only tips as missing. Choosing
   `warn` or `ignore` does not waive a command's requirement for estimable traits.
+- `sample --rank` places missing values last in both numeric and text ranks,
+  for either direction, and preserves input metadata columns in its report.
+  With `--report`, file outputs are staged together: serialization or handled
+  installation failures preserve existing tree and report files. Standard output
+  is emitted after the report is installed; an output error restores the report,
+  although already-emitted stream bytes cannot be recalled.
 
 ## Specialized input TSV schemas
 
@@ -178,7 +184,7 @@ contract:
 | `regress --predictor-contrasts` | Species-tree output columns from `nwkit contrast` | Selected predictor traits must uniquely identify every joined `branch_clade_id`; event taxa and signed orientation must exactly match the response table. |
 | `regress --response-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings, as described below. Required when response contrasts contain replicate metadata. |
 | `regress --predictor-sampling-covariance` | `tree_id`, `trait`, `contrast_id_1`, `contrast_id_2`, `sampling_covariance` | Complete explicit covariance or sparse factor loadings for every selected predictor. The predictor contrast table must also contain positive `contrast_variance`; together they define the phylogenetic prior and observation-error covariance of the latent predictor. |
-| `table2nwk` input | `branch_id`, `parent` | Optional `name`, `dist`, `support`, and `rooted`; exactly one root has `parent = -1`. Only its row may set `rooted` to `yes`, `no`, or `unknown`; all other rows must leave it empty. |
+| `table2nwk` input | `branch_id`, `parent` | Column headers must be unique. Optional `name`, `dist`, `support`, and `rooted`; exactly one root has `parent = -1`. Only its row may set `rooted` to `yes`, `no`, or `unknown`; all other rows must leave it empty. |
 
 All supported input TSV options may use `-` for standard input, subject to the
 single-standard-input rule.

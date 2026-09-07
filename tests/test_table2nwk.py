@@ -1,3 +1,5 @@
+import gzip
+
 import pandas as pd
 import pytest
 
@@ -8,6 +10,32 @@ from tests.helpers import make_args
 
 
 class TestTable2NwkMain:
+    def test_compressed_table_preserves_literal_node_names(self, tmp_path):
+        table_path = tmp_path / "nodes.tsv.gz"
+        with gzip.open(table_path, "wt") as handle:
+            handle.write("branch_id\tparent\tname\n0\t-1\tR\n1\t0\t001\n2\t0\tNA\n")
+        outfile = tmp_path / "output.nwk"
+        table2nwk_main(make_args(infile=str(table_path), outfile=str(outfile)))
+        tree = read_tree(str(outfile), "auto", True, quiet=True)
+        assert list(tree.leaf_names()) == ["001", "NA"]
+
+    @pytest.mark.parametrize("column", ["branch_id", "parent", "name", "dist"])
+    @pytest.mark.parametrize("prefix", ["", "\ufeff", "\n \n"])
+    def test_rejects_ambiguous_duplicate_headers_before_output(
+        self, tmp_path, column, prefix
+    ):
+        table_path = tmp_path / "ambiguous.tsv"
+        table_path.write_text(
+            f"{prefix}branch_id\tparent\tname\tdist\t{column}\n"
+            "0\t-1\troot\t0\t0\n1\t0\t001\t1\t99\n",
+            encoding="utf-8",
+        )
+        outfile = tmp_path / "output.nwk"
+        outfile.write_text("original tree")
+        with pytest.raises(ValueError, match="duplicat.*column"):
+            table2nwk_main(make_args(infile=str(table_path), outfile=str(outfile)))
+        assert outfile.read_text() == "original tree"
+
     def test_roundtrip_support_tree(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:2)80:3,C:4);", "tree.nwk")
         table_path = tmp_path / "tree.tsv"
