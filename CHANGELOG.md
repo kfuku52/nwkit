@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.5] - 2026-09-07
+
+### Fixed
+
+- Write BOM-bearing table2nwk regression fixtures explicitly as UTF-8 so they
+  also run on Windows with a non-UTF-8 default text encoding.
+
 ## [0.43.4] - 2026-09-07
 
 ### Fixed

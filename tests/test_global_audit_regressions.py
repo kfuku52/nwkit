@@ -89,7 +89,8 @@ def test_consensus_deep_tree_is_iterative(tmp_path):
 def test_table2nwk_rejects_duplicate_columns(tmp_path, column, bom):
     source = tmp_path / "table.tsv"
     source.write_text(
-        f"{bom}branch_id\tparent\tname\tsupport\t{column}\n0\t-1\tR\t\t0\n1\t0\tA\t\t0\n"
+        f"{bom}branch_id\tparent\tname\tsupport\t{column}\n0\t-1\tR\t\t0\n1\t0\tA\t\t0\n",
+        encoding="utf-8",
     )
     output = tmp_path / "tree.nwk"
     with pytest.raises(ValueError, match="duplicated"):
@@ -109,7 +110,7 @@ def test_table2nwk_preserves_input_containers_and_text_names(
     elif mode == "stdin":
         monkeypatch.setattr("sys.stdin", io.StringIO(text))
     else:
-        source.write_text(text)
+        source.write_text(text, encoding="utf-8")
     output = tmp_path / "out.nwk"
     main(
         [
