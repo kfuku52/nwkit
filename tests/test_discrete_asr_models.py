@@ -139,18 +139,17 @@ def test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium(
 
 
 @pytest.mark.parametrize("model", ["ER", "SYM", "ARD"])
-def test_single_state_reconstruction_has_unit_posteriors(model):
+def test_single_state_generator_respects_multistate_inference_contract(model):
+    np.testing.assert_array_equal(build_rate_matrix(model, ["x"], []), [[0.0]])
     tree = tree_from("(A:0.3,B:0.7)R;")
-    posterior, fit = asr.compute_mk_marginals(
-        tree,
-        ["x"],
-        {"A": "x", "B": "x"},
-        {"A": np.ones(1), "B": np.ones(1)},
-        model=model,
-    )
-    assert fit["log_likelihood"] == 0.0
-    for probabilities in posterior.values():
-        np.testing.assert_array_equal(probabilities, [1.0])
+    with pytest.raises(ValueError, match="at least two states"):
+        asr.compute_mk_marginals(
+            tree,
+            ["x"],
+            {"A": "x", "B": "x"},
+            {"A": np.ones(1), "B": np.ones(1)},
+            model=model,
+        )
 
 
 def test_tiny_er_rates_preserve_possible_state_changes():
