@@ -19,13 +19,10 @@ def _support_value_or_empty(node):
 def _sister_branch_id(node, node_to_branch_id):
     if node.is_root:
         return -1
-    siblings = node.up.get_children()
-    if len(siblings) == 2:
+    siblings = node.up.children
+    if len(siblings) >= 2:
         sister = siblings[1] if siblings[0] is node else siblings[0]
         return node_to_branch_id[sister]
-    sisters = node.get_sisters()
-    if len(sisters) > 0:
-        return node_to_branch_id[sisters[0]]
     return -1
 
 

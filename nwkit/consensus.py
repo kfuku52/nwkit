@@ -67,10 +67,6 @@ def _branch_observation_mask(mask, all_mask, anchor_bit, comparison):
     return _orient_unrooted_split(mask, all_mask, anchor_bit)
 
 
-def _mask_min_order(mask, bit_to_order):
-    return min(bit_to_order[bit] for bit in _iter_mask_bits(mask))
-
-
 def _read_tree_weights(weight_tsv, num_trees=None):
     if weight_tsv in ["", None]:
         return None if num_trees is None else [1.0] * num_trees
@@ -573,24 +569,6 @@ def _select_consensus_masks(clade_weights, total_weight, min_freq):
     return selected_masks
 
 
-def _get_direct_child_masks(parent_mask, selected_masks, bit_to_order):
-    candidates = [
-        mask
-        for mask in selected_masks
-        if (mask != parent_mask) and ((mask & ~parent_mask) == 0)
-    ]
-    candidates.sort(
-        key=lambda mask: (-count_set_bits(mask), _mask_min_order(mask, bit_to_order))
-    )
-    direct_masks: list[Any] = []
-    for mask in candidates:
-        if any((mask & ~direct_mask) == 0 for direct_mask in direct_masks):
-            continue
-        direct_masks.append(mask)
-    direct_masks.sort(key=lambda mask: _mask_min_order(mask, bit_to_order))
-    return direct_masks
-
-
 def _build_consensus_subtree(
     parent_mask,
     selected_masks,
@@ -600,42 +578,44 @@ def _build_consensus_subtree(
     bit_to_order,
     all_mask,
 ):
-    node = Tree()
-    node.dist = None if (parent_mask == all_mask) else dist_by_mask.get(parent_mask)
-    if parent_mask == all_mask:
-        node.support = None
-    else:
-        node.support = support_by_mask.get(parent_mask, MISSING_SUPPORT_VALUE)
-    direct_masks = _get_direct_child_masks(parent_mask, selected_masks, bit_to_order)
-    covered_mask = 0
-    child_specs = list()
-    for child_mask in direct_masks:
-        child_specs.append(
-            (_mask_min_order(child_mask, bit_to_order), "mask", child_mask)
+    # Selected clades are laminar. Join their current maximal subclades from
+    # smallest to largest, without recursion or rescanning every candidate at
+    # every ancestor. Taxa need not be contiguous in the input leaf order.
+    owner = {}
+    minimum_order = {}
+    for bit in _iter_mask_bits(parent_mask):
+        leaf = Tree()
+        leaf.name = bit_to_name[bit]
+        leaf.dist = dist_by_mask.get(bit)
+        leaf.support = MISSING_SUPPORT_VALUE
+        owner[bit] = leaf
+        minimum_order[leaf] = bit_to_order[bit]
+    masks = {mask for mask in selected_masks if mask & ~parent_mask == 0}
+    masks.add(parent_mask)
+    _assemble_consensus_clades(
+        masks, owner, minimum_order, all_mask, dist_by_mask, support_by_mask
+    )
+    return owner[parent_mask & -parent_mask]
+
+
+def _assemble_consensus_clades(
+    masks, owner, minimum_order, all_mask, dist_by_mask, support_by_mask
+):
+    for mask in sorted(masks, key=lambda value: (count_set_bits(value), value)):
+        node = Tree()
+        node.dist = None if mask == all_mask else dist_by_mask.get(mask)
+        node.support = (
+            None
+            if mask == all_mask
+            else support_by_mask.get(mask, MISSING_SUPPORT_VALUE)
         )
-        covered_mask |= child_mask
-    remainder_mask = parent_mask & ~covered_mask
-    for bit in _iter_mask_bits(remainder_mask):
-        child_specs.append((bit_to_order[bit], "leaf", bit))
-    child_specs.sort(key=lambda item: item[0])
-    for _, child_type, child_value in child_specs:
-        if child_type == "mask":
-            child = _build_consensus_subtree(
-                parent_mask=child_value,
-                selected_masks=selected_masks,
-                support_by_mask=support_by_mask,
-                dist_by_mask=dist_by_mask,
-                bit_to_name=bit_to_name,
-                bit_to_order=bit_to_order,
-                all_mask=all_mask,
-            )
-        else:
-            child = Tree()
-            child.name = bit_to_name[child_value]
-            child.dist = dist_by_mask.get(child_value)
-            child.support = MISSING_SUPPORT_VALUE
-        node.add_child(child=child)
-    return node
+        children = set()
+        for bit in _iter_mask_bits(mask):
+            children.add(owner[bit])
+            owner[bit] = node
+        for child in sorted(children, key=minimum_order.__getitem__):
+            node.add_child(child)
+        minimum_order[node] = min(minimum_order[child] for child in children)
 
 
 def _build_consensus_tree(

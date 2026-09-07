@@ -15,9 +15,21 @@ from nwkit.util import (
 
 
 def _read_table(path):
-    if path == "-":
-        return pd.read_csv(sys.stdin, sep="\t", dtype=object, keep_default_na=False)
-    return pd.read_csv(path, sep="\t", dtype=object, keep_default_na=False)
+    # Parse the header as data so pandas cannot silently mangle duplicate
+    # names. This remains a single parse and retains inferred compression.
+    source = sys.stdin if path == "-" else path
+    table = pd.read_csv(
+        source, sep="\t", header=None, dtype=object, keep_default_na=False
+    )
+    header = table.iloc[0].tolist()
+    _validate_column_headers(header)
+    table.columns = header
+    return table.iloc[1:].reset_index(drop=True)
+
+
+def _validate_column_headers(header):
+    if len(header) != len(set(header)):
+        raise ValueError("TSV input contains duplicated column headers.")
 
 
 def _is_empty(value):

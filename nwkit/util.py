@@ -19,7 +19,6 @@ from collections import Counter, defaultdict
 from collections.abc import Set
 from contextlib import contextmanager
 from io import StringIO
-from itertools import islice
 from typing import Any
 from urllib.parse import quote, urljoin, urlparse
 
@@ -2108,7 +2107,7 @@ class _LeafIntervalSet(Set):
         return index is not None and self._start <= index < self._end
 
     def __iter__(self):
-        return islice(self._leaf_names, self._start, self._end)
+        return map(self._leaf_names.__getitem__, range(self._start, self._end))
 
     def __len__(self):
         return self._end - self._start

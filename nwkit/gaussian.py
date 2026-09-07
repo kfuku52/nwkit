@@ -5,6 +5,7 @@ from dataclasses import dataclass
 
 import numpy as np
 from scipy import sparse
+from scipy.linalg import cho_solve
 from scipy.sparse.linalg import SuperLU, splu
 
 
@@ -643,10 +644,7 @@ def solve_factor(
         else:
             inverse_values = values / factor.diagonal[:, None]
         correction_rhs = factor.low_rank.T @ inverse_values
-        correction = np.linalg.solve(
-            factor.woodbury_cholesky.T,
-            np.linalg.solve(factor.woodbury_cholesky, correction_rhs),
-        )
+        correction = cho_solve((factor.woodbury_cholesky, True), correction_rhs)
         weighted_low_rank = factor.low_rank / factor.diagonal[:, None]
         return inverse_values - weighted_low_rank @ correction
     if isinstance(factor, GroupedDiagonalLowRankFactor):
@@ -654,10 +652,7 @@ def solve_factor(
         if factor.low_rank.shape[1] == 0:
             return inverse_values
         correction_rhs = factor.low_rank.T @ inverse_values
-        correction = np.linalg.solve(
-            factor.woodbury_cholesky.T,
-            np.linalg.solve(factor.woodbury_cholesky, correction_rhs),
-        )
+        correction = cho_solve((factor.woodbury_cholesky, True), correction_rhs)
         return inverse_values - factor.base_inverse_low_rank @ correction
     if isinstance(factor, SparseDiagonalLowRankFactor):
         values = np.asarray(values, dtype=float)
@@ -678,10 +673,7 @@ def solve_factor(
     if isinstance(factor, NestedLowRankFactor):
         inverse_values = solve_factor(factor.base_factor, values)
         correction_rhs = factor.low_rank.T @ inverse_values
-        correction = np.linalg.solve(
-            factor.woodbury_cholesky.T,
-            np.linalg.solve(factor.woodbury_cholesky, correction_rhs),
-        )
+        correction = cho_solve((factor.woodbury_cholesky, True), correction_rhs)
         return inverse_values - factor.base_inverse_low_rank @ correction
     factor = np.asarray(factor, dtype=float)
     values = np.asarray(values, dtype=float)
@@ -690,7 +682,7 @@ def solve_factor(
         if values.ndim == 1:
             return inverse_diagonal * values
         return inverse_diagonal[:, None] * values
-    return np.linalg.solve(factor.T, np.linalg.solve(factor, values))
+    return cho_solve((factor, True), values)
 
 
 def _solve_sparse_precision_factor(factor, values):

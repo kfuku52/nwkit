@@ -4,6 +4,34 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.4] - 2026-09-07
+
+### Fixed
+
+- Stage tree/companion-table output sets for sample, skim, annotate, transfer,
+  and compose, restoring previous files on handled write/installation failures.
+  Preserve intentional strict-mode diagnostic reports with atomic writes.
+- Avoid generated label collisions with retained node names; recognize the
+  root clade when every tip matches mark's target-only selection.
+- Separate skim's internal mixed-clade sentinel from user category strings and
+  reject duplicate table2nwk headers instead of silently discarding columns.
+- Construct deep consensus trees iteratively without a Python recursion limit,
+  assembling compatible clades once instead of repeatedly sorting all candidates.
+
+### Performance
+
+- Reuse Gaussian Cholesky factors with specialized solves, represent RF splits
+  with bitmasks, iterate leaf intervals without consuming their prefixes, and
+  obtain sister IDs without copying all siblings. Ranked sampling computes
+  ancestor paths only for selected candidates.
+- Warmup plus three-run medians on macOS x86_64, Python 3.10.14, NumPy 1.26.4,
+  SciPy 1.15.2 and one BLAS thread: 400-tip ladder consensus construction changed
+  from 2.988 to 0.0311 seconds; 1,600-tip ladder RF from 176.16 to 6.29 ms, with
+  peak Python allocations reduced from 155.85 to 1.47 MiB; 8,000-tip star sister
+  ID collection from 454.83 to 1.71 ms. RF/sister outputs and Gaussian numerical
+  results were checked for equivalence. These are workload-specific measurements,
+  not general speedup or process-RSS guarantees.
+
 ## [0.43.3] - 2026-09-06
 
 ### Fixed

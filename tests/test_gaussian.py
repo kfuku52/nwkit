@@ -7,6 +7,41 @@ from scipy import sparse
 from nwkit import gaussian
 
 
+@pytest.mark.parametrize("kind", ["dense", "low-rank", "grouped", "nested"])
+@pytest.mark.parametrize("vector", [True, False])
+def test_cholesky_solves_match_dense_oracle_without_refactorization(
+    kind, vector, monkeypatch
+):
+    rng = np.random.default_rng(241)
+    diagonal = np.linspace(0.5, 2.0, 8)
+    loading = rng.normal(size=(8, 3))
+    covariance = np.diag(diagonal) + loading @ loading.T
+    if kind == "dense":
+        factor = gaussian.factor_covariance(covariance)
+    elif kind == "low-rank":
+        factor = gaussian.factor_diagonal_low_rank(diagonal, loading)
+    elif kind == "grouped":
+        groups = np.eye(2)[np.arange(8) % 2]
+        covariance += groups @ groups.T
+        factor = gaussian.factor_diagonal_low_rank_updates(diagonal, [groups, loading])
+        assert isinstance(factor, gaussian.GroupedDiagonalLowRankFactor)
+    else:
+        base = gaussian.factor_diagonal_low_rank(diagonal, loading[:, :1])
+        factor = gaussian._factor_nested_low_rank(
+            base, sparse.csr_matrix(loading[:, 1:])
+        )
+    rhs = rng.normal(size=8 if vector else (8, 3))
+    expected = np.linalg.solve(covariance, rhs)
+
+    def forbidden(*args, **kwargs):
+        raise AssertionError("refactorized a Cholesky factor")
+
+    monkeypatch.setattr(np.linalg, "solve", forbidden)
+    np.testing.assert_allclose(
+        gaussian.solve_factor(factor, rhs), expected, rtol=1e-12, atol=1e-12
+    )
+
+
 @pytest.mark.parametrize(
     "columns, force_observation_space, label",
     [(1, True, "covariance"), (3, False, "covariance"), (2, False, "Woodbury")],

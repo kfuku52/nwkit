@@ -40,6 +40,19 @@ only external service boundaries are replaced with offline fixtures.
 
 ## CI coverage
 
+For core tree/Gaussian performance regressions, run the identical harness on
+each source checkout (warmup plus three timed repetitions):
+
+```sh
+OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+  python tools/benchmark_core.py --checkout /path/to/checkout --output /tmp/core.json
+```
+
+It covers deep consensus construction, RF, star-tree sister IDs, interval
+iteration, and a Gaussian profile fit. Compare numerical fields as well as
+timings. Memory is peak Python allocation, not total process RSS. Run without
+competing CPU workloads when making release performance claims.
+
 `tools/ci_matrix.py` classifies both sides of renamed paths. All source changes
 run full quality/security/coverage checks on Linux with the newest supported
 Python, plus the complete test suite on the minimum supported Python.

@@ -26,6 +26,24 @@ unique to one command.
   be mixed. `intersection --seqout` is a second primary result and may use
   standard output only when `--outfile` is a file path.
 
+## Related outputs and node editing
+
+`sample`, `skim`, `annotate`, `transfer`, and `compose` stage a successful tree
+and its companion tables before replacing any output files. A handled write
+or installation failure restores the previous files. This is not a guarantee
+against a process/system crash during a multi-file commit. With tree output on
+stdout, serialization finishes first, but bytes already delivered to a stream
+cannot be retracted. Strict `transfer`/`compose` failures intentionally still
+produce their diagnostic report without writing the result tree.
+
+`label` skips names already retained anywhere in the tree, including nodes
+outside `--target`. `--force yes` releases the old names of nodes being renamed,
+but does not overwrite names outside that target. Numbering may therefore skip
+occupied suffixes. `mark --target-only-clade yes` includes the root clade when
+every tip matches. All ordinary category strings, including `_MIXED_`, remain
+valid `skim` trait values. `table2nwk` rejects duplicate column headers rather
+than silently selecting one of the identically named columns.
+
 ## Tree input containers
 
 Shared tree readers accept standard Newick/NHX plus the PAML/MCMCtree

@@ -1,6 +1,5 @@
 import heapq
 import math
-import os
 import sys
 from fractions import Fraction
 from typing import Any
@@ -13,7 +12,6 @@ from nwkit.util import (
     remove_singleton,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
-    write_tree,
 )
 
 NUMERIC_OPERATORS = {"ge", "gt", "le", "lt"}
@@ -434,9 +432,12 @@ def sample_main(args):
     n_select = min(args.n, len(candidate_order))
 
     leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+    path_candidates = (
+        candidate_order[:n_select] if args.method == "ranked" else candidate_order
+    )
     path_edges_by_leaf = {
         leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
-        for leaf_name in candidate_order
+        for leaf_name in path_candidates
     }
 
     if args.method == "max-pd":
@@ -457,11 +458,13 @@ def sample_main(args):
     _validate_pd_tree(tree)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
 
-    if report_path is not None:
-        output_df = _build_output_table(selected_rows, ranked_df)
-        output_table_dir = os.path.dirname(os.path.realpath(report_path))
-        if output_table_dir:
-            os.makedirs(output_table_dir, exist_ok=True)
-        output_df.to_csv(report_path, sep="\t", index=False)
+    from nwkit.tree_outputs import write_tree_with_tables
 
-    write_tree(tree, args, format=args.outformat)
+    tables = (
+        []
+        if report_path is None
+        else [(report_path, _build_output_table(selected_rows, ranked_df))]
+    )
+    write_tree_with_tables(
+        tree, args, format=args.outformat, tables=tables, create_table_parents=True
+    )

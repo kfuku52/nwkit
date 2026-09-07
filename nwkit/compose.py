@@ -18,7 +18,6 @@ from nwkit.util import (
     get_tree_property_names,
     read_tree,
     validate_distinct_output_paths,
-    write_tree,
 )
 
 
@@ -117,11 +116,9 @@ def _root_report_row(source_path, target, source, mapping, status, reason, taxon
 
 
 def _write_report(rows, path):
-    if path in (None, ""):
-        return
-    if path == "-":
-        raise ValueError("'--report' requires a file path, not '-'.")
-    pd.DataFrame(rows, columns=REPORT_COLUMNS).to_csv(path, sep="\t", index=False)
+    from nwkit.tree_outputs import write_table_report
+
+    write_table_report(pd.DataFrame(rows, columns=REPORT_COLUMNS), path)
 
 
 def _configured_sources(args):
@@ -344,8 +341,8 @@ def compose_main(args):
         if result["error"] is not None:
             failures.append(str(result["error"]))
 
-    _write_report(report_rows, getattr(args, "report", None))
     if failures and policy == "strict":
+        _write_report(report_rows, getattr(args, "report", None))
         raise ValueError("Strict composition failed: {}".format(" | ".join(failures)))
     transferred = status_counts.get("transferred", 0)
     skipped = sum(
@@ -362,4 +359,17 @@ def compose_main(args):
     )
     if outformat == "auto" and has_internal_names:
         outformat = 1
-    write_tree(target, args, format=outformat, props=output_properties)
+    from nwkit.tree_outputs import write_tree_with_tables
+
+    write_tree_with_tables(
+        target,
+        args,
+        format=outformat,
+        props=output_properties,
+        tables=[
+            (
+                getattr(args, "report", None),
+                pd.DataFrame(report_rows, columns=REPORT_COLUMNS),
+            )
+        ],
+    )

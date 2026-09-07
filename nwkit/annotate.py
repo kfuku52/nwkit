@@ -16,7 +16,6 @@ from nwkit.util import (
     read_tree,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
-    write_tree,
 )
 
 ANNOTATION_REPORT_COLUMNS = (
@@ -254,16 +253,6 @@ def _aggregate_summary(summary, method, column):
         return float(summary["max"]), True, "numeric_maximum"
     raise AssertionError(
         "Unhandled aggregation method for '{}': {}".format(column, method)
-    )
-
-
-def _write_report(rows, path):
-    if path in (None, ""):
-        return
-    if path == "-":
-        raise ValueError("'--report' requires a file path, not '-'.")
-    pd.DataFrame(rows, columns=ANNOTATION_REPORT_COLUMNS).to_csv(
-        path, sep="\t", index=False
     )
 
 
@@ -548,6 +537,18 @@ def annotate_main(args):
         _append_unmatched_table_rows(
             report_rows, table_only, column_specs, rows_by_leaf, missing_values
         )
-    _write_report(report_rows, getattr(args, "report", None))
+    from nwkit.tree_outputs import write_tree_with_tables
+
     sys.stderr.write("Attached or aggregated {} property values.\n".format(annotated))
-    write_tree(tree, args, format=args.outformat, props=output_properties)
+    write_tree_with_tables(
+        tree,
+        args,
+        format=args.outformat,
+        props=output_properties,
+        tables=[
+            (
+                getattr(args, "report", None),
+                pd.DataFrame(report_rows, columns=ANNOTATION_REPORT_COLUMNS),
+            )
+        ],
+    )

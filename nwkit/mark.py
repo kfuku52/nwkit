@@ -36,6 +36,7 @@ def annotate_tree_attr(tree, args):
             node.props["is_descendant_all_target"] = True
     for node in tree.traverse():
         if node.is_root:
+            node.props["is_target_only_mrca"] = node.props["is_descendant_all_target"]
             continue
         if (not node.up.props.get("is_descendant_all_target")) and node.props.get(
             "is_descendant_all_target"

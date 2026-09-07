@@ -326,7 +326,7 @@ class TestIntersectionRefactorValidation:
 
 
 class TestMarkRefactorValidation:
-    def test_annotate_tree_attr_matches_old_logic_randomized(self):
+    def test_annotate_tree_attr_matches_corrected_reference_randomized(self):
         rng = random.Random(23)
         prop_keys = [
             "is_target_leaf",
@@ -354,6 +354,12 @@ class TestMarkRefactorValidation:
                 pattern = re.escape(chosen.split("_")[0]) + ".*"
             args = Namespace(pattern=pattern)
             tree_old = old_annotate_tree_attr(tree.copy(), args)
+            # The legacy oracle omitted the root when every tip matched.
+            # Correct just that known bug; retain all other legacy comparisons.
+            if all(re.fullmatch(pattern, name) for name in leaf_names):
+                tree_old.props["is_target_only_mrca"] = True
+                for node in tree_old.traverse():
+                    node.props["is_target_only_mrca_clade"] = True
             tree_new = mark.annotate_tree_attr(tree.copy(), args)
             expected = node_prop_map(tree_old, prop_keys)
             actual = node_prop_map(tree_new, prop_keys)

@@ -25,7 +25,6 @@ from nwkit.util import (
     support_is_missing,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
-    write_tree,
 )
 
 SPECIAL_PROPERTIES = frozenset(("name", "support", "length"))
@@ -831,13 +830,9 @@ def _try_align_roots(target, source, taxon_mode, allow_target_reroot=True):
 
 
 def _write_report(rows, report_path):
-    if report_path in (None, ""):
-        return
-    if report_path == "-":
-        raise ValueError("'--report' requires a file path, not '-'.")
-    pd.DataFrame(rows, columns=REPORT_COLUMNS).to_csv(
-        report_path, sep="\t", index=False
-    )
+    from nwkit.tree_outputs import write_table_report
+
+    write_table_report(pd.DataFrame(rows, columns=REPORT_COLUMNS), report_path)
 
 
 def _transfer_root_edge_candidates(
@@ -1274,7 +1269,6 @@ def transfer_main(args):
         ),
         collect_report=getattr(args, "report", None) not in (None, ""),
     )
-    _write_report(result["rows"], getattr(args, "report", None))
     sys.stderr.write(
         "Transferred {} nodes out of {} target nodes.\n".format(
             result["changed_node_count"],
@@ -1282,15 +1276,24 @@ def transfer_main(args):
         )
     )
     if result["error"] is not None:
+        _write_report(result["rows"], getattr(args, "report", None))
         raise result["error"]
     outformat = args.outformat
     if outformat == "auto" and any(
         target_prop == "name" for _, target_prop in property_specs
     ):
         outformat = 1
-    write_tree(
+    from nwkit.tree_outputs import write_tree_with_tables
+
+    write_tree_with_tables(
         result["tree"],
         args,
         format=outformat,
         props=result["output_properties"],
+        tables=[
+            (
+                getattr(args, "report", None),
+                pd.DataFrame(result["rows"], columns=REPORT_COLUMNS),
+            )
+        ],
     )

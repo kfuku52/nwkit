@@ -9,8 +9,10 @@ from nwkit.util import (
     remove_singleton,
     validate_distinct_output_paths,
     validate_unique_named_leaves,
-    write_tree,
 )
+
+# Distinct from every user-supplied category, including the text "_MIXED_".
+_MIXED = object()
 
 
 def read_trait(args, tree):
@@ -62,15 +64,15 @@ def mark_traits_to_nodes(tree, trait_df, args):
                 child_trait = child.props.get("trait")
                 if pd.isna(child_trait):
                     continue
-                elif child_trait == "_MIXED_":
-                    trait = "_MIXED_"
+                elif child_trait is _MIXED:
+                    trait = _MIXED
                     break
                 elif pd.isna(trait):
                     trait = child_trait
                 elif trait == child_trait:
                     continue
                 else:
-                    trait = "_MIXED_"
+                    trait = _MIXED
                     break
             node.add_props(trait=trait)
     return tree
@@ -92,9 +94,7 @@ def add_group_ids(trait_df, marked_tree):
     subtree_leaf_name_sets = get_subtree_leaf_name_sets(marked_tree)
     for node in iter_frontier_nodes(
         root=marked_tree.root,
-        stop_condition=lambda node: (
-            pd.isna(node.props.get("trait")) or node.props.get("trait") != "_MIXED_"
-        ),
+        stop_condition=lambda node: node.props.get("trait") is not _MIXED,
     ):
         if node.is_leaf:
             leafname2group[node.name] = group_id
@@ -172,14 +172,14 @@ def sample_from_groups(trait_df, args):
 
 
 def iter_contrastive_nodes(root):
-    if root.props.get("trait") != "_MIXED_":
+    if root.props.get("trait") is not _MIXED:
         return
     stack = [root]
     while stack:
         node = stack.pop()
         flag_has_mixed_child = False
         for child in node.children:
-            if child.props.get("trait") == "_MIXED_":
+            if child.props.get("trait") is _MIXED:
                 stack.append(child)
                 flag_has_mixed_child = True
         if not flag_has_mixed_child:
@@ -253,11 +253,17 @@ def skim_main(args):
         )
     tree.prune(sampled_trait_df["leaf_name"].tolist(), preserve_branch_length=True)
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
-    if group_table_prefix not in ["", None]:
-        trait_df.sort_values("group").to_csv(
-            f"{group_table_prefix}.all.tsv", sep="\t", index=False
-        )
-        sampled_trait_df.sort_values("group").to_csv(
-            f"{group_table_prefix}.sampled.tsv", sep="\t", index=False
-        )
-    write_tree(tree, args, format=args.outformat)
+    from nwkit.tree_outputs import write_tree_with_tables
+
+    tables = (
+        []
+        if group_table_prefix in ("", None)
+        else [
+            (f"{group_table_prefix}.all.tsv", trait_df.sort_values("group")),
+            (
+                f"{group_table_prefix}.sampled.tsv",
+                sampled_trait_df.sort_values("group"),
+            ),
+        ]
+    )
+    write_tree_with_tables(tree, args, format=args.outformat, tables=tables)
