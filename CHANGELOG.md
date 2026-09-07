@@ -4,6 +4,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Single-state ER ancestral reconstruction now returns unit posterior
+  probabilities. ER transitions retain tiny positive rates and avoid intermediate
+  overflow when large rates are paired with short branches.
+- Discrete rate-matrix validation scales rows before checking their sums, and
+  stationary distributions normalize rate units before solving, preventing
+  overflow from admitting invalid generators and underflow from rejecting valid
+  stationary priors.
+- Mk multistart fitting records SciPy's finite-difference bound-roundoff failure
+  and runs the existing bounded Powell fallback instead of aborting the analysis.
+
 ## [0.43.5] - 2026-09-07
 
 ### Fixed

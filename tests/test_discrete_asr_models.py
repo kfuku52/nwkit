@@ -138,6 +138,85 @@ def test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium(
     assert math.isfinite(fit["log_likelihood"])
 
 
+@pytest.mark.parametrize("model", ["ER", "SYM", "ARD"])
+def test_single_state_reconstruction_has_unit_posteriors(model):
+    tree = tree_from("(A:0.3,B:0.7)R;")
+    posterior, fit = asr.compute_mk_marginals(
+        tree,
+        ["x"],
+        {"A": "x", "B": "x"},
+        {"A": np.ones(1), "B": np.ones(1)},
+        model=model,
+    )
+    assert fit["log_likelihood"] == 0.0
+    for probabilities in posterior.values():
+        np.testing.assert_array_equal(probabilities, [1.0])
+
+
+def test_tiny_er_rates_preserve_possible_state_changes():
+    tree = tree_from("(A:1,B:1)R;")
+    posterior, fit = asr.compute_mk_marginals(
+        tree,
+        ["x", "y"],
+        {"A": "x", "B": "y"},
+        {"A": np.array([1.0, 0.0]), "B": np.array([0.0, 1.0])},
+        rate=1e-20,
+    )
+    assert fit["log_likelihood"] == pytest.approx(math.log(1e-20))
+    np.testing.assert_allclose(posterior[tree], [0.5, 0.5])
+
+
+@pytest.mark.parametrize("rate, length", [(1e308, 1e-308), (1e-308, 1e308)])
+def test_er_transitions_are_invariant_to_reciprocal_rate_time_units(rate, length):
+    expected = asr._er_transition_matrix(1.0, 1.0, 2)
+    np.testing.assert_allclose(asr._er_transition_matrix(length, rate, 2), expected)
+
+
+def test_generator_validation_does_not_overflow_its_tolerance():
+    with np.errstate(over="raise", invalid="raise"):
+        with pytest.raises(ValueError, match="rows must sum to zero"):
+            validate_rate_matrix([[-1e308, 1e308, 1e308], [0, 0, 0], [0, 0, 0]])
+        valid = np.array([[-1e308, 1e308], [1e308, -1e308]])
+        np.testing.assert_array_equal(validate_rate_matrix(valid), valid)
+
+
+@pytest.mark.parametrize("scale", [1e-320, 1e-200, 1.0, 1e200, 1e308])
+def test_stationary_distribution_is_invariant_to_rate_units(scale):
+    matrix = np.array([[-0.5, 0.5], [1.0, -1.0]]) * scale
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_allclose(stationary_distribution(matrix), [2 / 3, 1 / 3])
+
+
+def test_mk_fit_recovers_from_scipy_bound_roundoff(monkeypatch):
+    minimize = asr.minimize
+    methods = []
+
+    def fail_lbfgsb(*args, **kwargs):
+        methods.append(kwargs["method"])
+        if kwargs["method"] == "L-BFGS-B":
+            raise ValueError("`x0` violates bound constraints.")
+        return minimize(*args, **kwargs)
+
+    monkeypatch.setattr(asr, "minimize", fail_lbfgsb)
+    tree = tree_from("(A:1,B:1)R;")
+    posterior, fit = asr.compute_mk_marginals(
+        tree,
+        ["x", "y"],
+        {"A": "x", "B": "y"},
+        {"A": np.array([1.0, 0.0]), "B": np.array([0.0, 1.0])},
+        rate_bounds=(1e-4, 1.0),
+    )
+    assert fit["optimizer_success"]
+    assert "`x0` violates bound constraints." in fit["optimizer_message"]
+    assert "Powell fallback" in fit["optimizer_message"]
+    assert methods.count("Powell") == methods.count("L-BFGS-B")
+    assert 1e-4 <= fit["rates"][0] <= 1.0
+    expected = asr._er_transition_matrix(1.0, fit["rates"][0], 2)
+    expected_likelihood = float(np.sum(0.5 * expected[:, 0] * expected[:, 1]))
+    assert fit["log_likelihood"] == pytest.approx(math.log(expected_likelihood))
+    np.testing.assert_allclose(posterior[tree], [0.5, 0.5])
+
+
 def test_ordered_graph_uses_state_order_and_removes_nonadjacent_rates():
     states = ["low", "medium", "high"]
     graph, source = read_transition_graph("ordered", states)

@@ -447,8 +447,12 @@ def validate_rate_matrix(rate_matrix, *, num_states=None):
         raise ValueError(
             "A rate matrix requires non-negative off-diagonals and non-positive diagonals."
         )
-    row_scale = np.sum(np.abs(matrix), axis=1)
-    if not np.all(_roundoff_close(matrix.sum(axis=1), row_scale)):
+    # Scale before summing: finite entries can otherwise overflow both the
+    # residual and its tolerance, making an invalid row pass as inf <= inf.
+    row_max = np.max(np.abs(matrix), axis=1, keepdims=True)
+    scaled = matrix / np.where(row_max > 0.0, row_max, 1.0)
+    row_scale = np.sum(np.abs(scaled), axis=1)
+    if not np.all(_roundoff_close(scaled.sum(axis=1), row_scale)):
         raise ValueError("Rate-matrix rows must sum to zero.")
     return matrix.copy()
 
@@ -457,6 +461,11 @@ def stationary_distribution(rate_matrix):
     """Return the unique stationary distribution of a finite CTMC generator."""
 
     matrix = validate_rate_matrix(rate_matrix)
+    # Stationary probabilities are independent of the overall rate units.
+    # Normalize before mixing generator equations with the unit-sum equation.
+    rate_scale = float(np.max(np.abs(matrix)))
+    if rate_scale > 0.0:
+        matrix /= rate_scale
     system = matrix.T.copy()
     system[-1, :] = 1.0
     target = np.zeros(matrix.shape[0], dtype=float)

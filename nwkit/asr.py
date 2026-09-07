@@ -9,7 +9,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from scipy.linalg import expm
-from scipy.optimize import minimize
+from scipy.optimize import OptimizeResult, minimize
 from scipy.special import logsumexp
 from scipy.stats import gamma as gamma_distribution
 from scipy.stats import poisson
@@ -287,10 +287,9 @@ def _er_transition_matrix(branch_length, rate, num_states):
         return np.ones((1, 1), dtype=float)
     if rate < 0.0:
         raise ValueError("Mk transition rate must be non-negative.")
-    exponent = -float(num_states) * float(rate) * float(branch_length)
+    exponent = -float(num_states) * (float(rate) * float(branch_length))
     decay = math.exp(exponent)
-    # exp() rounds to one for tiny negative exponents.  expm1() preserves the
-    # correspondingly tiny but non-zero transition probabilities.
+    # expm1 preserves tiny positive transitions when exp rounds to one.
     off_diagonal = -math.expm1(exponent) / float(num_states)
     matrix = np.full((num_states, num_states), off_diagonal, dtype=float)
     diagonal = off_diagonal + decay
@@ -753,6 +752,21 @@ def _parameter_boundary_summary(parameters, parameter_kinds, parameter_bounds):
     return counts
 
 
+def _minimize_mk(*args, **kwargs):
+    try:
+        return minimize(*args, **kwargs)
+    except ValueError as exc:
+        # SciPy 1.17.1 can move one ULP beyond a bound and reject its own
+        # finite-difference point. Let the shared bounded Powell fallback run.
+        # Remove when supported SciPy versions clip these iterates.
+        if (
+            kwargs.get("method") != "L-BFGS-B"
+            or str(exc) != "`x0` violates bound constraints."
+        ):
+            raise
+        return OptimizeResult(success=False, message=str(exc))
+
+
 def _fit_parametric_rate_matrix(
     tree,
     model,
@@ -855,7 +869,7 @@ def _fit_parametric_rate_matrix(
             initial_logs,
             list(zip(lower_logs, upper_logs, strict=True)),
             maxiter=500,
-            minimizer=minimize,
+            minimizer=_minimize_mk,
             ftol=None,
             additional_starts=(
                 ()
