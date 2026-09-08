@@ -39,6 +39,7 @@ def validate_panel_options(args, trait_type):
         if (
             getattr(args, "figure_simulations", 0)
             or getattr(args, "figure_tip_heatmap", "no") == "yes"
+            or getattr(args, "figure_trait_tip_labels", "no") == "yes"
             or any(getattr(args, key, None) is not None for key in settings)
         ):
             raise ValueError(
@@ -126,11 +127,21 @@ def _draw_model(context, row, cached, figure, slot, trait_axes):
     )
     if heatmap:
         draw_tip_heatmap(tree_ax, table, tips, positions, _label_overhang(tips) + 0.65)
+    from nwkit.asr_tip_labels import draw_trait_tip_labels
+
+    tip_labels = getattr(context.args, "figure_trait_tip_labels", "no") == "yes"
+    tip_colors = {tip.name: styles[by_node[tip]][0] for tip in tips}
     for index, trait in enumerate(context.trait_columns):
         rows = table[table.trait == trait].set_index("branch_id")
         theta = _theta_values(fit, index, styles)
         ax = figure.add_subplot(grid[1 + index * stride], sharey=tree_ax)
         _draw_trait(ax, rows, nodes, depths, ids, by_node, styles, theta, node_types)
+        if tip_labels:
+            draw_trait_tip_labels(
+                ax,
+                {tip.name: float(rows.loc[ids[tip], "mean"]) for tip in tips},
+                tip_colors,
+            )
         ax.set_title(f"{trait} | ASR", loc="left", fontsize=10, fontweight="bold")
         trait_axes[trait].append(ax)
         if include_simulation:
@@ -162,6 +173,20 @@ def _draw_model(context, row, cached, figure, slot, trait_axes):
                 )
                 sim_ax.set_title(sim_ax.get_title(loc="left"), loc="left", fontsize=10)
                 trait_axes[trait].append(sim_ax)
+                if tip_labels:
+                    draw_trait_tip_labels(
+                        sim_ax,
+                        {
+                            tip.name: float(
+                                simulation.root_values[0, index]
+                                if tip.is_root
+                                else simulation.branches[tip].values[0, -1, index]
+                            )
+                            for tip in tips
+                        },
+                        tip_colors,
+                        first_history=simulation.count > 1,
+                    )
     extent = max(depths.values()) or 1.0
     tree_ax.set_ylim(extent * 1.04, -extent * 0.05)
     tree_ax.set_title("Phylogeny", loc="left", fontsize=10, fontweight="bold")
@@ -207,6 +232,8 @@ def build_comparison_panels(context, table):
     overhang = _label_overhang(list(context.tree.leaves()))
     if getattr(context.args, "figure_tip_heatmap", "no") == "yes":
         overhang += heatmap_extra_space(len(context.trait_columns))
+    if getattr(context.args, "figure_trait_tip_labels", "no") == "yes":
+        overhang += 0.45
     heights = [
         5.3 + overhang
         if row["model_id"] in fits

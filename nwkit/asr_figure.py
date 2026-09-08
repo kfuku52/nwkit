@@ -34,6 +34,8 @@ def validate_figure_options(args):
 
     simulation_options(args)
     path = getattr(args, "figure_out", None)
+    if getattr(args, "figure_trait_tip_labels", "no") == "yes" and path in (None, ""):
+        raise ValueError("--figure-trait-tip-labels yes requires --figure-out.")
     if getattr(args, "figure_tip_heatmap", "no") == "yes" and path in (None, ""):
         raise ValueError("--figure-tip-heatmap yes requires --figure-out.")
     for name in ("figure_width", "figure_height"):
@@ -378,6 +380,7 @@ def build_continuous_asr_figure(
     simulation=None,
     node_types=None,
     tip_heatmap=False,
+    trait_tip_labels=False,
 ):
     """Build a headless Matplotlib Figure using a complete continuous summary table."""
     from matplotlib.figure import Figure
@@ -390,7 +393,7 @@ def build_continuous_asr_figure(
     traits = list(dict.fromkeys(table["trait"]))
     by_node, styles = _regime_styles(tree, regime_assignment)
     tree_width = max(3.4, len(tips) * 0.36)
-    overhang = _label_overhang(tips)
+    overhang = _label_overhang(tips) + (0.45 if trait_tip_labels else 0)
     extra_footer = 0.2 if simulation is not None else 0.0
     heatmap_space = heatmap_extra_space(len(traits)) if tip_heatmap else 0.0
     panels_per_trait = 2 if simulation is not None else 1
@@ -401,7 +404,6 @@ def build_continuous_asr_figure(
         1,
         1 + num_panels,
         sharey=True,
-        gridspec_kw={"width_ratios": [tree_width, *([3.8] * num_panels)]},
     )
     _draw_tree(
         axes[0],
@@ -416,6 +418,9 @@ def build_continuous_asr_figure(
     )
     if tip_heatmap:
         draw_tip_heatmap(axes[0], table, tips, positions, overhang + 0.65)
+    from nwkit.asr_tip_labels import draw_trait_tip_labels
+
+    tip_colors = {tip.name: styles[by_node[tip]][0] for tip in tips}
     has_theta = False
     for index, trait in enumerate(traits):
         rows = table[table.trait == trait].set_index("branch_id")
@@ -427,6 +432,12 @@ def build_continuous_asr_figure(
         has_theta = has_theta or bool(theta)
         ax = axes[1 + index * panels_per_trait]
         _draw_trait(ax, rows, nodes, depths, ids, by_node, styles, theta, node_types)
+        if trait_tip_labels:
+            draw_trait_tip_labels(
+                ax,
+                {tip.name: float(rows.loc[ids[tip], "mean"]) for tip in tips},
+                tip_colors,
+            )
         if simulation is not None:
             ax.set_title(f"{trait} | ASR", loc="left", fontweight="bold", pad=14)
             simulated_ax = axes[2 + index * panels_per_trait]
@@ -448,6 +459,20 @@ def build_continuous_asr_figure(
             )
             ax.set_xlim(limits)
             simulated_ax.set_xlim(limits)
+            if trait_tip_labels:
+                draw_trait_tip_labels(
+                    simulated_ax,
+                    {
+                        tip.name: float(
+                            simulation.root_values[0, index]
+                            if tip.is_root
+                            else simulation.branches[tip].values[0, -1, index]
+                        )
+                        for tip in tips
+                    },
+                    tip_colors,
+                    first_history=simulation.count > 1,
+                )
     extent = max(depths.values()) or 1.0
     axes[0].set_ylim(extent * 1.04, -extent * 0.05)
     for ax in axes:
@@ -601,6 +626,7 @@ def write_continuous_asr_figure(
         simulation=simulation,
         node_types=figure_node_types(tree, args),
         tip_heatmap=getattr(args, "figure_tip_heatmap", "no") == "yes",
+        trait_tip_labels=getattr(args, "figure_trait_tip_labels", "no") == "yes",
     )
     try:
         with output_transaction([args.figure_out]) as staged:

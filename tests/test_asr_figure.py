@@ -399,3 +399,24 @@ def test_example_is_binary_and_regimes_match_renamed_trait_tips():
         if event == "duplication":
             assert types[node.up] == "speciation"
             assert all(types[child] == "speciation" for child in node.children)
+
+
+def test_trait_tip_labels_keep_values_and_follow_shared_limits():
+    tree = Tree("((A:1,B:2):0,C:1):90;")
+    table, fit = summary(tree)
+    figure = build_continuous_asr_figure(
+        tree, table, model="BM", fit=fit, trait_tip_labels=True
+    )
+    axis = figure.axes[1]
+    band = next(
+        child for child in axis.child_axes if child.get_label() == "trait-tip-labels"
+    )
+    labels = [text for text in band.texts if text.get_gid()]
+    rows = table[table.node_class == "leaf"].set_index("name")
+    assert {text.get_text() for text in labels} == set(tree.leaf_names())
+    for text in labels:
+        assert text.xy == (rows.loc[text.get_text(), "mean"], 1)
+    assert [text.xy[0] for text in labels] == sorted(text.xy[0] for text in labels)
+    axis.set_xlim(-10, 20)
+    assert band.get_xlim() == axis.get_xlim()
+    assert len({round(ax.get_position().width, 8) for ax in figure.axes}) == 1

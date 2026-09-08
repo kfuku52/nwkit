@@ -4,6 +4,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.9] - 2026-09-08
+
+### Added
+
+- Add optional, value-ordered full tip labels below ASR and simulation panels,
+  with thin connectors, shared value scales and explicit first-history labeling.
+
+### Changed
+
+- Give phylogeny, ASR and simulation plots equal widths and include labeled
+  examples in the figure guide.
+
 ## [0.43.8] - 2026-09-08
 
 ### Added

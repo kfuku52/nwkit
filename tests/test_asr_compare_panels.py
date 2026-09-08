@@ -34,7 +34,8 @@ def command(tmp_path, *extra):
     ]
 
 
-def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch):
+@pytest.mark.parametrize("tip_labels", ["no", "yes"])
+def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch, tip_labels):
     import nwkit.asr_compare as comparison
     import nwkit.asr_compare_panels as plotting
 
@@ -56,6 +57,20 @@ def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch):
         trait_plots = [ax for ax in plots if ax.get_xlabel() == "x"]
         assert len(trait_plots) == 4
         assert len({ax.get_xlim() for ax in trait_plots}) == 1
+        if tip_labels == "yes":
+            for ax in trait_plots:
+                band = next(
+                    child
+                    for child in ax.child_axes
+                    if child.get_label() == "trait-tip-labels"
+                )
+                assert band.get_xlim() == ax.get_xlim()
+                labels = [text for text in band.texts if text.get_gid()]
+                assert {text.get_text() for text in labels} == set("ABCDEF")
+                if "simulation" in ax.get_title(loc="left"):
+                    assert any(
+                        "first history" in text.get_text() for text in band.texts
+                    )
         # Cached marginals, rather than a second fit, supply every node.
         for posterior, _, _, _ in context.cache["figure_fits"].values():
             assert len(posterior) == len(list(context.tree.traverse()))
@@ -73,6 +88,8 @@ def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch):
             str(pdf),
             "--figure-simulations",
             "2",
+            "--figure-trait-tip-labels",
+            tip_labels,
             "--figure-simulation-steps",
             "4",
             "--seed",

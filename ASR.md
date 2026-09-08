@@ -1445,3 +1445,14 @@ It is an importance sample, not equally weighted posterior histories. Figures,
 Gaussian diagnostics, replicate reduction and tree ensembles are currently
 rejected for these models. `asrcompare` marks them inapplicable: approximate,
 fixed-parameter latent fits are not silently ranked as ordinary ML fits.
+
+### Tip labels beneath continuous trait panels
+
+`asr --figure-trait-tip-labels yes` and
+`asrcompare --figure-layout panels --figure-trait-tip-labels yes` add optional
+full tip names in detached strips below ASR and simulation panels. `--figure-out`
+is required. Values repeat on the main panel's x scale; thin connectors lead to
+evenly spaced names sorted by value. ASR labels use posterior tip means,
+including imputed tips. Simulation labels use the first sampled history's tip
+endpoints, explicitly identified when several histories are drawn. Labels are
+off by default. The input names and numerical outputs are unchanged.

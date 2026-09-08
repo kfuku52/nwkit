@@ -473,3 +473,14 @@ parser meaning. It writes one tree/document, never a directory or implicit
 sidecars. See [CONVERT.md](CONVERT.md) for annotation, scaling, ambiguity and
 loss contracts. `validate --require-all-lengths yes` adds the issue
 `missing_branch_length` for absent non-root lengths without changing TSV columns.
+
+### Tip labels beneath continuous trait panels
+
+`asr --figure-trait-tip-labels yes` and
+`asrcompare --figure-layout panels --figure-trait-tip-labels yes` add optional
+full tip names in detached strips below ASR and simulation panels. `--figure-out`
+is required. Values repeat on the main panel's x scale; thin connectors lead to
+evenly spaced names sorted by value. ASR labels use posterior tip means,
+including imputed tips. Simulation labels use the first sampled history's tip
+endpoints, explicitly identified when several histories are drawn. Labels are
+off by default. The input names and numerical outputs are unchanged.

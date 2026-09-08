@@ -1200,6 +1200,13 @@ pasr.add_argument(
     help="Optional PDF, SVG, or PNG showing continuous ancestral traits beside the tree. Includes all nodes regardless of --target.",
 )
 pasr.add_argument(
+    "--figure-trait-tip-labels",
+    "--figure_trait_tip_labels",
+    choices=("yes", "no"),
+    default="no",
+    help="default=no: Add full tip names in detached value-ordered strips below ASR and simulation panels. Labels use posterior tip means or the first sampled history. Requires --figure-out; asrcompare requires --figure-layout panels.",
+)
+pasr.add_argument(
     "--figure-tip-heatmap",
     "--figure_tip_heatmap",
     choices=("yes", "no"),
@@ -1341,6 +1348,7 @@ _copy_store_options(
         "figure_simulation_mode",
         "figure_simulation_steps",
         "figure_tip_heatmap",
+        "figure_trait_tip_labels",
         "species_overlap_node_plot",
         "seed",
     ),

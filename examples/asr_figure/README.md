@@ -12,7 +12,7 @@ From the repository root:
 nwkit asr \
   -i examples/asr_figure/tree.nwk \
   --trait examples/asr_figure/traits.tsv \
-  --state-column "Trait value" --figure-tip-heatmap yes \
+  --state-column "Trait value" --figure-tip-heatmap yes --figure-trait-tip-labels yes \
   --model OUM \
   --regime-map examples/asr_figure/regimes.tsv \
   --regime-parameters examples/asr_figure/parameters.tsv \
@@ -73,7 +73,7 @@ This command generates the additional simulation panel shown below:
 nwkit asr \
   -i examples/asr_figure/tree.nwk \
   --trait examples/asr_figure/traits.tsv \
-  --state-column "Trait value" --figure-tip-heatmap yes \
+  --state-column "Trait value" --figure-tip-heatmap yes --figure-trait-tip-labels yes \
   --model OUM \
   --regime-map examples/asr_figure/regimes.tsv \
   --regime-parameters examples/asr_figure/parameters.tsv \
@@ -102,7 +102,7 @@ values and tree. They do not add parameter or tree uncertainty.
 ```sh
 nwkit asrcompare \
   -i examples/asr_figure/tree.nwk \
-  --trait examples/asr_figure/traits.tsv --state-column "Trait value" --figure-tip-heatmap yes \
+  --trait examples/asr_figure/traits.tsv --state-column "Trait value" --figure-tip-heatmap yes --figure-trait-tip-labels yes \
   --models BM,OU,OUM \
   --regime-map examples/asr_figure/regimes.tsv \
   --regime-parameters examples/asr_figure/parameters.tsv \
@@ -125,4 +125,16 @@ The heatmap below each phylogeny displays the observed values in tip order,
 using the same 0.5-7.8 scale in every model. `Rattus_norvegicus_2` is gray because
 its observation is missing; its ASR-imputed value is shown only in the ASR panel.
 The numeric color key is below the vertical tip names. Omit
-`--figure-tip-heatmap yes` to use the original layout without the heatmap.
+`--figure-tip-heatmap yes` to hide the heatmap; omit
+`--figure-trait-tip-labels yes` to hide the trait-panel label strips.
+
+## Optional labels under trait panels
+
+The commands above enable `--figure-trait-tip-labels yes` to show full tip
+names under the ASR and simulation panels. The detached strips repeat the tip
+values on the same x scale and fan out to evenly spaced, value-ordered names.
+ASR uses posterior tip means (including imputed tips); simulation uses endpoints
+of the first sampled history, identified explicitly when several are drawn.
+Regime colors match the corresponding branches. These labels are off by default.
+
+![Trait panels with detached tip labels](simulation-labelled.png)
