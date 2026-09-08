@@ -297,3 +297,25 @@ class TestValidateMain:
         issues = "" if pd.isna(table.loc[1, "issues"]) else str(table.loc[1, "issues"])
         assert "leaf_set_mismatch" not in issues
         assert "rooting_mismatch" not in issues
+
+
+@pytest.mark.parametrize(
+    "text,required,missing",
+    [
+        ("(A,B);", True, True),
+        ("(A:1,B);", True, True),
+        ("(A:1,B:2);", True, False),
+        ("(A,B);", False, False),
+    ],
+)
+def test_require_all_lengths_reports_only_missing_nonroot_lengths(
+    tmp_nwk, tmp_path, text, required, missing
+):
+    outfile = tmp_path / "lengths.tsv"
+    validate_main(
+        make_args(
+            infile=tmp_nwk(text), outfile=str(outfile), require_all_lengths=required
+        )
+    )
+    table = pd.read_csv(outfile, sep="\t").fillna("")
+    assert ("missing_branch_length" in table.loc[0, "issues"]) is missing

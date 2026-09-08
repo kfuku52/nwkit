@@ -29,6 +29,7 @@ CASES = {
     "compose": ["--length-source", "{other}"],
     "cladefreq": [],
     "consensus": [],
+    "convert": [],
     "contrast": ["--trait", "{data}", "--columns", "x"],
     "diff": ["-i2", "{other}"],
     "dist": ["-i2", "{other}"],

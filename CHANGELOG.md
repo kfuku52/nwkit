@@ -4,6 +4,22 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.7] - 2026-09-08
+
+### Added
+
+- Add `convert` for Newick, NHX, FigTree NEXUS and MCMCtree output, with explicit
+  time scaling, interval retention/removal and selection of ambiguous trees.
+  Preserve node names, support, interval methods/levels and unrelated comments;
+  reject implicit property loss and unsupported NEXUS translation tables.
+- Add `label --start` for configurable sequential numbering and
+  `validate --require-all-lengths` for complete non-root branch lengths.
+
+### Changed
+
+- Share quote-aware container and age-annotation parsing across tree readers
+  and conversion. Recognize MCMCtree's topology and paired dated-tree views.
+
 ## [0.43.6] - 2026-09-08
 
 ### Fixed

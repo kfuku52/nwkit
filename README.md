@@ -72,6 +72,7 @@ minimal worked example, in
 - [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
 - [`contrast`](https://github.com/kfuku52/nwkit/wiki/nwkit-contrast): Calculating continuous-trait phylogenetic independent contrasts, with biological/technical replicates, batch adjustment, propagated sampling covariance, and reconciled gene-tree event mappings
+- [`convert`](https://github.com/kfuku52/nwkit/wiki/nwkit-convert): Converting Newick, NHX, FigTree and MCMCtree output with explicit time scaling and interval retention
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, unrooted, spiral, or fractal geometry, annotation-aware spacing, and auditable layout reports

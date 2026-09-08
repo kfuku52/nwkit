@@ -74,17 +74,6 @@ ETE_DOWNLOAD_HEADERS = {
 ETE_TAXONOMY_DEFAULT_MAX_AGE_DAYS = 30.0
 
 _PAML_TREEFILE_HEADER_PATTERN = re.compile(r"^\s*\d+\s+\d+\s*$")
-_PAML_FIGTREE_INTERVAL_PATTERN = re.compile(
-    r"\[\s*&\s*(95%HPD|95%)\s*=\s*\{\s*"
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*,\s*"
-    r"([+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)\s*\}\s*\]"
-    r"(\s*:\s*[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?)?",
-    flags=re.IGNORECASE,
-)
-_PAML_NEXUS_TREE_PATTERN = re.compile(
-    r"(?ims)^\s*(?:u?tree)\s+[^=]+?=\s*(.+?;)\s*$",
-)
-_PAML_MAIN_OUTPUT_MARKER = "Species tree for FigTree."
 COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser("~"), ".local", "share", "ete"),
     os.path.join(os.path.expanduser("~"), ".etetoolkit"),
@@ -124,32 +113,19 @@ def read_input_text(infile):
 
 
 def _convert_paml_figtree_intervals(text):
-    """Convert PAML/FigTree age intervals into ETE-readable NHX properties."""
+    """Normalize annotations through the same quote-aware syntax as convert."""
+    from nwkit.tree_formats import transform_annotations
 
-    def replace_interval(match):
-        kind = "HPD" if match.group(1).upper() == "95%HPD" else "equal-tail"
-        return (
-            "{}[&&NHX:age_ci_low={}:age_ci_high={}:age_ci_kind={}:age_ci_level=0.95]"
-        ).format(match.group(4) or "", match.group(2), match.group(3), kind)
-
-    return _PAML_FIGTREE_INTERVAL_PATTERN.sub(replace_interval, str(text))
+    return transform_annotations(str(text), parser=True)
 
 
 def _extract_paml_main_output_tree(text):
-    marker_index = text.find(_PAML_MAIN_OUTPUT_MARKER)
-    if marker_index < 0:
+    from nwkit.tree_formats import MCMCTREE_MARKER, read_container, select_mcmctree_tree
+
+    if MCMCTREE_MARKER.search(text) is None:
         return None
-    candidates = []
-    for line in text[marker_index:].splitlines()[1:]:
-        candidate = line.strip()
-        if candidate.startswith("(") and candidate.endswith(";"):
-            candidates.append(candidate)
-            if len(candidates) == 3:
-                break
-    if not candidates:
-        raise ValueError("MCMCtree output did not contain its FigTree species tree.")
-    annotated = [candidate for candidate in candidates if "[&95%" in candidate]
-    return annotated[-1] if annotated else candidates[-1]
+    _, statements = read_container(text, "mcmctree-output")
+    return select_mcmctree_tree(statements)
 
 
 def normalize_phylogenetic_tree_text(tree_text, collection=False):
@@ -167,16 +143,10 @@ def normalize_phylogenetic_tree_text(tree_text, collection=False):
     main_output_tree = _extract_paml_main_output_tree(text)
     if main_output_tree is not None:
         text = main_output_tree
-    elif re.search(r"(?im)^\s*(?:u?tree)\s+[^=]+?=", text):
-        if re.search(r"(?im)^\s*translate\b", text):
-            raise ValueError(
-                "NEXUS TRANSLATE tables are not supported; provide direct tip labels."
-            )
-        nexus_trees = _PAML_NEXUS_TREE_PATTERN.findall(text)
-        if not nexus_trees:
-            raise ValueError(
-                "NEXUS input did not contain a complete TREE or UTREE statement."
-            )
+    elif re.search(r"(?im)^\s*(?:#NEXUS\b|(?:u?tree)\s+[^=]+?=)", text):
+        from nwkit.tree_formats import read_container
+
+        _, nexus_trees = read_container(text, "figtree")
         text = "\n".join(nexus_trees if collection else nexus_trees[:1])
     else:
         lines = text.splitlines()

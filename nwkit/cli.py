@@ -3276,6 +3276,13 @@ plabel.add_argument(
     action="store",
     help="default=%(default)s: Whether to overwrite existing node names.",
 )
+plabel.add_argument(
+    "--start",
+    type=int,
+    default=0,
+    metavar="INT",
+    help="default=%(default)s: First label number in level order; existing reserved names are skipped.",
+)
 plabel.set_defaults(handler=command_label)
 
 
@@ -4465,6 +4472,54 @@ pmark.add_argument(
     help="default=%(default)s: Place to insert --insert-text.",
 )
 pmark.set_defaults(handler=command_mark)
+
+
+def command_convert(args):
+    from nwkit.convert import convert_main
+
+    convert_main(args)
+
+
+pconvert = subparsers.add_parser(
+    "convert",
+    help="Convert Newick, NHX, FigTree and MCMCtree output without silently losing annotations",
+    parents=[p_tree_input, p_text_output],
+)
+pconvert.add_argument(
+    "--from",
+    default="auto",
+    choices=["auto", "newick", "nhx", "figtree", "mcmctree-output"],
+    help="default=%(default)s: Input container. figtree means direct-label NEXUS.",
+)
+pconvert.add_argument(
+    "--to",
+    default="nhx",
+    choices=["newick", "nhx", "figtree"],
+    help="default=%(default)s: Output syntax; plain Newick cannot retain NHX properties.",
+)
+pconvert.add_argument(
+    "--time-factor",
+    "--time_factor",
+    default="1",
+    metavar="NUMBER",
+    help="default=%(default)s: Finite positive multiplier for all branch lengths and recognized ages/age intervals; never labels or supports.",
+)
+pconvert.add_argument(
+    "--age-ci",
+    "--age_ci",
+    default="keep",
+    choices=["keep", "drop"],
+    help="default=%(default)s: Keep or explicitly remove existing node-age intervals, without recomputing their kind or level.",
+)
+pconvert.add_argument(
+    "--tree-index",
+    "--tree_index",
+    type=int,
+    default=None,
+    metavar="INT",
+    help="default=None: Select a 1-based input tree statement. Ambiguous multi-tree inputs require this option.",
+)
+pconvert.set_defaults(handler=command_convert)
 
 
 def command_mcmctree(args):
@@ -5886,6 +5941,14 @@ pvalidate.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Mark unrooted or unknown-rooting trees as invalid. Declared rooted polytomies are accepted.",
+)
+pvalidate.add_argument(
+    "--require-all-lengths",
+    "--require_all_lengths",
+    default="no",
+    type=strtobool,
+    metavar="yes|no",
+    help="Require a branch length on every non-root node; finite and non-negative lengths are always checked.",
 )
 pvalidate.add_argument(
     "--require-ultrametric",

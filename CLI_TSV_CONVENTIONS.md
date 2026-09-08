@@ -396,3 +396,11 @@ warning; legacy ASR target values are normalized without an option-name warning.
 | monophyly `*_leaves`, `num_*_leaves` | `*_taxa`, `num_*_taxa` |
 | transfer/compose `*_taxon_count` | `num_*_taxa` |
 | report `node_id`, `target_node_id`, `source_node_id` | `branch_id`, `target_branch_id`, `source_branch_id` |
+
+## Tree conversion
+
+`convert` uses `--from`/`--to` for container formats; `--format` retains its ETE
+parser meaning. It writes one tree/document, never a directory or implicit
+sidecars. See [CONVERT.md](CONVERT.md) for annotation, scaling, ambiguity and
+loss contracts. `validate --require-all-lengths yes` adds the issue
+`missing_branch_length` for absent non-root lengths without changing TSV columns.

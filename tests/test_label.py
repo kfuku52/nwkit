@@ -181,3 +181,19 @@ class TestLabelMain:
         label_main(args)
         captured = capsys.readouterr()
         assert "Output tree format = 9" in captured.err
+
+
+def test_label_start_keeps_names_unique_and_lengths_intact(tmp_nwk, tmp_outfile):
+    args = make_args(
+        infile=tmp_nwk("((s1:1,B:1):1,C:2);"),
+        outfile=tmp_outfile,
+        target="intnode",
+        prefix="s",
+        force=True,
+        start=1,
+    )
+    label_main(args)
+    tree = read_tree(tmp_outfile, format="1", quoted_node_names=True, quiet=True)
+    assert tree.name == "s2"
+    assert tree["B"].up.name == "s3"
+    assert tree["s1"].dist == 1
