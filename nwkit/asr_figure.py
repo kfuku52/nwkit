@@ -368,6 +368,32 @@ def _draw_simulation(
     ax.margins(x=0.12)
 
 
+def continuous_figure_width(tips, panels, *, wspace=0.24):
+    """Budget physical label spacing for every equal-width plot column."""
+    from matplotlib.backends.backend_agg import RendererAgg
+    from matplotlib.font_manager import FontProperties
+
+    renderer = RendererAgg(1, 1, 72)
+    font = FontProperties(size=9)
+    # A 90-degree label's horizontal extent is its unrotated text height.
+    label_width = (
+        max(
+            (
+                renderer.get_text_width_height_descent(str(tip.name), font, False)[1]
+                for tip in tips
+            ),
+            default=9.0,
+        )
+        / 72
+    )
+    column_width = max(3.4, (len(tips) + 0.6) * (label_width + 0.05))
+    columns = 1 + panels
+    return max(
+        max(3.4, len(tips) * 0.36) + 3.8 * panels,
+        column_width * (columns + wspace * (columns - 1)) / 0.88,
+    )
+
+
 def build_continuous_asr_figure(
     tree,
     table,
@@ -392,14 +418,15 @@ def build_continuous_asr_figure(
     ids = assign_branch_ids(tree)
     traits = list(dict.fromkeys(table["trait"]))
     by_node, styles = _regime_styles(tree, regime_assignment)
-    tree_width = max(3.4, len(tips) * 0.36)
     overhang = _label_overhang(tips) + (0.45 if trait_tip_labels else 0)
     extra_footer = 0.2 if simulation is not None else 0.0
     heatmap_space = heatmap_extra_space(len(traits)) if tip_heatmap else 0.0
     panels_per_trait = 2 if simulation is not None else 1
     num_panels = len(traits) * panels_per_trait
     figure_height = height or 7.5 + overhang + extra_footer + heatmap_space
-    figure = Figure(figsize=(width or tree_width + 3.8 * num_panels, figure_height))
+    figure = Figure(
+        figsize=(width or continuous_figure_width(tips, num_panels), figure_height)
+    )
     axes = figure.subplots(
         1,
         1 + num_panels,
@@ -615,30 +642,37 @@ def write_continuous_asr_figure(
             seed=getattr(args, "seed", None),
         )
     table = continuous_figure_table(tree, observed, errors, posterior, traits, settings)
-    figure = build_continuous_asr_figure(
-        tree,
-        table,
-        model=settings.model,
-        fit=fit,
-        regime_assignment=assignment,
-        width=getattr(args, "figure_width", None),
-        height=getattr(args, "figure_height", None),
-        simulation=simulation,
-        node_types=figure_node_types(tree, args),
-        tip_heatmap=getattr(args, "figure_tip_heatmap", "no") == "yes",
-        trait_tip_labels=getattr(args, "figure_trait_tip_labels", "no") == "yes",
-    )
-    try:
-        with output_transaction([args.figure_out]) as staged:
-            figure.savefig(
-                staged[args.figure_out],
-                format=Path(args.figure_out).suffix[1:].lower(),
-                dpi=180,
-                bbox_inches="tight",
-                facecolor="white",
-            )
-    finally:
-        figure.clear()
+    from matplotlib import rc_context
+
+    from nwkit.asr_compare_figure import _font_family_for_text
+
+    text = " ".join([*traits, *tree.leaf_names(), *table.trait.astype(str)])
+    family = _font_family_for_text(text)
+    with rc_context({"font.family": family} if family else {}):
+        figure = build_continuous_asr_figure(
+            tree,
+            table,
+            model=settings.model,
+            fit=fit,
+            regime_assignment=assignment,
+            width=getattr(args, "figure_width", None),
+            height=getattr(args, "figure_height", None),
+            simulation=simulation,
+            node_types=figure_node_types(tree, args),
+            tip_heatmap=getattr(args, "figure_tip_heatmap", "no") == "yes",
+            trait_tip_labels=getattr(args, "figure_trait_tip_labels", "no") == "yes",
+        )
+        try:
+            with output_transaction([args.figure_out]) as staged:
+                figure.savefig(
+                    staged[args.figure_out],
+                    format=Path(args.figure_out).suffix[1:].lower(),
+                    dpi=180,
+                    bbox_inches="tight",
+                    facecolor="white",
+                )
+        finally:
+            figure.clear()
 
 
 def continuous_figure_table(tree, observed, errors, posterior, traits, settings):

@@ -224,6 +224,8 @@ def _row_notes(ax, simulation, styles, node_types, *, legend_left):
 def build_comparison_panels(context, table):
     from matplotlib.figure import Figure
 
+    from nwkit.asr_figure import continuous_figure_width
+
     records = table.sort_values(
         ["comparison_group", "criterion_rank"], kind="stable", na_position="last"
     ).to_dict("records")
@@ -242,9 +244,8 @@ def build_comparison_panels(context, table):
     ]
     count = len(context.trait_columns)
     panels = count * (2 if getattr(context.args, "figure_simulations", 0) else 1)
-    width = (
-        getattr(context.args, "figure_width", None)
-        or max(3.6, len(list(context.tree.leaves())) * 0.36) + 3.8 * panels
+    width = getattr(context.args, "figure_width", None) or continuous_figure_width(
+        list(context.tree.leaves()), panels
     )
     height = getattr(context.args, "figure_height", None) or sum(heights) + 1.8
     figure = Figure(figsize=(width, height))

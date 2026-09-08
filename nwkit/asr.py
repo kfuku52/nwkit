@@ -2912,6 +2912,7 @@ def _validate_asr_output_paths(args):
                 "tip_likelihoods",
                 "misclassification_matrix",
                 "latent_regime_config",
+                "species_map_tsv",
             )
         ],
         [("--outfile", getattr(args, "outfile", None)), *auxiliary_outputs.items()],

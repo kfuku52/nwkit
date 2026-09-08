@@ -20,6 +20,7 @@ from nwkit.multivariate_gaussian_asr import (
 from nwkit.optimization import deterministic_multistart
 from nwkit.vector_fit import normalized_vector_observations, restored_vector_posterior
 from nwkit.vector_gaussian import condition_vector_tree
+from nwkit.vector_mean import stationary_mean_gls
 from nwkit.vector_ou_fit import _ou_geometry
 from nwkit.vector_processes import vector_ou_process
 
@@ -106,7 +107,8 @@ def fit_full_mvou(
 
     C,D positive definite and K skew parameterize all stable A with positive
     definite diffusion. Free covariance parameters are optimized together with
-    the trait optima. Numerical local identifiability is reported, not assumed.
+    the trait optima, followed by an exact GLS mean solve at the selected
+    covariance. Numerical local identifiability is reported, not assumed.
     """
     from dataclasses import replace
 
@@ -146,7 +148,15 @@ def fit_full_mvou(
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
-    result, matrices, theta = evaluate(optimized.x)
+    _, matrices, _ = evaluate(optimized.x)
+    zero_process = vector_ou_process(
+        tree, matrices[0], matrices[1], np.zeros(dimension)
+    )
+    theta = stationary_mean_gls(zero_process, observed, errors)
+    parameters = optimized.x.copy()
+    parameters[-dimension:] = theta
+    result, matrices, theta = evaluate(parameters)
+    optimized = replace(optimized, x=parameters, fun=-result.log_likelihood)
     diagnostic = ("fixed_covariance_parameters", 0, 1.0)
     if fixed is None:
         design, complete = observation_moment_design(data)

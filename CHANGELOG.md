@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.10] - 2026-09-08
+
+### Fixed
+
+- Protect species-map inputs from every ASR output, including file aliases.
+- Refine full OU trait optima with a tree-based GLS solve and recompute the
+  likelihood and posterior after covariance optimization.
+- Reject excessive multivariate history matrix memory before refining the tree.
+- Size equal-width figure columns to prevent overlapping tip labels in larger
+  multivariate ASR and comparison figures.
+- Apply Unicode font selection to standalone ASR figures and support observed
+  heatmaps when the root is the only tip.
+
 ## [0.43.9] - 2026-09-08
 
 ### Added

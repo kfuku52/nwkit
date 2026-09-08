@@ -224,3 +224,34 @@ def test_full_ou_nonidentifiable_fit_excluded_from_ranking():
     assert _classify_fit(
         ComparisonCandidate("MV-OU-FULL", "stationary", "default"), fit, summary
     )[:2] == ("nonregular", "no")
+
+
+def test_reported_optimizer_success_cannot_leave_mean_unoptimized(monkeypatch):
+    from nwkit.optimization import MultistartResult
+
+    tree = _tree("(((A:1,B:2):1,(C:1,D:3):1):1,((E:2,F:1):2,(G:1,H:4):1):1)R;")
+    rng = np.random.default_rng(33)
+    observed = {name: rng.normal(size=2) for name in tree.leaf_names()}
+    errors = {name: [0.2, 0.2] for name in observed}
+
+    def premature(objective, initial, bounds, **kwargs):
+        parameters = np.asarray(initial, dtype=float)
+        parameters[-2:] = [4.0, -3.0]
+        return MultistartResult(
+            parameters, objective(parameters), True, "premature", 1, 1, 0
+        )
+
+    monkeypatch.setattr("nwkit.full_ou_fit.deterministic_multistart", premature)
+    posterior, fit = fit_full_mvou(tree, observed, ("x", "y"), standard_errors=errors)
+    fixed_posterior, fixed = fit_full_mvou(
+        tree,
+        observed,
+        ("x", "y"),
+        standard_errors=errors,
+        attraction=fit.attraction_matrix,
+        diffusion=fit.diffusion_sigma,
+    )
+    assert fit.theta == pytest.approx(fixed.theta, abs=1e-10)
+    assert fit.log_likelihood == pytest.approx(fixed.log_likelihood, abs=1e-10)
+    for node in tree.traverse():
+        assert posterior[node].mean == pytest.approx(fixed_posterior[node].mean)

@@ -36,6 +36,7 @@ _VECTOR_MODELS = {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}
 _MAX_GRID_NODES = 100_000
 _MAX_PATH_VALUES = 2_000_000
 _MAX_PATH_TRACES = 50_000
+_MAX_VECTOR_GRID_BYTES = 512 * 1024**2
 
 
 @dataclass(frozen=True)
@@ -95,7 +96,7 @@ def validate_path_model(args, model):
         )
 
 
-def _grid_counts(tree, steps, count, dimension):
+def _grid_counts(tree, steps, count, dimension, *, vector=False, mode="unconditional"):
     lengths = {node: float(node.dist) for node in tree.traverse() if not node.is_root}
     if any(not math.isfinite(length) or length < 0 for length in lengths.values()):
         raise ValueError("Path simulation requires finite nonnegative branch lengths.")
@@ -118,6 +119,16 @@ def _grid_counts(tree, steps, count, dimension):
             "Figure simulation grid is too large; reduce --figure-simulation-steps "
             "or --figure-simulations (at most 100,000 grid nodes and 2,000,000 trait values)."
         )
+    if vector:
+        # Transitions retain two matrices per node; conditioning retains four
+        # more. Include working matrices and both sampled/output path arrays.
+        matrices = 8 if mode == "conditional" else 3
+        estimated = 8 * nodes * (matrices * dimension**2 + 2 * count * dimension)
+        if estimated > _MAX_VECTOR_GRID_BYTES:
+            raise ValueError(
+                "Figure simulation matrix memory exceeds 512 MiB; reduce "
+                "--figure-simulation-steps, --figure-simulations, or trait count."
+            )
     return counts
 
 
@@ -259,7 +270,9 @@ def simulate_fitted_paths(
     if model not in PATH_MODELS:
         raise ValueError(f"Path simulation does not support model {model}.")
     dimension = len(fit.trait_names) if model in _VECTOR_MODELS else 1
-    counts = _grid_counts(tree, steps, count, dimension)
+    counts = _grid_counts(
+        tree, steps, count, dimension, vector=model in _VECTOR_MODELS, mode=mode
+    )
     refined, chains, assignment = _refined_tree(tree, counts, regime_assignment)
     if model in _VECTOR_MODELS:
         nodes, values, description = _vector_samples(

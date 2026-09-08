@@ -138,3 +138,14 @@ of the first sampled history, identified explicitly when several are drawn.
 Regime colors match the corresponding branches. These labels are off by default.
 
 ![Trait panels with detached tip labels](simulation-labelled.png)
+
+Automatic figure width reserves label spacing in each equal-width column, so
+many tips and traits can produce a wide page. `--figure-width` overrides that
+size and may crowd labels. Standalone ASR and comparison figures select an
+installed font covering the tip and trait names; install a suitable font if
+those characters are unavailable on your system.
+
+Multivariate simulation checks estimated matrix and sample-array memory before
+subdividing branches (512 MiB limit). Conditional histories retain more matrices
+than unconditional histories. Reduce `--figure-simulation-steps`, the history
+count, or the number of traits when the limit is exceeded.

@@ -21,7 +21,8 @@ def tip_trait_values(table, tips):
     traits = list(dict.fromkeys(table["trait"]))
     values = []
     for trait in traits:
-        rows = table[(table.trait == trait) & (table.node_class == "leaf")]
+        tip_class = "root" if len(tips) == 1 and tips[0].is_root else "leaf"
+        rows = table[(table.trait == trait) & (table.node_class == tip_class)]
         rows = rows.set_index("name")
         row = []
         for tip in tips:
