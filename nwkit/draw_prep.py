@@ -7,6 +7,22 @@ from typing import Any
 
 from ete4 import Tree
 
+from nwkit.util import assign_branch_ids
+
+
+def prepare_branch_id_annotations(tree, property_name):
+    """Attach canonical input IDs before display-only reordering or collapsing."""
+    if property_name == "branch_id":
+        for node, branch_id in assign_branch_ids(tree).items():
+            node.props["branch_id"] = branch_id
+
+
+def resolve_node_label_decimals(property_name, decimals):
+    """Branch identifiers are integers, never rounded display measurements."""
+    if int(decimals) < 0:
+        raise ValueError("'--node-label-decimals' must be zero or greater.")
+    return 0 if property_name == "branch_id" else decimals
+
 
 def _aggregate_leaf_properties(leaves, numeric_mode="none"):
     numeric_mode = str(numeric_mode).strip().lower()
@@ -17,7 +33,7 @@ def _aggregate_leaf_properties(leaves, numeric_mode="none"):
             key
             for leaf in leaves
             for key in leaf.props
-            if key not in {"name", "dist", "support"}
+            if key not in {"name", "dist", "support", "branch_id"}
         }
     )
     aggregated: dict[str, Any] = {}

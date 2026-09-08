@@ -476,7 +476,7 @@ def command_asr(args):
 pasr = subparsers.add_parser(
     "asr",
     help="Infer ancestral traits and impute missing tips under discrete Mk or continuous Gaussian models",
-    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+    parents=[p_tree_input, p_table_output, p_tip_table_policy, p_species],
 )
 pasr.add_argument(
     "--trait",
@@ -1191,6 +1191,72 @@ pasr.add_argument(
     default=None,
     help="Match exact descendant clades (default) or their MRCA.",
 )
+pasr.add_argument(
+    "--figure-out",
+    "--figure_out",
+    dest="figure_out",
+    metavar="PATH",
+    default=None,
+    help="Optional PDF, SVG, or PNG showing continuous ancestral traits beside the tree. Includes all nodes regardless of --target.",
+)
+pasr.add_argument(
+    "--figure-tip-heatmap",
+    "--figure_tip_heatmap",
+    choices=("yes", "no"),
+    default="no",
+    help="default=no: Add observed tip-trait heatmap rows below the phylogeny, with one color scale per trait and gray missing values. Requires --figure-out; asrcompare requires --figure-layout panels.",
+)
+pasr.add_argument(
+    "--figure-width",
+    "--figure_width",
+    dest="figure_width",
+    metavar="FLOAT",
+    type=finite_float,
+    default=None,
+    help="Figure width in inches; default follows tip and trait counts. Requires --figure-out.",
+)
+pasr.add_argument(
+    "--figure-height",
+    "--figure_height",
+    dest="figure_height",
+    metavar="FLOAT",
+    type=finite_float,
+    default=None,
+    help="Figure height in inches (default: at least 7.5, expanded for long tip labels). Requires --figure-out.",
+)
+pasr.add_argument(
+    "--figure-simulations",
+    "--figure_simulations",
+    dest="figure_simulations",
+    metavar="INT",
+    type=int,
+    default=0,
+    help="default=0: Add a panel with this many sampled BM/OU histories per trait. Requires --figure-out; use --seed for reproducibility.",
+)
+pasr.add_argument(
+    "--species-overlap-node-plot",
+    "--species_overlap_node_plot",
+    choices=("yes", "no", "auto"),
+    default="auto",
+    help="default=auto: Color figure node circles by the shared species-overlap method (blue speciation, red duplication). Auto requires all tip labels to be parseable; yes classifies fully parsed subtrees; no disables event colors. Simulation branching circles are always shown.",
+)
+pasr.add_argument(
+    "--figure-simulation-mode",
+    "--figure_simulation_mode",
+    dest="figure_simulation_mode",
+    choices=("unconditional", "conditional"),
+    default=None,
+    help="default=unconditional: Simulate new histories from fitted parameters, or condition on observed tips. Flat-root unconditional histories start at the inferred root mean.",
+)
+pasr.add_argument(
+    "--figure-simulation-steps",
+    "--figure_simulation_steps",
+    dest="figure_simulation_steps",
+    metavar="INT",
+    type=int,
+    default=None,
+    help="default=200: Grid steps along the longest branch; shorter branches use proportional counts. Exact Gaussian transitions, with linear display between grid points.",
+)
 pasr.set_defaults(handler=command_asr)
 
 
@@ -1226,7 +1292,7 @@ def _copy_store_options(source, target, destinations):
 pasrcompare = subparsers.add_parser(
     "asrcompare",
     help="Compare the fit of applicable ancestral-trait models",
-    parents=[p_tree_input, p_table_output, p_tip_table_policy],
+    parents=[p_tree_input, p_table_output, p_tip_table_policy, p_species],
 )
 _copy_store_options(
     pasr,
@@ -1269,6 +1335,14 @@ _copy_store_options(
         "standard_error_column",
         "measurement_covariance",
         "replicate_observations",
+        "figure_width",
+        "figure_height",
+        "figure_simulations",
+        "figure_simulation_mode",
+        "figure_simulation_steps",
+        "figure_tip_heatmap",
+        "species_overlap_node_plot",
+        "seed",
     ),
 )
 pasrcompare.add_argument(
@@ -1307,8 +1381,14 @@ pasrcompare.add_argument(
     metavar="PATH.pdf",
     default=None,
     type=str,
-    help="Optional single-page, rank-sorted table showing every candidate in "
-    "clearly separated compatible comparison sets.",
+    help="Optional single-page PDF; --figure-layout selects a comparison table or continuous model panels.",
+)
+pasrcompare.add_argument(
+    "--figure-layout",
+    "--figure_layout",
+    choices=("table", "panels"),
+    default="table",
+    help="default=table: Rank-sorted comparison table, or one row per continuous model with phylogeny and ASR panels. Add --figure-simulations for sampled histories. Panel width/height default to fit all candidates on one page.",
 )
 pasrcompare.set_defaults(handler=command_asrcompare)
 
@@ -2863,7 +2943,7 @@ pdraw.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=None: Display this Newick/NHX property beside matching nodes; use "name" for ordinary Newick node labels.',
+    help='default=None: Display this Newick/NHX property beside matching nodes; use "name" for ordinary Newick labels or "branch_id" for integer IDs matching asr/nwk2table on the input tree, before display reordering.',
 )
 pdraw.add_argument(
     "--node-label-target",

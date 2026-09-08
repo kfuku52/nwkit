@@ -368,6 +368,40 @@ names, root declarations, and missing-support handling. Discrete NHX fields use
 
 ## Protecting related outputs
 
+`asr --figure-out` accepts PDF, SVG, or PNG for continuous traits and includes all
+nodes independently of TSV `--target`. Its destination must differ from inputs
+and other outputs. The figure alone uses recoverable replacement; other ASR
+outputs are not part of the same transaction. See [ASR visualization](ASR.md#visualizing-continuous-ancestral-traits)
+for the interpretation of node intervals and connecting lines.
+
+`asr --figure-simulations N` adds sampled BM/OU branch histories to that figure.
+It requires `--figure-out`; `--figure-simulation-mode` chooses unconditional
+model histories (default) or histories conditioned on observed tips.
+`--figure-simulation-steps` controls the finite grid, and `--seed` controls the
+local simulation RNG. These figure options do not change ASR TSV values or IDs.
+See [branch simulations](ASR.md#simulated-evolution-along-branches) for supported
+models and root treatment.
+
+`--figure-tip-heatmap yes` adds an observed tip heatmap to ASR figures (default
+`no`). Missing observations remain gray, and every model uses the same per-trait
+observed range. Multiple traits have separate numbered rows and color keys.
+The option requires a figure; `asrcompare` also requires panel layout. It does
+not change inference or TSV output.
+
+ASR figure circles also accept `--species-overlap-node-plot auto|yes|no` and
+the shared `--species-parser`, `--species-regex`, `--species-map-tsv` controls.
+Node event colors follow `draw` (blue speciation, red duplication); branch
+colors remain regime colors. Simulation circles use the root and original
+branching nodes, never interpolation-grid points. These display controls do not
+change inference or output TSV values.
+
+`asrcompare --figure-out` remains PDF-only. The default `--figure-layout table`
+shows comparison statistics; `--figure-layout panels` shows one row per continuous
+model, reusing its fit and posterior. Optional simulations, their mode/grid, seed,
+and page dimensions follow the continuous ASR figure controls. The entire model
+set occupies one custom-size page, with ranks separated by comparison set.
+Panel rendering is part of the same output transaction as the comparison TSV.
+
 `draw`, `asrcompare`, `rootcompare`, `regress`, and `intersection` share
 recoverable output installation. All file destinations are validated before
 writing, staged beside their targets, and installed after generation succeeds.
@@ -382,6 +416,12 @@ the previous complete pair. As with any separate filesystem renames, this is not
 a crash-atomic multi-file transaction. Output locks coordinate NWKIT writers, not
 arbitrary external programs. A stdout write can trigger file rollback on failure,
 but already emitted stdout bytes cannot be retracted.
+
+`draw --node-label-property branch_id --node-label-target all` computes the same
+input-tree IDs as `nwk2table` and `asr`. Labels are integers and are assigned before
+display ladderization or collapse; a collapsed clade retains its original root
+ID. This computed property replaces any input NHX `branch_id` for the drawing.
+See [preparing ASR regimes](ASR.md#find-branch-ids-before-assigning-regimes).
 
 ## Compatibility names
 

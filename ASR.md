@@ -15,6 +15,140 @@ non-root branch lengths are supported. Root stem length is not part of any
 model. No rerooting, arbitrary binary resolution, or automatic trait
 transformation is performed.
 
+## Visualizing continuous ancestral traits
+
+Add `--figure-out asr.pdf` to a continuous `nwkit asr` command to draw a
+phylogeny beside ancestral trait estimates on a shared vertical depth axis.
+PDF, SVG, and PNG are supported. Each trait in a multivariate model gets its own
+panel and value scale. Tip labels are vertical (90 degrees), and trait labels
+use the selected column names. The figure always includes every node, independently of
+the TSV `--target` selection. Discrete models currently reject `--figure-out`;
+their annotated trees can be visualized with `nwkit draw`.
+
+Open or event-colored circles show node means, horizontal bars show the marginal intervals
+selected by `--ci-level` (default 95%), filled squares show observed tip values,
+and open diamonds mark missing tip values reconstructed by the model. With
+measurement error, the observed square can differ from the inferred latent tip
+mean; bars describe the latent trait, not measurement error. Branch regimes use
+matching colors in the tree and trait panels. OU optima (`theta`) are dashed
+references, distinct from ancestral values. Regime reference lines span the
+depth range of branches assigned to that regime; they do not locate additional
+shift events or imply that the regime occupies every intervening branch.
+
+In the ASR panels, connecting segments **only join node means**. They are not inferred branch
+trajectories, and no branch-interior uncertainty band is implied. Intervals
+condition on the fitted/fixed parameters and the input tree, even when bootstrap
+diagnostics are requested separately. Branch depths use the original input
+lengths, including for transformed models, and exclude the root stem. The axis
+is not automatically converted to geological time. Non-ultrametric trees, root
+polytomies, and zero-length branches retain their actual geometry.
+
+Use `--figure-width` and `--figure-height` to set dimensions in inches. The
+default width follows the number of tips and traits; the default height is at
+least 7.5 inches, expanded to accommodate long tip labels and simulation notes.
+Dense trees or coincident node values can still overlap; larger dimensions
+help with labels, while individual coincident values remain available in the TSV.
+Figure output cannot alias the input or another output. Figure replacement is
+recoverable on a handled rendering failure; ASR's full set of outputs is not one
+transaction.
+
+A complete [synthetic OUM example](examples/asr_figure/README.md) is included:
+
+![Continuous ancestral reconstruction with three supplied OU regimes](examples/asr_figure/preview.png)
+
+### Observed tip heatmap
+
+Add `--figure-tip-heatmap yes` to show observed trait values as a heatmap below
+the phylogeny (`no` is the default). Each cell is aligned to its tip label;
+labels share a common baseline even for non-ultrametric trees, while branch
+lengths and the depth axis remain unchanged. Purple marks the low end of each
+trait's observed range and yellow the high end; gray means missing. ASR-imputed
+values are not substituted into this observed-data heatmap.
+
+Each trait has its own numeric color key. With multiple traits, numbered rows
+match the numbered keys. `asrcompare --figure-layout panels` uses the same
+observations and per-trait ranges for every model, so its heatmaps are directly
+comparable. The strip displays the observed trait (or the effective weighted
+observation when using replicate inputs), not the latent tip mean. Measurement
+uncertainty remains in the ASR panel. Heatmaps only affect figures and require
+`--figure-out`; comparison figures additionally require panel layout.
+
+### Speciation and duplication circles
+
+`asr` and `asrcompare --figure-layout panels` accept the same species parser
+controls as `draw`: `--species-parser`, `--species-regex`, and
+`--species-map-tsv`. With `--species-overlap-node-plot auto` (default), all tip
+labels must be parseable before event colors are enabled. For example,
+`Homo_sapiens_1` and `Homo_sapiens_2` both identify species `Homo_sapiens` under
+the default parser. An overlap in species between child clades labels a branching
+node as duplication (red); disjoint child species sets label it as speciation
+(blue), using exactly the same heuristic and colors as `draw`.
+
+Event circles appear at the corresponding nodes in the phylogeny, ASR, and
+simulated-history panels. ASR interval bars match their node circle colors.
+Branch colors and OU reference lines continue to
+indicate supplied regimes. `--species-overlap-node-plot no` disables event
+colors. `yes` classifies fully parsed subtrees even if other labels are missing
+or unparseable; nodes depending on unparseable species remain unclassified.
+These events are inferred from tip labels and topology, not trait values or
+simulated paths, and do not discover regime shifts.
+
+Simulation circles always mark the root and every original branching node,
+including with event colors disabled. Each circle uses that history's sampled
+node value; it is shared by incoming and daughter paths. Grid points and terminal
+tips are not marked as branching events. Coincident sampled node values can
+overlap, particularly with error-free conditioning or zero branch lengths.
+
+### Simulated evolution along branches
+
+Add `--figure-simulations 1 --seed 7` to include a finite-grid history beside each
+ASR panel. The panels share the same depth axis, trait-value limits, branch colors,
+and OU-optimum references. Each history is one joint realization on the whole
+tree: daughters start from the same sampled parent value and then evolve
+independently conditional on that value. Larger counts overlay independent
+histories. `--seed` makes the paths reproducible, and enabling the panels does not
+change the ASR fit, output table, or other simulation diagnostics.
+
+```sh
+nwkit asr -i tree.nwk --input-rooted yes \
+  --trait traits.tsv --state-column "Trait value" --model OU \
+  --figure-out asr.pdf --figure-simulations 1 --seed 7 -o asr.tsv
+```
+
+Two modes are available:
+
+- `--figure-simulation-mode unconditional` (default) generates new latent
+  histories using the fitted/fixed parameters. These are not conditioned on
+  observed tips and are not estimates of the actual historical trajectory.
+  Proper OU roots follow the selected stationary, Gaussian, or fixed root prior.
+  An improper flat root cannot be sampled, so BM-family histories start at the
+  inferred root mean; this choice is stated in the figure.
+- `--figure-simulation-mode conditional` draws joint posterior histories
+  conditioned on the observed tips. Error-free observed tips are pinned to their
+  values; noisy tips represent inferred latent values, and missing tips remain
+  uncertain. The conditioning uses the same measurement errors as ASR. Parameter
+  and tree uncertainty are not included in either mode.
+
+Paths use exact Gaussian transition draws on a subdivided copy of the tree,
+not an Euler approximation or cosmetic noise added to node means. The original
+tree is unchanged. `--figure-simulation-steps 200` is the default number of steps
+on the longest branch; shorter branches receive proportional counts, with at
+least one step. Lines interpolate the displayed grid points, not every intervening
+fluctuation. Zero-length branches preserve their parent value. Finer grids change
+the displayed paths but not the model's theoretical endpoint distribution.
+
+Supported models are BM, BM-DRIFT, BMS, BMS-DRIFT, OU, OUM, OUMA, OUMV, OUMVA,
+MV-BM, MV-OU, MV-OU-DIAG, and MV-OU-FULL. Multivariate histories retain cross-trait covariance
+and require a positive-definite fitted diffusion covariance. Path panels
+currently reject LAMBDA, KAPPA, DELTA, EB, and ACDC: simply subdividing their input
+branches and reapplying the transformation would not in general preserve the
+original model. Their ASR node-summary figures remain available. Resource guards
+limit the refined tree to 100,000 nodes, the samples to 2,000,000 trait values,
+and the rendered branch traces (branches times histories) to 50,000.
+Reduce history count or grid resolution if the guard is reached.
+
+![Synthetic OUM reconstruction beside an unconditional model history](examples/asr_figure/simulation.png)
+
 ## Input and automatic type selection
 
 The TSV requires `leaf_name` and the column selected by `--state-column`.
@@ -170,6 +304,60 @@ retaining slow modes. Material negative entries or invalid row sums fail
 explicitly.
 
 ### Branch regimes and hidden rates
+
+#### Find branch IDs before assigning regimes
+
+Use `nwkit nwk2table` on the **same input tree** you will pass to ASR:
+
+```sh
+nwkit nwk2table -i tree.nwk --input-rooted yes -o branches.tsv
+```
+
+The table includes `branch_id`, `parent`, `name`, and `dist`. Root 0 has parent
+`-1`; every other ID identifies the branch entering that node from its parent.
+IDs follow level-order traversal of the input tree, including unnamed internal
+nodes. No preliminary ASR fit is needed.
+
+To see those same IDs on a tree, use the computed `branch_id` label property:
+
+```sh
+nwkit draw -i tree.nwk --input-rooted yes -o branch-ids.svg \
+  --node-label-property branch_id --node-label-target all \
+  --node-label-prefix 'ID=' --support-labels no \
+  --species-overlap-node-plot no --figure-width 6 --figure-height 2.5
+```
+
+PDF and PNG destinations work as well. IDs are displayed as integers. The `all`
+target includes root and tips; the default label target is only internal nodes.
+Drawing computes IDs before `--ladderize` and `--max-visible-tips`, so these
+display operations preserve the original mapping. A collapsed clade shows its
+original clade-root ID, not the IDs of hidden descendants; use the uncollapsed
+tree to prepare a complete regime map. Selecting `branch_id` recomputes IDs from
+the input tree even if NHX already contains a property with that name.
+
+For example, `((A:1,B:1):1,C:2);` has root 0, the A/B internal node 1, C 2,
+A 3, and B 4. Assigning the entire A/B clade to `high` gives:
+
+```tsv
+branch_id	regime
+0	baseline
+1	high
+2	baseline
+3	high
+4	high
+```
+
+Save **only these two columns** as `regimes.tsv` and pass
+`--regime-map regimes.tsv` with a regime model such as OUM or MK-REGIME. Every
+ID, including root 0, must occur exactly once. Assignments are per incoming
+branch and do not automatically propagate to descendants. The map specifies
+the regimes; ASR does not search for their locations.
+
+Rerooting, pruning, or reordering the actual input tree can change IDs. If the
+input changes, regenerate both the ID table/figure and the regime map. Use the
+same input format and rootedness interpretation in all commands.
+
+#### Discrete branch regimes
 
 `--model MK-REGIME --regime-map regimes.tsv` jointly fits one Q matrix per
 named branch regime. `--regime-model ER|SYM|ARD|F81|GTR` selects the structure
@@ -646,6 +834,41 @@ nwkit asrcompare -i tree.nwk --trait traits.tsv \
   --exclude-models BM-DRIFT -o comparison.tsv \
   --figure-out comparison.pdf --criterion aic
 ```
+
+For a single PDF page containing the tree, ASR, and simulated histories **for
+each continuous model**, select `--figure-layout panels`:
+
+```sh
+nwkit asrcompare -i tree.nwk --input-rooted yes \
+  --trait traits.tsv --state-column "Trait value" --models BM,OU \
+  --figure-out model-panels.pdf --figure-layout panels \
+  --figure-simulations 1 --seed 7 -o comparison.tsv
+```
+
+Every fitted candidate occupies one row, ordered by comparison set and criterion
+rank. The figure reuses its fitted parameters and all-node posterior; no model is
+refitted for plotting. Each trait gets an ASR panel and, when requested, a
+simulation panel. Depth and per-trait value scales are shared across models.
+Headers show the fit status, IC value, and compatible comparison set; ranks are
+only meaningful within a set. The tree colors follow each model's supplied
+regimes. Intervals are 95% node marginals conditional on the fitted parameters.
+
+Use `--figure-simulation-mode conditional` for posterior histories conditioned on
+tips; the default is new unconditional histories. Simulation seeds are stable
+per model identity, independent of row ordering or excluding other candidates.
+Transformed models still receive ASR panels but explicitly mark branch simulation
+as unavailable. Equivalent aliases, skipped candidates, and failed automatic fits
+remain as labeled rows with their reasons; equivalent aliases are not refitted.
+
+`--figure-width` and `--figure-height` set the entire page size in inches.
+Defaults expand with the number of models, traits, and tip labels; the result is
+one custom-size page, not necessarily A4. `--figure-simulations 0` (default) omits
+simulation panels. The existing comparison table remains the default
+`--figure-layout table`, including for discrete traits. Panel dimensions and
+simulation controls require `--figure-layout panels`; the latter requires
+continuous traits and `--figure-out`. The PDF and comparison TSV are installed
+together only after rendering succeeds. See the
+[reproducible three-model example](examples/asr_figure/README.md#compare-models-on-one-page).
 
 `--models all` is the default. It includes every registered model for the
 resolved trait type. Models needing unavailable inputs, such as BMS without a

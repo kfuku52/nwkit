@@ -17,6 +17,7 @@ from nwkit.asr_compare_figure import (
     _font_family_for_text,
     draw_comparison_figure,
 )
+from nwkit.asr_compare_panels import panels_requested, validate_panel_options
 from nwkit.asr_comparison import (
     grouped_model_comparison_table,
     has_nonregular_variance_boundary,
@@ -980,6 +981,7 @@ def _fit_continuous(context, candidate):
             {
                 "compute_posterior": bool(
                     getattr(context.args, "model_average_out", None)
+                    or panels_requested(context.args)
                 ),
                 "geometry_cache": context.cache.setdefault("multivariate_geometry", {}),
             }
@@ -990,6 +992,13 @@ def _fit_continuous(context, candidate):
     if getattr(context.args, "model_average_out", None):
         context.cache.setdefault("averaging_posteriors", {})[candidate.model_id] = (
             posterior
+        )
+    if panels_requested(context.args):
+        context.cache.setdefault("figure_fits", {})[candidate.model_id] = (
+            posterior,
+            fit,
+            settings,
+            regime_assignment,
         )
     return fit
 
@@ -1714,6 +1723,7 @@ def _validate_output_paths(args):
         ("--infile", args.infile),
         ("--trait", args.trait),
         ("--regime-map", getattr(args, "regime_map", None)),
+        ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
         ("--regime-parameters", getattr(args, "regime_parameters", None)),
         ("--rate-matrix", getattr(args, "rate_matrix", None)),
         ("--rate-design", getattr(args, "rate_design", None)),
@@ -1730,7 +1740,9 @@ def _validate_output_paths(args):
     )
 
 
-def _write_outputs(table, args, criterion, *, include_figure, average_table=None):
+def _write_outputs(
+    table, args, criterion, *, include_figure, average_table=None, panel_context=None
+):
     figure = getattr(args, "figure_out", None) if include_figure else None
     outputs = []
     if average_table is not None:
@@ -1749,7 +1761,12 @@ def _write_outputs(table, args, criterion, *, include_figure, average_table=None
         if args.outfile != "-":
             _write_table(table, staged[args.outfile])
         if figure not in (None, ""):
-            draw_comparison_figure(table, staged[figure], criterion)
+            if panel_context is None:
+                draw_comparison_figure(table, staged[figure], criterion)
+            else:
+                from nwkit.asr_compare_panels import draw_comparison_panels
+
+                draw_comparison_panels(panel_context, table, staged[figure])
 
 
 def _has_completed_fit(table):
@@ -1800,6 +1817,7 @@ def asr_compare_main(args):
     )
     requested_type = getattr(args, "trait_type", "auto")
     trait_type = resolve_trait_type(requested_type, trait_df, state_input)
+    validate_panel_options(args, trait_type)
     _validate_mode_arguments(args, trait_type)
     candidates, automatic = resolve_comparison_candidates(trait_type, args)
     context = ComparisonContext(
@@ -1849,6 +1867,7 @@ def asr_compare_main(args):
         criterion,
         include_figure=completed,
         average_table=average_table,
+        panel_context=context if panels_requested(args) else None,
     )
     if not completed:
         raise ValueError(

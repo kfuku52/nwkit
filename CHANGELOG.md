@@ -4,8 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.8] - 2026-09-08
+
 ### Added
 
+- Add continuous ASR figures with shared-depth phylogeny, ancestral summaries,
+  exact Gaussian sampled histories, observed-tip heatmaps and species-overlap
+  event colors; include a reproducible 16-tip example.
+- Add single-page per-model ASR comparison panels and computed `branch_id`
+  labels for tree drawings.
 - Expand ASR with bootstrap prediction-error intervals, tip/clade predictive
   cross-validation, phylogenetic predictive statistics, clade/MRCA-aligned tree
   ensembles and likelihood-compatible model averaging.

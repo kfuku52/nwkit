@@ -9,6 +9,7 @@ include PHYLOGENETIC_REGRESSION.md
 include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt
 include scripts/make_draw_layout_gallery.py
+graft examples/asr_figure
 graft tests
 graft tools
 global-exclude __pycache__ *.py[cod]

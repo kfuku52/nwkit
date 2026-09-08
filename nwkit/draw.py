@@ -272,7 +272,11 @@ from nwkit.draw_helpers import (
     _wrap_tip_label as _wrap_tip_label,
 )
 from nwkit.draw_output import save_drawing
-from nwkit.draw_prep import collapse_tree_for_drawing
+from nwkit.draw_prep import (
+    collapse_tree_for_drawing,
+    prepare_branch_id_annotations,
+    resolve_node_label_decimals,
+)
 from nwkit.draw_render import (
     _add_drawing_report_metadata,
     _configure_drawing_axes,
@@ -427,7 +431,9 @@ def _draw_tree(
         node_label_property=node_label_property,
         node_label_target=node_label_target,
         node_label_filters=node_label_filters,
-        node_label_decimals=node_label_decimals,
+        node_label_decimals=resolve_node_label_decimals(
+            node_label_property, node_label_decimals
+        ),
         node_label_prefix=node_label_prefix,
     )
     property_style = PropertyStyle(
@@ -795,6 +801,7 @@ def draw_main(args):
         args.quoted_node_names,
         rooted=getattr(args, "input_rooted", "auto"),
     )
+    prepare_branch_id_annotations(tree, getattr(args, "node_label_property", None))
     prepare_time_tree_annotations(tree)
     densitree_mode = str(getattr(args, "densitree", "none")).strip().lower()
     if posterior_path not in (None, "") and densitree_tree_path not in (None, ""):

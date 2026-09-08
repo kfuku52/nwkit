@@ -2875,13 +2875,16 @@ def _write_stochastic_map(tree, states, fit, args):
 
 
 def _validate_asr_output_paths(args):
+    from nwkit.asr_figure import validate_figure_options
     from nwkit.asr_tree_ensemble import validate_tree_ensemble_options
     from nwkit.util import validate_outputs_do_not_replace_inputs
 
+    validate_figure_options(args)
     validate_tree_ensemble_options(args)
     auxiliary_outputs = {
         "--latent-history-out": getattr(args, "latent_history_out", None),
         "--tree-ensemble-out": getattr(args, "tree_ensemble_out", None),
+        "--figure-out": getattr(args, "figure_out", None),
         "--model-out": getattr(args, "model_out", None),
         "--tree-out": getattr(args, "tree_out", None),
         "--stochastic-map-out": getattr(args, "stochastic_map_out", None),
@@ -2924,6 +2927,7 @@ def _validate_asr_output_paths(args):
         [
             ("--latent-history-out", getattr(args, "latent_history_out", None)),
             ("--tree-ensemble-out", getattr(args, "tree_ensemble_out", None)),
+            ("--figure-out", getattr(args, "figure_out", None)),
             ("--outfile", getattr(args, "outfile", None)),
             ("--model-out", getattr(args, "model_out", None)),
             ("--tree-out", getattr(args, "tree_out", None)),
@@ -2959,7 +2963,9 @@ def _validate_asr_output_paths(args):
 
 
 def asr_main(args):
+    from nwkit.asr_figure import validate_figure_trait
     from nwkit.asr_latent import regime_input_columns
+    from nwkit.asr_paths import validate_path_model
     from nwkit.asr_tree_ensemble import (
         validate_tree_ensemble_options,
         write_tree_ensemble,
@@ -3001,7 +3007,9 @@ def asr_main(args):
     )
     requested_type = getattr(args, "trait_type", "auto")
     trait_type = resolve_trait_type(requested_type, trait_df, state_column_input)
+    validate_figure_trait(args, trait_type)
     settings = AsrSettings.from_args(args, trait_type)
+    validate_path_model(args, settings.model)
     validate_tree_ensemble_options(args, settings)
     effective = effective_asr_args(args, settings)
     sys.stderr.write(f"ASR trait type: {trait_type} ({requested_type}).\n")
@@ -4002,6 +4010,19 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
         regime_assignment,
     )
     _write_continuous_model_comparison(tree, observed, errors, args, settings, fit)
+    from nwkit.asr_figure import write_continuous_asr_figure
+
+    write_continuous_asr_figure(
+        tree,
+        observed,
+        errors,
+        posterior,
+        trait_columns,
+        args,
+        settings,
+        fit,
+        regime_assignment,
+    )
     from nwkit.asr_continuous_diagnostics import write_continuous_diagnostics
 
     write_continuous_diagnostics(
