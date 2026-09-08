@@ -243,3 +243,54 @@ def test_single_asr_uses_selected_font_during_build_and_export(tmp_path, monkeyp
         )
     assert selected == [True]
     assert rcParams["font.family"] == previous
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig"])
+def test_shared_input_reader_ignores_legacy_os_encoding(
+    tmp_path, monkeypatch, encoding
+):
+    import builtins
+
+    import nwkit.util as util
+
+    source = tmp_path / "traits.tsv"
+    content = "leaf_name\t発現量\n種A\t1\n"
+    source.write_bytes(content.encode(encoding))
+    original_open = builtins.open
+
+    def legacy_open(path, *args, **kwargs):
+        kwargs.setdefault("encoding", "cp1252")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(util, "open", legacy_open, raising=False)
+    assert util.read_input_text(source) == content
+    table = util.read_tsv_preserving_leaf_name(source)
+    assert table.columns.tolist() == ["leaf_name", "発現量"]
+    assert table.iloc[0]["leaf_name"] == "種A"
+
+
+@pytest.mark.parametrize("encoding", ["utf-8", "utf-8-sig"])
+def test_unicode_tree_file_roundtrip_under_legacy_locale(
+    tmp_path, monkeypatch, encoding
+):
+    import builtins
+
+    import nwkit.util as util
+
+    source = tmp_path / "input.nwk"
+    output = tmp_path / "output.nwk"
+    source.write_bytes("[&R](種A:1,種B:2);".encode(encoding))
+    original_open = builtins.open
+
+    def legacy_open(path, *args, **kwargs):
+        kwargs.setdefault("encoding", "cp1252")
+        return original_open(path, *args, **kwargs)
+
+    monkeypatch.setattr(util, "open", legacy_open, raising=False)
+    tree = util.read_tree(source, "1", True, quiet=True)
+    util.write_tree(tree, SimpleNamespace(outfile=str(output)), "1", quiet=True)
+    assert "種A" in output.read_text(encoding="utf-8")
+    for path in (source, output):
+        assert len(list(util.iter_tree_strings(path))) == 1
+        restored = util.read_trees(path, "1", True, quiet=True)
+        assert list(restored[0].leaf_names()) == ["種A", "種B"]

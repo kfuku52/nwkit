@@ -104,10 +104,11 @@ def copy_tree_iteratively(tree):
 
 
 def read_input_text(infile):
+    """Read UTF-8 files (with an optional BOM), or already-decoded stdin/text."""
     if infile == "-":
         return sys.stdin.read()
     if os.path.isfile(infile):
-        with open(infile) as handle:
+        with open(infile, encoding="utf-8-sig") as handle:
             return handle.read()
     return str(infile)
 
@@ -1440,7 +1441,7 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
     elif hasattr(args.outfile, "write"):
         args.outfile.write(tree_str)
     else:
-        with open(args.outfile, mode="w") as f:
+        with open(args.outfile, mode="w", encoding="utf-8") as f:
             f.write(tree_str)
 
 
@@ -1567,7 +1568,7 @@ def iter_tree_strings(infile):
     if infile == "-":
         yield from _iter_tree_handle(sys.stdin)
     elif os.path.isfile(infile):
-        with open(infile) as handle:
+        with open(infile, encoding="utf-8-sig") as handle:
             yield from _iter_tree_handle(handle)
     else:
         yield from split_newick_stream(

@@ -873,5 +873,5 @@ def mcmctree_main(args):
     if args.outfile == "-":
         print(nwk_text)
     else:
-        with open(args.outfile, mode="w") as f:
+        with open(args.outfile, mode="w", encoding="utf-8") as f:
             f.write(nwk_text)

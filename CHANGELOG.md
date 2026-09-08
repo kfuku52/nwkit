@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.11] - 2026-09-08
+
+### Fixed
+
+- Read tree and trait-table files as UTF-8, with optional BOM, independently of
+  the operating system locale; this fixes Japanese ASR input on Windows.
+  Tree writers also use UTF-8 so names survive file round trips.
+
 ## [0.43.10] - 2026-09-08
 
 ### Fixed

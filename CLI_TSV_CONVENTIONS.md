@@ -33,6 +33,10 @@ are distinct from fitted-parameter conditional intervals in the primary table.
   be mixed. `intersection --seqout` is a second primary result and may use
   standard output only when `--outfile` is a file path.
 
+Files read by the shared tree/trait-table input reader use UTF-8, with an
+optional byte-order mark (BOM), on all operating systems. Tree file output also
+uses UTF-8. Standard input is already decoded by the Python input stream.
+
 ## Related outputs and node editing
 
 `sample`, `skim`, `annotate`, `transfer`, and `compose` stage a successful tree
