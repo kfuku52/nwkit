@@ -4,6 +4,13 @@ This document defines the shared interface conventions for NWKIT commands.
 Command-specific help remains authoritative for options and columns that are
 unique to one command.
 
+ASR diagnostic schemas are described in [ASR.md](ASR.md). Joint samples use one
+row per sample/node/trait. Predictive checks add a topology-sensitive sister-clade
+discrepancy; multivariate checks identify trait pairs with `trait`/`other_trait`.
+Scalar cross-validation writes one row per held-out observed tip, including its
+fold and predictive observation score. Bootstrap prediction-error intervals
+are distinct from fitted-parameter conditional intervals in the primary table.
+
 ## CLI option names
 
 - Canonical long options use kebab-case: `--species-map-tsv`,
@@ -396,6 +403,28 @@ warning; legacy ASR target values are normalized without an option-name warning.
 | monophyly `*_leaves`, `num_*_leaves` | `*_taxa`, `num_*_taxa` |
 | transfer/compose `*_taxon_count` | `num_*_taxa` |
 | report `node_id`, `target_node_id`, `source_node_id` | `branch_id`, `target_branch_id`, `source_branch_id` |
+
+## ASR observation extensions
+
+Discrete `--cross-validation-out` uses one row per held-out tip with fold,
+training count, marginal observation probability/log score, JSON state
+probabilities and fit diagnostics. Brier scores are present only for one-hot
+known-state likelihoods. Clade folds remove all members together but report
+marginal tip scores, not a joint clade probability.
+
+Latent-history ASR (`JUMP-BM`, `MM-BM`, `MM-OU`) retains the scalar summary columns
+but uses mixture quantiles. Model TSVs explicitly report fixed parameters,
+Monte Carlo likelihood/ESS/relative error and history uncertainty. History TSVs
+use `history, weight, branch_id` plus `jump_count`, or `regime, segments`, where
+segments are JSON `[state,duration]` arrays. Weights are normalized across
+histories, repeated for each branch, and must not be summed across branches.
+These models are excluded from ordinary information-criterion ranking.
+
+ASR observation extensions use long TSVs: `--measurement-covariance` requires
+`leaf_name, trait, other_trait, covariance` (all ordered entries), and
+`--replicate-observations` requires `leaf_name, trait, value, standard_error`.
+These input tables are distinct from ancestral output and are protected against
+output-path collisions. See [ASR.md](ASR.md) for missingness and likelihood rules.
 
 ## Tree conversion
 

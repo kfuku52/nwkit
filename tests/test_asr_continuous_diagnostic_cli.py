@@ -73,6 +73,7 @@ def test_bm_cli_writes_reproducible_simulation_diagnostics(tmp_path):
         "variance",
         "range",
         "max_abs_centered",
+        "sister_clade_mean_squared_difference",
     }
     assert set(predictive["num_simulations"]) == {20}
     bootstrap = pd.read_csv(first[3], sep="\t")
@@ -123,7 +124,7 @@ def test_multivariate_diagnostics_are_rejected_explicitly(tmp_path):
                 "x,y",
                 "--model",
                 "MV-BM",
-                "--posterior-samples-out",
+                "--cross-validation-out",
                 str(tmp_path / "samples.tsv"),
                 "-o",
                 str(tmp_path / "out.tsv"),

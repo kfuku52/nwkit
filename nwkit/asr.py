@@ -302,16 +302,22 @@ def _get_root_prior(root_prior, states, observed_state_by_leaf, likelihood_by_le
     if root_prior == "equal":
         return np.full(num_states, 1.0 / float(num_states), dtype=float)
     if root_prior == "empirical":
-        counts = np.zeros(num_states, dtype=float)
-        for leaf_name, observed_state in observed_state_by_leaf.items():
-            if observed_state is None:
-                continue
-            likelihood = likelihood_by_leaf[leaf_name]
-            counts += likelihood / likelihood.sum()
+        counts = _empirical_state_counts(
+            num_states, observed_state_by_leaf, likelihood_by_leaf
+        )
         if counts.sum() == 0.0:
             return np.full(num_states, 1.0 / float(num_states), dtype=float)
         return counts / counts.sum()
     raise ValueError("Unsupported '--root-prior': {}".format(root_prior))
+
+
+def _empirical_state_counts(num_states, observed, likelihoods):
+    counts = np.zeros(num_states, dtype=float)
+    for name, state in observed.items():
+        likelihood = likelihoods[name]
+        if state is not None or _is_informative_tip_likelihood(likelihood):
+            counts += likelihood / likelihood.sum()
+    return counts
 
 
 def _root_prior_for_matrix(
@@ -2869,7 +2875,13 @@ def _write_stochastic_map(tree, states, fit, args):
 
 
 def _validate_asr_output_paths(args):
+    from nwkit.asr_tree_ensemble import validate_tree_ensemble_options
+    from nwkit.util import validate_outputs_do_not_replace_inputs
+
+    validate_tree_ensemble_options(args)
     auxiliary_outputs = {
+        "--latent-history-out": getattr(args, "latent_history_out", None),
+        "--tree-ensemble-out": getattr(args, "tree_ensemble_out", None),
         "--model-out": getattr(args, "model_out", None),
         "--tree-out": getattr(args, "tree_out", None),
         "--stochastic-map-out": getattr(args, "stochastic_map_out", None),
@@ -2878,11 +2890,30 @@ def _validate_asr_output_paths(args):
         "--posterior-samples-out": getattr(args, "posterior_samples_out", None),
         "--posterior-predictive-out": getattr(args, "posterior_predictive_out", None),
         "--bootstrap-out": getattr(args, "bootstrap_out", None),
+        "--cross-validation-out": getattr(args, "cross_validation_out", None),
+        "--bootstrap-intervals-out": getattr(args, "bootstrap_intervals_out", None),
         "--model-comparison-out": getattr(args, "model_comparison_out", None),
     }
     stdout_auxiliary_outputs = [
         option_name for option_name, path in auxiliary_outputs.items() if path == "-"
     ]
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--" + name.replace("_", "-"), getattr(args, name, None))
+            for name in (
+                "trait",
+                "infile",
+                "tree_ensemble",
+                "measurement_covariance",
+                "replicate_observations",
+                "tip_likelihoods",
+                "misclassification_matrix",
+                "latent_regime_config",
+            )
+        ],
+        [("--outfile", getattr(args, "outfile", None)), *auxiliary_outputs.items()],
+        label="ASR output",
+    )
     if stdout_auxiliary_outputs:
         raise ValueError(
             "Auxiliary outputs require file paths, not STDOUT: {}".format(
@@ -2891,6 +2922,8 @@ def _validate_asr_output_paths(args):
         )
     validate_distinct_output_paths(
         [
+            ("--latent-history-out", getattr(args, "latent_history_out", None)),
+            ("--tree-ensemble-out", getattr(args, "tree_ensemble_out", None)),
             ("--outfile", getattr(args, "outfile", None)),
             ("--model-out", getattr(args, "model_out", None)),
             ("--tree-out", getattr(args, "tree_out", None)),
@@ -2906,6 +2939,11 @@ def _validate_asr_output_paths(args):
                 getattr(args, "posterior_predictive_out", None),
             ),
             ("--bootstrap-out", getattr(args, "bootstrap_out", None)),
+            ("--cross-validation-out", getattr(args, "cross_validation_out", None)),
+            (
+                "--bootstrap-intervals-out",
+                getattr(args, "bootstrap_intervals_out", None),
+            ),
             (
                 "--model-comparison-out",
                 getattr(args, "model_comparison_out", None),
@@ -2921,6 +2959,12 @@ def _validate_asr_output_paths(args):
 
 
 def asr_main(args):
+    from nwkit.asr_latent import regime_input_columns
+    from nwkit.asr_tree_ensemble import (
+        validate_tree_ensemble_options,
+        write_tree_ensemble,
+    )
+
     _validate_asr_output_paths(args)
     tree = read_tree(
         args.infile,
@@ -2938,6 +2982,7 @@ def asr_main(args):
         "MV-BM",
         "MV-OU",
         "MV-OU-DIAG",
+        "MV-OU-FULL",
         "MK-MIXTURE",
         "PAGEL-INDEPENDENT",
         "PAGEL-DEPENDENT",
@@ -2952,10 +2997,12 @@ def asr_main(args):
         missing_values=getattr(args, "missing_values", None),
         unmatched=getattr(args, "unmatched", "warn"),
         standard_error_column=standard_error_columns,
+        additional_columns=regime_input_columns(args, model),
     )
     requested_type = getattr(args, "trait_type", "auto")
     trait_type = resolve_trait_type(requested_type, trait_df, state_column_input)
     settings = AsrSettings.from_args(args, trait_type)
+    validate_tree_ensemble_options(args, settings)
     effective = effective_asr_args(args, settings)
     sys.stderr.write(f"ASR trait type: {trait_type} ({requested_type}).\n")
     if requested_type == "auto" and trait_type == "continuous":
@@ -2966,6 +3013,7 @@ def asr_main(args):
     targets = _parse_targets(getattr(args, "target", DEFAULT_TARGET))
     handlers = {"discrete": _run_discrete_asr, "continuous": _run_continuous_asr}
     handlers[trait_type](tree, trait_df, effective, settings, targets)
+    write_tree_ensemble(tree, trait_df, effective, settings)
 
 
 def _warn_discrete_rate_fit(fit):
@@ -3019,6 +3067,11 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
         unmatched=getattr(args, "unmatched", "warn"),
         trait_df=trait_df,
         state_source="--rate-matrix" if settings.model == "CUSTOM" else "--states",
+    )
+    from nwkit.discrete_observation import apply_discrete_observation_model
+
+    likelihood_by_leaf = apply_discrete_observation_model(
+        states, likelihood_by_leaf, args
     )
     if settings.model == "THRESHOLD":
         from nwkit.threshold_asr import (
@@ -3150,6 +3203,19 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
     )
     _write_annotated_tree(tree, states, posterior_by_node, observed_state_by_leaf, args)
     _write_stochastic_map(tree, states, fit, args)
+
+    from nwkit.asr_discrete_cross_validation import write_discrete_cross_validation
+
+    write_discrete_cross_validation(
+        tree,
+        trait_df,
+        states,
+        observed_state_by_leaf,
+        likelihood_by_leaf,
+        args,
+        settings,
+        fixed_rate_matrix,
+    )
 
 
 def _comparison_model_names(value):
@@ -3522,7 +3588,9 @@ def _run_discrete_mixture_asr(tree, trait_df, args, settings, targets):
 
 
 def _continuous_observations(tree, trait_df, args, settings):
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    from nwkit.continuous_observation import apply_replicate_observations
+
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         trait_columns = asr_trait_columns(args.state_column, settings.model)
         observed = continuous_tip_vectors(
             trait_df, trait_columns, list(tree.leaf_names())
@@ -3538,12 +3606,18 @@ def _continuous_observations(tree, trait_df, args, settings):
             trait_columns,
             list(tree.leaf_names()),
         )
+        observed, errors = apply_replicate_observations(
+            observed, errors, trait_columns, args
+        )
         return trait_columns, observed, errors
     observed, errors = continuous_tip_values(
         trait_df,
         args.state_column,
         list(tree.leaf_names()),
         getattr(args, "standard_error_column", None),
+    )
+    observed, errors = apply_replicate_observations(
+        observed, errors, (args.state_column,), args
     )
     return (args.state_column,), observed, errors
 
@@ -3556,7 +3630,89 @@ def _continuous_regime_assignment(tree, args, model):
     return read_regime_map(getattr(args, "regime_map", None), tree)
 
 
+def _fit_correlated_measurement_model(
+    tree, observed, errors, trait_columns, args, settings, compute_posterior
+):
+    from nwkit.continuous_observation import read_measurement_covariances
+    from nwkit.ou_asr import parse_alpha_bounds
+    from nwkit.vector_fit import fit_pruning_mvbm
+    from nwkit.vector_ou_fit import fit_pruning_mvou
+
+    if settings.model not in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
+        raise ValueError("--measurement-covariance requires a multivariate model.")
+    covariance = read_measurement_covariances(
+        args.measurement_covariance, observed, trait_columns
+    )
+    options = dict(
+        standard_errors=errors,
+        measurement_covariances=covariance,
+        compute_posterior=compute_posterior,
+    )
+    if settings.model == "MV-BM":
+        return fit_pruning_mvbm(tree, observed, trait_columns, **options)
+    if settings.model == "MV-OU-FULL":
+        return _fit_full_ou_model(tree, observed, trait_columns, args, **options)
+    return fit_pruning_mvou(
+        tree,
+        observed,
+        trait_columns,
+        alpha=getattr(args, "alpha", None),
+        alpha_by_trait=getattr(args, "alpha_by_trait", None),
+        alpha_bounds=parse_alpha_bounds(args.alpha_bounds, tree)
+        if getattr(args, "alpha_bounds", None) not in (None, "")
+        else None,
+        diagonal=settings.model == "MV-OU-DIAG",
+        **options,
+    )
+
+
+def _fit_full_ou_model(tree, observed, traits, args, **options):
+    from nwkit.full_ou import parse_full_ou_matrix
+    from nwkit.full_ou_fit import fit_full_mvou
+
+    return fit_full_mvou(
+        tree,
+        observed,
+        traits,
+        attraction=parse_full_ou_matrix(
+            getattr(args, "attraction_matrix", None), len(traits), "--attraction-matrix"
+        ),
+        diffusion=parse_full_ou_matrix(
+            getattr(args, "diffusion_matrix", None), len(traits), "--diffusion-matrix"
+        ),
+        **options,
+    )
+
+
 def _fit_continuous_model(
+    tree,
+    observed,
+    errors,
+    trait_columns,
+    args,
+    settings,
+    regime_assignment,
+    *,
+    compute_posterior=True,
+    geometry_cache=None,
+):
+    from nwkit.continuous_observation import restore_replicate_likelihood
+
+    posterior, fit = _fit_continuous_model_impl(
+        tree,
+        observed,
+        errors,
+        trait_columns,
+        args,
+        settings,
+        regime_assignment,
+        compute_posterior=compute_posterior,
+        geometry_cache=geometry_cache,
+    )
+    return posterior, restore_replicate_likelihood(fit, args)
+
+
+def _fit_continuous_model_impl(
     tree,
     observed,
     errors,
@@ -3572,6 +3728,10 @@ def _fit_continuous_model(
     from nwkit.continuous_asr import compute_bm_marginals
 
     model = settings.model
+    if getattr(args, "measurement_covariance", None) not in (None, ""):
+        return _fit_correlated_measurement_model(
+            tree, observed, errors, trait_columns, args, settings, compute_posterior
+        )
     if model == "BM":
         return compute_bm_marginals(
             tree,
@@ -3652,6 +3812,15 @@ def _fit_continuous_model(
             _tree_validated=True,
             compute_posterior=compute_posterior,
             _geometry_cache=geometry_cache,
+        )
+    if model == "MV-OU-FULL":
+        return _fit_full_ou_model(
+            tree,
+            observed,
+            trait_columns,
+            args,
+            standard_errors=errors,
+            compute_posterior=compute_posterior,
         )
     if model == "MV-OU":
         from nwkit.multivariate_gaussian_asr import fit_dense_mvou
@@ -3818,6 +3987,10 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     trait_columns, observed, errors = _continuous_observations(
         tree, trait_df, args, settings
     )
+    from nwkit.asr_latent import LATENT_MODELS, run_latent_asr
+
+    if settings.model in LATENT_MODELS:
+        return run_latent_asr(tree, trait_df, observed, errors, args, settings, targets)
     regime_assignment = _continuous_regime_assignment(tree, args, settings.model)
     posterior, fit = _fit_continuous_model(
         tree,
@@ -3843,7 +4016,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     selected = [
         node for node in tree.traverse() if _should_output_node(node, observed, targets)
     ]
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         from nwkit.multivariate_asr import (
             multivariate_covariance_table,
             multivariate_model_table,
@@ -3875,7 +4048,10 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
             f"Continuous ASR: sigma2=0 ({fit.fit_status}); intervals condition on this rate "
             "and exclude rate-estimation uncertainty.\n"
         )
-    elif settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"} and fit.fit_status != "ok":
+    elif (
+        settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}
+        and fit.fit_status != "ok"
+    ):
         sys.stderr.write(_multivariate_fit_status_message(settings.model, fit))
     elif settings.model in {
         "BMS",
@@ -3897,7 +4073,7 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
             "on fitted parameters and exclude parameter-estimation uncertainty.\n"
         )
     _write_table(table, args.outfile)
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"} and getattr(
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"} and getattr(
         args, "covariance_out", None
     ) not in (None, ""):
         _write_table(
@@ -3907,11 +4083,14 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
     if getattr(args, "model_out", None) not in (None, ""):
         model_table = (
             multivariate_model_table(fit, args, settings.ci_level)
-            if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}
+            if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}
             else continuous_model_table(fit, args, settings.ci_level)
         )
+        if getattr(args, "replicate_observations", None):
+            model_table["replicate_observations"] = args.replicate_observations
+            model_table["replicate_log_constant"] = args._replicate_log_constant
         _write_table(model_table, args.model_out)
-    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    if settings.model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         write_multivariate_tree(
             tree,
             observed,
@@ -3981,6 +4160,10 @@ def _write_continuous_model_comparison(
                 standard_errors=errors,
                 _tree_validated=True,
             )
+        if model != settings.model:
+            from nwkit.continuous_observation import restore_replicate_likelihood
+
+            candidate_fit = restore_replicate_likelihood(candidate_fit, args)
         summaries.append(summarize_fit(model, candidate_fit, trait_type="continuous"))
     _write_table(
         model_comparison_table(summaries),

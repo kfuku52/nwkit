@@ -532,7 +532,7 @@ pasr.add_argument(
     help="default=ER for discrete, BM for continuous: Discrete ER/SYM/ARD/F81/GTR/"
     "MK-DESIGN/PAGEL-INDEPENDENT/PAGEL-DEPENDENT/MK-REGIME/HRM/COVARION/"
     "MK-MIXTURE/THRESHOLD/CUSTOM or continuous BM/BMS/LAMBDA/KAPPA/DELTA/"
-    "EB/ACDC/BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/MV-OU-DIAG/OU/OUM/OUMA/"
+    "JUMP-BM/MM-BM/MM-OU/EB/ACDC/BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/MV-OU-DIAG/MV-OU-FULL/OU/OUM/OUMA/"
     "OUMV/OUMVA.",
 )
 pasr.add_argument(
@@ -650,6 +650,20 @@ pasr.add_argument(
     type=str,
     help="Discrete CUSTOM only: Labelled TSV Q matrix. The first column is state; "
     "zero diagonals are replaced by negative off-diagonal row sums.",
+)
+pasr.add_argument(
+    "--tip-likelihoods",
+    "--tip_likelihoods",
+    metavar="PATH",
+    default=None,
+    help="Discrete single-character CTMC: TSV leaf_name plus ordered state columns with P(data|state); supplied tips replace exact coding.",
+)
+pasr.add_argument(
+    "--misclassification-matrix",
+    "--misclassification_matrix",
+    metavar="PATH",
+    default=None,
+    help="Discrete single-character CTMC: TSV state plus ordered state columns; rows are true states, columns observed states, each row sums to one.",
 )
 pasr.add_argument(
     "--thresholds",
@@ -778,6 +792,42 @@ pasr.add_argument(
     "If omitted, estimate it; MV-BM estimates a covariance matrix instead.",
 )
 pasr.add_argument(
+    "--jump-rate",
+    "--jump_rate",
+    type=nonnegative_finite_float,
+    help="JUMP-BM: fixed Poisson jump rate per branch-length unit (required).",
+)
+pasr.add_argument(
+    "--jump-sd",
+    "--jump_sd",
+    type=nonnegative_finite_float,
+    help="JUMP-BM: fixed zero-mean Gaussian jump standard deviation (required).",
+)
+pasr.add_argument(
+    "--latent-regime-config",
+    "--latent_regime_config",
+    metavar="JSON",
+    help="MM-BM/MM-OU: fixed states, q and sigma2 arrays; MM-OU also requires alpha/theta arrays.",
+)
+pasr.add_argument(
+    "--regime-column",
+    "--regime_column",
+    metavar="COLUMN",
+    help="MM-BM/MM-OU: discrete regime column in the trait table; missing values allowed.",
+)
+pasr.add_argument(
+    "--history-samples",
+    "--history_samples",
+    type=int,
+    help="default=1000: independent latent-history importance proposals (at least 2).",
+)
+pasr.add_argument(
+    "--latent-history-out",
+    "--latent_history_out",
+    metavar="PATH",
+    help="Write sampled jump counts or regime histories with normalized posterior importance weights.",
+)
+pasr.add_argument(
     "--evolution-parameter",
     "--evolution_parameter",
     dest="evolution_parameter",
@@ -824,6 +874,23 @@ pasr.add_argument(
     "--state-column order. Omit both this and --alpha to estimate one per trait.",
 )
 pasr.add_argument(
+    "--attraction-matrix",
+    "--attraction_matrix",
+    default=None,
+    metavar="MATRIX",
+    help="MV-OU-FULL: Fixed attraction matrix in trait order; comma-separated entries, "
+    "semicolon-separated rows (quote the argument). Requires --diffusion-matrix. "
+    "Omit both to estimate a stable full OU model.",
+)
+pasr.add_argument(
+    "--diffusion-matrix",
+    "--diffusion_matrix",
+    default=None,
+    metavar="MATRIX",
+    help="MV-OU-FULL: Fixed positive-definite diffusion covariance, using the same "
+    "matrix syntax as --attraction-matrix. Supply both matrices together.",
+)
+pasr.add_argument(
     "--theta",
     metavar="FLOAT",
     default=None,
@@ -866,6 +933,18 @@ pasr.add_argument(
     default=None,
     type=str,
     help="Known non-negative measurement SEs. Multivariate models require a comma-separated SE column per trait.",
+)
+pasr.add_argument(
+    "--replicate-observations",
+    "--replicate_observations",
+    metavar="PATH",
+    help="Continuous replicate TSV: leaf_name, trait, value, standard_error. Known positive SEs; replaces supplied tip/trait cells with precision-weighted summaries.",
+)
+pasr.add_argument(
+    "--measurement-covariance",
+    "--measurement_covariance",
+    metavar="PATH",
+    help="Multivariate known error covariance TSV: leaf_name, trait, other_trait, covariance; all ordered matrix entries per observed tip.",
 )
 pasr.add_argument(
     "--ci-level",
@@ -924,7 +1003,7 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="MV-BM/MV-OU/MV-OU-DIAG only: Optional tidy TSV of conditional trait "
+    help="Multivariate continuous models only: Optional tidy TSV of conditional trait "
     "covariances for selected nodes.",
 )
 pasr.add_argument(
@@ -934,7 +1013,7 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="Scalar continuous models: Optional long-form TSV of joint all-node posterior draws.",
+    help="Continuous models: Optional long-form TSV of joint all-node posterior draws.",
 )
 pasr.add_argument(
     "--posterior-samples",
@@ -952,7 +1031,7 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    help="Scalar continuous models: Optional posterior-predictive check TSV.",
+    help="Continuous models: Optional posterior-predictive check TSV.",
 )
 pasr.add_argument(
     "--posterior-predictive-simulations",
@@ -964,13 +1043,42 @@ pasr.add_argument(
     help="default=1000 with --posterior-predictive-out: Replicated datasets.",
 )
 pasr.add_argument(
+    "--bootstrap-intervals-out",
+    "--bootstrap_intervals_out",
+    default=None,
+    metavar="PATH",
+    help="Scalar continuous ASR: bootstrap prediction-error intervals for latent node values.",
+)
+pasr.add_argument(
+    "--bootstrap-interval-simulations",
+    "--bootstrap_interval_simulations",
+    default=None,
+    type=int,
+    metavar="INT",
+    help="default=100: Refits for --bootstrap-intervals-out (at least two).",
+)
+pasr.add_argument(
+    "--cross-validation-out",
+    "--cross_validation_out",
+    default=None,
+    metavar="PATH",
+    help="Scalar Gaussian or single-character CTMC: refitted held-out predictive scores; Gaussian coverage or discrete probabilities/Brier scores.",
+)
+pasr.add_argument(
+    "--cross-validation-unit",
+    "--cross_validation_unit",
+    default=None,
+    choices=("tip", "clade"),
+    help="default=tip: Hold out individual tips or each root-child clade.",
+)
+pasr.add_argument(
     "--bootstrap-out",
     "--bootstrap_out",
     dest="bootstrap_out",
     metavar="PATH",
     default=None,
     type=str,
-    help="Scalar continuous models: Optional parametric-bootstrap refit TSV.",
+    help="Continuous models: Optional parametric-bootstrap refit TSV.",
 )
 pasr.add_argument(
     "--bootstrap-simulations",
@@ -1058,6 +1166,31 @@ pasr.add_argument(
     action="store",
     help="default=%(default)s: Random seed for stochastic mapping, liability MCMC, or continuous simulation diagnostics.",
 )
+pasr.add_argument(
+    "--tree-ensemble",
+    "--tree_ensemble",
+    metavar="PATH",
+    help="Newick tree sample with the same tips as --infile; refit independently on each tree.",
+)
+pasr.add_argument(
+    "--tree-ensemble-out",
+    "--tree_ensemble_out",
+    metavar="PATH",
+    help="Tree-averaged node summaries, aligned to --infile clades.",
+)
+pasr.add_argument(
+    "--tree-ensemble-weights",
+    "--tree_ensemble_weights",
+    metavar="WEIGHTS",
+    help="Comma-separated nonnegative tree weights (default: equal).",
+)
+pasr.add_argument(
+    "--tree-ensemble-mapping",
+    "--tree_ensemble_mapping",
+    choices=("clade", "mrca"),
+    default=None,
+    help="Match exact descendant clades (default) or their MRCA.",
+)
 pasr.set_defaults(handler=command_asr)
 
 
@@ -1115,6 +1248,8 @@ _copy_store_options(
         "rate_mixture",
         "rate_categories",
         "rate_matrix",
+        "tip_likelihoods",
+        "misclassification_matrix",
         "root_prior",
         "root_mean",
         "root_variance",
@@ -1124,12 +1259,16 @@ _copy_store_options(
         "evolution_parameter_bounds",
         "alpha",
         "alpha_by_trait",
+        "attraction_matrix",
+        "diffusion_matrix",
         "alpha_bounds",
         "theta",
         "eb_rate",
         "eb_rate_bounds",
         "drift",
         "standard_error_column",
+        "measurement_covariance",
+        "replicate_observations",
     ),
 )
 pasrcompare.add_argument(
@@ -1138,6 +1277,12 @@ pasrcompare.add_argument(
     default="all",
     type=str,
     help="default=%(default)s: Models to evaluate. Automatic comparison records but does not fit non-rankable HRM; name HRM explicitly for a diagnostic fit. OU root variants may be written as OU[stationary], OU[fixed], or OU[gaussian].",
+)
+pasrcompare.add_argument(
+    "--model-average-out",
+    "--model_average_out",
+    metavar="PATH",
+    help="Average rankable ancestral reconstructions within one likelihood/root comparison group; incompatible groups are rejected.",
 )
 pasrcompare.add_argument(
     "--exclude-models",

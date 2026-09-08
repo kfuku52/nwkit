@@ -27,6 +27,8 @@ def _summary(marginal, ci_level):
     # and the largest representable level below one.
     width = math.sqrt(2.0) * float(erfinv(ci_level)) * sd
     lower, upper = marginal.mean - width, marginal.mean + width
+    if hasattr(marginal, "interval"):
+        lower, upper = marginal.interval(ci_level)
     if not math.isfinite(lower) or not math.isfinite(upper):
         raise ValueError(
             "An ancestral interval exceeds floating-point range; rescale the trait units."
@@ -307,6 +309,8 @@ def write_continuous_tree(tree, observed, errors, posterior, args, ci_level):
     interval_kind = (
         "conditional_on_sigma2" if model == "BM" else "conditional_on_parameters"
     )
+    if model in {"JUMP-BM", "MM-BM", "MM-OU"}:
+        interval_kind = "latent_history_mixture_conditional_on_parameters"
     for node in tree.traverse():
         summary = _summary(posterior[node], ci_level)
         node.add_props(**{"asr_" + key: value for key, value in summary.items()})

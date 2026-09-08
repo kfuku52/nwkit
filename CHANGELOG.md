@@ -4,6 +4,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Expand ASR with bootstrap prediction-error intervals, tip/clade predictive
+  cross-validation, phylogenetic predictive statistics, clade/MRCA-aligned tree
+  ensembles and likelihood-compatible model averaging.
+- Add discrete tip-likelihood/misclassification inputs, correlated continuous
+  measurement covariance and known-error within-species replicate reduction.
+- Add vector Gaussian pruning for missing/noisy multivariate traits, joint
+  posterior samples, predictive simulation and bootstrap refitting; retain
+  dense fitting for smaller supported problems.
+- Add stable full-attraction multivariate OU with local identifiability checks,
+  and fixed-parameter CTMC-modulated BM/OU and Gaussian compound-Poisson jump
+  models with weighted history integration and Monte Carlo diagnostics.
+
 ## [0.43.7] - 2026-09-08
 
 ### Added

@@ -216,6 +216,7 @@ def compute_mvbm_marginals(
     trait_names,
     *,
     standard_errors=None,
+    measurement_covariances=None,
     _tree_validated=False,
     compute_posterior=True,
     _geometry_cache=None,
@@ -223,11 +224,23 @@ def compute_mvbm_marginals(
     """Estimate a trait covariance and return all-node MV-BM marginals.
 
     Complete exact observations use the linear-time path. Partial vectors or
-    non-zero known measurement errors use the dense Gaussian implementation;
+    non-zero known measurement errors use dense Gaussian fitting up to 1,000
+    observed coordinates, then memory-linear vector pruning;
     complete all-zero error mappings retain the linear-time path after validation.
     """
 
     trait_names = tuple(str(value) for value in trait_names)
+    if measurement_covariances is not None:
+        from nwkit.vector_fit import fit_pruning_mvbm
+
+        return fit_pruning_mvbm(
+            tree,
+            values_by_leaf,
+            trait_names,
+            standard_errors=standard_errors,
+            measurement_covariances=measurement_covariances,
+            compute_posterior=compute_posterior,
+        )
     partial = any(
         vector is not None
         and any(value is None for value in vector)
@@ -242,7 +255,17 @@ def compute_mvbm_marginals(
     if partial or standard_errors is not None:
         from nwkit.multivariate_gaussian_asr import fit_dense_mvbm
 
-        return fit_dense_mvbm(
+        fitter = fit_dense_mvbm
+        coordinates = sum(
+            sum(value is not None for value in vector)
+            for vector in values_by_leaf.values()
+            if vector is not None
+        )
+        if coordinates > 1000:
+            from nwkit.vector_fit import fit_pruning_mvbm
+
+            fitter = fit_pruning_mvbm
+        return fitter(
             tree,
             values_by_leaf,
             trait_names,
@@ -435,7 +458,7 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
 
 def multivariate_model_table(fit, args, ci_level):
     model = getattr(fit, "model", "MV-BM")
-    is_ou = model in {"MV-OU", "MV-OU-DIAG"}
+    is_ou = model in {"MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}
     row = {
         "trait_type": "continuous",
         "trait_type_requested": getattr(args, "trait_type", "auto"),
@@ -457,6 +480,7 @@ def multivariate_model_table(fit, args, ci_level):
         "sigma_rank": fit.sigma_rank,
         "fit_status": fit.fit_status,
         "standard_error_column": getattr(args, "standard_error_column", None) or "",
+        "measurement_covariance": getattr(args, "measurement_covariance", None) or "",
         "ci_level": ci_level,
         "interval_kind": "conditional_on_covariance",
         "parameter_uncertainty_included": False,
@@ -469,6 +493,11 @@ def multivariate_model_table(fit, args, ci_level):
             row[f"theta_{_trait_id(trait)}"] = float(fit.theta[index])
             if model == "MV-OU-DIAG":
                 row[f"alpha_{_trait_id(trait)}"] = float(fit.alpha_by_trait[index])
+    if model == "MV-OU-FULL":
+        row["attraction_estimated"] = fit.attraction_estimated
+        row["identifiability_status"] = fit.identifiability_status
+        row["identifiability_rank"] = fit.identifiability_rank
+        row["identifiability_singular_value_ratio"] = fit.identifiability_ratio
     row["sigma_interpretation"] = (
         "stationary_trait_covariance" if is_ou else "diffusion_covariance"
     )
@@ -477,11 +506,15 @@ def multivariate_model_table(fit, args, ci_level):
             row[f"sigma_{_trait_id(first_trait)}_to_{_trait_id(second_trait)}"] = float(
                 fit.sigma[first, second]
             )
-            if model == "MV-OU-DIAG":
+            if model in {"MV-OU-DIAG", "MV-OU-FULL"}:
                 row[
                     f"diffusion_sigma_{_trait_id(first_trait)}_to_"
                     f"{_trait_id(second_trait)}"
                 ] = float(fit.diffusion_sigma[first, second])
+            if model == "MV-OU-FULL":
+                row[
+                    f"attraction_{_trait_id(first_trait)}_to_{_trait_id(second_trait)}"
+                ] = float(fit.attraction_matrix[first, second])
     return pd.DataFrame([row])
 
 

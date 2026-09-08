@@ -59,12 +59,12 @@ codes require explicit discrete mode.
 
 | Option | Discrete | Continuous |
 |---|---|---|
-| `--model` | ER (default), SYM, ARD, F81, GTR, MK-DESIGN, PAGEL-INDEPENDENT/DEPENDENT, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, MV-OU-DIAG, OU, OUM/OUMA/OUMV/OUMVA |
+| `--model` | ER (default), SYM, ARD, F81, GTR, MK-DESIGN, PAGEL-INDEPENDENT/DEPENDENT, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, MV-OU-DIAG, MV-OU-FULL, OU, OUM/OUMA/OUMV/OUMVA, JUMP-BM, MM-BM, MM-OU |
 | `--root-prior` | equal/empirical/stationary for CTMCs; identified Gaussian for THRESHOLD | flat for BM-family models; stationary for OU-family models; OU also supports fixed or Gaussian |
 | `--output` | probabilities (default), map | summary (default) |
 | `--tree-annotation` | map (default), state, probability, all | summary (default), mean, all |
 | Rate controls | `--rate`, `--rate-bounds`, `--rate-design`, `--rate-matrix`; mixture/covarion controls | `--sigma2`, transform parameters, `--alpha`, `--alpha-by-trait`, `--theta`, and `--drift` as applicable |
-| Structure controls | states/graph/design/regime/hidden controls; multiple columns for MK-MIXTURE or Pagel | regime map/parameters; multiple trait and SE columns for MV-BM/MV-OU/MV-OU-DIAG |
+| Structure controls | states/graph/design/regime/hidden controls; multiple columns for MK-MIXTURE or Pagel | fixed or latent regime controls; multiple trait and SE columns for MV models |
 | Observation uncertainty | Ambiguous states; THRESHOLD MCMC | Known per-trait measurement SEs for every continuous model |
 | Interval/parameter uncertainty | THRESHOLD posterior probabilities and liability moments | Conditional Gaussian intervals; optional transform profile CI, joint posterior samples, PPC, and bootstrap |
 | Simulation | CTMC stochastic maps except MK-MIXTURE/THRESHOLD | `--posterior-samples-out`, `--posterior-predictive-out`, `--bootstrap-out`, and `--seed` |
@@ -538,9 +538,12 @@ this treatment explicitly, and intervals condition on the fitted drift.
 contrast/smoothing path. Trait-level missingness or known errors automatically
 select a dense observed-coordinate likelihood, with one comma-separated
 `--standard-error-column` per trait. Every trait needs enough observations to
-identify its mean/covariance; an implementation guard rejects more
-than 1,000 dense observed coordinates. This cap bounds covariance factorization
-size. Dense reconstruction computes node cross-covariances one node at a time,
+identify its mean/covariance. Above 1,000 observed coordinates, incomplete/noisy
+MV-BM, MV-OU and MV-OU-DIAG automatically use vector Gaussian pruning, storing per-node trait
+matrices instead of a dense observed-coordinate covariance. Small fits
+retain the dense implementation because its optimized factorization can be
+faster. Full known measurement-error covariance also selects vector pruning. Dense
+reconstruction computes node cross-covariances one node at a time,
 without allocating a nodes-by-observations matrix, and rejects estimated
 posterior result storage above 256 MiB. Multivariate `asrcompare` fits share
 observed geometry and skip ancestral reconstruction entirely. Complete
@@ -560,6 +563,11 @@ Consistent exact observations at one zero-length-contracted position count once;
 conflicting values at that position have zero likelihood and are rejected. A
 covariance component is also rejected explicitly when the observed trait/branch
 overlap leaves it absent from every independent flat-root contrast.
+
+The generic pruning path is substantially slower on the measured small/medium
+fixtures; its purpose is to avoid dense-memory limits. See
+[measurements and reproduction commands](ASR_PERFORMANCE.md) for the time/memory
+tradeoff and an actual fit above 1,000 observed coordinates.
 
 `--model MV-OU` fits a stationary separable process with one shared positive
 alpha, a full stationary trait covariance `Sigma`, and one optimum per trait:
@@ -596,10 +604,37 @@ writes each selected node's conditional covariance and correlation upper
 triangle; `--model-out` records stationary Sigma, rank, optimizer diagnostics,
 and alpha/theta for OU models. MV-OU-DIAG additionally records every trait alpha
 and diffusion-covariance element. Intervals condition on fitted parameters and exclude parameter
-and tree uncertainty. Scalar posterior-sampling/PPC/bootstrap outputs are
-currently rejected for multivariate fits rather than silently approximated.
+and tree uncertainty. `--posterior-samples-out` supports joint multivariate
+draws across both nodes and traits, including missing values and known diagonal
+measurement errors. The long-form schema is identical to scalar samples, with
+one row per sample/node/trait. Positive-definite fitted diffusion is required;
+singular fits are rejected for simulation diagnostics. `--posterior-predictive-out`
+also reports per-trait discrepancies and pairwise observed-tip covariances,
+with `trait` and `other_trait` columns identifying the comparison. Missing
+coordinates remain missing in every replicate; covariances require at least
+two jointly observed tips. `--bootstrap-out` refits the vector model and writes
+covariance/optimum/rate elements with zero-based trait indices (for example,
+`sigma_0_1`), as well as failed-replicate records. Multivariate cross-validation
+and bootstrap prediction-error intervals remain unsupported.
 
 ### Model comparison and simulation diagnostics
+
+For single-character discrete CTMC models, `--tip-likelihoods likelihoods.tsv`
+accepts `leaf_name` followed by one column per state in the exact `--states`
+order. Values are finite probabilities `P(data|latent_state)` in `[0,1]`, with
+at least one positive entry per row. A supplied row replaces that tip's exact
+trait coding; omitted rows retain their original likelihoods. This is a data
+likelihood, not an already-computed posterior over states. Specify `--states`
+when the likelihoods include states absent from the trait table.
+
+Alternatively, `--misclassification-matrix errors.tsv` accepts `state` followed
+by the same ordered state columns. Rows index true states and columns index
+observed labels; each row must sum to one. Ambiguous observed labels are
+marginalized by summing their columns, and missing tips remain uninformative.
+Both inputs describe known observation mechanisms, add no fitted parameters,
+and are mutually exclusive. `asrcompare` applies the same observation model to
+every compatible candidate. THRESHOLD, MK-MIXTURE and two-character Pagel models
+do not accept these single-character inputs.
 
 `nwkit asrcompare` is the batch model-selection interface corresponding to
 `rootcompare`. It reads the tree and trait table once, resolves the trait type,
@@ -711,7 +746,59 @@ table for interpretation.
 For any scalar Gaussian model, `--posterior-samples-out` writes exact joint
 all-node conditional draws using forward-filter/backward sampling.
 `--posterior-predictive-out` simulates replicated observed tips and reports
-mean/variance/range discrepancy summaries with tail probabilities.
+mean/variance/range discrepancy summaries with tail probabilities. It also
+reports `sister_clade_mean_squared_difference`: the average squared difference
+between observed child-clade means over all sibling pairs at all branching
+nodes. This topology-sensitive discrepancy is not a standardized independent
+contrast; branch lengths and errors are handled by generating replicates from
+the fitted process. Predictive simulations draw the root from its conditional
+posterior and then generate new descendant values. These are fitted-parameter
+checks, not posterior integration over evolutionary parameters, and their tail
+areas are descriptive rather than calibrated frequentist p-values.
+`--cross-validation-out cv.tsv` refits the scalar continuous model once per
+held-out tip. `--cross-validation-unit clade` instead holds out each nonempty
+root-child clade, keeping closely related test tips out of the training set
+together. A unary root does not define a usable clade partition. Estimated
+parameters are refitted from training values only; explicitly fixed parameters,
+the tree, and regimes remain fixed. The TSV reports observed values, predictive
+means/SDs (including known measurement error), marginal observation log scores,
+PIT values, and interval bounds/coverage at `--ci-level`. Sum or average log
+scores only across the same held-out observations and partition; clade scores
+are marginal, not a joint clade density. Intervals condition on each training
+fit and do not integrate parameter or tree uncertainty. An unidentifiable
+training fit or zero predictive variance fails explicitly instead of silently
+dropping difficult folds. All observed tips are held out exactly once; missing
+tips are not scored. Multivariate and latent-history models do not yet support
+this option.
+
+The same options support single-character CTMCs (including fixed-Q, regime,
+hidden-rate and covarion models). Each fold removes the held-out likelihoods
+before refitting; empirical roots are recalculated from training data, while the
+state alphabet remains fixed. Output reports marginal observation probabilities,
+log scores and JSON latent-state probability vectors. Hidden classes are summed
+out. Exact one-hot observations also receive a multiclass Brier score; ambiguous
+or noisy observations do not pretend to supply a known true state. Misclassification
+and explicit tip likelihoods are applied before masking and are not reapplied to
+held-out training cells. Zero predictive probability has log score `-inf`.
+The TSV retains fold fit/optimizer status; failed folds raise, and nonconverged
+fits must be inspected before summarizing scores. THRESHOLD, MK-MIXTURE and
+two-character Pagel models are explicitly unsupported.
+
+`--bootstrap-intervals-out intervals.tsv` constructs parametric-bootstrap
+prediction-error intervals for latent values at every node. In each replicate,
+simulate latent node values and observations, refit all originally estimated
+parameters, and reconstruct ancestors. Add the empirical quantiles of
+`simulated latent value - refitted conditional mean` to the original conditional
+mean. This includes reconstruction error and refitting variability under the
+fitted generating model; it is a frequentist plug-in bootstrap, **not** a
+Bayesian credible interval or a guarantee of nominal finite-sample coverage.
+The original conditional intervals remain unchanged. `--bootstrap-interval-simulations`
+defaults to 100 (minimum 2); use more replicates for stable tail quantiles.
+Known errors and missingness are preserved, trees/regimes remain fixed, and
+failed refits stop the interval calculation. Flat-root simulations fix the root
+at its fitted conditional mean. The TSV includes interval level, method,
+replicate count, reconstruction-error bias and SD; `--seed` is reproducible.
+
 `--bootstrap-out` simulates the fitted process, preserves the original missing
 pattern and known SEs, refits the same fixed/free parameter specification, and
 writes successful and failed replicates. Associated count options default to
@@ -911,10 +998,10 @@ nwkit asrcompare -i tree.nwk --trait states.tsv --state-column state \
   -o model-comparison.tsv --figure-out model-comparison.pdf
 ```
 
-Lévy/jump processes, tree-uncertainty integration, correlated measurement-error
-matrices, and branchwise continuous stochastic trajectories remain outside the
-current model set. Joint Gaussian node samples are provided instead of
-repurposing discrete transition-count maps.
+Tree ensembles and correlated measurement errors are available as described here.
+The latent-history models below support Gaussian
+compound-Poisson jumps and CTMC-modulated scalar BM/OU, with explicit Monte Carlo
+limitations; general stable/variance-gamma Lévy families are not implemented.
 
 ## Method references
 
@@ -938,3 +1025,200 @@ BM/OU, generic Gaussian smoothing to independent dense conditioning,
 multivariate covariance to dense matrix or contrast oracles, shared-alpha
 MV-OU-DIAG reduction to MV-OU, Pagel nested rate partitions, threshold constraints
 and seeded sampling, and cached versus uncached discrete-mixture likelihoods.
+# Tree uncertainty
+
+`nwkit asrcompare --models ER,SYM --model-average-out averaged.tsv` additionally
+averages eligible single discrete-character or continuous-trait reconstructions using the selected
+`--criterion` (AIC by default). It excludes failed/nonregular fits and duplicate
+equivalent models, requires finite scores, and rejects multiple likelihood/root
+comparison groups instead of combining their weights. Inspect the comparison
+table for exclusions. Each summary includes the actual model weights; Gaussian
+variance includes both within-model and between-model components and intervals
+are mixture quantiles. These are information-criterion weights, not Bayesian
+model probabilities, and do not integrate parameter uncertainty within models.
+Multivariate output summarizes each trait's marginal mixture separately; it
+does not export cross-trait mixture covariance or joint averaged samples.
+
+Use `--tree-ensemble trees.nwk --tree-ensemble-out ensemble.tsv` to refit a
+Gaussian trait vector or a single CTMC character on each tree in a Newick sample.
+The ordinary output remains the reconstruction on `--infile`; the ensemble
+output is a separate mixture, conditional on each tree's fitted parameters.
+Every sampled tree must have the same unique tip labels. Optional
+`--tree-ensemble-weights 1,2,1` supplies nonnegative weights (equal by default).
+These supplied weights are not inferred tree posterior probabilities.
+
+Nodes are matched by exact descendant-tip sets, never by branch IDs.
+`matched_tree_weight` records clade support; summaries exclude trees missing
+that clade and renormalize the remaining weights. Thus they are conditional
+on the clade existing. `--tree-ensemble-mapping mrca` instead summarizes the
+MRCA of the reference descendant set in every tree, which can include extra
+tips and is a different estimand. Continuous intervals use mixture quantiles,
+with within-tree and between-tree variance reported separately. Discrete
+probabilities are weighted directly. Multivariate Gaussian output has one
+row per trait and reference node, reporting marginal mixture intervals (not
+joint credible regions). Branch-ID regime maps,
+threshold liabilities, Pagel pairs and character mixtures are not
+currently accepted by this ensemble output.
+
+## Correlated errors and species replicates
+
+Multivariate models accept `--measurement-covariance errors.tsv`, a long TSV
+with exactly `leaf_name`, `trait`, `other_trait`, `covariance` columns. Supply
+all ordered matrix entries for every observed species, in the original trait
+units. Matrices must be symmetric, with a positive-definite noisy-coordinate
+block. Exact coordinates have zero rows and columns; singular correlated noisy
+blocks are not supported. Missing trait coordinates are marginalized. This
+option replaces, and cannot be combined with, `--standard-error-column`.
+The same covariance is used for fitting, joint posterior samples, predictive
+checks, tree ensembles and bootstrap refits. Model metadata records its source.
+
+`--replicate-observations replicates.tsv` accepts exactly `leaf_name`, `trait`,
+`value`, `standard_error` columns, with repeated tip/trait pairs. Values must be
+finite and SEs strictly positive and known. They describe total independent
+within-species observation variation, not a variance estimated from these
+replicates. Supplied pairs replace the corresponding cells of `--trait`;
+unspecified pairs retain their original observations and SEs. The main trait
+table is still required (use explicit `--trait-type continuous` if it contains
+only missing placeholders). Replicates and full correlated errors cannot be
+combined. Species replicates are not additional evolutionary tips.
+
+Independent Gaussian replicates reduce exactly to a precision-weighted mean
+and its SE. The full-data likelihood retains the product-density normalization
+constant, also in model comparison; `--model-out` records the source and
+`replicate_log_constant`. Evolutionary sample size remains the number of
+observed phylogenetic positions. Posterior output describes latent species
+values, not individual measurements. Predictive checks, cross-validation and
+bootstrap diagnostics operate on the sufficient-statistic species means;
+bootstrap likelihood columns describe simulated means, not new individual
+replicate residuals. They do not test the assumed within-species noise model.
+
+### Full-attraction multivariate OU
+
+`--model MV-OU-FULL` fits the stationary SDE
+`dX = -A(X-theta)dt + L dW`, with unrestricted stable attraction `A` and
+positive-definite diffusion `D = L L'`. This includes nonsymmetric attraction,
+complex eigenvalues and negative individual diagonal entries, provided all
+eigenvalues have positive real parts. It uses exact matrix-exponential edge
+transitions and multivariate Gaussian pruning, with missing coordinates and
+known independent or correlated measurement errors.
+
+By default, stationary covariance `C`, diffusion `D` and a skew matrix `K`
+parameterize `A=(D/2+K) C^-1`, so `AC+CA'=D`. Both covariances use Cholesky
+parameters; optima are ML-estimated, not integrated out. The estimated parameter
+count is `d*d + d*(d+1)/2 + d`. Sufficient observation count alone does not ensure
+identifiability. Alternatively, supply both fixed matrices in trait order:
+
+```sh
+nwkit asr -i tree.nwk --input-rooted yes --trait traits.tsv \
+  --state-column x,y --model MV-OU-FULL \
+  --attraction-matrix '0.7,-0.3;0.2,0.5' \
+  --diffusion-matrix '1.2,0.3;0.3,0.8' \
+  --model-out full_ou_model.tsv -o full_ou.tsv
+```
+
+Matrix rows use semicolons and entries use commas. Supply both matrices or
+neither; scalar `--alpha`, `--alpha-by-trait`, `--alpha-bounds` and `--theta`
+are not accepted. With fixed matrices, only the `d` optima are estimated.
+Model output includes attraction/diffusion entries (using the existing hex
+trait identifiers), stationary covariance and a local identifiability diagnostic.
+This model also supports `asrcompare`, joint posterior samples, predictive
+checks, bootstrap refits, tree ensembles and compatible model averaging.
+
+For free matrices, a central-difference Jacobian of observed covariance entries
+is column-scaled and checked by SVD (relative threshold `1e-6`). Its rank and
+smallest/largest singular-value ratio are reported. A complete deficient design
+is `local_rank_deficient`; a deficient capped subset is
+`inconclusive_design_subset`. Full rank of a subset suffices for
+`local_full_rank`. This numerical check is local, not a guarantee of global
+identifiability, optimizer uniqueness, or precise estimation. In particular,
+ultrametric data can leave rotational dynamics unidentified. Non-full-rank,
+inconclusive and parameter-boundary fits retain their reconstruction but are
+excluded from regular-model IC ranking. Fixed matrices report
+`fixed_covariance_parameters`. The general model is substantially more expensive
+to fit than shared/diagonal OU; start with those restricted models where suitable.
+
+For the multivariate OU formulation and identifiability cautions, see
+[Bartoszek et al. (2012)](https://pubmed.ncbi.nlm.nih.gov/22940235/) and
+[Bartoszek et al. (2023)](https://pmc.ncbi.nlm.nih.gov/articles/PMC11302515/).
+
+### Latent regimes and evolutionary jumps
+
+`JUMP-BM`, `MM-BM`, and `MM-OU` integrate uncertain process histories using
+independent importance proposals and conditional Gaussian pruning. All process
+parameters are **fixed inputs**, not ML estimates or draws from a parameter
+posterior. The continuous root has an improper flat prior. Output intervals are
+numerical quantiles of the weighted Gaussian mixture, not normal intervals
+formed from its mean and variance. Joint posterior draws choose one history
+per draw before sampling all nodes together.
+
+`JUMP-BM` adds a Poisson process of zero-mean Gaussian jumps to BM. For an edge
+of length `t`, propose `N ~ Poisson(jump_rate*t)` and integrate jump sizes
+analytically: the edge variance is `sigma2*t + N*jump_sd^2`.
+
+```sh
+nwkit asr -i tree.nwk --input-rooted yes --trait traits.tsv \
+  --state-column body_mass --model JUMP-BM --sigma2 1 \
+  --jump-rate 0.1 --jump-sd 2 --history-samples 2000 --seed 42 \
+  --model-out jump_model.tsv --latent-history-out jump_histories.tsv \
+  --posterior-samples-out jump_draws.tsv -o jump.tsv
+```
+
+`sigma2` must be positive to avoid singular atom/density mixtures at exact
+observations; jump rate and SD may be zero, recovering BM. This is a particular
+finite-activity Lévy model, not a general heavy-tail family. Known observation
+SEs are supported. A large observation alone cannot distinguish an evolutionary
+jump from misspecified measurement noise: examine SE assumptions and replicate
+quality before interpreting jump histories. See
+[Landis et al. (2013)](https://pmc.ncbi.nlm.nih.gov/articles/PMC3566600/) for
+phylogenetic Lévy-process formulations.
+
+`MM-BM` couples a discrete CTMC regime to a continuous diffusion rate; `MM-OU`
+also allows regime-specific attraction and optima. The trait TSV contains both
+the continuous column and a `--regime-column`; missing regimes are permitted.
+The JSON configuration uses arrays in exactly the listed state order:
+
+```json
+{"states":["cold","warm"],"q":[[-0.2,0.2],[0.1,-0.1]],"sigma2":[0.5,2]}
+```
+
+For `MM-OU`, additionally include `"alpha":[0.3,0.8]` and
+`"theta":[0,4]`. Rate and alpha entries must be positive. The CTMC generator
+is fixed in branch-length units, with nonnegative off-diagonals and zero row
+sums; it is not normalized to mean rate one. The discrete root is uniform,
+independent of the flat continuous root before conditioning. In particular,
+`MM-OU` is **not** a stationary-root switching OU model.
+
+```sh
+nwkit asr -i tree.nwk --input-rooted yes --trait traits.tsv \
+  --state-column body_mass --regime-column habitat --model MM-BM \
+  --latent-regime-config regimes.json --history-samples 2000 --seed 42 \
+  --latent-history-out regime_histories.tsv --model-out regime_model.tsv \
+  -o regime_asr.tsv
+```
+
+Histories are proposed conditional on discrete tips using CTMC uniformization
+bridges, including event times. BM variances or OU affine moments compose over
+successive regime segments. Continuous likelihoods reweight these histories,
+so continuous observations also inform ancestral regimes. The joint reported
+likelihood includes the discrete-tip likelihood once. This differs from fitting
+a fixed branch-ID regime map. For stochastic-map integration in comparative
+models, see [Caetano and Harmon (2019)](https://academic.oup.com/sysbio/article/68/3/412/5133548).
+
+`--history-samples` defaults to 1000 (minimum 2); a limit of 1,000,000 history-node
+pairs bounds retained state. Model output reports importance ESS, largest weight
+and relative likelihood Monte Carlo SE (a delta-method log-likelihood SE).
+The likelihood estimator is unbiased; its logarithm and self-normalized posterior
+summaries are not. Low ESS is flagged `importance_degenerate`; even high ESS
+does not rule out unvisited important histories. Repeat independent seeds and
+increase sample counts until summaries stabilize. Uniformization retains its
+existing numerical Poisson-tail truncation. Reported intervals include history
+uncertainty, but exclude parameter uncertainty, tree uncertainty and Monte Carlo
+error in the interval endpoints.
+
+These models support summary/NHX, model, weighted-history and joint-node-sample
+outputs. `--latent-history-out` stores branch jump counts, or node regimes plus
+JSON `[state,duration]` segments (including virtual self-transition segments).
+It is an importance sample, not equally weighted posterior histories. Figures,
+Gaussian diagnostics, replicate reduction and tree ensembles are currently
+rejected for these models. `asrcompare` marks them inapplicable: approximate,
+fixed-parameter latent fits are not silently ranked as ordinary ML fits.

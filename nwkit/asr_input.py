@@ -22,6 +22,8 @@ _DISCRETE_ONLY = (
     "rate",
     "rate_bounds",
     "rate_matrix",
+    "tip_likelihoods",
+    "misclassification_matrix",
     "rate_design",
     "transition_graph",
     "hidden_categories",
@@ -44,9 +46,13 @@ _CONTINUOUS_ONLY = (
     "evolution_parameter",
     "evolution_parameter_bounds",
     "standard_error_column",
+    "measurement_covariance",
+    "replicate_observations",
     "ci_level",
     "alpha",
     "alpha_by_trait",
+    "attraction_matrix",
+    "diffusion_matrix",
     "alpha_bounds",
     "theta",
     "eb_rate",
@@ -62,14 +68,18 @@ _CONTINUOUS_ONLY = (
     "posterior_predictive_simulations",
     "bootstrap_out",
     "bootstrap_simulations",
+    "bootstrap_intervals_out",
+    "bootstrap_interval_simulations",
 )
 _REGIME_MODELS = frozenset(
     {"MK-REGIME", "BMS", "BMS-DRIFT", "OUM", "OUMA", "OUMV", "OUMVA"}
 )
 _CONTINUOUS_REGIME_MODELS = frozenset(_REGIME_MODELS - {"MK-REGIME"})
 _TRANSFORMED_MODELS = frozenset({"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"})
-_OU_MODELS = frozenset({"OU", "MV-OU", "MV-OU-DIAG", "OUM", "OUMA", "OUMV", "OUMVA"})
-_MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU", "MV-OU-DIAG"})
+_OU_MODELS = frozenset(
+    {"OU", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL", "OUM", "OUMA", "OUMV", "OUMVA"}
+)
+_MULTIVARIATE_MODELS = frozenset({"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"})
 _PAGEL_MODELS = frozenset({"PAGEL-INDEPENDENT", "PAGEL-DEPENDENT"})
 
 
@@ -251,6 +261,9 @@ def _validate_threshold_options(args, model):
 
 
 def _validate_discrete_model_arguments(args, model):
+    from nwkit.discrete_observation import validate_discrete_observation_options
+
+    validate_discrete_observation_options(args, model)
     _validate_custom_and_graph_options(args, model)
     _validate_mixture_options(args, model)
     _validate_threshold_options(args, model)
@@ -349,13 +362,36 @@ def _validate_ou_root_options(args, model, root_prior):
 
 
 def _validate_multivariate_options(args, model):
+    attraction = getattr(args, "attraction_matrix", None)
+    diffusion = getattr(args, "diffusion_matrix", None)
+    if attraction is not None or diffusion is not None:
+        if model != "MV-OU-FULL":
+            raise ValueError(
+                "--attraction-matrix and --diffusion-matrix require MV-OU-FULL."
+            )
+        if attraction is None or diffusion is None:
+            raise ValueError(
+                "MV-OU-FULL requires both fixed attraction and diffusion, or neither."
+            )
+    if model == "MV-OU-FULL" and any(
+        getattr(args, name, None) is not None
+        for name in ("alpha", "alpha_by_trait", "alpha_bounds", "theta")
+    ):
+        raise ValueError(
+            "MV-OU-FULL uses matrix parameters, not scalar alpha/theta options."
+        )
+    if getattr(args, "measurement_covariance", None) not in (None, ""):
+        if model not in _MULTIVARIATE_MODELS:
+            raise ValueError("--measurement-covariance requires a multivariate model.")
+        if getattr(args, "standard_error_column", None) not in (None, ""):
+            raise ValueError(
+                "--measurement-covariance cannot be combined with --standard-error-column."
+            )
     diagnostic_options = (
-        "posterior_samples_out",
-        "posterior_samples",
-        "posterior_predictive_out",
-        "posterior_predictive_simulations",
-        "bootstrap_out",
-        "bootstrap_simulations",
+        "cross_validation_out",
+        "cross_validation_unit",
+        "bootstrap_intervals_out",
+        "bootstrap_interval_simulations",
     )
     if model in _MULTIVARIATE_MODELS:
         if getattr(args, "sigma2", None) is not None:
@@ -370,7 +406,7 @@ def _validate_multivariate_options(args, model):
             )
         if any(getattr(args, name, None) is not None for name in diagnostic_options):
             raise ValueError(
-                "Simulation diagnostics currently support scalar continuous models, "
+                "Cross-validation and bootstrap intervals currently support scalar continuous models, "
                 "not MV-BM, MV-OU, or MV-OU-DIAG."
             )
         if getattr(args, "compare_models", None) not in (None, ""):
@@ -389,6 +425,8 @@ def _validate_diagnostic_counts(args):
         ("posterior_samples", "posterior_samples_out"),
         ("posterior_predictive_simulations", "posterior_predictive_out"),
         ("bootstrap_simulations", "bootstrap_out"),
+        ("cross_validation_unit", "cross_validation_out"),
+        ("bootstrap_interval_simulations", "bootstrap_intervals_out"),
     ):
         if getattr(args, count_name, None) is not None and getattr(
             args, output_name, None
@@ -438,6 +476,11 @@ def _validate_continuous_model_arguments(args, model, root_prior):
 
 
 def _validate_model_arguments(args, trait_type, model, root_prior=None):
+    from nwkit.asr_discrete_cross_validation import validate_discrete_cv
+    from nwkit.asr_latent import validate_latent_options
+
+    validate_latent_options(args, model)
+    validate_discrete_cv(args, trait_type, model)
     _validate_regime_arguments(args, model)
     if trait_type == "discrete":
         _validate_discrete_model_arguments(args, model)
@@ -512,6 +555,7 @@ def read_asr_table(
     missing_values=None,
     unmatched="warn",
     standard_error_column=None,
+    additional_columns=(),
 ):
     if trait_path in ("", None):
         raise ValueError("'--trait' is required.")
@@ -533,12 +577,12 @@ def read_asr_table(
         trait_path,
         option_name="--trait",
         tree_leaf_names=tree_leaf_names,
-        required_columns=state_columns,
+        required_columns=(*state_columns, *additional_columns),
         unmatched=unmatched,
         missing_values=missing_values,
         preserve_columns=tuple(
             column
-            for column in (*state_columns, *standard_error_columns)
+            for column in (*state_columns, *standard_error_columns, *additional_columns)
             if column is not None
         ),
     )

@@ -32,12 +32,16 @@ def _estimated_mapping_count(fit, value_name, flag_name, *, shared_name=None):
 
 def _continuous_parameter_count(fit):
     model = getattr(fit, "model", "")
-    if model in {"MV-BM", "MV-OU", "MV-OU-DIAG"}:
+    if model in {"MV-BM", "MV-OU", "MV-OU-DIAG", "MV-OU-FULL"}:
         dimension = len(fit.trait_names)
         covariance_count = dimension * (dimension + 1) // 2
         if model == "MV-BM":
             return covariance_count
         theta_count = dimension if getattr(fit, "theta_estimated", False) else 0
+        if model == "MV-OU-FULL":
+            return theta_count + (
+                dimension**2 + covariance_count if fit.attraction_estimated else 0
+            )
         alpha_count = 0
         if getattr(fit, "alpha_estimated", False):
             alpha_count = dimension if model == "MV-OU-DIAG" else 1
@@ -309,6 +313,7 @@ def model_comparison_table(summaries):
         row = rows[index]
         fit_status = str(row.get("fit_status", "ok"))
         singular = "singular" in fit_status
+        singular = singular or (row["model"] == "MV-OU-FULL" and fit_status != "ok")
         covarion_boundary = row["model"] == "COVARION" and "boundary" in fit_status
         variance_boundary = has_nonregular_variance_boundary(fit_status)
         if singular or covarion_boundary or variance_boundary:

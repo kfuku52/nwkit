@@ -1,6 +1,7 @@
 include CLI_TSV_CONVENTIONS.md
 include CONVERT.md
 include ASR.md
+include ASR_PERFORMANCE.md
 include DEVELOPMENT.md
 include CHANGELOG.md
 include RELEASING.md

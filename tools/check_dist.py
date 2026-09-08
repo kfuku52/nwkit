@@ -80,6 +80,7 @@ def main() -> int:
         sdist_members = set(archive.getnames())
     required_sdist = {"/" + member for member in required_wheel} | {
         "/ASR.md",
+        "/ASR_PERFORMANCE.md",
         "/CHANGELOG.md",
         "/CLI_TSV_CONVENTIONS.md",
         "/DEVELOPMENT.md",
