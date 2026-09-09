@@ -175,7 +175,9 @@ class TestDrawMain:
         assert interval[:, 1].tolist() == pytest.approx([layout.ycoord[tree]] * 2)
         assert interval[1, 0] - interval[0, 0] == pytest.approx(4.0)
 
-    def test_root_credible_interval_is_inside_saved_axes(self, tmp_nwk, tmp_path, monkeypatch):
+    def test_root_credible_interval_is_inside_saved_axes(
+        self, tmp_nwk, tmp_path, monkeypatch
+    ):
         from matplotlib.figure import Figure
 
         infile = tmp_nwk(
@@ -189,10 +191,14 @@ class TestDrawMain:
             return original_savefig(figure, *args, **kwargs)
 
         monkeypatch.setattr(Figure, "savefig", capture_bounds)
-        draw_main(make_draw_args(
-            infile=str(infile), outfile=str(tmp_path / "root-ci.svg"),
-            image_format="svg", species_overlap_node_plot="no",
-        ))
+        draw_main(
+            make_draw_args(
+                infile=str(infile),
+                outfile=str(tmp_path / "root-ci.svg"),
+                image_format="svg",
+                species_overlap_node_plot="no",
+            )
+        )
         assert bounds
         assert all(left < -5 and right > 5 for left, right in bounds)
 

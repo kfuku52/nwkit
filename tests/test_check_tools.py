@@ -1,4 +1,5 @@
 import importlib.util
+import json
 import subprocess
 import sys
 from pathlib import Path
@@ -94,20 +95,76 @@ def test_full_checks_keep_the_complete_suite_and_uncached_type_checks(monkeypatc
 
 def test_complexity_cleanup_is_not_penalized_for_raising_the_average():
     baseline = {"module:large": 20, "module:small": 1}
-    assert maintainability.complexity_violations({"module:large": 19}, baseline) == []
+    assert maintainability.complexity_increases({"module:large": 19}, baseline) == []
     assert (
-        maintainability.complexity_violations(
+        maintainability.complexity_increases(
             {"module:large": 20, "module:new": 2}, baseline
         )
         == []
     )
 
 
-def test_complexity_ratchet_rejects_growth_and_large_new_functions():
-    assert maintainability.complexity_violations(
+def test_complexity_growth_warns_but_common_limit_still_rejects():
+    assert maintainability.complexity_increases(
         {"module:existing": 4}, {"module:existing": 3}
     )
+    assert maintainability.complexity_violations({"module:existing": 4}) == []
+    assert maintainability.complexity_violations({"module:existing": 41})
+    assert maintainability.complexity_violations({"module:new": 40}) == []
     assert maintainability.complexity_violations({"module:new": 41}, {})
+
+
+def test_documented_exception_has_a_hard_ceiling():
+    exception = {
+        "module:legacy": {
+            "limit": 50,
+            "reason": "Legacy orchestration awaiting responsibility separation.",
+            "tests": ["tests/test_draw.py"],
+        }
+    }
+    maintainability.validate_exceptions(exception, {"module:legacy": 50})
+    assert maintainability.complexity_violations({"module:legacy": 50}, exception) == []
+    assert maintainability.complexity_violations({"module:legacy": 51}, exception)
+
+
+@pytest.mark.parametrize(
+    "record",
+    [
+        {"limit": 50, "reason": "", "tests": ["tests/test_draw.py"]},
+        {"limit": 40, "reason": "Reason", "tests": ["tests/test_draw.py"]},
+        {"limit": 50, "reason": "Reason", "tests": []},
+        {"limit": 50, "reason": "Reason", "tests": ["tests/missing_test.py"]},
+        {"limit": 50, "reason": "Reason", "tests": ["tests/../setup.py"]},
+    ],
+)
+def test_complexity_exception_requires_a_rationale_and_real_tests(record):
+    with pytest.raises(ValueError):
+        maintainability.validate_exceptions(
+            {"module:legacy": record}, {"module:legacy": 50}
+        )
+
+
+def test_complexity_baseline_update_cannot_bypass_hard_limits(
+    tmp_path, monkeypatch, capsys
+):
+    baseline = tmp_path / "baseline.json"
+    exceptions = tmp_path / "exceptions.json"
+    baseline.write_text('{"module:existing": 16}')
+    exceptions.write_text("{}")
+    monkeypatch.setattr(maintainability, "BASELINE_PATH", baseline)
+    monkeypatch.setattr(maintainability, "EXCEPTIONS_PATH", exceptions)
+    current = {"module:existing": 20}
+    monkeypatch.setattr(maintainability, "collect_complexities", lambda: current)
+    assert maintainability.main([]) == 0
+    assert "increased from 16 to 20" in capsys.readouterr().err
+    assert json.loads(baseline.read_text())["module:existing"] == 16
+    assert maintainability.main(["--update-baseline"]) == 0
+    assert json.loads(baseline.read_text())["module:existing"] == 20
+    current["module:existing"] = 41
+    with pytest.raises(RuntimeError, match="exceeds limit 40"):
+        maintainability.main(["--update-baseline"])
+    assert json.loads(baseline.read_text())["module:existing"] == 20
+    assert exceptions.read_text() == "{}"
 
 
 def test_complexity_keys_distinguish_methods_and_nested_functions():

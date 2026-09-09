@@ -79,19 +79,31 @@ This CI workaround is not a runtime ETE upper bound.
 ## Keep complexity from growing
 
 `tools/check_maintainability.py` measures individual functions, methods and nested
-functions. Existing functions may not exceed their recorded complexity; new
-functions have a ceiling of 40. Average complexity is informational, so deleting
-small functions cannot make a cleanup fail.
+functions. Both existing and new functions have a hard ceiling of 40. Increases
+relative to `tools/complexity_baseline.json` produce review warnings rather than
+failing the check. Average complexity is informational, so deleting small
+functions cannot make a cleanup fail. Complexity is a branching heuristic, not
+a correctness or readability score; split functions only along useful responsibilities.
 
-After a verified cleanup, run:
+After reviewing changes and running the relevant tests, update the comparison
+baseline when appropriate:
 
 ```sh
 python tools/check_maintainability.py --update-baseline
 ```
 
-The updater validates first, then records reductions/new functions and removes
-deleted entries. It cannot approve a ceiling increase. For an unchanged function
-moved to another module, move its baseline key with it and review that move.
+The updater checks hard limits first, then records current values (including
+reviewed increases) and removes deleted entries. It never changes a hard limit.
+Exceptions belong in `tools/complexity_exceptions.json` and require an explicit
+limit above 40, a rationale, and existing test-file paths documenting the
+relevant coverage. Those tests must be run; listing them is not proof of success.
+The legacy `draw_main` limit of 50 is preserved as a documented exception.
+Review exception changes explicitly; never raise a limit merely to pass a check.
+For an unchanged function moved to another module, move its baseline and any
+exception keys with it and review that move. Remove exceptions for deleted functions.
+
+Ruff formatting remains mandatory. Apply `python -m ruff format` to edited files
+before committing; CI continues to use `ruff format --check`.
 
 Drawing stages exchange the typed records in `draw_types.py`. Input readers and
 primitives live in `draw_helpers.py`, validation/measurement/layout in

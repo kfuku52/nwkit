@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Changed
+
+- Report cyclomatic-complexity increases as review warnings while enforcing a
+  common per-function ceiling and documented, tested exceptions. Keep mandatory
+  formatting checks and separate interval-bound expansion from drawing-axis setup.
+
 ### Added
 
 - Add experimental `nwkit radte` with shared speciation ages, GeneRax/Notung

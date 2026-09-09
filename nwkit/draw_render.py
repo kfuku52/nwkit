@@ -1273,6 +1273,18 @@ def _draw_root_marker(
     return root_marker_size_pt
 
 
+def _expand_axes_to_rendered_intervals(ax, x_span):
+    # Rendered intervals can extend beyond node coordinates (especially at the
+    # root). Keep their caps inside the axes instead of clipping credible ages.
+    data_bounds = ax.dataLim
+    x_left, x_right = ax.get_xlim()
+    if math.isfinite(data_bounds.xmin) and data_bounds.xmin < x_left:
+        x_left = data_bounds.xmin - x_span * 0.01
+    if math.isfinite(data_bounds.xmax) and data_bounds.xmax > x_right:
+        x_right = data_bounds.xmax + x_span * 0.01
+    ax.set_xlim(x_left, x_right)
+
+
 def _configure_drawing_axes(
     *,
     annotations: AnnotationOptions,
@@ -1366,15 +1378,7 @@ def _configure_drawing_axes(
             frame.ax.set_ylim(0.5, -0.5)
         else:
             frame.ax.set_ylim(geometry.y_max + 0.5, geometry.y_min - 0.5)
-    # Rendered intervals can extend beyond node coordinates (especially at the
-    # root). Keep their caps inside the axes instead of clipping credible ages.
-    data_bounds = frame.ax.dataLim
-    x_left, x_right = frame.ax.get_xlim()
-    if math.isfinite(data_bounds.xmin) and data_bounds.xmin < x_left:
-        x_left = data_bounds.xmin - geometry.x_span * 0.01
-    if math.isfinite(data_bounds.xmax) and data_bounds.xmax > x_right:
-        x_right = data_bounds.xmax + geometry.x_span * 0.01
-    frame.ax.set_xlim(x_left, x_right)
+    _expand_axes_to_rendered_intervals(frame.ax, geometry.x_span)
     frame.ax.axis("off")
     axes_left = spacing.left_margin_in / panels.fig_width
     axes_right = 1.0 - (
