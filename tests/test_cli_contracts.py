@@ -48,6 +48,14 @@ CASES = {
     "label": [],
     "rename": ["--pattern", "Genus_a", "--replacement", "Renamed_a"],
     "reconcile": ["--species-tree", "{tree}"],
+    "radte": [
+        "--species-tree",
+        "{tree}",
+        "--gene-tree",
+        "{tree}",
+        "--reconcile",
+        "lca",
+    ],
     "regress": [
         "--tree",
         "{tree}",
@@ -143,6 +151,14 @@ def test_command_parser_reaches_its_real_handler(
         "pdf": tmp_path / "roots.pdf",
     }
     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
+    if command == "radte":
+        prefix = tmp_path / "radte"
+        main([*arguments, "--out-prefix", str(prefix)])
+        assert prefix.with_suffix(".dated.nwk").is_file()
+        assert json.loads(prefix.with_suffix(".manifest.json").read_text())[
+            "shared_speciation_ages"
+        ]
+        return
     if command == "help":
         with pytest.raises(SystemExit) as exc:
             main(arguments)

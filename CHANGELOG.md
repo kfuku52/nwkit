@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Add experimental `nwkit radte` with shared speciation ages, GeneRax/Notung
+  input adapters, internal LCA reconciliation, native branch and sequence
+  relaxed-clock estimation, conditional uncertainty, and an optional MCMCTree
+  reference backend. See `RADTE.md` for estimator assumptions and validation limits.
+
 ## [0.43.11] - 2026-09-08
 
 ### Fixed

@@ -23,7 +23,9 @@ ROOTING_INPUT_OPTIONS = {
     "infile": "input-rooted",
     "tree": "input-rooted",
     "gene_tree": "input-rooted",
+    "generax_nhx": "input-rooted",
     "gene_tree_ensemble": "input-rooted",
+    "species_tree_ensemble": "species-tree-rooted",
     **{
         name: name.replace("_", "-") + "-rooted"
         for name in (

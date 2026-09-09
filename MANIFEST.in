@@ -1,6 +1,9 @@
 include CLI_TSV_CONVENTIONS.md
 include CONVERT.md
 include ASR.md
+include RADTE.md
+include RADTE_MATH.md
+include RADTE_VALIDATION.md
 include ASR_PERFORMANCE.md
 include DEVELOPMENT.md
 include CHANGELOG.md
@@ -10,6 +13,7 @@ include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt
 include scripts/make_draw_layout_gallery.py
 graft examples/asr_figure
+graft examples/radte
 graft tests
 graft tools
 global-exclude __pycache__ *.py[cod]

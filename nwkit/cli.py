@@ -6325,6 +6325,9 @@ def _add_input_rooting_options():
             )
 
 
+from nwkit.radte_cli import register_radte  # noqa: E402
+
+register_radte(subparsers, p_audit, p_species, finite_float)
 _add_input_rooting_options()
 
 

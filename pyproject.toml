@@ -80,7 +80,7 @@ include = ["nwkit"]
 namespaces = false
 
 [tool.setuptools.package-data]
-nwkit = ["data_tree/*.nwk"]
+nwkit = ["data_tree/*.nwk", "data_model/*.txt"]
 
 [tool.ruff]
 target-version = "py310"

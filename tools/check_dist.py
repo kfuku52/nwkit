@@ -53,6 +53,7 @@ def main() -> int:
         "nwkit/root_evaluation.py",
         "nwkit/sparse_laplace.py",
         "nwkit/data_tree/apgiv.nwk",
+        "nwkit/data_model/lg.txt",
     }
     required_wheel.update(
         path.relative_to(PROJECT_ROOT).as_posix()
@@ -80,6 +81,13 @@ def main() -> int:
         sdist_members = set(archive.getnames())
     required_sdist = {"/" + member for member in required_wheel} | {
         "/ASR.md",
+        "/RADTE.md",
+        "/RADTE_MATH.md",
+        "/RADTE_VALIDATION.md",
+        "/examples/radte/gene.nwk",
+        "/examples/radte/species.nwk",
+        "/examples/radte/species-map.tsv",
+        "/examples/radte/README.md",
         "/ASR_PERFORMANCE.md",
         "/CHANGELOG.md",
         "/CLI_TSV_CONVENTIONS.md",

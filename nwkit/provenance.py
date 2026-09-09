@@ -60,6 +60,12 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "expression",
         "evolution_covariance",
         "gene_tree",
+        "generax_nhx",
+        "notung_parsable",
+        "species_node_bounds_tsv",
+        "species_tree_ensemble",
+        "alignment",
+        "likelihood_summary",
         "gene_tree_ensemble",
         "length_source",
         "manifest",
@@ -751,6 +757,24 @@ def _image_output_collision_candidates(args):
     return candidates
 
 
+def _prefix_output_collision_candidates(args):
+    prefix = getattr(args, "out_prefix", None)
+    if prefix in (None, ""):
+        return []
+    if getattr(args, "command", None) == "radte":
+        from nwkit.radte import radte_paths
+
+        return [
+            ("--out-prefix " + key, path) for key, path in radte_paths(prefix).items()
+        ]
+    from nwkit.conventions import regression_bundle_lock_path, regression_bundle_paths
+
+    return [
+        ("--out-prefix " + key, path)
+        for key, path in regression_bundle_paths(prefix).items()
+    ] + [("--out-prefix transaction lock", regression_bundle_lock_path(prefix))]
+
+
 def _audit_collision_candidates(args, audit_path):
     candidates = [("--audit", audit_path)]
     for argument in OUTPUT_ARGUMENTS:
@@ -781,20 +805,7 @@ def _audit_collision_candidates(args, audit_path):
                 candidates.append(
                     ("--{}".format(argument.replace("_", "-")), candidate)
                 )
-    out_prefix = getattr(args, "out_prefix", None)
-    if out_prefix not in (None, ""):
-        from nwkit.conventions import (
-            regression_bundle_lock_path,
-            regression_bundle_paths,
-        )
-
-        candidates.extend(
-            ("--out-prefix {}".format(argument), path)
-            for argument, path in regression_bundle_paths(out_prefix).items()
-        )
-        candidates.append(
-            ("--out-prefix transaction lock", regression_bundle_lock_path(out_prefix))
-        )
+    candidates.extend(_prefix_output_collision_candidates(args))
     candidates.extend(_image_output_collision_candidates(args))
     return candidates
 
