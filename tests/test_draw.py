@@ -175,6 +175,27 @@ class TestDrawMain:
         assert interval[:, 1].tolist() == pytest.approx([layout.ycoord[tree]] * 2)
         assert interval[1, 0] - interval[0, 0] == pytest.approx(4.0)
 
+    def test_root_credible_interval_is_inside_saved_axes(self, tmp_nwk, tmp_path, monkeypatch):
+        from matplotlib.figure import Figure
+
+        infile = tmp_nwk(
+            "((A:10,B:10):20,C:30)Root[&&NHX:age=30:age_ci_low=25:age_ci_high=35:age_ci_kind=HPD:age_ci_level=0.95];"
+        )
+        original_savefig = Figure.savefig
+        bounds = []
+
+        def capture_bounds(figure, *args, **kwargs):
+            bounds.append(figure.axes[0].get_xlim())
+            return original_savefig(figure, *args, **kwargs)
+
+        monkeypatch.setattr(Figure, "savefig", capture_bounds)
+        draw_main(make_draw_args(
+            infile=str(infile), outfile=str(tmp_path / "root-ci.svg"),
+            image_format="svg", species_overlap_node_plot="no",
+        ))
+        assert bounds
+        assert all(left < -5 and right > 5 for left, right in bounds)
+
     def test_projected_and_radial_time_intervals_follow_their_time_axes(self):
         tree = Tree("((A:4,B:4):6,(C:3,D:3):7);", parser=1)
         node = tree.common_ancestor(["A", "B"])
