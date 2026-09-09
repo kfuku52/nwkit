@@ -35,6 +35,10 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
             "species_node_bounds_tsv",
             "Optional hard species age intervals: node, age_min, age_max.",
         ),
+        (
+            "species_node_intervals_tsv",
+            "External species age intervals for display only: node or species_event_id, lower, upper, level, kind, source.",
+        ),
         ("alignment", "Optional aligned FASTA with exactly the gene-tip names."),
         (
             "gene_tree_ensemble",
@@ -141,6 +145,12 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         help="Conditional interval method (default: none); diagnostics describe unavailable intervals.",
     )
     add(
+        "ensemble_within_uncertainty",
+        choices=["none", "profile", "bootstrap"],
+        default="none",
+        help="Evaluate conditional intervals separately within each input ensemble sample (default: none).",
+    )
+    add(
         "interval_level",
         type=finite_float,
         default=0.95,
@@ -219,3 +229,37 @@ def command_radte(args):
     from nwkit.radte import radte_main
 
     return radte_main(args)
+
+
+def register_radte_compare(subparsers, audit_parent):
+    parser = subparsers.add_parser(
+        "radte-compare",
+        parents=[audit_parent],
+        help="Compare saved fixed, bounded and species-ensemble RADTE results",
+    )
+    for mode in ("fixed", "bounded", "ensemble"):
+        parser.add_argument(
+            "--" + mode + "-prefix",
+            "--" + mode + "_prefix",
+            required=True,
+            help=f"Saved {mode} RADTE output prefix.",
+        )
+    parser.add_argument(
+        "--species-tree",
+        "--species_tree",
+        required=True,
+        help="Common reference species chronogram.",
+    )
+    parser.add_argument(
+        "--out-prefix",
+        "--out_prefix",
+        required=True,
+        help="Output prefix for PDF, comparison TSV, components TSV and manifest.",
+    )
+    parser.set_defaults(handler=command_radte_compare)
+
+
+def command_radte_compare(args):
+    from nwkit.radte_compare import compare_main
+
+    return compare_main(args)

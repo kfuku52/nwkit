@@ -48,6 +48,16 @@ CASES = {
     "label": [],
     "rename": ["--pattern", "Genus_a", "--replacement", "Renamed_a"],
     "reconcile": ["--species-tree", "{tree}"],
+    "radte-compare": [
+        "--fixed-prefix",
+        "{tree}",
+        "--bounded-prefix",
+        "{tree}",
+        "--ensemble-prefix",
+        "{tree}",
+        "--species-tree",
+        "{tree}",
+    ],
     "radte": [
         "--species-tree",
         "{tree}",
@@ -151,6 +161,10 @@ def test_command_parser_reaches_its_real_handler(
         "pdf": tmp_path / "roots.pdf",
     }
     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
+    if command == "radte-compare":
+        with pytest.raises(FileNotFoundError, match="manifest"):
+            main([*arguments, "--out-prefix", str(tmp_path / "comparison")])
+        return
     if command == "radte":
         prefix = tmp_path / "radte"
         main([*arguments, "--out-prefix", str(prefix)])

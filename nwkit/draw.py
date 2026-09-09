@@ -417,6 +417,8 @@ def _draw_tree(
     node_pie_leaf_filters = node_pie_leaf_filters or []
     node_label_filters = node_label_filters or []
     tip_image_by_leaf = tip_image_by_leaf or {}
+    if figure_width is None:
+        figure_width = FIGURE_WIDTH_IN
     tip_track_properties = tip_track_properties or []
     branch_markers = _normalized_branch_markers(branch_markers)
     collapsed_clades = collapsed_clades or []

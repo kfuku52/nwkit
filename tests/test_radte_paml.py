@@ -83,6 +83,8 @@ def test_real_mcmctree_mirror_samples_and_soft_bound_metadata(tmp_path, likeliho
             likelihood,
             "--out-prefix",
             prefix,
+            "--figure-out",
+            str(tmp_path / "paml.pdf"),
             "--mcmctree-burnin",
             "100",
             "--mcmctree-samples",
@@ -96,6 +98,7 @@ def test_real_mcmctree_mirror_samples_and_soft_bound_metadata(tmp_path, likeliho
     assert manifest["calibration_policy"] == "PAML-soft-root-and-speciation-priors"
     assert "convergence-not-established" in manifest["diagnostics"]
     trace = pd.read_csv(tmp_path / "paml.mcmctree-trace.tsv", sep="\t")
+    assert (tmp_path / "paml.pdf").read_bytes().startswith(b"%PDF")
     assert len(trace) == 200
     np.testing.assert_array_equal(trace.t_n6, trace.t_n7)
     nodes = pd.read_csv(tmp_path / "paml.nodes.tsv", sep="\t")

@@ -488,3 +488,19 @@ evenly spaced names sorted by value. ASR labels use posterior tip means,
 including imputed tips. Simulation labels use the first sampled history's tip
 endpoints, explicitly identified when several histories are drawn. Labels are
 off by default. The input names and numerical outputs are unchanged.
+
+
+### RADTE species-age uncertainty
+
+`radte --species-node-intervals-tsv` takes `node` or `species_event_id` plus
+`lower`, `upper`, `level`, `kind`, and `source`. This is external display evidence,
+separate from the hard `node`, `age_min`, `age_max` bounds table. The `.species.tsv`
+output retains external `input_interval_*` fields alongside the result's
+`interval_lower`, `interval_upper`, and `interval_status`.
+
+RADTE also publishes `.conditional-intervals.tsv` and
+`.uncertainty-components.tsv`, empty when not applicable. Input sample IDs and
+shared-age IDs identify rows; missing estimates are `NA`, never zero.
+`radte-compare` publishes `.comparison.tsv` and `.uncertainty-components.tsv`
+with its PDF and hash manifest. See
+[species-age uncertainty](RADTE_SPECIES_UNCERTAINTY.md) for semantics and schemas.

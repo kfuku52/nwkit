@@ -32,6 +32,7 @@ class DatingFit:
     sample_presence: np.ndarray | None = None
     sample_clade_presence: np.ndarray | None = None
     ensemble_metadata: dict | None = None
+    conditional_intervals: list[dict] = field(default_factory=list)
 
 
 def rate_precision(chronology, rho=0.0):
@@ -245,6 +246,14 @@ class DatingProblem:
         return np.exp(x[offset] + deviations)
 
 
+class DatingOptimizationError(ValueError):
+    """Numerical solver failure with the complete attempted fits attached."""
+
+    def __init__(self, message, attempts):
+        super().__init__(message)
+        self.attempts = attempts
+
+
 def solve_problem(
     problem, *, starts=3, maxiter=2000, seed=1, initial=None, initial_parameters=None
 ):
@@ -312,9 +321,10 @@ def solve_problem(
         if success:
             solutions.append(result)
     if not solutions:
-        raise ValueError(
+        raise DatingOptimizationError(
             "Dating optimization failed; no constraints were dropped. "
-            + "; ".join(str(a.get("message", "")) for a in attempts)
+            + "; ".join(str(a.get("message", "")) for a in attempts),
+            attempts,
         )
     best = min(solutions, key=lambda res: res.fun)
     close = [

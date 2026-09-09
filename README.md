@@ -92,6 +92,8 @@ minimal worked example, in
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
 - [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree
 - [`radte`](https://github.com/kfuku52/nwkit/wiki/nwkit-radte): Experimental reconciled gene-tree dating with shared speciation ages, native relaxed clocks, and an optional MCMCTree reference backend
+- [`radte-compare`](RADTE_SPECIES_UNCERTAINTY.md): Comparing fixed, bounded, and sampled species-age analyses for one gene family
+See [reconciliation and dating figures](RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
 - [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root
 - [`rootcompare`](https://github.com/kfuku52/nwkit/wiki/nwkit-rootcompare): Comparing rooting methods in a TSV summary and a branch-marked PDF

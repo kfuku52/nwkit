@@ -251,9 +251,15 @@ def read_inputs(args):
                 raise ValueError(
                     "Reconciliation tip placements disagree with the gene-to-species mapping."
                 )
-    return build_chronology(
+    chronology = build_chronology(
         gene, species, table, args.species_node_bounds_tsv, args.max_age
     )
+    from nwkit.radte_species import attach_species_intervals
+
+    attach_species_intervals(
+        chronology, getattr(args, "species_node_intervals_tsv", None)
+    )
+    return chronology
 
 
 def _event_bounds(node, gid, rec, sp_by_id, bounds, sp_index, max_age):

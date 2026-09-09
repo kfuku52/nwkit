@@ -1,0 +1,3 @@
+node	lower	upper	level	kind	source
+AB	9.05	10.95	0.95	percentile	Synthetic chronogram sample quantiles
+R	18.1	21.9	0.95	percentile	Synthetic chronogram sample quantiles

@@ -422,3 +422,78 @@ def test_scale_invariance_of_time_and_substitution_units():
     after, _ = fit_dates(c)
     np.testing.assert_allclose(before.ages, after.ages, atol=1e-6)
     np.testing.assert_allclose(before.rates * 100, after.rates, rtol=1e-6)
+
+
+def test_profile_endpoints_match_analytic_likelihood_ratio():
+    from scipy.stats import chi2
+
+    fit, problem = fit_dates(small_chronology(), rate_sd=0.3)
+    original = fit.ages.copy()
+    profile_intervals(fit, problem)
+    np.testing.assert_array_equal(fit.ages, original)
+    group = problem.free[0]
+    baseline = problem.value_gradient(fit.parameters)[0]
+    for endpoint in (fit.interval_lower[group], fit.interval_upper[group]):
+        value = problem.value_gradient(np.array([endpoint]))[0]
+        assert 2 * (value - baseline) / 0.3**2 == pytest.approx(
+            chi2.ppf(0.95, 1), abs=1e-5
+        )
+
+
+def test_generax_profile_has_feasible_starts_and_verified_endpoints(monkeypatch):
+    from pathlib import Path
+
+    from scipy.stats import chi2
+
+    import nwkit.radte_uncertainty as uncertainty
+
+    root = Path(__file__).resolve().parents[1] / "examples/radte/visualization"
+    args = parser.parse_args(
+        [
+            "radte",
+            "--generax-nhx",
+            str(root / "generax-gene.nhx"),
+            "--species-tree",
+            str(root / "generax-species.nwk"),
+            "--max-age",
+            "1000",
+            "--out-prefix",
+            "unused",
+        ]
+    )
+    chronology = read_inputs(args)
+    fit, problem = fit_dates(chronology)
+    original = fit.ages.copy()
+    baseline = problem.value_gradient(fit.parameters)[0]
+    solve = uncertainty.solve_problem
+    evaluated = []
+
+    def checked(profile, **kwargs):
+        assert kwargs["starts"] == 4
+        assert profile.feasible(kwargs["initial_parameters"])
+        x, attempts = solve(profile, **kwargs)
+        evaluated.append((profile.unpack_ages(x), profile.value_gradient(x)[0]))
+        return x, attempts
+
+    monkeypatch.setattr(uncertainty, "solve_problem", checked)
+    profile_intervals(fit, problem, starts=4)
+    assert fit.interval_status == "conditional-profile"
+    np.testing.assert_array_equal(fit.ages, original)
+    for group in problem.free:
+        assert fit.interval_lower[group] < original[group] < fit.interval_upper[group]
+        for endpoint in (fit.interval_lower[group], fit.interval_upper[group]):
+            ages, value = min(
+                evaluated, key=lambda item: abs(item[0][group] - endpoint)
+            )
+            assert ages[group] == pytest.approx(endpoint, abs=1e-6)
+            delta = len(chronology.edges) * np.log(value / baseline)
+            assert delta == pytest.approx(chi2.ppf(0.95, 1), abs=1e-4)
+
+
+def test_profile_retains_calibration_limited_endpoint():
+    fit, problem = fit_dates(small_chronology(max_age=21), rate_sd=0.4)
+    profile_intervals(fit, problem)
+    group = problem.free[0]
+    assert fit.interval_status == "conditional-profile-calibration-limited"
+    assert fit.interval_upper[group] == problem.chronology.upper[group]
+    assert fit.interval_lower[group] < fit.ages[group]

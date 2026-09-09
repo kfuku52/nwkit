@@ -2,6 +2,8 @@ include CLI_TSV_CONVENTIONS.md
 include CONVERT.md
 include ASR.md
 include RADTE.md
+include RADTE_SPECIES_UNCERTAINTY.md
+include RECONCILIATION_PLOTS.md
 include RADTE_MATH.md
 include RADTE_VALIDATION.md
 include ASR_PERFORMANCE.md

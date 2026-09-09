@@ -73,6 +73,7 @@ def get_stdin_input_options(args: Any) -> list[tuple[str, str]]:
         (dest, "--{}".format(dest.replace("_", "-")))
         for dest in STDIN_INPUT_DESTS
         if getattr(args, dest, None) == "-"
+        and not (dest == "infile" and getattr(args, "radte_prefix", None))
     ]
     options.extend(
         ("property_source", "--property-source")

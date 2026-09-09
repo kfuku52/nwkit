@@ -63,6 +63,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "generax_nhx",
         "notung_parsable",
         "species_node_bounds_tsv",
+        "species_node_intervals_tsv",
         "species_tree_ensemble",
         "alignment",
         "likelihood_summary",
@@ -291,6 +292,8 @@ def _path_candidates_from_value(value):
 
 
 def _skip_declared_input_argument(args, argument):
+    if argument == "infile" and getattr(args, "radte_prefix", None):
+        return True
     return (
         argument in ("manifest", "attribution")
         and getattr(args, "command", None) == "image"
@@ -320,6 +323,23 @@ def _declared_input_path_candidates(args):
 
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
+    if getattr(args, "radte_prefix", None):
+        from nwkit.result_plot_data import radte_plot_protected_paths
+
+        candidates.extend(
+            ("radte:" + key, path)
+            for key, path in radte_plot_protected_paths(args.radte_prefix).items()
+        )
+    if getattr(args, "command", None) == "radte-compare":
+        from nwkit.result_plot_data import radte_plot_protected_paths
+
+        for mode in ("fixed", "bounded", "ensemble"):
+            candidates.extend(
+                (mode + ":" + key, path)
+                for key, path in radte_plot_protected_paths(
+                    getattr(args, mode + "_prefix")
+                ).items()
+            )
     if getattr(args, "command", None) == "compose":
         manifest_path = getattr(args, "manifest", None)
         if manifest_path not in (None, "") and os.path.isfile(manifest_path):
@@ -766,6 +786,13 @@ def _prefix_output_collision_candidates(args):
 
         return [
             ("--out-prefix " + key, path) for key, path in radte_paths(prefix).items()
+        ]
+    if getattr(args, "command", None) == "radte-compare":
+        from nwkit.radte_compare import comparison_paths
+
+        return [
+            ("--out-prefix " + key, path)
+            for key, path in comparison_paths(prefix).items()
         ]
     from nwkit.conventions import regression_bundle_lock_path, regression_bundle_paths
 

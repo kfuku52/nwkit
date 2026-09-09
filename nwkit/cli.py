@@ -2232,6 +2232,14 @@ pdist.set_defaults(handler=command_dist)
 
 
 def command_draw(args):
+    if getattr(args, "reconciliation", None) or getattr(args, "radte_prefix", None):
+        from nwkit.result_plot import draw_saved_results
+
+        return draw_saved_results(args)
+    if getattr(args, "species_tree", None):
+        raise ValueError(
+            "--species-tree requires --reconciliation or --radte-prefix for draw."
+        )
     from nwkit.draw import draw_main
 
     draw_main(args)
@@ -6325,9 +6333,15 @@ def _add_input_rooting_options():
             )
 
 
-from nwkit.radte_cli import register_radte  # noqa: E402
+from nwkit.radte_cli import register_radte, register_radte_compare  # noqa: E402
 
 register_radte(subparsers, p_audit, p_species, finite_float)
+register_radte_compare(subparsers, p_audit)
+from nwkit.result_plot_cli import register_result_plot_options  # noqa: E402
+
+register_result_plot_options(
+    pdraw, preconcile, subparsers.choices["radte"], finite_float
+)
 _add_input_rooting_options()
 
 

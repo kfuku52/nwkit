@@ -211,7 +211,7 @@ class MarginalDatingProblem(DatingProblem):
 
 
 def refine_quadrature(problem, x, *, starts, maxiter, seed):
-    from nwkit.radte_model import solve_problem
+    from nwkit.radte_model import DatingOptimizationError, solve_problem
 
     attempts: list[dict] = []
     for points in [64, 128, 256, 512]:
@@ -229,9 +229,13 @@ def refine_quadrature(problem, x, *, starts, maxiter, seed):
             and np.max(abs(gradient - check_gradient)) < 1e-4
         ):
             return problem, x, attempts
-        x, new_attempts = solve_problem(
-            refined, starts=starts, maxiter=maxiter, seed=seed, initial_parameters=x
-        )
+        try:
+            x, new_attempts = solve_problem(
+                refined, starts=starts, maxiter=maxiter, seed=seed, initial_parameters=x
+            )
+        except DatingOptimizationError as exc:
+            exc.attempts = attempts + exc.attempts
+            raise
         attempts.extend(new_attempts)
         problem = refined
     raise ValueError(

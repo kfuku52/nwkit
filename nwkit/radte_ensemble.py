@@ -44,6 +44,7 @@ def sample_arguments(args, genes, species, index):
         values["species_tree"] = species[index]
         # Each entire species chronogram is conditioned on as one joint draw.
         values["species_node_bounds_tsv"] = None
+        values["species_node_intervals_tsv"] = None
     values["seed"] = args.seed + index + 1
     return SimpleNamespace(**values)
 
@@ -75,6 +76,7 @@ def ensemble_intervals(reference, fit, args):
     genes, species, count = read_ensembles(args)
     samples, sample_ids, failures, methods, clades = [], [], [], [], []
     diagnostics = []
+    within_audit: list[dict] = []
     for index in range(count):
         try:
             options = sample_arguments(args, genes, species, index)
@@ -117,6 +119,19 @@ def ensemble_intervals(reference, fit, args):
                 if getattr(problem, "marginal", False)
                 else "sequence-joint-map"
             )
+            from nwkit.radte_components import conditional_intervals
+
+            fit.conditional_intervals.extend(
+                conditional_intervals(
+                    chronology,
+                    result,
+                    problem,
+                    options,
+                    index + 1,
+                    methods[-1],
+                    audit=within_audit,
+                )
+            )
             diagnostics.append(result.diagnostics)
         except (ValueError, FloatingPointError) as exc:
             failures.append(dict(sample=index + 1, reason=str(exc)))
@@ -128,8 +143,13 @@ def ensemble_intervals(reference, fit, args):
         sample_methods=methods,
         sample_ids=sample_ids,
         sample_diagnostics=diagnostics,
+        within_fit_diagnostics=within_audit,
+        species_chronogram_samples=species is not None,
         pairing="same-Newick-order",
-        within_fit_uncertainty=False,
+        within_fit_uncertainty=getattr(args, "ensemble_within_uncertainty", "none")
+        != "none",
+        within_fit_method=getattr(args, "ensemble_within_uncertainty", "none"),
+        components_are_combined_posterior=False,
     )
     if not samples:
         fit.interval_status = "unavailable-all-input-ensemble-fits-failed"

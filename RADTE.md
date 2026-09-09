@@ -14,6 +14,10 @@ replacement for a Bayesian dating analysis.
 The objective functions and rate integration are derived in [RADTE_MATH.md](RADTE_MATH.md).
 Measured workloads and their limitations are recorded in [RADTE_VALIDATION.md](RADTE_VALIDATION.md).
 
+External species-age intervals, fixed/bounded/ensemble comparisons, and separate
+input versus conditional uncertainty summaries are described in
+[Species-age uncertainty](RADTE_SPECIES_UNCERTAINTY.md).
+
 ## Inputs and quick start
 
 ```sh
@@ -120,7 +124,29 @@ reconciliation, and species calibration domain. Shared ages reduce parameter
 count but do not ensure identifiability. Inspect nonunique/local-optimum,
 boundary, approximation, and interval diagnostics. Fixed species calibrations
 are assumptions, not independent evidence of estimation accuracy. `--starts`,
-`--maxiter`, and `--seed` control reproducible optimization.
+`--maxiter`, and `--seed` control reproducible optimization, including each
+profile fit. Profile searches move outward from the point estimate and reuse
+nearby fitted ages and nuisance parameters. Initial ages are interpolated
+within the feasible chronology domain before optimization; constraints and
+convergence requirements remain unchanged. Numerical solver failures trigger
+intermediate half-steps, with at most 32 failed attempts per requested age.
+Approximation-validation failures are propagated immediately. A constrained
+profile objective improving on the reference by more than
+a scale-aware tolerance aborts interval publication and asks for a point-estimate
+refit with more starts; only smaller numerical differences are clamped to zero.
+For branch-only residual objectives, this tolerance is `1e-7` times the larger
+of the absolute reference objective and the specified rate variance (zero when
+unspecified). Sequence objectives use `1e-7 * max(1, abs(reference objective))`.
+This prevents a unit-sized tolerance from hiding a materially better fit when
+the log-rate variance is very small.
+
+The manifest's `optimizer_attempts` records profile fits with `phase` (`profile`
+or `profile-quadrature`), `profile_group`, `profile_age` in input time units,
+`successful_starts`, and `objective_spread`, alongside each attempt's success,
+objective, iteration count, and solver message. `diagnostics` also flags profile
+local optima and nonunique age solutions. Failed runs retain diagnostics on the
+in-memory fit and report an error; the existing output bundle is preserved.
+
 When all positive ages can be multiplied by a common factor inside their hard
 bounds, dividing the mean rate by that factor gives exactly the same likelihood.
 Such runs explicitly report `absolute-scale-unidentified`; their point ages are
@@ -162,8 +188,14 @@ for a gene-tree ensemble; supply the original alignment or use branch-only mode.
 
 ## Files and reuse
 
+Use `--figure-out report.pdf` (or `.svg` / `.png`) to publish a dated-tree and
+interval report with the results. Saved bundles can be redrawn using
+`nwkit draw --radte-prefix family --species-tree species.nwk --outfile report.svg`
+without running inference. See [reconciliation and dating figures](RECONCILIATION_PLOTS.md).
+
 `--out-prefix family` writes `.dated.nwk`, `.nodes.tsv`, `.species.tsv`,
-`.events.tsv`, `.shared-ages.tsv`, `.age-samples.tsv`, `.likelihood.json`,
+`.events.tsv`, `.shared-ages.tsv`, `.age-samples.tsv`,
+`.conditional-intervals.tsv`, `.uncertainty-components.tsv`, `.likelihood.json`,
 `.mcmctree-trace.tsv`, and `.manifest.json`. Empty sample/trace tables are normal
 when their methods were not requested. The manifest records inputs and hashes,
 options, estimator, diagnostics, and output hashes. Outputs are staged together

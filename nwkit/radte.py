@@ -26,6 +26,7 @@ from nwkit.radte_uncertainty import bootstrap_intervals, profile_intervals
 from nwkit.util import (
     _serialize_newick_node_name,
     copy_tree_iteratively,
+    read_tree,
     validate_outputs_do_not_replace_inputs,
 )
 
@@ -36,6 +37,8 @@ RADTE_SUFFIXES = {
     "events": ".events.tsv",
     "groups": ".shared-ages.tsv",
     "samples": ".age-samples.tsv",
+    "conditional_intervals": ".conditional-intervals.tsv",
+    "uncertainty_components": ".uncertainty-components.tsv",
     "likelihood": ".likelihood.json",
     "paml_trace": ".mcmctree-trace.tsv",
     "manifest": ".manifest.json",
@@ -47,6 +50,7 @@ RADTE_INPUTS = (
     "notung_parsable",
     "reconciliation",
     "species_node_bounds_tsv",
+    "species_node_intervals_tsv",
     "species_map_tsv",
     "alignment",
     "gene_tree_ensemble",
@@ -88,6 +92,8 @@ def validate_options(args):
         raise ValueError(
             "Tree ensembles require --uncertainty input-ensemble, and that method requires an ensemble input."
         )
+    if getattr(args, "ensemble_within_uncertainty", "none") != "none" and not ensemble:
+        raise ValueError("--ensemble-within-uncertainty requires an input ensemble.")
     if args.gene_tree_ensemble and args.likelihood_summary:
         raise ValueError(
             "Gene-tree ensembles cannot reuse a single-tree likelihood summary; supply the alignment instead."
@@ -347,6 +353,7 @@ def run_dating(c, args):
             fit,
             problem,
             level=args.interval_level,
+            starts=args.starts,
             maxiter=args.maxiter,
             seed=args.seed,
         )
@@ -482,11 +489,35 @@ def result_tables(c, fit, *, bound_policy="hard"):
     species["estimated_age"] = [
         fit.ages[group_ids["S:" + sid]] * c.scale for sid in species.species_event_id
     ]
+    species_indices = np.array(
+        [group_ids["S:" + sid] for sid in species.species_event_id]
+    )
+    species["interval_lower"] = (
+        np.nan
+        if fit.interval_lower is None
+        else fit.interval_lower[species_indices] * c.scale
+    )
+    species["interval_upper"] = (
+        np.nan
+        if fit.interval_upper is None
+        else fit.interval_upper[species_indices] * c.scale
+    )
+    species["interval_status"] = fit.interval_status
     represented = set(nodes.loc[nodes.event_type == "speciation", "shared_age_id"])
     species["estimation_status"] = [
         "represented-gene-event" if "S:" + sid in represented else "calibration-only"
         for sid in species.species_event_id
     ]
+    if fit.ensemble_metadata and fit.ensemble_metadata.get(
+        "species_chronogram_samples"
+    ):
+        species.loc[
+            species.estimation_status == "calibration-only", "estimation_status"
+        ] = "input-chronogram-samples"
+    species.loc[
+        species.estimation_status == "calibration-only",
+        ["interval_lower", "interval_upper"],
+    ] = np.nan
     if bound_policy == "PAML-soft-prior":
         absent = species.estimation_status == "calibration-only"
         species.loc[absent, "estimated_age"] = np.nan
@@ -520,6 +551,12 @@ def radte_main(args):
         if key != "handler" and not key.startswith("_")
     }
     paths = radte_paths(args.out_prefix)
+    figure_out = getattr(args, "figure_out", None)
+    if figure_out:
+        from nwkit.result_plot import figure_format
+
+        figure_format(figure_out)
+        paths["figure"] = figure_out
     inputs = [
         ("--" + name.replace("_", "-"), getattr(args, name, None))
         for name in RADTE_INPUTS
@@ -546,6 +583,9 @@ def radte_main(args):
     tables = result_tables(
         c, fit, bound_policy="hard" if args.backend == "native" else "PAML-soft-prior"
     )
+    from nwkit.radte_components import component_tables
+
+    tables.update(component_tables(c, fit))
     tables["paml_trace"] = paml_trace
     if args.backend == "native" and not tables["nodes"].within_original_bounds.all():
         raise ValueError("Dated output failed calibration validation.")
@@ -606,6 +646,24 @@ def radte_main(args):
                 likelihood_data, handle, indent=2, allow_nan=False
             ),
         )
+        if figure_out:
+            from nwkit.result_plot import save_result_figure
+            from nwkit.result_plot_cli import result_figure_options
+            from nwkit.result_plot_data import dating_plot_data
+
+            data = dating_plot_data(
+                read_tree(text, "auto", True),
+                c.species,
+                tables["nodes"],
+                tables["species"],
+                manifest,
+            )
+            save_result_figure(
+                data,
+                staged[figure_out],
+                image_format=figure_format(figure_out),
+                **result_figure_options(args),
+            )
         manifest["output_sha256"] = {
             key: _hash_file(staged[path])
             for key, path in paths.items()

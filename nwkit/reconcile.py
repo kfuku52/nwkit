@@ -758,6 +758,12 @@ def _report_unmatched_species(species_label_by_gene_leaf, species_tree, policy):
 
 def reconcile_main(args):
     outputs = [("--outfile", args.outfile)]
+    figure_out = getattr(args, "figure_out", None)
+    if figure_out:
+        from nwkit.result_plot import figure_format
+
+        figure_format(figure_out)
+        outputs.append(("--figure-out", figure_out))
     validate_distinct_output_paths(outputs)
     validate_outputs_do_not_replace_inputs(
         [
@@ -791,7 +797,29 @@ def reconcile_main(args):
         event_source=args.event_source,
         tree_id=getattr(args, "tree_id", ""),
     )
-    if args.outfile == "-":
+    if figure_out:
+        from nwkit.output_transaction import output_transaction
+        from nwkit.result_plot import save_result_figure
+        from nwkit.result_plot_cli import result_figure_options
+        from nwkit.result_plot_data import reconciliation_plot_data
+
+        data = reconciliation_plot_data(gene_tree, species_tree, table)
+        paths = [path for _, path in outputs if path != "-"]
+        with output_transaction(paths, follow_symlinks=False) as staged:
+            if args.outfile != "-":
+                staged.write_text(
+                    args.outfile,
+                    lambda handle: table.to_csv(handle, sep="\t", index=False),
+                )
+            save_result_figure(
+                data,
+                staged[figure_out],
+                image_format=figure_format(figure_out),
+                **result_figure_options(args),
+            )
+        if args.outfile == "-":
+            print(table.to_csv(sep="\t", index=False), end="")
+    elif args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
     else:
         from nwkit.regression_pipeline import _write_dataframes_transactionally
