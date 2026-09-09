@@ -4,12 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
-### Added
+## [0.43.15] - 2026-09-10
 
-- Add first-derivative-only IQ-TREE session requests and worker timing counters;
-  retain full derivative requests for diagnostics and reuse fixed tip data.
-  Share immutable marginal-profile matrices and quadrature nodes across age
-  constraints while rebuilding them when the likelihood or correlation changes.
+### Changed
+
+- Use unmodified official IQ-TREE 3 for sequence dating. An optional external
+  library worker keeps the fitted model, alignment and topology resident;
+  auto discovery uses ordinary CLI evaluations when no worker is installed.
+- Keep IQ-TREE source, libraries and executables outside the MIT NWKIT package.
+  Document external library/adapter setup and separate Conda packaging.
+- Replace the unpublished custom IQ-TREE session interface while retaining
+  complete-export caching and shared marginal-profile matrices.
 
 ## [0.43.14] - 2026-09-09
 

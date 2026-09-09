@@ -35,7 +35,7 @@ def alignment(tmp_path):
 
 @pytest.fixture
 def iqtree():
-    executable = shutil.which("iqtree")
+    executable = shutil.which("iqtree3")
     if not executable:
         pytest.skip("IQ-TREE runtime required")
     return executable
@@ -328,35 +328,49 @@ def test_missing_iq2mc_export_is_explicit(tmp_path):
 
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "model", ["GY{0.5,2}+FQ+G4{1}", "GY+F3X4+R4", "ECMK07+G4{1}", "HKY+I+G4"]
+    "model", ["GY{0.5,2}+FQ+G4{1}", "ECMK07+G4{1}", "GY+F3X4+I+R4"]
 )
-def test_loaded_session_matches_subprocess_after_branch_updates(
-    tmp_path, iqtree, model
-):
+def test_standard_cli_cache_reuses_complete_export(tmp_path, iqtree, model):
     c = small_chronology()
-    path = alignment(tmp_path)
-    session = IQTreeLikelihood(c, path, model, executable=iqtree)
-    reference = IQTreeLikelihood(c, path, model, executable=iqtree, mode="subprocess")
+    exact = IQTreeLikelihood(
+        c, alignment(tmp_path), model, executable=iqtree, interface="cli"
+    )
     try:
-        pid = session.session.process.pid
-        session.alignment.unlink()  # Subsequent evaluations must use loaded patterns.
-        base = np.array([n.dist for n in c.edges])
-        for lengths in [base, base * [1.2, 0.7, 2, 0.8, 1.1, 0.9], base]:
-            session.cache.clear()
-            value, score = session.value_gradient(lengths)
-            expected, gradient = reference.value_gradient(lengths)
-            assert value == pytest.approx(expected, abs=2e-5)
-            np.testing.assert_allclose(score, gradient, rtol=1e-5, atol=2e-4)
-            assert session.session.process.pid == pid
-        assert session.session.process.poll() is None
+        assert "version 3." in exact.version
+        for scale in [1.0, 1.03, 0.95]:
+            lengths = np.array([n.dist for n in c.edges]) * scale
+            before = exact.evaluations
+            value, gradient = exact.value_gradient(lengths)
+            full = exact.evaluate(lengths)
+            assert exact.evaluations == before + 1
+            assert full[1] == value
+            np.testing.assert_array_equal(full[2][full[4]], gradient)
+            assert np.isfinite(full[3]).all()
     finally:
-        session.close()
-        reference.close()
-    assert session.session.process.poll() == 0
+        exact.close()
+
+
+@pytest.mark.parametrize(
+    "version", ["IQ-TREE version 2.4.0", "unrecognized executable"]
+)
+def test_requires_iqtree3_before_likelihood_work(tmp_path, monkeypatch, version):
+    monkeypatch.setattr(shutil, "which", lambda executable: "/test/iqtree3")
+    calls = []
+
+    def command(self, args):
+        calls.append(args)
+        return version
+
+    monkeypatch.setattr(IQTreeLikelihood, "_command", command)
+    with pytest.raises(ValueError, match="IQ-TREE 3 or later"):
+        IQTreeLikelihood(
+            small_chronology(), alignment(tmp_path), "GY+FQ", interface="cli"
+        )
+    assert calls == [["--version"]]
 
 
 @pytest.mark.integration
-def test_session_tiny_codon_branches_match_matrix_exponential(tmp_path, iqtree):
+def test_official_cli_tiny_codon_branches_match_matrix_exponential(tmp_path, iqtree):
     from scipy.linalg import expm
 
     c = small_chronology()
@@ -382,41 +396,115 @@ def test_session_tiny_codon_branches_match_matrix_exponential(tmp_path, iqtree):
         for lengths in (ordinary, tiny, ordinary * 1.02):
             value, gradient = exact.value_gradient(lengths)
             expected, score = reference.value_gradient(lengths)
-            assert value == pytest.approx(expected, abs=2e-6)
-            np.testing.assert_allclose(gradient, score, rtol=2e-7, atol=2e-5)
+            # IQ2MC text scores have the same limited export precision as the
+            # ordinary-branch comparison above, unlike a binary session protocol.
+            assert value == pytest.approx(expected, abs=2e-5)
+            np.testing.assert_allclose(gradient, score, rtol=1e-5, atol=3e-4)
     finally:
         exact.close()
 
 
+@pytest.fixture
+def library_worker():
+    from nwkit.iqtree_library import find_worker
+
+    found = find_worker()
+    if found is None:
+        pytest.skip("Externally built IQ-TREE library worker required")
+    return found["executable"]
+
+
 @pytest.mark.integration
 @pytest.mark.parametrize(
-    "model", ["GY{0.5,2}+FQ+G4{1}", "ECMK07+G4{1}", "GY+F3X4+I+R4"]
+    "model",
+    [
+        "GY{0.5,2}+FQ+G4{1}",
+        "GY+F3X4+R4",
+        "ECMK07+G4{1}",
+        "HKY+I+G4",
+    ],
 )
-def test_score_only_matches_full_derivatives_and_cache_upgrade(tmp_path, iqtree, model):
+def test_library_reuses_loaded_model_and_matches_official_cli(
+    tmp_path, iqtree, library_worker, model
+):
     c = small_chronology()
-    exact = IQTreeLikelihood(c, alignment(tmp_path), model, executable=iqtree)
-    lengths = np.array([n.dist for n in c.edges])
+    path = alignment(tmp_path)
+    exact = IQTreeLikelihood(
+        c, path, model, executable=iqtree, interface="library", worker=library_worker
+    )
+    reference = IQTreeLikelihood(c, path, model, executable=iqtree, interface="cli")
     try:
-        initial = exact.evaluations
+        assert exact.interface == "library-worker-v1"
+        pid = exact.worker.process.pid
+        exact.alignment.unlink()  # A new IQ-TREE invocation could no longer load this input.
+        base = np.array([n.dist for n in c.edges])
+        for lengths in [base, base * [1.2, 0.7, 2, 0.8, 1.1, 0.9], base]:
+            exact.cache.clear()
+            value, score = exact.value_gradient(lengths)
+            expected, gradient = reference.value_gradient(lengths)
+            assert value == pytest.approx(expected, abs=2e-5)
+            np.testing.assert_allclose(score, gradient, rtol=1e-5, atol=3e-4)
+            assert exact.worker.process.pid == pid
+        assert exact.worker.process.poll() is None
+    finally:
+        exact.close()
+        reference.close()
+    assert exact.worker.process.poll() == 0
+
+
+@pytest.mark.integration
+def test_library_two_threads_matches_single_thread_cli(
+    tmp_path, iqtree, library_worker
+):
+    c = small_chronology()
+    path = alignment(tmp_path)
+    exact = IQTreeLikelihood(
+        c,
+        path,
+        "GY{0.5,2}+FQ+G4{1}",
+        executable=iqtree,
+        threads=2,
+        interface="library",
+        worker=library_worker,
+    )
+    reference = IQTreeLikelihood(
+        c, path, "GY{0.5,2}+FQ+G4{1}", executable=iqtree, interface="cli"
+    )
+    try:
+        lengths = np.array([n.dist for n in c.edges]) * 1.1
         value, gradient = exact.value_gradient(lengths)
-        assert exact.evaluations == initial + 1
-        assert exact.cache[lengths.tobytes()][3] is None
-        full = exact.evaluate(lengths)
-        assert exact.evaluations == initial + 2
-        assert full[1] == pytest.approx(value, abs=1e-10)
-        np.testing.assert_allclose(full[2][full[4]], gradient, rtol=1e-12, atol=1e-10)
-        assert np.isfinite(full[3]).all()
-        exact.value_gradient(lengths)
-        exact.evaluate(lengths)
-        assert exact.evaluations == initial + 2
-        # Exercise real worker requests while retaining constant tip tables.
-        for scale in [1.03, 0.95, 1.01]:
-            probe = lengths * scale
-            value, gradient = exact.value_gradient(probe)
-            full = exact.evaluate(probe)
-            assert full[1] == pytest.approx(value, abs=1e-10)
-            np.testing.assert_allclose(
-                full[2][full[4]], gradient, rtol=1e-12, atol=1e-10
+        expected, score = reference.value_gradient(lengths)
+        assert value == pytest.approx(expected, abs=2e-5)
+        np.testing.assert_allclose(gradient, score, rtol=1e-5, atol=3e-4)
+    finally:
+        exact.close()
+        reference.close()
+
+
+@pytest.mark.integration
+def test_library_bootstrap_keeps_the_selected_interface(
+    tmp_path, iqtree, library_worker
+):
+    exact = IQTreeLikelihood(
+        small_chronology(),
+        alignment(tmp_path),
+        "GY{0.5,2}+FQ",
+        executable=iqtree,
+        interface="library",
+        worker=library_worker,
+    )
+    try:
+        replicate = exact.bootstrap(np.random.default_rng(41))
+        try:
+            assert replicate.interface == exact.interface == "library-worker-v1"
+            assert replicate.worker.process.pid != exact.worker.process.pid
+            assert (
+                replicate.worker_info["library_sha256"]
+                == exact.worker_info["library_sha256"]
             )
+            assert np.isfinite(replicate.value_gradient(replicate.initial_lengths)[0])
+        finally:
+            replicate.close()
+        assert exact.worker.process.poll() is None
     finally:
         exact.close()

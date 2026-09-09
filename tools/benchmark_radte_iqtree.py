@@ -1,11 +1,4 @@
-"""Compare loaded IQ-TREE sessions with subprocesses using the same executable.
-
-Run inside the target runtime. Each trial has a fresh Python process; setup and
-20 uncached branch-score evaluations are timed separately. One untimed evaluation
-warms the likelihood kernel. Peak RSS is the largest IQ-TREE child, not the sum
-of simultaneous Python/worker memory. Synthetic GY94 alignments evolve down a
-balanced gene tree, with four, sixteen or sixty-four tips and 150/1500 codons.
-"""
+"""Measure IQ-TREE 3 setup and uncached branch evaluations for one interface."""
 
 import argparse
 import hashlib
@@ -78,7 +71,8 @@ def trial(args):
             path,
             "GY{0.5,2}+FQ+G4{1}",
             executable=args.executable,
-            mode=args.mode,
+            interface=args.interface,
+            worker=args.worker,
             threads=args.threads,
         )
         setup = time.perf_counter() - started
@@ -92,7 +86,6 @@ def trial(args):
 
             base = np.array([n.dist for n in c.edges])
             evaluate(base)
-            before = exact.session.statistics() if args.worker_stats else None
             probes = [
                 base * np.exp(np.sin(np.arange(len(base)) + i) * 0.08)
                 for i in range(1, args.evaluations + 1)
@@ -101,9 +94,10 @@ def trial(args):
             values = [evaluate(lengths) for lengths in probes]
             elapsed = time.perf_counter() - started
             result = dict(
+                interface=exact.interface,
+                library=exact.worker_info,
                 tips=args.tips,
                 codons=args.sites,
-                mode=args.mode,
                 setup_s=setup,
                 evaluations=args.evaluations,
                 derivative_order_requested=args.derivative_order,
@@ -112,9 +106,6 @@ def trial(args):
                 nll=[v[0] for v in values],
                 gradient=[v[1].tolist() for v in values],
             )
-            if before is not None:
-                after = exact.session.statistics()
-                result["worker"] = {key: after[key] - before[key] for key in before}
         finally:
             exact.close()
         # macOS reports bytes; Linux reports KiB.
@@ -125,24 +116,22 @@ def trial(args):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--executable", default="iqtree")
+    parser.add_argument("--executable", default="iqtree3")
+    parser.add_argument(
+        "--interface", choices=["cli", "library", "auto"], default="cli"
+    )
+    parser.add_argument("--worker")
     parser.add_argument("--output", type=Path, default=Path("iqtree-benchmark.json"))
     parser.add_argument("--repeats", type=int, default=3)
     parser.add_argument("--evaluations", type=int, default=20)
     parser.add_argument("--derivative-order", type=int, choices=[1, 2], default=1)
     parser.add_argument("--threads", type=int, default=1)
-    parser.add_argument("--worker-stats", action="store_true")
     parser.add_argument("--trial", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--tips", type=int, default=4)
     parser.add_argument("--sites", type=int, default=150)
-    parser.add_argument(
-        "--mode", choices=["persistent", "subprocess"], default="persistent"
-    )
     args = parser.parse_args()
     if args.evaluations < 1 or args.threads < 1:
         parser.error("Evaluation and thread counts must be positive.")
-    if args.worker_stats and (not args.trial or args.mode != "persistent"):
-        parser.error("Worker statistics require --trial --mode persistent.")
     if args.trial:
         print(json.dumps(trial(args)))
         return
@@ -163,55 +152,48 @@ def main():
     for tips, sites in [(4, 150), (16, 150), (16, 1500), (64, 1500)]:
         reference = None
         for repeat in range(args.repeats):
-            # Alternate mode order to reduce systematic warmup/load bias.
-            modes = (
-                ["subprocess", "persistent"]
-                if repeat % 2 == 0
-                else ["persistent", "subprocess"]
+            command = [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--trial",
+                "--executable",
+                executable,
+                "--interface",
+                args.interface,
+                "--tips",
+                str(tips),
+                "--sites",
+                str(sites),
+                "--evaluations",
+                str(args.evaluations),
+                "--derivative-order",
+                str(args.derivative_order),
+                "--threads",
+                str(args.threads),
+            ]
+            if args.worker:
+                command += ["--worker", args.worker]
+            data = json.loads(
+                subprocess.check_output(command, text=True, env=environment)
             )
-            for mode in modes:
-                command = [
-                    sys.executable,
-                    str(Path(__file__).resolve()),
-                    "--trial",
-                    "--executable",
-                    executable,
-                    "--tips",
-                    str(tips),
-                    "--sites",
-                    str(sites),
-                    "--mode",
-                    mode,
-                    "--evaluations",
-                    str(args.evaluations),
-                    "--derivative-order",
-                    str(args.derivative_order),
-                    "--threads",
-                    str(args.threads),
-                ]
-                data = json.loads(
-                    subprocess.check_output(command, text=True, env=environment)
-                )
-                data["repeat"] = repeat
-                if reference is None:
-                    reference = data
-                np.testing.assert_allclose(
-                    data["nll"], reference["nll"], rtol=0, atol=2e-5
-                )
-                np.testing.assert_allclose(
-                    data["gradient"], reference["gradient"], rtol=1e-5, atol=2e-4
-                )
-                data["max_nll_difference"] = float(
-                    np.max(np.abs(np.array(data["nll"]) - reference["nll"]))
-                )
-                report["trials"].append(data)
-                args.output.write_text(json.dumps(report, indent=2) + "\n")
-                print(
-                    json.dumps(
-                        {k: v for k, v in data.items() if k not in {"nll", "gradient"}}
-                    ),
-                    flush=True,
-                )
+            data["repeat"] = repeat
+            if reference is None:
+                reference = data
+            np.testing.assert_allclose(data["nll"], reference["nll"], rtol=0, atol=2e-5)
+            np.testing.assert_allclose(
+                data["gradient"], reference["gradient"], rtol=1e-5, atol=2e-4
+            )
+            data["max_nll_difference"] = float(
+                np.max(np.abs(np.array(data["nll"]) - reference["nll"]))
+            )
+            report["trials"].append(data)
+            args.output.write_text(json.dumps(report, indent=2) + "\n")
+            print(
+                json.dumps(
+                    {k: v for k, v in data.items() if k not in {"nll", "gradient"}}
+                ),
+                flush=True,
+            )
 
 
 if __name__ == "__main__":

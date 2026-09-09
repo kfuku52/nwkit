@@ -375,14 +375,12 @@ nwkit radte --gene-tree gene.nwk --species-tree dated_species.nwk \
 
 Use the reconciliation/species-mapping arguments appropriate to the input tree,
 as in the examples above. `--iqtree-executable` selects an executable path and
-`--iqtree-threads` sets worker threads (default 1). `--iqtree-mode persistent`
-is the default and requires an IQ-TREE build with `--likelihood-session` support,
-plus IQ2MC export support for the initial unclocked prefit. This session mode is
-a local IQ-TREE source extension; ordinary released binaries are not assumed
-to contain it. The adapter validates the protocol at runtime.
-`--iqtree-mode subprocess` explicitly selects the original per-evaluation CLI
-route, which requires IQ2MC export support but no session extension.
-No fixed upstream version is embedded in NWKIT.
+`--iqtree-threads` sets threads per evaluation (default 1). The executable defaults
+to `iqtree3` and must be IQ-TREE 3 or later with standard IQ2MC export support.
+NWKIT uses the unmodified [official IQ-TREE 3](https://github.com/iqtree/iqtree3)
+CLI for the initial model fit. An optional external library worker retains the
+frozen model between later evaluations; no upstream source changes are required.
+See [library setup and Conda packaging](IQTREE_LIBRARY.md).
 
 Supported base models are JC, HKY, GTR, F81, Poisson, LG, WAG, JTT, GY, MG,
 ECMK07 and ECMrest. Supported modifiers are IQ-TREE's compatible combinations of
@@ -415,11 +413,8 @@ its model parameters and checks that the fixed-model likelihood reproduces the
 fit. Tip aliases preserve identifiers and identical sequences. Subsequent calls
 fix topology and branch lengths; bipartitions map IQ-TREE's unrooted edges back
 to NWKIT, summing the two root branches. Explicit tree-output precision preserves
-very short positive branches. A persistent worker returns double-precision branch
-scores directly through a first-derivative-only `SCORE` request, without writing
-a full Hessian. Explicit diagnostic evaluations can request diagonal curvature
-through `EVAL`. The
-subprocess route uses IQ2MC scores; its approximate cross derivatives are
+very short positive branches. Standard IQ2MC exports provide branch scores;
+the export's approximate cross derivatives are
 **not** treated as the observed Hessian. NWKIT forms the
 full log-length curvature by differencing IQ-TREE scores, retaining the existing
 exact likelihood/gradient checks and exact profile refit when auto's quadratic
@@ -431,31 +426,29 @@ Marginal profile fits share immutable covariance and likelihood matrices across
 age constraints; a changed model, Hessian, mapping or correlation invalidates
 that shared structure. This does not alter the profile search or its validation.
 
-After the separate unclocked prefit, the persistent worker loads the frozen model
-and alignment once. Repeated evaluations send only unrooted branch lengths over
-pipes; alignment patterns, model eigensystems and allocated buffers remain in
-memory. Partial likelihoods are invalidated when branch lengths change. Each
-bootstrap replicate owns a separately fitted session. A bounded evaluation cache
-avoids duplicate requests. Workers are reaped when their likelihood object is
-released or explicitly closed, including initialization and protocol failures.
-A timeout, malformed response or numerical failure stops evaluation; it never
-silently restarts the worker or switches engines. The connection mode and
-protocol version are included in the provenance metadata.
+After the separate unclocked prefit, `--iqtree-interface auto` uses an installed
+external library worker when available, otherwise the standard CLI. `library`
+requires the worker; `cli` explicitly selects standard IQ2MC exports. No analysis
+downloads or compiles IQ-TREE. A bounded cache reuses results for repeated lengths.
+Each bootstrap replicate refits its own model. The manifest records
+`iqtree_interface=library-worker-v1` or `standard-cli-iq2mc` and the library/worker
+identity when used. The ordinary `iqtree3` executable remains required for prefit.
 
-To compare the two IQ-TREE connection modes with the same binary in the target
-runtime, run `python tools/benchmark_radte_iqtree.py --output benchmark.json`.
-The benchmark uses simulated codon alignments with 4/16/64 tips, three repetitions,
-alternating mode order and a warmup. It checks likelihood/score equivalence and
-records setup time, 20 uncached evaluations and largest-child peak RSS. These
-kernel timings do not establish complete dating/profile throughput; measure
-that separately on representative inputs.
+Run `python tools/benchmark_radte_iqtree.py --output benchmark.json` inside the
+target runtime to record setup time, uncached evaluation time, likelihoods,
+gradients and largest-child peak RSS across repeated simulated codon workloads.
+Use `--interface library` to measure an externally installed worker.
+These measurements do not establish full dating/profile throughput. Earlier
+custom-session measurements do not apply to this standard CLI implementation.
 
-The subprocess exporter in the tested IQ-TREE 3.1.3 runtime can return an
-infinite branch score for extremely short sibling codon edges (observed around
-`8e-11` and `6e-11`). The local persistent extension detects spectral
-cancellation and recomputes the same fitted model within IQ-TREE using stable
-matrix exponentiation and original-state pruning. Regression tests compare
-these boundary values and scores against an independent matrix exponential,
-including a subsequent return to ordinary lengths. NWKIT still rejects
-nonfinite results; it does not floor branches or switch engines. These checks
-do not establish accuracy for every possible numerical boundary.
+IQ-TREE exports can be numerically unstable near zero-length codon branches.
+NWKIT rejects nonfinite likelihoods or derivatives; it does not floor branches,
+patch IQ-TREE or switch engines. Such failures belong to the upstream likelihood
+implementation and require an upstream fix. No claim of support for every
+numerical boundary follows from ordinary-input validation.
+
+The unmodified official IQ-TREE 3.1.4 validation also compares sibling codon
+branches near `8e-11` and `6e-11` with independent SciPy matrix-exponential
+pruning. This case passes at the existing IQ2MC text-export tolerances
+(NLL absolute `2e-5`; score relative `1e-5`, absolute `3e-4`). It requires no
+upstream patch and does not establish accuracy at every numerical boundary.

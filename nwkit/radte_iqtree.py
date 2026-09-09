@@ -1,8 +1,8 @@
 """IQ-TREE likelihood/derivative adapter; reconciliation and dating stay in NWKIT.
 
-Uses a persistent IQ-TREE worker by default; IQ2MC exports supply the initial
-unclocked prefit and the explicit subprocess mode. MCMCTree is never launched.
-Both protocols verify lengths and map bipartitions to the reconciled rooted tree.
+Uses unmodified IQ-TREE 3 standard IQ2MC exports for the model prefit. Repeated
+evaluations can use a separately installed library worker. MCMCTree is never
+launched. Exported lengths and bipartitions are verified for both interfaces.
 """
 
 import gzip
@@ -249,23 +249,27 @@ class IQTreeLikelihood:
         alignment,
         model,
         *,
-        executable="iqtree",
+        executable="iqtree3",
         threads=1,
         seed=1,
         genetic_code=1,
-        mode="persistent",
+        interface="auto",
+        worker=None,
     ):
+        from nwkit.iqtree_library import select_worker
+
         if genetic_code != 1:
             raise ValueError("IQ-TREE dating currently supports genetic code 1 only.")
         if threads < 1:
             raise ValueError("IQ-TREE threads must be positive.")
+        self.worker_info = select_worker(interface, worker)
+        self.interface = (
+            "library-worker-v1" if self.worker_info else "standard-cli-iq2mc"
+        )
+        self.worker = None
         self.executable = shutil.which(executable)
         if not self.executable:
             raise ValueError("IQ-TREE executable not found: " + executable)
-        if mode not in {"persistent", "subprocess"}:
-            raise ValueError("Unknown IQ-TREE mode: " + mode)
-        self.mode = mode
-        self.session = None
         self.chronology = chronology
         self.edges = chronology.edges
         self.edge_id = {node: i for i, node in enumerate(self.edges)}
@@ -298,6 +302,10 @@ class IQTreeLikelihood:
         self.cache = OrderedDict()
         self.evaluations = 0
         self.version = self._command(["--version"]).splitlines()[0]
+        version = re.search(r"version\s+(\d+)\.", self.version, re.IGNORECASE)
+        if version is None or int(version.group(1)) < 3:
+            self._temporary.cleanup()
+            raise ValueError("IQ-TREE 3 or later is required: " + self.version)
         self.initial_lengths = np.array([node.dist for node in self.edges])
         fitted = self._evaluate(self.initial_lengths, model, fixed=False)
         try:
@@ -308,9 +316,9 @@ class IQTreeLikelihood:
             ) from exc
         self.initial_lengths = fitted[0]
         try:
-            if self.mode == "persistent":
-                self._start_session()
-                checked = self._session_evaluate(self.initial_lengths)
+            if self.worker_info:
+                self._start_worker()
+                checked = self._worker_evaluate(self.initial_lengths)
             else:
                 checked = self._evaluate(
                     self.initial_lengths, self.frozen_model, fixed=True
@@ -326,15 +334,19 @@ class IQTreeLikelihood:
         self.prefit_nll = checked[1]
         self.fitted_checkpoint = fitted[-1]
 
-    def _start_session(self):
-        from nwkit.radte_iqtree_session import IQTreeSession
+    def close(self):
+        if self.worker is not None:
+            self.worker.close()
+        self._temporary.cleanup()
 
-        treepath = self.directory / "session.nwk"
+    def _start_worker(self):
+        from nwkit.iqtree_worker import IQTreeWorker
+
+        treepath = self.directory / "worker.nwk"
         treepath.write_text(self._newick(self.initial_lengths))
-        self.session = IQTreeSession(
+        self.worker = IQTreeWorker(
             [
-                self.executable,
-                "--likelihood-session",
+                self.worker_info["executable"],
                 "-s",
                 str(self.alignment),
                 "--seqtype",
@@ -345,7 +357,7 @@ class IQTreeLikelihood:
                 str(treepath),
                 "-blfix",
                 "--prefix",
-                str(self.directory / "session"),
+                str(self.directory / "worker"),
                 "-T",
                 str(self.threads),
                 "--seed",
@@ -365,38 +377,32 @@ class IQTreeLikelihood:
                 (tuple(sorted(side)), tuple(sorted(other))), key=lambda x: (len(x), x)
             )
 
-        keys = [canonical(side) for side in self.session.splits]
+        keys = [canonical(side) for side in self.worker.splits]
         expected = [
-            canonical(frozenset(self.aliases[str(n.name)] for n in e.leaves()))
-            for e in self.edges
+            canonical(frozenset(self.aliases[str(n.name)] for n in edge.leaves()))
+            for edge in self.edges
         ]
         if (
             len(keys) != len(set(keys))
             or set(keys) != set(expected)
-            or any(not side <= self.all_aliases for side in self.session.splits)
+            or any(not side <= self.all_aliases for side in self.worker.splits)
         ):
             raise ValueError(
-                "IQ-TREE session changed the fixed topology or sequence set."
+                "IQ-TREE library worker changed the fixed topology or sequence set."
             )
-        self.session_mapping = np.array([keys.index(key) for key in expected])
-        combined = np.bincount(self.session_mapping, weights=self.initial_lengths)
-        if not np.allclose(combined, self.session.lengths, rtol=1e-7, atol=1e-12):
-            raise ValueError("IQ-TREE session changed fixed initial branch lengths.")
+        self.worker_mapping = np.array([keys.index(key) for key in expected])
+        combined = np.bincount(self.worker_mapping, weights=self.initial_lengths)
+        if not np.allclose(combined, self.worker.lengths, rtol=1e-7, atol=1e-12):
+            raise ValueError(
+                "IQ-TREE library worker changed fixed initial branch lengths."
+            )
 
-    def _session_evaluate(self, lengths, *, second_derivatives=True):
-        assert self.session is not None
-        combined = np.bincount(self.session_mapping, weights=lengths)
-        nll, gradient, diagonal = self.session.evaluate(
-            combined, second_derivatives=second_derivatives
-        )
+    def _worker_evaluate(self, lengths):
+        assert self.worker is not None
+        combined = np.bincount(self.worker_mapping, weights=lengths)
+        nll, gradient, diagonal = self.worker.evaluate(combined)
         self.evaluations += 1
-        # Only diagonal curvature is exported; full observed curvature remains
-        # finite differences of exact scores in build_quadratic().
-        return lengths.copy(), nll, gradient, diagonal, self.session_mapping, {}
-
-    def close(self):
-        if self.session is not None:
-            self.session.close()
+        return lengths.copy(), nll, gradient, diagonal, self.worker_mapping, {}
 
     def _command(self, args):
         result = subprocess.run(
@@ -505,17 +511,17 @@ class IQTreeLikelihood:
         self.evaluations += 1
         return fitted_lengths, nll, gradient, hessian, mapping, data
 
-    def evaluate(self, lengths, *, second_derivatives=True):
+    def evaluate(self, lengths):
         lengths = np.asarray(lengths, dtype=float)
         if not np.isfinite(lengths).all() or np.any(lengths <= 0):
             raise ValueError(
                 "Sequence likelihood requires finite positive branch lengths."
             )
         key = lengths.tobytes()
-        if key not in self.cache or (second_derivatives and self.cache[key][3] is None):
+        if key not in self.cache:
             self.cache[key] = (
-                self._session_evaluate(lengths, second_derivatives=second_derivatives)
-                if self.mode == "persistent"
+                self._worker_evaluate(lengths)
+                if self.worker is not None
                 else self._evaluate(lengths, self.frozen_model, fixed=True)
             )
             if len(self.cache) > 32:
@@ -523,9 +529,7 @@ class IQTreeLikelihood:
         return self.cache[key]
 
     def value_gradient(self, lengths):
-        _, nll, gradient, _, mapping, _ = self.evaluate(
-            lengths, second_derivatives=False
-        )
+        _, nll, gradient, _, mapping, _ = self.evaluate(lengths)
         return nll, gradient[mapping]
 
     def bootstrap(self, rng):
@@ -550,7 +554,8 @@ class IQTreeLikelihood:
             executable=self.executable,
             threads=self.threads,
             seed=self.seed,
-            mode=self.mode,
+            interface="library" if self.worker_info else "cli",
+            worker=self.worker_info["executable"] if self.worker_info else None,
         )
 
 
@@ -562,12 +567,13 @@ def prepare_iqtree(c, args):
         c,
         args.alignment,
         model,
-        executable=getattr(args, "iqtree_executable", None) or "iqtree",
+        executable=getattr(args, "iqtree_executable", None) or "iqtree3",
         threads=args.iqtree_threads
         if getattr(args, "iqtree_threads", None) is not None
         else 1,
         seed=args.seed,
-        mode=getattr(args, "iqtree_mode", None) or "persistent",
+        interface=getattr(args, "iqtree_interface", None) or "auto",
+        worker=getattr(args, "iqtree_worker", None),
         genetic_code=args.genetic_code if args.genetic_code is not None else 1,
     )
     return exact, dict(
@@ -575,8 +581,8 @@ def prepare_iqtree(c, args):
         model=model,
         frozen_model=exact.frozen_model,
         iqtree_version=exact.version,
-        iqtree_mode=exact.mode,
-        iqtree_session_protocol=1 if exact.mode == "persistent" else None,
+        iqtree_interface=exact.interface,
+        iqtree_library=exact.worker_info,
         iqtree_binary_sha256=_hash_file(exact.executable),
         derivative_method="iqtree-score; finite-difference-log-length-hessian",
         alignment_sites=len(exact.sequences[exact.names[0]])

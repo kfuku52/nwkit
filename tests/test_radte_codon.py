@@ -117,7 +117,7 @@ def test_empirical_likelihood_matches_iqtree(tmp_path, model):
     from nwkit.radte_inputs import build_chronology
     from nwkit.reconcile import build_reconciliation_table
 
-    iqtree = shutil.which("iqtree") or shutil.which("iqtree2")
+    iqtree = shutil.which("iqtree3")
     if not iqtree:
         pytest.skip("IQ-TREE is required for independent codon likelihood validation")
     gene = Tree("((A:0.12,B:0.15)X:0.17,(C:0.13,D:0.11)Y:0.18)Root;", parser=1)

@@ -54,6 +54,7 @@ def main() -> int:
         "nwkit/sparse_laplace.py",
         "nwkit/data_tree/apgiv.nwk",
         "nwkit/data_model/lg.txt",
+        "nwkit/data_iqtree/worker.cpp",
     }
     required_wheel.update(
         path.relative_to(PROJECT_ROOT).as_posix()
@@ -72,6 +73,14 @@ def main() -> int:
         if missing:
             raise RuntimeError(f"Wheel is missing required members: {sorted(missing)}")
         if any(
+            Path(member).name in {"iqtree3", "iqtree3.exe", "nwkit-iqtree-worker"}
+            or Path(member).name.startswith("libiqtree.")
+            for member in members
+        ):
+            raise RuntimeError(
+                "NWKIT wheels must not bundle IQ-TREE binaries or libraries."
+            )
+        if any(
             member in forbidden_names or member.endswith("/THIRD_PARTY_NOTICES")
             for member in members
         ):
@@ -82,6 +91,7 @@ def main() -> int:
     required_sdist = {"/" + member for member in required_wheel} | {
         "/ASR.md",
         "/RADTE.md",
+        "/IQTREE_LIBRARY.md",
         "/RADTE_MATH.md",
         "/RADTE_VALIDATION.md",
         "/examples/radte/gene.nwk",

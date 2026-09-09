@@ -122,7 +122,8 @@ def validate_options(args):
                 "iqtree_model",
                 "iqtree_executable",
                 "iqtree_threads",
-                "iqtree_mode",
+                "iqtree_interface",
+                "iqtree_worker",
             )
         )
         and getattr(args, "sequence_engine", None) != "iqtree"
@@ -135,7 +136,8 @@ def validate_options(args):
         "iqtree_model",
         "iqtree_executable",
         "iqtree_threads",
-        "iqtree_mode",
+        "iqtree_interface",
+        "iqtree_worker",
         "substitution_model",
         "kappa",
         "omega",

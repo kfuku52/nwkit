@@ -112,17 +112,26 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         help="Complete IQ-TREE reversible model, e.g. GY+F3X4+R4; replaces separate model parameter controls.",
     )
     add(
-        "iqtree_mode",
-        choices=["persistent", "subprocess"],
+        "iqtree_executable",
         default=None,
-        help="IQ-TREE connection (default: persistent; requires --likelihood-session support).",
+        help="IQ-TREE executable (default: iqtree3; requires IQ-TREE 3 or later).",
     )
-    add("iqtree_executable", default=None, help="IQ-TREE executable (default: iqtree).")
     add(
         "iqtree_threads",
         type=int,
         default=None,
         help="Threads per IQ-TREE evaluation (default: 1).",
+    )
+    add(
+        "iqtree_interface",
+        choices=["auto", "cli", "library"],
+        default=None,
+        help="IQ-TREE interface: auto uses a separately installed library worker when available, otherwise standard CLI. No runtime builds/downloads.",
+    )
+    add(
+        "iqtree_worker",
+        default=None,
+        help="External nwkit-iqtree-worker executable; requires a user-built IQ-TREE 3 library. Also configurable with NWKIT_IQTREE_WORKER.",
     )
     add(
         "substitution_model",

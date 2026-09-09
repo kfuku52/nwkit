@@ -19,3 +19,5 @@ graft examples/radte
 graft tests
 graft tools
 global-exclude __pycache__ *.py[cod]
+
+include IQTREE_LIBRARY.md
