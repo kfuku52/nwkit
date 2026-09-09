@@ -4,12 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.13] - 2026-09-09
+
 ### Added
 
 - Add `convert --node-label PROPERTY` and explicit `--properties keep|drop`
   for NHX-to-Newick workflows, preserving loss-aware defaults and tip names.
   Copy rooting properties before canonicalization, validate generated labels
   independently of input quoting policy, and reject ambiguous reserved NHX keys.
+- Add reconciliation/RADTE result plots, species-age uncertainty propagation,
+  and comparison reports with worked examples and validation guidance.
 
 ## [0.43.12] - 2026-09-09
 
