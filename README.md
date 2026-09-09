@@ -91,7 +91,7 @@ minimal worked example, in
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
 - [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree
-- [`radte`](RADTE.md): Dating reconciled gene trees with shared speciation ages, native relaxed clocks, and an optional MCMCTree reference backend
+- [`radte`](https://github.com/kfuku52/nwkit/wiki/nwkit-radte): Experimental reconciled gene-tree dating with shared speciation ages, native relaxed clocks, and an optional MCMCTree reference backend
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
 - [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root
 - [`rootcompare`](https://github.com/kfuku52/nwkit/wiki/nwkit-rootcompare): Comparing rooting methods in a TSV summary and a branch-marked PDF
@@ -128,6 +128,11 @@ security, dependency, coverage, and maintainability gates; `dist` for
 reproducible package validation; or `release` for the complete pre-release
 suite. Focused checks, CI coverage, and benchmarks are described in
 [DEVELOPMENT.md](https://github.com/kfuku52/nwkit/blob/master/DEVELOPMENT.md).
+
+Formatting is required. Function-complexity increases are review warnings; a
+common hard limit and documented exceptions guard against excessive branching.
+See [development and validation](https://github.com/kfuku52/nwkit/wiki/Development-and-validation)
+for the check workflow.
 
 See [CHANGELOG.md](https://github.com/kfuku52/nwkit/blob/master/CHANGELOG.md) for changes and
 [RELEASING.md](https://github.com/kfuku52/nwkit/blob/master/RELEASING.md) for the release checklist.

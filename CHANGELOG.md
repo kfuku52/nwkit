@@ -4,6 +4,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.12] - 2026-09-09
+
 ### Changed
 
 - Report cyclomatic-complexity increases as review warnings while enforcing a
@@ -16,6 +18,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   input adapters, internal LCA reconciliation, native branch and sequence
   relaxed-clock estimation, conditional uncertainty, and an optional MCMCTree
   reference backend. See `RADTE.md` for estimator assumptions and validation limits.
+
+### Fixed
+
+- Keep root-age interval endpoints inside the saved drawing axes.
+- Preserve joint-MAP rate variance when reusing a RADTE likelihood summary,
+  reject incompatible zero-variance tree inputs, and avoid degenerate
+  rate-bootstrap intervals at the strict-clock limit.
 
 ## [0.43.11] - 2026-09-08
 
