@@ -61,6 +61,7 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "evolution_covariance",
         "gene_tree",
         "generax_nhx",
+        "reconciliation_species_tree",
         "notung_parsable",
         "species_node_bounds_tsv",
         "species_node_intervals_tsv",

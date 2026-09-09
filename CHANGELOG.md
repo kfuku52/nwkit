@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Add first-derivative-only IQ-TREE session requests and worker timing counters;
+  retain full derivative requests for diagnostics and reuse fixed tip data.
+  Share immutable marginal-profile matrices and quadrature nodes across age
+  constraints while rebuilding them when the likelihood or correlation changes.
+
 ## [0.43.14] - 2026-09-09
 
 ### Added

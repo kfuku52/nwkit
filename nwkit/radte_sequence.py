@@ -17,6 +17,7 @@ from scipy.special import logsumexp
 from scipy.stats import gamma
 
 from nwkit.fasta import parse_fasta
+from nwkit.radte_codon import CODON_MODELS, CODONS, codon_matrix, encode_codons
 
 DNA_STATES = "ACGT"
 DNA_CODES = dict(zip(DNA_STATES, DNA_STATES, strict=True))
@@ -53,6 +54,8 @@ def read_alignment(path, names, alphabet="dna"):
     lengths = {len(s) for s in seqs.values()}
     if len(lengths) != 1 or not next(iter(lengths)):
         raise ValueError("Alignment must have a positive, equal sequence length.")
+    if alphabet == "codon":
+        return encode_codons(seqs, names, DNA_CODES)
     states = DNA_STATES if alphabet == "dna" else AA_STATES
     codes = (
         DNA_CODES
@@ -153,18 +156,37 @@ class SequenceLikelihood:
         gamma_categories=4,
         matrix=None,
         exchangeabilities=None,
+        omega=0.5,
+        codon_frequencies=None,
+        genetic_code=1,
     ):
         self.chronology = chronology
         self.fit_settings: dict[str, bool] = {}
         self.model = model
-        if model not in {"jc69", "hky", "gtr", "f81", "poisson", "lg", "lg-f"}:
+        if (
+            model
+            not in {"jc69", "hky", "gtr", "f81", "poisson", "lg", "lg-f"} | CODON_MODELS
+        ):
             raise ValueError("Unsupported sequence substitution model.")
+        self.omega = omega
+        self.genetic_code = genetic_code
+        self.codon_frequencies = codon_frequencies or (
+            "f3x4" if model == "gy94" else "model"
+        )
+        if model in CODON_MODELS and genetic_code != 1:
+            raise ValueError("Codon models currently require standard genetic code 1.")
         self.names = [str(n.name) for n in chronology.gene.leaves()]
         alphabet = "protein" if model in {"poisson", "lg", "lg-f"} else "dna"
+        if model in CODON_MODELS:
+            alphabet = "codon"
         if matrix is None:
             matrix, self.states = read_alignment(alignment, self.names, alphabet)
         else:
-            self.states = AA_STATES if alphabet == "protein" else DNA_STATES
+            self.states = (
+                CODONS
+                if alphabet == "codon"
+                else (AA_STATES if alphabet == "protein" else DNA_STATES)
+            )
         self.raw_matrix = matrix
         self.patterns, self.counts = np.unique(matrix, axis=1, return_counts=True)
         self.rates = gamma_rates(gamma_shape, gamma_categories)
@@ -184,21 +206,35 @@ class SequenceLikelihood:
         self.tip_data = {}
         for i, node in enumerate(chronology.gene.leaves()):
             self.tip_data[node] = (
-                (self.patterns[i, :, None] >> np.arange(len(self.states))) & 1
+                (
+                    self.patterns[i, :, None]
+                    >> np.arange(len(self.states), dtype=self.patterns.dtype)
+                )
+                & 1
             ).astype(float)
         self.postorder = list(chronology.gene.traverse(strategy="postorder"))
         self.preorder = list(chronology.gene.traverse())
 
     def update_parameters(self):
         self.rates = gamma_rates(self.gamma_shape, self.gamma_categories)
-        self.q, self.pi = substitution_matrix(
-            self.model,
-            self.patterns,
-            self.counts,
-            self.states,
-            self.kappa,
-            self.exchangeabilities,
-        )
+        if self.model in CODON_MODELS:
+            self.q, self.pi = codon_matrix(
+                self.model,
+                self.patterns,
+                self.counts,
+                self.kappa,
+                self.omega,
+                self.codon_frequencies,
+            )
+        else:
+            self.q, self.pi = substitution_matrix(
+                self.model,
+                self.patterns,
+                self.counts,
+                self.states,
+                self.kappa,
+                self.exchangeabilities,
+            )
         rootpi = np.sqrt(self.pi)
         symmetric = rootpi[:, None] * self.q / rootpi[None, :]
         self.eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
@@ -279,6 +315,9 @@ class SequenceLikelihood:
             self.chronology,
             None,
             model=self.model,
+            omega=self.omega,
+            codon_frequencies=self.codon_frequencies,
+            genetic_code=self.genetic_code,
             kappa=self.kappa,
             gamma_shape=self.gamma_shape,
             gamma_categories=self.gamma_categories,

@@ -7,6 +7,9 @@ Only z needs Gauss-Hermite quadrature. This is an approximation to the sequence
 likelihood, not an approximation that treats a sum of lognormals as lognormal.
 """
 
+from dataclasses import dataclass
+from functools import lru_cache
+
 import numpy as np
 from scipy import sparse
 from scipy.linalg import cho_factor, cho_solve
@@ -14,6 +17,34 @@ from scipy.optimize import Bounds, LinearConstraint
 from scipy.special import logsumexp, roots_hermitenorm
 
 from nwkit.radte_model import DatingProblem
+
+
+@dataclass(frozen=True)
+class _MarginalStructure:
+    """Immutable model/edge quantities shared across constrained age fits."""
+
+    key: tuple
+    root_edges: np.ndarray
+    root_row: int
+    rows_to_edges: np.ndarray
+    contrast_variance: float
+    conditional_slope: np.ndarray
+    conditional_covariance: np.ndarray
+    projected_covariance: np.ndarray
+    measurement_covariance: np.ndarray
+    observation: np.ndarray
+    kernel_minimum: float
+    measurement_logdet: float
+
+
+@lru_cache(maxsize=8)
+def _normal_quadrature(points):
+    nodes, weights = roots_hermitenorm(points)
+    nodes = nodes[weights > 0]
+    log_weights = np.log(weights[weights > 0]) - 0.5 * np.log(2 * np.pi)
+    nodes.setflags(write=False)
+    log_weights.setflags(write=False)
+    return nodes, log_weights
 
 
 class MarginalDatingProblem(DatingProblem):
@@ -27,18 +58,54 @@ class MarginalDatingProblem(DatingProblem):
         likelihood=None,
         rate_sd=None,
         quadrature_points=32,
+        shared_structure=None,
     ):
         super().__init__(chronology, rho=rho, likelihood=likelihood, rate_sd=rate_sd)
         self.quadrature_points = quadrature_points
         self.fixed_sd = rate_sd
-        nodes, weights = roots_hermitenorm(quadrature_points)
-        self.normal_nodes = nodes[weights > 0]
-        self.log_weights = np.log(weights[weights > 0]) - 0.5 * np.log(2 * np.pi)
-        self.root_edges = np.array(
-            [i for i, n in enumerate(chronology.edges) if n.up is chronology.gene]
+        self.normal_nodes, self.log_weights = _normal_quadrature(quadrature_points)
+        # Include array contents: callers can mutate a QuadraticLikelihood in
+        # place. Bounds/initial ages are deliberately absent from this key.
+        key = (
+            rho,
+            tuple(chronology.edges),
+            tuple(chronology.parent),
+            tuple(chronology.child),
+            id(likelihood),
+            likelihood.center.tobytes(),
+            likelihood.gradient.tobytes(),
+            likelihood.hessian.tobytes(),
+            likelihood.mapping.tobytes(),
+            likelihood.nll,
         )
-        self.root_row = int(likelihood.mapping[self.root_edges[0]])
-        self.rows_to_edges = np.array(
+        if shared_structure is None or shared_structure.key != key:
+            shared_structure = self._build_structure(key)
+        self.shared_structure = shared_structure
+        self.root_edges = shared_structure.root_edges
+        self.root_row = shared_structure.root_row
+        self.rows_to_edges = shared_structure.rows_to_edges
+        self.contrast_variance = shared_structure.contrast_variance
+        self.conditional_slope = shared_structure.conditional_slope
+        self.conditional_covariance = shared_structure.conditional_covariance
+        self.projected_covariance = shared_structure.projected_covariance
+        self.measurement_covariance = shared_structure.measurement_covariance
+        self.observation = shared_structure.observation
+        self.kernel_minimum = shared_structure.kernel_minimum
+        self.measurement_logdet = shared_structure.measurement_logdet
+        self._cached_sd = None
+        self._cached_covariance = None
+
+    def _build_structure(self, key):
+        likelihood = self.likelihood
+        root_edges = np.array(
+            [
+                i
+                for i, n in enumerate(self.chronology.edges)
+                if n.up is self.chronology.gene
+            ]
+        )
+        root_row = int(likelihood.mapping[root_edges[0]])
+        rows_to_edges = np.array(
             [
                 np.flatnonzero(likelihood.mapping == row)[-1]
                 for row in range(len(likelihood.center))
@@ -46,35 +113,51 @@ class MarginalDatingProblem(DatingProblem):
         )
         # Choose the second root edge as the Gaussian base; the first enters
         # through log(dt_first * exp(z) + dt_second).
-        self.rows_to_edges[self.root_row] = self.root_edges[1]
-        contrast = np.zeros(len(chronology.edges))
-        contrast[self.root_edges] = [1, -1]
+        rows_to_edges[root_row] = root_edges[1]
+        contrast = np.zeros(len(self.chronology.edges))
+        contrast[root_edges] = [1, -1]
         covariance = np.linalg.inv(self.precision.toarray())
         covariance_contrast = covariance @ contrast
-        self.contrast_variance = float(contrast @ covariance_contrast)
-        self.conditional_slope = covariance_contrast / self.contrast_variance
-        self.conditional_covariance = (
+        contrast_variance = float(contrast @ covariance_contrast)
+        conditional_slope = covariance_contrast / contrast_variance
+        conditional_covariance = (
             covariance
-            - np.outer(covariance_contrast, covariance_contrast)
-            / self.contrast_variance
+            - np.outer(covariance_contrast, covariance_contrast) / contrast_variance
         )
-        self.projected_covariance = self.conditional_covariance[
-            np.ix_(self.rows_to_edges, self.rows_to_edges)
+        projected_covariance = conditional_covariance[
+            np.ix_(rows_to_edges, rows_to_edges)
         ]
-        self.measurement_covariance = np.linalg.inv(likelihood.hessian)
-        self.observation = (
-            likelihood.center - self.measurement_covariance @ likelihood.gradient
-        )
-        self.kernel_minimum = (
+        measurement_covariance = np.linalg.inv(likelihood.hessian)
+        observation = likelihood.center - measurement_covariance @ likelihood.gradient
+        kernel_minimum = (
             likelihood.nll
-            - 0.5
-            * likelihood.gradient
-            @ self.measurement_covariance
-            @ likelihood.gradient
+            - 0.5 * likelihood.gradient @ measurement_covariance @ likelihood.gradient
         )
-        self.measurement_logdet = np.linalg.slogdet(self.measurement_covariance)[1]
-        self._cached_sd = None
-        self._cached_covariance = None
+        measurement_logdet = np.linalg.slogdet(measurement_covariance)[1]
+        for array in (
+            root_edges,
+            rows_to_edges,
+            conditional_slope,
+            conditional_covariance,
+            projected_covariance,
+            measurement_covariance,
+            observation,
+        ):
+            array.setflags(write=False)
+        return _MarginalStructure(
+            key,
+            root_edges,
+            root_row,
+            rows_to_edges,
+            contrast_variance,
+            conditional_slope,
+            conditional_covariance,
+            projected_covariance,
+            measurement_covariance,
+            observation,
+            kernel_minimum,
+            measurement_logdet,
+        )
 
     def _covariance(self, sd):
         if sd != self._cached_sd:
@@ -221,6 +304,7 @@ def refine_quadrature(problem, x, *, starts, maxiter, seed):
             likelihood=problem.likelihood,
             rate_sd=problem.fixed_sd,
             quadrature_points=points,
+            shared_structure=problem.shared_structure,
         )
         value, gradient = problem.value_gradient(x)
         check_value, check_gradient = refined.value_gradient(x)

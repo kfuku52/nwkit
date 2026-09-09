@@ -80,3 +80,58 @@ def test_marginal_sequence_estimates_are_invariant_to_root_branch_split(tmp_path
     assert first.objective == pytest.approx(second.objective, abs=1e-7)
     np.testing.assert_allclose(first.ages, second.ages, atol=1e-5)
     assert first.log_rate_sd == pytest.approx(second.log_rate_sd, abs=1e-5)
+
+
+@pytest.mark.parametrize("rho", [0.0, 0.5])
+def test_profile_structure_reuse_preserves_values_and_derivatives(rho, monkeypatch):
+    from dataclasses import replace
+
+    c = small_chronology()
+    mapping = np.array([0, 0, 1, 2, 3, 4])
+    q = QuadraticLikelihood(
+        np.log(np.bincount(mapping, weights=[n.dist for n in c.edges])),
+        np.arange(5) * 0.01,
+        np.eye(5) * 40 + 0.5,
+        20,
+        mapping,
+    )
+    parent = MarginalDatingProblem(c, rho=rho, likelihood=q, rate_sd=0.4)
+    group = parent.free[0]
+    lo, hi = c.lower.copy(), c.upper.copy()
+    lo[group] = hi[group] = c.initial[group]
+    constrained = replace(c, lower=lo, upper=hi)
+    cold = MarginalDatingProblem(constrained, rho=rho, likelihood=q, rate_sd=0.4)
+
+    def forbidden_inverse(*args, **kwargs):
+        raise AssertionError("Fixed profile matrices were recomputed")
+
+    with monkeypatch.context() as m:
+        m.setattr(np.linalg, "inv", forbidden_inverse)
+        shared = MarginalDatingProblem(
+            constrained,
+            rho=rho,
+            likelihood=q,
+            rate_sd=0.4,
+            shared_structure=parent.shared_structure,
+        )
+    assert shared.shared_structure is parent.shared_structure
+    assert not shared.measurement_covariance.flags.writeable
+    x = shared.initial_parameters()
+    for candidate in (x, x + 0.001):
+        a, ga = cold.value_gradient(candidate)
+        b, gb = shared.value_gradient(candidate)
+        assert a == pytest.approx(b, abs=1e-12)
+        np.testing.assert_allclose(ga, gb, atol=1e-12)
+        np.testing.assert_allclose(
+            cold.posterior_rates(candidate), shared.posterior_rates(candidate)
+        )
+    # The input likelihood remains mutable: sharing must detect such changes.
+    q.hessian[0, 0] += 1
+    changed = MarginalDatingProblem(
+        c, rho=rho, likelihood=q, rate_sd=0.4, shared_structure=parent.shared_structure
+    )
+    assert changed.shared_structure is not parent.shared_structure
+    changed_rho = MarginalDatingProblem(
+        c, rho=0.2, likelihood=q, rate_sd=0.4, shared_structure=changed.shared_structure
+    )
+    assert changed_rho.shared_structure is not changed.shared_structure

@@ -37,7 +37,11 @@ preserved; estimated rates are substitutions per site per time unit.
 Choose one reconciliation source:
 
 * `--generax-nhx family.nhx`: retain GeneRax `S` and `D` annotations; transfers
-  are rejected because a bifurcating dating model cannot represent them.
+  are rejected because a bifurcating dating model cannot represent them. If its
+  species-node names differ from the dated species tree, supply
+  `--reconciliation-species-tree generax-species.nwk`. This reads names (including
+  numeric labels) in Newick format 1 and maps identical rooted descendant clades;
+  only the dated `--species-tree` supplies ages. Incompatible topologies fail.
 * `--gene-tree family.nwk --notung-parsable family.parsable.txt`: read existing
   Notung output; no Notung executable is needed.
 * `--gene-tree family.nwk --reconciliation events.tsv`: reuse a `nwkit
@@ -78,6 +82,62 @@ nwkit radte --gene-tree family.nwk --species-tree species.nwk \
   --uncertainty bootstrap --bootstrap-replicates 100 --out-prefix results/family
 ```
 
+### Codon alignments
+
+Select `--substitution-model gy94`, `ecmk07`, or `ecmrest` explicitly for CDS.
+DNA/codon content cannot be distinguished reliably by alphabet or sequence length,
+so the standalone command does not infer a coding frame from DNA input.
+
+| Model | Exchangeabilities | Default frequencies |
+|---|---|---|
+| `gy94` | One-base changes, transition multiplier κ and nonsynonymous multiplier ω | `f3x4` |
+| `ecmk07` | Published unrestricted Kosiol et al. (2007) matrix, including multi-base changes | Published matrix frequencies |
+| `ecmrest` | Published restricted matrix; direct changes differ at one base | Published matrix frequencies |
+
+GY94 estimates one shared κ and ω in the unclocked prefit; `--kappa` and `--omega`
+fix them. Dating and profile intervals condition on those fitted values. Plain ECM
+has no fitted κ or ω multiplier; specifying these controls for ECM is an error.
+
+`--codon-frequencies f` replaces frequencies with observed unambiguous codon counts
+plus a 0.5 pseudocount per sense codon (the analogue of `+F`, with explicit smoothing).
+`f3x4` uses position-specific base counts, `f1x4` pools positions, and `fq` uses equal
+sense-codon frequencies. Base-count modes add 0.5 per base per position, then
+normalize products over sense codons. Ambiguous codons contribute a base only when
+that position is resolved by all compatible sense codons. `model` selects published
+frequencies for ECM and is invalid for GY94.
+
+The first implementation supports **standard genetic code 1 only**, for all three
+models. `--genetic-code` rejects other codes. Sequence lengths must be multiples of
+three. In-frame `---` and ambiguous codons are integrated over compatible sense
+states; partial gaps and codons compatible only with stops are errors, including
+terminal stops. Stops must be dealt with explicitly during upstream alignment
+preparation. Bootstrap resamples complete codon columns.
+
+All codon branch lengths and rates use **expected nucleotide changes per codon
+site**, or that quantity per time unit. Multi-base ECM transitions contribute their
+Hamming distance to the normalization. This differs from unit codon-event rate:
+for a fixed matrix, convert to event units by multiplying by `-sum(pi * diag(Q))`.
+Do not reuse DNA-per-nucleotide branch lengths or unconverted external codon
+likelihood summaries as if their units were identical. The unclocked sequence
+prefit estimates branch lengths from the alignment in the selected model's units.
+The manifest records the unit, state order, genetic code, frequencies, and fitted
+parameters. Independent IQ-TREE tests compare fixed-tree ECM likelihoods after
+converting its codon-event branch units.
+
+```sh
+nwkit radte --gene-tree family.nwk --species-tree species.nwk \
+  --species-map-tsv species-map.tsv --reconcile lca --max-age 100 \
+  --alignment family.cds.fasta --substitution-model gy94 \
+  --uncertainty profile --interval-level 0.95 --out-prefix results/family \
+  --figure-out results/family.pdf
+# Use --substitution-model ecmk07 --codon-frequencies f for empirical exchangeabilities
+# with frequencies estimated from this alignment.
+```
+
+The original ECM numerical data are packaged with their source recorded in each
+file: [Goldman laboratory supplementary material](https://www.ebi.ac.uk/research/goldman/empirical-codon-models/),
+Kosiol, Holmes & Goldman (2007), *Molecular Biology and Evolution* 24:1464–1479.
+
 The sequence likelihood uses scaled pruning and analytic branch derivatives.
 The two edges adjacent to the root are combined into their unrooted length
 before constructing a full-covariance quadratic approximation in log lengths.
@@ -90,7 +150,8 @@ as an independently observed branch length.
 The default `--inference auto --likelihood auto` uses this marginal method when
 the quadratic approximation is usable and passes exact likelihood and
 standardized-score checks at fitted rate states. If the approximation is
-unavailable or fails those checks, it refits using exact sequence likelihood
+unavailable or fails those checks (including checks during profile-interval
+exploration), it refits the point estimate and requested profile intervals using exact sequence likelihood
 and conditional joint MAP. That fallback estimates rate SD from the non-root
 branches and holds it fixed; it is a different estimator, explicitly recorded
 in diagnostics and the manifest. Numerical quadrature failures are reported.
@@ -292,3 +353,109 @@ sensitivity to violated assumptions, not recovery under the stated model.
 
 The native marginal root-contrast integration above is this implementation's
 construction; the references do not establish its accuracy or coverage.
+
+## Optional IQ-TREE sequence engine
+
+The native sequence implementation remains available and is the default.
+`--backend native --sequence-engine iqtree` delegates substitution-model fitting,
+sequence log likelihoods and branch scores to the `iqtree` executable. NWKIT still
+handles reconciliation, shared speciation ages, the clock model, conditional
+intervals and report generation. MCMCTree is never executed by this adapter.
+
+```sh
+nwkit radte --gene-tree gene.nwk --species-tree dated_species.nwk \
+  --alignment cds.fasta --substitution-model gy94 \
+  --sequence-engine iqtree --uncertainty profile --out-prefix iqtree_dates
+
+# Complete IQ-TREE model syntax replaces separate frequency/gamma controls.
+nwkit radte --gene-tree gene.nwk --species-tree dated_species.nwk \
+  --alignment cds.fasta --sequence-engine iqtree \
+  --iqtree-model 'GY+F3X4+R4' --uncertainty profile --out-prefix freerate_dates
+```
+
+Use the reconciliation/species-mapping arguments appropriate to the input tree,
+as in the examples above. `--iqtree-executable` selects an executable path and
+`--iqtree-threads` sets worker threads (default 1). `--iqtree-mode persistent`
+is the default and requires an IQ-TREE build with `--likelihood-session` support,
+plus IQ2MC export support for the initial unclocked prefit. This session mode is
+a local IQ-TREE source extension; ordinary released binaries are not assumed
+to contain it. The adapter validates the protocol at runtime.
+`--iqtree-mode subprocess` explicitly selects the original per-evaluation CLI
+route, which requires IQ2MC export support but no session extension.
+No fixed upstream version is embedded in NWKIT.
+
+Supported base models are JC, HKY, GTR, F81, Poisson, LG, WAG, JTT, GY, MG,
+ECMK07 and ECMrest. Supported modifiers are IQ-TREE's compatible combinations of
+`+F`, `+FQ`, `+F1X4`, `+F3X4`, `+I`, `+Gk` and `+Rk` (explicit category counts,
+minimum 2). Substitution and rate parameters can be supplied in braces using IQ-TREE syntax;
+explicit frequency vectors are not exposed. GY braces
+contain omega followed by kappa. A model without gamma/FreeRate has homogeneous
+sites. ModelFinder, partitions, ascertainment corrections, nonreversible models
+and mixture models are not exposed by this adapter. Codon inputs currently require
+standard genetic code 1, and IQ-TREE requires at least three sequences. Unsupported
+models or failed evaluations raise errors; they do not select the native engine
+implicitly.
+
+Without `--iqtree-model`, the existing substitution/frequency/gamma options build
+the IQ-TREE model; GY94 still defaults to F3x4 and four gamma categories. For that
+interface, fix both GY94 kappa and omega or estimate both. A complete
+`--iqtree-model` cannot be combined with separate frequency/gamma/parameter
+controls. It takes precedence over `--substitution-model`.
+
+IQ-TREE frequency estimation follows IQ-TREE's definitions, including its treatment
+of absent states; native frequency pseudocounts are not imposed. IQ-TREE branch
+rates use its substitution-per-site normalization. In particular ECMK07 counts
+codon replacement events, whereas native ECMK07 counts nucleotide changes per
+codon; absolute rates from those two engines therefore need a unit conversion.
+The model string, frozen parameters, executable version/hash, normalization label
+and alignment hash are recorded in the manifest and likelihood metadata.
+
+The adapter first fits the supplied reconciled topology without a clock, freezes
+its model parameters and checks that the fixed-model likelihood reproduces the
+fit. Tip aliases preserve identifiers and identical sequences. Subsequent calls
+fix topology and branch lengths; bipartitions map IQ-TREE's unrooted edges back
+to NWKIT, summing the two root branches. Explicit tree-output precision preserves
+very short positive branches. A persistent worker returns double-precision branch
+scores directly through a first-derivative-only `SCORE` request, without writing
+a full Hessian. Explicit diagnostic evaluations can request diagonal curvature
+through `EVAL`. The
+subprocess route uses IQ2MC scores; its approximate cross derivatives are
+**not** treated as the observed Hessian. NWKIT forms the
+full log-length curvature by differencing IQ-TREE scores, retaining the existing
+exact likelihood/gradient checks and exact profile refit when auto's quadratic
+approximation fails. Substitution parameters remain conditional throughout dating.
+Bootstrap replicates resample complete codons (or NT/AA columns) and refit the
+requested IQ-TREE model.
+
+Marginal profile fits share immutable covariance and likelihood matrices across
+age constraints; a changed model, Hessian, mapping or correlation invalidates
+that shared structure. This does not alter the profile search or its validation.
+
+After the separate unclocked prefit, the persistent worker loads the frozen model
+and alignment once. Repeated evaluations send only unrooted branch lengths over
+pipes; alignment patterns, model eigensystems and allocated buffers remain in
+memory. Partial likelihoods are invalidated when branch lengths change. Each
+bootstrap replicate owns a separately fitted session. A bounded evaluation cache
+avoids duplicate requests. Workers are reaped when their likelihood object is
+released or explicitly closed, including initialization and protocol failures.
+A timeout, malformed response or numerical failure stops evaluation; it never
+silently restarts the worker or switches engines. The connection mode and
+protocol version are included in the provenance metadata.
+
+To compare the two IQ-TREE connection modes with the same binary in the target
+runtime, run `python tools/benchmark_radte_iqtree.py --output benchmark.json`.
+The benchmark uses simulated codon alignments with 4/16/64 tips, three repetitions,
+alternating mode order and a warmup. It checks likelihood/score equivalence and
+records setup time, 20 uncached evaluations and largest-child peak RSS. These
+kernel timings do not establish complete dating/profile throughput; measure
+that separately on representative inputs.
+
+The subprocess exporter in the tested IQ-TREE 3.1.3 runtime can return an
+infinite branch score for extremely short sibling codon edges (observed around
+`8e-11` and `6e-11`). The local persistent extension detects spectral
+cancellation and recomputes the same fitted model within IQ-TREE using stable
+matrix exponentiation and original-state pruning. Regression tests compare
+these boundary values and scores against an independent matrix exponential,
+including a subsequent return to ordinary lengths. NWKIT still rejects
+nonfinite results; it does not floor branches or switch engines. These checks
+do not establish accuracy for every possible numerical boundary.

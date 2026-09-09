@@ -14,6 +14,7 @@ import scipy
 from nwkit import __version__
 from nwkit.clade_index import CladeIndex
 from nwkit.output_transaction import output_transaction, validate_output_targets
+from nwkit.radte_codon import CODON_MODELS
 from nwkit.radte_inputs import read_inputs
 from nwkit.radte_model import fit_dates, laplace_intervals
 from nwkit.radte_sequence import (
@@ -23,7 +24,11 @@ from nwkit.radte_sequence import (
 )
 from nwkit.radte_sequence_fit import default_sequence_model, fit_sequence_model
 from nwkit.radte_studentized import studentized_intervals
-from nwkit.radte_uncertainty import bootstrap_intervals, profile_intervals
+from nwkit.radte_uncertainty import (
+    ProfileApproximationError,
+    bootstrap_intervals,
+    profile_intervals,
+)
 from nwkit.util import (
     _serialize_newick_node_name,
     copy_tree_iteratively,
@@ -47,6 +52,7 @@ RADTE_SUFFIXES = {
 RADTE_INPUTS = (
     "gene_tree",
     "generax_nhx",
+    "reconciliation_species_tree",
     "species_tree",
     "notung_parsable",
     "reconciliation",
@@ -109,9 +115,32 @@ def validate_options(args):
         raise ValueError(
             "--inference marginal requires a quadratic likelihood; choose auto or quadratic."
         )
+    if (
+        any(
+            getattr(args, key, None) is not None
+            for key in (
+                "iqtree_model",
+                "iqtree_executable",
+                "iqtree_threads",
+                "iqtree_mode",
+            )
+        )
+        and getattr(args, "sequence_engine", None) != "iqtree"
+    ):
+        raise ValueError("IQ-TREE controls require --sequence-engine iqtree.")
+    if getattr(args, "sequence_engine", None) and args.backend != "native":
+        raise ValueError("--sequence-engine requires --backend native.")
     sequence_options = [
+        "sequence_engine",
+        "iqtree_model",
+        "iqtree_executable",
+        "iqtree_threads",
+        "iqtree_mode",
         "substitution_model",
         "kappa",
+        "omega",
+        "codon_frequencies",
+        "genetic_code",
         "gamma_shape",
         "gamma_categories",
         "likelihood",
@@ -157,6 +186,9 @@ def validate_backend_options(args):
         getattr(args, key) is not None
         for key in [
             "kappa",
+            "omega",
+            "codon_frequencies",
+            "genetic_code",
             "gtr_exchangeabilities",
             "gamma_shape",
             "gamma_categories",
@@ -259,6 +291,81 @@ def _fit(c, args, likelihood):
     )
 
 
+def prepare_sequence_likelihood(c, args):
+    if getattr(args, "sequence_engine", None) == "iqtree":
+        from nwkit.radte_iqtree import prepare_iqtree
+
+        exact, metadata = prepare_iqtree(c, args)
+        metadata["alignment_sha256"] = _hash_file(args.alignment)
+        return exact, metadata
+    metadata = dict(
+        model=args.substitution_model or default_sequence_model(args.alignment),
+        kappa=args.kappa if args.kappa is not None else 2.0,
+        gamma_shape=args.gamma_shape if args.gamma_shape is not None else 1.0,
+        gamma_categories=args.gamma_categories
+        if args.gamma_categories is not None
+        else 4,
+    )
+    if args.kappa is not None and metadata["model"] not in {"hky", "gy94"}:
+        raise ValueError("--kappa applies only to HKY or GY94.")
+    codon = metadata["model"] in CODON_MODELS
+    if args.omega is not None and metadata["model"] != "gy94":
+        raise ValueError("--omega requires GY94.")
+    if not codon and (
+        args.codon_frequencies is not None or args.genetic_code is not None
+    ):
+        raise ValueError("Codon controls require a codon substitution model.")
+    if codon:
+        metadata.update(
+            omega=args.omega if args.omega is not None else 0.5,
+            codon_frequencies=args.codon_frequencies,
+            genetic_code=args.genetic_code if args.genetic_code is not None else 1,
+        )
+    exchange = None
+    if args.gtr_exchangeabilities is not None:
+        if metadata["model"] != "gtr":
+            raise ValueError(
+                "--gtr-exchangeabilities requires --substitution-model gtr."
+            )
+        exchange = np.array(
+            [float(value) for value in args.gtr_exchangeabilities.split(",")]
+        )
+    exact = SequenceLikelihood(
+        c, args.alignment, exchangeabilities=exchange, **metadata
+    )
+    initial_lengths = np.array([n.dist for n in c.edges])
+    metadata["prefit"] = fit_sequence_model(
+        exact,
+        initial_lengths,
+        fit_kappa=metadata["model"] in {"hky", "gy94"} and args.kappa is None,
+        fit_omega=metadata["model"] == "gy94" and args.omega is None,
+        fit_gtr=metadata["model"] == "gtr" and exchange is None,
+        fit_gamma=args.gamma_shape is None,
+        maxiter=args.maxiter,
+    )
+    metadata.update(
+        kappa=exact.kappa,
+        gamma_shape=exact.gamma_shape,
+        frequencies=exact.pi.tolist(),
+        gamma_rates=exact.rates.tolist(),
+        exchangeabilities=exact.exchangeabilities.tolist()
+        if exact.model == "gtr"
+        else None,
+        alignment_sha256=_hash_file(args.alignment),
+    )
+    if codon:
+        metadata.update(
+            omega=exact.omega if exact.model == "gy94" else None,
+            codon_frequencies=exact.codon_frequencies,
+            branch_length_unit="nucleotide_changes_per_codon",
+            alignment_codon_sites=int(exact.raw_matrix.shape[1]),
+            kappa=exact.kappa if exact.model == "gy94" else None,
+            codon_order=list(exact.states),
+        )
+    metadata["engine"] = "native"
+    return exact, metadata
+
+
 def run_dating(c, args):
     likelihood = None
     metadata = {}
@@ -267,48 +374,8 @@ def run_dating(c, args):
         likelihood, data = read_likelihood_summary(args.likelihood_summary, c)
         metadata = dict(data.get("metadata", {}))
     elif args.alignment:
-        metadata = dict(
-            model=args.substitution_model or default_sequence_model(args.alignment),
-            kappa=args.kappa if args.kappa is not None else 2.0,
-            gamma_shape=args.gamma_shape if args.gamma_shape is not None else 1.0,
-            gamma_categories=args.gamma_categories
-            if args.gamma_categories is not None
-            else 4,
-        )
-        if args.kappa is not None and metadata["model"] != "hky":
-            raise ValueError("--kappa applies only to the HKY sequence model.")
-        exchange = None
-        if args.gtr_exchangeabilities is not None:
-            if metadata["model"] != "gtr":
-                raise ValueError(
-                    "--gtr-exchangeabilities requires --substitution-model gtr."
-                )
-            exchange = np.array(
-                [float(value) for value in args.gtr_exchangeabilities.split(",")]
-            )
-        exact = SequenceLikelihood(
-            c, args.alignment, exchangeabilities=exchange, **metadata
-        )
-        initial_lengths = np.array([n.dist for n in c.edges])
-        metadata["prefit"] = fit_sequence_model(
-            exact,
-            initial_lengths,
-            fit_kappa=metadata["model"] == "hky" and args.kappa is None,
-            fit_gtr=metadata["model"] == "gtr" and exchange is None,
-            fit_gamma=args.gamma_shape is None,
-            maxiter=args.maxiter,
-        )
-        metadata.update(
-            kappa=exact.kappa,
-            gamma_shape=exact.gamma_shape,
-            frequencies=exact.pi.tolist(),
-            gamma_rates=exact.rates.tolist(),
-            exchangeabilities=exact.exchangeabilities.tolist()
-            if exact.model == "gtr"
-            else None,
-            alignment_sha256=_hash_file(args.alignment),
-        )
-        initial_lengths = getattr(exact, "initial_lengths", initial_lengths)
+        exact, metadata = prepare_sequence_likelihood(c, args)
+        initial_lengths = exact.initial_lengths
         likelihood = exact
         if args.likelihood != "exact":
             try:
@@ -352,14 +419,32 @@ def run_dating(c, args):
     elif args.uncertainty == "studentized":
         studentized_intervals(fit, problem, args.interval_level)
     elif args.uncertainty == "profile":
-        profile_intervals(
-            fit,
-            problem,
+        profile_options = dict(
             level=args.interval_level,
             starts=args.starts,
             maxiter=args.maxiter,
             seed=args.seed,
         )
+        try:
+            profile_intervals(fit, problem, **profile_options)
+        except ProfileApproximationError:
+            if (
+                args.likelihood == "quadratic"
+                or args.inference == "marginal"
+                or not isinstance(likelihood, QuadraticLikelihood)
+                or likelihood.exact is None
+            ):
+                raise
+            previous_attempts = fit.attempts
+            previous_diagnostics = fit.diagnostics
+            likelihood = likelihood.exact
+            fit, problem = _fit(c, args, likelihood)
+            fit.attempts = previous_attempts + fit.attempts
+            fit.diagnostics.append("profile_quadratic_failed_validation_refitted_exact")
+            fit.diagnostics.extend(
+                "prior_quadratic_fit: " + item for item in previous_diagnostics
+            )
+            profile_intervals(fit, problem, **profile_options)
     elif args.uncertainty == "bootstrap":
         bootstrap_intervals(
             fit,

@@ -29,6 +29,10 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
             "generax_nhx",
             "GeneRax NHX gene tree; requires S annotations and resolved D/L events.",
         ),
+        (
+            "reconciliation_species_tree",
+            "GeneRax species tree supplying S labels; remap by identical descendant clades onto the dated species tree.",
+        ),
         ("notung_parsable", "Notung parsable reconciliation accompanying --gene-tree."),
         ("reconciliation", "Reusable TSV from nwkit reconcile or nwkit radte."),
         (
@@ -97,8 +101,43 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         help="Log-rate SD; default estimates it from the gene branches. Zero selects a strict sequence clock.",
     )
     add(
+        "sequence_engine",
+        choices=["native", "iqtree"],
+        default=None,
+        help="Sequence likelihood engine (default: native); dating constraints remain in NWKIT.",
+    )
+    add(
+        "iqtree_model",
+        default=None,
+        help="Complete IQ-TREE reversible model, e.g. GY+F3X4+R4; replaces separate model parameter controls.",
+    )
+    add(
+        "iqtree_mode",
+        choices=["persistent", "subprocess"],
+        default=None,
+        help="IQ-TREE connection (default: persistent; requires --likelihood-session support).",
+    )
+    add("iqtree_executable", default=None, help="IQ-TREE executable (default: iqtree).")
+    add(
+        "iqtree_threads",
+        type=int,
+        default=None,
+        help="Threads per IQ-TREE evaluation (default: 1).",
+    )
+    add(
         "substitution_model",
-        choices=["jc69", "hky", "gtr", "f81", "poisson", "lg", "lg-f"],
+        choices=[
+            "jc69",
+            "hky",
+            "gtr",
+            "f81",
+            "poisson",
+            "lg",
+            "lg-f",
+            "gy94",
+            "ecmk07",
+            "ecmrest",
+        ],
         default=None,
         help="Default detects DNA (GTR) or protein (LG); choose explicitly for ambiguous alphabets.",
     )
@@ -106,7 +145,25 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         "kappa",
         type=finite_float,
         default=None,
-        help="Fix the HKY exchangeability ratio; default estimates it from the alignment.",
+        help="Fix the HKY/GY94 exchangeability ratio; default estimates it from the alignment.",
+    )
+    add(
+        "omega",
+        type=finite_float,
+        default=None,
+        help="Fix GY94 omega; default estimates one shared omega in an unclocked fit.",
+    )
+    add(
+        "codon_frequencies",
+        choices=["model", "f", "f1x4", "f3x4", "fq"],
+        default=None,
+        help="Codon frequencies: GY94 defaults to f3x4, ECM to model. Native f uses 0.5 pseudocounts; IQ-TREE uses its own frequency estimator.",
+    )
+    add(
+        "genetic_code",
+        type=int,
+        default=None,
+        help="Codon translation table; currently only standard code 1 is supported.",
     )
     add(
         "gtr_exchangeabilities",

@@ -36,17 +36,22 @@ def fit_sequence_model(
     lengths,
     *,
     fit_kappa=False,
+    fit_omega=False,
     fit_gamma=False,
     fit_gtr=False,
     maxiter=1000,
 ):
     likelihood.fit_settings = dict(
-        fit_kappa=fit_kappa, fit_gamma=fit_gamma, fit_gtr=fit_gtr
+        fit_kappa=fit_kappa, fit_omega=fit_omega, fit_gamma=fit_gamma, fit_gtr=fit_gtr
     )
     settings: list[tuple[str, int | None, float, float, float]] = []
     if fit_kappa:
         settings.append(
             ("kappa", None, np.log(likelihood.kappa), np.log(0.05), np.log(100))
+        )
+    if fit_omega:
+        settings.append(
+            ("omega", None, np.log(likelihood.omega), np.log(0.001), np.log(100))
         )
     if fit_gtr:
         likelihood.exchangeabilities /= likelihood.exchangeabilities[-1]

@@ -9,6 +9,10 @@ from scipy.stats import chi2
 from nwkit.radte_model import DatingOptimizationError, fit_dates, solve_problem
 
 
+class ProfileApproximationError(ValueError):
+    """A profile evaluation is outside the validated quadratic region."""
+
+
 def validate_profile_approximation(problem, parameters):
     likelihood = problem.likelihood
     if not hasattr(likelihood, "mapping"):
@@ -27,7 +31,7 @@ def validate_profile_approximation(problem, parameters):
         )
         valid = likelihood.check(lengths)[0]
     if not valid:
-        raise ValueError(
+        raise ProfileApproximationError(
             "Profile interval left the validated quadratic likelihood region; use exact likelihood or bootstrap."
         )
 
@@ -168,6 +172,7 @@ def profile_intervals(fit, problem, *, level=0.95, starts=3, maxiter=2000, seed=
             extra = {}
             if getattr(problem, "marginal", False):
                 extra["quadrature_points"] = problem.quadrature_points
+                extra["shared_structure"] = problem.shared_structure
             profile = type(problem)(
                 constrained,
                 rho=problem.rho,
@@ -303,7 +308,7 @@ def bootstrap_intervals(
             else:
                 likelihood = exact.bootstrap(rng)
             try:
-                initial_lengths = original
+                initial_lengths = getattr(likelihood, "initial_lengths", original)
                 if likelihood is not None and getattr(likelihood, "fit_settings", {}):
                     from nwkit.radte_sequence_fit import fit_sequence_model
 

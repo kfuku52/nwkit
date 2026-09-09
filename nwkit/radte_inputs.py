@@ -178,6 +178,30 @@ def _notung_events(path, gene, species, table):
     return table
 
 
+def remap_generax_species(gene, species, source_path):
+    """Translate GeneRax S labels by topology, never borrow its branch ages."""
+    source = read_tree(source_path, 1, True, rooted="auto")
+    _validate_rooted_binary_tree(source, "--reconciliation-species-tree")
+    source_names = _unique_names(source)
+    _unique_names(species)
+    old, new = CladeIndex(source), CladeIndex(species)
+    target = {new.clade_id_for_node(n): n for n in species.traverse()}
+    if {old.clade_id_for_node(n) for n in source.traverse()} != set(target):
+        raise ValueError(
+            "Reconciliation and dated species trees must have identical rooted clades."
+        )
+    for node in gene.traverse():
+        label = str(node.props.get("S", ""))
+        if label not in source_names:
+            raise ValueError(f"Unknown GeneRax species annotation: {label}")
+        sid = old.clade_id_for_node(source_names[label])
+        destination = target[sid]
+        if not destination.name:
+            destination.name = sid
+        node.props["S"] = str(destination.name)
+    _unique_names(species)
+
+
 def read_inputs(args):
     if bool(args.generax_nhx) == bool(args.gene_tree):
         raise ValueError("Provide exactly one of --generax-nhx or --gene-tree.")
@@ -208,6 +232,11 @@ def read_inputs(args):
     )
     _validate_rooted_binary_tree(gene, "--gene-tree")
     _validate_rooted_binary_tree(species, "--species-tree")
+    source_species = getattr(args, "reconciliation_species_tree", None)
+    if source_species:
+        if not args.generax_nhx:
+            raise ValueError("--reconciliation-species-tree requires --generax-nhx.")
+        remap_generax_species(gene, species, source_species)
     if args.generax_nhx:
         # Never replace an absent or invalid GeneRax S annotation by LCA.
         if any(str(node.props.get("S", "")) == "" for node in gene.traverse()):
