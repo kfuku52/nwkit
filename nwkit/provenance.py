@@ -26,6 +26,9 @@ from nwkit.util import (
 OUTPUT_ARGUMENTS = frozenset(
     (
         "outfile",
+        "summary_out",
+        "clades_out",
+        "simulations_out",
         "report",
         "tree_out",
         "model_out",

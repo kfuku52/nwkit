@@ -89,6 +89,13 @@ def main() -> int:
     with tarfile.open(sdist, "r:gz") as archive:
         sdist_members = set(archive.getnames())
     required_sdist = {"/" + member for member in required_wheel} | {
+        "/DTT.md",
+        "/examples/dtt/README.md",
+        "/examples/dtt/dtt.png",
+        "/examples/dtt/heatmap.png",
+        "/examples/dtt/reference.R",
+        "/examples/dtt/traits.tsv",
+        "/examples/dtt/tree.nwk",
         "/ASR.md",
         "/RADTE.md",
         "/IQTREE_LIBRARY.md",

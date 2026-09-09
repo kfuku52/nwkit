@@ -21,3 +21,6 @@ graft tools
 global-exclude __pycache__ *.py[cod]
 
 include IQTREE_LIBRARY.md
+
+include DTT.md
+graft examples/dtt

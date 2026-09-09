@@ -508,3 +508,17 @@ shared-age IDs identify rows; missing estimates are `NA`, never zero.
 `radte-compare` publishes `.comparison.tsv` and `.uncertainty-components.tsv`
 with its PDF and hash manifest. See
 [species-age uncertainty](RADTE_SPECIES_UNCERTAINTY.md) for semantics and schemas.
+
+## Disparity through time
+
+`dtt --trait` uses the shared tip-keyed TSV policies. `--columns` selects jointly
+analyzed continuous traits; `--missing error|drop` controls incomplete tips.
+The primary TSV is keyed by one-based `time_index`, with `phase` distinguishing
+the pre/post-split rows at relative time zero. It includes observed disparity,
+non-singleton clade counts and BM mean/median/pointwise envelope columns.
+`--n-sim 0` leaves BM columns and summary MDI fields empty. Auxiliary summary,
+clade and simulation tables, the model JSON and PNG/PDF/SVG figure participate
+in the same output transaction. The figure uses one tree plus a heatmap by default
+for any number of displayed traits, including one.
+`--figure-columns` and `--figure-scale` affect only display, independently of
+`--columns` and `--scale`. See [DTT](DTT.md) for definitions, units and limits.

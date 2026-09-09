@@ -4,6 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Add `nwkit dtt` for scalar or joint continuous-trait disparity through time,
+  fitted Brownian simulations, MDI, transactional TSV/JSON outputs and figures
+  with aligned observed-trait trees, compact heatmaps by default for any trait count, and independent
+  display-column selection and color scaling.
+  Include geiger reference checks and a reproducible example. Harden deep-tree
+  pruning, event-time rounding, extreme-unit color scales, and literal/Unicode
+  figure labels.
+
 ## [0.43.15] - 2026-09-10
 
 ### Changed

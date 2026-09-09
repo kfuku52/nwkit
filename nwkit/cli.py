@@ -6355,6 +6355,9 @@ from nwkit.result_plot_cli import register_result_plot_options  # noqa: E402
 register_result_plot_options(
     pdraw, preconcile, subparsers.choices["radte"], finite_float
 )
+from nwkit.dtt_cli import register_dtt  # noqa: E402
+
+register_dtt(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
 _add_input_rooting_options()
 
 

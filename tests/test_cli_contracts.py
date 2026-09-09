@@ -12,6 +12,7 @@ from nwkit.util import read_tree
 pytestmark = pytest.mark.integration
 
 CASES = {
+    "dtt": ["--trait", "{data}", "--columns", "x,y", "--n-sim", "9"],
     "annotate": ["--table", "{data}"],
     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
     "asrcompare": [
@@ -107,6 +108,7 @@ CASES = {
 }
 
 TABLE_COLUMNS = {
+    "dtt": "relative_disparity",
     "asr": "map_state",
     "asrcompare": "model",
     "cladefreq": "frequency",
