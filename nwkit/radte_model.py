@@ -114,6 +114,7 @@ class DatingProblem:
         self.log_observed = np.log(self.observed)
         self.likelihood = likelihood
         self.rate_sd = rate_sd
+        self.rate_variance_estimated = rate_sd is None
         self.age_design = sparse.coo_matrix(
             (
                 np.tile([1.0, -1.0], len(chronology.edges)),
@@ -507,17 +508,20 @@ def fit_dates(
         attempts,
         diagnostics,
     )
+    # The exact sequence problem receives the fitted SD as a numerical input;
+    # retain whether that input was estimated or supplied by the caller.
+    problem.rate_variance_estimated = rate_sd is None
     return fit, problem
 
 
-def laplace_intervals(fit, problem, level=0.95):
-    """Observed-information intervals on interior free ages, with nuisance rates.
+def curvature_covariance(fit, problem, level=0.95):
+    """Return the free-age covariance, retaining all nuisance directions.
 
-    Refuse a Gaussian interval at an active bound, a singular Hessian, or the
-    strict-clock limit. Never clip intervals and call them credible intervals.
+    Unavailable curvature and fixed ages set the interval status and return None.
     """
     if not 0 < level < 1:
         raise ValueError("Interval level must be between zero and one.")
+    fit.interval_lower = fit.interval_upper = None
     c = problem.chronology
     lower, upper = fit.ages.copy(), fit.ages.copy()
     if len(problem.free) == 0:
@@ -561,10 +565,17 @@ def laplace_intervals(fit, problem, level=0.95):
     if eigen[0] <= max(1e-10, eigen[-1] * 1e-10):
         fit.interval_status = "unavailable-unidentified-or-nonpositive-curvature"
         return
-    covariance = np.linalg.inv(hessian)
-    widths = norm.ppf((1 + level) / 2) * np.sqrt(
-        np.diag(covariance)[: len(problem.free)]
-    )
+    return np.linalg.inv(hessian)[: len(problem.free), : len(problem.free)]
+
+
+def laplace_intervals(fit, problem, level=0.95):
+    """Unadjusted Gaussian curvature intervals, conditional on the fitted model."""
+    covariance = curvature_covariance(fit, problem, level)
+    if covariance is None:
+        return
+    c = problem.chronology
+    lower, upper = fit.ages.copy(), fit.ages.copy()
+    widths = norm.ppf((1 + level) / 2) * np.sqrt(np.diag(covariance))
     lower[problem.free] -= widths
     upper[problem.free] += widths
     if np.any(lower < c.lower) or np.any(upper > c.upper):
@@ -574,3 +585,5 @@ def laplace_intervals(fit, problem, level=0.95):
     fit.interval_status = (
         "conditional-laplace" if problem.likelihood else "conditional-profile-curvature"
     )
+    if problem.rate_variance_estimated:
+        fit.diagnostics.append("unadjusted_curvature_with_estimated_rate_variance")

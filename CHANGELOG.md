@@ -4,6 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.14] - 2026-09-09
+
+### Added
+
+- Add opt-in `nwkit radte --uncertainty studentized` with residual branch degrees
+  of freedom, a small-sample t correction, and bounded age coordinates. Preserve
+  point estimates and hard constraints; record unavailable intervals explicitly.
+  Document paired coverage, availability and width on the original 200 families
+  and 900 new independent families, with a reproducible validation runner.
+
+
 ## [0.43.13] - 2026-09-09
 
 ### Added

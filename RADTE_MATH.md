@@ -176,3 +176,66 @@ Profiles recheck approximation validity along the constrained solutions.
 Bootstrap replicates preserve shared events and refit the specified estimator;
 they report failures instead of silently changing marginal replicates into
 conditional MAP estimates.
+
+## Small-sample curvature adjustment
+
+`--uncertainty laplace` retains its unadjusted Gaussian definition. It can
+undercover when the number of independent branch-rate observations is small.
+For exact conditional sequence MAP, the fitted rate SD is held fixed inside
+the information calculation; its estimation uncertainty is absent. Marginal
+inference includes an SD coordinate, but a local Gaussian approximation to
+the joint ML fit does not remove small-sample variance bias or provide an
+accurate reference distribution near a zero-variance boundary. Increasing
+alignment length does not increase the number of independently realized rates.
+
+`--uncertainty studentized` is a separate, approximate finite-sample correction.
+Let `C` be the free-age block of the inverse **full** observed-information matrix;
+nuisance rate/mean/SD directions are retained before inversion. Write
+
+\[
+  X=[\mathbf 1,\ J],\quad \nu=n-\operatorname{rank}(X),\quad
+  \widetilde C=(n/\nu)C.
+\]
+
+Here `J` is the local Jacobian of the observed log durations with respect to
+free ages. Tree-only inference uses its observed branches. Exact conditional
+sequence inference uses the non-root branches from which its SD was estimated.
+Marginal sequence inference uses identifiable unrooted lengths, combining the
+root pair before taking the log. Columns with no influence do not consume a
+degree of freedom. Fitted latent rates are random effects and are not subtracted
+as fixed-effect parameters. A four-tip root-duplication example has `(n, nu)`
+equal to `(4, 3)` for conditional sequence MAP and `(5, 3)` for marginal inference.
+It does not have 2,000 rate observations merely because it has 2,000 sites.
+
+The `n/nu` factor converts an ML residual-variance estimate to its residual-df
+version in the local homoscedastic Gaussian regression. The critical value is
+`t_(1-alpha/2, nu)`, not `z_(1-alpha/2)`. If the user supplies `--rate-sd`, there
+is no variance correction and the normal critical value is used. The correction
+does not alter the SD or point estimates saved by the dating fit.
+
+Propagate **all** hard age and positive-duration constraints through the shared
+event graph to obtain each age's feasible range `(L_i, U_i)`. Use
+
+\[
+ g_i(a)=\log\frac{a-L_i}{U_i-a},\qquad
+ s_i=g_i'(\hat a_i)\sqrt{\widetilde C_{ii}},
+\]
+
+and transform the two limits `g_i(a_hat) +/- critical * s_i` back with the
+inverse logit. These are marginal intervals: their Cartesian product is not
+a simultaneous feasible chronology or a joint confidence region. The method
+does not clip a Gaussian interval at a calibration, remove a constraint, or
+replace a point estimate. It refuses active-bound, singular, strict-clock, and
+zero-residual-df cases instead of turning these into narrow intervals.
+
+The t/variance adjustment follows the familiar unknown-variance Gaussian
+regression calculation ([NIST confidence intervals](https://www.itl.nist.gov/div898/handbook/prc/section1/prc14.htm)).
+Its extension to this nonlinear model, an unobserved root-rate split, and
+sequence measurement error is a **local approximation**, not an exact pivot,
+REML implementation, or universally calibrated confidence procedure. In
+particular, it neither estimates missing topology/reconciliation uncertainty
+nor integrates substitution-model parameter uncertainty. Low rate variation
+can still put the marginal SD estimate on its numerical boundary and make
+intervals unavailable. The validation report records interval availability,
+coverage conditional on availability, and correct intervals returned across
+all families separately.

@@ -109,7 +109,18 @@ Rate-bootstrap intervals are unavailable at the strict-clock limit.
 `--uncertainty none` is the default. Optional methods are:
 
 * `laplace`: conditional curvature intervals, refused at active bounds,
-  singular information, or the strict-clock limit.
+  singular information, or the strict-clock limit. This is an unadjusted normal
+  approximation; estimating rate variance from a few branches can give severe
+  undercoverage even with a long alignment.
+* `studentized`: small-sample adjusted curvature intervals. When rate variance
+  is estimated, this uses residual branch degrees of freedom, an `n/df` variance
+  correction, and a Student t critical value. Intervals use a logit transformation
+  of the feasible age domain, preserving all hard bounds without clipping.
+  Supplied `--rate-sd` uses a normal critical value without variance inflation.
+  This is an approximate alternative, not a posterior or a guarantee of 95%
+  coverage. Point ages and rates are unchanged. Active bounds, singular
+  information, the strict-clock limit, and absent residual degrees of freedom
+  still make intervals unavailable.
 * `profile`: conditional likelihood-ratio intervals; endpoints limited by
   calibrations are explicitly marked. These use asymptotic reference thresholds.
 * `bootstrap`: site resampling with an alignment, or parametric Gaussian-rate
@@ -119,7 +130,7 @@ Rate-bootstrap intervals are unavailable at the strict-clock limit.
 * `input-ensemble`: refit supplied gene-tree and/or species-chronogram samples
   as described below. Percentiles describe variation between conditional fits.
 
-Laplace, profile, and site/rate bootstrap condition on the supplied topology,
+Laplace, studentized, profile, and site/rate bootstrap condition on the supplied topology,
 reconciliation, and species calibration domain. Shared ages reduce parameter
 count but do not ensure identifiability. Inspect nonunique/local-optimum,
 boundary, approximation, and interval diagnostics. Fixed species calibrations
@@ -139,6 +150,14 @@ of the absolute reference objective and the specified rate variance (zero when
 unspecified). Sequence objectives use `1e-7 * max(1, abs(reference objective))`.
 This prevents a unit-sized tolerance from hiding a materially better fit when
 the log-rate variance is very small.
+
+For example, add `--uncertainty studentized --interval-level 0.95` to a native
+dating command to request the adjusted intervals. The manifest records
+`conditional-studentized-curvature` (or `conditional-bounded-normal-curvature`
+with a supplied SD), observation count, residual degrees of freedom, variance
+factor, and age transformation in its uncertainty status and diagnostics.
+See [the derivation](RADTE_MATH.md#small-sample-curvature-adjustment) and
+[the independent-family coverage checks](RADTE_VALIDATION.md#small-sample-interval-validation).
 
 The manifest's `optimizer_attempts` records profile fits with `phase` (`profile`
 or `profile-quadrature`), `profile_group`, `profile_age` in input time units,

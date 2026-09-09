@@ -22,6 +22,7 @@ from nwkit.radte_sequence import (
     build_quadratic,
 )
 from nwkit.radte_sequence_fit import default_sequence_model, fit_sequence_model
+from nwkit.radte_studentized import studentized_intervals
 from nwkit.radte_uncertainty import bootstrap_intervals, profile_intervals
 from nwkit.util import (
     _serialize_newick_node_name,
@@ -348,6 +349,8 @@ def run_dating(c, args):
     fit.diagnostics.extend(diagnostics)
     if args.uncertainty == "laplace":
         laplace_intervals(fit, problem, args.interval_level)
+    elif args.uncertainty == "studentized":
+        studentized_intervals(fit, problem, args.interval_level)
     elif args.uncertainty == "profile":
         profile_intervals(
             fit,

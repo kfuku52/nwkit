@@ -140,9 +140,17 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
     )
     add(
         "uncertainty",
-        choices=["none", "laplace", "profile", "bootstrap", "input-ensemble"],
+        choices=[
+            "none",
+            "laplace",
+            "studentized",
+            "profile",
+            "bootstrap",
+            "input-ensemble",
+        ],
         default="none",
-        help="Conditional interval method (default: none); diagnostics describe unavailable intervals.",
+        help="Conditional interval method (default: none); studentized uses small-sample "
+        "t-adjusted curvature. Diagnostics describe unavailable intervals.",
     )
     add(
         "ensemble_within_uncertainty",

@@ -132,3 +132,133 @@ The present evidence is insufficient to promote curvature intervals as general
 95% uncertainty estimates or claim that the marginal approximation always
 replaces MCMCTree. Existing fast dating programs were not benchmarked as if they
 implemented the same duplication and shared-event constraints.
+
+
+## Small-sample interval validation
+
+The [September 2026 workflow benchmark](https://github.com/kfuku52/nwkit/wiki/RADTE-performance)
+found 155 true ages inside 190 returned nominal 95% native Laplace intervals
+from 200 independent four-tip/2,000-site families: **81.6% coverage among
+returned intervals**, with 10 families returning no interval. The follow-up
+below reproduces that result and tests an explicit `--uncertainty studentized`
+alternative. It does not redefine the original Laplace calculation or change
+point estimates, fitted rates, auto-estimator selection, or chronology bounds.
+
+### Cause and controlled checks
+
+Only four non-root branches inform the rate-variance estimate in the exact
+conditional sequence fit for this condition. The Gaussian curvature interval
+holds that estimated variance fixed and uses a normal critical value. Marginal
+inference includes an estimated SD parameter, but its ML variance estimate and
+Gaussian reference approximation still have small-sample limitations.
+
+On the original 200 families, the auto fit's mean estimated log-rate SD was
+0.241, versus the generating SD of 0.3. In a controlled **exact-only** comparison,
+holding SD at its generating value increased Laplace coverage from **164/200
+(82.0%) to 188/200 (94.0%)**. Auto with supplied true SD covered 185/200 (92.5%);
+its estimator-selection path can also change. These oracle comparisons diagnose
+a source of undercoverage; they do not assume that real users know the true SD.
+
+Independent second differences of the objective, using three step sizes on
+four families and both exact/marginal fits, agreed with gradient-based curvature:
+the maximum relative difference in the age standard error was **0.0032%**.
+The evidence therefore points to variance estimation and small-sample reference
+approximations, rather than a simple Hessian scaling or derivative error.
+
+The new method uses residual rate degrees of freedom, an `n/df` curvature
+variance correction, a t critical value, and a bounded age transformation.
+The formula is derived from a local Gaussian regression approximation; no
+multiplier was fitted to achieve a target coverage on these data. See
+[the mathematical definition and limits](RADTE_MATH.md#small-sample-curvature-adjustment).
+
+### Independent-family results
+
+After choosing the correction on the original cases, six new conditions and
+new seed ranges were specified and evaluated, totaling **900 new families**.
+All 1,100 distinct families (original plus new) completed point inference.
+The native sequence `auto` fit was shared by the two interval calculations,
+and paired point estimates/parameters were checked for exact equality. The
+recomputed original Laplace endpoints agree with the archived ones to within
+`4e-15` age units. These are development-checkout results; source-file hashes,
+not the package version string alone, identify the tested implementation.
+
+![RADTE interval coverage, availability and width](examples/radte/interval-coverage.png)
+
+Coverage denominators below are **returned intervals**. Comparing them with the
+family count exposes unavailable intervals. Widths are medians among returned
+intervals, in input age units. Root-duplication truth is 20; the internal case
+has truth 7.5 and 12 gene tips from eight species.
+
+| Condition | Families | Laplace: covered / returned | Studentized: covered / returned | Median width: Laplace → studentized |
+| --- | --- | --- | --- | --- |
+| Original 4 tips, 2,000 sites, SD 0.3 | 200 | 155/190 (81.6%) | 185/190 (97.4%) | 9.29 → 18.34 |
+| New 4 tips, 2,000 sites, SD 0.3 | 200 | 162/197 (82.2%) | 195/199 (98.0%) | 8.23 → 16.81 |
+| New 4 tips, 2,000 sites, SD 0.1 | 200 | 153/155 (98.7%) | 155/155 (100.0%) | 5.15 → 9.87 |
+| New 4 tips, 2,000 sites, SD 0.6 | 200 | 103/137 (75.2%) | 191/199 (96.0%) | 12.79 → 36.65 |
+| New 16 tips, 2,000 sites, SD 0.3 | 100 | 95/100 (95.0%) | 97/100 (97.0%) | 10.09 → 10.98 |
+| New 4 tips, 10,000 sites, SD 0.3 | 100 | 79/100 (79.0%) | 97/100 (97.0%) | 6.70 → 14.85 |
+| New internal duplication, 12 tips, 2,000 sites, SD 0.3 | 100 | 85/91 (93.4%) | 97/100 (97.0%) | 2.27 → 2.45 |
+
+On the original families, a correct interval was returned for **77.5% → 92.5%**
+of all 200 families; on the new primary condition the corresponding values
+were **81.0% → 97.5%**. Conditional coverage alone must not hide missing intervals.
+The new primary studentized coverage is 195/199 = **98.0%**, with a Wilson 95%
+interval of **94.9–99.2%**. It is more conservative, with approximately twice
+the original median interval width. In the low-SD condition, 45/200 families
+still return no interval and all 155 returned adjusted intervals contain truth.
+This is conservative conditional coverage with incomplete availability, not a
+successful interval for every family. No boundary failure is converted into
+a narrow or degenerate confidence interval.
+
+A separate known-SD check reuses the same 200 new primary families: unadjusted
+Laplace covers 188/200 (94.0%) and the bounded-normal variant selected by
+`studentized --rate-sd 0.3` covers 189/200 (94.5%). These are not 200 additional
+independent families. The adjustment does not integrate substitution-model,
+topology, reconciliation, or external calibration uncertainty, and the six
+conditions do not establish universal 95% calibration.
+
+### Reproduction and evidence
+
+[Per-family paired results](examples/radte/interval-coverage.csv) and
+[summary, parameters, source hashes and environment](examples/radte/interval-coverage-summary.json)
+are included. The runs used Python 3.10.14, NumPy 1.26.4 and SciPy 1.15.2 with
+x86_64 executables under Rosetta on the same Apple M2 Max host. This is a
+statistical validation study, not a new runtime benchmark.
+
+From the checkout, regenerate the new primary condition with:
+
+```sh
+PYTHONPATH=. OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 \
+  MKL_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 NUMEXPR_NUM_THREADS=1 \
+  python tools/validate_radte_intervals.py \
+  --species 2 --sites 2000 --rate-sd 0.3 --families 200 \
+  --seed 91300000 --output /tmp/radte-interval-primary
+```
+
+The output directory must be new. `--input-root` can reuse directories named
+`f000`, `f001`, etc., containing the simulator's input files; an existing
+`ml.nhx` takes precedence over `gene.nwk`. A failed point fit is retained in
+both methods' denominators. The paired CSV/JSONL and metadata retain seeds,
+input hashes, unavailable statuses, fitted SDs, actual estimators, and source
+hashes. Seeds identify both simulation and optimizer initialization. For the
+remaining conditions, use the following values with separate output directories:
+
+| New condition | Species | Sites | Simulated SD | Scenario | Families | First seed |
+| --- | --- | --- | --- | --- | --- | --- |
+| Low rate variation | 2 | 2000 | 0.1 | root | 200 | 91310000 |
+| High rate variation | 2 | 2000 | 0.6 | root | 200 | 91320000 |
+| Larger family | 8 | 2000 | 0.3 | root | 100 | 91330000 |
+| Longer alignment | 2 | 10000 | 0.3 | root | 100 | 91340000 |
+| Internal duplication | 8 | 2000 | 0.3 | nested | 100 | 91350000 |
+
+For the oracle comparison, repeat the primary command with `--fit-rate-sd 0.3`.
+The original 200 cases use the frozen inputs linked from the workflow benchmark.
+Their seed range begins at 20260909; they are diagnostic/reproduction cases,
+not held-out evidence.
+
+Regression checks cover the local Gaussian formula, observation/degree counts
+for both sequence estimators, supplied-SD behavior, hard-domain propagation
+against independent linear programs, shared ages, unavailable/stale intervals,
+and CLI output. Broader RADTE/CLI tests include the exact and approximate PAML
+references; IQ-TREE integration is checked separately with its required local
+IQ2MC/session extension.

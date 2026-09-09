@@ -1,0 +1,369 @@
+{
+  "nominal_level": 0.95,
+  "independent_new_families": 900,
+  "original_families": 200,
+  "oracle_comparison": "The known-SD comparison reuses the 200 new primary families.",
+  "engine": "native auto, JC69, one gamma category, fixed species event ages",
+  "environment": {
+    "version": "0.43.12",
+    "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+    "platform": "macOS-26.6.2-x86_64-i386-64bit",
+    "numpy": "1.26.4",
+    "scipy": "1.15.2",
+    "threads": {
+      "OMP_NUM_THREADS": "1",
+      "OPENBLAS_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "NUMEXPR_NUM_THREADS": "1"
+    }
+  },
+  "source_sha256": {
+    "nwkit/radte.py": "40238f92065d2567538693c80280df8c34d4929743cf0b963fff665acd37982b",
+    "nwkit/radte_cli.py": "ae3cc51b0162e88abda03fe434ce84df17d2964396d6ac24755b47dc302b0cf3",
+    "nwkit/radte_codon.py": "a5ba0d518a838efb2dd92a5fb259df7c013e8bf268fafe480d799f8ecf196d15",
+    "nwkit/radte_compare.py": "3ef76fe16538364597663993c37d747151301925c29254226895d649b7c7c260",
+    "nwkit/radte_compare_plot.py": "81478dbc81e9b34ca8415628485a3f3828a3c5f255e0f21cea552c79e1062c56",
+    "nwkit/radte_components.py": "46cb67477cb9402acc46cd954419b497bb89ae25297224990700d55c562d31f7",
+    "nwkit/radte_ensemble.py": "0f5857e1decba5049e5f3c63cc6fbf30ac20b4b54ecb1f87decf2de943578356",
+    "nwkit/radte_inputs.py": "067a45f06b179bc678b7531a2d4ed002b319007edd5544c83319673b390b9a05",
+    "nwkit/radte_iqtree.py": "1c8c272ced513e88d5d0b85ddf9021b6cce5f2195015f618a5824623ade515a8",
+    "nwkit/radte_iqtree_session.py": "3e759e79a110c1e64d9606b0b43004293ebaee4b209e4f70819dc272a48a6b7d",
+    "nwkit/radte_marginal.py": "6ea31cdfd704f73a544924192d94c3333e36a5a95879337c118ee4afd4b8943e",
+    "nwkit/radte_model.py": "ec2ddc2df79529279cc6adb102e54e2ede6b20d50dc5e292d9dfe2a3e51c3154",
+    "nwkit/radte_paml.py": "735167a3094123c493b552e228be78353456be5e7f0fd91cdfdf6f8dd73d6d56",
+    "nwkit/radte_sequence.py": "99dabde91d856bbf3dc171e2f9e57e16d02340d18dbc433468b63b4ce01a022c",
+    "nwkit/radte_sequence_fit.py": "7082ed35c94ffd84b428d59aab871cb2a66984b0e463ac58d30192205d795310",
+    "nwkit/radte_species.py": "23d8f0b2a7e05bdc622efb00963bd5e05a3d447f9a7dd3cd068e0bb567672f5b",
+    "nwkit/radte_studentized.py": "9540c3b29844184ecf25fb80981cf37550b43c204407e28a0c6cc89dfd435982",
+    "nwkit/radte_uncertainty.py": "eecad9a6cb4197f922589f943a9e2dfa12de2933460da8aabc29d20dac2be01e"
+  },
+  "runner_sha256": "fa033319d2f49d9735046250acbda720f85d66ebc228aadf6ec2e3211d061744",
+  "studies": [
+    {
+      "name": "t4-s2000-sd03",
+      "parameters": {
+        "families": 200,
+        "species": 2,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "seed": 91300000
+      },
+      "results": {
+        "laplace": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 197,
+          "truth_covered": 162,
+          "coverage_among_available": 0.8223350253807107,
+          "correct_interval_returned_fraction": 0.81,
+          "median_width": 8.230768644097951,
+          "coverage_wilson_95": [
+            0.7629490945410132,
+            0.8693904669505322
+          ]
+        },
+        "studentized": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 199,
+          "truth_covered": 195,
+          "coverage_among_available": 0.9798994974874372,
+          "correct_interval_returned_fraction": 0.975,
+          "median_width": 16.814558795752074,
+          "coverage_wilson_95": [
+            0.9494658790228638,
+            0.9921562188976523
+          ]
+        }
+      }
+    },
+    {
+      "name": "t4-s2000-sd01",
+      "parameters": {
+        "families": 200,
+        "species": 2,
+        "sites": 2000,
+        "rate_sd": 0.1,
+        "scenario": "root",
+        "seed": 91310000
+      },
+      "results": {
+        "laplace": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 155,
+          "truth_covered": 153,
+          "coverage_among_available": 0.9870967741935484,
+          "correct_interval_returned_fraction": 0.765,
+          "median_width": 5.1480457449708865,
+          "coverage_wilson_95": [
+            0.95417911647676,
+            0.9964543083298841
+          ]
+        },
+        "studentized": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 155,
+          "truth_covered": 155,
+          "coverage_among_available": 1.0,
+          "correct_interval_returned_fraction": 0.775,
+          "median_width": 9.87245793067552,
+          "coverage_wilson_95": [
+            0.9758157671856282,
+            1.0
+          ]
+        }
+      }
+    },
+    {
+      "name": "t4-s2000-sd06",
+      "parameters": {
+        "families": 200,
+        "species": 2,
+        "sites": 2000,
+        "rate_sd": 0.6,
+        "scenario": "root",
+        "seed": 91320000
+      },
+      "results": {
+        "laplace": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 137,
+          "truth_covered": 103,
+          "coverage_among_available": 0.7518248175182481,
+          "correct_interval_returned_fraction": 0.515,
+          "median_width": 12.792274224821377,
+          "coverage_wilson_95": [
+            0.6732884840527308,
+            0.8166240784679698
+          ]
+        },
+        "studentized": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 199,
+          "truth_covered": 191,
+          "coverage_among_available": 0.9597989949748744,
+          "correct_interval_returned_fraction": 0.955,
+          "median_width": 36.654065343490444,
+          "coverage_wilson_95": [
+            0.92269130297867,
+            0.9794911259189975
+          ]
+        }
+      }
+    },
+    {
+      "name": "t16-s2000-sd03",
+      "parameters": {
+        "families": 100,
+        "species": 8,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "seed": 91330000
+      },
+      "results": {
+        "laplace": {
+          "families": 100,
+          "completed": 100,
+          "intervals_available": 100,
+          "truth_covered": 95,
+          "coverage_among_available": 0.95,
+          "correct_interval_returned_fraction": 0.95,
+          "median_width": 10.08610450442442,
+          "coverage_wilson_95": [
+            0.8882495307680809,
+            0.978456320845632
+          ]
+        },
+        "studentized": {
+          "families": 100,
+          "completed": 100,
+          "intervals_available": 100,
+          "truth_covered": 97,
+          "coverage_among_available": 0.97,
+          "correct_interval_returned_fraction": 0.97,
+          "median_width": 10.97526239441085,
+          "coverage_wilson_95": [
+            0.9154806357094724,
+            0.9897454759759611
+          ]
+        }
+      }
+    },
+    {
+      "name": "t4-s10000-sd03",
+      "parameters": {
+        "families": 100,
+        "species": 2,
+        "sites": 10000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "seed": 91340000
+      },
+      "results": {
+        "laplace": {
+          "families": 100,
+          "completed": 100,
+          "intervals_available": 100,
+          "truth_covered": 79,
+          "coverage_among_available": 0.79,
+          "correct_interval_returned_fraction": 0.79,
+          "median_width": 6.697305368354947,
+          "coverage_wilson_95": [
+            0.7002003116591013,
+            0.858343459380847
+          ]
+        },
+        "studentized": {
+          "families": 100,
+          "completed": 100,
+          "intervals_available": 100,
+          "truth_covered": 97,
+          "coverage_among_available": 0.97,
+          "correct_interval_returned_fraction": 0.97,
+          "median_width": 14.850586590639669,
+          "coverage_wilson_95": [
+            0.9154806357094724,
+            0.9897454759759611
+          ]
+        }
+      }
+    },
+    {
+      "name": "internal-s2000-sd03",
+      "parameters": {
+        "families": 100,
+        "species": 8,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "nested",
+        "seed": 91350000
+      },
+      "results": {
+        "laplace": {
+          "families": 100,
+          "completed": 100,
+          "intervals_available": 91,
+          "truth_covered": 85,
+          "coverage_among_available": 0.9340659340659341,
+          "correct_interval_returned_fraction": 0.85,
+          "median_width": 2.2726014679088147,
+          "coverage_wilson_95": [
+            0.8635353380058842,
+            0.9694337135283845
+          ]
+        },
+        "studentized": {
+          "families": 100,
+          "completed": 100,
+          "intervals_available": 100,
+          "truth_covered": 97,
+          "coverage_among_available": 0.97,
+          "correct_interval_returned_fraction": 0.97,
+          "median_width": 2.450592512825044,
+          "coverage_wilson_95": [
+            0.9154806357094724,
+            0.9897454759759611
+          ]
+        }
+      }
+    },
+    {
+      "name": "original-200",
+      "parameters": {
+        "families": 200,
+        "species": 2,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "seed": 20260909
+      },
+      "results": {
+        "laplace": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 190,
+          "truth_covered": 155,
+          "coverage_among_available": 0.8157894736842105,
+          "correct_interval_returned_fraction": 0.775,
+          "median_width": 9.291747199358252,
+          "coverage_wilson_95": [
+            0.7546014994961865,
+            0.8644611134766222
+          ]
+        },
+        "studentized": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 190,
+          "truth_covered": 185,
+          "coverage_among_available": 0.9736842105263158,
+          "correct_interval_returned_fraction": 0.925,
+          "median_width": 18.33700397550822,
+          "coverage_wilson_95": [
+            0.9398856844700374,
+            0.9887082349891756
+          ]
+        }
+      }
+    },
+    {
+      "name": "heldout-known-sd",
+      "parameters": {
+        "families": 200,
+        "species": 2,
+        "sites": 2000,
+        "rate_sd": 0.3,
+        "scenario": "root",
+        "seed": 91300000,
+        "fit_rate_sd": 0.3
+      },
+      "results": {
+        "laplace": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 200,
+          "truth_covered": 188,
+          "coverage_among_available": 0.94,
+          "correct_interval_returned_fraction": 0.94,
+          "median_width": 10.746555322432444,
+          "coverage_wilson_95": [
+            0.8980683070423372,
+            0.9653478057456681
+          ]
+        },
+        "studentized": {
+          "families": 200,
+          "completed": 200,
+          "intervals_available": 200,
+          "truth_covered": 189,
+          "coverage_among_available": 0.945,
+          "correct_interval_returned_fraction": 0.945,
+          "median_width": 10.997921396747257,
+          "coverage_wilson_95": [
+            0.9042130012276915,
+            0.9690146582965412
+          ]
+        }
+      }
+    }
+  ],
+  "paired_baseline_check": {
+    "age_new": 3.552713678800501e-15,
+    "lower": 0.0,
+    "upper": 3.552713678800501e-15,
+    "nwkit/radte_model.py": true,
+    "nwkit/radte_studentized.py": true,
+    "nwkit/radte_cli.py": true,
+    "nwkit/radte.py": true,
+    "tools/validate_radte_intervals.py": true
+  },
+  "max_independent_hessian_se_relative_difference": 3.1100558458452277e-05,
+  "cases_csv_sha256": "19ba2a7df2b3b2c0fc22060c584da1a54c13a083fd177b4a3eecb6e8ad73ec8d"
+}
