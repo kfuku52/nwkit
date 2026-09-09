@@ -311,7 +311,8 @@ def _render_attributes(attributes, output):
         raise ValueError(
             "Plain Newick cannot retain these properties: "
             + ", ".join(sorted(attributes))
-            + ". Use --to nhx/figtree, or --age-ci drop for age intervals."
+            + ". Use --to nhx/figtree to retain them, --properties drop to discard "
+            "all properties, or --age-ci drop for age intervals only."
         )
     if output == "nhx":
         return (
@@ -338,7 +339,16 @@ def _render_attributes(attributes, output):
     return "".join(comments)
 
 
-def _node_suffix(parts, output, factor, age_ci, parser):
+def _node_suffix(
+    parts,
+    output,
+    factor,
+    age_ci,
+    parser,
+    node_label="",
+    properties="keep",
+    internal=False,
+):
     attributes: dict[str, str] = {}
     comments: list[str] = []
     fields: list[Token] = []
@@ -354,12 +364,21 @@ def _node_suffix(parts, output, factor, age_ci, parser):
     if kinds not in ([], ["name"], [":", "name"], ["name", ":", "name"]):
         raise ValueError("Malformed Newick node label or branch length.")
     validate_age_attributes(attributes)
+    if internal and node_label and node_label in attributes:
+        value = attributes[node_label]
+        label = Token("name", "'" + value.replace("'", "''") + "'")
+        if fields and fields[0].kind == "name":
+            fields[0] = label
+        else:
+            fields.insert(0, label)
     if age_ci == "drop":
         attributes = {
             key: value for key, value in attributes.items() if key not in CI_FIELDS
         }
     for key in AGE_FIELDS & attributes.keys():
         attributes[key] = scaled_time(attributes[key], factor)
+    if properties == "drop":
+        attributes = {}
     rendered = []
     for index, field in enumerate(fields):
         if index and fields[index - 1].kind == ":":
@@ -381,22 +400,48 @@ def _node_suffix(parts, output, factor, age_ci, parser):
 
 
 def transform_annotations(
-    text, *, output="nhx", factor=Decimal(1), age_ci="keep", parser=False
+    text,
+    *,
+    output="nhx",
+    factor=Decimal(1),
+    age_ci="keep",
+    parser=False,
+    node_label="",
+    properties="keep",
 ):
     """Convert annotations without reserializing node names or support values."""
     factor = finite_decimal(factor, positive=True)
     if age_ci not in {"keep", "drop"}:
         raise ValueError("--age-ci must be keep or drop.")
+    if properties not in {"keep", "drop"}:
+        raise ValueError("--properties must be keep or drop.")
     result: list[str] = []
     suffix: list[Token] = []
+    internal = False
     for token in tokens(text):
         if token.kind in {"(", ")", ",", ";"}:
-            result.append(_node_suffix(suffix, output, factor, age_ci, parser))
+            result.append(
+                _node_suffix(
+                    suffix,
+                    output,
+                    factor,
+                    age_ci,
+                    parser,
+                    node_label,
+                    properties,
+                    internal,
+                )
+            )
             result.append(token.text)
             suffix = []
+            internal = token.kind == ")"
         else:
             suffix.append(token)
-    result.append(_node_suffix(suffix, output, factor, age_ci, parser))
+    result.append(
+        _node_suffix(
+            suffix, output, factor, age_ci, parser, node_label, properties, internal
+        )
+    )
     return "".join(result)
 
 

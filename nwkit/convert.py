@@ -57,6 +57,22 @@ def _rewrite_rooting(statement, state):
     return marker + "".join(result)
 
 
+def _validate_reserved_properties(statement):
+    """Reject attributes that ETE interprets as overrides of Newick fields."""
+    for token in tokens(statement):
+        if token.kind != "comment":
+            continue
+        attributes, _ = annotation_attributes(token.text)
+        reserved = {"name", "dist", "support"} & attributes.keys()
+        if reserved:
+            raise ValueError(
+                "Reserved NHX properties are ambiguous in convert: "
+                + ", ".join(sorted(reserved))
+                + ". Put node names, branch lengths and support in Newick fields, "
+                "or rename these properties before conversion."
+            )
+
+
 def convert_tree_text(
     text,
     *,
@@ -68,6 +84,8 @@ def convert_tree_text(
     tree_format="auto",
     quoted_node_names=True,
     rooted="auto",
+    node_label="",
+    properties="keep",
 ):
     """Serialize a validated result fully before the caller publishes any bytes."""
     if target not in {"newick", "nhx", "figtree"}:
@@ -75,6 +93,7 @@ def convert_tree_text(
     factor = finite_decimal(time_factor, positive=True)
     detected, statements = read_container(text, source)
     statement = _select_statement(detected, statements, tree_index)
+    _validate_reserved_properties(statement)
     tree = read_tree(
         statement, tree_format, quoted_node_names, quiet=True, rooted=rooted
     )
@@ -83,16 +102,25 @@ def convert_tree_text(
         if node.dist is not None and node.dist < 0:
             raise ValueError("Tree branch lengths must be non-negative.")
     info = get_rooting_info(tree)
+    if node_label:
+        # Copy from the original attributes, including nwkit_rooted, before
+        # canonicalizing rooting declarations or dropping/scaling properties.
+        statement = transform_annotations(statement, node_label=node_label)
     if info.state != "unknown" and (
         info.source != "topology" or rooted != "auto" or target == "figtree"
     ):
         statement = _rewrite_rooting(statement, info.state)
     converted = transform_annotations(
-        statement, output=target, factor=factor, age_ci=age_ci
+        statement,
+        output=target,
+        factor=factor,
+        age_ci=age_ci,
+        properties=properties,
     )
     # Verify the emitted numeric values and the exact downstream reader boundary.
-    # Names/support are carried lexically, not renamed or rounded by an ETE writer.
-    read_tree(converted, tree_format, quoted_node_names, quiet=True)
+    # The input quoting policy was checked above. Generated labels are always
+    # safely quoted, independent of whether input quotes were permitted.
+    read_tree(converted, 1 if node_label else tree_format, True, quiet=True)
     if target == "figtree":
         return "#NEXUS\nBEGIN TREES;\n  UTREE 1 = " + converted + "\nEND;\n"
     return converted + "\n"
@@ -109,6 +137,8 @@ def convert_main(args):
         tree_format=args.format,
         quoted_node_names=args.quoted_node_names,
         rooted=getattr(args, "input_rooted", "auto"),
+        node_label=getattr(args, "node_label", ""),
+        properties=getattr(args, "properties", "keep"),
     )
     if args.outfile == "-":
         sys.stdout.write(converted)

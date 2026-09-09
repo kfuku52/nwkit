@@ -472,6 +472,10 @@ output-path collisions. See [ASR.md](ASR.md) for missingness and likelihood rule
 
 ## Tree conversion
 
+`convert --node-label PROPERTY` copies a property to internal node names before
+`--properties drop` explicitly removes normalized NHX/age properties. The
+default is `--properties keep`; tip names and ordinary comments remain intact.
+
 `convert` uses `--from`/`--to` for container formats; `--format` retains its ETE
 parser meaning. It writes one tree/document, never a directory or implicit
 sidecars. See [CONVERT.md](CONVERT.md) for annotation, scaling, ambiguity and

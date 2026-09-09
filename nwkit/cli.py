@@ -4760,6 +4760,19 @@ pconvert.add_argument(
     metavar="INT",
     help="default=None: Select a 1-based input tree statement. Ambiguous multi-tree inputs require this option.",
 )
+pconvert.add_argument(
+    "--node-label",
+    "--node_label",
+    default="",
+    metavar="PROPERTY",
+    help="Copy an NHX property into internal node labels before property removal; missing properties leave labels unchanged. Tip names are never changed.",
+)
+pconvert.add_argument(
+    "--properties",
+    choices=["keep", "drop"],
+    default="keep",
+    help="default=%(default)s: Explicitly discard normalized NHX/age properties with drop; includes age intervals. Ordinary comments and explicit rooting remain.",
+)
 pconvert.set_defaults(handler=command_convert)
 
 

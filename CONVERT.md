@@ -1,6 +1,6 @@
 # Tree format conversion
 
-`nwkit convert` converts one tree without renaming its nodes or inferring new
+`nwkit convert` converts one tree without implicitly renaming its nodes or inferring new
 ages or credible intervals. It accepts Newick, NHX, FigTree NEXUS and the
 `Species tree for FigTree` block in MCMCtree's main output.
 
@@ -32,6 +32,39 @@ explicitly removes all four interval attributes; its default is `keep`.
 Plain Newick output refuses to discard NHX properties implicitly. Use NHX or
 FigTree to retain other attributes. Ordinary comments and uninterpreted FigTree
 fields are retained as comments; no time semantics are inferred for them.
+
+## Replacing NHX-to-Newick workflows
+
+Use `--properties drop` to explicitly discard all normalized NHX and age
+properties, including age intervals. The default `keep` continues to reject
+lossy plain-Newick conversion. Ordinary comments, uninterpreted FigTree fields,
+and explicit rooting declarations are retained. Invalid annotations are still
+rejected before removal.
+
+`--node-label PROPERTY` copies that property's original value into internal
+node labels (including the root) before removing or scaling properties. It
+replaces existing internal labels; nodes without the property keep their labels.
+Tip names never change. Values are quoted as Newick names; numeric values are
+labels, not support estimates. Read them with `--format 1` downstream when
+necessary. Property copies remain in NHX/FigTree output unless explicitly dropped.
+The input-only `--quoted-node-names no` check does not forbid safely quoted
+generated labels. `nwkit_rooted` can be copied before its rooting declaration
+is canonicalized, including when `--input-rooted` overrides that declaration.
+
+NHX keys `name`, `dist`, and `support` are rejected, even with `--properties drop`:
+ETE treats them as overrides of Newick fields, so retaining or removing them can
+silently change names, lengths, or support. Put those values in Newick fields or
+rename the attributes to non-reserved keys before conversion.
+
+```sh
+# Strip NHX properties explicitly.
+nwkit convert -i input.nhx --to newick --properties drop -o output.nwk
+# Equivalent purpose to nhx2nwk --node-label S, with explicit property removal.
+nwkit convert -i input.nhx --to newick --node-label S --properties drop -o labeled.nwk
+```
+
+`nhx2nwk` remains available for existing scripts. `convert` retains its stricter
+validation and container-selection rules, so it is not a byte-for-byte alias.
 
 Multiple input trees require a one-based `--tree-index`. MCMCtree's known
 paired plain and CI-annotated renderings of the same dated tree are recognized

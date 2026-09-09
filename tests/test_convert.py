@@ -14,6 +14,127 @@ def parsed(text):
     return read_tree(text, "auto", True, quiet=True)
 
 
+def test_property_labels_are_internal_only_and_precede_removal():
+    source = "((A:1[&&NHX:S=tip],B:2)old:3[&&NHX:S=AB:D=Y],C:4)root[&&NHX:S=ancestor];"
+    result = convert_tree_text(
+        source, target="newick", node_label="S", properties="drop"
+    )
+    tree = read_tree(result, 1, True, quiet=True)
+    assert set(tree.leaf_names()) == {"A", "B", "C"}
+    assert {n.name for n in tree.traverse() if not n.is_leaf} == {"AB", "ancestor"}
+    assert tree["A"].dist == 1 and tree["AB"].dist == 3
+    assert "NHX" not in result
+
+
+def test_label_copy_retains_properties_and_missing_labels():
+    source = "((A:1,B:1)unchanged:1,C:2)root[&&NHX:S=two words];"
+    result = convert_tree_text(source, node_label="S")
+    tree = read_tree(result, 1, True, quiet=True)
+    assert tree.name == "two words"
+    assert tree.props["S"] == "two words"
+    assert tree["unchanged"].name == "unchanged"
+
+
+def test_drop_properties_preserves_rooting_comments_and_precision():
+    source = "[&R](A:0.123456789012345,B:2)[note][&&NHX:D=Y:age=2];"
+    result = convert_tree_text(source, target="newick", properties="drop")
+    assert "[&R]" in result and "[note]" in result
+    assert "0.123456789012345" in result and "NHX" not in result
+
+
+@pytest.mark.parametrize("label", ["95", "O'Brien", "a,b", "two words"])
+def test_property_labels_are_quoted_and_replace_support(label):
+    result = convert_tree_text(
+        f"(A:1,B:1)90[&&NHX:S={label}];",
+        tree_format=0,
+        node_label="S",
+        properties="drop",
+        target="newick",
+    )
+    assert read_tree(result, 1, True, quiet=True).name == label
+
+
+def test_age_property_label_is_copied_before_scaling():
+    result = convert_tree_text(
+        "(A:1,B:1)[&&NHX:age=2];", node_label="age", time_factor=1000
+    )
+    tree = read_tree(result, 1, True, quiet=True)
+    assert tree.name == "2"
+    assert float(tree.props["age"]) == 2000
+
+
+@pytest.mark.parametrize("target", ["nhx", "newick", "figtree"])
+def test_generated_quotes_are_independent_of_input_quote_policy(target):
+    result = convert_tree_text(
+        "(A:1,B:1)[&&NHX:S=two words];",
+        target=target,
+        quoted_node_names=False,
+        node_label="S",
+        properties="drop",
+    )
+    assert read_tree(result, 1, True, quiet=True).name == "two words"
+    with pytest.raises(ValueError, match="Quoted node names"):
+        convert_tree_text(
+            "('A':1,B:1)[&&NHX:S=ancestor];",
+            node_label="S",
+            quoted_node_names=False,
+        )
+
+
+@pytest.mark.parametrize("target", ["nhx", "newick", "figtree"])
+@pytest.mark.parametrize("rooted", ["auto", "no"])
+def test_rooting_property_is_copied_before_canonicalization(target, rooted):
+    result = convert_tree_text(
+        "(A:1,B:1)[&&NHX:nwkit_rooted=yes];",
+        target=target,
+        rooted=rooted,
+        node_label="nwkit_rooted",
+        properties="drop",
+    )
+    assert read_tree(result, 1, True, quiet=True).name == "yes"
+    assert ("[&U]" if rooted == "no" else "[&R]") in result
+
+
+@pytest.mark.parametrize("property_value", ["name=old", "dist=9", "support=95"])
+@pytest.mark.parametrize("properties", ["keep", "drop"])
+@pytest.mark.parametrize("target", ["nhx", "newick", "figtree"])
+def test_reserved_properties_cannot_silently_override_converted_fields(
+    property_value, properties, target
+):
+    source = f"((A:1,B:1)original:2[&&NHX:S=ancestor:{property_value}],C:3);"
+    with pytest.raises(ValueError, match="Reserved NHX properties"):
+        convert_tree_text(
+            source, target=target, properties=properties, node_label="S", time_factor=10
+        )
+
+
+def test_reserved_tip_property_failure_preserves_output(tmp_path):
+    source = tmp_path / "input.nhx"
+    output = tmp_path / "output.nwk"
+    source.write_text("(A:1[&&NHX:name=X],B:1);")
+    output.write_text("previous result")
+    with pytest.raises(ValueError, match="Reserved NHX properties"):
+        main(["convert", "-i", str(source), "-o", str(output), "--properties", "drop"])
+    assert output.read_text() == "previous result"
+
+
+def test_property_drop_includes_intervals_but_validates_input():
+    source = "(A:1,B:1)[&95%HPD={0.5,1.5}];"
+    assert (
+        convert_tree_text(source, target="newick", properties="drop") == "(A:1,B:1);\n"
+    )
+    with pytest.raises(ValueError):
+        convert_tree_text("(A:1,B:1)[&95%HPD={2,1}];", properties="drop")
+    with pytest.raises(ValueError, match="properties"):
+        convert_tree_text("(A:1,B:1);", properties="invalid")
+
+
+def test_convert_cli_replaces_nhx2nwk_label_workflow(monkeypatch, capsys):
+    monkeypatch.setattr("sys.stdin", io.StringIO("(A:1,B:1)[&&NHX:S=ancestor];"))
+    main(["convert", "--to", "newick", "--node-label", "S", "--properties", "drop"])
+    assert read_tree(capsys.readouterr().out, 1, True, quiet=True).name == "ancestor"
+
+
 def test_multiline_nexus_roundtrip_scales_lengths_ages_and_intervals():
     source = "#NEXUS\nBEGIN TREES;\nTREE dated = [&R] (A:0.1,\nB:0.1)[&95%HPD={0.05,0.15},age=0.1];\nEND;\n"
     nhx = convert_tree_text(source, time_factor=1000)
