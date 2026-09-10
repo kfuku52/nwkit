@@ -197,3 +197,26 @@ def test_replicate_cli_likelihood_uses_raw_measurements(tmp_path):
     assert pd.read_csv(comparison, sep="\t").log_likelihood.iloc[0] == pytest.approx(
         loglike, abs=1e-8
     )
+
+
+@pytest.mark.parametrize("traits", [("x",), ("x", "y")])
+def test_replicates_can_fill_missing_tips_without_existing_error_entries(
+    tmp_path, traits
+):
+    from types import SimpleNamespace
+
+    from nwkit.continuous_observation import apply_replicate_observations
+
+    path = tmp_path / "replicates.tsv"
+    path.write_text("leaf_name\ttrait\tvalue\tstandard_error\nB\tx\t4.0\t0.2\n")
+    scalar = len(traits) == 1
+    observed = {"A": 1.0 if scalar else [1.0, None], "B": None, "C": None}
+    errors = {"A": 0.1 if scalar else [0.1, 0.0]}
+    args = SimpleNamespace(replicate_observations=str(path))
+    values, uncertainty = apply_replicate_observations(observed, errors, traits, args)
+    assert values["A"] == observed["A"]
+    assert values["B"] == (4.0 if scalar else [4.0, None])
+    assert values["C"] == (None if scalar else [None, None])
+    assert uncertainty["B"] == (0.2 if scalar else [0.2, 0.0])
+    assert uncertainty["A"] == errors["A"]
+    assert args._replicate_log_constant == pytest.approx(0.0)

@@ -83,12 +83,15 @@ def write_branch_outputs(tree, observed, errors, fit, args, settings):
         return
     ids = assign_branch_ids(tree)
     metadata = {
-        "schema_version": 1,
+        "schema_version": 2,
         "nwkit_version": __version__,
         "command": "asr",
         "model": settings.model,
         "output": settings.output,
-        "parameters": "fixed; no parameter estimation or model search",
+        "parameters": "fixed; no parameter estimation or model search"
+        if fit.estimation is None
+        else "estimated diffusion parameters; fixed assignments, jumps and root",
+        "estimation": fit.estimation,
         "root": asdict(fit.process.root),
         "nodes": _node_rows(tree),
         "branch_models": rows,
@@ -128,7 +131,7 @@ def write_branch_outputs(tree, observed, errors, fit, args, settings):
         "log_likelihood": fit.log_likelihood,
         "num_observed": fit.num_observed,
         "likelihood_rank": fit.num_effective_observations,
-        "uncertainty": "Conditional on fixed tree, branch assignments and parameters. Prior draws are latent states without observation noise. Flat-root likelihoods use an improper constant-density root and are not comparable to proper-root likelihoods.",
+        "uncertainty": "Conditional on the input tree, fixed branch assignments and supplied/fitted parameters; parameter and assignment uncertainty is excluded. Prior draws are latent states without observation noise. Flat-root likelihoods use an improper constant-density root and are not comparable to proper-root likelihoods.",
     }
     Path(args.process_out).write_text(
         json.dumps(metadata, ensure_ascii=False, allow_nan=False, indent=2) + "\n",

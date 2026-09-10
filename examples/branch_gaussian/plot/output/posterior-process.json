@@ -1,10 +1,11 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "nwkit_version": "0.43.15",
   "command": "asr",
   "model": "BRANCH-GAUSSIAN",
   "output": "summary",
   "parameters": "fixed; no parameter estimation or model search",
+  "estimation": null,
   "root": {
     "mode": "gaussian",
     "mean": 0.0,
@@ -449,5 +450,5 @@
   "log_likelihood": -3.2469193182601863,
   "num_observed": 7,
   "likelihood_rank": 7,
-  "uncertainty": "Conditional on fixed tree, branch assignments and parameters. Prior draws are latent states without observation noise. Flat-root likelihoods use an improper constant-density root and are not comparable to proper-root likelihoods."
+  "uncertainty": "Conditional on the input tree, fixed branch assignments and supplied/fitted parameters; parameter and assignment uncertainty is excluded. Prior draws are latent states without observation noise. Flat-root likelihoods use an improper constant-density root and are not comparable to proper-root likelihoods."
 }

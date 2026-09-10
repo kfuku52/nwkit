@@ -65,7 +65,7 @@ minimal worked example, in
 
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
 - [`shift`](SHIFT.md): Experimental small-tree OU shift selection with bootstrap calibration and explicit α limits; optional legacy kfl1ou backend
-- [`asr`](https://github.com/kfuku52/nwkit/blob/master/ASR.md): Inferring Mk/covarion/mixture/threshold or scalar/multivariate Gaussian ancestral traits, with regimes, joint evolutionary/individual covariance, model comparison, simulation diagnostics, and automatic trait-type detection; supports [fixed branch-specific BM/OU and Gaussian jumps](BRANCH_GAUSSIAN.md)
+- [`asr`](https://github.com/kfuku52/nwkit/blob/master/ASR.md): Inferring Mk/covarion/mixture/threshold or scalar/multivariate Gaussian ancestral traits, with regimes, joint evolutionary/individual covariance, model comparison, simulation diagnostics, and automatic trait-type detection; supports [branch-specific BM/OU and fixed Gaussian jumps](BRANCH_GAUSSIAN.md)
 - [`asrcompare`](https://github.com/kfuku52/nwkit/blob/master/ASR.md#model-comparison-and-simulation-diagnostics): Batch-fitting applicable ASR models and comparing compatible likelihood/root groups with AIC, AICc, BIC, and an optional PDF
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`collapse`](https://github.com/kfuku52/nwkit/wiki/nwkit-collapse): Collapsing internal branches by support and/or branch length

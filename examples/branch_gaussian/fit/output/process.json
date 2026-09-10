@@ -3,9 +3,74 @@
   "nwkit_version": "0.43.15",
   "command": "asr",
   "model": "BRANCH-GAUSSIAN",
-  "output": "prior-samples",
-  "parameters": "fixed; no parameter estimation or model search",
-  "estimation": null,
+  "output": "summary",
+  "parameters": "estimated diffusion parameters; fixed assignments, jumps and root",
+  "estimation": {
+    "method": "ML",
+    "assignment_search": false,
+    "root_parameters_estimated": false,
+    "jump_parameters_estimated": false,
+    "num_parameters_estimated": 3,
+    "parameter_rank": 3,
+    "identifiability": "numerical_local_full_rank",
+    "initial_log_likelihood": -3.427654478391859,
+    "groups": [
+      {
+        "group": "high",
+        "parameter": "theta",
+        "regimes": [
+          "High optimum",
+          "High optimum + event"
+        ],
+        "initial": 2.5,
+        "lower": 0.0,
+        "upper": 5.0,
+        "time_scale": 1.0,
+        "estimate": 2.4878212065814664,
+        "boundary": null
+      },
+      {
+        "group": "pull",
+        "parameter": "alpha",
+        "regimes": [
+          "High optimum",
+          "High optimum + event",
+          "Low optimum"
+        ],
+        "initial": 1.8,
+        "lower": 0.0,
+        "upper": 8.0,
+        "time_scale": 0.9,
+        "estimate": 1.2253429920206087,
+        "boundary": null
+      },
+      {
+        "group": "rate",
+        "parameter": "sigma2",
+        "regimes": [
+          "Background",
+          "High optimum",
+          "High optimum + event",
+          "Low optimum"
+        ],
+        "initial": 0.3,
+        "lower": 0.01,
+        "upper": 3.0,
+        "time_scale": 1.0,
+        "estimate": 0.1884463109063332,
+        "boundary": null
+      }
+    ],
+    "fit_status": "ok",
+    "optimizer_success": true,
+    "optimizer_message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL; checked projected gradient=4.12725e-07",
+    "optimizer_starts": 6,
+    "optimizer_converged_starts": 6,
+    "optimizer_failed_starts": 0,
+    "optimizer_projected_gradient": 4.1272540939253374e-07,
+    "optimizer_global_optimum_guaranteed": false,
+    "boundary_groups": []
+  },
   "root": {
     "mode": "gaussian",
     "mean": 0.0,
@@ -122,7 +187,7 @@
     {
       "branch_id": 1,
       "model": "BM",
-      "sigma2": 0.25,
+      "sigma2": 0.1884463109063332,
       "alpha": null,
       "theta": null,
       "jump_mean": null,
@@ -131,16 +196,16 @@
     {
       "branch_id": 2,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": null,
       "jump_variance": null
     },
     {
       "branch_id": 3,
       "model": "BM",
-      "sigma2": 0.25,
+      "sigma2": 0.1884463109063332,
       "alpha": null,
       "theta": null,
       "jump_mean": null,
@@ -149,8 +214,8 @@
     {
       "branch_id": 4,
       "model": "OU",
-      "sigma2": 0.2,
-      "alpha": 2.0,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
       "theta": -1.2,
       "jump_mean": null,
       "jump_variance": null
@@ -158,25 +223,25 @@
     {
       "branch_id": 5,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": null,
       "jump_variance": null
     },
     {
       "branch_id": 6,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": null,
       "jump_variance": null
     },
     {
       "branch_id": 7,
       "model": "BM",
-      "sigma2": 0.25,
+      "sigma2": 0.1884463109063332,
       "alpha": null,
       "theta": null,
       "jump_mean": null,
@@ -185,7 +250,7 @@
     {
       "branch_id": 8,
       "model": "BM",
-      "sigma2": 0.25,
+      "sigma2": 0.1884463109063332,
       "alpha": null,
       "theta": null,
       "jump_mean": null,
@@ -194,8 +259,8 @@
     {
       "branch_id": 9,
       "model": "OU",
-      "sigma2": 0.2,
-      "alpha": 2.0,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
       "theta": -1.2,
       "jump_mean": null,
       "jump_variance": null
@@ -203,8 +268,8 @@
     {
       "branch_id": 10,
       "model": "OU",
-      "sigma2": 0.2,
-      "alpha": 2.0,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
       "theta": -1.2,
       "jump_mean": null,
       "jump_variance": null
@@ -212,36 +277,36 @@
     {
       "branch_id": 11,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": null,
       "jump_variance": null
     },
     {
       "branch_id": 12,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": 0.9,
       "jump_variance": 0.06
     },
     {
       "branch_id": 13,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": null,
       "jump_variance": null
     },
     {
       "branch_id": 14,
       "model": "OU",
-      "sigma2": 0.35,
-      "alpha": 1.8,
-      "theta": 2.5,
+      "sigma2": 0.1884463109063332,
+      "alpha": 1.2253429920206087,
+      "theta": 2.4878212065814664,
       "jump_mean": null,
       "jump_variance": null
     }
@@ -309,105 +374,146 @@
       "branch_id": 1,
       "slope": 1.0,
       "intercept": 0.0,
-      "variance": 0.175
+      "variance": 0.13191241763443323
     },
     {
       "branch_id": 2,
-      "slope": 0.19789869908361465,
-      "intercept": 2.0052532522909634,
-      "variance": 0.09341462130982069
+      "slope": 0.33193746281668574,
+      "intercept": 1.6620201473272689,
+      "variance": 0.06842281314804638
     },
     {
       "branch_id": 3,
       "slope": 1.0,
       "intercept": 0.0,
-      "variance": 0.15
+      "variance": 0.11306778654379993
     },
     {
       "branch_id": 4,
-      "slope": 0.44932896411722156,
-      "intercept": -0.6608052430593341,
-      "variance": 0.039905174100267234
+      "slope": 0.6125423495639469,
+      "intercept": -0.4649491805232637,
+      "variance": 0.048043577900526595
     },
     {
       "branch_id": 5,
-      "slope": 0.4065696597405991,
-      "intercept": 1.4835758506485022,
-      "variance": 0.08115149697845685
+      "slope": 0.541901246588066,
+      "intercept": 1.1396677934467432,
+      "variance": 0.054314482063631035
     },
     {
       "branch_id": 6,
-      "slope": 0.5827482523739896,
-      "intercept": 1.0431293690650258,
-      "variance": 0.06420599056229759
+      "slope": 0.6923920776556921,
+      "intercept": 0.7652735125206342,
+      "variance": 0.04003118747033407
     },
     {
       "branch_id": 7,
       "slope": 1.0,
       "intercept": 0.0,
-      "variance": 0.175
+      "variance": 0.13191241763443323
     },
     {
       "branch_id": 8,
       "slope": 1.0,
       "intercept": 0.0,
-      "variance": 0.175
+      "variance": 0.13191241763443323
     },
     {
       "branch_id": 9,
-      "slope": 0.16529888822158653,
-      "intercept": -1.0016413341340962,
-      "variance": 0.04863381387763538
+      "slope": 0.33193746281668574,
+      "intercept": -0.8016750446199772,
+      "variance": 0.06842281314804638
     },
     {
       "branch_id": 10,
-      "slope": 0.16529888822158653,
-      "intercept": -1.0016413341340962,
-      "variance": 0.04863381387763538
+      "slope": 0.33193746281668574,
+      "intercept": -0.8016750446199772,
+      "variance": 0.06842281314804638
     },
     {
       "branch_id": 11,
-      "slope": 0.3395955256449391,
-      "intercept": 1.6510111858876522,
-      "variance": 0.08601005767685503
+      "slope": 0.47940678920036595,
+      "intercept": 1.2951428298296652,
+      "variance": 0.05922241052336485
     },
     {
       "branch_id": 12,
-      "slope": 0.3395955256449391,
-      "intercept": 2.5510111858876523,
-      "variance": 0.14601005767685504
+      "slope": 0.47940678920036595,
+      "intercept": 2.195142829829665,
+      "variance": 0.11922241052336485
     },
     {
       "branch_id": 13,
-      "slope": 0.2369277586821217,
-      "intercept": 1.9076806032946958,
-      "variance": 0.09176467583557033
+      "slope": 0.3752081300093205,
+      "intercept": 1.5543704638625029,
+      "variance": 0.06606991892354028
     },
     {
       "branch_id": 14,
-      "slope": 0.2369277586821217,
-      "intercept": 1.9076806032946958,
-      "variance": 0.09176467583557033
+      "slope": 0.3752081300093205,
+      "intercept": 1.5543704638625029,
+      "variance": 0.06606991892354028
     }
   ],
   "jump_position": "branch_end_after_diffusion",
-  "observations": [],
+  "observations": [
+    {
+      "leaf_name": "A",
+      "value": -0.4,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "B",
+      "value": 0.2,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "C",
+      "value": -0.9,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "D",
+      "value": null,
+      "standard_error": 0.0
+    },
+    {
+      "leaf_name": "E",
+      "value": 2.0,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "F",
+      "value": 3.0,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "G",
+      "value": 2.8,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "H",
+      "value": 2.1,
+      "standard_error": 0.1
+    }
+  ],
   "state_column": "x",
-  "standard_error_column": null,
+  "standard_error_column": "se",
   "ci_level": 0.95,
   "target": "all",
   "missing_values": ",NA,NaN,nan,?,missing,unknown",
   "unmatched": "warn",
   "replicate_log_constant": 0.0,
-  "num_observed_positions": 0,
+  "num_observed_positions": 7,
   "seed": 39,
-  "prior_samples": 6,
+  "prior_samples": null,
   "prior_root_value": null,
   "figure_simulations": 6,
-  "figure_simulation_mode": "unconditional",
+  "figure_simulation_mode": "conditional",
   "figure_simulation_steps": 120,
-  "log_likelihood": null,
-  "num_observed": 0,
-  "likelihood_rank": 0,
+  "log_likelihood": -2.7748646611633405,
+  "num_observed": 7,
+  "likelihood_rank": 7,
   "uncertainty": "Conditional on the input tree, fixed branch assignments and supplied/fitted parameters; parameter and assignment uncertainty is excluded. Prior draws are latent states without observation noise. Flat-root likelihoods use an improper constant-density root and are not comparable to proper-root likelihoods."
 }

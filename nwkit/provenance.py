@@ -71,6 +71,7 @@ OUTPUT_ARGUMENTS = frozenset(
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
+        "branch_fit",
         "branch_models",
         "branch_regimes",
         "regime_models",

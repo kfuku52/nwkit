@@ -2977,6 +2977,7 @@ def _validate_asr_output_paths(args):
                 "misclassification_matrix",
                 "latent_regime_config",
                 "species_map_tsv",
+                "branch_fit",
                 "branch_models",
                 "branch_regimes",
                 "regime_models",

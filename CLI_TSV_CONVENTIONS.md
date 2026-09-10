@@ -661,3 +661,13 @@ reinput using 17 significant digits. `--model-out` remains the ASR model TSV;
 `--process-out` exports the process/run JSON. See
 [BRANCH_GAUSSIAN.md](BRANCH_GAUSSIAN.md) for required parameters, root treatment
 and the ASR, likelihood and simulation output schemas.
+
+
+With `--branch-fit FILE`, BRANCH-GAUSSIAN additionally reads an explicit fitting
+TSV: `regime, parameter, group, lower, upper`. Named regimes are required;
+repeated groups tie one diffusion parameter across regimes with identical
+starting values/bounds. Unlisted parameters and all jumps/root parameters stay
+fixed. `--branch-models-out` contains fitted values; the model TSV includes a
+`parameter_estimation` JSON cell, and process JSON schema 2 has an `estimation`
+object with estimates, bounds, local rank and optimizer diagnostics. See the
+[fixed-assignment estimation contract](BRANCH_GAUSSIAN.md#estimation-at-a-fixed-assignment).

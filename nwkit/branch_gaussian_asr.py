@@ -1,6 +1,7 @@
 """Fixed branch processes exposed through the common ASR fit interface."""
 
-from dataclasses import dataclass
+import json
+from dataclasses import dataclass, replace
 from typing import Any
 
 from nwkit.asr_regimes import RegimeAssignment
@@ -39,6 +40,8 @@ class BranchGaussianFit:
     optimizer_success: bool = True
     summary_kind: str = "posterior"
     prior_root_value: float | None = None
+    fit_spec: tuple = ()
+    estimation: dict | None = None
 
     @property
     def root_prior(self):
@@ -134,11 +137,26 @@ def compute_branch_marginals(
     assignment=None,
     root=None,
     compute_posterior=True,
+    fit_spec=None,
 ):
     if assignment is None:
         assignment = load_branch_assignment(tree, args)
     if root is None:
         root = branch_root(args)
+    if fit_spec is None and getattr(args, "branch_fit", None):
+        from nwkit.branch_gaussian_fit_spec import load_branch_fit_spec
+
+        fit_spec = load_branch_fit_spec(args.branch_fit, assignment, tree)
+    estimation = None
+    if fit_spec:
+        from nwkit.branch_gaussian_estimation import estimate_branch_parameters
+
+        assignment, estimation = estimate_branch_parameters(
+            tree, observed, errors, assignment, root, fit_spec
+        )
+        estimation["initial_log_likelihood"] += getattr(
+            args, "_replicate_log_constant", 0.0
+        )
     process = build_branch_gaussian_process(
         tree, assignment.models_by_branch_id, root=root
     )
@@ -149,7 +167,16 @@ def compute_branch_marginals(
     else:
         result = gaussian_tree_likelihood(process, observed, standard_errors=errors)
         posterior = {}
-    return posterior, branch_fit(process, assignment, result)
+    fit = branch_fit(process, assignment, result)
+    if estimation is not None:
+        fit = replace(
+            fit,
+            fit_spec=tuple(fit_spec),
+            estimation=estimation,
+            fit_status=estimation["fit_status"],
+            optimizer_success=estimation["optimizer_success"],
+        )
+    return posterior, fit
 
 
 def branch_model_table(fit, args, ci_level):
@@ -165,8 +192,16 @@ def branch_model_table(fit, args, ci_level):
                 "root_prior": fit.root_prior,
                 "root_mean": fit.root_mean,
                 "root_variance": fit.root_variance,
-                "estimation_method": "fixed",
-                "num_parameters_estimated": 0,
+                "estimation_method": "fixed"
+                if fit.estimation is None
+                else fit.estimation["method"],
+                "num_parameters_estimated": len(fit.fit_spec),
+                "optimizer_success": fit.optimizer_success,
+                "parameter_estimation": None
+                if fit.estimation is None
+                else json.dumps(
+                    fit.estimation, ensure_ascii=False, allow_nan=False, sort_keys=True
+                ),
                 "log_likelihood": fit.log_likelihood,
                 "likelihood_kind": "flat_root_integrated"
                 if fit.root_prior == "flat"

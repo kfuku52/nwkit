@@ -1,0 +1,10 @@
+regime	parameter	group	lower	upper
+Background	sigma2	rate	0.01	3
+Low optimum	sigma2	rate	0.01	3
+High optimum	sigma2	rate	0.01	3
+High optimum + event	sigma2	rate	0.01	3
+Low optimum	alpha	pull	0	8
+High optimum	alpha	pull	0	8
+High optimum + event	alpha	pull	0	8
+High optimum	theta	high	0	5
+High optimum + event	theta	high	0	5

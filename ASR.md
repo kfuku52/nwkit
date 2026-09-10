@@ -1509,5 +1509,6 @@ process supports likelihood, ancestral-state conditioning and simulation.
 Use `asr --model BRANCH-GAUSSIAN` with direct/regime TSV assignments and an
 explicit root prior. It supports summary, likelihood and prior-sample outputs,
 standard ASR plots, conditional/unconditional histories and Gaussian end-jump
-markers. See the [plot examples](examples/branch_gaussian/plot/README.md).
+markers. Add `--branch-fit` to estimate explicitly shared BM/OU parameters while
+keeping the branch assignment, root parameters and jumps fixed. See the [plot examples](examples/branch_gaussian/plot/README.md).
 `--model-out` stays TSV; `--process-out` exports complete JSON run settings.

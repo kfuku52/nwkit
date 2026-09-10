@@ -5,8 +5,9 @@ BM, OU and prescribed Gaussian jump parameters assigned to individual branches.
 It returns the existing `GaussianTreeProcess`, usable directly for likelihood,
 ancestral-state conditioning, covariance and simulation. Parameters and branch
 assignments are supplied by the caller. The `nwkit asr --model BRANCH-GAUSSIAN` CLI reads
-fixed models from TSV files; fitting and automatic model search are outside
-this API.
+models from TSV files. Adding `--branch-fit` estimates selected diffusion
+parameters at a fixed regime assignment; automatic model search is not performed.
+The process-building API itself continues to accept fully specified parameters.
 
 ## Model and units
 
@@ -169,7 +170,7 @@ use `--posterior-samples-out FILE --posterior-samples N` with summary output.
 `observed_se`, `is_imputed`, `mean`, `variance`, `sd`, `ci_lower`, `ci_upper`,
 `ci_level`. `--target` selects nodes (default all); figures always show every
 node. `--tree-out` exports the standard ASR NHX annotations. Likelihood emits
-one fixed-model summary row, including `model`, `trait`, `root_prior`,
+one fixed-assignment model summary row, including `model`, `trait`, `root_prior`,
 `log_likelihood`, `likelihood_rank`, `num_observed`, and
 `num_observed_positions`. Prior sampling emits `simulation`, `branch_id`, `parent`,
 `node_class`, `name`, `value`; each one-based simulation includes every latent
@@ -177,11 +178,15 @@ node value. Parents use original branch IDs, with −1 for the root.
 
 `--branch-models-out FILE` exports normalized direct assignments accepted by
 `--branch-models`. The shared `--model-out FILE` remains a TSV of model and
-likelihood metadata, with `num_parameters_estimated=0`.
-`--process-out FILE` writes JSON schema version 1 containing
+likelihood metadata. `num_parameters_estimated` counts the free groups (zero
+without `--branch-fit`); `parameter_estimation` contains the group estimates,
+bounds and diagnostics as JSON in one TSV cell.
+`--process-out FILE` writes JSON schema version 2 containing
 the root, topology/lengths, normalized branch parameters, optional regime names,
 affine transitions, used observations/SEs, operation, seed, draw count, interval
-level and inference summary. JSON is a run record; it is not a separate model
+level and inference summary. The `estimation` object records estimated groups
+and optimizer/identifiability diagnostics, or is null for fixed parameters.
+JSON is a run record; it is not a separate model
 input format. Auxiliary outputs require file paths, not stdout. Normalized model TSVs
 use 17 significant digits for float round trips.
 
@@ -199,7 +204,8 @@ record.
 node means and intervals, branch model colors, and OU optima. A star marks each
 prescribed end jump; an open diamond marks an imputed tip. Add
 `--figure-tip-heatmap yes` and `--figure-trait-tip-labels yes` to locate observed
-and missing tips. These are scalar models, with fixed parameters and assignments.
+and missing tips. These are scalar models with fixed assignments. With `--branch-fit`, node
+intervals, optima and histories use the fitted diffusion parameters.
 
 `--figure-simulations N --figure-simulation-mode conditional` adds sampled
 histories conditioned on all observed tips and their standard errors.
@@ -219,11 +225,94 @@ same numerical endpoints.
 
 Summary output also supports posterior predictive checks, leave-one-tip/clade
 cross-validation, independent measurement errors and replicate observations.
-All intervals and draws condition on the supplied parameters, branch assignments
-and tree. Bootstrap parameter estimation, model comparison, correlated
+All intervals and draws condition on the supplied/fitted parameters, branch assignments
+and tree. Bootstrap uncertainty, model comparison, correlated
 measurement-error input and tree ensembles are rejected for this fixed branch
 assignment interface. `asrcompare --models all` records it as not applicable;
 use the explicit ASR command to evaluate a supplied assignment.
 
 See the [eight-tip plotting example](examples/branch_gaussian/plot/README.md)
 for rendered posterior and prior figures and their exact inputs.
+
+
+## Estimation at a fixed assignment
+
+Add `--branch-fit fit.tsv` to `asr --model BRANCH-GAUSSIAN` with
+`--branch-regimes` and `--regime-models`. Each input regime model still contains
+numeric values: these become starting values for estimated parameters and stay
+fixed for all other parameters. Branch IDs, BM/OU model types, root parameters,
+and Gaussian jump means/variances remain fixed. This is an ASR fitting option;
+it does not invoke `shift` or search for regime locations.
+
+The fit TSV has exactly these five columns:
+
+```tsv
+regime	parameter	group	lower	upper
+Background	sigma2	diffusion	0.01	3
+Adapted	sigma2	diffusion	0.01	3
+Adapted	alpha	pull	0	8
+Adapted	theta	optimum	-5	5
+```
+
+This example estimates **three** parameters: the shared BM/OU diffusion rate,
+OU alpha, and OU optimum. Distinct group names permit different values;
+repeating a group ties the same parameter across those regimes. Every tied row
+must have identical initial values and bounds. Parameters omitted from this TSV
+stay fixed. The regime names must exactly match the assignment tables.
+Direct `--branch-models` input cannot be combined with fitting; use named regimes
+to make parameter sharing explicit.
+
+Only `sigma2` (BM or OU), `alpha` (OU), and `theta` (OU) may be estimated. Each
+regime/parameter appears at most once. All bounds must be finite and increasing;
+starting values must lie within them. Estimated sigma2 needs a strictly positive
+lower bound; alpha permits zero. Fixed parameters, including fixed sigma2=0,
+retain the ordinary process rules. Bounds are part of the requested statistical
+model, not confidence intervals. An estimate at a bound is reported as
+`fit_status=boundary`, with the affected groups and boundary sides; it must not
+be interpreted as an unconstrained optimum.
+
+Proper roots (`fixed`, `gaussian`, or explicitly specified `stationary`) use
+maximum likelihood with their supplied root parameters unchanged. A flat root
+uses the existing root-integrated likelihood, labeled `flat_root_integrated`;
+for all-BM shared-rate fitting without known errors this gives the usual
+residual-contrast rate estimate. **Alpha cannot be estimated with a flat root**:
+changing alpha changes the root loading and therefore the scale of its improper
+integral. Fix alpha or supply a proper root. A `stationary` root is a supplied
+reference distribution, not an equilibrium recalculated from fitted branch
+parameters. Proper-root and flat-root likelihoods are not directly comparable.
+
+The implementation uses bounded deterministic multistart optimization and
+independently checks projected finite-difference gradients before accepting
+convergence. Positive rate/alpha bounds use logarithmic coordinates; alpha
+bounds starting at zero use log(1 + alpha × tree-time scale). This is a numerical
+search, with no global-optimum guarantee. JSON records start counts, failures,
+termination messages, checked gradients, initial likelihood and group estimates.
+The fit centers the trait origin before constructing OU transitions and keeps
+objective resolution independent of the initial likelihood. Finite input
+precision still limits values whose differences are tiny relative to their
+absolute magnitudes.
+
+Estimation requires positive-definite observed (or flat-root contrast)
+covariance, more residual observation dimensions than free groups, at most
+20 free groups and 512 observed tips. Numerical local identifiability is checked
+using whitened mean/covariance derivatives on the actually observed tips;
+flat-root checks remove the root-mean direction. Rank-deficient specifications
+or fitted optima are rejected. Full local rank is not a guarantee of precise
+estimation or global identifiability. In particular, fitting a separate variance
+to every branch is not generally justified by one trait per tip.
+
+Standard ASR missing-value handling, known SEs, replicate aggregation, tree
+annotations, conditional posterior samples and figures remain available.
+Cross-validation refits re-estimate the same free groups using only training
+observations, while retaining their bounds and fixed layout. Posterior-predictive
+draws, node intervals and histories condition on the fitted parameters;
+they exclude parameter-estimation and assignment-selection uncertainty.
+
+`--branch-models-out` writes the fitted numeric assignment, so it can be reused
+without `--branch-fit` to reproduce the ASR or generate prior samples. Fitting
+requires observations and is rejected with `--output prior-samples`. All fit
+inputs participate in stdin, input-alias protection and audit recording; all
+outputs retain transactional publication.
+
+See the [fitted eight-tip example](examples/branch_gaussian/fit/README.md) for
+complete inputs, fitted values, plots and a reproduction script.

@@ -100,6 +100,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             simulated,
             errors,
             assignment=original_fit.branch_assignment,
+            fit_spec=original_fit.fit_spec,
             root=original_fit.process.root,
             compute_posterior=False,
         )[1]

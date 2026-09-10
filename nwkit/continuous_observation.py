@@ -145,7 +145,7 @@ def apply_replicate_observations(observed, errors, trait_names, args):
     }
     uncertainty = {
         name: [0.0] * dimension
-        if errors is None
+        if errors is None or all(value is None for value in values[name])
         else [errors[name]]
         if scalar
         else list(errors[name])

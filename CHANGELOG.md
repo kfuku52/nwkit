@@ -24,6 +24,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Fixed
 
+- Preserve branch-fit likelihood resolution for extremely poor initial rates,
+  center large trait offsets before fitting, and reject nonfinite convergence
+  gradients. Include the supplied initial model in local identifiability checks.
+
+- Allow replicate-observation aggregation to fill missing ASR tips without
+  requiring pre-existing measurement-error entries for unobserved values.
+
 - Harden joint individual ASR against premature covariance-optimizer stopping,
   unit-dependent matrix validation, variance underflow during unit restoration,
   and cancellation in conditional covariance calculations. Make normalization
@@ -43,6 +50,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   in extreme Gaussian tails using log-domain interval masses.
 
 ### Added
+
+- Add opt-in fixed-assignment BM/OU parameter estimation to
+  `asr --model BRANCH-GAUSSIAN --branch-fit`: explicit parameter sharing and
+  bounds, numerical identifiability and convergence checks, fitted model
+  replay, ASR plots and diagnostic refits. Jumps and root parameters stay
+  fixed; process JSON schema 2 records the estimation diagnostics.
 
 - Add paired known-error shift diagnostics and research-only nuisance-envelope
   calibration with explicit unresolved results and certified variance-tail

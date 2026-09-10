@@ -64,6 +64,7 @@ def validate_figure_options(args):
             "rate_design",
             "transition_graph",
             "species_map_tsv",
+            "branch_fit",
             "branch_models",
             "branch_regimes",
             "regime_models",

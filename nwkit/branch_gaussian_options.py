@@ -4,6 +4,7 @@ import math
 
 MODEL = "BRANCH-GAUSSIAN"
 BRANCH_OPTIONS = (
+    "branch_fit",
     "branch_models",
     "branch_regimes",
     "regime_models",
@@ -16,6 +17,10 @@ BRANCH_OPTIONS = (
 
 def register_branch_gaussian_options(parser):
     for name, help_text in (
+        (
+            "branch-fit",
+            "BRANCH-GAUSSIAN: estimate selected diffusion parameters at fixed regime assignments; TSV regime/parameter/group/lower/upper. Other values remain fixed.",
+        ),
         (
             "branch-models",
             "BRANCH-GAUSSIAN: complete non-root branch_id/model/parameter TSV.",
@@ -31,7 +36,7 @@ def register_branch_gaussian_options(parser):
         ),
         (
             "process-out",
-            "BRANCH-GAUSSIAN: JSON containing the tree, fixed parameters and run settings.",
+            "BRANCH-GAUSSIAN: JSON containing the tree, parameters, fit diagnostics and run settings.",
         ),
     ):
         parser.add_argument("--" + name, "--" + name.replace("-", "_"), help=help_text)
@@ -130,6 +135,15 @@ def validate_branch_options(args, model):
         )
     if any(value == "" for value in (direct, regimes, definitions)):
         raise ValueError("Branch assignment paths must not be empty.")
+    if getattr(args, "branch_fit", None) is not None:
+        if not args.branch_fit or direct or not regimes or not definitions:
+            raise ValueError(
+                "--branch-fit requires --branch-regimes and --regime-models."
+            )
+        if getattr(args, "output", None) == "prior-samples":
+            raise ValueError(
+                "--branch-fit cannot be used with prior-samples; fit observations first and reuse --branch-models-out."
+            )
     root = branch_root(args)
     _validate_prior_options(args, root)
     forbidden = [

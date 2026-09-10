@@ -1,2 +1,2 @@
-trait_type	trait_type_requested	trait	model	root_prior	root_mean	root_variance	estimation_method	num_parameters_estimated	log_likelihood	likelihood_kind	num_observed	num_observed_positions	likelihood_rank	fit_status	ci_level	interval_kind	parameter_uncertainty_included	tree_uncertainty_included
-continuous	auto	x	BRANCH-GAUSSIAN	gaussian	0.0	0.2	fixed	0		proper_root_ml	0	0	0	fixed	0.95	prior	False	False
+trait_type	trait_type_requested	trait	model	root_prior	root_mean	root_variance	estimation_method	num_parameters_estimated	optimizer_success	parameter_estimation	log_likelihood	likelihood_kind	num_observed	num_observed_positions	likelihood_rank	fit_status	ci_level	interval_kind	parameter_uncertainty_included	tree_uncertainty_included
+continuous	auto	x	BRANCH-GAUSSIAN	gaussian	0.0	0.2	fixed	0	True			proper_root_ml	0	0	0	fixed	0.95	prior	False	False
