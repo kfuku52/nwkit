@@ -1,0 +1,852 @@
+{
+  "master_seed": 20260916,
+  "calibration_replicates": 199,
+  "convergence": false,
+  "cases": [
+    {
+      "case_id": 0,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 2128888679
+    },
+    {
+      "case_id": 1,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 1385954181
+    },
+    {
+      "case_id": 2,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 3664994408
+    },
+    {
+      "case_id": 3,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 2913494971
+    },
+    {
+      "case_id": 4,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 2222779299
+    },
+    {
+      "case_id": 5,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 2006066042
+    },
+    {
+      "case_id": 6,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 1031989196
+    },
+    {
+      "case_id": 7,
+      "tips": 4,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 706432082
+    },
+    {
+      "case_id": 8,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 175608971
+    },
+    {
+      "case_id": 9,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 711519152
+    },
+    {
+      "case_id": 10,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 667194883
+    },
+    {
+      "case_id": 11,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 2396342495
+    },
+    {
+      "case_id": 12,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 818163793
+    },
+    {
+      "case_id": 13,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 2859403385
+    },
+    {
+      "case_id": 14,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 1625172641
+    },
+    {
+      "case_id": 15,
+      "tips": 4,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 4204801645
+    },
+    {
+      "case_id": 16,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 3866543409
+    },
+    {
+      "case_id": 17,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 756240636
+    },
+    {
+      "case_id": 18,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 1357129448
+    },
+    {
+      "case_id": 19,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 546313324
+    },
+    {
+      "case_id": 20,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 1610928564
+    },
+    {
+      "case_id": 21,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 3274116646
+    },
+    {
+      "case_id": 22,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 2595866174
+    },
+    {
+      "case_id": 23,
+      "tips": 4,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 1125345834
+    },
+    {
+      "case_id": 24,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 2719053449
+    },
+    {
+      "case_id": 25,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 2809246047
+    },
+    {
+      "case_id": 26,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 102182545
+    },
+    {
+      "case_id": 27,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 4142013001
+    },
+    {
+      "case_id": 28,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 3820409585
+    },
+    {
+      "case_id": 29,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 1954962913
+    },
+    {
+      "case_id": 30,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 1198571400
+    },
+    {
+      "case_id": 31,
+      "tips": 4,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 1573208087
+    },
+    {
+      "case_id": 32,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 2393430955
+    },
+    {
+      "case_id": 33,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 4007121249
+    },
+    {
+      "case_id": 34,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 1090553942
+    },
+    {
+      "case_id": 35,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 2895968638
+    },
+    {
+      "case_id": 36,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 3816921020
+    },
+    {
+      "case_id": 37,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 4240306712
+    },
+    {
+      "case_id": 38,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 241531677
+    },
+    {
+      "case_id": 39,
+      "tips": 4,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 4212296880
+    },
+    {
+      "case_id": 40,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 1277172367
+    },
+    {
+      "case_id": 41,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 592384434
+    },
+    {
+      "case_id": 42,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 2570389620
+    },
+    {
+      "case_id": 43,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 2491404941
+    },
+    {
+      "case_id": 44,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 96234719
+    },
+    {
+      "case_id": 45,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 1984364543
+    },
+    {
+      "case_id": 46,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 348288876
+    },
+    {
+      "case_id": 47,
+      "tips": 8,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 1829042455
+    },
+    {
+      "case_id": 48,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 1361552841
+    },
+    {
+      "case_id": 49,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 2038644293
+    },
+    {
+      "case_id": 50,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 337673067
+    },
+    {
+      "case_id": 51,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 1596941566
+    },
+    {
+      "case_id": 52,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 1594116934
+    },
+    {
+      "case_id": 53,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 743538010
+    },
+    {
+      "case_id": 54,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 3251121313
+    },
+    {
+      "case_id": 55,
+      "tips": 8,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 1783138995
+    },
+    {
+      "case_id": 56,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 1179324372
+    },
+    {
+      "case_id": 57,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 1125616892
+    },
+    {
+      "case_id": 58,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 330358904
+    },
+    {
+      "case_id": 59,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 4011502194
+    },
+    {
+      "case_id": 60,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 126981325
+    },
+    {
+      "case_id": 61,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 3648102100
+    },
+    {
+      "case_id": 62,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 1648697769
+    },
+    {
+      "case_id": 63,
+      "tips": 8,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 3649193523
+    },
+    {
+      "case_id": 64,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 3060352419
+    },
+    {
+      "case_id": 65,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 2567046972
+    },
+    {
+      "case_id": 66,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 3726720751
+    },
+    {
+      "case_id": 67,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 524084794
+    },
+    {
+      "case_id": 68,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 749329522
+    },
+    {
+      "case_id": 69,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 3955312258
+    },
+    {
+      "case_id": 70,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 2130940652
+    },
+    {
+      "case_id": 71,
+      "tips": 8,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 3360699963
+    },
+    {
+      "case_id": 72,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 2850781334
+    },
+    {
+      "case_id": 73,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 2793401099
+    },
+    {
+      "case_id": 74,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 2968024552
+    },
+    {
+      "case_id": 75,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 3107241997
+    },
+    {
+      "case_id": 76,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 3938722154
+    },
+    {
+      "case_id": 77,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 2542187614
+    },
+    {
+      "case_id": 78,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 123387325
+    },
+    {
+      "case_id": 79,
+      "tips": 8,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 3396384975
+    },
+    {
+      "case_id": 80,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 768706392
+    },
+    {
+      "case_id": 81,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 884196039
+    },
+    {
+      "case_id": 82,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 4211403857
+    },
+    {
+      "case_id": 83,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 1737482843
+    },
+    {
+      "case_id": 84,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 3718608742
+    },
+    {
+      "case_id": 85,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 308822434
+    },
+    {
+      "case_id": 86,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": false,
+      "seed": 1577788786
+    },
+    {
+      "case_id": 87,
+      "tips": 16,
+      "alpha_height": 0,
+      "known_error": true,
+      "seed": 1884440117
+    },
+    {
+      "case_id": 88,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 959158308
+    },
+    {
+      "case_id": 89,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 3685965519
+    },
+    {
+      "case_id": 90,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 3990533075
+    },
+    {
+      "case_id": 91,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 548200585
+    },
+    {
+      "case_id": 92,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 1882922110
+    },
+    {
+      "case_id": 93,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 2323906562
+    },
+    {
+      "case_id": 94,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": false,
+      "seed": 1647207499
+    },
+    {
+      "case_id": 95,
+      "tips": 16,
+      "alpha_height": 0.01,
+      "known_error": true,
+      "seed": 1283136296
+    },
+    {
+      "case_id": 96,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 3100256733
+    },
+    {
+      "case_id": 97,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 3410619718
+    },
+    {
+      "case_id": 98,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 2702275613
+    },
+    {
+      "case_id": 99,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 2988721992
+    },
+    {
+      "case_id": 100,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 147349018
+    },
+    {
+      "case_id": 101,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 1089490805
+    },
+    {
+      "case_id": 102,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": false,
+      "seed": 23612477
+    },
+    {
+      "case_id": 103,
+      "tips": 16,
+      "alpha_height": 2.0,
+      "known_error": true,
+      "seed": 855910379
+    },
+    {
+      "case_id": 104,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 2569875463
+    },
+    {
+      "case_id": 105,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 2597334196
+    },
+    {
+      "case_id": 106,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 1605903892
+    },
+    {
+      "case_id": 107,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 1860302249
+    },
+    {
+      "case_id": 108,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 1537426516
+    },
+    {
+      "case_id": 109,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 959378410
+    },
+    {
+      "case_id": 110,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": false,
+      "seed": 2418514639
+    },
+    {
+      "case_id": 111,
+      "tips": 16,
+      "alpha_height": 100.0,
+      "known_error": true,
+      "seed": 4064255593
+    },
+    {
+      "case_id": 112,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 3335144079
+    },
+    {
+      "case_id": 113,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 3893061697
+    },
+    {
+      "case_id": 114,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 580679471
+    },
+    {
+      "case_id": 115,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 4239156403
+    },
+    {
+      "case_id": 116,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 719346210
+    },
+    {
+      "case_id": 117,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 1838410757
+    },
+    {
+      "case_id": 118,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": false,
+      "seed": 1530725664
+    },
+    {
+      "case_id": 119,
+      "tips": 16,
+      "alpha_height": null,
+      "known_error": true,
+      "seed": 3090904726
+    }
+  ],
+  "source_sha256": {
+    "nwkit/shift_calibration.py": "e30e9aab8c4886811c315817e0b730e7d3966bfddb743899ec18c6cded6809cf",
+    "nwkit/shift_candidates.py": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0",
+    "tools/stress_shift_calibration.py": "132f2abc4115f967d70a9dbe6bc70129079e49731ce5aa9379acef38466e3757"
+  }
+}

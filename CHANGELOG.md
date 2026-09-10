@@ -6,6 +6,70 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
+- Audit calibrated shift selection: count only enabled candidates, use QR
+  least squares, batch bootstrap residual calculations, reject unbounded mixed
+  zero-error likelihoods, and calibrate the no-error null across the alpha grid.
+  Export explicit probability bounds in schema 7, reconstruct/replay evidence,
+  and add independent random-tree and weak-pull validation.
+
+- Default small-tree OU shift selection to complete-search parametric bootstrap
+  calibration. Include exact Brownian and independent α limits, suppress weakly
+  identified optima, and retain IC inference through explicit `--selection ic`.
+  Add versioned model output and independently seeded validation studies.
+
+- Add a frozen 520-dataset OU selection study comparing BIC/pBIC, two-stage/joint
+  search and alpha bounds, with paired recovery/error metrics, independent
+  likelihood audits, complete candidate ledgers and a portable technical report.
+
+- Record the kfl1ou pBIC coordinate/fitted-alpha correction and its before/after
+  reproduction; replay the joint-search grid with the corrected local backend
+  and mark historical pBIC evidence as belonging to the old implementation.
+
+- Add `nwkit dtt` for scalar or joint continuous-trait disparity through time,
+  fitted Brownian simulations, MDI, transactional TSV/JSON outputs and figures
+  with aligned observed-trait trees, compact heatmaps by default for any trait count, and independent
+  display-column selection and color scaling.
+  Include geiger reference checks and a reproducible example. Harden deep-tree
+  pruning, event-time rounding, extreme-unit color scales, and literal/Unicode
+  figure labels.
+- Add a small-tree joint shift/convergence reference, held-out candidate ledgers
+  and independent likelihood verification. Audit score equivalence and flag
+  kfl1ou pBIC representation discrepancies instead of reporting improvements.
+
+- Audit shift simulation exports against regenerated truth, actual inputs and
+  saved model results; reject stale summaries, publish bundles transactionally,
+  and reject duplicate grid entries or invalid bootstrap counts before a run.
+
+- Add an independent branchwise OU simulation harness for shift/convergence
+  validation, paired BIC/pBIC pilot evidence, truth-partition recovery metrics,
+  Monte Carlo intervals and explicit outer/inner failure denominators.
+
+- Make shift result checks account for cancellation along each ancestral path,
+  while preventing unrelated large effects from masking invalid shared optima.
+  Retain directly fitted optima instead of cancellation-prone reconstructions,
+  and keep search-bound metadata attached to the original discovery fit.
+
+- Add opt-in `nwkit shift --convergence`: refit shared OU optima using backward
+  search, preserve unconstrained diagnostics, propagate shared labels to ASR,
+  and repeat both discovery stages in bootstrap. Model JSON uses schema 5.
+
+- Add parametric bootstrap selection support to `nwkit shift`, with successful
+  refit denominators, failure counts/messages, branch and configuration support,
+  and tip-partition frequencies in model JSON schema 4. Preserve counts for
+  failures whose messages the backend omits and warn on partial failure.
+
+- Add experimental `nwkit shift` with an external kfl1ou backend for single-trait
+  OU optimum-shift discovery, ASR-compatible branch-regime maps, candidate/model
+  metadata and optional RDS fits. Preserve original time units and validate
+  clade mappings independently of backend edge numbering. Include shift effects,
+  conditional regime optima, tip predictions/residuals and structured search
+  diagnostics; verify fixed-parameter moments and likelihoods against kfl1ou
+  across root models, nested shifts, the BM boundary and time rescaling.
+  Add named known-SE input, preserving observations and variances in output;
+  canonicalize all-zero errors, validate error variance range and search
+  diagnostics, and make result checks robust to trait units and short branches.
+  See `SHIFT.md`.
+
 - Restore the common underscore compatibility aliases for `regress-select`
   options while retaining kebab-case help and canonical spellings.
 

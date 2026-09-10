@@ -1,0 +1,8722 @@
+[
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.06375928689966302
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.06375928689968137
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 1.7481524283713412e-09
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 5,
+      "denominator": 10,
+      "rate": 0.5,
+      "wilson_95": [
+        0.236593090512564,
+        0.7634069094874361
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": 0.0025284141454519626
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.014985153478037333
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 4,
+      "denominator": 10,
+      "rate": 0.4,
+      "wilson_95": [
+        0.16818032970623614,
+        0.6873262302663417
+      ]
+    },
+    "any_shift": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 4
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 4
+    },
+    "mean_rmse_right_minus_left": -0.026384779128169396
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.776046934878513e-05
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.776046146728912e-05
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 50,
+      "rate": 0.2,
+      "wilson_95": [
+        0.11243750015776106,
+        0.33037105932225413
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 9
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.08759531434923858
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 50,
+      "rate": 0.04,
+      "wilson_95": [
+        0.011038884327619812,
+        0.1346009068750702
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.014904880810425339
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 6.353900738886864e-12
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 1.5224493887799893e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 2.692756781441652e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.580878010778221e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.6448649135287218e-05
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.6448633844588786e-05
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 4,
+      "denominator": 50,
+      "rate": 0.08,
+      "wilson_95": [
+        0.03154951408859297,
+        0.18838246918342835
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": -0.028364083873701474
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 4,
+      "denominator": 50,
+      "rate": 0.08,
+      "wilson_95": [
+        0.03154951408859297,
+        0.18838246918342835
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": -0.028364083873701717
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.1830586283133613e-10
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.94386562244209e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.2232387875131821e-10
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.274001569326558e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 50,
+      "rate": 0.02,
+      "wilson_95": [
+        0.0035392592716462223,
+        0.10495443589637814
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0010860546472257753
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 50,
+      "rate": 0.02,
+      "wilson_95": [
+        0.0035392592716462223,
+        0.10495443589637814
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0011463579306132976
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 50,
+      "rate": 0.02,
+      "wilson_95": [
+        0.0035392592716462223,
+        0.10495443589637814
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.0011410130909188156
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 50,
+      "rate": 0.02,
+      "wilson_95": [
+        0.0035392592716462223,
+        0.10495443589637814
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.001141013090933021
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.4881425253475696e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.631244971380454e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 5.68064914552302e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -6.515863792966314e-11
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 6.395640211645292e-05
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 50,
+      "rate": 0.02,
+      "wilson_95": [
+        0.0035392592716462223,
+        0.10495443589637814
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.00044845824103041556
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 28,
+      "denominator": 50,
+      "rate": 0.56,
+      "wilson_95": [
+        0.4230602802165686,
+        0.6883780078874284
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 20
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 20
+    },
+    "mean_rmse_right_minus_left": -0.2737184123678283
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 24,
+      "denominator": 50,
+      "rate": 0.48,
+      "wilson_95": [
+        0.3479713528657804,
+        0.6148825510995539
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 21
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 21
+    },
+    "mean_rmse_right_minus_left": -0.25328313752991316
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.0257293804080163e-10
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.1507288450184347e-10
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -3.9147407544792843e-10
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -3.6509829832997997e-10
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.330467152589222e-10
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -7.929516487870103e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.2700287467841243
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 4,
+      "denominator": 10,
+      "rate": 0.4,
+      "wilson_95": [
+        0.16818032970623614,
+        0.6873262302663417
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.19133820918115693
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": 7.073921448608189e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.320730218581147e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 6.343864045188496e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 1.3389057917922998e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 5.667696361910113e-05
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.4371561980227625e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.008300410336730428
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.008300410311280253
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 5.8032267880037126e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.36725369809443e-11
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.3354091854832503e-10
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 1.9612476503949593e-10
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.00028657641967291814
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.0002865764196785359
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.00010012848882978153
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.0001001284888288545
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 5.351274978693255e-15
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.8669489282595605e-10
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.0911972714300333e-10
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.5250268323935278e-05
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.5249488981622372e-05
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 4,
+      "denominator": 10,
+      "rate": 0.4,
+      "wilson_95": [
+        0.16818032970623614,
+        0.6873262302663417
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0399269322102201
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 4,
+      "denominator": 10,
+      "rate": 0.4,
+      "wilson_95": [
+        0.16818032970623614,
+        0.6873262302663417
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.03992693221022002
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.547961841514734e-15
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "BIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.2815083156046968e-15
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "joint",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -6.252498518932725e-12
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "criterion": "pBIC",
+    "method": "two_stage",
+    "dimension": "floor_id",
+    "left": "small",
+    "right": "raised",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 4.118133611896724e-12
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.29078925369186687
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.3384983832307761
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.3545485405915299
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.40225767013045755
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.1837081994508673
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.2609658312823197
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.1837081994508673
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.2609658312823197
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.034105498719672
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.02739578465779279
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "shared_recovered": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.03663391111697154
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.042380938135830125
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.0834118340039193
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.09662871894650407
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.0570270548757499
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.09662871894650407
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 43,
+      "denominator": 50,
+      "rate": 0.86,
+      "wilson_95": [
+        0.7381380628941446,
+        0.9304916657298371
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 10,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 23,
+      "right_only": 4
+    },
+    "mean_rmse_right_minus_left": 0.29520766910504553
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 49,
+      "denominator": 50,
+      "rate": 0.98,
+      "wilson_95": [
+        0.8950455641036218,
+        0.9964607407283538
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 16,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 20,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": 0.3678981026278834
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 49,
+      "denominator": 50,
+      "rate": 0.98,
+      "wilson_95": [
+        0.8950455641036218,
+        0.9964607407283538
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 16,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 27,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": 0.3828407439236329
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 49,
+      "denominator": 50,
+      "rate": 0.98,
+      "wilson_95": [
+        0.8950455641036218,
+        0.9964607407283538
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 16,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 20,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": 0.3828407438997761
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 20,
+      "denominator": 50,
+      "rate": 0.4,
+      "wilson_95": [
+        0.2760838973025654,
+        0.5381856225241064
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 17
+    },
+    "exact_edges": {
+      "left_only": 4,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": 0.01014178873721213
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 26,
+      "denominator": 50,
+      "rate": 0.52,
+      "wilson_95": [
+        0.3851174489004461,
+        0.6520286471342196
+      ]
+    },
+    "any_shift": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 17
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.07574804765967436
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 20,
+      "denominator": 50,
+      "rate": 0.4,
+      "wilson_95": [
+        0.2760838973025654,
+        0.5381856225241064
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 17
+    },
+    "exact_edges": {
+      "left_only": 5,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": 0.010141788716638463
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 26,
+      "denominator": 50,
+      "rate": 0.52,
+      "wilson_95": [
+        0.3851174489004461,
+        0.6520286471342196
+      ]
+    },
+    "any_shift": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 17
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.07574804763909007
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 45,
+      "denominator": 50,
+      "rate": 0.9,
+      "wilson_95": [
+        0.7863976856252034,
+        0.9565242350681095
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 45,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 45,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.37995262982897016
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 45,
+      "denominator": 50,
+      "rate": 0.9,
+      "wilson_95": [
+        0.7863976856252034,
+        0.9565242350681095
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 45,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 45,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.3799526296108124
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 48,
+      "denominator": 50,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8653990931249297,
+        0.9889611156723802
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 48,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 48,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.4082902650535364
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 48,
+      "denominator": 50,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8653990931249297,
+        0.9889611156723802
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 48,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 48,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.4082902648506695
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0625623751637747
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.06256237517813303
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.06256237516779273
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.06256237517143438
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 48,
+      "denominator": 50,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8653990931249297,
+        0.9889611156723802
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.029156381500225502
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 48,
+      "denominator": 50,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8653990931249297,
+        0.9889611156723802
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.02865035596331441
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 47,
+      "denominator": 50,
+      "rate": 0.94,
+      "wilson_95": [
+        0.8378290831116182,
+        0.979385029651026
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.02692931376208092
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 47,
+      "denominator": 50,
+      "rate": 0.94,
+      "wilson_95": [
+        0.8378290831116182,
+        0.979385029651026
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.026362984941768093
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 42,
+      "denominator": 50,
+      "rate": 0.84,
+      "wilson_95": [
+        0.7148578393696501,
+        0.916625793219666
+      ]
+    },
+    "any_shift": {
+      "left_only": 16,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 16
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 16
+    },
+    "mean_rmse_right_minus_left": -0.048918383369311015
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 44,
+      "denominator": 50,
+      "rate": 0.88,
+      "wilson_95": [
+        0.7619518261679702,
+        0.9438239984906772
+      ]
+    },
+    "any_shift": {
+      "left_only": 15,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 15
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 15
+    },
+    "mean_rmse_right_minus_left": -0.049561179118001134
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 42,
+      "denominator": 50,
+      "rate": 0.84,
+      "wilson_95": [
+        0.7148578393696501,
+        0.916625793219666
+      ]
+    },
+    "any_shift": {
+      "left_only": 16,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 16
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 16
+    },
+    "mean_rmse_right_minus_left": -0.04891838340123608
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 44,
+      "denominator": 50,
+      "rate": 0.88,
+      "wilson_95": [
+        0.7619518261679702,
+        0.9438239984906772
+      ]
+    },
+    "any_shift": {
+      "left_only": 15,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 15
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 15
+    },
+    "mean_rmse_right_minus_left": -0.04956117901653004
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 39,
+      "denominator": 50,
+      "rate": 0.78,
+      "wilson_95": [
+        0.6475845041874633,
+        0.8724608402978558
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 2,
+      "right_only": 13
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 13
+    },
+    "mean_rmse_right_minus_left": 0.025398902835097017
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 40,
+      "denominator": 50,
+      "rate": 0.8,
+      "wilson_95": [
+        0.6696289406777458,
+        0.8875624998422389
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 14
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 14
+    },
+    "mean_rmse_right_minus_left": 0.04561354589271605
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 48,
+      "denominator": 50,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8653990931249297,
+        0.9889611156723802
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 9,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.2991812716050417
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 48,
+      "denominator": 50,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8653990931249297,
+        0.9889611156723802
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.29844822518159875
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 41,
+      "denominator": 50,
+      "rate": 0.82,
+      "wilson_95": [
+        0.6920394632569922,
+        0.9022980732976582
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 36
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 35
+    },
+    "mean_rmse_right_minus_left": -0.046220303931131454
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 41,
+      "denominator": 50,
+      "rate": 0.82,
+      "wilson_95": [
+        0.6920394632569922,
+        0.9022980732976582
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 37
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 37
+    },
+    "mean_rmse_right_minus_left": -0.05096481260602151
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 41,
+      "denominator": 50,
+      "rate": 0.82,
+      "wilson_95": [
+        0.6920394632569922,
+        0.9022980732976582
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 36
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 35
+    },
+    "mean_rmse_right_minus_left": -0.0462203039422303
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 41,
+      "denominator": 50,
+      "rate": 0.82,
+      "wilson_95": [
+        0.6920394632569922,
+        0.9022980732976582
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 37
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 37
+    },
+    "mean_rmse_right_minus_left": -0.050964812455996086
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 5,
+      "denominator": 10,
+      "rate": 0.5,
+      "wilson_95": [
+        0.236593090512564,
+        0.7634069094874361
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.2028899162562851
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.2815804538508081
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.4729186632734562
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.47291866295266977
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.030770743969602575
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.03077074397319359
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.030770743976903152
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.03077074399301184
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.052997649771655345
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 4
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 4
+    },
+    "mean_rmse_right_minus_left": -0.046638930188023404
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.06124138314476667
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 4,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 4
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 4
+    },
+    "mean_rmse_right_minus_left": -0.05493934054367522
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": -0.05650112965333395
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.034257146081961024
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "mean_rmse_right_minus_left": -0.0565011298288426
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 2,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -0.034257146244413256
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.03790654004428216
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.0390076899191138
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 7,
+      "denominator": 10,
+      "rate": 0.7,
+      "wilson_95": [
+        0.39677814746114526,
+        0.892208732593699
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.038092987975125295
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.03919413784996347
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.07342185712443054
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.07074881875192748
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.07342185741112543
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.0707488186428024
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.07585143629547393
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.07585143595151148
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.11579361877401795
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 10,
+      "rate": 1.0,
+      "wilson_95": [
+        0.7224672001371109,
+        1.0
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.1157936176507131
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.08067728286655404
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 6
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 6
+    },
+    "mean_rmse_right_minus_left": -0.0851439372118176
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "joint",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 10,
+      "rate": 0.8,
+      "wilson_95": [
+        0.4901624715366418,
+        0.9433178485456248
+      ]
+    },
+    "any_shift": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.08067728286029899
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "method": "two_stage",
+    "dimension": "criterion",
+    "left": "BIC",
+    "right": "pBIC",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 9,
+      "denominator": 10,
+      "rate": 0.9,
+      "wilson_95": [
+        0.5958499732047615,
+        0.9821237869049271
+      ]
+    },
+    "any_shift": {
+      "left_only": 6,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 6
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 6
+    },
+    "mean_rmse_right_minus_left": -0.08514393721593345
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.047709129538914076,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 4.7878367936959876e-15,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 0.047709129538914076,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.355582313067316e-14,
+    "search_score_comparison": {
+      "eligible": 9,
+      "excluded": 1,
+      "joint_lower": 0,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.246603069191224e-16,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": -0.07725763183145282,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 2,
+      "tied": 8,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.246603069191224e-16,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": -0.07725763183145282,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 2,
+      "tied": 8,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.006709714061858879,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.0333734696009743e-14,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.006709712313706451,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 3
+    },
+    "shared_recovered": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.012456739332565036,
+    "search_score_comparison": {
+      "eligible": 9,
+      "excluded": 1,
+      "joint_lower": 3,
+      "tied": 6,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0197273247867513,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.03294420972933608,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 2,
+      "tied": 8,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0197273247867513,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "shared_recovered": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 5,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.05932898885750548,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 6,
+      "tied": 4,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 9
+    },
+    "mean_rmse_right_minus_left": -1.5975313849558858e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 8,
+      "denominator": 50,
+      "rate": 0.16,
+      "wilson_95": [
+        0.08337420678033403,
+        0.28514216063034986
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 8
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "mean_rmse_right_minus_left": -0.0726904335388132,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 8,
+      "tied": 42,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 9
+    },
+    "mean_rmse_right_minus_left": -2.385680986094485e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 4.3576253716537396e-17,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 6
+    },
+    "mean_rmse_right_minus_left": -8.223015462993643e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 6,
+      "right_only": 10
+    },
+    "mean_rmse_right_minus_left": -0.06560625900469239,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 6,
+      "tied": 44,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 6
+    },
+    "mean_rmse_right_minus_left": -7.33595614810234e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 5
+    },
+    "exact_edges": {
+      "left_only": 7,
+      "right_only": 10
+    },
+    "mean_rmse_right_minus_left": -0.06560625899581117,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 6,
+      "tied": 44,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.1815782486056535e-10,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.858824288409778e-17,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.0286712643091674e-10,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.1538326677728036e-16,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.2708149999273174e-10,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -2.414398117545069e-10,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -5.821429338581652e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -6.185594869645428e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0005060256097205476,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 8,
+      "tied": 42,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 7.280945180099252e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 50,
+      "rate": 0.12,
+      "wilson_95": [
+        0.056176001509322726,
+        0.23804817383202986
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0005663288931080699,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 8,
+      "tied": 42,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 7.279524649739244e-11,
+    "search_score_comparison": {
+      "eligible": 49,
+      "excluded": 1,
+      "joint_lower": 0,
+      "tied": 49,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 50,
+      "rate": 0.2,
+      "wilson_95": [
+        0.11243750015776106,
+        0.33037105932225413
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0026505894704068177,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 11,
+      "tied": 39,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 50,
+      "rate": 0.06,
+      "wilson_95": [
+        0.020614970348973957,
+        0.1621709168883817
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.003293385219096943,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 47,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 10,
+      "denominator": 50,
+      "rate": 0.2,
+      "wilson_95": [
+        0.11243750015776106,
+        0.33037105932225413
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0026505894818378427,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 11,
+      "tied": 39,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 50,
+      "rate": 0.06,
+      "wilson_95": [
+        0.020614970348973957,
+        0.1621709168883817
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.003293385097131814,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 47,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 50,
+      "rate": 0.02,
+      "wilson_95": [
+        0.0035392592716462223,
+        0.10495443589637814
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.00022063178029630703,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 49,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 5,
+      "denominator": 50,
+      "rate": 0.1,
+      "wilson_95": [
+        0.04347576493189041,
+        0.21360231437479654
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.020435274837915348,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 5,
+      "tied": 45,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 50,
+      "rate": 0.04,
+      "wilson_95": [
+        0.011038884327619812,
+        0.1346009068750702
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.0007330464234431755,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 2,
+      "tied": 48,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.6653345369377348e-16,
+    "search_score_comparison": {
+      "eligible": 49,
+      "excluded": 1,
+      "joint_lower": 0,
+      "tied": 49,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.456790549303477e-10,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 50,
+      "rate": 0.04,
+      "wilson_95": [
+        0.011038884327619812,
+        0.1346009068750702
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.004744508529211017,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 47,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 4.182099860861044e-11,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 50,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 50,
+    "completed": 50,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 50,
+      "rate": 0.04,
+      "wilson_95": [
+        0.011038884327619812,
+        0.1346009068750702
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.004744508555586794,
+    "search_score_comparison": {
+      "eligible": 50,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 47,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -8.44435632529894e-12,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 2,
+      "denominator": 10,
+      "rate": 0.2,
+      "wilson_95": [
+        0.056682151454375274,
+        0.5098375284633583
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": -0.07869053760296732,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 2,
+      "tied": 8,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -3.2078623646292213e-10,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 2.2204460492503132e-17,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": 3.868233094950213e-11,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": 3.5091314576352064e-11,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 1
+    },
+    "mean_rmse_right_minus_left": 1.1504186492317103e-12,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 3,
+      "right_only": 2
+    },
+    "mean_rmse_right_minus_left": -1.4958267957609906e-11,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.006358719614462553,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 6,
+      "tied": 4,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.0830613062526877e-11,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 6,
+      "denominator": 10,
+      "rate": 0.6,
+      "wilson_95": [
+        0.3126737697336583,
+        0.8318196702937639
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.00630204260647189,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 6,
+      "tied": 4,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 5.380437761992596e-12,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "shared_recovered": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.022243983612175132,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 4.0802210221624337e-11,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 2
+    },
+    "shared_recovered": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 2,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.022243983587815402,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.386056712795238e-12,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0017552778714118311,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.002856427746243467,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 3,
+      "denominator": 10,
+      "rate": 0.3,
+      "wilson_95": [
+        0.10779126740630102,
+        0.6032218525388546
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0017552778714062134,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 3,
+      "tied": 7,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0028564277462443943,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0026730383596237583,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -1.2879292077272453e-11,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0026730383596291095,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -4.0869391204623184e-10,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 3.4396246406664945e-10,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 1.1233047769731996e-09,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 0,
+      "denominator": 10,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.27753279986288926
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -7.771561172376095e-17,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 0,
+      "tied": 10,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.00019191093923448532,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "raised",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.004274743406029074,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "BIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "shared_recovered": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 0,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": -0.00019191093923475177,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "floor_id": "small",
+    "criterion": "pBIC",
+    "dimension": "method",
+    "left": "two_stage",
+    "right": "joint",
+    "attempted": 10,
+    "completed": 10,
+    "partition_changed": {
+      "count": 1,
+      "denominator": 10,
+      "rate": 0.1,
+      "wilson_95": [
+        0.017876213095072896,
+        0.4041500267952385
+      ]
+    },
+    "any_shift": {
+      "left_only": 0,
+      "right_only": 1
+    },
+    "shared_recovered": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "exact_edges": {
+      "left_only": 1,
+      "right_only": 0
+    },
+    "mean_rmse_right_minus_left": 0.0042747434163997065,
+    "search_score_comparison": {
+      "eligible": 10,
+      "excluded": 0,
+      "joint_lower": 1,
+      "tied": 9,
+      "joint_higher": 0
+    }
+  }
+]

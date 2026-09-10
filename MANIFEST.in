@@ -30,3 +30,12 @@ graft examples/branch_gaussian
 
 include REGRESSION_SELECTION.md
 graft examples/regression_selection
+
+include SHIFT.md
+include SHIFT_VALIDATION.md
+include SHIFT_JOINT.md
+include SHIFT_PBIC.md
+include SHIFT_ALPHA.md
+include SHIFT_CALIBRATION.md
+include reviews/shift-calibration-review.md
+graft examples/shift

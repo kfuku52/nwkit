@@ -1,0 +1,63 @@
+{
+  "verified_cases": 1000,
+  "truth_regeneration": "exact_match",
+  "source_hashes": "snapshots_match; revised_sources_replayed",
+  "source_changes": {
+    "nwkit/shift_calibration.py": {
+      "frozen": "5a26bf6eea4bb1db490479e4e9fd52282575ef533e687e568b6fd35b10dbc3ca",
+      "current": "9c5ba6f8188e1c703618745c46140277a2093e7aa2d5c4c74c6abaff53d09883"
+    }
+  },
+  "bootstrap_probabilities_replayed": 1000,
+  "audit_module_sha256": "c4b63b4c235b3a4601333809b5ba697d583a9dc5e56fe3d6f4a6808afae6d533",
+  "metrics_and_summary": "reconstructed_and_matched",
+  "observed_likelihoods": "all_candidates_refitted",
+  "complete_search_null_rate": {
+    "count": 45,
+    "denominator": 1000,
+    "rate": 0.045,
+    "wilson_95": [
+      0.03379951228563171,
+      0.059682837936223455
+    ]
+  },
+  "default_no_convergence_null_rate": {
+    "count": 45,
+    "denominator": 1000,
+    "rate": 0.045,
+    "wilson_95": [
+      0.03379951228563171,
+      0.059682837936223455
+    ]
+  },
+  "default_no_convergence_cells": [
+    {
+      "family": "weak_pull",
+      "root_model": "OUfixedRoot",
+      "any_shift": {
+        "count": 20,
+        "denominator": 500,
+        "rate": 0.04,
+        "wilson_95": [
+          0.02604079738977726,
+          0.060973595834850805
+        ]
+      }
+    },
+    {
+      "family": "weak_pull",
+      "root_model": "OUrandomRoot",
+      "any_shift": {
+        "count": 25,
+        "denominator": 500,
+        "rate": 0.05,
+        "wilson_95": [
+          0.034093745243849435,
+          0.0727681611715476
+        ]
+      }
+    }
+  ],
+  "verifier_sha256": "4d7b8050727deb8b668a38367a6574df64995e7543ec62405f49c1c566af9426",
+  "record_sha256": "113400d08051809d7afb89d2d3220522af9c89eab50ed1586c47ff52d04095f1"
+}

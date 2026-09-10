@@ -532,3 +532,39 @@ in the same output transaction. The figure uses one tree plus a heatmap by defau
 for any number of displayed traits, including one.
 `--figure-columns` and `--figure-scale` affect only display, independently of
 `--columns` and `--scale`. See [DTT](DTT.md) for definitions, units and limits.
+
+## Shift inference
+
+`shift` writes the two-column `branch_id, regime` map consumed by ASR, including
+the root. Its required `--model-out` JSON records the external backend, original
+time units, input fingerprint, tip-token mapping, candidate configurations and
+root model. JSON schema v3 also includes effects, regime optima, tip predictions
+and structured search diagnostics. `--standard-error-column` supplies known
+independent SEs; `standard_error` and `observation_variance` are retained in the
+tip summaries, with zero for omitted errors. Optional `--effects-out`,
+`--regime-parameters-out` and `--tip-summary-out` write those tables with `NA` for
+unidentified optima. `--fit-out` optionally preserves the full external R fit. These
+outputs are staged together. See [SHIFT.md](SHIFT.md) for supported inputs and
+the distinction between shift discovery and a conditional ASR refit.
+
+With `shift --convergence`, different shift branches can share a regime label.
+Effects still have one row per shift location; regime parameters have one row
+per shared optimum, with the smallest member branch ID as representative.
+Model JSON `convergence.groups` contains the complete membership, including
+background ID 0. Bootstrap records ancestry partitions separately from
+partitions sharing an optimum.
+
+Calibrated shift selection (the default) writes schema-7 JSON: `selection=calibrated`,
+`parameters.contrast_log_likelihood` and `calibration.tests` replace the IC score.
+`parameters.alpha_status` distinguishes finite, Brownian and independent limits.
+At the independent limit, `alpha` and `sigma2` are JSON null. Optimum fields are
+null in JSON / `NA` in TSV whenever an α limit is supported; finite mean predictions
+remain available. Legacy `--selection ic` retains schema 5. See
+[calibrated selection](SHIFT_CALIBRATION.md) for limits and grid semantics.
+
+Schema 7 also exports the null calibration method and each test's
+`p_value_kind`. With `conservative_upper_bound`, the reported p-value is 1 and
+`p_value_lower_bound` records the evaluated partial maximum; neither is a
+posterior probability. `grid_supremum` denotes a completed alpha-grid maximum.
+`plugin` denotes the known-error or later-stage approximation. Historical
+schema-6 files used a plug-in first-stage test as well.

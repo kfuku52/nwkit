@@ -1,0 +1,70 @@
+[
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "attempted": 500,
+    "completed": 500,
+    "any_shift": {
+      "count": 20,
+      "denominator": 500,
+      "rate": 0.04,
+      "wilson_95": [
+        0.02604079738977726,
+        0.060973595834850805
+      ]
+    },
+    "partition_recovered": {
+      "count": 480,
+      "denominator": 500,
+      "rate": 0.96,
+      "wilson_95": [
+        0.9390264041651492,
+        0.9739592026102227
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 500,
+      "denominator": 500,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9923756595384479,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "attempted": 500,
+    "completed": 500,
+    "any_shift": {
+      "count": 25,
+      "denominator": 500,
+      "rate": 0.05,
+      "wilson_95": [
+        0.034093745243849435,
+        0.0727681611715476
+      ]
+    },
+    "partition_recovered": {
+      "count": 475,
+      "denominator": 500,
+      "rate": 0.95,
+      "wilson_95": [
+        0.9272318388284524,
+        0.9659062547561506
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 499,
+      "denominator": 500,
+      "rate": 0.998,
+      "wilson_95": [
+        0.9887592932948532,
+        0.9996468636054407
+      ]
+    }
+  }
+]

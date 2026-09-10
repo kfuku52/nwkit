@@ -12,6 +12,7 @@ from nwkit.util import read_tree
 pytestmark = pytest.mark.integration
 
 CASES = {
+    "shift": ["--trait", "{data}", "--state-column", "x", "--model-out", "{model}"],
     "regress-select": [
         "--input-rooted",
         "yes",
@@ -126,6 +127,7 @@ CASES = {
 }
 
 TABLE_COLUMNS = {
+    "shift": "regime",
     "dtt": "relative_disparity",
     "asr": "map_state",
     "asrcompare": "model",
@@ -194,8 +196,13 @@ def test_command_parser_reaches_its_real_handler(
         "images": tmp_path / "images",
         "downloads": tmp_path / "downloads",
         "pdf": tmp_path / "roots.pdf",
+        "model": tmp_path / "model.json",
     }
     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
+    if command == "shift":
+        from tests.test_shift import fake_backend
+
+        monkeypatch.setattr("nwkit.shift.run_backend", fake_backend)
     if command == "regress-select":
         prefix = tmp_path / "selection"
         assert main([*arguments, "--out-prefix", str(prefix)]) == 0

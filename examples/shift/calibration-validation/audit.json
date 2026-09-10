@@ -1,0 +1,131 @@
+{
+  "verified_cases": 700,
+  "truth_regeneration": "exact_match",
+  "source_hashes": "match",
+  "complete_search_null_rate": {
+    "count": 10,
+    "denominator": 250,
+    "rate": 0.04,
+    "wilson_95": [
+      0.021869911954542545,
+      0.07205272358126646
+    ]
+  },
+  "default_no_convergence_null_rate": {
+    "count": 10,
+    "denominator": 250,
+    "rate": 0.04,
+    "wilson_95": [
+      0.021869911954542545,
+      0.07205272358126646
+    ]
+  },
+  "default_no_convergence_cells": [
+    {
+      "family": "primary",
+      "root_model": "OUfixedRoot",
+      "any_shift": {
+        "count": 5,
+        "denominator": 50,
+        "rate": 0.1,
+        "wilson_95": [
+          0.04347576493189041,
+          0.21360231437479654
+        ]
+      }
+    },
+    {
+      "family": "primary",
+      "root_model": "OUrandomRoot",
+      "any_shift": {
+        "count": 1,
+        "denominator": 50,
+        "rate": 0.02,
+        "wilson_95": [
+          0.0035392592716462223,
+          0.10495443589637814
+        ]
+      }
+    },
+    {
+      "family": "weak_pull",
+      "root_model": "OUfixedRoot",
+      "any_shift": {
+        "count": 0,
+        "denominator": 25,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.1331922509390485
+        ]
+      }
+    },
+    {
+      "family": "weak_pull",
+      "root_model": "OUrandomRoot",
+      "any_shift": {
+        "count": 0,
+        "denominator": 25,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.1331922509390485
+        ]
+      }
+    },
+    {
+      "family": "known_error",
+      "root_model": "OUfixedRoot",
+      "any_shift": {
+        "count": 0,
+        "denominator": 25,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.1331922509390485
+        ]
+      }
+    },
+    {
+      "family": "known_error",
+      "root_model": "OUrandomRoot",
+      "any_shift": {
+        "count": 1,
+        "denominator": 25,
+        "rate": 0.04,
+        "wilson_95": [
+          0.007096233501987265,
+          0.19544063736193734
+        ]
+      }
+    },
+    {
+      "family": "sixteen_tips",
+      "root_model": "OUfixedRoot",
+      "any_shift": {
+        "count": 3,
+        "denominator": 25,
+        "rate": 0.12,
+        "wilson_95": [
+          0.041668171504403606,
+          0.29955793920927326
+        ]
+      }
+    },
+    {
+      "family": "sixteen_tips",
+      "root_model": "OUrandomRoot",
+      "any_shift": {
+        "count": 0,
+        "denominator": 25,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.1331922509390485
+        ]
+      }
+    }
+  ],
+  "verifier_sha256": "e4256c6fbbf69a94cffeaf0c51f880c4512d8b9a12036a87b4d1dca8e3c2650e",
+  "record_sha256": "b4ed1b100b9e1a0cc020d177541fdae4ce3a70ad12763014221d1c91fc535f0e"
+}

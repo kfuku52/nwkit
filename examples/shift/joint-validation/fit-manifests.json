@@ -1,0 +1,324 @@
+{
+  "fit-00-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-00",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-00-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "b28164a576c89d4db619570c3cb5bc22260e9044e30fa627cbcc72150dfb90af"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-01-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-01",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-01-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "964c0824f3e56a55b7c3beb6a6367720b6ab65247baeea1b7ad25f6e3b360f6b"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-02-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-02",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-02-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "dccc865bbc8fafa8349d8f7785a43f9b3636852c26a7b8dbea0d28e90c0fb57d"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-03-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-03",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-03-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "14e48799abf491f4d2d5dfc23645fae243a4918ad7bed1a4d1cea11c351db9c6"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-04-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-04",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-04-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "2e7f067d4f930b40c63472e4c2b6c1dcf010a2eb388f49b0b92f481a292fbfa3"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-05-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-05",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-05-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "499df3597cfbde1b50de7c5ac5af870d3e17a9fba4cafbede31b12d7d96576a8"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-06-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-06",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-06-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "a5f7339a0d38f30953be6f012a9c0a7201869c3f97423b84e073ab5cb923c729"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-06-pBIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-06",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-06-pBIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "pBIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "a5f7339a0d38f30953be6f012a9c0a7201869c3f97423b84e073ab5cb923c729"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-07-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-07",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-07-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "3756c33edec293ffba96d262cf2803bddcb07c5603df0b00932dcd9b8cec56df"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-07-pBIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-07",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-07-pBIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "pBIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "3756c33edec293ffba96d262cf2803bddcb07c5603df0b00932dcd9b8cec56df"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-08-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-08",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-08-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "538a6e781ac5f15d454e9082b402fac8d0739e2e6e6d6beb7603377755d8488a"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-09-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-09",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-09-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "425e1db85ebf5f149b9151d42802066266938aaabd6838ade429720fff7cc5ef",
+      "traits.tsv": "b203d00665bd409fe8fd14a8b525c936f5b3de7aab329f5a0b2eedf686582492"
+    },
+    "candidate_generation": {
+      "configurations_considered": 106,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 284
+    },
+    "candidates": 195,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-10-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-10",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-10-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUfixedRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "32d41b3a8abd346ce12d21b63e2d7b12fa6aae379d3dc65176d2eea404fb5a8d",
+      "traits.tsv": "afc79e7b3868917e549e3d223b4ba9df66a4da84374c2c912f6413e04534a711"
+    },
+    "candidate_generation": {
+      "configurations_considered": 466,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 1332
+    },
+    "candidates": 899,
+    "continuous_global_optimum_certified": false
+  },
+  "fit-11-BIC": {
+    "schema_version": 1,
+    "options": {
+      "case": "/private/tmp/nwkit-shift-joint-pilot-20260910/case-11",
+      "output": "/private/tmp/nwkit-shift-joint-pilot-20260910/fit-11-BIC",
+      "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+      "criterion": "BIC",
+      "root_model": "OUrandomRoot",
+      "max_shifts": 2,
+      "candidate_limit": 5000
+    },
+    "input_sha256": {
+      "tree.nwk": "32d41b3a8abd346ce12d21b63e2d7b12fa6aae379d3dc65176d2eea404fb5a8d",
+      "traits.tsv": "5318ca2766e36646454723d25cc97a6b5e648b4dee5fe1f3028a0d8696380f23"
+    },
+    "candidate_generation": {
+      "configurations_considered": 466,
+      "unidentifiable_configurations": 1,
+      "redundant_equalities": 1332
+    },
+    "candidates": 899,
+    "continuous_global_optimum_certified": false
+  }
+}

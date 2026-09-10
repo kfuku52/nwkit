@@ -1,0 +1,77 @@
+{
+  "attempted": 120,
+  "completed": 120,
+  "false_selection": {
+    "count": 6,
+    "denominator": 120,
+    "rate": 0.05,
+    "wilson_95": [
+      0.023114364414465793,
+      0.10480288536236734
+    ]
+  },
+  "by_tips": [
+    {
+      "tips": 4,
+      "false_selection": {
+        "count": 0,
+        "denominator": 40,
+        "rate": 0.0,
+        "wilson_95": [
+          0.0,
+          0.08762160119728662
+        ]
+      }
+    },
+    {
+      "tips": 8,
+      "false_selection": {
+        "count": 2,
+        "denominator": 40,
+        "rate": 0.05,
+        "wilson_95": [
+          0.013820667386148358,
+          0.16503877369140962
+        ]
+      }
+    },
+    {
+      "tips": 16,
+      "false_selection": {
+        "count": 4,
+        "denominator": 40,
+        "rate": 0.1,
+        "wilson_95": [
+          0.03957952868260636,
+          0.23051775227522295
+        ]
+      }
+    }
+  ],
+  "by_error": [
+    {
+      "known_error": false,
+      "false_selection": {
+        "count": 2,
+        "denominator": 60,
+        "rate": 0.03333333333333333,
+        "wilson_95": [
+          0.00918931925619787,
+          0.113637742743086
+        ]
+      }
+    },
+    {
+      "known_error": true,
+      "false_selection": {
+        "count": 4,
+        "denominator": 60,
+        "rate": 0.06666666666666667,
+        "wilson_95": [
+          0.0262286987245062,
+          0.15925357313197167
+        ]
+      }
+    }
+  ]
+}

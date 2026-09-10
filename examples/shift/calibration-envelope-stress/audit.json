@@ -1,0 +1,12 @@
+{
+  "cases_replayed": 120,
+  "inputs_covariances_and_fits": "exact_match",
+  "source_changes": {
+    "nwkit/shift_calibration.py": {
+      "frozen": "5a26bf6eea4bb1db490479e4e9fd52282575ef533e687e568b6fd35b10dbc3ca",
+      "current": "9c5ba6f8188e1c703618745c46140277a2093e7aa2d5c4c74c6abaff53d09883"
+    }
+  },
+  "records_sha256": "395e7c7975755b2f818c9dabac3016220a739fcd79eed9fa3b7f6dea735712a8",
+  "verifier_sha256": "07c894c1d8c83fd13590815de90c1811d8ab1a2306b5edaed864a46f9fbf34e1"
+}

@@ -1,0 +1,3509 @@
+{
+  "surface": "report",
+  "manifest": {
+    "version": 1,
+    "surface": "report",
+    "title": "OU シフト選択：独立反復と α 下限への感度",
+    "generatedAt": "2026-09-09T22:55:14.052880+00:00",
+    "blocks": [
+      {
+        "id": "title",
+        "type": "markdown",
+        "body": "# OU シフト選択：独立反復と α 下限への感度"
+      },
+      {
+        "id": "summary",
+        "type": "markdown",
+        "body": "## 技術要約\n\n**独立な 520 データセットで比較を完了しました。** 主解析は 8 末端、4 種類の真値、2 種類の根モデルで各 50 反復です。各データに BIC/pBIC、二段階/joint、2 通りの α 下限を適用しました。\n\n主解析の無シフト真値に対する joint の偽陽性率は、根と下限によって BIC: 98%–100%; pBIC: 68%–94% でした。これはこの条件での選択頻度であり、名目有意水準を保証する検定ではありません。選択モデル 4,160 件のうち独立計算による監査不一致は 0 件でした。正しい尤度の計算と、適切なモデル選択は別の検証課題です。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "definitions",
+        "type": "markdown",
+        "body": "## 偽陽性・回復率の定義\n\n偽陽性は、真のシフトがないデータで、親と異なる最適値を持つ実効シフトを 1 個以上選ぶことです。背景と統合されて消えた枝は数えません。回復率は、末端を同じ最適値でまとめた分割が真値と完全一致する割合です。これは枝位置の完全一致と異なります。RMSE は観測値への当てはまりでなく、生成過程の真の末端平均に対する誤差です。\n\n割合の分母は各条件で完了した反復数。失敗数と全試行を分母にした保守的な上下限は集計データに残しています。各棒は同じデータから得た対応のある結果で、棒どうしを独立標本とは扱いません。95% 区間は Wilson 区間です。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "null-OUfixedRoot",
+        "type": "markdown",
+        "body": "## 固定根：無シフト真値での選択\n\n棒の高さが高いほど、存在しない最適値の変化を選びやすいことを示します。下限の引き上げは推定範囲そのものを変えるため、結果を見て採用する調整ではなく感度分析として読みます。\n\njoint の結果：\n\n- BIC・下限 raised: 49/50 (98%; 95% CI 90%–100%)\n- pBIC・下限 raised: 47/50 (94%; 95% CI 84%–98%)\n- BIC・下限 small: 49/50 (98%; 95% CI 90%–100%)\n- pBIC・下限 small: 47/50 (94%; 95% CI 84%–98%)",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "false-positive-OUfixedRoot-block",
+        "type": "chart",
+        "chartId": "false-positive-OUfixedRoot"
+      },
+      {
+        "id": "null-OUrandomRoot",
+        "type": "markdown",
+        "body": "## 定常ランダム根：無シフト真値での選択\n\n棒の高さが高いほど、存在しない最適値の変化を選びやすいことを示します。下限の引き上げは推定範囲そのものを変えるため、結果を見て採用する調整ではなく感度分析として読みます。\n\njoint の結果：\n\n- BIC・下限 raised: 50/50 (100%; 95% CI 93%–100%)\n- pBIC・下限 raised: 34/50 (68%; 95% CI 54%–79%)\n- BIC・下限 small: 50/50 (100%; 95% CI 93%–100%)\n- pBIC・下限 small: 34/50 (68%; 95% CI 54%–79%)",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "false-positive-OUrandomRoot-block",
+        "type": "chart",
+        "chartId": "false-positive-OUrandomRoot"
+      },
+      {
+        "id": "recovery-OUfixedRoot",
+        "type": "markdown",
+        "body": "## 固定根：真の収斂を回復できるか\n\nこの条件では、離れた 2 クレードが同じ最適値を持ちます。棒が高いほど共有最適値の末端分割を正しく回復しています。探索を広げても、選択基準が真の分割を優先するとは限りません。\n\n- joint BIC・下限 raised: 16/50 (32%; 95% CI 21%–46%)\n- joint pBIC・下限 raised: 9/50 (18%; 95% CI 10%–31%)\n- joint BIC・下限 small: 16/50 (32%; 95% CI 21%–46%)\n- joint pBIC・下限 small: 0/50 (0%; 95% CI 0%–7%)\n\n境界到達（joint、下限 10⁻⁷）：BIC は下限 1/50、上限 47/50 / pBIC は下限 50/50、上限 0/50。上限への集中もあるため、この下限比較をパラメータ範囲全体に対する頑健性の証明とは扱いません。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "convergence-OUfixedRoot-block",
+        "type": "chart",
+        "chartId": "convergence-OUfixedRoot"
+      },
+      {
+        "id": "recovery-OUrandomRoot",
+        "type": "markdown",
+        "body": "## 定常ランダム根：真の収斂を回復できるか\n\nこの条件では、離れた 2 クレードが同じ最適値を持ちます。棒が高いほど共有最適値の末端分割を正しく回復しています。探索を広げても、選択基準が真の分割を優先するとは限りません。\n\n- joint BIC・下限 raised: 20/50 (40%; 95% CI 28%–54%)\n- joint pBIC・下限 raised: 36/50 (72%; 95% CI 58%–83%)\n- joint BIC・下限 small: 20/50 (40%; 95% CI 28%–54%)\n- joint pBIC・下限 small: 36/50 (72%; 95% CI 58%–83%)\n\n境界到達（joint、下限 10⁻⁷）：BIC は下限 0/50、上限 49/50 / pBIC は下限 0/50、上限 40/50。上限への集中もあるため、この下限比較をパラメータ範囲全体に対する頑健性の証明とは扱いません。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "convergence-OUrandomRoot-block",
+        "type": "chart",
+        "chartId": "convergence-OUrandomRoot"
+      },
+      {
+        "id": "paired",
+        "type": "markdown",
+        "body": "## 下限による変化を同じデータの中で比較\n\n次の表は αH の下限を 10⁻⁷ から 0.1 に変えたときの分割変更数です。RMSE 差は引き上げ後−引き上げ前で、負なら真の平均に近づきます。分割が変わっても必ずしも正解に近づくとは限りません。主解析の各行は 50 組です。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "floor-pairs-block",
+        "type": "table",
+        "tableId": "floor-pairs"
+      },
+      {
+        "id": "method-pairs",
+        "type": "markdown",
+        "body": "## 探索を広げた効果と基準を変えた効果\n\n次の表は各真値・根・下限での対応比較です。『改善』は左では誤り、右では正しい分割になった件数、『喪失』はその逆です。二段階→joint と BIC→pBIC を別の比較として示します。これにより、候補の最小スコアを下げることと真の分割を回復することを区別できます。RMSE 差は右−左です。両基準間でスコアそのものは比較しません。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "method-criterion-pairs-block",
+        "type": "table",
+        "tableId": "method-criterion-pairs"
+      },
+      {
+        "id": "all-results",
+        "type": "markdown",
+        "body": "## 弱い復元力・観測誤差・16 末端での補助検証\n\n補助条件は各 10 反復の探索的検証です。主解析と混ぜて単一の率に集約せず、以下の全条件表で確認できます。10 反復では区間が広く、根・樹形・標本数一般への外挿はできません。境界頻度はパラメータの弱い識別性を読むために併記します。\n\njoint・下限 10⁻⁷ の無シフト真値での範囲（2 種類の根、各 10 反復）：\n\n- 弱い復元力：BIC の偽陽性率 100%–100%、pBIC の偽陽性率 50%–100%。\n- 既知の観測誤差：BIC の偽陽性率 70%–90%、pBIC の偽陽性率 80%–100%。\n- 16 末端：BIC の偽陽性率 90%–100%、pBIC の偽陽性率 40%–70%。\n\n補助条件でも過剰選択は残り、16 末端に増やすことだけで一貫して解消したとはいえません。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "all-cells-block",
+        "type": "table",
+        "tableId": "all-cells"
+      },
+      {
+        "id": "design",
+        "type": "markdown",
+        "body": "## 生成モデルと比較範囲\n\n独立な枝ごとの OU 革新でデータを生成しました。主解析の αH=2.1、σ²H=0.25、非ゼロの最適値は ±2。補助条件は αH=0.2、既知の観測標準誤差 0.2、または 16 末端です。H は樹高です。真値は無シフト・単一・異なる 2 最適値・共有する 2 最適値の 4 種。主解析は各真値×根で 50 反復、補助条件は無シフトと収斂のみ各 10 反復です。\n\n探索の上限は 2 シフト。二段階は非制約モデルの枝配置を全探索してから後退統合、joint は識別可能な枝配置と最適値の等値制約を同時列挙します。候補数は 8 末端で 195、16 末端で 899。両者とも αH 上限 10、開始値 1、下限 10⁻⁷ または 0.1。以前の既定上限は生成値を含まなかったため、この検証では明示的な共通上限を使いました。以前の実験との単純な差分比較はしません。\n\nseed は 20260911 を基に条件と反復から事前生成し、全入力を推定前に固定しました。過去の 12 データの再利用ではありません。補正済み・未リリースの kfl1ou 3.0.9 を隔離ライブラリで使用。通常の同バージョン番号のリリース版とは異なります。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "validation",
+        "type": "markdown",
+        "body": "## 独立監査と残る数値的限界\n\n選択モデルは 4,160/4,160 件完了。joint の候補試行は 259,120 件、候補失敗は 0 件。Python で再計算した平均の最大絶対差は 9.99e-15、尤度は 1.1e-12、BIC は 2.16e-12 でした。監査許容差は 10⁻⁶ です。\n\n候補を全列挙しても連続パラメータの大域最適性は保証されません。境界での pBIC は α の小さな数値差にも敏感で、同一モデルの再最適化差を探索の改善と混同しないよう元記録に分離して保存しました。同一モデルのスコア差は最大 0.030408 で、差が 10⁻⁴ を超えた 4 組を探索スコアの比較から除外しました。候補失敗があるデータについては、全候補での最小値を証明したとは扱いません。\n\nWilson 区間は各率の標本誤差を表します。条件が多いため同時被覆率ではありません。この実験は平衡二分樹、単一形質、最大 2 シフトに限られ、ブートストラップ被覆率やモデル平均の校正は評価していません。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "null-optimization",
+        "type": "markdown",
+        "body": "## 無シフトモデルの単純な最適化失敗では説明できない\n\n高い偽陽性率を確認した後の追加診断として、主解析の無シフト真値を 200 条件で独立に調べました。切片と分散を解析的にプロファイルし、α の対数間隔 161 点と各格子局所最大の周辺を精査しました。保存された無シフトモデルからの尤度改善の最大値は 4.44e-14 で、丸め誤差程度でした。この点検は元の選択結果を変更せず、事前計画した主解析とも区別しています。連続大域最適性の厳密な証明ではなく、シフトを含む全候補の追加多点最適化も実施していません。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "next",
+        "type": "markdown",
+        "body": "## 次に検証すべきこと\n\n- α 下限と境界付近の pBIC の振る舞いを先に扱い、今回の結果だけでモデル平均の重みを確率として採用しない。\n- 有限標本での過剰選択に対して、独立な検証データを用いた基準の校正を検討する。今回の検証データで調整したら、新しい seed で再検証する。\n- 実データの樹形・末端数・誤差条件に合わせた模擬実験で再現性を確認する。",
+        "sourceId": "simulation"
+      },
+      {
+        "id": "questions",
+        "type": "markdown",
+        "body": "## 残る問い\n\n非平衡樹や多形質で同じ傾向が残るか。小さい α での最適値の非識別性に、選択基準をどう対応させるべきか。真の平均の予測を目的とする場合、枝・分割の完全回復より良い評価法があるか。これらは今回の結果だけでは決まりません。",
+        "sourceId": "simulation"
+      }
+    ],
+    "charts": [
+      {
+        "id": "false-positive-OUfixedRoot",
+        "title": "固定根：偽陽性率",
+        "subtitle": "8 末端・無シフト真値・各条件 50 反復。区間と分母は直前の本文とデータに保存。",
+        "showDescription": true,
+        "type": "bar",
+        "dataset": "false-positive-OUfixedRoot",
+        "sourceId": "simulation",
+        "layout": "full",
+        "encodings": {
+          "x": {
+            "field": "label",
+            "type": "nominal",
+            "label": "選択基準 / 探索"
+          },
+          "y": {
+            "field": "rate",
+            "type": "quantitative",
+            "label": "割合",
+            "format": "percent"
+          },
+          "color": {
+            "field": "floor",
+            "type": "nominal",
+            "label": "α 下限"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "blue-yellow"
+        },
+        "valueFormat": "percent",
+        "settings": {
+          "groupMode": "grouped",
+          "sort": "none"
+        },
+        "labels": {
+          "values": "all"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 1,
+            "label": "100%",
+            "color": "neutral"
+          }
+        ]
+      },
+      {
+        "id": "false-positive-OUrandomRoot",
+        "title": "定常ランダム根：偽陽性率",
+        "subtitle": "8 末端・無シフト真値・各条件 50 反復。区間と分母は直前の本文とデータに保存。",
+        "showDescription": true,
+        "type": "bar",
+        "dataset": "false-positive-OUrandomRoot",
+        "sourceId": "simulation",
+        "layout": "full",
+        "encodings": {
+          "x": {
+            "field": "label",
+            "type": "nominal",
+            "label": "選択基準 / 探索"
+          },
+          "y": {
+            "field": "rate",
+            "type": "quantitative",
+            "label": "割合",
+            "format": "percent"
+          },
+          "color": {
+            "field": "floor",
+            "type": "nominal",
+            "label": "α 下限"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "blue-yellow"
+        },
+        "valueFormat": "percent",
+        "settings": {
+          "groupMode": "grouped",
+          "sort": "none"
+        },
+        "labels": {
+          "values": "all"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 1,
+            "label": "100%",
+            "color": "neutral"
+          }
+        ]
+      },
+      {
+        "id": "convergence-OUfixedRoot",
+        "title": "固定根：共有最適値の回復率",
+        "subtitle": "8 末端・収斂真値・各条件 50 反復。完全な末端分割一致を評価。",
+        "showDescription": true,
+        "type": "bar",
+        "dataset": "convergence-OUfixedRoot",
+        "sourceId": "simulation",
+        "layout": "full",
+        "encodings": {
+          "x": {
+            "field": "label",
+            "type": "nominal",
+            "label": "選択基準 / 探索"
+          },
+          "y": {
+            "field": "rate",
+            "type": "quantitative",
+            "label": "割合",
+            "format": "percent"
+          },
+          "color": {
+            "field": "floor",
+            "type": "nominal",
+            "label": "α 下限"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "blue-yellow"
+        },
+        "valueFormat": "percent",
+        "settings": {
+          "groupMode": "grouped",
+          "sort": "none"
+        },
+        "labels": {
+          "values": "all"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 1,
+            "label": "100%",
+            "color": "neutral"
+          }
+        ]
+      },
+      {
+        "id": "convergence-OUrandomRoot",
+        "title": "定常ランダム根：共有最適値の回復率",
+        "subtitle": "8 末端・収斂真値・各条件 50 反復。完全な末端分割一致を評価。",
+        "showDescription": true,
+        "type": "bar",
+        "dataset": "convergence-OUrandomRoot",
+        "sourceId": "simulation",
+        "layout": "full",
+        "encodings": {
+          "x": {
+            "field": "label",
+            "type": "nominal",
+            "label": "選択基準 / 探索"
+          },
+          "y": {
+            "field": "rate",
+            "type": "quantitative",
+            "label": "割合",
+            "format": "percent"
+          },
+          "color": {
+            "field": "floor",
+            "type": "nominal",
+            "label": "α 下限"
+          }
+        },
+        "palette": {
+          "kind": "categorical",
+          "name": "blue-yellow"
+        },
+        "valueFormat": "percent",
+        "settings": {
+          "groupMode": "grouped",
+          "sort": "none"
+        },
+        "labels": {
+          "values": "all"
+        },
+        "referenceLines": [
+          {
+            "axis": "y",
+            "value": 1,
+            "label": "100%",
+            "color": "neutral"
+          }
+        ]
+      }
+    ],
+    "tables": [
+      {
+        "id": "floor-pairs",
+        "title": "下限変更の対応比較",
+        "dataset": "floor-pairs",
+        "sourceId": "simulation",
+        "defaultSort": {
+          "field": "condition",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "condition",
+            "label": "真値 / 根",
+            "type": "text"
+          },
+          {
+            "field": "method",
+            "label": "探索",
+            "type": "text"
+          },
+          {
+            "field": "criterion",
+            "label": "基準",
+            "type": "text"
+          },
+          {
+            "field": "changed",
+            "label": "分割変更",
+            "type": "text"
+          },
+          {
+            "field": "recovery_gain",
+            "label": "回復へ改善",
+            "type": "text"
+          },
+          {
+            "field": "recovery_loss",
+            "label": "回復を喪失",
+            "type": "text"
+          },
+          {
+            "field": "rmse_delta",
+            "label": "RMSE 差",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "method-criterion-pairs",
+        "title": "探索法・選択基準の対応比較",
+        "dataset": "method-criterion-pairs",
+        "sourceId": "simulation",
+        "defaultSort": {
+          "field": "condition",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "condition",
+            "label": "真値 / 根 / 下限",
+            "type": "text"
+          },
+          {
+            "field": "contrast",
+            "label": "対応比較",
+            "type": "text"
+          },
+          {
+            "field": "fixed",
+            "label": "共通設定",
+            "type": "text"
+          },
+          {
+            "field": "changed",
+            "label": "分割変更",
+            "type": "text"
+          },
+          {
+            "field": "gain",
+            "label": "回復へ改善",
+            "type": "text"
+          },
+          {
+            "field": "loss",
+            "label": "回復を喪失",
+            "type": "text"
+          },
+          {
+            "field": "rmse",
+            "label": "RMSE 差",
+            "type": "text"
+          },
+          {
+            "field": "score_lower",
+            "label": "joint スコア低下 / 比較可能組",
+            "type": "text"
+          }
+        ]
+      },
+      {
+        "id": "all-cells",
+        "title": "条件別の回復率・誤差・境界頻度",
+        "dataset": "all-cells",
+        "sourceId": "simulation",
+        "defaultSort": {
+          "field": "condition",
+          "direction": "asc"
+        },
+        "columns": [
+          {
+            "field": "condition",
+            "label": "条件",
+            "type": "text"
+          },
+          {
+            "field": "fit",
+            "label": "選択方法 / 下限",
+            "type": "text"
+          },
+          {
+            "field": "recovery",
+            "label": "分割回復 (95% CI)",
+            "type": "text"
+          },
+          {
+            "field": "any_shift",
+            "label": "実効シフトあり (95% CI)",
+            "type": "text"
+          },
+          {
+            "field": "rmse",
+            "label": "平均 RMSE",
+            "type": "text"
+          },
+          {
+            "field": "lower",
+            "label": "下限到達",
+            "type": "text"
+          },
+          {
+            "field": "upper",
+            "label": "上限到達",
+            "type": "text"
+          },
+          {
+            "field": "failed",
+            "label": "失敗",
+            "type": "text"
+          }
+        ]
+      }
+    ],
+    "cards": [],
+    "sources": [
+      {
+        "id": "simulation",
+        "label": "固定プロトコルによる独立 OU 模擬実験",
+        "path": "report-data.json",
+        "query": {
+          "engine": "SQLite (in-memory reviewed aggregates from Python and R)",
+          "language": "sql",
+          "sql": "SELECT dataset, position, payload FROM reviewed_rows ORDER BY dataset, position",
+          "description": "Paired simulation; aggregate completed fits within each frozen cell; preserve all failures.",
+          "tables_used": [
+            "reviewed_rows",
+            "summary.json",
+            "paired.json",
+            "audit.json",
+            "records.jsonl.gz",
+            "candidate-ledger.jsonl.gz",
+            "protocol.json"
+          ],
+          "filters": [
+            "520 independent datasets; same datasets across all eight fit settings; no outcome-based stopping"
+          ],
+          "metric_definitions": {
+            "any_shift": "at least one effective optimum change",
+            "shared_recovered": "exact label-invariant tip partition",
+            "rmse": "root mean squared error against generating tip means"
+          }
+        }
+      }
+    ]
+  },
+  "snapshot": {
+    "version": 1,
+    "generatedAt": "2026-09-09T22:55:14.052880+00:00",
+    "status": "ready",
+    "datasets": {
+      "all-cells": [
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.30299",
+          "lower": "0/10",
+          "upper": "9/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.25528",
+          "lower": "0/10",
+          "upper": "9/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.59378",
+          "lower": "10/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.59378",
+          "lower": "10/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.30299",
+          "lower": "0/10",
+          "upper": "9/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.25528",
+          "lower": "0/10",
+          "upper": "9/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.65754",
+          "lower": "8/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.65754",
+          "lower": "8/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.24588",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.24588",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "5/10 (50%; 95% CI 24%–76%)",
+          "any_shift": "6/10 (60%; 95% CI 31%–83%)",
+          "rmse": "0.42959",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "4/10 (40%; 95% CI 17%–69%)",
+          "any_shift": "5/10 (50%; 95% CI 24%–76%)",
+          "rmse": "0.50685",
+          "lower": "0/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.24588",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.24588",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "5/10 (50%; 95% CI 24%–76%)",
+          "any_shift": "6/10 (60%; 95% CI 31%–83%)",
+          "rmse": "0.42959",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "4/10 (40%; 95% CI 17%–69%)",
+          "any_shift": "5/10 (50%; 95% CI 24%–76%)",
+          "rmse": "0.50685",
+          "lower": "0/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.24449",
+          "lower": "0/10",
+          "upper": "8/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.23778",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.21038",
+          "lower": "6/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.21038",
+          "lower": "6/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.24449",
+          "lower": "0/10",
+          "upper": "8/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.23778",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.20785",
+          "lower": "6/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.19539",
+          "lower": "4/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "1/10 (10%; 95% CI 2%–40%)",
+          "any_shift": "9/10 (90%; 95% CI 60%–98%)",
+          "rmse": "0.29062",
+          "lower": "0/10",
+          "upper": "7/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.27090",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.20721",
+          "lower": "2/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "7/10 (70%; 95% CI 40%–89%)",
+          "any_shift": "3/10 (30%; 95% CI 11%–60%)",
+          "rmse": "0.17427",
+          "lower": "0/10",
+          "upper": "5/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "1/10 (10%; 95% CI 2%–40%)",
+          "any_shift": "9/10 (90%; 95% CI 60%–98%)",
+          "rmse": "0.29062",
+          "lower": "0/10",
+          "upper": "7/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.27090",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.23360",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "known_error / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "7/10 (70%; 95% CI 40%–89%)",
+          "any_shift": "3/10 (30%; 95% CI 11%–60%)",
+          "rmse": "0.17427",
+          "lower": "0/10",
+          "upper": "5/10",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.16993",
+          "lower": "1/50",
+          "upper": "47/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.16993",
+          "lower": "1/50",
+          "upper": "47/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "9/50 (18%; 95% CI 10%–31%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.46514",
+          "lower": "41/50",
+          "upper": "6/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.53783",
+          "lower": "49/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.16990",
+          "lower": "1/50",
+          "upper": "47/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.16990",
+          "lower": "1/50",
+          "upper": "47/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/50 (0%; 95% CI 0%–7%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.55274",
+          "lower": "50/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/50 (0%; 95% CI 0%–7%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.55274",
+          "lower": "50/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "20/50 (40%; 95% CI 28%–54%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17549",
+          "lower": "0/50",
+          "upper": "49/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "20/50 (40%; 95% CI 28%–54%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17549",
+          "lower": "0/50",
+          "upper": "49/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "36/50 (72%; 95% CI 58%–83%)",
+          "any_shift": "48/50 (96%; 95% CI 87%–99%)",
+          "rmse": "0.18563",
+          "lower": "0/50",
+          "upper": "40/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "31/50 (62%; 95% CI 48%–74%)",
+          "any_shift": "43/50 (86%; 95% CI 74%–93%)",
+          "rmse": "0.25123",
+          "lower": "0/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "20/50 (40%; 95% CI 28%–54%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17549",
+          "lower": "0/50",
+          "upper": "49/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "20/50 (40%; 95% CI 28%–54%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17549",
+          "lower": "0/50",
+          "upper": "49/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "36/50 (72%; 95% CI 58%–83%)",
+          "any_shift": "48/50 (96%; 95% CI 87%–99%)",
+          "rmse": "0.18563",
+          "lower": "0/50",
+          "upper": "40/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "31/50 (62%; 95% CI 48%–74%)",
+          "any_shift": "43/50 (86%; 95% CI 74%–93%)",
+          "rmse": "0.25123",
+          "lower": "0/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.14945",
+          "lower": "2/50",
+          "upper": "43/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.14945",
+          "lower": "2/50",
+          "upper": "43/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "5/50 (10%; 95% CI 4%–21%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.52941",
+          "lower": "47/50",
+          "upper": "3/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "5/50 (10%; 95% CI 4%–21%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.52941",
+          "lower": "47/50",
+          "upper": "3/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.14948",
+          "lower": "2/50",
+          "upper": "43/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.14948",
+          "lower": "2/50",
+          "upper": "43/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "2/50 (4%; 95% CI 1%–13%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.55777",
+          "lower": "50/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "2/50 (4%; 95% CI 1%–13%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.55777",
+          "lower": "50/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.15823",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.15823",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "44/50 (88%; 95% CI 76%–94%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.22080",
+          "lower": "0/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "44/50 (88%; 95% CI 76%–94%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.22080",
+          "lower": "0/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.15823",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "50/50 (100%; 95% CI 93%–100%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.15823",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "44/50 (88%; 95% CI 76%–94%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.22080",
+          "lower": "0/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / distinct / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "44/50 (88%; 95% CI 76%–94%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.22080",
+          "lower": "0/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.20502",
+          "lower": "2/50",
+          "upper": "35/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.20452",
+          "lower": "2/50",
+          "upper": "38/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "3/50 (6%; 95% CI 2%–16%)",
+          "any_shift": "47/50 (94%; 95% CI 84%–98%)",
+          "rmse": "0.17587",
+          "lower": "43/50",
+          "upper": "4/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "3/50 (6%; 95% CI 2%–16%)",
+          "any_shift": "47/50 (94%; 95% CI 84%–98%)",
+          "rmse": "0.17587",
+          "lower": "43/50",
+          "upper": "4/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.20394",
+          "lower": "4/50",
+          "upper": "34/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.20337",
+          "lower": "3/50",
+          "upper": "37/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "3/50 (6%; 95% CI 2%–16%)",
+          "any_shift": "47/50 (94%; 95% CI 84%–98%)",
+          "rmse": "0.17701",
+          "lower": "44/50",
+          "upper": "4/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "3/50 (6%; 95% CI 2%–16%)",
+          "any_shift": "47/50 (94%; 95% CI 84%–98%)",
+          "rmse": "0.17701",
+          "lower": "44/50",
+          "upper": "4/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "0/50 (0%; 95% CI 0%–7%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.21900",
+          "lower": "0/50",
+          "upper": "30/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.21635",
+          "lower": "0/50",
+          "upper": "37/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "34/50 (68%; 95% CI 54%–79%)",
+          "rmse": "0.17009",
+          "lower": "0/50",
+          "upper": "17/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "34/50 (68%; 95% CI 54%–79%)",
+          "rmse": "0.16679",
+          "lower": "0/50",
+          "upper": "19/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "0/50 (0%; 95% CI 0%–7%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.21900",
+          "lower": "0/50",
+          "upper": "30/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "1/50 (2%; 95% CI 0%–10%)",
+          "any_shift": "49/50 (98%; 95% CI 90%–100%)",
+          "rmse": "0.21635",
+          "lower": "0/50",
+          "upper": "37/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "34/50 (68%; 95% CI 54%–79%)",
+          "rmse": "0.17009",
+          "lower": "0/50",
+          "upper": "17/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "16/50 (32%; 95% CI 21%–46%)",
+          "any_shift": "34/50 (68%; 95% CI 54%–79%)",
+          "rmse": "0.16679",
+          "lower": "0/50",
+          "upper": "19/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "9/50 (18%; 95% CI 10%–31%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17671",
+          "lower": "3/50",
+          "upper": "40/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "8/50 (16%; 95% CI 8%–29%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17693",
+          "lower": "3/50",
+          "upper": "41/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "20/50 (40%; 95% CI 28%–54%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.20210",
+          "lower": "26/50",
+          "upper": "18/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "21/50 (42%; 95% CI 29%–56%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.22254",
+          "lower": "26/50",
+          "upper": "19/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "9/50 (18%; 95% CI 10%–31%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17664",
+          "lower": "3/50",
+          "upper": "40/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "7/50 (14%; 95% CI 7%–26%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.17738",
+          "lower": "3/50",
+          "upper": "42/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/50 (0%; 95% CI 0%–7%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.47582",
+          "lower": "50/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/50 (0%; 95% CI 0%–7%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.47582",
+          "lower": "50/50",
+          "upper": "0/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "6/50 (12%; 95% CI 6%–24%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.19093",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "6/50 (12%; 95% CI 6%–24%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.19093",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "42/50 (84%; 95% CI 71%–92%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.14471",
+          "lower": "0/50",
+          "upper": "26/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "43/50 (86%; 95% CI 74%–93%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.13997",
+          "lower": "0/50",
+          "upper": "27/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "6/50 (12%; 95% CI 6%–24%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.19093",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "6/50 (12%; 95% CI 6%–24%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.19093",
+          "lower": "0/50",
+          "upper": "39/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "42/50 (84%; 95% CI 71%–92%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.14471",
+          "lower": "0/50",
+          "upper": "26/50",
+          "failed": 0
+        },
+        {
+          "condition": "primary / single / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "43/50 (86%; 95% CI 74%–93%)",
+          "any_shift": "50/50 (100%; 95% CI 93%–100%)",
+          "rmse": "0.13997",
+          "lower": "0/50",
+          "upper": "27/50",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.13497",
+          "lower": "0/10",
+          "upper": "5/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.13497",
+          "lower": "0/10",
+          "upper": "5/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.33786",
+          "lower": "5/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "1/10 (10%; 95% CI 2%–40%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.41655",
+          "lower": "7/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.13497",
+          "lower": "0/10",
+          "upper": "5/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.13497",
+          "lower": "0/10",
+          "upper": "5/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.60789",
+          "lower": "10/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.60789",
+          "lower": "10/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.14475",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.14475",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.17552",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.17552",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.14475",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.14475",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.17552",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "8/10 (80%; 95% CI 49%–94%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.17552",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "1/10 (10%; 95% CI 2%–40%)",
+          "any_shift": "9/10 (90%; 95% CI 60%–98%)",
+          "rmse": "0.15888",
+          "lower": "1/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.15252",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.10588",
+          "lower": "1/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.10588",
+          "lower": "1/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "1/10 (10%; 95% CI 2%–40%)",
+          "any_shift": "9/10 (90%; 95% CI 60%–98%)",
+          "rmse": "0.15882",
+          "lower": "1/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.15252",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.09758",
+          "lower": "3/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.09758",
+          "lower": "3/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.19561",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.17336",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.13911",
+          "lower": "0/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.13911",
+          "lower": "0/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.19561",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "2/10 (20%; 95% CI 6%–51%)",
+          "any_shift": "8/10 (80%; 95% CI 49%–94%)",
+          "rmse": "0.17336",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.13911",
+          "lower": "0/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "sixteen_tips / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "3/10 (30%; 95% CI 11%–60%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.13911",
+          "lower": "0/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.45003",
+          "lower": "2/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.44827",
+          "lower": "2/10",
+          "upper": "7/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.41212",
+          "lower": "9/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "9/10 (90%; 95% CI 60%–98%)",
+          "rmse": "0.40926",
+          "lower": "9/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.45031",
+          "lower": "2/10",
+          "upper": "4/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.44856",
+          "lower": "2/10",
+          "upper": "7/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.41222",
+          "lower": "9/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "9/10 (90%; 95% CI 60%–98%)",
+          "rmse": "0.40936",
+          "lower": "9/10",
+          "upper": "1/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.59195",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.58928",
+          "lower": "0/10",
+          "upper": "9/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.51853",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.51853",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.59195",
+          "lower": "0/10",
+          "upper": "10/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.58928",
+          "lower": "0/10",
+          "upper": "9/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.51853",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / convergent / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "7/10 (70%; 95% CI 40%–89%)",
+          "rmse": "0.51853",
+          "lower": "0/10",
+          "upper": "2/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.45289",
+          "lower": "1/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.45289",
+          "lower": "1/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.37704",
+          "lower": "9/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.37704",
+          "lower": "9/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.45290",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.45290",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.33711",
+          "lower": "10/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUfixedRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.33711",
+          "lower": "10/10",
+          "upper": "0/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "BIC / joint / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.90782",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "BIC / two_stage / raised",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.90801",
+          "lower": "0/10",
+          "upper": "7/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "pBIC / joint / raised",
+          "recovery": "5/10 (50%; 95% CI 24%–76%)",
+          "any_shift": "5/10 (50%; 95% CI 24%–76%)",
+          "rmse": "0.82715",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / raised",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.82287",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "BIC / joint / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.90782",
+          "lower": "0/10",
+          "upper": "6/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "BIC / two_stage / small",
+          "recovery": "0/10 (0%; 95% CI 0%–28%)",
+          "any_shift": "10/10 (100%; 95% CI 72%–100%)",
+          "rmse": "0.90801",
+          "lower": "0/10",
+          "upper": "7/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "pBIC / joint / small",
+          "recovery": "5/10 (50%; 95% CI 24%–76%)",
+          "any_shift": "5/10 (50%; 95% CI 24%–76%)",
+          "rmse": "0.82715",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        },
+        {
+          "condition": "weak_pull / null / OUrandomRoot",
+          "fit": "pBIC / two_stage / small",
+          "recovery": "6/10 (60%; 95% CI 31%–83%)",
+          "any_shift": "4/10 (40%; 95% CI 17%–69%)",
+          "rmse": "0.82287",
+          "lower": "0/10",
+          "upper": "3/10",
+          "failed": 0
+        }
+      ],
+      "convergence-OUfixedRoot": [
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.32,
+          "raised_details": "16/50 (32%; 95% CI 21%–46%)",
+          "raised_rmse": 0.16993402091531934,
+          "small": 0.32,
+          "small_details": "16/50 (32%; 95% CI 21%–46%)",
+          "small_rmse": 0.1698962604538521,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.32
+        },
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.32,
+          "raised_details": "16/50 (32%; 95% CI 21%–46%)",
+          "raised_rmse": 0.16993402091531934,
+          "small": 0.32,
+          "small_details": "16/50 (32%; 95% CI 21%–46%)",
+          "small_rmse": 0.1698962604538521,
+          "floor": "αH 下限 0.1",
+          "rate": 0.32
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.32,
+          "raised_details": "16/50 (32%; 95% CI 21%–46%)",
+          "raised_rmse": 0.16993402089934406,
+          "small": 0.32,
+          "small_details": "16/50 (32%; 95% CI 21%–46%)",
+          "small_rmse": 0.16989626042999526,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.32
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.32,
+          "raised_details": "16/50 (32%; 95% CI 21%–46%)",
+          "raised_rmse": 0.16993402089934406,
+          "small": 0.32,
+          "small_details": "16/50 (32%; 95% CI 21%–46%)",
+          "small_rmse": 0.16989626042999526,
+          "floor": "αH 下限 0.1",
+          "rate": 0.32
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.02,
+          "raised_details": "1/50 (2%; 95% CI 0%–10%)",
+          "raised_rmse": 0.5378321235432028,
+          "small": 0.0,
+          "small_details": "0/50 (0%; 95% CI 0%–7%)",
+          "small_rmse": 0.5527370043536282,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.0
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.02,
+          "raised_details": "1/50 (2%; 95% CI 0%–10%)",
+          "raised_rmse": 0.5378321235432028,
+          "small": 0.0,
+          "small_details": "0/50 (0%; 95% CI 0%–7%)",
+          "small_rmse": 0.5527370043536282,
+          "floor": "αH 下限 0.1",
+          "rate": 0.02
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.18,
+          "raised_details": "9/50 (18%; 95% CI 10%–31%)",
+          "raised_rmse": 0.4651416900043896,
+          "small": 0.0,
+          "small_details": "0/50 (0%; 95% CI 0%–7%)",
+          "small_rmse": 0.5527370043536283,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.0
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.18,
+          "raised_details": "9/50 (18%; 95% CI 10%–31%)",
+          "raised_rmse": 0.4651416900043896,
+          "small": 0.0,
+          "small_details": "0/50 (0%; 95% CI 0%–7%)",
+          "small_rmse": 0.5527370043536283,
+          "floor": "αH 下限 0.1",
+          "rate": 0.18
+        }
+      ],
+      "convergence-OUrandomRoot": [
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.4,
+          "raised_details": "20/50 (40%; 95% CI 28%–54%)",
+          "raised_rmse": 0.17548654708890243,
+          "small": 0.4,
+          "small_details": "20/50 (40%; 95% CI 28%–54%)",
+          "small_rmse": 0.17548654707367795,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.4
+        },
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.4,
+          "raised_details": "20/50 (40%; 95% CI 28%–54%)",
+          "raised_rmse": 0.17548654708890243,
+          "small": 0.4,
+          "small_details": "20/50 (40%; 95% CI 28%–54%)",
+          "small_rmse": 0.17548654707367795,
+          "floor": "αH 下限 0.1",
+          "rate": 0.4
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 0.4,
+          "raised_details": "20/50 (40%; 95% CI 28%–54%)",
+          "raised_rmse": 0.17548654700667232,
+          "small": 0.4,
+          "small_details": "20/50 (40%; 95% CI 28%–54%)",
+          "small_rmse": 0.1754865470003184,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.4
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 0.4,
+          "raised_details": "20/50 (40%; 95% CI 28%–54%)",
+          "raised_rmse": 0.17548654700667232,
+          "small": 0.4,
+          "small_details": "20/50 (40%; 95% CI 28%–54%)",
+          "small_rmse": 0.1754865470003184,
+          "floor": "αH 下限 0.1",
+          "rate": 0.4
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.62,
+          "raised_details": "31/50 (62%; 95% CI 48%–74%)",
+          "raised_rmse": 0.25123459474857684,
+          "small": 0.62,
+          "small_details": "31/50 (62%; 95% CI 48%–74%)",
+          "small_rmse": 0.25123459471276804,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.62
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.62,
+          "raised_details": "31/50 (62%; 95% CI 48%–74%)",
+          "raised_rmse": 0.25123459474857684,
+          "small": 0.62,
+          "small_details": "31/50 (62%; 95% CI 48%–74%)",
+          "small_rmse": 0.25123459471276804,
+          "floor": "αH 下限 0.1",
+          "rate": 0.62
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 0.72,
+          "raised_details": "36/50 (72%; 95% CI 58%–83%)",
+          "raised_rmse": 0.18562833574388443,
+          "small": 0.72,
+          "small_details": "36/50 (72%; 95% CI 58%–83%)",
+          "small_rmse": 0.18562833571695683,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.72
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 0.72,
+          "raised_details": "36/50 (72%; 95% CI 58%–83%)",
+          "raised_rmse": 0.18562833574388443,
+          "small": 0.72,
+          "small_details": "36/50 (72%; 95% CI 58%–83%)",
+          "small_rmse": 0.18562833571695683,
+          "floor": "αH 下限 0.1",
+          "rate": 0.72
+        }
+      ],
+      "false-positive-OUfixedRoot": [
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.98,
+          "raised_details": "49/50 (98%; 95% CI 90%–100%)",
+          "raised_count": 49,
+          "raised_n": 50,
+          "small": 0.98,
+          "small_details": "49/50 (98%; 95% CI 90%–100%)",
+          "small_count": 49,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.98
+        },
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.98,
+          "raised_details": "49/50 (98%; 95% CI 90%–100%)",
+          "raised_count": 49,
+          "raised_n": 50,
+          "small": 0.98,
+          "small_details": "49/50 (98%; 95% CI 90%–100%)",
+          "small_count": 49,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.98
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.98,
+          "raised_details": "49/50 (98%; 95% CI 90%–100%)",
+          "raised_count": 49,
+          "raised_n": 50,
+          "small": 0.98,
+          "small_details": "49/50 (98%; 95% CI 90%–100%)",
+          "small_count": 49,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.98
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.98,
+          "raised_details": "49/50 (98%; 95% CI 90%–100%)",
+          "raised_count": 49,
+          "raised_n": 50,
+          "small": 0.98,
+          "small_details": "49/50 (98%; 95% CI 90%–100%)",
+          "small_count": 49,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.98
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.94,
+          "raised_details": "47/50 (94%; 95% CI 84%–98%)",
+          "raised_count": 47,
+          "raised_n": 50,
+          "small": 0.94,
+          "small_details": "47/50 (94%; 95% CI 84%–98%)",
+          "small_count": 47,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.94
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUfixedRoot",
+          "raised": 0.94,
+          "raised_details": "47/50 (94%; 95% CI 84%–98%)",
+          "raised_count": 47,
+          "raised_n": 50,
+          "small": 0.94,
+          "small_details": "47/50 (94%; 95% CI 84%–98%)",
+          "small_count": 47,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.94
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.94,
+          "raised_details": "47/50 (94%; 95% CI 84%–98%)",
+          "raised_count": 47,
+          "raised_n": 50,
+          "small": 0.94,
+          "small_details": "47/50 (94%; 95% CI 84%–98%)",
+          "small_count": 47,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.94
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUfixedRoot",
+          "raised": 0.94,
+          "raised_details": "47/50 (94%; 95% CI 84%–98%)",
+          "raised_count": 47,
+          "raised_n": 50,
+          "small": 0.94,
+          "small_details": "47/50 (94%; 95% CI 84%–98%)",
+          "small_count": 47,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.94
+        }
+      ],
+      "false-positive-OUrandomRoot": [
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.98,
+          "raised_details": "49/50 (98%; 95% CI 90%–100%)",
+          "raised_count": 49,
+          "raised_n": 50,
+          "small": 0.98,
+          "small_details": "49/50 (98%; 95% CI 90%–100%)",
+          "small_count": 49,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.98
+        },
+        {
+          "label": "BIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.98,
+          "raised_details": "49/50 (98%; 95% CI 90%–100%)",
+          "raised_count": 49,
+          "raised_n": 50,
+          "small": 0.98,
+          "small_details": "49/50 (98%; 95% CI 90%–100%)",
+          "small_count": 49,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.98
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 1.0,
+          "raised_details": "50/50 (100%; 95% CI 93%–100%)",
+          "raised_count": 50,
+          "raised_n": 50,
+          "small": 1.0,
+          "small_details": "50/50 (100%; 95% CI 93%–100%)",
+          "small_count": 50,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 1.0
+        },
+        {
+          "label": "BIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 1.0,
+          "raised_details": "50/50 (100%; 95% CI 93%–100%)",
+          "raised_count": 50,
+          "raised_n": 50,
+          "small": 1.0,
+          "small_details": "50/50 (100%; 95% CI 93%–100%)",
+          "small_count": 50,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 1.0
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.68,
+          "raised_details": "34/50 (68%; 95% CI 54%–79%)",
+          "raised_count": 34,
+          "raised_n": 50,
+          "small": 0.68,
+          "small_details": "34/50 (68%; 95% CI 54%–79%)",
+          "small_count": 34,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.68
+        },
+        {
+          "label": "pBIC / 二段階",
+          "root_model": "OUrandomRoot",
+          "raised": 0.68,
+          "raised_details": "34/50 (68%; 95% CI 54%–79%)",
+          "raised_count": 34,
+          "raised_n": 50,
+          "small": 0.68,
+          "small_details": "34/50 (68%; 95% CI 54%–79%)",
+          "small_count": 34,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.68
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 0.68,
+          "raised_details": "34/50 (68%; 95% CI 54%–79%)",
+          "raised_count": 34,
+          "raised_n": 50,
+          "small": 0.68,
+          "small_details": "34/50 (68%; 95% CI 54%–79%)",
+          "small_count": 34,
+          "small_n": 50,
+          "floor": "αH 下限 10⁻⁷",
+          "rate": 0.68
+        },
+        {
+          "label": "pBIC / joint",
+          "root_model": "OUrandomRoot",
+          "raised": 0.68,
+          "raised_details": "34/50 (68%; 95% CI 54%–79%)",
+          "raised_count": 34,
+          "raised_n": 50,
+          "small": 0.68,
+          "small_details": "34/50 (68%; 95% CI 54%–79%)",
+          "small_count": 34,
+          "small_n": 50,
+          "floor": "αH 下限 0.1",
+          "rate": 0.68
+        }
+      ],
+      "floor-pairs": [
+        {
+          "condition": "convergent / OUfixedRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00004"
+        },
+        {
+          "condition": "convergent / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00004"
+        },
+        {
+          "condition": "convergent / OUfixedRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "10/50",
+          "recovery_gain": 9,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.08760"
+        },
+        {
+          "condition": "convergent / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "2/50",
+          "recovery_gain": 1,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.01490"
+        },
+        {
+          "condition": "convergent / OUrandomRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "convergent / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "convergent / OUrandomRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "convergent / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "distinct / OUfixedRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00003"
+        },
+        {
+          "condition": "distinct / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00003"
+        },
+        {
+          "condition": "distinct / OUfixedRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "4/50",
+          "recovery_gain": 3,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.02836"
+        },
+        {
+          "condition": "distinct / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "4/50",
+          "recovery_gain": 3,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.02836"
+        },
+        {
+          "condition": "distinct / OUrandomRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "distinct / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "distinct / OUrandomRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "distinct / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "null / OUfixedRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "1/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00109"
+        },
+        {
+          "condition": "null / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "1/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00115"
+        },
+        {
+          "condition": "null / OUfixedRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "1/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00114"
+        },
+        {
+          "condition": "null / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "1/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00114"
+        },
+        {
+          "condition": "null / OUrandomRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "null / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "null / OUrandomRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00000"
+        },
+        {
+          "condition": "null / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "single / OUfixedRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "0.00006"
+        },
+        {
+          "condition": "single / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "1/50",
+          "recovery_gain": 1,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00045"
+        },
+        {
+          "condition": "single / OUfixedRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "28/50",
+          "recovery_gain": 20,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.27372"
+        },
+        {
+          "condition": "single / OUfixedRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "24/50",
+          "recovery_gain": 21,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.25328"
+        },
+        {
+          "condition": "single / OUrandomRoot",
+          "method": "joint",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "single / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "BIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "single / OUrandomRoot",
+          "method": "joint",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        },
+        {
+          "condition": "single / OUrandomRoot",
+          "method": "two_stage",
+          "criterion": "pBIC",
+          "changed": "0/50",
+          "recovery_gain": 0,
+          "recovery_loss": 0,
+          "rmse_delta": "-0.00000"
+        }
+      ],
+      "method-criterion-pairs": [
+        {
+          "condition": "convergent / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "43/50",
+          "gain": 3,
+          "loss": 10,
+          "rmse": "0.29521",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "49/50",
+          "gain": 1,
+          "loss": 16,
+          "rmse": "0.36790",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "49/50",
+          "gain": 0,
+          "loss": 16,
+          "rmse": "0.38284",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "49/50",
+          "gain": 0,
+          "loss": 16,
+          "rmse": "0.38284",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "20/50",
+          "gain": 17,
+          "loss": 1,
+          "rmse": "0.01014",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "26/50",
+          "gain": 17,
+          "loss": 6,
+          "rmse": "0.07575",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "20/50",
+          "gain": 17,
+          "loss": 1,
+          "rmse": "0.01014",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "26/50",
+          "gain": 17,
+          "loss": 6,
+          "rmse": "0.07575",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "45/50",
+          "gain": 0,
+          "loss": 45,
+          "rmse": "0.37995",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "45/50",
+          "gain": 0,
+          "loss": 45,
+          "rmse": "0.37995",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "48/50",
+          "gain": 0,
+          "loss": 48,
+          "rmse": "0.40829",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "48/50",
+          "gain": 0,
+          "loss": 48,
+          "rmse": "0.40829",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "6/50",
+          "gain": 0,
+          "loss": 6,
+          "rmse": "0.06256",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "6/50",
+          "gain": 0,
+          "loss": 6,
+          "rmse": "0.06256",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "6/50",
+          "gain": 0,
+          "loss": 6,
+          "rmse": "0.06256",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "6/50",
+          "gain": 0,
+          "loss": 6,
+          "rmse": "0.06256",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "48/50",
+          "gain": 2,
+          "loss": 0,
+          "rmse": "-0.02916",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "48/50",
+          "gain": 2,
+          "loss": 0,
+          "rmse": "-0.02865",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "47/50",
+          "gain": 2,
+          "loss": 0,
+          "rmse": "-0.02693",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "47/50",
+          "gain": 2,
+          "loss": 0,
+          "rmse": "-0.02636",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "42/50",
+          "gain": 16,
+          "loss": 0,
+          "rmse": "-0.04892",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "44/50",
+          "gain": 15,
+          "loss": 0,
+          "rmse": "-0.04956",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "42/50",
+          "gain": 16,
+          "loss": 0,
+          "rmse": "-0.04892",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "null / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "44/50",
+          "gain": 15,
+          "loss": 0,
+          "rmse": "-0.04956",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "39/50",
+          "gain": 13,
+          "loss": 2,
+          "rmse": "0.02540",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUfixedRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "40/50",
+          "gain": 14,
+          "loss": 1,
+          "rmse": "0.04561",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "48/50",
+          "gain": 0,
+          "loss": 9,
+          "rmse": "0.29918",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUfixedRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "48/50",
+          "gain": 0,
+          "loss": 7,
+          "rmse": "0.29845",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "41/50",
+          "gain": 36,
+          "loss": 0,
+          "rmse": "-0.04622",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUrandomRoot / raised",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "41/50",
+          "gain": 37,
+          "loss": 0,
+          "rmse": "-0.05096",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "joint",
+          "changed": "41/50",
+          "gain": 36,
+          "loss": 0,
+          "rmse": "-0.04622",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "single / OUrandomRoot / small",
+          "contrast": "BIC → pBIC",
+          "fixed": "two_stage",
+          "changed": "41/50",
+          "gain": 37,
+          "loss": 0,
+          "rmse": "-0.05096",
+          "score_lower": "比較対象外"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "8/50",
+          "gain": 8,
+          "loss": 0,
+          "rmse": "-0.07269",
+          "score_lower": "8/50"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "convergent / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "6/50",
+          "gain": 5,
+          "loss": 0,
+          "rmse": "-0.06561",
+          "score_lower": "6/50"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "convergent / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "6/50",
+          "gain": 5,
+          "loss": 0,
+          "rmse": "-0.06561",
+          "score_lower": "6/50"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "distinct / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "null / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "6/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00051",
+          "score_lower": "8/50"
+        },
+        {
+          "condition": "null / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "null / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "6/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00057",
+          "score_lower": "8/50"
+        },
+        {
+          "condition": "null / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00000",
+          "score_lower": "0/49"
+        },
+        {
+          "condition": "null / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "10/50",
+          "gain": 0,
+          "loss": 1,
+          "rmse": "0.00265",
+          "score_lower": "11/50"
+        },
+        {
+          "condition": "null / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "3/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00329",
+          "score_lower": "3/50"
+        },
+        {
+          "condition": "null / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "10/50",
+          "gain": 0,
+          "loss": 1,
+          "rmse": "0.00265",
+          "score_lower": "11/50"
+        },
+        {
+          "condition": "null / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "3/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00329",
+          "score_lower": "3/50"
+        },
+        {
+          "condition": "single / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "1/50",
+          "gain": 1,
+          "loss": 0,
+          "rmse": "-0.00022",
+          "score_lower": "1/50"
+        },
+        {
+          "condition": "single / OUfixedRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "5/50",
+          "gain": 0,
+          "loss": 1,
+          "rmse": "-0.02044",
+          "score_lower": "5/50"
+        },
+        {
+          "condition": "single / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "2/50",
+          "gain": 2,
+          "loss": 0,
+          "rmse": "-0.00073",
+          "score_lower": "2/50"
+        },
+        {
+          "condition": "single / OUfixedRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/49"
+        },
+        {
+          "condition": "single / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "-0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "single / OUrandomRoot / raised",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "2/50",
+          "gain": 0,
+          "loss": 1,
+          "rmse": "0.00474",
+          "score_lower": "3/50"
+        },
+        {
+          "condition": "single / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "BIC",
+          "changed": "0/50",
+          "gain": 0,
+          "loss": 0,
+          "rmse": "0.00000",
+          "score_lower": "0/50"
+        },
+        {
+          "condition": "single / OUrandomRoot / small",
+          "contrast": "two_stage → joint",
+          "fixed": "pBIC",
+          "changed": "2/50",
+          "gain": 0,
+          "loss": 1,
+          "rmse": "0.00474",
+          "score_lower": "3/50"
+        }
+      ]
+    },
+    "accessIssues": []
+  },
+  "sources": [
+    {
+      "id": "simulation",
+      "label": "固定プロトコルによる独立 OU 模擬実験",
+      "path": "report-data.json",
+      "query": {
+        "engine": "SQLite (in-memory reviewed aggregates from Python and R)",
+        "language": "sql",
+        "sql": "SELECT dataset, position, payload FROM reviewed_rows ORDER BY dataset, position",
+        "description": "Paired simulation; aggregate completed fits within each frozen cell; preserve all failures.",
+        "tables_used": [
+          "reviewed_rows",
+          "summary.json",
+          "paired.json",
+          "audit.json",
+          "records.jsonl.gz",
+          "candidate-ledger.jsonl.gz",
+          "protocol.json"
+        ],
+        "filters": [
+          "520 independent datasets; same datasets across all eight fit settings; no outcome-based stopping"
+        ],
+        "metric_definitions": {
+          "any_shift": "at least one effective optimum change",
+          "shared_recovered": "exact label-invariant tip partition",
+          "rmse": "root mean squared error against generating tip means"
+        }
+      }
+    }
+  ]
+}

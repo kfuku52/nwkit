@@ -1,0 +1,682 @@
+[
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 3,
+      "denominator": 50,
+      "rate": 0.06,
+      "wilson_95": [
+        0.020614970348973957,
+        0.1621709168883817
+      ]
+    },
+    "partition_recovered": {
+      "count": 47,
+      "denominator": 50,
+      "rate": 0.94,
+      "wilson_95": [
+        0.8378290831116182,
+        0.979385029651026
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 0,
+      "denominator": 50,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.07134759913335872
+      ]
+    },
+    "partition_recovered": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 33,
+      "denominator": 50,
+      "rate": 0.66,
+      "wilson_95": [
+        0.521538260502326,
+        0.7756305077749992
+      ]
+    },
+    "partition_recovered": {
+      "count": 32,
+      "denominator": 50,
+      "rate": 0.64,
+      "wilson_95": [
+        0.5014101687611269,
+        0.7586125034815326
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 23,
+      "denominator": 50,
+      "rate": 0.46,
+      "wilson_95": [
+        0.3296965219222435,
+        0.5960112860084252
+      ]
+    },
+    "partition_recovered": {
+      "count": 22,
+      "denominator": 50,
+      "rate": 0.44,
+      "wilson_95": [
+        0.3116219921125717,
+        0.5769397197834314
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 21,
+      "denominator": 50,
+      "rate": 0.42,
+      "wilson_95": [
+        0.2937500335471198,
+        0.5576655823142176
+      ]
+    },
+    "partition_recovered": {
+      "count": 20,
+      "denominator": 50,
+      "rate": 0.4,
+      "wilson_95": [
+        0.2760838973025654,
+        0.5381856225241064
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 26,
+      "denominator": 50,
+      "rate": 0.52,
+      "wilson_95": [
+        0.3851174489004461,
+        0.6520286471342196
+      ]
+    },
+    "partition_recovered": {
+      "count": 24,
+      "denominator": 50,
+      "rate": 0.48,
+      "wilson_95": [
+        0.3479713528657804,
+        0.6148825510995539
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 19,
+      "denominator": 50,
+      "rate": 0.38,
+      "wilson_95": [
+        0.25862789310193596,
+        0.5184955306900703
+      ]
+    },
+    "partition_recovered": {
+      "count": 19,
+      "denominator": 50,
+      "rate": 0.38,
+      "wilson_95": [
+        0.25862789310193596,
+        0.5184955306900703
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "primary",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "attempted": 50,
+    "completed": 50,
+    "any_shift": {
+      "count": 28,
+      "denominator": 50,
+      "rate": 0.56,
+      "wilson_95": [
+        0.4230602802165686,
+        0.6883780078874284
+      ]
+    },
+    "partition_recovered": {
+      "count": 25,
+      "denominator": 50,
+      "rate": 0.5,
+      "wilson_95": [
+        0.3664451431682858,
+        0.6335548568317142
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 50,
+      "denominator": 50,
+      "rate": 1.0,
+      "wilson_95": [
+        0.9286524008666412,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "partition_recovered": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 3,
+      "denominator": 25,
+      "rate": 0.12,
+      "wilson_95": [
+        0.041668171504403606,
+        0.29955793920927326
+      ]
+    },
+    "partition_recovered": {
+      "count": 22,
+      "denominator": 25,
+      "rate": 0.88,
+      "wilson_95": [
+        0.7004420607907268,
+        0.9583318284955965
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 5,
+      "denominator": 25,
+      "rate": 0.2,
+      "wilson_95": [
+        0.08860584686802575,
+        0.39130950369540335
+      ]
+    },
+    "partition_recovered": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 24,
+      "denominator": 25,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8045593626380626,
+        0.9929037664980128
+      ]
+    }
+  },
+  {
+    "family": "weak_pull",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "partition_recovered": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "partition_recovered": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "partition_recovered": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 10,
+      "denominator": 25,
+      "rate": 0.4,
+      "wilson_95": [
+        0.23403302377747967,
+        0.59260542641033
+      ]
+    },
+    "partition_recovered": {
+      "count": 10,
+      "denominator": 25,
+      "rate": 0.4,
+      "wilson_95": [
+        0.23403302377747967,
+        0.59260542641033
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "known_error",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 11,
+      "denominator": 25,
+      "rate": 0.44,
+      "wilson_95": [
+        0.26665638881067355,
+        0.6293266813020123
+      ]
+    },
+    "partition_recovered": {
+      "count": 11,
+      "denominator": 25,
+      "rate": 0.44,
+      "wilson_95": [
+        0.26665638881067355,
+        0.6293266813020123
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 0,
+      "denominator": 25,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.1331922509390485
+      ]
+    },
+    "partition_recovered": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 1,
+      "denominator": 25,
+      "rate": 0.04,
+      "wilson_95": [
+        0.007096233501987265,
+        0.19544063736193734
+      ]
+    },
+    "partition_recovered": {
+      "count": 24,
+      "denominator": 25,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8045593626380626,
+        0.9929037664980128
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 24,
+      "denominator": 25,
+      "rate": 0.96,
+      "wilson_95": [
+        0.8045593626380626,
+        0.9929037664980128
+      ]
+    },
+    "partition_recovered": {
+      "count": 21,
+      "denominator": 25,
+      "rate": 0.84,
+      "wilson_95": [
+        0.6534637839282115,
+        0.9359654854332357
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  },
+  {
+    "family": "sixteen_tips",
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "attempted": 25,
+    "completed": 25,
+    "any_shift": {
+      "count": 23,
+      "denominator": 25,
+      "rate": 0.92,
+      "wilson_95": [
+        0.750338910496047,
+        0.9777795987151525
+      ]
+    },
+    "partition_recovered": {
+      "count": 23,
+      "denominator": 25,
+      "rate": 0.92,
+      "wilson_95": [
+        0.750338910496047,
+        0.9777795987151525
+      ]
+    },
+    "alpha_limit_supported": {
+      "count": 25,
+      "denominator": 25,
+      "rate": 1.0,
+      "wilson_95": [
+        0.8668077490609516,
+        1.0
+      ]
+    }
+  }
+]

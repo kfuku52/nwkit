@@ -1,0 +1,6786 @@
+[
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.17522455296074635,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.1752245469543872,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.11398916995810333,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.11398917141580717,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.19675384513248426,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.1967538450841365,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.0632657494257905,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.0632657494257905,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.32780824078117216,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3278082423887159,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.08242590424675844,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.08242590424675844,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.10419448799314274,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.10419448799314274,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.13564962318436438,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "null",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.13564962226428204,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.1910121197135705,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.1910121197135705,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.11735265115449062,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.11735264497734334,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.20564098228028768,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.20564098228028768,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3101646226612722,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3101646226677616,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.2203669833997239,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.22036698351773445,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.15717836271374794,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.15717836484508052,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.24779643617159786,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.24779643617159786,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.15695268861786174,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "single",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.1569526016975386,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3466936283720124,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3466936300598007,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.21073822392570415,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "mean_tip_mean_rmse": 0.2107382251180281,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.4107294365577085,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.41072943328933514,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.5044400615755826,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.5044400104451295,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.34886922864783204,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.348973496293143,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.7494207879981426,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.7494207881390896,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.39303398394703354,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.39303398394987293,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.7350411438814076,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "distinct",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "mean_tip_mean_rmse": 0.7350411138472371,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3300512253062812,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3300512262909134,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.4193314746746275,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 3,
+      "denominator": 3,
+      "rate": 1.0,
+      "wilson_95": [
+        0.4385029682449546,
+        1.0
+      ]
+    },
+    "any_merge": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.4106512994739784,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.2447675403818811,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.2447675403818811,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.8803184067726807,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUfixedRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.8803184067726807,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.25988482463373336,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.25988482463373336,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.7043644263167387,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.0,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.7043644269464533,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.2909011861938415,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 0.5,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 1,
+      "denominator": 3,
+      "rate": 0.3333333333333333,
+      "wilson_95": [
+        0.06149194472039626,
+        0.7923403991979523
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.2909011861953406,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "shift",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "mean_tip_mean_rmse": 0.3721193002372982,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  },
+  {
+    "criterion": "pBIC",
+    "tips": 16,
+    "scenario": "convergent",
+    "root_model": "OUrandomRoot",
+    "standard_error": 0.2,
+    "effect": 2.0,
+    "mode": "convergence",
+    "attempted": 3,
+    "completed": 3,
+    "failure": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "any_shift": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "any_merge": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "exact_edges": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "exact_edges_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "ancestry_recovered_returned": {
+      "count": 0,
+      "denominator": 3,
+      "rate": 0.0,
+      "wilson_95": [
+        0.0,
+        0.5614970317550454
+      ]
+    },
+    "shared_recovered": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "shared_recovered_returned": {
+      "count": 2,
+      "denominator": 3,
+      "rate": 0.6666666666666666,
+      "wilson_95": [
+        0.20765960080204782,
+        0.9385080552796038
+      ]
+    },
+    "mean_tip_mean_rmse": 0.34171568824401993,
+    "bootstrap_counts": {
+      "attempted": 0,
+      "successful": 0,
+      "failed": 0
+    },
+    "bootstrap_truth_ancestry_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    },
+    "bootstrap_truth_shared_partition": {
+      "outer_fits_available": 0,
+      "mean_frequency": null
+    }
+  }
+]

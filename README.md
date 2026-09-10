@@ -64,6 +64,7 @@ minimal worked example, in
 [the mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).
 
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
+- [`shift`](SHIFT.md): Small-tree OU shift selection with bootstrap calibration and explicit α limits; optional legacy kfl1ou backend
 - [`asr`](https://github.com/kfuku52/nwkit/blob/master/ASR.md): Inferring Mk/covarion/mixture/threshold or scalar/multivariate Gaussian ancestral traits, with regimes, model comparison, simulation diagnostics, and automatic trait-type detection
 - [`asrcompare`](https://github.com/kfuku52/nwkit/blob/master/ASR.md#model-comparison-and-simulation-diagnostics): Batch-fitting applicable ASR models and comparing compatible likelihood/root groups with AIC, AICc, BIC, and an optional PDF
 - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint

@@ -1,0 +1,94 @@
+{
+  "seed": 20260910,
+  "grid": [
+    [
+      8,
+      "null",
+      "OUfixedRoot",
+      0.0
+    ],
+    [
+      8,
+      "null",
+      "OUrandomRoot",
+      0.0
+    ],
+    [
+      8,
+      "single",
+      "OUfixedRoot",
+      0.0
+    ],
+    [
+      8,
+      "single",
+      "OUrandomRoot",
+      0.0
+    ],
+    [
+      8,
+      "distinct",
+      "OUfixedRoot",
+      0.0
+    ],
+    [
+      8,
+      "distinct",
+      "OUrandomRoot",
+      0.0
+    ],
+    [
+      8,
+      "convergent",
+      "OUfixedRoot",
+      0.0
+    ],
+    [
+      8,
+      "convergent",
+      "OUrandomRoot",
+      0.0
+    ],
+    [
+      8,
+      "convergent",
+      "OUfixedRoot",
+      0.2
+    ],
+    [
+      8,
+      "convergent",
+      "OUrandomRoot",
+      0.2
+    ],
+    [
+      16,
+      "convergent",
+      "OUfixedRoot",
+      0.0
+    ],
+    [
+      16,
+      "convergent",
+      "OUrandomRoot",
+      0.0
+    ]
+  ],
+  "effect": 2,
+  "criteria": "BIC for all cases; pBIC also for eight-tip convergent/no-SE cases",
+  "source_sha256": {
+    "tools/validate_shift_joint_pilot.py": "2482507f0cb7218c47eb993ee887bd7411042bb4130b3d553d27d37d5121cc1d",
+    "tools/validate_shift_joint.py": "65994eca781d249bcff076d0b1ae9f81232e07ee6bf8ea349eb981cfbda7cc49",
+    "tools/shift_joint_candidates.py": "9fefe0e64f95d09a911f23985e7a81ca776755ba94fcaf0175a55dcd709da27c",
+    "tools/shift_joint_backend.py": "78d57289395c19184348824efa1d137f89d933089c11f045456c2958fc9977e9",
+    "tools/shift_simulation_cases.py": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+    "nwkit/shift.py": "98998711c5bf5b2747bd6702a89a69e817334f1962591c75ea2debe13cec1c90",
+    "nwkit/shift_backend.py": "8946565fda853185329b9e702cbd9d42accb7d14941d81bd5d64efc8eb55613e",
+    "nwkit/shift_bootstrap.py": "537b5131193936c79678cf377ef7e6826765f4f578a4596bb3253a7412744817",
+    "nwkit/shift_cli.py": "77137e1f66b0a3832c3b6829855266a519cd5b104f769b20b9f2f6ba421de28c",
+    "nwkit/shift_convergence.py": "bd98b4ffb8bd9d9eb09fa397f981c6f3bd5afc9fb00b901938a64cecd0bdbff9",
+    "nwkit/shift_math.py": "ab5a5de73e7658077de3a4e3c3db885dbba21cbd2860a4d6cb093744606b7a88",
+    "nwkit/shift_reference.py": "897d0f9746c9b7a51ac32294a1f1ff02477ad4b7dbd50ab297c2d962068ad086",
+    "nwkit/shift_results.py": "b8f9cd772babd447fb757a4d9ff139f3bcc1a804bd23a399219e3560f66c1a4a"
+  }
+}

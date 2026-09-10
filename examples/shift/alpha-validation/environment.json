@@ -1,0 +1,11 @@
+{
+  "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "numpy": "1.26.4",
+  "scipy": "1.15.2",
+  "backend_installed_file_count": 28,
+  "installed_backend_unchanged_during_run": true,
+  "corrected_backend_source_matches_prior_provenance": true,
+  "extra_bic_route_checks": 8,
+  "maximum_bic_route_gap": 1.7763568394002505e-15
+}

@@ -1,0 +1,1140 @@
+[
+  {
+    "case": "case-00",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 13.334472342132,
+    "joint_score": 13.334472342132,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 13.334472342132,
+    "joint": {
+      "candidate_id": 145,
+      "shift_branch_ids": [
+        7,
+        11
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          7
+        ],
+        [
+          11
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "",
+      "score": 13.334472342132,
+      "log_likelihood": 0.610809224813444,
+      "alpha": 3.33333540729278e-08,
+      "sigma2": 0.0234775668991366,
+      "free_score": 13.334472342132,
+      "free_log_likelihood": 0.610809224813437,
+      "parameters": {
+        "alpha": 3.33333540729278e-08,
+        "sigma2": 0.0234775668991366,
+        "intercept": -0.104068002597125
+      },
+      "tip_predictions": {
+        "t0": 0.547584129608904,
+        "t1": -0.104068002597125,
+        "t2": -0.104068002597125,
+        "t3": -0.104068002597125,
+        "t4": -1.1793138074282,
+        "t5": -0.104068002597125,
+        "t6": -0.104068002597125,
+        "t7": -0.104068002597125
+      },
+      "reference_log_likelihood": 0.610809224813428,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 13.334472342132,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.021405182655144e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.4684562853641829
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.46845628536417944
+    },
+    "best_truth_partition_score": 15.9768998148996
+  },
+  {
+    "case": "case-01",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 14.3877557785323,
+    "joint_score": 14.3877557785323,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 14.3877557785323,
+    "joint": {
+      "candidate_id": 186,
+      "shift_branch_ids": [
+        11,
+        13
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          11,
+          13
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 14.3877557785323,
+      "log_likelihood": -0.955553264226657,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.106744824102384,
+      "free_score": null,
+      "free_log_likelihood": null,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.106744824102384,
+        "intercept": 0.0646594433068343
+      },
+      "tip_predictions": {
+        "t0": 0.0646594433068343,
+        "t1": 0.0646594433068343,
+        "t2": 0.0646594433068343,
+        "t3": 0.0646594433068343,
+        "t4": 1.01702628297026,
+        "t5": 0.0646594433068343,
+        "t6": 1.01702628297026,
+        "t7": 0.0646594433068343
+      },
+      "reference_log_likelihood": -0.9555532642266455,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 14.3877557785323,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 9.947598300641403e-14,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.5115869894452342
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.5115869894452342
+    },
+    "best_truth_partition_score": 18.2264822783322
+  },
+  {
+    "case": "case-02",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 11.9477953106221,
+    "joint_score": 11.7776740726869,
+    "score_improvement": 0.1701212379352004,
+    "same_candidate_refit_score": 11.9477953106221,
+    "joint": {
+      "candidate_id": 18,
+      "shift_branch_ids": [
+        1,
+        4
+      ],
+      "groups": [
+        [
+          0,
+          4
+        ],
+        [
+          1
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 11.7776740726869,
+      "log_likelihood": 0.349487588696082,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.0779098527093497,
+      "free_score": null,
+      "free_log_likelihood": null,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.0779098527093497,
+        "intercept": 0.25830479952954
+      },
+      "tip_predictions": {
+        "t0": 1.84309949733448,
+        "t1": 1.84309949733448,
+        "t2": 0.484704042073102,
+        "t3": 0.484704042073102,
+        "t4": 0.25830479952954,
+        "t5": 0.25830479952954,
+        "t6": 0.25830479952954,
+        "t7": 0.25830479952954
+      },
+      "reference_log_likelihood": 0.34948758869607577,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 11.9477953106221,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.0302869668521453e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.3469416432077026
+    },
+    "two_stage_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.33478185872950955
+    },
+    "best_truth_partition_score": 11.7776740726869
+  },
+  {
+    "case": "case-03",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 18.268088298976,
+    "joint_score": 18.268088298976,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 18.268088298976,
+    "joint": {
+      "candidate_id": 77,
+      "shift_branch_ids": [
+        3,
+        11
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          3
+        ],
+        [
+          11
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 18.268088298976,
+      "log_likelihood": -1.85599875360857,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.133693857028629,
+      "free_score": 18.2680894889703,
+      "free_log_likelihood": -1.85599934860574,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.133693857028629,
+        "intercept": 0.0931351692124904
+      },
+      "tip_predictions": {
+        "t0": 1.9035487851735,
+        "t1": 1.9035487851735,
+        "t2": 0.0931351692124904,
+        "t3": 0.0931351692124904,
+        "t4": -0.966188930576878,
+        "t5": 0.0931351692124904,
+        "t6": 0.0931351692124904,
+        "t7": 0.0931351692124904
+      },
+      "reference_log_likelihood": -1.855998753608564,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 18.268088298976,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.0658141036401503e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.4018241855926684
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.4018241855926684
+    },
+    "best_truth_partition_score": 21.0790471717691
+  },
+  {
+    "case": "case-04",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 26.3872496648461,
+    "joint_score": 24.5628034837843,
+    "score_improvement": 1.8244461810617985,
+    "same_candidate_refit_score": 26.3872496648461,
+    "joint": {
+      "candidate_id": 84,
+      "shift_branch_ids": [
+        3,
+        14
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          3,
+          14
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 24.5628034837843,
+      "log_likelihood": -6.04307711685264,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.385173391411365,
+      "free_score": null,
+      "free_log_likelihood": null,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.385173391411365,
+        "intercept": -0.802815233751785
+      },
+      "tip_predictions": {
+        "t0": 1.25791334573313,
+        "t1": 1.25791334573313,
+        "t2": -0.802815233751785,
+        "t3": -0.802815233751785,
+        "t4": -0.802815233751785,
+        "t5": -0.802815233751785,
+        "t6": -0.802815233751785,
+        "t7": 0.571003819238156
+      },
+      "reference_log_likelihood": -6.0430771168526505,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 26.3872496648461,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 9.947598300641403e-14,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.6494886103421539
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.4982612033967532
+    },
+    "best_truth_partition_score": 27.6984083190311
+  },
+  {
+    "case": "case-05",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 18.8864443311826,
+    "joint_score": 18.8864443311826,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 18.8864443311826,
+    "joint": {
+      "candidate_id": 65,
+      "shift_branch_ids": [
+        3,
+        5
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          3
+        ],
+        [
+          5
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 18.8864443311826,
+      "log_likelihood": -2.16517676971185,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.14443752211477,
+      "free_score": 18.8864456775904,
+      "free_log_likelihood": -2.16517744291577,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.14443752211477,
+        "intercept": 0.0341959053168504
+      },
+      "tip_predictions": {
+        "t0": 1.70045631020895,
+        "t1": 1.70045631020895,
+        "t2": 0.0341959053168504,
+        "t3": 0.0341959053168504,
+        "t4": -1.75194317274824,
+        "t5": -1.75194317274824,
+        "t6": 0.0341959053168504,
+        "t7": 0.0341959053168504
+      },
+      "reference_log_likelihood": -2.165176769711854,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 18.8864443311826,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.9895196601282805e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.1580595874188153
+    },
+    "two_stage_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.1580595874188153
+    },
+    "best_truth_partition_score": 18.8864443311826
+  },
+  {
+    "case": "case-06",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 10.4330804766466,
+    "joint_score": 10.4330804766466,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 10.4330804766466,
+    "joint": {
+      "candidate_id": 87,
+      "shift_branch_ids": [
+        4,
+        6
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          4
+        ],
+        [
+          6
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 10.4330804766466,
+      "log_likelihood": 2.06150515755614,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.0507823082739353,
+      "free_score": 10.433080867368,
+      "free_log_likelihood": 2.06150496219543,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.0507823082739353,
+        "intercept": 1.60608934925101
+      },
+      "tip_predictions": {
+        "t0": 1.60608934925101,
+        "t1": 1.60608934925101,
+        "t2": -0.212928502866143,
+        "t3": -0.212928502866143,
+        "t4": 1.60608934925101,
+        "t5": 1.60608934925101,
+        "t6": 0.472489355154979,
+        "t7": 0.472489355154979
+      },
+      "reference_log_likelihood": 2.061505157556054,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 10.4330804766466,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 9.947598300641403e-14,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.2684674450955864
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.2684674450955864
+    },
+    "best_truth_partition_score": 13.521449143263
+  },
+  {
+    "case": "case-06",
+    "criterion": "pBIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": -41.5060047941404,
+    "joint_score": -41.5060028458101,
+    "score_improvement": -1.948330300649559e-06,
+    "same_candidate_refit_score": -41.5060028458101,
+    "joint": {
+      "candidate_id": 85,
+      "shift_branch_ids": [
+        4,
+        5
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          4
+        ],
+        [
+          5
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "",
+      "score": -41.5060028458101,
+      "log_likelihood": -1.60916875784944,
+      "alpha": 3.3333368273284e-08,
+      "sigma2": 0.040896310896797,
+      "free_score": -41.5060025551128,
+      "free_log_likelihood": -1.60916875784949,
+      "parameters": {
+        "alpha": 3.3333368273284e-08,
+        "sigma2": 0.040896310896797,
+        "intercept": 0.960023043535401
+      },
+      "tip_predictions": {
+        "t0": 0.960023043535401,
+        "t1": 0.960023043535401,
+        "t2": -0.415868598966177,
+        "t3": -0.415868598966177,
+        "t4": 1.96756206268623,
+        "t5": 1.96756206268623,
+        "t6": 0.960023043535401,
+        "t7": 0.960023043535401
+      },
+      "reference_log_likelihood": -1.6091687578494698,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": -41.5060047941404,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.4732447217724598e-06,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.6336124010219747
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.6336124010219754
+    },
+    "best_truth_partition_score": 13.4764344551231
+  },
+  {
+    "case": "case-07",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 9.92719580720379,
+    "joint_score": 9.92719580720379,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 9.92719580720379,
+    "joint": {
+      "candidate_id": 87,
+      "shift_branch_ids": [
+        4,
+        6
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          4
+        ],
+        [
+          6
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 9.92719580720379,
+      "log_likelihood": 2.31444749227753,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.0471314721149301,
+      "free_score": 9.927197156664,
+      "free_log_likelihood": 2.31444681754743,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.0471314721149301,
+        "intercept": 1.3804140515223
+      },
+      "tip_predictions": {
+        "t0": 1.3804140515223,
+        "t1": 1.3804140515223,
+        "t2": 0.52521406640618,
+        "t3": 0.52521406640618,
+        "t4": 1.3804140515223,
+        "t5": 1.3804140515223,
+        "t6": -0.470110854797518,
+        "t7": -0.470110854797518
+      },
+      "reference_log_likelihood": 2.3144474922775187,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 9.92719580720379,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 9.947598300641403e-14,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.36359452591082925
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.36359452591082925
+    },
+    "best_truth_partition_score": 18.7687120973574
+  },
+  {
+    "case": "case-07",
+    "criterion": "pBIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 19.7828790377028,
+    "joint_score": 19.4325557445865,
+    "score_improvement": 0.35032329311629695,
+    "same_candidate_refit_score": 19.7828790377028,
+    "joint": {
+      "candidate_id": 130,
+      "shift_branch_ids": [
+        6,
+        10
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          6,
+          10
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "",
+      "score": 19.4325557445865,
+      "log_likelihood": 0.677449733271849,
+      "alpha": 0.578379787461466,
+      "sigma2": 0.060630085428088,
+      "free_score": null,
+      "free_log_likelihood": null,
+      "parameters": {
+        "alpha": 0.578379787461466,
+        "sigma2": 0.060630085428088,
+        "intercept": 1.2487567265567
+      },
+      "tip_predictions": {
+        "t0": 1.2487567265567,
+        "t1": 1.2487567265567,
+        "t2": 1.2487567265567,
+        "t3": 0.191357184503913,
+        "t4": 1.2487567265567,
+        "t5": 1.2487567265567,
+        "t6": -0.401639093990443,
+        "t7": -0.401639093990443
+      },
+      "reference_log_likelihood": 0.6774497332718115,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 19.7828790377028,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.93220809840966e-06,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.5226132313672266
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.36359452591082925
+    },
+    "best_truth_partition_score": 24.7719677602965
+  },
+  {
+    "case": "case-08",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 17.2510440200906,
+    "joint_score": 17.2510440200906,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 17.2510440200906,
+    "joint": {
+      "candidate_id": 87,
+      "shift_branch_ids": [
+        4,
+        6
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          4
+        ],
+        [
+          6
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "",
+      "score": 17.2510440200906,
+      "log_likelihood": -1.34747661416586,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.0524552974313714,
+      "free_score": 17.2510440200906,
+      "free_log_likelihood": -1.34747661416587,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.0524552974313714,
+        "intercept": 1.28272358908727
+      },
+      "tip_predictions": {
+        "t0": 1.28272358908727,
+        "t1": 1.28272358908727,
+        "t2": 0.292767652264733,
+        "t3": 0.292767652264733,
+        "t4": 1.28272358908727,
+        "t5": 1.28272358908727,
+        "t6": -0.327976348674326,
+        "t7": -0.327976348674326
+      },
+      "reference_log_likelihood": -1.347476614165835,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 17.2510440200906,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.0302869668521453e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.27097384647955164
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.27097384647954215
+    },
+    "best_truth_partition_score": 18.5894136239221
+  },
+  {
+    "case": "case-09",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 195,
+    "successful": 195,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 15.8344155160133,
+    "joint_score": 15.8344155160133,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 15.8344155160133,
+    "joint": {
+      "candidate_id": 87,
+      "shift_branch_ids": [
+        4,
+        6
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          4
+        ],
+        [
+          6
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "",
+      "score": 15.8344155160133,
+      "log_likelihood": -0.639162362127205,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.0285414261788758,
+      "free_score": 15.8344155160133,
+      "free_log_likelihood": -0.639162362127215,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.0285414261788758,
+        "intercept": 1.58862447764765
+      },
+      "tip_predictions": {
+        "t0": 1.58862447764765,
+        "t1": 1.58862447764765,
+        "t2": 0.0139125626235354,
+        "t3": 0.0139125626235354,
+        "t4": 1.58862447764765,
+        "t5": 1.58862447764765,
+        "t6": 0.767209824962907,
+        "t7": 0.767209824962907
+      },
+      "reference_log_likelihood": -0.6391623621272187,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 15.8344155160133,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 105,
+      "maximum_information_penalty_gap": 1.0302869668521453e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.38800546964108434
+    },
+    "two_stage_truth": {
+      "exact_edges": false,
+      "ancestry_recovered": false,
+      "shared_recovered": false,
+      "tip_mean_rmse": 0.38800546964108334
+    },
+    "best_truth_partition_score": 18.9613605861597
+  },
+  {
+    "case": "case-10",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUfixedRoot",
+    "attempted": 899,
+    "successful": 899,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 35.7323143591692,
+    "joint_score": 35.7323143591692,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 35.7323143591692,
+    "joint": {
+      "candidate_id": 146,
+      "shift_branch_ids": [
+        3,
+        5
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          3,
+          5
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "",
+      "score": 35.7323143591692,
+      "log_likelihood": -9.54839101286528,
+      "alpha": 0.660131038521328,
+      "sigma2": 0.266475113541301,
+      "free_score": null,
+      "free_log_likelihood": null,
+      "parameters": {
+        "alpha": 0.660131038521328,
+        "sigma2": 0.266475113541301,
+        "intercept": -0.030618899935307
+      },
+      "tip_predictions": {
+        "t0": 1.73312351397583,
+        "t1": 1.73312351397583,
+        "t2": 1.73312351397583,
+        "t3": 1.73312351397583,
+        "t4": -0.030618899935307,
+        "t5": -0.030618899935307,
+        "t6": -0.030618899935307,
+        "t7": -0.030618899935307,
+        "t8": 1.73312351397583,
+        "t9": 1.73312351397583,
+        "t10": 1.73312351397583,
+        "t11": 1.73312351397583,
+        "t12": -0.030618899935307,
+        "t13": -0.030618899935307,
+        "t14": -0.030618899935307,
+        "t15": -0.030618899935307
+      },
+      "reference_log_likelihood": -9.548391012865293,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 35.7323143591692,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 465,
+      "maximum_information_penalty_gap": 2.0605739337042905e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.026645056341293043
+    },
+    "two_stage_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.026645056341293043
+    },
+    "best_truth_partition_score": 35.7323143591692
+  },
+  {
+    "case": "case-11",
+    "criterion": "BIC",
+    "status": "completed",
+    "root_model": "OUrandomRoot",
+    "attempted": 899,
+    "successful": 899,
+    "failed": 0,
+    "discrete_coverage_complete": true,
+    "continuous_global_optimum_certified": false,
+    "two_stage_score": 17.9850231612873,
+    "joint_score": 17.9850231612873,
+    "score_improvement": 0.0,
+    "same_candidate_refit_score": 17.9850231612873,
+    "joint": {
+      "candidate_id": 146,
+      "shift_branch_ids": [
+        3,
+        5
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          3,
+          5
+        ]
+      ],
+      "status": "completed",
+      "error": "",
+      "warnings": "the estimation of alpha matches the upper/lower bound for this parameter.\n                              You may change the bounds using options \"upper.bound\" and \"lower.bound\".\n",
+      "score": 17.9850231612873,
+      "log_likelihood": -0.674745413924318,
+      "alpha": 0.693147180559945,
+      "sigma2": 0.0914621814449213,
+      "free_score": null,
+      "free_log_likelihood": null,
+      "parameters": {
+        "alpha": 0.693147180559945,
+        "sigma2": 0.0914621814449213,
+        "intercept": 0.129604510901454
+      },
+      "tip_predictions": {
+        "t0": 1.84960419898278,
+        "t1": 1.84960419898278,
+        "t2": 1.84960419898278,
+        "t3": 1.84960419898278,
+        "t4": 0.129604510901454,
+        "t5": 0.129604510901454,
+        "t6": 0.129604510901454,
+        "t7": 0.129604510901454,
+        "t8": 1.84960419898278,
+        "t9": 1.84960419898278,
+        "t10": 1.84960419898278,
+        "t11": 1.84960419898278,
+        "t12": 0.129604510901454,
+        "t13": 0.129604510901454,
+        "t14": 0.129604510901454,
+        "t15": 0.129604510901454
+      },
+      "reference_log_likelihood": -0.6747454139244429,
+      "backend_version": "3.0.9"
+    },
+    "score_audit": {
+      "baseline_refit_score": 17.9850231612873,
+      "baseline_refit_error": "",
+      "baseline_refit_matches": true,
+      "unconstrained_equivalence_comparisons": 465,
+      "maximum_information_penalty_gap": 2.0250467969162855e-13,
+      "score_equivalence_passed": true,
+      "comparison_validated": true
+    },
+    "joint_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.11342575330203318
+    },
+    "two_stage_truth": {
+      "exact_edges": true,
+      "ancestry_recovered": true,
+      "shared_recovered": true,
+      "tip_mean_rmse": 0.11342575330203318
+    },
+    "best_truth_partition_score": 17.9850231612873
+  }
+]

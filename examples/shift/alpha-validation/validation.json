@@ -1,0 +1,38 @@
+{
+  "status": "passed",
+  "regenerated_datasets": 520,
+  "selected_records": 4160,
+  "summary_cells": 160,
+  "paired_comparisons": 240,
+  "joint_candidate_rows": 259120,
+  "max_archived_likelihood_error": 1.1031175972675555e-12,
+  "checks": [
+    "exact regenerated trees/truth/observations",
+    "unique complete selected-fit grid",
+    "archived parameters reproduce means/likelihood/RMSE",
+    "independent counts/means/Wilson formula",
+    "unique candidate IDs and selected joint minima"
+  ],
+  "test_suites": {
+    "repository_quick": {
+      "passed": 3346,
+      "skipped": 74,
+      "deselected_slow": 13,
+      "warnings": 3
+    },
+    "shift_with_corrected_R_backend": {
+      "passed": 182,
+      "skipped": 0,
+      "warnings": 1
+    },
+    "final_sensitivity_harness": {
+      "passed": 6,
+      "warnings": 1
+    }
+  },
+  "negative_archive_tests": {
+    "changed_rate_rejected": true,
+    "changed_paired_count_rejected": true
+  },
+  "scope": "The full security/coverage profile and all slow repository tests were not run; quick, focused backend, archive and renderer checks were run."
+}

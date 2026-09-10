@@ -1,0 +1,45 @@
+{
+  "status": "local unreleased correction on 3.0.9; no commit or release",
+  "repository": "https://github.com/kfuku52/kfl1ou",
+  "base_commit": "63670031d52adf421b5ee6e23968a85f174da4d9",
+  "source_sha256": {
+    "R/shift_configuration.R": "eecd574f3cddbbe11092522b283d633a5ff103de24900580459cb91b8be77685",
+    "R/convergent_regions.R": "6c0dc3aea1c6c91216c76b340910ae143dca2c46829841f03c3908ea67ba316b",
+    "tests/testthat/test-pbic-coordinates.R": "54efa00133d85e16dbc7ea4f4b069c5f56ac9552a7add85437fc6544ad544bdd",
+    "tools/reproduce-pbic-coordinates.R": "9b02561d7befddc644063e21dbc07753365b18ce5650b27b5fdf9ef23a8a9b27",
+    "NEWS.md": "743c69e61e05d8efa4e1c226110124e53b1c3ca34ecc54d7110cb86bab7f85be",
+    "man/configuration_ic.Rd": "e878ff912a76a30f62fdd6ced541fd69ad10d83db7d46548d6264afc44d48bd2",
+    "vignettes/getting-started.Rmd": "430a2aa738de2cd2c3ad7cda89283b0a87fdd33da9bf63b8f9b63284f9da2727"
+  },
+  "comparison": "Replay of seed 20260910; same observations as joint-validation, not independent replication",
+  "library": "/tmp/nwkit-pbic-library",
+  "rscript": "/tmp/nwkit-shift-r/bin/Rscript",
+  "package_check": {
+    "mode": "quick (no manual or vignette build)",
+    "errors": 0,
+    "warnings": 0,
+    "notes": 0,
+    "assertions_passed": 1097,
+    "skipped": 0
+  },
+  "unchanged_bic_records": 12,
+  "full_package_check": {
+    "status": "not clean: PDF-manual tools unavailable",
+    "errors": 1,
+    "warnings": 2,
+    "notes": 4,
+    "tests": "1097 passed; no failures, warnings or skips",
+    "vignettes": "passed, including rebuilding",
+    "missing_tools": [
+      "pdflatex",
+      "qpdf"
+    ],
+    "other_notes": [
+      "CRAN new submission",
+      "conda compiler flags",
+      "HTML tidy/V8 checks unavailable",
+      "manual tex intermediate retained"
+    ]
+  },
+  "nwkit_shift_tests_passed": 179
+}
