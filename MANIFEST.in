@@ -1,6 +1,8 @@
 include CLI_TSV_CONVENTIONS.md
 include CONVERT.md
 include ASR.md
+include THRESHOLD_DIAGNOSTICS.md
+graft examples/threshold
 include RADTE.md
 include RADTE_SPECIES_UNCERTAINTY.md
 include RECONCILIATION_PLOTS.md

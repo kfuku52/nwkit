@@ -424,13 +424,35 @@ thinning and chains controlled by `--liability-samples`,
 `--liability-burnin`, `--liability-thin`, and `--liability-chains`.
 Ambiguous ordered observations constrain liabilities to the union of their
 allowed category intervals and remain valid as estimated thresholds move.
-`--liability-out` reports posterior liability moments; `--model-out` reports
-maximum R-hat, minimum lag-one ESS, and diagnostic status. Threshold inference
-requires positive branch lengths and does not report a marginal likelihood or
-support CTMC stochastic mapping.
-R-hat requires at least two chains and two retained draws per chain; otherwise
-it is reported as unavailable rather than as apparent convergence. Burn-in may
-be zero, while retained draws, thinning, and chain counts must be positive.
+`--liability-out` reports posterior liability moments. Optional
+`--liability-diagnostics-out diagnostics.tsv` reports one row per node liability,
+node second moment, node/category indicator, and threshold. All nodes are
+monitored, including internal ancestors and missing or ambiguous tips, regardless
+of the primary output target selection. `--model-out` reports the aggregate
+status and diagnostics. See [THRESHOLD_DIAGNOSTICS.md](THRESHOLD_DIAGNOSTICS.md)
+for definitions, prior assumptions, numerical validation, and storage costs.
+
+Diagnostic version `rank_split_v1` uses rank-normalized split/folded R-hat and
+multi-lag bulk/tail ESS. The retained columns `mcmc_rhat_max` and `mcmc_ess_min`
+have these new definitions; ESS is no longer a lag-one AR(1) approximation.
+The default checks are R-hat <= 1.01 and bulk/tail ESS >= 400. Category
+probabilities additionally require indicator mean ESS >= 400 and absolute
+Monte Carlo standard error <= 0.01. These are computational checks, not a
+proof that the model describes the data or that every posterior region was
+visited. Small/rare category probabilities need additional relative precision.
+
+Fixed thresholds and observation-determined categories are marked
+`structural_constant` and excluded. An unknown quantity that remains constant,
+an unvisited nonstructural category, non-finite draws, fewer than two independent
+chains, or fewer than eight retained draws per chain cannot pass the checks.
+An unavailable diagnostic is not silently omitted when determining `fit_status`.
+Finite aggregate extrema summarize available diagnostics only; inspect the status
+and unavailable count as well. Failing diagnostics retain the requested output
+and emit the status to stderr, allowing inspection and a longer independent run.
+Burn-in may be zero. Four independently seeded, dispersed feasible initial
+states remain the default; thinning remains one and is not a mixing remedy.
+Threshold inference requires positive branch lengths and does not report a
+marginal likelihood or support CTMC stochastic mapping.
 
 `--root-prior stationary` derives root frequencies from the current Q, including
 inside each fitted-rate likelihood evaluation. It requires a unique valid
@@ -1200,7 +1222,8 @@ Ordinal threshold reconstruction with explicit MCMC size:
 ```sh
 nwkit asr -i tree.nwk --trait stages.tsv --state-column stage \
   --trait-type discrete --model THRESHOLD --states juvenile,adult,senescent \
-  --liability-samples 2000 --liability-out liability.tsv -o threshold.tsv
+  --liability-samples 2000 --liability-out liability.tsv \
+  --liability-diagnostics-out diagnostics.tsv -o threshold.tsv
 ```
 
 Compare flat-root models and write continuous simulation diagnostics:

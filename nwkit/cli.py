@@ -709,6 +709,14 @@ pasr.add_argument(
     help="default=4 for THRESHOLD: Independent MCMC chains used for R-hat and ESS diagnostics.",
 )
 pasr.add_argument(
+    "--liability-diagnostics-out",
+    "--liability_diagnostics_out",
+    metavar="PATH",
+    default=None,
+    type=str,
+    help="THRESHOLD only: Per-node and threshold rank/split R-hat, bulk/tail ESS, MCSE and status TSV.",
+)
+pasr.add_argument(
     "--liability-out",
     "--liability_out",
     dest="liability_out",

@@ -36,6 +36,7 @@ _DISCRETE_ONLY = (
     "liability_thin",
     "liability_chains",
     "liability_out",
+    "liability_diagnostics_out",
     "ambiguous_separator",
     "stochastic_map_out",
     "n_sim",
@@ -225,6 +226,7 @@ def _validate_threshold_options(args, model):
         "liability_thin",
         "liability_chains",
         "liability_out",
+        "liability_diagnostics_out",
     )
     if model != "THRESHOLD" and any(
         getattr(args, name, None) is not None for name in option_names
