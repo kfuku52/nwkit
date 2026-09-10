@@ -1,0 +1,16 @@
+{
+  "scope": "Independent validation of branch-only single-root-age exact Gaussian contrast intervals; not validation of sequence or general calibrated-profile intervals",
+  "level": 0.95,
+  "truth_age": 20,
+  "species_age": 10,
+  "max_age": 100,
+  "reference_endpoint_tolerance_normalized": 0.000001,
+  "simultaneous_correct_return_lower_required": 0.93,
+  "availability_required": 0.99,
+  "stopping": "Exactly the prespecified family count in every cell; no optional extension",
+  "cells": [
+    {"name": "low-sd-independent", "rho": 0.0, "sd": 0.1, "seed": 92440000, "families": 1000},
+    {"name": "medium-sd-correlated", "rho": 0.5, "sd": 0.3, "seed": 92450000, "families": 1000},
+    {"name": "high-sd-correlated", "rho": 0.9, "sd": 0.6, "seed": 92460000, "families": 1000}
+  ]
+}

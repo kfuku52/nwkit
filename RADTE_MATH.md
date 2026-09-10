@@ -144,6 +144,25 @@ log determinant, and the scaled quadrature nodes when estimating `sigma`.
 Constrained optimization estimates the ages, mean log rate, and variance by
 marginal likelihood, not by maximizing over every rate realization.
 
+The optimization coordinate for an estimated rate variance is now
+`tau = sigma² >= 0`; the upper numerical protection remains `tau <= exp(4)`.
+This includes the exact strict-clock boundary instead of the former
+`log(sigma) >= -9` floor. For positive tau the variance score is obtained by
+the chain rule. At zero, write the conditional mean derivatives with respect
+to root contrast z as `b=m'(0)` and `h=m''(0)`, with `h_root=w(1-w)` and other
+entries zero. With `v=V^-1(m(0)-y)`, `P=M K_c M^T`, and `k=Var(z)/tau`, the
+right derivative of the negative log likelihood is
+
+```text
+d f / d tau | 0 = 1/2 tr(V^-1 P) - 1/2 v' P v
+                 + k/2 [b' V^-1 b + h' v - (b' v)^2].
+```
+
+It follows by differentiating the Gaussian expectation at zero variance.
+The root log-sum second derivative is retained. A nonnegative right score at
+a zero-variance optimum satisfies the one-sided variance KKT condition; it
+does not justify an inverse-Hessian interval for an estimated boundary variance.
+
 Numerical checks include independent two-dimensional Gaussian integration on
 a two-tip example, central finite differences for age/mean/SD gradients with
 independent and correlated clocks, and root-split invariance. These establish
@@ -235,7 +254,57 @@ sequence measurement error is a **local approximation**, not an exact pivot,
 REML implementation, or universally calibrated confidence procedure. In
 particular, it neither estimates missing topology/reconciliation uncertainty
 nor integrates substitution-model parameter uncertainty. Low rate variation
-can still put the marginal SD estimate on its numerical boundary and make
+can still put the marginal variance estimate at zero and make
 intervals unavailable. The validation report records interval availability,
 coverage conditional on availability, and correct intervals returned across
 all families separately.
+
+## Exact log-duration contrasts
+
+For branch-only input, suppose there is exactly one free age a, every affected
+duration is `d_e=s_e(a-a0)` with positive s_e and common a0, and unaffected
+durations are fixed. Divide observed branch lengths by s_e for affected edges
+and by their fixed durations otherwise, then take logs. The resulting model is
+
+```text
+y = 1 mu + I_affected theta + error,   theta=log(a-a0),
+error ~ N(0, sigma² K_rho).
+```
+
+For fixed positive-definite K, GLS gives beta_hat and residual sum of squares S.
+The contrast for theta has a t distribution with `n-2` residual degrees of
+freedom when using `S/(n-2)`, or a normal distribution with supplied positive
+sigma. Exponentiating its endpoints and adding a0 is an exact monotone
+transformation. Intersecting this confidence set with the known feasible age
+domain does not change coverage of a true age in that domain. The unrestricted
+GLS contrast is used even when the constrained point estimate is at a boundary.
+An empty intersection is reported explicitly; zero residual variance is not
+used to manufacture a narrow interval. Exactness is under the stated Gaussian
+branch-length model and known K, not robustness to estimated lengths or rho.
+
+`exact-log-duration` checks eligibility algebraically. Internal free ages that
+both lengthen child branches and shorten parent branches do not generally meet
+the condition. The independent dense-whitening reference lives in
+`tools/radte_interval_reference.py`; the production path uses the normal
+equations and does not call the reference.
+
+## Research-only calibrated profile
+
+`tools/validate_radte_intervals.py --methods calibrated-profile` develops a
+constrained nuisance plug-in parametric-bootstrap LR test. It regenerates
+Gaussian rates on the rooted genealogy and then native CTMC alignment sites;
+site resampling is a different observation experiment. Sequence fits must use
+marginal inference with the native alignment and retain exact approximation
+checks. Informative IUPAC ambiguities require an explicit coarsening model and
+are rejected by this generator; fully missing entries retain their mask.
+
+Failed refits count as exceedances for a conservative Monte Carlo tail bound,
+and more than 10% failures makes the candidate interval unavailable. A one-sided
+99% binomial upper bound accounts for simulation uncertainty at a fixed
+candidate age, but not nuisance plug-in error or simultaneous grid error.
+All grid points are inspected, and the hull of accepted points is padded by
+adjacent cells. A finite grid can miss components and is not exact inversion;
+the output is labeled `experimental-calibrated-profile-grid-hull`. The exact
+branch-only special case bypasses this approximation. This prototype has not
+passed the criteria for a general-purpose 95% confidence method and is not a
+public `--uncertainty` choice.

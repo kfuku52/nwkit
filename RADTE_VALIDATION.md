@@ -1,5 +1,11 @@
 # Preliminary RADTE validation, 2026-09-09
 
+The tables below retain the historical implementations identified by their
+saved source hashes. The later [variance-boundary and exact-contrast work](examples/radte/interval-boundary-validation/README.md)
+has separate evidence and does not retrospectively re-label these results as
+validation of the current implementation. In particular, the general sequence
+calibrated-profile prototype has not met its availability criteria.
+
 The implementation passes its numerical and input/output contract tests.
 Small simulation comparisons support useful speed and point-estimation
 behavior, but **do not establish general high accuracy or nominal interval

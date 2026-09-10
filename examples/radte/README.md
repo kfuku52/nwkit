@@ -10,3 +10,7 @@ The `interval-coverage.csv`, `interval-coverage-summary.json`, and
 `interval-coverage.png` files record the independent-family validation of
 Laplace and studentized curvature intervals. See
 [the study, limitations and reproduction commands](../../RADTE_VALIDATION.md#small-sample-interval-validation).
+
+[Variance-boundary and exact-contrast validation](interval-boundary-validation/README.md)
+records the later changes, frozen protocol, family-level results, and criteria
+that were not met. It is separate from the historical 1,100-family study.

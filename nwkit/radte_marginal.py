@@ -172,7 +172,7 @@ class MarginalDatingProblem(DatingProblem):
         ages = self.unpack_ages(x)
         duration = self.chronology.durations(ages)
         mu = x[len(self.free)]
-        sd = np.exp(x[-1]) if self.fixed_sd is None else self.fixed_sd
+        sd = np.sqrt(x[-1]) if self.fixed_sd is None else self.fixed_sd
         z = self.normal_nodes * sd * np.sqrt(self.contrast_variance)
         log_duration = np.log(duration)
         means = (
@@ -222,15 +222,29 @@ class MarginalDatingProblem(DatingProblem):
             [self.free_design.T @ edge_gradient, [weights @ v.sum(axis=1)]]
         )
         if self.fixed_sd is None:
-            covariance_derivative = 2 * sd**2 * self.projected_covariance
+            covariance_derivative = self.projected_covariance
+            covariance_score = 0.5 * np.sum(
+                inverse * covariance_derivative.T
+            ) - 0.5 * np.einsum("ki,ij,kj->k", v, covariance_derivative, v)
+            if sd == 0:
+                # d E[f(sqrt(k*tau)*Z)] / d tau at zero = k*f''(0)/2.
+                # This right derivative includes the root log-sum curvature;
+                # dividing the log-SD score by tau would lose it at zero.
+                slope = self.conditional_slope[self.rows_to_edges].copy()
+                slope[root] += root_weight[0]
+                second = root_weight[0] * (1 - root_weight[0])
+                score = slope @ v[0]
+                variance_score = covariance_score[0] + 0.5 * self.contrast_variance * (
+                    slope @ inverse @ slope + second * v[0, root] - score**2
+                )
+                return float(value), np.append(gradient, variance_score)
             mean_derivative = (
                 z[:, None] * self.conditional_slope[self.rows_to_edges][None, :]
             )
             mean_derivative[:, root] += z * root_weight
-            covariance_score = 0.5 * np.sum(
-                inverse * covariance_derivative.T
-            ) - 0.5 * np.einsum("ki,ij,kj->k", v, covariance_derivative, v)
-            sigma_score = covariance_score + np.sum(v * mean_derivative, axis=1)
+            sigma_score = covariance_score + np.sum(v * mean_derivative, axis=1) / (
+                2 * sd**2
+            )
             gradient = np.append(gradient, weights @ sigma_score)
         return float(value), np.asarray(gradient)
 
@@ -240,7 +254,7 @@ class MarginalDatingProblem(DatingProblem):
         initial = np.concatenate([ages[self.free], [mu]])
         if self.fixed_sd is None:
             sd = max(0.1, np.sqrt(sse / len(self.observed)))
-            initial = np.append(initial, np.log(sd))
+            initial = np.append(initial, sd**2)
         return initial
 
     def bounds_and_constraint(self):
@@ -248,8 +262,8 @@ class MarginalDatingProblem(DatingProblem):
         lower = c.lower[self.free].tolist() + [-30.0]
         upper = c.upper[self.free].tolist() + [30.0]
         if self.fixed_sd is None:
-            lower.append(-9.0)
-            upper.append(2.0)
+            lower.append(0.0)
+            upper.append(float(np.exp(4.0)))
         extras = len(lower) - len(self.free)
         matrix = sparse.hstack(
             [

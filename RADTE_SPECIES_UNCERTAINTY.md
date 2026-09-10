@@ -155,3 +155,10 @@ output. A failed render/publication preserves existing comparison outputs.
 
 Run the complete [synthetic example](examples/radte/species-uncertainty/README.md)
 to generate all three analyses and the two-page comparison report.
+
+The branch-only `exact-log-duration` method can appear in saved single-family
+comparison bundles; its status and limits use the same interval columns.
+It requires one free age with a linear log-duration contrast and does not
+integrate species-age uncertainty. It is not an ensemble within-fit choice.
+An estimated zero marginal rate variance is a boundary diagnostic, not an
+external species-age confidence statement.

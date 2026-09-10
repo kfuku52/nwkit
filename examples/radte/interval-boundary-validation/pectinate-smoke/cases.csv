@@ -1,0 +1,5 @@
+status,age,truth,fitted_rate_sd,rate_variance_estimated,interval_status,interval_available,lower,upper,width,covered,fixed_target,family,seed,optimizer_seed,target,method,actual_estimator,error
+completed,20.996625213499645,20.0,0.8697731826565891,True,unavailable-gaussian-interval-crosses-bound,False,,,,False,False,0,92420000,92420000,D,laplace,joint-map,
+completed,20.996625213499645,20.0,0.8697731826565891,True,conditional-studentized-curvature,True,12.280927566159905,48.426797801569336,36.14587023540943,True,False,0,92420000,92420000,D,studentized,joint-map,
+completed,24.50596562016514,20.0,0.5425006688075658,True,unavailable-active-bound-use-profile-or-bootstrap,False,,,,False,False,1,92420001,92420001,D,laplace,joint-map,
+completed,24.50596562016514,20.0,0.5425006688075658,True,unavailable-active-bound-use-profile-or-bootstrap,False,,,,False,False,1,92420001,92420001,D,studentized,joint-map,

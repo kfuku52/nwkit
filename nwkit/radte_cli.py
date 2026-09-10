@@ -211,12 +211,13 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
             "laplace",
             "studentized",
             "profile",
+            "exact-log-duration",
             "bootstrap",
             "input-ensemble",
         ],
         default="none",
         help="Conditional interval method (default: none); studentized uses small-sample "
-        "t-adjusted curvature. Diagnostics describe unavailable intervals.",
+        "t-adjusted curvature; exact-log-duration requires a branch-only linear log-duration contrast. Diagnostics describe unavailable intervals.",
     )
     add(
         "ensemble_within_uncertainty",

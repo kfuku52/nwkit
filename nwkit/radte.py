@@ -447,6 +447,13 @@ def run_dating(c, args):
                 "prior_quadratic_fit: " + item for item in previous_diagnostics
             )
             profile_intervals(fit, problem, **profile_options)
+    elif args.uncertainty == "exact-log-duration":
+        from nwkit.radte_exact_interval import exact_log_duration_intervals
+
+        if not exact_log_duration_intervals(fit, problem, args.interval_level):
+            raise ValueError(
+                "exact-log-duration requires branch-only input, one free age and a linear log-duration contrast; use a supported interval method for this chronology."
+            )
     elif args.uncertainty == "bootstrap":
         bootstrap_intervals(
             fit,
