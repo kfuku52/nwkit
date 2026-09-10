@@ -13,6 +13,7 @@ from pathlib import Path
 from shift_alpha_design import cases, generate_case, protocol
 from shift_joint_candidates import enumerate_candidates
 
+from nwkit.shift_backend_probe import R_PBIC_PROBE, collect_pbic_validation
 from nwkit.util import assign_branch_ids, read_tree
 
 
@@ -85,14 +86,19 @@ def prepare_case(root, case, specification):
 def run_case(folder, rscript, backend, environment):
     with (folder / "backend.log").open("w") as log:
         result = subprocess.run(
-            [rscript, str(backend), "run"],
+            [rscript, "--vanilla", str(backend), "run"],
             cwd=folder,
             env=environment,
             stdout=log,
             stderr=subprocess.STDOUT,
             check=False,
         )
-    return {"case_id": folder.name, "returncode": result.returncode}
+    validation = collect_pbic_validation(folder) if not result.returncode else None
+    return {
+        "case_id": folder.name,
+        "returncode": result.returncode,
+        "pbic_validation": validation,
+    }
 
 
 def main():
@@ -119,6 +125,7 @@ def main():
     ):
         shutil.copy2(source / name, snapshot / name)
     backend = snapshot / "shift_alpha_backend.R"
+    backend.write_text(R_PBIC_PROBE + "\n" + backend.read_text())
     environment = dict(
         os.environ,
         OPENBLAS_NUM_THREADS="1",
@@ -127,9 +134,18 @@ def main():
         VECLIB_MAXIMUM_THREADS="1",
     )
     subprocess.run(
-        [args.rscript, str(backend), "probe", str(root / "backend-probe.tsv")],
+        [
+            args.rscript,
+            "--vanilla",
+            str(backend),
+            "probe",
+            str(root / "backend-probe.tsv"),
+        ],
         env=environment,
         check=True,
+    )
+    (root / "pbic-validation.json").write_text(
+        json.dumps(collect_pbic_validation(root), indent=2) + "\n"
     )
     library = Path(
         next(csv.DictReader((root / "backend-probe.tsv").open(), delimiter="\t"))[

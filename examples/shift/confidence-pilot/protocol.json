@@ -1,0 +1,23 @@
+{
+  "phase": "pilot",
+  "blocks": 2,
+  "master_seed": 20260928,
+  "bootstrap_replicates": 999,
+  "betas": [
+    0.005,
+    0.01
+  ],
+  "level": 0.05,
+  "convergence": false,
+  "candidate_grid": "unchanged production 27-point alpha-height grid",
+  "workers": 2,
+  "source_sha256": {
+    "nwkit/shift_calibration.py": "9c5ba6f8188e1c703618745c46140277a2093e7aa2d5c4c74c6abaff53d09883",
+    "nwkit/shift_candidates.py": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0",
+    "tools/shift_confidence_calibration.py": "4f15fa7a712e66616db2aa2cafab9d558c65437dc3c05bd8213f1df6ddbf4512",
+    "tools/try_shift_confidence_calibration.py": "d3a09b24b947d8e0a4503695441902c74aff606f20a64b0e5603e100f21040c3",
+    "tools/shift_alpha_design.py": "04c1ee74b5242e84d544dcdc960e59f338962d92fd71ec615ce55d02c8b77833",
+    "tools/shift_simulation_cases.py": "c3712bb6c4c71d4f6446a589e44662d9dbe6304edb9603d505fb238dbe003e88",
+    "reviews/shift-calibration-final-protocol.md": "e26510d2072faa0dc55a59c321ebda75499325884b0cb35fdab80e7c0a8da553"
+  }
+}

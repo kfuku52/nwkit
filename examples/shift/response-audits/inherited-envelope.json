@@ -1,0 +1,21 @@
+{
+  "verified_cases": 700,
+  "truth_regeneration": "exact_match",
+  "source_hashes": "snapshots_and_active_fitting_sources_match",
+  "bootstrap_probabilities_replayed": 0,
+  "audit_module_sha256": "51f56fe5d33a4f38585080cac5366a6731c3b1a31a4e3a42932df8de03cd4458",
+  "metrics_and_summary": "reconstructed_and_matched",
+  "observed_likelihoods": "all_candidates_refitted",
+  "complete_search_null_rate": {
+    "count": 7,
+    "denominator": 250,
+    "rate": 0.028,
+    "wilson_95": [
+      0.013628058600839217,
+      0.05665777612286046
+    ]
+  },
+  "default_null_refitted": false,
+  "verifier_sha256": "3966bb3c9f8cc4a91914ccdf546b41ba5a77e7b41a336824a2b3266a9c48393c",
+  "record_sha256": "332a61193e806c92ecf809ceb24d274f08361f1ff519858afe9c2edececf989d"
+}

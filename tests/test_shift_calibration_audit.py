@@ -1,6 +1,9 @@
 """The evidence auditor must reject altered results, not merely valid JSON."""
 
 import copy
+import gzip
+import hashlib
+import json
 import sys
 from pathlib import Path
 
@@ -11,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from shift_alpha_design import cases, generate_case, protocol  # noqa: E402
 from shift_calibration_audit import audit_record, audit_records  # noqa: E402
 from shift_simulation_cases import rate  # noqa: E402
+from verify_shift_calibration import main as verify_main  # noqa: E402
 
 from nwkit.shift_calibration import CalibratedSearch  # noqa: E402
 from nwkit.shift_candidates import tip_groups  # noqa: E402
@@ -137,3 +141,63 @@ def test_replay_checks_nuisance_probabilities_even_when_upper_bound_is_one(evide
     test["p_value_lower_bound"] = value
     with pytest.raises(ValueError, match="seeded replay"):
         audit_record(row, spec, search, replay_bootstrap=True)
+
+
+def test_audit_cli_leaves_source_evidence_unchanged(
+    evidence, tmp_path, monkeypatch, capsys
+):
+    spec, row, summary, _ = evidence
+    spec = copy.deepcopy(spec)
+    spec["cells"] = spec["cells"][:1]
+    names = [
+        "nwkit/shift_calibration.py",
+        "nwkit/shift_candidates.py",
+        "tools/shift_alpha_design.py",
+        "tools/shift_simulation_cases.py",
+    ]
+    spec["source_sha256"] = {
+        name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in names
+    }
+    directory = tmp_path / "evidence"
+    snapshot = directory / "source-snapshot"
+    snapshot.mkdir(parents=True)
+    for name in names:
+        (snapshot / Path(name).name).write_bytes(Path(name).read_bytes())
+    (directory / "protocol.json").write_text(json.dumps(spec))
+    (directory / "summary.json").write_text(json.dumps(summary))
+    with gzip.open(directory / "records.jsonl.gz", "wt") as stream:
+        stream.write(json.dumps(row) + "\n")
+
+    def fingerprints():
+        return {
+            str(p): hashlib.sha256(p.read_bytes()).hexdigest()
+            for p in directory.rglob("*")
+            if p.is_file()
+        }
+
+    before = fingerprints()
+    monkeypatch.setattr(sys, "argv", ["verify", str(directory)])
+    verify_main()
+    result = json.loads(capsys.readouterr().out)
+    assert result["verified_cases"] == 1
+    assert not result["default_null_refitted"]
+    assert fingerprints() == before
+    monkeypatch.setattr(
+        sys, "argv", ["verify", str(directory), "--output", str(directory / "new")]
+    )
+    with pytest.raises(SystemExit):
+        verify_main()
+    assert fingerprints() == before
+    output = tmp_path / "audit-output"
+    monkeypatch.setattr(
+        sys, "argv", ["verify", str(directory), "--output", str(output)]
+    )
+    verify_main()
+    assert json.loads((output / "audit.json").read_text())["verified_cases"] == 1
+    assert fingerprints() == before
+
+
+def test_default_refits_require_an_explicit_output(tmp_path, monkeypatch):
+    monkeypatch.setattr(sys, "argv", ["verify", str(tmp_path), "--refit-default-null"])
+    with pytest.raises(SystemExit):
+        verify_main()

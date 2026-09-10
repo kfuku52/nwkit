@@ -2,7 +2,10 @@
 
 This research experiment compares BIC and corrected pBIC, two-stage and joint
 selection, and two lower bounds on alpha using the same independently generated
-data. The production CLI, its defaults, and model-averaging behavior are unchanged.
+data. This is historical research evidence, not the settings of the current
+[calibrated CLI default](SHIFT_CALIBRATION.md). It used corrected pBIC and the
+explicit bounds recorded below. Current reruns additionally use the shared
+[backend capability check](SHIFT_PBIC.md).
 
 The [technical report](examples/shift/alpha-validation/report.html) contains the
 results, uncertainty, diagnostics, and interpretation. The

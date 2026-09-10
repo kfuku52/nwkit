@@ -198,6 +198,9 @@ def collect(root, output):
         "jobs.jsonl",
     ):
         shutil.copy2(root / filename, output / filename)
+    # Historical bundles predate the common production/research capability probe.
+    if (root / "pbic-validation.json").exists():
+        shutil.copy2(root / "pbic-validation.json", output / "pbic-validation.json")
     shutil.copytree(root / "source", output / "source", dirs_exist_ok=True)
     print(json.dumps(audit, indent=2))
 

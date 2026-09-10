@@ -6,6 +6,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Changed
 
+- Require a same-process numerical capability probe for pBIC backends; export
+  boundary-family and calibration-scope metadata. Retain independent null audits
+  and close the final confidence-set calibration attempt without adoption after
+  its prespecified power-improvement screen failed.
+
 - Make event-average estimating equations the default reconciled coefficient
   estimand, with a separate common-coefficient likelihood option and explicit
   inference metadata. Remove event pseudo-determinants and row-count inflation

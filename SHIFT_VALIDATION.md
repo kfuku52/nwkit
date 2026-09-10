@@ -3,8 +3,10 @@
 **Historical pBIC results:** the pBIC numbers below were generated with the old
 kfl1ou 3.0.9 scoring implementation. The [pBIC correction](SHIFT_PBIC.md) changes
 its coefficient determinant and can change selections; these results do not
-validate the corrected criterion. Original evidence is retained. BIC is
-unaffected by the correction.
+validate the corrected criterion. Original evidence is retained. BIC does not
+use the corrected pBIC determinant. The current default is the native calibrated
+procedure; see [the response validation](SHIFT_RESPONSE_VALIDATION.md) for its
+independent evidence, tested scope and unmet power criterion.
 
 This is a small, reproducible statistical pilot, not a calibration guarantee.
 It tests whether `shift` recovers independently generated changes and shared

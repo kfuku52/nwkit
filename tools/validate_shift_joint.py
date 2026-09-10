@@ -20,6 +20,7 @@ from shift_joint_backend import R_SCRIPT
 from shift_joint_candidates import canonical_groups, enumerate_candidates, tip_groups
 
 from nwkit.cli import parser
+from nwkit.shift_backend_probe import collect_pbic_validation
 from nwkit.shift_reference import evaluate_shift_model
 from nwkit.util import assign_branch_ids, read_tree
 
@@ -289,6 +290,9 @@ def run(options):
     ]
     summary = {
         "criterion": options.criterion,
+        "pbic_validation": collect_pbic_validation(output)
+        if options.criterion == "pBIC"
+        else {"status": "not_applicable", "criterion": options.criterion},
         "root_model": options.root_model,
         "attempted": len(results),
         "successful": len(good),

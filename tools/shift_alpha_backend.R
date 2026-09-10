@@ -2,6 +2,8 @@
 # No inference implementation from the external GPL backend is copied here.
 args <- commandArgs(trailingOnly=TRUE)
 if (!requireNamespace("kfl1ou", quietly=TRUE)) stop("Install the corrected kfl1ou backend.")
+if (!exists("nwkit_pbic_preflight", mode="function"))
+    stop("Generate this driver through validate_shift_alpha.py to include the pBIC capability contract.")
 options(digits=17)
 write_tsv <- function(x, path) utils::write.table(x, path, sep="\t", quote=TRUE,
     qmethod="double", row.names=FALSE, na="NA")
@@ -9,21 +11,14 @@ parse_ids <- function(x) if (!nzchar(x)) integer() else as.integer(strsplit(x, "
 compact <- function(x) paste(x, collapse=";")
 
 if (identical(args[[1]], "probe")) {
-    tr <- ape::reorder.phylo(ape::read.tree(text="((a:1,b:1):1,(c:1,d:1):1);"), "postorder")
-    Y <- matrix(c(1, 1.3, 2.2, 1.7), ncol=1, dimnames=list(tr$tip.label,"trait"))
-    sc <- match(1L, tr$edge[,2])
-    call <- function(groups=NULL, criterion="pBIC") suppressWarnings(kfl1ou::fit_OU(
-        tr, Y, sc, cr.regimes=groups, criterion=criterion,
-        alpha.lower=.4, alpha.upper=.4, compute.hessian=FALSE))
-    free <- call(); grouped <- call(list(0L, sc)); bic <- call(list(0L, sc), "BIC")
-    if (abs(free$score - grouped$score) > 1e-6) stop("Backend pBIC coordinate/fixed-alpha equivalence probe failed.")
-    if (abs(stats::BIC(grouped) - bic$score) > 1e-6) stop("Public BIC() and fit_OU criterion disagree.")
+    nwkit_pbic_preflight(dirname(args[[2]]))
     write_tsv(data.frame(version=as.character(utils::packageVersion("kfl1ou")),
-        library=normalizePath(find.package("kfl1ou")), score_gap=free$score-grouped$score,
-        bic_gap=stats::BIC(grouped)-bic$score), args[[2]])
+        library=normalizePath(find.package("kfl1ou")),
+        contract="ou-optimum-information-v1"), args[[2]])
     quit(status=0)
 }
 
+nwkit_pbic_preflight()
 tr <- ape::read.tree("tree.nwk")
 y <- read.delim("traits.tsv", stringsAsFactors=FALSE, check.names=FALSE)
 Y <- matrix(y$value, ncol=1, dimnames=list(y$leaf_name, "trait"))

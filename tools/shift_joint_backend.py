@@ -1,6 +1,9 @@
 """Public kfl1ou fixed-configuration fits for a small enumerated reference."""
 
+from nwkit.shift_backend_probe import R_PBIC_PROBE
+
 R_SCRIPT = r"""
+__PBIC_PREFLIGHT__
 args <- commandArgs(trailingOnly=TRUE)
 if (!requireNamespace("kfl1ou", quietly=TRUE) || utils::packageVersion("kfl1ou") < "3.0.9")
     stop("Install kfl1ou >= 3.0.9.")
@@ -10,6 +13,7 @@ initial <- attr(baseline, "nwkit.unconstrained.fit")
 tr <- initial$tree
 Y <- initial$Y
 opt <- initial$l1ou.options
+if (identical(opt$criterion, "pBIC")) nwkit_pbic_preflight()
 opt$use.saved.scores <- FALSE
 opt$fixed.alpha <- FALSE
 opt$compute.hessian <- FALSE
@@ -78,4 +82,4 @@ write_tsv(data.frame(token=tr$tip.label, observed=as.numeric(best$Y[,1]),
     predicted=as.numeric(best$mu[,1]), optimum=as.numeric(best$optima[,1])), "joint-tips.tsv")
 write_tsv(data.frame(branch_id=as.integer(names(edge)[match(unname(best$shift.configuration), edge)]),
     mean_effect=as.numeric(best$shift.means), optimum_effect=as.numeric(best$shift.values)), "joint-effects.tsv")
-"""
+""".replace("__PBIC_PREFLIGHT__", R_PBIC_PROBE)

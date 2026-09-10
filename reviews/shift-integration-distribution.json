@@ -1,0 +1,31 @@
+{
+  "status": "passed",
+  "command": "SOURCE_DATE_EPOCH=1789006638 python tools/check.py dist",
+  "source_date_epoch": 1789006638,
+  "checks": [
+    "wheel and sdist metadata",
+    "required archive contents",
+    "wheel content validation",
+    "independent wheel/sdist byte reproducibility"
+  ],
+  "artifacts": {
+    "dist/nwkit-0.43.15-py3-none-any.whl": {
+      "bytes": 948282,
+      "sha256": "bf227ba2082f6b86d9012ec487242bed53b2997923952fff8fd9cc12aeab6fcd"
+    },
+    "dist/nwkit-0.43.15.tar.gz": {
+      "bytes": 66439890,
+      "sha256": "8259fbc86c656d1ce879ce23955c55db153ac245dfbae8390f4fdd5cdcdbeed0"
+    },
+    "direct-dist/nwkit-0.43.15-py3-none-any.whl": {
+      "bytes": 948282,
+      "sha256": "bf227ba2082f6b86d9012ec487242bed53b2997923952fff8fd9cc12aeab6fcd"
+    },
+    "direct-dist/nwkit-0.43.15.tar.gz": {
+      "bytes": 66439890,
+      "sha256": "8259fbc86c656d1ce879ce23955c55db153ac245dfbae8390f4fdd5cdcdbeed0"
+    }
+  },
+  "validation_output": "nwkit-0.43.15.tar.gz and nwkit-0.43.15-py3-none-any.whl\n+ /Users/kf/miniforge3/bin/python tools/normalize_sdist.py dist/nwkit-0.43.15.tar.gz\n+ /Users/kf/miniforge3/bin/python tools/check_dist.py\n/Users/kf/miniforge3/lib/python3.10/site-packages/requests/__init__.py:113: RequestsDependencyWarning: urllib3 (2.6.3) or chardet (7.5.1)/charset_normalizer (3.4.4) doesn't match a supported version!\n  warnings.warn(\nChecking \n/private/tmp/nwkit-shift-final-dist/dist/nwkit-0.43.15-py3-none-any.whl: PASSED\nChecking /private/tmp/nwkit-shift-final-dist/dist/nwkit-0.43.15.tar.gz: PASSED\n/private/tmp/nwkit-shift-final-dist/dist/nwkit-0.43.15-py3-none-any.whl: OK\nDistribution reproducibility and contents are valid.",
+  "scope": "Validated isolated source tree containing the base commit and this response. This repository-only result record is intentionally outside the source archive."
+}

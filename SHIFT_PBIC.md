@@ -3,12 +3,41 @@
 The mismatch identified by the joint-search reference is in **kfl1ou**, not
 NWKIT's adapter. A local, unreleased correction has been implemented in the
 kfl1ou checkout based on version 3.0.9. The installed release of 3.0.9 does not
-contain it. NWKIT's production interface and default criterion are unchanged.
+contain it. The historical correction evidence below predates the current
+calibrated default and the runtime capability check.
+
+Current `--selection ic --criterion pBIC` runs a public-API capability check
+**inside the same R process and loaded library as the requested fit**. Original
+3.0.9 is rejected before user data are fitted. A corrected backend must match an
+independent dense Gaussian likelihood and optimum-coordinate information
+determinant for fixed/estimated alpha, both root models, free/singleton
+representations and refitted shared optima. The contract is
+`ou-optimum-information-v1`, with 22 checks at absolute tolerance `2e-6`.
+The check preserves the R random-number state. No criterion is substituted.
+
+Model JSON records the resolved library, reported package version, contract,
+all check residuals and installed-file SHA-256 hashes in
+`execution.pbic_validation`. Files must still match their in-process fingerprint
+after fitting. There is no version-only allowlist or persistent probe cache.
+The same contract is used by the alpha and joint research drivers; their
+generated R scripts retain the complete probe. This identifies the corrected
+behavior even while both installations report 3.0.9. It does not certify all
+backend functionality, multivariate pBIC extensions, or statistical calibration.
 
 The correction restores score consistency; it does not establish statistical
 calibration or make convergence-model weights validated posterior probabilities.
 Previous pBIC scores, selected models and weights must be recomputed with the
 corrected backend. Historical evidence bundles are retained unchanged.
+
+Small positive alpha is also a nonregular region for this criterion: with free
+mean displacements, the optimum-coordinate information determinant contributes
+`2 k log(alpha)` as alpha approaches zero. Likelihood can remain finite while
+the pBIC formula decreases without bound. The exactly-zero guard does not repair
+this limiting approximation. This is a statement about evaluating the criterion
+along an alpha profile; the backend estimates alpha through its likelihood fit,
+not by minimizing pBIC over alpha. Do not choose an alpha floor after examining
+selected models. The default [calibrated procedure](SHIFT_CALIBRATION.md) treats
+its boundary mean models explicitly instead.
 
 ## Cause and correction
 

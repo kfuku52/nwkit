@@ -1,0 +1,8 @@
+{
+  "status": "passed",
+  "pairs": 600,
+  "independent_winner_fits": 1200,
+  "maximum_likelihood_error": 2.842170943040401e-14,
+  "record_sha256": "0f0f8e3935151b874dbfe2e40cc1527504a1261795a54c6dd27e6352ba422e3a",
+  "verifier_sha256": "78ac04f2f5a24223c58bb6af884d0772de6ed7e03890918a3666deafd1e71613"
+}

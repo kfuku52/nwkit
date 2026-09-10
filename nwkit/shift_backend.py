@@ -7,15 +7,18 @@ import shutil
 import subprocess
 from pathlib import Path
 
+from nwkit.shift_backend_probe import R_PBIC_PROBE, collect_pbic_validation
 from nwkit.shift_convergence import R_CONVERGENCE
 
 # Labels and user settings are passed as files/arguments, never interpolated R code.
 R_SCRIPT = r"""
+__PBIC_PREFLIGHT__
 args <- commandArgs(trailingOnly=TRUE)
 if (!requireNamespace("kfl1ou", quietly=TRUE) ||
     utils::packageVersion("kfl1ou") < "3.0.9") {
     stop("Install kfl1ou >= 3.0.9 in this R environment.")
 }
+if (identical(args[2], "pBIC")) nwkit_pbic_preflight()
 options(digits=17)
 tr <- ape::read.tree("tree.nwk")
 y <- utils::read.delim("trait.tsv", check.names=FALSE, stringsAsFactors=FALSE)
@@ -90,7 +93,9 @@ if (length(args) >= 7L && as.integer(args[7]) > 0L) {
         count=as.integer(boot$failure.messages)), "bootstrap-failures.tsv",
         sep="\t", quote=TRUE, qmethod="double", row.names=FALSE)
 }
-""".replace("__CONVERGENCE_SETUP__", R_CONVERGENCE)
+""".replace("__CONVERGENCE_SETUP__", R_CONVERGENCE).replace(
+    "__PBIC_PREFLIGHT__", R_PBIC_PROBE
+)
 
 
 def run_backend(directory, args):
@@ -128,4 +133,11 @@ def run_backend(directory, args):
         raise RuntimeError(
             f"kfl1ou failed (exit {result.returncode}):\n{result.stderr[-8000:]}"
         )
-    return {"rscript": executable, "stdout": result.stdout, "stderr": result.stderr}
+    return {
+        "rscript": executable,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+        "pbic_validation": collect_pbic_validation(directory)
+        if args.criterion == "pBIC"
+        else {"status": "not_applicable", "criterion": args.criterion},
+    }

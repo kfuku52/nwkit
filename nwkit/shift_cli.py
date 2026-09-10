@@ -6,7 +6,7 @@ def register_shift(subparsers, tree_input, table_output):
         "shift",
         parents=[tree_input, table_output],
         help="Search for continuous-trait OU shifts with bootstrap calibration.",
-        description="Small-tree calibrated OU selection; legacy IC selection requires Rscript and kfl1ou >= 3.0.9.",
+        description="Small-tree calibrated OU selection; legacy IC requires Rscript and kfl1ou >= 3.0.9. pBIC also requires the optimum-coordinate capability check.",
     )
     parser.add_argument(
         "--selection",
@@ -62,14 +62,14 @@ def register_shift(subparsers, tree_input, table_output):
         "--criterion",
         choices=["pBIC", "pBICess", "mBIC", "BIC", "AICc"],
         default=None,
-        help="IC-only score (default with --selection ic: pBIC).",
+        help="IC-only score (default with --selection ic: pBIC). Uncorrected pBIC backends are rejected before fitting.",
     )
     parser.add_argument(
         "--root-model",
         "--root_model",
         choices=["OUfixedRoot", "OUrandomRoot"],
         default="OUfixedRoot",
-        help="kfl1ou root treatment; ASR OUM instead defaults to a stationary root.",
+        help="IC root treatment; calibrated contrasts remove the common root component. ASR OUM defaults to a stationary root.",
     )
     parser.add_argument(
         "--search-strategy",

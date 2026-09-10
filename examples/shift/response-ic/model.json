@@ -1,0 +1,554 @@
+{
+  "schema_version": 5,
+  "selection": "ic",
+  "convergence": null,
+  "unconstrained_parameters": null,
+  "search_stage": "unconstrained_shift_discovery",
+  "bootstrap": null,
+  "standard_error_column": null,
+  "effective_observation_error": "none",
+  "observation_error": "none",
+  "optimum_convention": "root_mean_equals_baseline_optimum",
+  "effective_root_model": "OUfixedRoot",
+  "shift_effects": [
+    {
+      "branch_id": 9,
+      "regime": "shift_9",
+      "parent_regime": "baseline",
+      "mean_effect": -0.984158461824056,
+      "optimum_effect": -29524721.2542474,
+      "optimum_identifiable": true
+    }
+  ],
+  "regime_parameters": [
+    {
+      "regime": "baseline",
+      "branch_id": 0,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "regime": "shift_9",
+      "branch_id": 9,
+      "optimum": -29524717.5562276,
+      "optimum_identifiable": true
+    }
+  ],
+  "tip_predictions": [
+    {
+      "leaf_name": "A",
+      "branch_id": 7,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 1.0,
+      "predicted": 3.69801980772801,
+      "residual": -2.69801980772801,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "B",
+      "branch_id": 8,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 1.2,
+      "predicted": 3.69801980772801,
+      "residual": -2.49801980772801,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "C",
+      "branch_id": 9,
+      "regime": "shift_9",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 0.9,
+      "predicted": 2.71386134590395,
+      "residual": -1.81386134590395,
+      "optimum": -29524717.5562276,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "D",
+      "branch_id": 10,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 1.4,
+      "predicted": 3.69801980772801,
+      "residual": -2.29801980772801,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "E",
+      "branch_id": 11,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 6.0,
+      "predicted": 3.69801980772801,
+      "residual": 2.30198019227199,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "F",
+      "branch_id": 12,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 6.2,
+      "predicted": 3.69801980772801,
+      "residual": 2.50198019227199,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "G",
+      "branch_id": 13,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 5.8,
+      "predicted": 3.69801980772801,
+      "residual": 2.10198019227199,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    },
+    {
+      "leaf_name": "H",
+      "branch_id": 14,
+      "regime": "baseline",
+      "standard_error": 0.0,
+      "observation_variance": 0.0,
+      "observed": 6.1,
+      "predicted": 3.69801980772801,
+      "residual": 2.40198019227199,
+      "optimum": 3.69801980772801,
+      "optimum_identifiable": true
+    }
+  ],
+  "search": {
+    "configuration_space_size": 14.0,
+    "evaluated_configurations": 14.0,
+    "coverage": 1.0,
+    "ensemble_attempted": 0.0,
+    "ensemble_successful": 0.0,
+    "ensemble_failed": 0.0,
+    "alpha_lower": null,
+    "alpha_upper": 0.693147180559945,
+    "strategy": "exhaustive",
+    "globally_optimal": true,
+    "alpha_at_lower_bound": null,
+    "alpha_at_upper_bound": false
+  },
+  "nwkit_version": "0.43.15",
+  "backend": "kfl1ou",
+  "backend_version": "3.0.9",
+  "trait": "value",
+  "root_model": "OUfixedRoot",
+  "criterion": "pBIC",
+  "search_strategy": "auto",
+  "max_shifts": 1,
+  "exhaustive_max_configurations": 5000,
+  "seed": 1,
+  "time_scale": "original",
+  "tree_normalized": false,
+  "convergence_searched": false,
+  "shift_branch_ids": [
+    9
+  ],
+  "parameters": {
+    "alpha": 3.33333706947406e-08,
+    "sigma2": 0.812005051819081,
+    "intercept": 3.69801980772801,
+    "log_likelihood": -13.5630355607937,
+    "score": 5.88380338530703
+  },
+  "candidates": [
+    {
+      "score": 5.88380338530703,
+      "shift_branch_ids": [
+        9
+      ]
+    },
+    {
+      "score": 6.07201079932626,
+      "shift_branch_ids": [
+        12
+      ]
+    },
+    {
+      "score": 6.07201080246996,
+      "shift_branch_ids": [
+        14
+      ]
+    },
+    {
+      "score": 6.07814268522093,
+      "shift_branch_ids": [
+        5
+      ]
+    },
+    {
+      "score": 6.0951269890209,
+      "shift_branch_ids": [
+        7
+      ]
+    },
+    {
+      "score": 6.20420462123015,
+      "shift_branch_ids": [
+        3
+      ]
+    },
+    {
+      "score": 6.29129062239486,
+      "shift_branch_ids": [
+        11
+      ]
+    },
+    {
+      "score": 6.30403685120373,
+      "shift_branch_ids": [
+        8
+      ]
+    },
+    {
+      "score": 6.32211497315573,
+      "shift_branch_ids": [
+        4
+      ]
+    },
+    {
+      "score": 6.35554174616088,
+      "shift_branch_ids": [
+        13
+      ]
+    },
+    {
+      "score": 6.38701870679002,
+      "shift_branch_ids": [
+        10
+      ]
+    },
+    {
+      "score": 6.43229645401133,
+      "shift_branch_ids": [
+        6
+      ]
+    },
+    {
+      "score": 17.7871352767212,
+      "shift_branch_ids": [
+        1
+      ]
+    },
+    {
+      "score": 34.1582441792735,
+      "shift_branch_ids": []
+    }
+  ],
+  "tip_tokens": {
+    "t0": "A",
+    "t1": "B",
+    "t2": "C",
+    "t3": "D",
+    "t4": "E",
+    "t5": "F",
+    "t6": "G",
+    "t7": "H"
+  },
+  "analysis_tree_tokens": "(((t0:1,t1:1):1,(t2:1,t3:1):1):1,((t4:1,t5:1):1,(t6:1,t7:1):1):1);",
+  "analysis_input_sha256": "5d7c7b77b8b6acf35e59aa6691bdb6993eaf5eaaa135b6128d38fcf390a49ece",
+  "branches": [
+    {
+      "branch_id": 0,
+      "parent": -1,
+      "name": null,
+      "dist": null,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 1,
+      "parent": 0,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 2,
+      "parent": 0,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 3,
+      "parent": 1,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 4,
+      "parent": 1,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 5,
+      "parent": 2,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 6,
+      "parent": 2,
+      "name": null,
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 7,
+      "parent": 3,
+      "name": "A",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 8,
+      "parent": 3,
+      "name": "B",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 9,
+      "parent": 4,
+      "name": "C",
+      "dist": 1.0,
+      "regime": "shift_9"
+    },
+    {
+      "branch_id": 10,
+      "parent": 4,
+      "name": "D",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 11,
+      "parent": 5,
+      "name": "E",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 12,
+      "parent": 5,
+      "name": "F",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 13,
+      "parent": 6,
+      "name": "G",
+      "dist": 1.0,
+      "regime": "baseline"
+    },
+    {
+      "branch_id": 14,
+      "parent": 6,
+      "name": "H",
+      "dist": 1.0,
+      "regime": "baseline"
+    }
+  ],
+  "search_diagnostics_r": "list(requested = \"auto\", strategy = \"exhaustive\", configuration.space.size = 14, \n    evaluated.configurations = 14L, coverage = 1, globally.optimal = TRUE, \n    estimability = list(requested.max.nShifts = 1L, effective.max.nShifts = 1L, \n        reason = \"\"), ensemble = list(attempted = 0L, successful = 0L, \n        failed = 0L, failure.messages = integer(0)))\n",
+  "execution": {
+    "rscript": "/private/tmp/nwkit-shift-r/bin/Rscript",
+    "stdout": "",
+    "stderr": "",
+    "pbic_validation": {
+      "contract": "ou-optimum-information-v1",
+      "version": "3.0.9",
+      "library": "/private/tmp/nwkit-pbic-library/kfl1ou",
+      "status": "passed",
+      "tolerance": 2e-06,
+      "checks": [
+        {
+          "check": "OUfixedRoot/fixed/free/likelihood",
+          "actual": -7.70679361935182,
+          "expected": -7.70679361935182,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUfixedRoot/fixed/free/pBIC",
+          "actual": 26.6331760583742,
+          "expected": 26.6331760583742,
+          "absolute_error": 3.5527136788005e-15
+        },
+        {
+          "check": "OUfixedRoot/fixed/singleton/likelihood",
+          "actual": -7.70679361935182,
+          "expected": -7.70679361935183,
+          "absolute_error": 1.77635683940025e-15
+        },
+        {
+          "check": "OUfixedRoot/fixed/singleton/pBIC",
+          "actual": 26.6331760583742,
+          "expected": 26.6331760583742,
+          "absolute_error": 3.5527136788005e-15
+        },
+        {
+          "check": "OUfixedRoot/fixed/coordinate_equivalence",
+          "actual": 26.6331760583742,
+          "expected": 26.6331760583742,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUfixedRoot/estimated/free/likelihood",
+          "actual": -7.51264624877358,
+          "expected": -7.51264624877358,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUfixedRoot/estimated/free/pBIC",
+          "actual": 18.6993340485396,
+          "expected": 18.6993340485396,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUfixedRoot/estimated/singleton/likelihood",
+          "actual": -7.51264623799175,
+          "expected": -7.51264623799175,
+          "absolute_error": 8.88178419700125e-16
+        },
+        {
+          "check": "OUfixedRoot/estimated/singleton/pBIC",
+          "actual": 18.6993313149695,
+          "expected": 18.6993313149695,
+          "absolute_error": 3.5527136788005e-15
+        },
+        {
+          "check": "OUfixedRoot/shared/likelihood",
+          "actual": -7.77608159775739,
+          "expected": -7.77608159775739,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUfixedRoot/shared/pBIC",
+          "actual": 32.6162952529436,
+          "expected": 32.6162952529436,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUrandomRoot/fixed/free/likelihood",
+          "actual": -7.9051720995853,
+          "expected": -7.9051720995853,
+          "absolute_error": 1.77635683940025e-15
+        },
+        {
+          "check": "OUrandomRoot/fixed/free/pBIC",
+          "actual": 26.6331760583742,
+          "expected": 26.6331760583742,
+          "absolute_error": 3.5527136788005e-15
+        },
+        {
+          "check": "OUrandomRoot/fixed/singleton/likelihood",
+          "actual": -7.9051720995853,
+          "expected": -7.9051720995853,
+          "absolute_error": 1.77635683940025e-15
+        },
+        {
+          "check": "OUrandomRoot/fixed/singleton/pBIC",
+          "actual": 26.6331760583742,
+          "expected": 26.6331760583742,
+          "absolute_error": 1.06581410364015e-14
+        },
+        {
+          "check": "OUrandomRoot/fixed/coordinate_equivalence",
+          "actual": 26.6331760583742,
+          "expected": 26.6331760583742,
+          "absolute_error": 0.0
+        },
+        {
+          "check": "OUrandomRoot/estimated/free/likelihood",
+          "actual": -7.87461772800719,
+          "expected": -7.87461772800719,
+          "absolute_error": 8.88178419700125e-16
+        },
+        {
+          "check": "OUrandomRoot/estimated/free/pBIC",
+          "actual": 29.9124779556967,
+          "expected": 29.9124779556967,
+          "absolute_error": 3.5527136788005e-15
+        },
+        {
+          "check": "OUrandomRoot/estimated/singleton/likelihood",
+          "actual": -7.87461772800719,
+          "expected": -7.87461772800719,
+          "absolute_error": 1.77635683940025e-15
+        },
+        {
+          "check": "OUrandomRoot/estimated/singleton/pBIC",
+          "actual": 29.9124779437857,
+          "expected": 29.9124779437857,
+          "absolute_error": 7.105427357601e-15
+        },
+        {
+          "check": "OUrandomRoot/shared/likelihood",
+          "actual": -7.77608165852593,
+          "expected": -7.77608165852593,
+          "absolute_error": 1.77635683940025e-15
+        },
+        {
+          "check": "OUrandomRoot/shared/pBIC",
+          "actual": 32.6162952529436,
+          "expected": 32.6162952529436,
+          "absolute_error": 0.0
+        }
+      ],
+      "installed_files_sha256": {
+        "CITATION": "76ea071a0f6ac1a94834dd22922ae49d8ac51fe21c3ed2ce336629cd9b7c2a34",
+        "data/lizard.traits.rda": "980f525d7224701440d7978801954671aa434201f8bf000a9970076a00ada2b6",
+        "data/lizard.tree.rda": "d551ef2b906fcec29b48892985e1529d3f39676b1b8ee56434885e25cdb752a0",
+        "DESCRIPTION": "090a74c537e001df17bbe3f306923ac39b258f4b7843a43d239d2a9c38191f3b",
+        "help/aliases.rds": "056cb728b2638dfa9a9e04057d365eb807ca15c849cdc118013fa531e9beca46",
+        "help/AnIndex": "109b153a3a2962f382f886ef0a65145e9a3f6bfcb88f82b0ff139fe6da525e24",
+        "help/kfl1ou.rdb": "9157b7a0b423e13874a7d62cf224a167cfb10558cfc1607f5a122f0fd66bacb1",
+        "help/kfl1ou.rdx": "8248d4e48970a879b6c143c7db30c7414577a32ffe54204bf5ec900570a28681",
+        "help/paths.rds": "5c480ba1e852a89bd60149d2f59d51e602c9e6d6dfda18dde40d42d21dd60b91",
+        "html/00Index.html": "bcdddb24b279cd3ccb2a7625305a5d58572d4c145bcefbbcf783e2748a1eb4f1",
+        "html/R.css": "52144cf4c349f7f2cf131342f81bbc43c6514ba2274556815df88918fdeb189b",
+        "INDEX": "24a74f4ff5f32dc9c5cb0d816e67211c69dc8440106d2814d4d7fa6a280edfff",
+        "libs/kfl1ou.so": "9074ad9ba55b5d002e1fde6eb4fd064b2c9a453f385f3617ebd96be625852c5c",
+        "LICENSE": "3972dc9744f6499f0f9b2dbf76696f2ae7ad8af9b23dde66d6af86c9dfb36986",
+        "licenses/phylolm-LICENSE": "c03cea027b4b40e4402fabd08557736727ec3d5bc54ad64ab6472de432198cad",
+        "Meta/data.rds": "830e17333c9889d61907578ae8f91c5c9ebe98626b401b7475f12922ccf5f4f9",
+        "Meta/features.rds": "3d0dc41bc2f8db966da9c2b0e2a291e6137e628e676f88a64a127d73b459b93e",
+        "Meta/hsearch.rds": "7e7ff59d0bf1ad9e3f4122fc872c64b6345f2314178b6870d8f46f89f28842f1",
+        "Meta/links.rds": "48d86d697889168c7d7ecb74d349446eab75da542391c42e1e6cc9d8730bcd94",
+        "Meta/nsInfo.rds": "724956f9228fbe86d38baab2c65c5f9ef682fcb736b1e6028fe27233b6bae873",
+        "Meta/package.rds": "510add68dc7a027b3dd9d33d5f09134fe0bbd659417809331b70b183feba65ca",
+        "Meta/Rd.rds": "27cd2a969d6899bba154e9acbb3f0f48451690c8bc80ba83204e8e8da60c7a24",
+        "NAMESPACE": "53ab551523d7f8f7d646319739bdb0797085b20c8dc2a6bea05c7a8f20b132d4",
+        "NEWS.md": "743c69e61e05d8efa4e1c226110124e53b1c3ca34ecc54d7110cb86bab7f85be",
+        "NOTICE": "eeac7335e6f1af8aae45b8b7e7e6bda41c8ae50650db37f982c7ae5e985c1d4a",
+        "R/kfl1ou": "570ca456b280cdeb201ef5ebdf22dc8f80092e2c0c68e33c7f73340e420f3759",
+        "R/kfl1ou.rdb": "5a14f0590f1b9910476aa9ea5df35eeb6acc73b44fe80262275bd56c70365292",
+        "R/kfl1ou.rdx": "910db9ba7efec8f49e5da1b90e7eff176d721f0b4a29da22930f2f3c7d02ef75"
+      },
+      "scope": "single-trait optimum-coordinate pBIC; not selection calibration"
+    }
+  },
+  "asr_note": "Regime map only. ASR refits a model; match root treatment, observation-error inputs and units before comparing. Uncertainty conditional on selected regimes excludes selection uncertainty."
+}

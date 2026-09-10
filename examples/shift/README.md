@@ -42,10 +42,20 @@ criterion and must not be treated as calibration of its corrected implementation
 
 The current default uses [calibrated selection](../../SHIFT_CALIBRATION.md).
 `calibration-validation/` contains a separately seeded, frozen-protocol study of
-that implementation. All earlier IC simulation commands explicitly request
+the historical plug-in implementation. All earlier IC simulation commands explicitly request
 `--selection ic` and retain their original interpretation.
 
 Current alpha-envelope evidence is in `calibration-envelope/`,
 `calibration-envelope-stress/` and `calibration-weak-null/`. Earlier calibration
 directories retain the earlier plug-in method. See the
-[review and next plan](../../reviews/shift-calibration-review.md).
+[earlier review and work plan](../../reviews/shift-calibration-review.md).
+
+The response adds `response-ic/` (same-process pBIC attestation),
+`response-calibrated/` (boundary metadata), `null-contract-validation/`
+(12,000 independent null datasets), `null-contract-b999/` (paired budget check),
+and `calibration-paired/` (600 paired comparisons).
+See [response validation](../../SHIFT_RESPONSE_VALIDATION.md) for its unmet power
+criterion. `confidence-development/` contains the final 100-block paired
+confidence-set experiment and its full replay audit. `confidence-pilot/` is
+timing-only and excluded from scientific counts. The [final decision](../../SHIFT_CALIBRATION_DECISION.md)
+rejects adoption and closes this calibration investigation.

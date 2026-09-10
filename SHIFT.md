@@ -3,6 +3,11 @@
 The default is now **calibrated selection** for 4–16 tips and at most two shifts.
 It repeats the full candidate search inside a parametric bootstrap and includes
 both exact α limits. The no-error null test covers the entire fitted α grid. See [calibration, boundary semantics and validation](SHIFT_CALIBRATION.md).
+The [current independent audit](SHIFT_RESPONSE_VALIDATION.md) gives its tested
+scope and the unmet power criterion. Known-error calibration and claims about
+convergence remain research uses.
+The [final calibration attempt](SHIFT_CALIBRATION_DECISION.md) found no improvement
+and is closed without adopting its prototype.
 No R installation is needed for this mode. Larger searches and the historical
 IC methods require an explicit `--selection ic`; they are not calibrated by this change.
 
@@ -17,6 +22,13 @@ Install R and kfl1ou using the [kfl1ou installation guide](https://github.com/kf
 `Rscript` must be on PATH, or supplied with `--rscript /path/to/Rscript`.
 NWKIT's Python installation does not install R. Runs use `Rscript --vanilla`,
 so dependencies must be available without user R startup files.
+
+Before pBIC inference, NWKIT runs the [shared capability probe](SHIFT_PBIC.md)
+in that same R process. A package version alone is insufficient: unmodified
+3.0.9 is rejected. The corrected backend must pass independent dense-score,
+coordinate and parameter-count checks. Model JSON records the probe results,
+resolved library and installed-file fingerprints. Failure aborts without
+replacing existing output files or switching criteria.
 
 ## Example
 
@@ -188,7 +200,7 @@ A [joint-search reference](SHIFT_JOINT.md) found inconsistent pBIC penalties in
 released kfl1ou 3.0.9. The [backend correction](SHIFT_PBIC.md) fixes coefficient
 coordinates, fitted-alpha evaluation and fixed-alpha parameter counting in a
 local unreleased kfl1ou checkout. Recompute pBIC analyses with that correction;
-installing unmodified 3.0.9 does not include it. Statistical calibration and
+installing unmodified 3.0.9 does not include it and fails the pBIC probe. Statistical calibration and
 convergence-model weights remain unvalidated.
 An [independent sensitivity study](SHIFT_ALPHA.md) compares BIC/pBIC, two-stage
 and joint selection, and alpha lower bounds on 520 new simulated datasets.
@@ -255,12 +267,16 @@ nwkit asr -i examples/shift/tree.nwk \
   --trait-type continuous --model OUM --regime-map regimes.tsv -o ancestors.tsv
 ```
 
-This command performs a **new stationary-root OUM fit**. Shift's default is
-kfl1ou `OUfixedRoot`; `--root-model OUrandomRoot` requests its random-root model.
+This command performs a **new stationary-root OUM fit**. Calibrated shift
+selection removes the common root component with contrasts; the IC backend
+defaults to kfl1ou `OUfixedRoot`. `--root-model OUrandomRoot` requests the
+IC backend's random-root model.
 A map alone does not transfer the fitted parameters or establish numerical
 identity between engines. Match root semantics, bounds and units before comparing
 fits. In particular, kfl1ou can reach the exact Brownian boundary, whereas OUM
-uses positive alpha. ASR intervals conditional on the chosen map exclude
+uses positive alpha. Native calibrated selection also includes a scaled-effect
+drift limit at alpha=0 and an independent-tip limit at infinity. A regime map
+does not transfer either boundary model. ASR intervals conditional on the chosen map exclude
 uncertainty in shift selection. No ASR refit is launched automatically.
 When the shift fit used known errors, pass the same trait table and
 `--standard-error-column` to ASR; the regime map alone does not transfer SEs.

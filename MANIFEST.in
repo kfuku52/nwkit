@@ -55,3 +55,8 @@ graft examples/individual_asr
 
 include STOCHASTIC_MAPS.md
 graft examples/stochastic_maps
+
+include SHIFT_RESPONSE_VALIDATION.md
+include SHIFT_CALIBRATION_DECISION.md
+include reviews/shift-calibration-final-protocol.md
+include reviews/shift-implementation-base.json

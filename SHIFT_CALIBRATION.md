@@ -6,6 +6,13 @@ calibrating the **entire search**, including nuisance parameters and shared
 optimum candidates. Raising an arbitrary lower bound on alpha is not the fix.
 The historical procedure remains available with explicit `--selection ic`.
 
+The [independent response validation](SHIFT_RESPONSE_VALIDATION.md) reports a
+restricted no-error null study and an unmet power-noninferiority criterion.
+Known-error calibration, continuous-alpha guarantees and inferential claims
+about convergence remain research uses. The [final bounded calibration attempt](SHIFT_CALIBRATION_DECISION.md)
+failed its prespecified improvement screen and is closed without changing the
+production calibration. The whole input range is not a validated 5% detector.
+
 ```sh
 nwkit shift -i examples/shift/tree.nwk \
   --trait examples/shift/traits.tsv --state-column value \
@@ -89,7 +96,9 @@ at infinity it is vI. For finite alpha,
 v=sigma2×H×(1−exp(−2a))/(2a). Mean shift weights are normalized by 1−exp(−a),
 so their limits remain finite. At zero they become the fraction of tree height
 since each shift's parent. These are scaled-effect/drift limits: ordinary finite
-OU optima are not identified there. At infinity the limiting tip means and v
+OU optima are not identified there. Holding ordinary OU optima finite while alpha
+tends to zero would instead remove shift mean effects. The projected contrast
+covariance has a finite limit even though a stationary root is undefined at zero alpha. At infinity the limiting tip means and v
 are estimable, but finite alpha and diffusion rate are not separately estimated.
 
 Schema-7 JSON records `parameters.alpha_status` as `finite`, `brownian_limit`
@@ -176,6 +185,10 @@ uniform error control. For example, the random-tree known-error subset returned
 4/60 false selections; all four occurred among the 20 known-error 16-tip cases.
 This small subgroup needs targeted follow-up and is not declared calibrated.
 
+The evidence verifier is read-only by default. Optional `--refit-default-null`
+requires a new `--output` directory outside the input bundle; no evidence is
+overwritten. Refits use the stored bootstrap budget and test level.
+
 The evidence verifier reconstructs all selection/recovery flags and summaries,
 refits every observed candidate and alpha profile, checks probability-bound
 metadata, and optionally replays the complete seeded bootstrap traces and fit
@@ -200,7 +213,7 @@ OPENBLAS_NUM_THREADS=1 python tools/validate_shift_calibration.py \
 
 A [worked CLI example](examples/shift/calibrated/model.json) exports the regime
 map, mean predictions, alpha diagnostics and missing optimum estimates.
-The [review and next work plan](reviews/shift-calibration-review.md) records the
+The [earlier review and work plan](reviews/shift-calibration-review.md) records the
 reproduced bugs, fixes, remaining limits and priorities.
 
 ## Follow-up known-error diagnostics

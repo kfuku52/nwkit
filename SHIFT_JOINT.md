@@ -3,7 +3,9 @@
 The research tools enumerate shift locations and shared-optimum groups together,
 then fit each declared model through the public kfl1ou `fit_OU` API. They compare
 this reference with NWKIT's exhaustive unconstrained search followed by backward
-convergence. The production `shift` command and its defaults are unchanged.
+convergence. This historical reference predates the current
+[calibrated default](SHIFT_CALIBRATION.md), which enumerates its candidates
+jointly. Current IC pBIC reruns must pass the shared runtime capability check.
 
 The held-out pilot found lower BIC scores in 2 of 12 datasets, but both methods
 recovered the true shared-optimum tip partition in 4 of 12. This demonstrates

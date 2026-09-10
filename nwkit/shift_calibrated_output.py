@@ -1,4 +1,4 @@
-"""CLI exports for calibrated contrast selection (schema 6)."""
+"""CLI exports for calibrated contrast selection (schema 7)."""
 
 import hashlib
 import json
@@ -119,6 +119,12 @@ def calibrated_main(args, tree, ids, tokens, newick, data, outputs):
         "tree_normalized": False,
         "max_shifts": args.max_shifts,
         "convergence_searched": args.convergence,
+        "model_family": {
+            "finite_alpha": "OU_with_regime_optima",
+            "zero_alpha": "scaled_effect_drift_limit_not_finite_OU_optima",
+            "infinite_alpha": "independent_tip_process_with_regime_means",
+            "root_mean": "removed_by_fixed_orthonormal_contrasts",
+        },
         "shift_branch_ids": selected,
         "parameters": {
             k: fit[k]
@@ -142,6 +148,13 @@ def calibrated_main(args, tree, ids, tokens, newick, data, outputs):
             "tests": fit["tests"],
             "method": "sequential_complete_search_parametric_bootstrap",
             "null_calibration": fit["null_calibration"],
+            "null_hypothesis": "no_effective_shift",
+            "later_stage_interpretation": "family_selection_not_individual_branch_or_convergence_tests",
+            "likelihood_process_scale": "profile_ML",
+            "plugin_generation_process_scale": "RSS_over_residual_degrees_of_freedom"
+            if not search.known_error
+            else "fitted_process_variance_with_fixed_observation_variances",
+            "replicate_failure_policy": "fail_entire_run",
             "note": "Without measurement error, the first test covers every fitted alpha grid point; early acceptance reports p_value=1 as an explicit upper bound. Later stages and known-error fits use plug-in calibration. This is not a uniform guarantee over continuous nuisance parameters. Every replicate repeats the candidate and nuisance-grid search.",
         },
         "search": {
@@ -149,6 +162,7 @@ def calibrated_main(args, tree, ids, tokens, newick, data, outputs):
             "evaluated_candidates": fit["candidate_count"],
             "likelihood": "Gaussian_orthonormal_contrast_density",
             "profile": "finite_grid_including_exact_alpha_limits",
+            "continuous_global_optimum_certified": False,
             "process_variance_grid": search.variance_grid.tolist()
             if search.known_error
             else None,
@@ -158,6 +172,7 @@ def calibrated_main(args, tree, ids, tokens, newick, data, outputs):
         if search.known_error
         else "none",
         "optimum_convention": "root_mean_equals_baseline_optimum; suppressed if alpha limit is supported",
+        "optimum_identifiability_rule": "diagnostic_only: finite_grid_maximum, positive_process_variance, and neither_alpha_limit_in_profile_support_set",
         "shift_effects": effect_rows,
         "regime_parameters": regime_rows,
         "tip_predictions": tip_rows,

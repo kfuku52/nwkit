@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "datasets": 2000,
+  "fits": 4000,
+  "source_snapshots": "matched",
+  "engine_scope": "archived engine; not current CLI validation",
+  "inputs": "exactly_regenerated",
+  "independent_winner_likelihood_max_error": 1.199040866595169e-14,
+  "independent_predictions": "matched",
+  "complete_search_replays": 4,
+  "cellwise_counts_and_bounds": "matched",
+  "all_cells_meet_acceptance": true,
+  "record_sha256": "d916d712e2a3a85e40c9c83b27aff19f59258520ebe2713619fe827645d39cf8",
+  "verifier_sha256": "10408930367fdd3a16e27d661c18246d0c81aeff486dd6b8f0b318a16bea0eaa",
+  "input_file_fingerprints": "unchanged; no files added or removed"
+}

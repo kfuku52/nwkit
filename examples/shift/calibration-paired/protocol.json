@@ -1,0 +1,14 @@
+{
+  "description": "Paired software-effect replay of existing evidence, not fresh validation data",
+  "records_sha256": "332a61193e806c92ecf809ceb24d274f08361f1ff519858afe9c2edececf989d",
+  "source_sha256": {
+    "examples/shift/calibration-review/source-snapshot/shift_calibration.py": "e30e9aab8c4886811c315817e0b730e7d3966bfddb743899ec18c6cded6809cf",
+    "/Users/kf/.codex/worktrees/bfb0/nwkit/tools/compare_shift_null_calibration.py": "0f1f680df83e8c305aa47bec798b9300a1aad7b58b00a8119d04eaad4daf7a39",
+    "nwkit/shift_candidates.py": "bdf10b084ea6d9b8cda0ffe0a7758b617a41e694ad481aed01ff7c65f4e510a0"
+  },
+  "convergence": true,
+  "B": 199,
+  "attempted": 600,
+  "known_error": "Excluded: the first-stage method did not change",
+  "power_interval": "Per-cell conservative one-sided exact 95% bound for paired losses; no multiplicity adjustment"
+}
