@@ -162,7 +162,6 @@ def main() -> int:
         "/examples/shift/tree.nwk",
         "/examples/shift/traits.tsv",
         "/examples/shift/traits-with-se.tsv",
-
         "/THRESHOLD_DIAGNOSTICS.md",
         "/examples/threshold/README.md",
         "/examples/threshold/diagnostic-pilot.json",
