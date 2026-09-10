@@ -6358,6 +6358,9 @@ register_result_plot_options(
 from nwkit.dtt_cli import register_dtt  # noqa: E402
 
 register_dtt(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.regression_selection_cli import register_regression_selection  # noqa: E402
+
+register_regression_selection(subparsers, p_audit)
 _add_input_rooting_options()
 
 

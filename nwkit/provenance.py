@@ -57,6 +57,8 @@ OUTPUT_ARGUMENTS = frozenset(
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
+        "folds",
+        "predictor_file",
         "infile",
         "infile2",
         "data",
@@ -462,15 +464,29 @@ def _input_file_records(args, input_candidates=None):
     return sorted(records, key=lambda record: (record["argument"], record["path"]))
 
 
+def _selection_output_values(args):
+    if getattr(args, "command", None) != "regress-select":
+        return {}
+    from nwkit.regression_selection_cli import selection_output_paths
+
+    return {
+        "out_prefix:" + key: value
+        for key, value in selection_output_paths(args.out_prefix).items()
+    }
+
+
 def _output_file_records(args):
     records_by_path: dict[str, dict[str, Any]] = {}
     output_arguments = set(OUTPUT_ARGUMENTS)
     if getattr(args, "command", None) == "image":
         output_arguments.update(("manifest", "attribution"))
-    for argument in output_arguments:
+    output_values = {
+        argument: getattr(args, argument, None) for argument in output_arguments
+    }
+    output_values.update(_selection_output_values(args))
+    for argument, value in output_values.items():
         if argument == "audit":
             continue
-        value = getattr(args, argument, None)
         if (
             argument == "group_table_prefix"
             and value in (None, "")
@@ -525,10 +541,13 @@ def _output_file_records(args):
 
 def _planned_output_records(args):
     records_by_path: dict[str, dict[str, Any]] = {}
-    for argument in OUTPUT_ARGUMENTS:
+    output_values = {
+        argument: getattr(args, argument, None) for argument in OUTPUT_ARGUMENTS
+    }
+    output_values.update(_selection_output_values(args))
+    for argument, value in output_values.items():
         if argument == "audit":
             continue
-        value = getattr(args, argument, None)
         candidates = _path_candidates_from_value(value)
         if argument == "group_table_prefix":
             candidates = [
@@ -562,7 +581,7 @@ def _primary_input_text(args, stdin_text):
     ordinary_tree = getattr(args, "tree", None)
     primary_input = (
         ordinary_tree
-        if getattr(args, "command", None) == "regress"
+        if getattr(args, "command", None) in {"regress", "regress-select"}
         and ordinary_tree not in (None, "")
         else (
             gene_tree
@@ -797,6 +816,11 @@ def _prefix_output_collision_candidates(args):
         return [
             ("--out-prefix " + key, path)
             for key, path in comparison_paths(prefix).items()
+        ]
+    if getattr(args, "command", None) == "regress-select":
+        return [
+            ("--out-prefix " + key, value)
+            for key, value in _selection_output_values(args).items()
         ]
     from nwkit.conventions import regression_bundle_lock_path, regression_bundle_paths
 

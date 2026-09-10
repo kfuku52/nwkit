@@ -509,6 +509,16 @@ shared-age IDs identify rows; missing estimates are `NA`, never zero.
 with its PDF and hash manifest. See
 [species-age uncertainty](RADTE_SPECIES_UNCERTAINTY.md) for semantics and schemas.
 
+## Exploratory regression selection
+
+`regress-select --data` requires unique `leaf_name` rows, a finite numeric
+response and finite numeric predictors. `--folds` requires unique `leaf_name`
+and non-empty `fold` values; both files must match the tree tips exactly.
+`--predictor-file` contains one predictor name per line without a header.
+Binary responses require numeric 0/1 and an explicit `--family binomial`.
+The six-file prefix bundle and its non-inferential schema are specified in
+[the selection guide](REGRESSION_SELECTION.md#output-bundle).
+
 ## Disparity through time
 
 `dtt --trait` uses the shared tip-keyed TSV policies. `--columns` selects jointly

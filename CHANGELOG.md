@@ -6,6 +6,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
+- Restore the common underscore compatibility aliases for `regress-select`
+  options while retaining kebab-case help and canonical spellings.
+
+- Add `nwkit regress-select` for Gaussian, binomial, Poisson and negative-binomial
+  phylogenetic lasso/elastic net with nested group CV, baseline predictions,
+  coefficient paths, selection frequencies and audited transactional bundles.
+  These exploratory outputs deliberately omit post-selection P-values.
+  Refine Gaussian fits by GLS coordinate minimization, enforce independent
+  KKT convergence checks, and flag rank-deficient lasso equicorrelation designs.
+- Verify and polish scalar GLMM latent-mode scores when objective rounding near
+  the negative-binomial Poisson limit stalls the numerical optimizer.
+
 - Add a fixed-parameter branch-specific scalar Gaussian Python API combining
   BM, OU and prescribed Gaussian end jumps, with explicit roots and shared
   likelihood, ancestral-state conditioning and simulation.

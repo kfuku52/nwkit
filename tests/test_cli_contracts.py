@@ -12,6 +12,24 @@ from nwkit.util import read_tree
 pytestmark = pytest.mark.integration
 
 CASES = {
+    "regress-select": [
+        "--input-rooted",
+        "yes",
+        "--tree",
+        "{tree}",
+        "--data",
+        "{data}",
+        "--folds",
+        "{folds}",
+        "--response",
+        "y",
+        "--predictors",
+        "x",
+        "--strengths",
+        "0.1",
+        "--l1-ratios",
+        "0.5",
+    ],
     "dtt": ["--trait", "{data}", "--columns", "x,y", "--n-sim", "9"],
     "annotate": ["--table", "{data}"],
     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
@@ -151,9 +169,24 @@ def test_command_parser_reaches_its_real_handler(
             "state": ["x", "x", "y", "y", "y"],
         }
     ).to_csv(data, sep="\t", index=False)
+    folds = tmp_path / "folds.tsv"
+    if command == "regress-select":
+        names = [f"Genus_{i}" for i in range(12)]
+        tree.write_text("(" + ",".join(f"{name}:1" for name in names) + ");")
+        pd.DataFrame(
+            {
+                "leaf_name": names,
+                "x": range(12),
+                "y": [i + (i % 3) * 0.2 for i in range(12)],
+            }
+        ).to_csv(data, sep="\t", index=False)
+        pd.DataFrame(
+            {"leaf_name": names, "fold": [str(i // 4) for i in range(12)]}
+        ).to_csv(folds, sep="\t", index=False)
     species = tmp_path / "species.txt"
     species.write_text("\n".join(names) + "\n")
     paths = {
+        "folds": folds,
         "tree": tree,
         "other": other,
         "data": data,
@@ -163,6 +196,13 @@ def test_command_parser_reaches_its_real_handler(
         "pdf": tmp_path / "roots.pdf",
     }
     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
+    if command == "regress-select":
+        prefix = tmp_path / "selection"
+        assert main([*arguments, "--out-prefix", str(prefix)]) == 0
+        coefficients = pd.read_csv(str(prefix) + ".coefficients.tsv", sep="\t")
+        assert "coefficient" in coefficients
+        assert not any("p_value" in name for name in coefficients)
+        return
     if command == "radte-compare":
         with pytest.raises(FileNotFoundError, match="manifest"):
             main([*arguments, "--out-prefix", str(tmp_path / "comparison")])
@@ -215,7 +255,8 @@ def test_command_parser_reaches_its_real_handler(
 
 
 @pytest.mark.parametrize(
-    "arguments", [["--version"], ["--help"], ["regress", "--help"]]
+    "arguments",
+    [["--version"], ["--help"], ["regress", "--help"], ["regress-select", "--help"]],
 )
 def test_help_and_version_do_not_import_numerical_libraries(arguments):
     import subprocess

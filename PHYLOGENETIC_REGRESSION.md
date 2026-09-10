@@ -1060,3 +1060,10 @@ References:
 - Ives AR, Midford PE, Garland T Jr. 2007. Within-species variation and
   measurement error in phylogenetic comparative methods. *Systematic Biology*
   56:252–270. https://doi.org/10.1080/10635150701313830
+
+## Exploratory multi-predictor selection
+
+Use [`nwkit regress-select`](REGRESSION_SELECTION.md) for lasso/elastic-net
+selection with nested phylogenetic-group CV. Gaussian, binary, Poisson and
+negative-binomial responses are supported. Its outputs contain predictions
+and selection frequencies, not post-selection coefficient P-values.

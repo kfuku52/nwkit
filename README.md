@@ -86,6 +86,7 @@ minimal worked example, in
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
 - [`regress`](https://github.com/kfuku52/nwkit/wiki/nwkit-regress): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
+- [`regress-select`](REGRESSION_SELECTION.md): Exploratory phylogenetic lasso/elastic net with nested group cross-validation and selection frequencies, without post-selection P-values
 - [`dtt`](DTT.md): Continuous-trait disparity through time with a Brownian null envelope, MDI and figures
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves

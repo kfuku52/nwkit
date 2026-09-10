@@ -27,3 +27,6 @@ graft examples/dtt
 
 include BRANCH_GAUSSIAN.md
 graft examples/branch_gaussian
+
+include REGRESSION_SELECTION.md
+graft examples/regression_selection

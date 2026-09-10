@@ -2210,6 +2210,44 @@ def _bootstrap_coefficient_inference(
     )
 
 
+def _polish_scalar_random_mode(
+    mode, precision, observation_to_tip, terms, value_and_gradient
+):
+    # Near the Poisson limit, differences of large log-gamma values can
+    # obscure objective improvements while the analytic score stays
+    # accurate. Polish that score with damped Newton steps, accepting
+    # only strictly smaller score norms; keep the original final tolerance.
+    for _polish in range(8):
+        final_value, final_gradient = value_and_gradient(mode)
+        score = float(np.max(np.abs(final_gradient)))
+        if not np.isfinite(score) or score < 1e-5:
+            break
+        _, _, weights = terms(mode)
+        hessian = precision + np.diag(
+            np.bincount(observation_to_tip, weights=weights, minlength=len(mode))
+        )
+        try:
+            factor = _positive_definite_cholesky(hessian)
+            step = np.linalg.solve(factor.T, np.linalg.solve(factor, final_gradient))
+        except np.linalg.LinAlgError:
+            break
+        accepted = False
+        for _backtrack in range(16):
+            candidate = mode - step
+            _, candidate_gradient = value_and_gradient(candidate)
+            if (
+                np.isfinite(candidate_gradient).all()
+                and np.max(np.abs(candidate_gradient)) < score
+            ):
+                mode = candidate
+                accepted = True
+                break
+            step *= 0.5
+        if not accepted:
+            break
+    return mode
+
+
 def _scalar_random_mode(
     values: np.ndarray,
     fixed_linear: np.ndarray,
@@ -2305,17 +2343,26 @@ def _scalar_random_mode(
             jac=True,
             options={"maxiter": 1000, "ftol": 1e-12, "gtol": 1e-7},
         )
+        mode = np.asarray(fallback.x, dtype=float)
+        mode = _polish_scalar_random_mode(
+            mode, precision, observation_to_tip, terms, value_and_gradient
+        )
+        final_value, final_gradient = value_and_gradient(mode)
+        # Objective rounding can stop L-BFGS line search after the mode already
+        # meets the same score tolerance as the Newton path. Verify the score
+        # directly, even when the optimizer reports success; curvature is
+        # checked below before the Laplace determinant is used.
         if (
-            not fallback.success
-            or not np.isfinite(fallback.fun)
-            or float(fallback.fun) >= 1e99
+            not np.isfinite(final_value)
+            or float(final_value) >= 1e99
+            or not np.isfinite(final_gradient).all()
+            or float(np.max(np.abs(final_gradient))) >= 1e-5
         ):
             raise RuntimeError(
                 "Scalar random-effect mode optimization failed: {}".format(
                     fallback.message
                 )
             )
-        mode = np.asarray(fallback.x, dtype=float)
     log_likelihood, _, weights = terms(mode)
     objective = -log_likelihood + 0.5 * float(mode @ precision @ mode)
     mapped_weights = np.bincount(
