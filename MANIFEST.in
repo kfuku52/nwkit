@@ -13,6 +13,8 @@ include DEVELOPMENT.md
 include CHANGELOG.md
 include RELEASING.md
 include PHYLOGENETIC_REGRESSION.md
+include REGRESSION_CALIBRATION.md
+graft examples/regression_calibration
 include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt
 include scripts/make_draw_layout_gallery.py

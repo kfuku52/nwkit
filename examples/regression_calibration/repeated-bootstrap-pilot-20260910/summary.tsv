@@ -1,0 +1,7 @@
+case	method	generated	p_available	rejection_given_available	coverage_given_interval	fit_failures	seconds
+rsc-e20-copies5-concentrated	oracle	20	1.0	0.15	0.85	0	0.017630917980568483
+rsc-e20-copies5-concentrated	parametric-bootstrap	20	1.0	0.1	0.9	0	763.5815780160483
+rsc-e20-copies5-concentrated	wald	20	1.0	0.1	0.9	0	8.877200089977123
+rsc-e5-copies5	oracle	20	1.0	0.1	0.9	0	0.019672750000609085
+rsc-e5-copies5	parametric-bootstrap	20	1.0	0.0	1.0	0	673.811081101012
+rsc-e5-copies5	wald	20	1.0	0.0	1.0	0	7.894800209061941

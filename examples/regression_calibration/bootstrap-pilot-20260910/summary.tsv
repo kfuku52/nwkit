@@ -1,0 +1,13 @@
+case	method	generated	p_available	rejection_given_available	coverage_given_interval	fit_failures	seconds
+rsc-e2	null-bootstrap	200	1.0	0.025	None	0	167.7352944141021
+rsc-e2	oracle	200	1.0	0.045	0.955	0	0.07292853112448938
+rsc-e2	parametric-bootstrap	200	1.0	0.28	0.725	0	88.26990905194543
+rsc-e2	wald	200	1.0	0.03	0.97	0	4.377997543924721
+rsc-e20	null-bootstrap	200	1.0	0.06	None	0	238.99407341110054
+rsc-e20	oracle	200	1.0	0.05	0.95	0	0.08205169808934443
+rsc-e20	parametric-bootstrap	200	1.0	0.07	0.935	0	126.30862069298746
+rsc-e20	wald	200	1.0	0.06	0.94	0	5.057023039436899
+rsc-e5	null-bootstrap	200	1.0	0.05	None	0	178.99804612717708
+rsc-e5	oracle	200	1.0	0.065	0.935	0	0.062444538954878226
+rsc-e5	parametric-bootstrap	200	1.0	0.115	0.885	0	95.14133412606316
+rsc-e5	wald	200	1.0	0.05	0.95	0	4.294032083824277

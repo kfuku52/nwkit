@@ -2722,8 +2722,11 @@ def _fit_scalar_phylogenetic_glmm(
         initial,
         bounds=bounds,
         label="Scalar phylogenetic GLMM",
-        force_multistart=family
-        in ZERO_COMPONENT_FAMILIES | {"beta-binomial", "censored-gaussian"},
+        # An unpenalized Laplace objective can have distinct coefficient/variance
+        # basins even for ordinary Poisson/NB data. A successful first start can
+        # be worse than an embedded intercept-only fit; check other starts.
+        force_multistart=coefficient_penalty == "none"
+        or family in ZERO_COMPONENT_FAMILIES | {"beta-binomial", "censored-gaussian"},
     )
     coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
         result.x
@@ -3376,6 +3379,10 @@ def fit_phylogenetic_glmm(
         initial,
         bounds=bounds,
         label="Categorical phylogenetic GLMM",
+        # Sparse binary data can trade very large variance against an extreme
+        # intercept. Convergence at the first start does not establish the best
+        # Laplace fit, particularly without a coefficient penalty.
+        force_multistart=coefficient_penalty == "none",
     )
     coefficients, thresholds, log_variances, decoded_parameter = unpack(result.x)
     fitted_state = state(result.x)

@@ -183,12 +183,23 @@ the scale is on the supplied linear-predictor coefficients, rescale continuous
 predictors when a common prior scale is scientifically intended.
 
 An optimizer result is emitted only when both the outer parameter optimization
-and every inner random-effect mode solve converge to a finite state. Failed
-profile and bootstrap refits are discarded. If the nuisance-adjusted Wald
+and every inner random-effect mode solve converge to a finite state.
+Unpenalized scalar and categorical fits also check multiple bounded starting
+points: a successful first optimization can otherwise have a worse Laplace
+objective than an embedded intercept-only model. This improves the numerical
+search; it does not certify a global optimum or calibrate Wald inference.
+Failed profile and bootstrap refits are discarded. If the nuisance-adjusted Wald
 information is singular, coefficients and the fit are retained but Wald
 standard errors, intervals, and p-values are left missing with an explicit
 `inference_status`; likelihood-ratio or parametric-bootstrap inference can then
 be selected instead.
+
+Changing inference method is not a guarantee of calibrated small-sample tests.
+In particular, the current coefficient bootstrap uses centered coefficient
+samples for p-values and percentile intervals, not a null-constrained test or
+a studentized pivot. Re-estimating variances in every refit alone does not
+remove its small-sample plug-in error. See [regression calibration](REGRESSION_CALIBRATION.md)
+for the fixed-model validation protocol and recorded limitations.
 
 Categorical biological replicates are not averaged. Response replicates enter
 the binomial/multinomial/ordinal likelihood as per-tip category counts.
