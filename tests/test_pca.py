@@ -333,3 +333,60 @@ def test_input_file_and_audit_aliases_are_protected(tmp_path):
     alias = tmp_path / "alias.tsv"
     with pytest.raises(ValueError):
         main([*arguments, "--loadings-out", str(alias), "--audit", str(alias)])
+
+
+@pytest.mark.parametrize("drop", [False, True])
+def test_deep_tree_cli_preserves_covariance_and_input_ids(tmp_path, drop):
+    from nwkit.pca import _ID, _retained_tree
+    from nwkit.util import assign_branch_ids
+
+    count = 200
+    text = "(t0:1,t1:1):1"
+    for index in range(2, count):
+        text = f"({text},t{index}:1):1"
+    text += ";"
+    tree = read_tree(text, 1, True, quiet=True, rooted="yes")
+    original_ids = assign_branch_ids(tree)
+    names = sorted(tree.leaf_names())
+    used = [name for name in names if not drop or name != "t100"]
+    retained = _retained_tree(tree, used)
+    assert all(_ID not in node.props for node in tree.traverse())
+    assert {node.props[_ID] for node in retained.traverse()} <= set(
+        original_ids.values()
+    )
+    original = build_evolutionary_covariance(tree, used)
+    actual = build_evolutionary_covariance(retained, used)
+    np.testing.assert_allclose(actual, original)
+    table = tmp_path / "traits.tsv"
+    table.write_text(
+        "leaf_name\tx\ty\n"
+        + "".join(
+            f"t{i}\t{'NA' if drop and i == 100 else i}\t{(i * i) % 97}\n"
+            for i in range(count)
+        )
+    )
+    eigenvalues = tmp_path / "eigenvalues.tsv"
+    main(
+        [
+            "pca",
+            "-i",
+            text,
+            "--input-rooted",
+            "yes",
+            "--trait",
+            str(table),
+            "--columns",
+            "x,y",
+            "--missing",
+            "drop",
+            "-o",
+            str(tmp_path / "scores.tsv"),
+            "--eigenvalues-out",
+            str(eigenvalues),
+        ]
+    )
+    values = np.array([[int(name[1:]), (int(name[1:]) ** 2) % 97] for name in used])
+    expected = fit_pca(original, values)
+    np.testing.assert_allclose(
+        pd.read_csv(eigenvalues, sep="\t").eigenvalue, expected.eigenvalues
+    )

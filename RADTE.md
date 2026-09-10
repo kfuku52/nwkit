@@ -477,3 +477,15 @@ branches near `8e-11` and `6e-11` with independent SciPy matrix-exponential
 pruning. This case passes at the existing IQ2MC text-export tolerances
 (NLL absolute `2e-5`; score relative `1e-5`, absolute `3e-4`). It requires no
 upstream patch and does not establish accuracy at every numerical boundary.
+
+### Sequence initialization at a chronology boundary
+
+A branch-only warm start can collapse a duration to the minimum allowed value,
+creating an ill-conditioned sequence start even for feasible ages. When this
+happens in the joint sequence path, NWKIT uses the existing interior chronology
+start and records `sequence_initial_ages_reset_from_duration_boundary`. This
+changes initialization only; the fitted objective, calibration constraints and
+final minimum duration remain unchanged. See the [external GY94 validation
+record](examples/radte/default-profile-validation/README.md) for the retained
+failure, regression fixture and separate post-fix checks. The repair does not
+establish nominal profile-interval coverage.

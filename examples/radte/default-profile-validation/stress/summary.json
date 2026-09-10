@@ -1,0 +1,175 @@
+{
+  "long_alignment": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 49,
+    "truth_covered": 41,
+    "coverage_among_returned": 0.8367346938775511,
+    "correct_return_fraction": 0.82,
+    "availability": 0.98,
+    "bias": 0.658428528423899,
+    "rmse": 3.1831768425622955,
+    "median_width": 9.956704648501773,
+    "statuses": {
+      "complete": 50
+    },
+    "interval_statuses": {
+      "conditional-profile": 49,
+      "unavailable-strict-clock-limit": 1
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 44,
+      "sequence-marginal-quadratic": 6
+    },
+    "coverage_wilson95": [
+      0.7096366156608317,
+      0.9148730162927116
+    ],
+    "availability_wilson95": [
+      0.8950455641036218,
+      0.9964607407283538
+    ],
+    "correct_return_wilson95": [
+      0.6920394632569922,
+      0.9022980732976582
+    ]
+  },
+  "larger_family": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 48,
+    "truth_covered": 48,
+    "coverage_among_returned": 1.0,
+    "correct_return_fraction": 0.96,
+    "availability": 0.96,
+    "bias": 0.6679503833930164,
+    "rmse": 3.010342710260579,
+    "median_width": 18.748528174804804,
+    "statuses": {
+      "complete": 48,
+      "profile-timeout": 2
+    },
+    "interval_statuses": {
+      "conditional-profile": 48,
+      "profile-timeout": 2
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 50
+    },
+    "coverage_wilson95": [
+      0.9258998703338825,
+      1.0
+    ],
+    "availability_wilson95": [
+      0.8653990931249297,
+      0.9889611156723802
+    ],
+    "correct_return_wilson95": [
+      0.8653990931249297,
+      0.9889611156723802
+    ]
+  },
+  "loss_rate_shift": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 50,
+    "truth_covered": 49,
+    "coverage_among_returned": 0.98,
+    "correct_return_fraction": 0.98,
+    "availability": 1.0,
+    "bias": 1.8215658418249319,
+    "rmse": 4.153429057199234,
+    "median_width": 27.54796372192883,
+    "statuses": {
+      "complete": 50
+    },
+    "interval_statuses": {
+      "conditional-profile": 50
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 50
+    },
+    "coverage_wilson95": [
+      0.8950455641036218,
+      0.9964607407283538
+    ],
+    "availability_wilson95": [
+      0.9286524008666412,
+      1.0
+    ],
+    "correct_return_wilson95": [
+      0.8950455641036218,
+      0.9964607407283538
+    ]
+  },
+  "wrong_mapping": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 43,
+    "truth_covered": 41,
+    "coverage_among_returned": 0.9534883720930233,
+    "correct_return_fraction": 0.82,
+    "availability": 0.86,
+    "bias": -0.46443023626499375,
+    "rmse": 3.2478277045865913,
+    "median_width": 14.218261219834247,
+    "statuses": {
+      "complete": 50
+    },
+    "interval_statuses": {
+      "unavailable-strict-clock-limit": 7,
+      "conditional-profile-calibration-limited": 43
+    },
+    "estimators": {
+      "sequence-marginal-quadratic": 7,
+      "sequence-empirical-bayes-map": 43
+    },
+    "coverage_wilson95": [
+      0.8454450199593603,
+      0.9871507399056197
+    ],
+    "availability_wilson95": [
+      0.7381380628941446,
+      0.9304916657298371
+    ],
+    "correct_return_wilson95": [
+      0.6920394632569922,
+      0.9022980732976582
+    ]
+  },
+  "low_sd": {
+    "families": 50,
+    "point_successes": 50,
+    "intervals_returned": 37,
+    "truth_covered": 35,
+    "coverage_among_returned": 0.9459459459459459,
+    "correct_return_fraction": 0.7,
+    "availability": 0.74,
+    "bias": 0.11889610977905772,
+    "rmse": 2.186260591324671,
+    "median_width": 10.542991443532337,
+    "statuses": {
+      "complete": 50
+    },
+    "interval_statuses": {
+      "conditional-profile": 37,
+      "unavailable-strict-clock-limit": 13
+    },
+    "estimators": {
+      "sequence-empirical-bayes-map": 37,
+      "sequence-marginal-quadratic": 13
+    },
+    "coverage_wilson95": [
+      0.822953456491869,
+      0.9850490231668423
+    ],
+    "availability_wilson95": [
+      0.6044684273515115,
+      0.8412847250644762
+    ],
+    "correct_return_wilson95": [
+      0.562496495355466,
+      0.8089644649911906
+    ]
+  }
+}

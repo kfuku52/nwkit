@@ -1,0 +1,4 @@
+shared_age_id	species_name	member_count	estimated_age	max_member_age_difference	interval_lower	interval_upper	interval_status
+S:clade-sha256:0766342b8a4cddd5bc4145233cb9a7d3d4fd2cbddbeab1d545576daf2f90fd1f	N0	1	10.0	0.0	10.0	10.0	conditional-profile-calibration-limited
+S:clade-sha256:76c4acf11468f87e33e47341d226f15a36314bc65e2eb8ad4701b5a191a27997	N2	1	5.0	0.0	5.0	5.0	conditional-profile-calibration-limited
+S:clade-sha256:a7e07ed1f942c885f43028fbd5277840889673d1fc87d37baa301056bcfaa869	N1	2	5.0	0.0	5.0	5.0	conditional-profile-calibration-limited

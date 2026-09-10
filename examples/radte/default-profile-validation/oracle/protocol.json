@@ -1,0 +1,14 @@
+{
+  "role": "diagnostic-oracle",
+  "selection": "First N family indices, irrespective of outcomes",
+  "arguments": {
+    "input": "/nwkit/tmp/default-profile-validation",
+    "case": "root",
+    "families": 50,
+    "workers": 2,
+    "timeout": 180,
+    "output": "/nwkit/tmp/default-profile-oracle"
+  },
+  "script_sha256": "d165765aa4adf6917ebc1772781b64d2722d0d4d8bfa750612efbfd148704a21",
+  "original_metadata_sha256": "c889857690cc16308d651c9918d55091906f8b1a14fceccfe800dfd999f2ef3c"
+}

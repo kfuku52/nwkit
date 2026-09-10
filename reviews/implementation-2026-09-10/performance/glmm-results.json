@@ -1,0 +1,926 @@
+{
+  "environment": {
+    "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+    "executable": "/Users/kf/miniforge3/bin/python",
+    "platform": "macOS-26.6.2-x86_64-i386-64bit",
+    "cpu_count": 12,
+    "thread_limit": 1,
+    "warmups": 1,
+    "repeats": 3
+  },
+  "manifest": {
+    "revisions": {
+      "before": "8ad9544",
+      "reviewed": "e2465b0",
+      "radte_first": "0423427"
+    },
+    "after_patch_files": [
+      "nwkit/asr.py",
+      "nwkit/asr_figure.py",
+      "nwkit/asr_output.py",
+      "nwkit/pca.py",
+      "tests/test_asr_output.py",
+      "tests/test_pca.py"
+    ],
+    "runs": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs",
+    "cases": [
+      {
+        "name": "regress-binomial-30",
+        "before": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before",
+        "after": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after",
+        "args": [
+          "regress",
+          "--tree",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/tree30.nwk",
+          "--data",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/traits30.tsv",
+          "--responses",
+          "binary",
+          "--predictors",
+          "x",
+          "--response-family",
+          "binary=binomial",
+          "--categorical-responses",
+          "binary",
+          "--coefficient-penalty",
+          "none",
+          "-o",
+          "result.tsv"
+        ],
+        "tables": [
+          "result.tsv"
+        ]
+      },
+      {
+        "name": "binomial-n60-p0.05",
+        "before": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before",
+        "after": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after",
+        "args": [
+          "regress",
+          "--tree",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/binomial-n60-p0.05/tree.nwk",
+          "--data",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/binomial-n60-p0.05/traits.tsv",
+          "--responses",
+          "y",
+          "--predictors",
+          "x",
+          "--response-family",
+          "y=binomial",
+          "--coefficient-penalty",
+          "none",
+          "--evolution-model",
+          "custom",
+          "--evolution-covariance",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/binomial-n60-p0.05/covariance.tsv",
+          "-o",
+          "result.tsv",
+          "--categorical-responses",
+          "y"
+        ],
+        "tables": [
+          "result.tsv"
+        ]
+      },
+      {
+        "name": "negative-binomial-n30-boundary",
+        "before": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before",
+        "after": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after",
+        "args": [
+          "regress",
+          "--tree",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/negative-binomial-n30-boundary/tree.nwk",
+          "--data",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/negative-binomial-n30-boundary/traits.tsv",
+          "--responses",
+          "y",
+          "--predictors",
+          "x",
+          "--response-family",
+          "y=negative-binomial",
+          "--coefficient-penalty",
+          "none",
+          "--evolution-model",
+          "custom",
+          "--evolution-covariance",
+          "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inputs/negative-binomial-n30-boundary/covariance.tsv",
+          "-o",
+          "result.tsv"
+        ],
+        "tables": [
+          "result.tsv"
+        ]
+      }
+    ],
+    "input_sha256": {
+      "tree64.nwk": "ed3fc93e2ffc5b0bac028c9a83072ea841ad9e4b536c9d0af5c7e8d4d5232d56",
+      "tree512.nwk": "82bf5447ef73a5b4081607937a1788f2e95bef53021f76d47ef80ee2f63a254f",
+      "tree128.nwk": "8b4b63b38f310507bce67a151399f64030207369896dedfd6c34b6eaab1842b1",
+      "tree60.nwk": "23f2b5dd847d1d8f24d7c6c24de273739607dd3af9196119ae5a0f364529409c",
+      "traits64.tsv": "f6062e1626da45857ce917e5b71907ff047fb34a81b1cafac45cfc0a2929ccc9",
+      "traits256.tsv": "418d5a165414df5f0fe27b689a4fa33e45c839aca5f543cac5b108e0145a19e9",
+      "traits1024.tsv": "1be3c7df003eabecca4f29693746afb0bbae8344c578b74224c851fb7da37494",
+      "traits2048.tsv": "655c58f00453bce1bd9f46f199a9510c817b8a5d9ca7be62ab426524fbf64f6f",
+      "balanced2048.nwk": "4e20373fab95c381c75007038801f45cf26e25e091ffcfa3d2af1c996cae43a9",
+      "comb1600.nwk": "23f808d6ef4f69655960b95847108ad3ab76bb934d44097490bedf7f886705dd",
+      "traits60.tsv": "5ad8ac4bde926a18e1ac5be201cece332280ad566fc1a3c82c114daee46b07e1",
+      "traits512.tsv": "8e83f82a26dec55263d6e3633babc3d9d33bdb8a323621460f41f34f187a0ae0",
+      "ensemble.nwk": "a0286a0fe604763233c58e6a8a793b8a630adac6f4fe0504662f7bd276e48a8e",
+      "tree30.nwk": "7e748185c08f9a8ac7ae1807d1a8b17b4e5a8ec964a79b7677cedff393e852fa",
+      "traits128.tsv": "af5809a5395cdaf82721bfbe166de2d5a16b49d765156e4b85b0bb66c99dba22",
+      "traits30.tsv": "ee52e1d7afc9c0bbe27c6a4c935ac3acdfc0e2885bb58906b3ea967db9ebf382",
+      "tree256.nwk": "463592f8103409f98eacd96c98df1dea45fd1e425cb30444ac38bbb013a0ac18",
+      "tree2048.nwk": "4e20373fab95c381c75007038801f45cf26e25e091ffcfa3d2af1c996cae43a9",
+      "tree1024.nwk": "c14126b81e68d53b0f475884e78a2ecbc3d992f4562b29cf7b09bdebbf129acc",
+      "binomial-n60-p0.05/tree.nwk": "cfe4be90d5c8150db6f25fb358bdb13903df8f2f2c519d0d45c0a4c358d7f524",
+      "binomial-n60-p0.05/traits.tsv": "0a1cfe117f50fe988d67457f61af4e5d0762e689dea7ac020799fff4530cdb90",
+      "binomial-n60-p0.05/covariance.tsv": "b2424ce3a61eaab6882fea268fcb2fb7123da6713e64eb9cc2448a95d30228a9",
+      "negative-binomial-n30-boundary/tree.nwk": "25ba81d3e83e86f6d98582b4fac9a302e4ddb5fa333561a98906f97daf863365",
+      "negative-binomial-n30-boundary/traits.tsv": "a01ae1dd26caf74bfe8daf9e76644f37a160f2cd1136795a7e23e48e7821c2d1",
+      "negative-binomial-n30-boundary/covariance.tsv": "44814da8ccdeb2d21dc43c0a50361c1797f4da5456e7858f382a194e5f43e149",
+      "radte8/gene.nwk": "b4c9c6ad37fbfbe9a1644b0f26a97ecb8888ed820d3807a5b2b644218d32ee17",
+      "radte8/species.nwk": "cf3036a55d218a8b173bd5107cc847e5f1b513a77a9ff5f7faad843ec7864210",
+      "radte8/mapping.tsv": "1174c5e1c9f22d2a43e19431c4866f05a96e374ed686f4f56391a0704ca7c30b",
+      "radte8/alignment.fasta": "d073128cde62158a0a92a479a7719f5e2bc3543117d45bf84b6686c00c7b2c50",
+      "radte8/truth.json": "a9026253185b342bce96aecba57ec21c1a491a92a5eddce95d27ec994ae329ab",
+      "radte16/gene.nwk": "4675a643b8f7727d29d296b2d2c6a7e4f58423c127b28f04ab37327009d258b3",
+      "radte16/species.nwk": "819b4bd20e6cb9c3612e12b4e304864b4d52ec8c29fad891009c0450c996d795",
+      "radte16/mapping.tsv": "3c5622a1c59ca0eacd2aa962354cce3c5c520dcb231613cc3dac8c2cee751fa0",
+      "radte16/alignment.fasta": "d33420294a0a0ca30c3ff20291275de34e0812b583291c61a4ed682bdc450b80",
+      "radte16/truth.json": "a9026253185b342bce96aecba57ec21c1a491a92a5eddce95d27ec994ae329ab"
+    }
+  },
+  "cases": {
+    "regress-binomial-30": {
+      "records": [
+        {
+          "wall_seconds": 3.1791736659943126,
+          "cpu_seconds": 3.1109739999999997,
+          "peak_rss_bytes": 159072256,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": -1,
+          "process_wall_seconds": 3.348433541978011,
+          "load_average": [
+            10.99365234375,
+            19.533203125,
+            25.0517578125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/-1/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "f5849136da1a4a8a405aabac589de1e8fb62a7354b6b6280b5b5fb98224892c9"
+          }
+        },
+        {
+          "wall_seconds": 3.610362083010841,
+          "cpu_seconds": 3.567211,
+          "peak_rss_bytes": 160759808,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": -1,
+          "process_wall_seconds": 3.771546625008341,
+          "load_average": [
+            13.556640625,
+            19.92236328125,
+            25.15673828125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/-1/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "c4bacc0c6e8772929b5c5bdfcbd22657445930236413ae5a8cd82d2dfbfc9bbb"
+          }
+        },
+        {
+          "wall_seconds": 3.64616712499992,
+          "cpu_seconds": 3.588015,
+          "peak_rss_bytes": 160620544,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 0,
+          "process_wall_seconds": 3.81439208399388,
+          "load_average": [
+            13.271484375,
+            19.75732421875,
+            25.06787109375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/0/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "c4bacc0c6e8772929b5c5bdfcbd22657445930236413ae5a8cd82d2dfbfc9bbb"
+          }
+        },
+        {
+          "wall_seconds": 3.1436859590176027,
+          "cpu_seconds": 3.1039529999999997,
+          "peak_rss_bytes": 159612928,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 0,
+          "process_wall_seconds": 3.3253058750124183,
+          "load_average": [
+            12.84912109375,
+            19.56201171875,
+            24.9677734375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/0/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "f5849136da1a4a8a405aabac589de1e8fb62a7354b6b6280b5b5fb98224892c9"
+          }
+        },
+        {
+          "wall_seconds": 3.188274417014327,
+          "cpu_seconds": 3.1403559999999997,
+          "peak_rss_bytes": 159813632,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 1,
+          "process_wall_seconds": 3.364386541012209,
+          "load_average": [
+            12.84912109375,
+            19.56201171875,
+            24.9677734375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/1/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "f5849136da1a4a8a405aabac589de1e8fb62a7354b6b6280b5b5fb98224892c9"
+          }
+        },
+        {
+          "wall_seconds": 3.712346541986335,
+          "cpu_seconds": 3.6634539999999998,
+          "peak_rss_bytes": 160759808,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 1,
+          "process_wall_seconds": 3.8959360419830773,
+          "load_average": [
+            12.38037109375,
+            19.35302734375,
+            24.8623046875
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/1/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "c4bacc0c6e8772929b5c5bdfcbd22657445930236413ae5a8cd82d2dfbfc9bbb"
+          }
+        },
+        {
+          "wall_seconds": 3.627007707982557,
+          "cpu_seconds": 3.5703270000000003,
+          "peak_rss_bytes": 160358400,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 2,
+          "process_wall_seconds": 3.788566167000681,
+          "load_average": [
+            12.029296875,
+            19.1640625,
+            24.76318359375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/2/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "c4bacc0c6e8772929b5c5bdfcbd22657445930236413ae5a8cd82d2dfbfc9bbb"
+          }
+        },
+        {
+          "wall_seconds": 3.22618191599031,
+          "cpu_seconds": 3.1548760000000002,
+          "peak_rss_bytes": 159387648,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 2,
+          "process_wall_seconds": 3.4006564580195118,
+          "load_average": [
+            11.70654296875,
+            18.978515625,
+            24.66455078125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/regress-binomial-30/2/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "f5849136da1a4a8a405aabac589de1e8fb62a7354b6b6280b5b5fb98224892c9"
+          }
+        }
+      ],
+      "summary": {
+        "before": {
+          "successful": 3,
+          "attempted": 3,
+          "wall_seconds": {
+            "median": 3.188274417014327,
+            "min": 3.1436859590176027,
+            "max": 3.22618191599031
+          },
+          "cpu_seconds": {
+            "median": 3.1403559999999997,
+            "min": 3.1039529999999997,
+            "max": 3.1548760000000002
+          },
+          "peak_rss_bytes": {
+            "median": 159612928,
+            "min": 159387648,
+            "max": 159813632
+          },
+          "process_wall_seconds": {
+            "median": 3.364386541012209,
+            "min": 3.3253058750124183,
+            "max": 3.4006564580195118
+          }
+        },
+        "after": {
+          "successful": 3,
+          "attempted": 3,
+          "wall_seconds": {
+            "median": 3.64616712499992,
+            "min": 3.627007707982557,
+            "max": 3.712346541986335
+          },
+          "cpu_seconds": {
+            "median": 3.588015,
+            "min": 3.5703270000000003,
+            "max": 3.6634539999999998
+          },
+          "peak_rss_bytes": {
+            "median": 160620544,
+            "min": 160358400,
+            "max": 160759808
+          },
+          "process_wall_seconds": {
+            "median": 3.81439208399388,
+            "min": 3.788566167000681,
+            "max": 3.8959360419830773
+          }
+        },
+        "outputs": {
+          "result.tsv": {
+            "rows": [
+              2,
+              2
+            ],
+            "added_columns": [
+              "bootstrap_attempted",
+              "bootstrap_failed",
+              "bootstrap_succeeded",
+              "coefficient_profile",
+              "covariance_basis",
+              "interval_method",
+              "monte_carlo_se",
+              "objective_kind",
+              "objective_value",
+              "observation_model",
+              "p_value_method",
+              "penalty_value"
+            ],
+            "removed_columns": [],
+            "changed_columns": [],
+            "equivalent_shared_columns": true
+          }
+        },
+        "ratios": {
+          "wall_seconds": 1.1436177217186934,
+          "cpu_seconds": 1.142550398744601,
+          "peak_rss_bytes": 1.0063128721001848
+        }
+      }
+    },
+    "binomial-n60-p0.05": {
+      "records": [
+        {
+          "wall_seconds": 3.554045540979132,
+          "cpu_seconds": 3.38224,
+          "peak_rss_bytes": 162263040,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": -1,
+          "process_wall_seconds": 3.733401875011623,
+          "load_average": [
+            11.70654296875,
+            18.978515625,
+            24.66455078125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/-1/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "473dd22140d7577b4c06c54c4577f23f2db0067b15591b087d8222e773cd94e9"
+          }
+        },
+        {
+          "wall_seconds": 4.088590833009221,
+          "cpu_seconds": 4.040889999999999,
+          "peak_rss_bytes": 162840576,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": -1,
+          "process_wall_seconds": 4.262183124985313,
+          "load_average": [
+            11.97021484375,
+            18.912109375,
+            24.60791015625
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/-1/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "62469e0d2b3d7ebe99b35090d8a226515249b5fddcbfd630084c17bcfcaaf0fd"
+          }
+        },
+        {
+          "wall_seconds": 4.16856637498131,
+          "cpu_seconds": 4.061217,
+          "peak_rss_bytes": 162041856,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 0,
+          "process_wall_seconds": 4.358499833004316,
+          "load_average": [
+            11.65185546875,
+            18.73046875,
+            24.51025390625
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/0/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "62469e0d2b3d7ebe99b35090d8a226515249b5fddcbfd630084c17bcfcaaf0fd"
+          }
+        },
+        {
+          "wall_seconds": 3.4711039169924334,
+          "cpu_seconds": 3.416067,
+          "peak_rss_bytes": 162254848,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 0,
+          "process_wall_seconds": 3.6503021660028026,
+          "load_average": [
+            11.439453125,
+            18.56884765625,
+            24.4189453125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/0/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "473dd22140d7577b4c06c54c4577f23f2db0067b15591b087d8222e773cd94e9"
+          }
+        },
+        {
+          "wall_seconds": 3.3903411669889465,
+          "cpu_seconds": 3.34463,
+          "peak_rss_bytes": 161099776,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 1,
+          "process_wall_seconds": 3.5685532499919645,
+          "load_average": [
+            11.439453125,
+            18.56884765625,
+            24.4189453125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/1/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "473dd22140d7577b4c06c54c4577f23f2db0067b15591b087d8222e773cd94e9"
+          }
+        },
+        {
+          "wall_seconds": 4.121625625004526,
+          "cpu_seconds": 4.0589580000000005,
+          "peak_rss_bytes": 162820096,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 1,
+          "process_wall_seconds": 4.285917708999477,
+          "load_average": [
+            11.32373046875,
+            18.42626953125,
+            24.333984375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/1/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "62469e0d2b3d7ebe99b35090d8a226515249b5fddcbfd630084c17bcfcaaf0fd"
+          }
+        },
+        {
+          "wall_seconds": 4.1615694999927655,
+          "cpu_seconds": 4.08351,
+          "peak_rss_bytes": 162516992,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 2,
+          "process_wall_seconds": 4.332499917014502,
+          "load_average": [
+            11.05712890625,
+            18.2529296875,
+            24.23779296875
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/2/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "62469e0d2b3d7ebe99b35090d8a226515249b5fddcbfd630084c17bcfcaaf0fd"
+          }
+        },
+        {
+          "wall_seconds": 3.43824983300874,
+          "cpu_seconds": 3.3876079999999997,
+          "peak_rss_bytes": 162201600,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 2,
+          "process_wall_seconds": 3.61018887499813,
+          "load_average": [
+            10.89208984375,
+            18.09912109375,
+            24.1484375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/binomial-n60-p0.05/2/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "473dd22140d7577b4c06c54c4577f23f2db0067b15591b087d8222e773cd94e9"
+          }
+        }
+      ],
+      "summary": {
+        "before": {
+          "successful": 3,
+          "attempted": 3,
+          "wall_seconds": {
+            "median": 3.43824983300874,
+            "min": 3.3903411669889465,
+            "max": 3.4711039169924334
+          },
+          "cpu_seconds": {
+            "median": 3.3876079999999997,
+            "min": 3.34463,
+            "max": 3.416067
+          },
+          "peak_rss_bytes": {
+            "median": 162201600,
+            "min": 161099776,
+            "max": 162254848
+          },
+          "process_wall_seconds": {
+            "median": 3.61018887499813,
+            "min": 3.5685532499919645,
+            "max": 3.6503021660028026
+          }
+        },
+        "after": {
+          "successful": 3,
+          "attempted": 3,
+          "wall_seconds": {
+            "median": 4.1615694999927655,
+            "min": 4.121625625004526,
+            "max": 4.16856637498131
+          },
+          "cpu_seconds": {
+            "median": 4.061217,
+            "min": 4.0589580000000005,
+            "max": 4.08351
+          },
+          "peak_rss_bytes": {
+            "median": 162516992,
+            "min": 162041856,
+            "max": 162820096
+          },
+          "process_wall_seconds": {
+            "median": 4.332499917014502,
+            "min": 4.285917708999477,
+            "max": 4.358499833004316
+          }
+        },
+        "outputs": {
+          "result.tsv": {
+            "rows": [
+              2,
+              2
+            ],
+            "added_columns": [
+              "bootstrap_attempted",
+              "bootstrap_failed",
+              "bootstrap_succeeded",
+              "coefficient_profile",
+              "covariance_basis",
+              "interval_method",
+              "monte_carlo_se",
+              "objective_kind",
+              "objective_value",
+              "observation_model",
+              "p_value_method",
+              "penalty_value"
+            ],
+            "removed_columns": [],
+            "changed_columns": [
+              "p_value",
+              "confidence_interval_upper"
+            ],
+            "equivalent_shared_columns": false
+          }
+        },
+        "ratios": {
+          "wall_seconds": 1.2103743771147264,
+          "cpu_seconds": 1.1988450257526846,
+          "peak_rss_bytes": 1.0019444444444445
+        }
+      }
+    },
+    "negative-binomial-n30-boundary": {
+      "records": [
+        {
+          "wall_seconds": 3.2572778750036377,
+          "cpu_seconds": 3.155704,
+          "peak_rss_bytes": 157753344,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": -1,
+          "process_wall_seconds": 3.447508499986725,
+          "load_average": [
+            10.66015625,
+            17.93115234375,
+            24.0537109375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/-1/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "36cc6e9429db6fe325d26a76d9d693791197343388ab109ee2179657c02282d9"
+          }
+        },
+        {
+          "wall_seconds": 4.175236375012901,
+          "cpu_seconds": 4.083251,
+          "peak_rss_bytes": 158732288,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": -1,
+          "process_wall_seconds": 4.347409709007479,
+          "load_average": [
+            10.66015625,
+            17.93115234375,
+            24.0537109375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/-1/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "8108bb05608e560737947133306f0515597dd1bc000a0384c36e90559d1e3eea"
+          }
+        },
+        {
+          "wall_seconds": 5.020258167001884,
+          "cpu_seconds": 4.677771,
+          "peak_rss_bytes": 159105024,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 0,
+          "process_wall_seconds": 5.224862124974607,
+          "load_average": [
+            10.60693359375,
+            17.79931640625,
+            23.97119140625
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/0/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "8108bb05608e560737947133306f0515597dd1bc000a0384c36e90559d1e3eea"
+          }
+        },
+        {
+          "wall_seconds": 4.476928166986909,
+          "cpu_seconds": 3.9479390000000003,
+          "peak_rss_bytes": 160489472,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 0,
+          "process_wall_seconds": 4.689120583003387,
+          "load_average": [
+            10.87841796875,
+            17.73583984375,
+            23.91259765625
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/0/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "36cc6e9429db6fe325d26a76d9d693791197343388ab109ee2179657c02282d9"
+          }
+        },
+        {
+          "wall_seconds": 3.5378791670082137,
+          "cpu_seconds": 3.356206,
+          "peak_rss_bytes": 160088064,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 1,
+          "process_wall_seconds": 3.7448934169951826,
+          "load_average": [
+            11.3681640625,
+            17.72314453125,
+            23.8720703125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/1/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "36cc6e9429db6fe325d26a76d9d693791197343388ab109ee2179657c02282d9"
+          }
+        },
+        {
+          "wall_seconds": 5.0907545420050155,
+          "cpu_seconds": 4.6245259999999995,
+          "peak_rss_bytes": 159555584,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 1,
+          "process_wall_seconds": 5.325174750003498,
+          "load_average": [
+            11.25830078125,
+            17.5947265625,
+            23.79052734375
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/1/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "8108bb05608e560737947133306f0515597dd1bc000a0384c36e90559d1e3eea"
+          }
+        },
+        {
+          "wall_seconds": 5.524318375013536,
+          "cpu_seconds": 4.909682,
+          "peak_rss_bytes": 160440320,
+          "version": "0.43.15",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/after/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "after",
+          "repeat": 2,
+          "process_wall_seconds": 5.770410290977452,
+          "load_average": [
+            11.3974609375,
+            17.51806640625,
+            23.72705078125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/2/after",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "8108bb05608e560737947133306f0515597dd1bc000a0384c36e90559d1e3eea"
+          }
+        },
+        {
+          "wall_seconds": 3.7154233750188723,
+          "cpu_seconds": 3.4885,
+          "peak_rss_bytes": 160169984,
+          "version": "0.43.3",
+          "module": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/before/nwkit/__init__.py",
+          "exit_code": 0,
+          "label": "before",
+          "repeat": 2,
+          "process_wall_seconds": 3.958091707987478,
+          "load_average": [
+            11.685546875,
+            17.47607421875,
+            23.67578125
+          ],
+          "directory": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/glmm-runs/negative-binomial-n30-boundary/2/before",
+          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "table_sha256": {
+            "result.tsv": "36cc6e9429db6fe325d26a76d9d693791197343388ab109ee2179657c02282d9"
+          }
+        }
+      ],
+      "summary": {
+        "before": {
+          "successful": 3,
+          "attempted": 3,
+          "wall_seconds": {
+            "median": 3.7154233750188723,
+            "min": 3.5378791670082137,
+            "max": 4.476928166986909
+          },
+          "cpu_seconds": {
+            "median": 3.4885,
+            "min": 3.356206,
+            "max": 3.9479390000000003
+          },
+          "peak_rss_bytes": {
+            "median": 160169984,
+            "min": 160088064,
+            "max": 160489472
+          },
+          "process_wall_seconds": {
+            "median": 3.958091707987478,
+            "min": 3.7448934169951826,
+            "max": 4.689120583003387
+          }
+        },
+        "after": {
+          "successful": 3,
+          "attempted": 3,
+          "wall_seconds": {
+            "median": 5.0907545420050155,
+            "min": 5.020258167001884,
+            "max": 5.524318375013536
+          },
+          "cpu_seconds": {
+            "median": 4.677771,
+            "min": 4.6245259999999995,
+            "max": 4.909682
+          },
+          "peak_rss_bytes": {
+            "median": 159555584,
+            "min": 159105024,
+            "max": 160440320
+          },
+          "process_wall_seconds": {
+            "median": 5.325174750003498,
+            "min": 5.224862124974607,
+            "max": 5.770410290977452
+          }
+        },
+        "outputs": {
+          "result.tsv": {
+            "rows": [
+              2,
+              2
+            ],
+            "added_columns": [
+              "bootstrap_attempted",
+              "bootstrap_failed",
+              "bootstrap_succeeded",
+              "coefficient_profile",
+              "covariance_basis",
+              "interval_method",
+              "monte_carlo_se",
+              "objective_kind",
+              "objective_value",
+              "observation_model",
+              "p_value_method",
+              "penalty_value"
+            ],
+            "removed_columns": [],
+            "changed_columns": [
+              "response_dispersion",
+              "separation_warning",
+              "coefficient",
+              "standard_error",
+              "statistic",
+              "p_value",
+              "confidence_interval_lower",
+              "confidence_interval_upper",
+              "condition_number",
+              "evolutionary_rate",
+              "inference_status"
+            ],
+            "equivalent_shared_columns": false
+          }
+        },
+        "ratios": {
+          "wall_seconds": 1.3701680880389997,
+          "cpu_seconds": 1.340911853232048,
+          "peak_rss_bytes": 0.9961640752864157
+        }
+      }
+    }
+  }
+}

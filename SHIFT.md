@@ -8,8 +8,15 @@ scope and the unmet power criterion. Known-error calibration and claims about
 convergence remain research uses.
 The [final calibration attempt](SHIFT_CALIBRATION_DECISION.md) found no improvement
 and is closed without adopting its prototype.
-No R installation is needed for this mode. Larger searches and the historical
-IC methods require an explicit `--selection ic`; they are not calibrated by this change.
+No R installation is needed for this mode. Native multivariate fitting and larger
+research searches use `--selection native`; historical IC methods use `--selection ic`.
+
+## Native multivariate mode
+
+For shared multivariate layouts, missing observations, native discovery and
+full-search bootstrap replay, see [Native OU shift inference](NATIVE_SHIFT.md).
+That research implementation is distinct from the restricted calibrated method
+and has not passed its production-adoption gates.
 
 ## Legacy IC backend
 

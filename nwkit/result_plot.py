@@ -489,9 +489,17 @@ def _diagnostic_lines(data):
         f"Shared species events: {len(groups)} ({sum(v > 1 for v in groups.values())} represented by multiple gene nodes)"
     )
     if manifest.get("experimental_native_estimator"):
-        lines.append(
-            "Native intervals are conditional estimates, not MCMC posterior intervals."
+        lines.extend(
+            [
+                "Exploratory native RADTE estimate; general interval coverage is not established.",
+                "Native intervals are conditional estimates, not MCMC posterior intervals.",
+                "Conditioned on the species calibration and reconciliation assumptions.",
+            ]
         )
+        if "profile" in interval and manifest.get("sequence_model"):
+            lines.append(
+                "Profile intervals also condition on the fitted substitution model."
+            )
     descriptions = {
         "rate_sd_changes_uncertainty_only_in_tree_mode": "Fixed rate SD affects interval width, not point ages (tree-only input).",
         "conditional_on_input_branch_lengths_and_root_split": "Conditional on the supplied branch lengths and root split.",

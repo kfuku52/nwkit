@@ -1,0 +1,47 @@
+{
+  "slow": [
+    {
+      "cpu": 2.3238180000000006,
+      "shape": [
+        128,
+        128
+      ],
+      "rhs_shape": [
+        128,
+        2
+      ],
+      "min_abs": 0.00496504555690369,
+      "max_abs": 1.0,
+      "file": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-measured-vpfetzlh/inspect-solve/factor0.npz"
+    }
+  ],
+  "threadpools": [
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libopenblas",
+      "filepath": "/Users/kf/miniforge3/lib/python3.10/site-packages/numpy/.dylibs/libopenblas64_.0.dylib",
+      "version": "0.3.23.dev",
+      "threading_layer": "pthreads",
+      "architecture": "Nehalem"
+    },
+    {
+      "user_api": "blas",
+      "internal_api": "mkl",
+      "num_threads": 1,
+      "prefix": "libmkl_rt",
+      "filepath": "/Users/kf/miniforge3/lib/libmkl_rt.dylib",
+      "version": "2020.0.4",
+      "threading_layer": "intel"
+    },
+    {
+      "user_api": "openmp",
+      "internal_api": "openmp",
+      "num_threads": 1,
+      "prefix": "libomp",
+      "filepath": "/Users/kf/miniforge3/lib/libomp.dylib",
+      "version": null
+    }
+  ]
+}

@@ -352,6 +352,11 @@ Save **only these two columns** as `regimes.tsv` and pass
 ID, including root 0, must occur exactly once. Assignments are per incoming
 branch and do not automatically propagate to descendants. The map specifies
 the regimes; ASR does not search for their locations.
+The [`nwkit shift`](SHIFT.md) command generates this map using calibrated
+small-tree selection by default, or the explicit legacy kfl1ou backend. Passing
+it to ASR performs a new fit. Calibrated contrast densities cannot be compared
+directly with ASR full-data likelihoods; ASR does not inherit alpha-limit models
+or selection uncertainty.
 
 Rerooting, pruning, or reordering the actual input tree can change IDs. If the
 input changes, regenerate both the ID table/figure and the regime map. Use the

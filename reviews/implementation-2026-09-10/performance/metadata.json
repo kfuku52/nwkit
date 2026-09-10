@@ -1,0 +1,73 @@
+{
+  "hardware": "Apple M2 Max; 64 GiB RAM",
+  "python_architecture": "x86_64",
+  "revisions": {
+    "before": "8ad95448892102f86641d1341e7f5e928221e897",
+    "reviewed": "e2465b048f7529b7dad84cb6722278406bb49bbe",
+    "radte_first": "042342781fdeb116f126eed4bdd312ae57d9d3c9",
+    "branch_cli_first": "97491cbd0a24393eeb6a28b56e02ee95da546294"
+  },
+  "input_sha256": {
+    "tree64.nwk": "ed3fc93e2ffc5b0bac028c9a83072ea841ad9e4b536c9d0af5c7e8d4d5232d56",
+    "tree512.nwk": "82bf5447ef73a5b4081607937a1788f2e95bef53021f76d47ef80ee2f63a254f",
+    "tree128.nwk": "8b4b63b38f310507bce67a151399f64030207369896dedfd6c34b6eaab1842b1",
+    "tree60.nwk": "23f2b5dd847d1d8f24d7c6c24de273739607dd3af9196119ae5a0f364529409c",
+    "traits64.tsv": "f6062e1626da45857ce917e5b71907ff047fb34a81b1cafac45cfc0a2929ccc9",
+    "traits256.tsv": "418d5a165414df5f0fe27b689a4fa33e45c839aca5f543cac5b108e0145a19e9",
+    "traits1024.tsv": "1be3c7df003eabecca4f29693746afb0bbae8344c578b74224c851fb7da37494",
+    "traits2048.tsv": "655c58f00453bce1bd9f46f199a9510c817b8a5d9ca7be62ab426524fbf64f6f",
+    "balanced2048.nwk": "4e20373fab95c381c75007038801f45cf26e25e091ffcfa3d2af1c996cae43a9",
+    "comb1600.nwk": "23f808d6ef4f69655960b95847108ad3ab76bb934d44097490bedf7f886705dd",
+    "traits60.tsv": "5ad8ac4bde926a18e1ac5be201cece332280ad566fc1a3c82c114daee46b07e1",
+    "traits512.tsv": "8e83f82a26dec55263d6e3633babc3d9d33bdb8a323621460f41f34f187a0ae0",
+    "ensemble.nwk": "a0286a0fe604763233c58e6a8a793b8a630adac6f4fe0504662f7bd276e48a8e",
+    "tree30.nwk": "7e748185c08f9a8ac7ae1807d1a8b17b4e5a8ec964a79b7677cedff393e852fa",
+    "traits128.tsv": "af5809a5395cdaf82721bfbe166de2d5a16b49d765156e4b85b0bb66c99dba22",
+    "branch-models512.tsv": "80a5f8da9b96b56fe392fc76f5c29b3a6040d081a055b653006b8cacbb39aa3e",
+    "traits30.tsv": "ee52e1d7afc9c0bbe27c6a4c935ac3acdfc0e2885bb58906b3ea967db9ebf382",
+    "branch-models128.tsv": "dafbd4724ea294f273a963f4a51531704e3c8f78a2e3c43add48806e74a61ac1",
+    "tree256.nwk": "463592f8103409f98eacd96c98df1dea45fd1e425cb30444ac38bbb013a0ac18",
+    "tree2048.nwk": "4e20373fab95c381c75007038801f45cf26e25e091ffcfa3d2af1c996cae43a9",
+    "tree1024.nwk": "c14126b81e68d53b0f475884e78a2ecbc3d992f4562b29cf7b09bdebbf129acc",
+    "binomial-n60-p0.05/tree.nwk": "cfe4be90d5c8150db6f25fb358bdb13903df8f2f2c519d0d45c0a4c358d7f524",
+    "binomial-n60-p0.05/traits.tsv": "0a1cfe117f50fe988d67457f61af4e5d0762e689dea7ac020799fff4530cdb90",
+    "binomial-n60-p0.05/covariance.tsv": "b2424ce3a61eaab6882fea268fcb2fb7123da6713e64eb9cc2448a95d30228a9",
+    "negative-binomial-n30-boundary/tree.nwk": "25ba81d3e83e86f6d98582b4fac9a302e4ddb5fa333561a98906f97daf863365",
+    "negative-binomial-n30-boundary/traits.tsv": "a01ae1dd26caf74bfe8daf9e76644f37a160f2cd1136795a7e23e48e7821c2d1",
+    "negative-binomial-n30-boundary/covariance.tsv": "44814da8ccdeb2d21dc43c0a50361c1797f4da5456e7858f382a194e5f43e149",
+    "radte8/gene.nwk": "b4c9c6ad37fbfbe9a1644b0f26a97ecb8888ed820d3807a5b2b644218d32ee17",
+    "radte8/species.nwk": "cf3036a55d218a8b173bd5107cc847e5f1b513a77a9ff5f7faad843ec7864210",
+    "radte8/mapping.tsv": "1174c5e1c9f22d2a43e19431c4866f05a96e374ed686f4f56391a0704ca7c30b",
+    "radte8/alignment.fasta": "d073128cde62158a0a92a479a7719f5e2bc3543117d45bf84b6686c00c7b2c50",
+    "radte8/truth.json": "a9026253185b342bce96aecba57ec21c1a491a92a5eddce95d27ec994ae329ab",
+    "radte16/gene.nwk": "4675a643b8f7727d29d296b2d2c6a7e4f58423c127b28f04ab37327009d258b3",
+    "radte16/species.nwk": "819b4bd20e6cb9c3612e12b4e304864b4d52ec8c29fad891009c0450c996d795",
+    "radte16/mapping.tsv": "3c5622a1c59ca0eacd2aa962354cce3c5c520dcb231613cc3dac8c2cee751fa0",
+    "radte16/alignment.fasta": "d33420294a0a0ca30c3ff20291275de34e0812b583291c61a4ed682bdc450b80",
+    "radte16/truth.json": "a9026253185b342bce96aecba57ec21c1a491a92a5eddce95d27ec994ae329ab"
+  },
+  "patched_sha256": {
+    "nwkit/asr.py": "08406468cc099c39259263df02c9e858a7b256f69d4d1270a0e988c43df0a0ed",
+    "nwkit/asr_figure.py": "296d67de61f10eedddc8a31ac5334fba310e50bee0df57f120ab0fa20af0c151",
+    "nwkit/asr_output.py": "5740dee75ee6e68eaa7ec065056f08e5c0c4bb97f217110722a5cbc819bafd11",
+    "nwkit/pca.py": "3f7726532cb2cdf2d3162272232be4347bb509fb4518f3c574d183de0a763242",
+    "tests/test_asr_output.py": "5b44a86b32b184fd226792734b1d2e6bb4fe20e4520fa67c59d2c925525a0a18",
+    "tests/test_pca.py": "02ccc66eca7297e715ce4f0c6cd47f5d19164fc57c368cafb3a0bdc94c1862f2"
+  },
+  "dependencies": {
+    "numpy": "1.26.4",
+    "scipy": "1.15.2",
+    "pandas": "2.2.3",
+    "ete4": "4.4.0",
+    "threadpoolctl": "3.5.0"
+  },
+  "initial_patched_sha256": {
+    "nwkit/asr.py": "08406468cc099c39259263df02c9e858a7b256f69d4d1270a0e988c43df0a0ed",
+    "nwkit/asr_figure.py": "296d67de61f10eedddc8a31ac5334fba310e50bee0df57f120ab0fa20af0c151",
+    "nwkit/asr_output.py": "ebc81e30729e308d9346c724400302c21dbeb02a02b8004c1e99b90ee46cb78a",
+    "nwkit/pca.py": "3f7726532cb2cdf2d3162272232be4347bb509fb4518f3c574d183de0a763242",
+    "tests/test_asr_output.py": "c42ba15eea7e02f66defae8d556ee084094a27db2bf1018ede4564cdffb203db",
+    "tests/test_pca.py": "02ccc66eca7297e715ce4f0c6cd47f5d19164fc57c368cafb3a0bdc94c1862f2"
+  },
+  "final_stdout_adjustment_rechecked": "136 related tests, lint, typecheck, Bandit, maintainability and dist; ensemble benchmark repeated in additional-results.json. Other measured command paths are unchanged."
+}

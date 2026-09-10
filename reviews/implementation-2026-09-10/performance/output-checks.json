@@ -1,0 +1,3570 @@
+{
+  "startup": [],
+  "nwk2table-balanced-2048": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          4095,
+          4095
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "nwk2table-comb-1600": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          3199,
+          3199
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-BM-128": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-BM-1024": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-OU-128": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-OU-512": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1023,
+          1023
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-ER-128": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-ER-1024": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2047,
+          2047
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-MV-BM-64": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          254,
+          254
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "asr-MV-BM-256": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          1022,
+          1022
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "regress-lambda-128": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "regress-lambda-512": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [
+          "bootstrap_attempted",
+          "bootstrap_failed",
+          "bootstrap_succeeded",
+          "coefficient_profile",
+          "covariance_basis",
+          "interval_method",
+          "monte_carlo_se",
+          "objective_kind",
+          "objective_value",
+          "observation_model",
+          "p_value_method",
+          "penalty_value"
+        ],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "regress-binomial-30": [],
+  "asr-ensemble-128": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "ensemble.tsv",
+      "check": {
+        "rows": [
+          255,
+          255
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "pca-256": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.tsv",
+      "check": {
+        "rows": [
+          256,
+          256
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "eigenvalues.tsv",
+      "check": {
+        "rows": [
+          2,
+          2
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "radte-branch-8": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          31,
+          31
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ],
+  "radte-branch-16": [
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "after",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 0,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "after",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 1,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "after",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "after",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    },
+    {
+      "label": "before",
+      "repeat": 2,
+      "baseline": "before",
+      "table": "result.nodes.tsv",
+      "check": {
+        "rows": [
+          63,
+          63
+        ],
+        "added_columns": [],
+        "removed_columns": [],
+        "changed_columns": [],
+        "equivalent_shared_columns": true
+      }
+    }
+  ]
+}

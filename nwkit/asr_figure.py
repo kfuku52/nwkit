@@ -740,7 +740,9 @@ def write_continuous_asr_figure(
                 bbox_inches="tight",
                 facecolor="white",
             )
-            if getattr(args, "_branch_output_staged", False):
+            if getattr(args, "_branch_output_staged", False) or getattr(
+                args, "_ensemble_output_staged", False
+            ):
                 figure.savefig(args.figure_out, **options)
             else:
                 with output_transaction([args.figure_out]) as staged:

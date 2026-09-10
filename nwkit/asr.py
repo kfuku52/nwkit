@@ -2969,6 +2969,7 @@ def _validate_asr_output_paths(args):
                 "rate_matrix",
                 "rate_design",
                 "regime_map",
+                "regime_parameters",
                 "transition_graph",
                 "tree_ensemble",
                 "measurement_covariance",
@@ -3043,6 +3044,12 @@ def _validate_asr_output_paths(args):
 
 
 def asr_main(args):
+    if getattr(args, "tree_ensemble", None) and not getattr(
+        args, "_ensemble_output_staged", False
+    ):
+        from nwkit.asr_output import run_ensemble_transaction
+
+        return run_ensemble_transaction(args, asr_main)
     if getattr(args, "model", None) == "BRANCH-GAUSSIAN" and not getattr(
         args, "_branch_output_staged", False
     ):

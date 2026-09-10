@@ -1,0 +1,13 @@
+{
+  "local_archive": "/Users/kf/.codex/visualizations/2026/09/09/01a0889a-f8d0-7b90-b1d2-b38fa3fb9b05/native-dating-validation-raw",
+  "original_root": "/Users/kf/repos/nwkit/tmp",
+  "directories": [
+    "default-profile-validation",
+    "default-profile-stress",
+    "default-profile-oracle",
+    "default-profile-pilot",
+    "default-profile-pilot-v2",
+    "default-profile-pilot-report"
+  ],
+  "verified": "Every source raw file matched its archived SHA256 before removal from tmp; the 650-family report audited original inputs and results."
+}

@@ -61,20 +61,28 @@ def _validate_outputs(args):
 
 
 def _retained_tree(tree, names):
-    for node, identifier in assign_branch_ids(tree).items():
-        node.add_prop(_ID, identifier)
+    identifiers = assign_branch_ids(tree)
     retained = set(names)
-    root = tree.common_ancestor(names).copy(method="deepcopy")
+    crown = tree.common_ancestor(names)
     keep: dict[Any, bool] = {}
-    for node in root.traverse("postorder"):
+    for node in crown.traverse("postorder"):
         keep[node] = (
             node.name in retained
             if node.is_leaf
             else any(keep[child] for child in node.children)
         )
-    for node in list(root.traverse("postorder")):
-        if not keep[node] and not node.is_root:
-            node.detach()
+    # Copy retained nodes iteratively: ETE deepcopy recurses through child links.
+    copies = {}
+    for node in crown.traverse("preorder"):
+        if not keep[node]:
+            continue
+        clone = type(tree)()
+        clone.props.update(node.props)
+        clone.add_prop(_ID, identifiers[node])
+        copies[node] = clone
+        if node is not crown:
+            copies[node.up].add_child(clone)
+    root = copies[crown]
     set_rooting_info(root, True, source="operation")
     return root
 

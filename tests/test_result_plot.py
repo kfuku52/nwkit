@@ -386,6 +386,21 @@ def test_not_requested_intervals_are_points_only(result_dir):
     assert not any("95%" in line for line in lines)
 
 
+def test_native_profile_label_exposes_scientific_limits(result_dir):
+    from nwkit.result_plot import _diagnostic_lines
+
+    data = load_data(result_dir)
+    data.manifest["sequence_model"] = {"model": "gy94"}
+    lines = _diagnostic_lines(data)
+    assert any("Exploratory native RADTE" in line for line in lines)
+    assert any("general interval coverage is not established" in line for line in lines)
+    assert any("fitted substitution model" in line for line in lines)
+    data.manifest["experimental_native_estimator"] = False
+    assert not any(
+        "Exploratory native RADTE" in line for line in _diagnostic_lines(data)
+    )
+
+
 def test_paml_unestimated_species_nodes_use_explicit_input_positions():
     from ete4 import Tree
 

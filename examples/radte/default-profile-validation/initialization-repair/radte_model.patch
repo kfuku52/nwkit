@@ -1,0 +1,27 @@
+--- a/nwkit/radte_model.py
++++ b/nwkit/radte_model.py
+@@ -467,8 +467,23 @@
+             problem = DatingProblem(
+                 chronology, rho=rho, likelihood=likelihood, rate_sd=sd
+             )
++        sequence_initial = ages
++        if (
++            not marginal
++            and len(problem.free)
++            and np.any(chronology.durations(ages) <= 2 * chronology.min_duration)
++            and not np.array_equal(ages, chronology.initial)
++        ):
++            # A branch-only warm start can collapse an edge against its time
++            # constraint. Initializing log rates there gives enormous age
++            # gradients and can make SLSQP report incompatible constraints even
++            # though the chronology is feasible. Start the exact sequence fit
++            # from the existing feasible interior instead. The objective,
++            # fitted rate SD, allowed ages and final minimum duration are unchanged.
++            sequence_initial = chronology.initial
++            diagnostics.append("sequence_initial_ages_reset_from_duration_boundary")
+         x, sequence_attempts = solve_problem(
+-            problem, starts=starts, maxiter=maxiter, seed=seed, initial=ages
++            problem, starts=starts, maxiter=maxiter, seed=seed, initial=sequence_initial
+         )
+         final_attempts = sequence_attempts
+         for attempt in sequence_attempts:

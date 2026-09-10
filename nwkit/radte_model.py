@@ -383,6 +383,23 @@ def solution_diagnostics(problem, x, ages, attempts, starts):
     return diagnostics
 
 
+def _sequence_initial_ages(chronology, ages, *, marginal, has_free_ages):
+    if (
+        not marginal
+        and has_free_ages
+        and np.any(chronology.durations(ages) <= 2 * chronology.min_duration)
+        and not np.array_equal(ages, chronology.initial)
+    ):
+        # A branch-only warm start can collapse an edge against its time
+        # constraint. Initializing log rates there gives enormous age
+        # gradients and can make SLSQP report incompatible constraints even
+        # though the chronology is feasible. Start the exact sequence fit
+        # from the existing feasible interior instead. The objective,
+        # fitted rate SD, allowed ages and final minimum duration are unchanged.
+        return chronology.initial
+    return ages
+
+
 def fit_dates(
     chronology,
     *,
@@ -467,8 +484,13 @@ def fit_dates(
             problem = DatingProblem(
                 chronology, rho=rho, likelihood=likelihood, rate_sd=sd
             )
+        sequence_initial = _sequence_initial_ages(
+            chronology, ages, marginal=marginal, has_free_ages=bool(len(problem.free))
+        )
+        if sequence_initial is not ages:
+            diagnostics.append("sequence_initial_ages_reset_from_duration_boundary")
         x, sequence_attempts = solve_problem(
-            problem, starts=starts, maxiter=maxiter, seed=seed, initial=ages
+            problem, starts=starts, maxiter=maxiter, seed=seed, initial=sequence_initial
         )
         final_attempts = sequence_attempts
         for attempt in sequence_attempts:

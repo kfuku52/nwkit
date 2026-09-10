@@ -36,6 +36,10 @@ include REGRESSION_SELECTION.md
 graft examples/regression_selection
 
 include SHIFT.md
+include NATIVE_SHIFT.md
+include NATIVE_SHIFT_VALIDATION.md
+include NATIVE_SHIFT_SCALING.md
+graft reviews/native-scale-2026-09-10
 include SHIFT_VALIDATION.md
 include SHIFT_JOINT.md
 include SHIFT_PBIC.md

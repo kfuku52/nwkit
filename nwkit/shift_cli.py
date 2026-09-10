@@ -10,9 +10,9 @@ def register_shift(subparsers, tree_input, table_output):
     )
     parser.add_argument(
         "--selection",
-        choices=["calibrated", "ic"],
+        choices=["calibrated", "ic", "native"],
         default="calibrated",
-        help="Selection method (default: calibrated; 4..16 tips, <=2 shifts). IC is the legacy external method.",
+        help="Method (default: calibrated; 4..16 tips, <=2 shifts). Native fits multivariate fixed layouts or runs experimental calibrated search without R; IC is the legacy external method.",
     )
     parser.add_argument(
         "--calibration-replicates",
@@ -35,7 +35,7 @@ def register_shift(subparsers, tree_input, table_output):
         "--state-column",
         "--state_column",
         required=True,
-        help="Continuous trait column (complete observations required).",
+        help="Continuous trait column; native mode accepts comma-separated columns and missing coordinates.",
     )
     parser.add_argument(
         "--model-out",
@@ -127,10 +127,104 @@ def register_shift(subparsers, tree_input, table_output):
         "--standard_error_column",
         help="Known SE of each tip observation; finite nonnegative values in --trait. Variances are SE squared, not estimated.",
     )
+    _register_native_options(parser)
     parser.set_defaults(handler=_command_shift)
 
 
+def _register_native_options(parser):
+    for name, default in [
+        ("candidate-pool", 24),
+        ("refit-budget", 48),
+        ("screening-budget", 2000),
+        ("beam-width", 2),
+        ("lasso-iterations", 150),
+        ("search-memory-mb", 512),
+    ]:
+        parser.add_argument(
+            "--" + name,
+            "--" + name.replace("-", "_"),
+            type=int,
+            default=default,
+            help=f"Native search budget (default: {default}).",
+        )
+    parser.add_argument(
+        "--resume-model",
+        "--resume_model",
+        help="Reuse a completed native JSON only when input, configuration and implementation fingerprints match.",
+    )
+    parser.add_argument(
+        "--regime-map",
+        "--regime_map",
+        help="Native fixed layout: complete branch_id/regime TSV, including root 0.",
+    )
+    parser.add_argument(
+        "--alpha",
+        help="Native fixed alpha in original branch-time units; one value or comma-separated values per trait (0/inf limits supported).",
+    )
+    parser.add_argument(
+        "--process-tip-variance",
+        "--process_tip_variance",
+        help="Native fixed process tip variance, in original trait units squared; one value or one per trait.",
+    )
+    parser.add_argument(
+        "--measurement-variance",
+        "--measurement_variance",
+        help="Native fixed extra observation variance in addition to known SE squared; one value or one per trait.",
+    )
+    parser.add_argument(
+        "--estimate-measurement-error",
+        "--estimate_measurement_error",
+        action="store_true",
+        help="Native mode: estimate an additional observation variance per trait.",
+    )
+    parser.add_argument(
+        "--optimizer-starts",
+        "--optimizer_starts",
+        type=int,
+        default=3,
+        help="Native deterministic variance-optimizer starts (default: 3).",
+    )
+    parser.add_argument(
+        "--max-iterations",
+        "--max_iterations",
+        type=int,
+        default=300,
+        help="Native iterations per variance-optimizer start (default: 300).",
+    )
+
+
 def _command_shift(args):
+    if args.selection == "native":
+        from nwkit.shift_native_output import native_main
+
+        return native_main(args)
+    if (
+        any(
+            getattr(args, name) is not None
+            for name in (
+                "regime_map",
+                "alpha",
+                "process_tip_variance",
+                "measurement_variance",
+            )
+        )
+        or args.estimate_measurement_error
+        or args.optimizer_starts != 3
+        or args.max_iterations != 300
+        or args.resume_model
+        or any(
+            getattr(args, name) != value
+            for name, value in [
+                ("candidate_pool", 24),
+                ("refit_budget", 48),
+                ("screening_budget", 2000),
+                ("beam_width", 2),
+                ("lasso_iterations", 150),
+                ("search_memory_mb", 512),
+            ]
+        )
+    ):
+        raise ValueError("Native fitting options require --selection native.")
     from nwkit.shift import shift_main
 
     return shift_main(args)

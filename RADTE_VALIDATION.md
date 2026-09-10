@@ -268,3 +268,20 @@ against independent linear programs, shared ages, unavailable/stale intervals,
 and CLI output. Broader RADTE/CLI tests include the exact and approximate PAML
 references; IQ-TREE integration is checked separately with its required local
 IQ2MC/session extension.
+
+## Native GY94 default-profile study (2026-09-10)
+
+The [external-sequence default-profile study](examples/radte/default-profile-validation/README.md)
+records 400 primary and 250 stress families with fixed species ages, independently
+generated AliSim codon alignments, and refitted native GY94/F3x4 + G4 likelihoods.
+This is a distinct experiment from branch-observation interval validation above.
+Nominal 95% profile intervals show condition-dependent undercoverage; unavailable
+intervals and failed points remain in their original denominators.
+
+One internal family exposed a collapsed branch-only warm start. Resetting that
+near-minimum-duration sequence initializer to the existing chronology interior
+repairs a feasible optimization failure without changing the objective or age
+constraints. The original study retains its failure; the retained regression
+fixture and a separate 20-family post-fix check are described in that record.
+Neither this numerical repair nor the exploratory plot labels establish 95%
+coverage. Species-age uncertainty is not propagated in this study.

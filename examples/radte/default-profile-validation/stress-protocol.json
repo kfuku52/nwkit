@@ -1,0 +1,14 @@
+{
+  "role": "held-out-stress-validation",
+  "purpose": "Prespecified follow-up sensitivity cases for default GY94/profile; no method tuning or species-age uncertainty propagation.",
+  "generator": "External AliSim GY{0.5,2}+FQ+G4{0.7}, independent lognormal rates and true topology. Loss changes the chronology; copy-wide shift and wrong mapping deliberately violate the fitted assumptions.",
+  "estimand": "One original root duplication D at age 20 per family. Wrong-map results only assess that retained event and do not validate newly inferred events.",
+  "decision": "Report all attempted families and Wilson intervals. These small stress cells map limitations; they do not certify 95% coverage or rank methods. No post-hoc exclusions, threshold or method changes.",
+  "cases": [
+    {"name": "long_alignment", "species": 2, "codons": 1000, "rate_sd": 0.3, "seed": 910000, "families": 50},
+    {"name": "larger_family", "species": 8, "codons": 300, "rate_sd": 0.3, "seed": 920000, "families": 50},
+    {"name": "loss_rate_shift", "species": 4, "codons": 300, "rate_sd": 0.3, "scenario": "loss", "copy_ratio": 3.0, "seed": 930000, "families": 50},
+    {"name": "wrong_mapping", "species": 2, "codons": 300, "rate_sd": 0.3, "mapping_errors": 1, "seed": 940000, "families": 50},
+    {"name": "low_sd", "species": 2, "codons": 300, "rate_sd": 0.1, "seed": 950000, "families": 50}
+  ]
+}

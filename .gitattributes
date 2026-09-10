@@ -1,2 +1,7 @@
 *.svg -whitespace
 *.tsv -whitespace
+
+# Preserve generated logs, patch context, and the original simulator fixture.
+reviews/**/*.log -whitespace
+reviews/native-scale-2026-09-10/changes.patch -whitespace
+tests/data/radte-initial-boundary/alignment.fa -whitespace

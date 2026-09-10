@@ -1,0 +1,46 @@
+{
+  "balanced-2": {
+    "finite": true,
+    "equivalent": true,
+    "max_absolute_difference": 1.8189894035458565e-12,
+    "wall_before": 0.7644100839970633,
+    "wall_after": 0.1206970409839414,
+    "cpu_before": 0.7588270000000001,
+    "cpu_after": 0.12048900000000007,
+    "rss_before_mib": 162.96875,
+    "rss_after_mib": 137.16015625
+  },
+  "balanced-4": {
+    "finite": true,
+    "equivalent": true,
+    "max_absolute_difference": 1.8189894035458565e-12,
+    "wall_before": 1.5482864169753157,
+    "wall_after": 0.2405003749881871,
+    "cpu_before": 1.5397700000000003,
+    "cpu_after": 0.23989499999999997,
+    "rss_before_mib": 171.703125,
+    "rss_after_mib": 145.21875
+  },
+  "pectinate-2": {
+    "finite": true,
+    "equivalent": true,
+    "max_absolute_difference": 1.8189894035458565e-12,
+    "wall_before": 0.8302091250079684,
+    "wall_after": 0.13424954097718,
+    "cpu_before": 0.8256310000000004,
+    "cpu_after": 0.13347200000000004,
+    "rss_before_mib": 164.85546875,
+    "rss_after_mib": 131.83203125
+  },
+  "pectinate-4": {
+    "finite": true,
+    "equivalent": true,
+    "max_absolute_difference": 3.637978807091713e-12,
+    "wall_before": 1.684694750001654,
+    "wall_after": 0.25937666703248397,
+    "cpu_before": 1.662629,
+    "cpu_after": 0.2575209999999999,
+    "rss_before_mib": 176.765625,
+    "rss_after_mib": 138.9296875
+  }
+}
