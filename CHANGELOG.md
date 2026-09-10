@@ -6,6 +6,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
+- Add a fixed-parameter branch-specific scalar Gaussian Python API combining
+  BM, OU and prescribed Gaussian end jumps, with explicit roots and shared
+  likelihood, ancestral-state conditioning and simulation.
+
 - Add `nwkit dtt` for scalar or joint continuous-trait disparity through time,
   fitted Brownian simulations, MDI, transactional TSV/JSON outputs and figures
   with aligned observed-trait trees, compact heatmaps by default for any trait count, and independent

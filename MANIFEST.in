@@ -24,3 +24,6 @@ include IQTREE_LIBRARY.md
 
 include DTT.md
 graft examples/dtt
+
+include BRANCH_GAUSSIAN.md
+graft examples/branch_gaussian

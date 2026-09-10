@@ -1456,3 +1456,9 @@ evenly spaced names sorted by value. ASR labels use posterior tip means,
 including imputed tips. Simulation labels use the first sampled history's tip
 endpoints, explicitly identified when several histories are drawn. Labels are
 off by default. The input names and numerical outputs are unchanged.
+
+## Branch-specific Gaussian Python API
+
+For fixed BM/OU parameters and prescribed Gaussian end jumps on individual
+branches, see [the branch-specific Gaussian API](BRANCH_GAUSSIAN.md). The same
+process supports likelihood, ancestral-state conditioning and simulation.

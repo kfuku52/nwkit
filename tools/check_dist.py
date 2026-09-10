@@ -89,6 +89,8 @@ def main() -> int:
     with tarfile.open(sdist, "r:gz") as archive:
         sdist_members = set(archive.getnames())
     required_sdist = {"/" + member for member in required_wheel} | {
+        "/BRANCH_GAUSSIAN.md",
+        "/examples/branch_gaussian/mixed_process.py",
         "/DTT.md",
         "/examples/dtt/README.md",
         "/examples/dtt/dtt.png",
