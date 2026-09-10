@@ -87,6 +87,10 @@ def continuous_output_table(
 
 def continuous_model_table(fit, args, ci_level):
     model = getattr(args, "model", "BM")
+    if model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_asr import branch_model_table
+
+        return branch_model_table(fit, args, ci_level)
     if model in {"OU", "OUM", "OUMA", "OUMV", "OUMVA"}:
         theta = getattr(fit, "theta", None)
         theta_by_regime = getattr(fit, "theta_by_regime", None)

@@ -75,6 +75,12 @@ _MODEL_DEFINITIONS = (
         "CUSTOM", "discrete", "equal", ("equal", "empirical", "stationary")
     ),
     _evolution_definition("brownian"),
+    AsrModelDefinition(
+        "BRANCH-GAUSSIAN",
+        "continuous",
+        "flat",
+        ("fixed", "flat", "gaussian", "stationary"),
+    ),
     AsrModelDefinition("JUMP-BM", "continuous", "flat", ("flat",)),
     AsrModelDefinition("MM-BM", "continuous", "flat", ("flat",)),
     AsrModelDefinition("MM-OU", "continuous", "flat", ("flat",)),

@@ -33,6 +33,9 @@ def regression_bundle_lock_path(prefix: str) -> str:
 
 
 STDIN_INPUT_DESTS = (
+    "branch_models",
+    "branch_regimes",
+    "regime_models",
     "infile",
     "infile2",
     "data",

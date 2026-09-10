@@ -483,9 +483,9 @@ pasr.add_argument(
     metavar="PATH",
     default=None,
     type=str,
-    required=True,
+    required=False,
     action="store",
-    help='TSV containing "leaf_name" and trait columns.',
+    help='TSV containing "leaf_name" and trait columns; --within-species-covariance uses individual-keyed long data instead.',
 )
 pasr.add_argument(
     "--state-column",
@@ -494,7 +494,7 @@ pasr.add_argument(
     metavar="STR",
     default=None,
     type=str,
-    required=True,
+    required=False,
     action="store",
     help="Trait column in --trait. Pagel models require exactly two comma-separated "
     "binary-trait columns; multivariate Gaussian models require two or more columns.",
@@ -533,7 +533,7 @@ pasr.add_argument(
     "MK-DESIGN/PAGEL-INDEPENDENT/PAGEL-DEPENDENT/MK-REGIME/HRM/COVARION/"
     "MK-MIXTURE/THRESHOLD/CUSTOM or continuous BM/BMS/LAMBDA/KAPPA/DELTA/"
     "JUMP-BM/MM-BM/MM-OU/EB/ACDC/BMS-DRIFT/BM-DRIFT/MV-BM/MV-OU/MV-OU-DIAG/MV-OU-FULL/OU/OUM/OUMA/"
-    "OUMV/OUMVA.",
+    "OUMV/OUMVA/BRANCH-GAUSSIAN.",
 )
 pasr.add_argument(
     "--rate",
@@ -737,7 +737,8 @@ pasr.add_argument(
     choices=["equal", "empirical", "stationary", "flat", "fixed", "gaussian"],
     help="model-specific default: Discrete equal (F81/GTR stationary), flat for BM-family "
     "models, and stationary for OU/OUM. OU also supports fixed or Gaussian roots. "
-    "Stationary uses the fitted/fixed process equilibrium; "
+    "BRANCH-GAUSSIAN requires an explicit prior and explicit proper-root parameters. "
+    "Other stationary models use the fitted/fixed process equilibrium; "
     "independent of --input-rooted.",
 )
 pasr.add_argument(
@@ -747,7 +748,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=finite_float,
-    help="OU with --root-prior fixed/gaussian: Required fixed root-state mean.",
+    help="Required root-state mean for OU fixed/gaussian roots and BRANCH-GAUSSIAN proper roots.",
 )
 pasr.add_argument(
     "--root-variance",
@@ -756,7 +757,7 @@ pasr.add_argument(
     metavar="FLOAT",
     default=None,
     type=nonnegative_finite_float,
-    help="OU with --root-prior gaussian: Required positive root-state variance.",
+    help="Required positive root-state variance for OU Gaussian roots and BRANCH-GAUSSIAN gaussian/stationary roots.",
 )
 pasr.add_argument(
     "--ambiguous-separator",
@@ -782,14 +783,14 @@ pasr.add_argument(
 )
 pasr.add_argument(
     "--output",
-    metavar="probabilities|map|summary",
+    metavar="probabilities|map|summary|likelihood|prior-samples",
     default=None,
     type=str,
     required=False,
     action="store",
-    choices=["probabilities", "map", "summary"],
+    choices=["probabilities", "map", "summary", "likelihood", "prior-samples"],
     help="default=probabilities for discrete, summary for continuous: "
-    "Report discrete probabilities/MAP states or continuous means, variances, and intervals.",
+    "Report discrete probabilities/MAP states or continuous means, variances, and intervals. BRANCH-GAUSSIAN also supports likelihood and prior-samples.",
 )
 pasr.add_argument(
     "--sigma2",
@@ -941,6 +942,26 @@ pasr.add_argument(
     default=None,
     type=str,
     help="Known non-negative measurement SEs. Multivariate models require a comma-separated SE column per trait.",
+)
+pasr.add_argument(
+    "--within-species-covariance",
+    "--within_species_covariance",
+    choices=["full", "diagonal"],
+    default=None,
+    help="MV-BM: jointly estimate evolutionary Sigma and common individual W. --trait becomes long TSV: leaf_name, individual_id, trait, value; --state-column lists traits.",
+)
+pasr.add_argument(
+    "--covariance-method",
+    "--covariance_method",
+    choices=["ML", "REML"],
+    default=None,
+    help="Joint individual covariance estimation method (default REML).",
+)
+pasr.add_argument(
+    "--individual-out",
+    "--individual_out",
+    metavar="PATH",
+    help="Joint individual MV-BM: conditional predictions for every trait of each listed individual, including missing coordinates.",
 )
 pasr.add_argument(
     "--replicate-observations",
@@ -1145,6 +1166,48 @@ pasr.add_argument(
     action="store",
     help="default=%(default)s: Optional TSV summarizing sampled stochastic-map transition counts per branch.",
 )
+for _map_option, _map_help in (
+    (
+        "map-history-out",
+        "Conditional stochastic-map segments: draw, branch, state, local times and times from the root.",
+    ),
+    (
+        "map-summary-out",
+        "Per-branch/state posterior duration summaries from the same stochastic maps.",
+    ),
+    (
+        "map-time-out",
+        "Time-bin state durations and directed transition counts, with lineage-time exposure.",
+    ),
+    (
+        "map-probabilities-out",
+        "Sampled state probabilities on a regular grid along every branch.",
+    ),
+    (
+        "map-figure-out",
+        "PNG/PDF/SVG tree with stacked state-probability ribbons (at most 20 states and 200 tips).",
+    ),
+):
+    pasr.add_argument(
+        "--" + _map_option,
+        "--" + _map_option.replace("-", "_"),
+        metavar="PATH",
+        help=_map_help,
+    )
+pasr.add_argument(
+    "--map-time-bins",
+    "--map_time_bins",
+    type=int,
+    default=None,
+    help="default=20 with --map-time-out: equal-width bins forward from the input root.",
+)
+pasr.add_argument(
+    "--map-grid-points",
+    "--map_grid_points",
+    type=int,
+    default=None,
+    help="default=51: probability-grid points per branch, including both endpoints.",
+)
 pasr.add_argument(
     "--n-sim",
     "--n_sim",
@@ -1154,7 +1217,7 @@ pasr.add_argument(
     type=int,
     required=False,
     action="store",
-    help="default=100 for discrete: Number of stochastic maps sampled when --stochastic-map-out is specified.",
+    help="default=100 for discrete: Number of stochastic maps for count, history, summary, probability or map-figure output.",
 )
 pasr.add_argument(
     "--threads",
@@ -6403,12 +6466,21 @@ register_result_plot_options(
 from nwkit.shift_cli import register_shift  # noqa: E402
 
 register_shift(subparsers, p_tree_input, p_table_output)
+from nwkit.signal_cli import register_signal  # noqa: E402
+
+register_signal(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.pca_cli import register_pca  # noqa: E402
+
+register_pca(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
 from nwkit.dtt_cli import register_dtt  # noqa: E402
 
 register_dtt(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
 from nwkit.regression_selection_cli import register_regression_selection  # noqa: E402
 
 register_regression_selection(subparsers, p_audit)
+from nwkit.branch_gaussian_options import register_branch_gaussian_options  # noqa: E402
+
+register_branch_gaussian_options(pasr)
 _add_input_rooting_options()
 
 

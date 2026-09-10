@@ -12,7 +12,6 @@ from nwkit.util import read_tree
 pytestmark = pytest.mark.integration
 
 CASES = {
-    "shift": ["--trait", "{data}", "--state-column", "x", "--model-out", "{model}"],
     "regress-select": [
         "--input-rooted",
         "yes",
@@ -32,6 +31,9 @@ CASES = {
         "0.5",
     ],
     "dtt": ["--trait", "{data}", "--columns", "x,y", "--n-sim", "9"],
+    "pca": ["--trait", "{data}", "--columns", "x,y"],
+    "signal": ["--trait", "{data}", "--columns", "x", "--n-sim", "9"],
+    "shift": ["--trait", "{data}", "--state-column", "x", "--model-out", "{model}"],
     "annotate": ["--table", "{data}"],
     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
     "asrcompare": [
@@ -127,8 +129,10 @@ CASES = {
 }
 
 TABLE_COLUMNS = {
-    "shift": "regime",
     "dtt": "relative_disparity",
+    "pca": "PC1",
+    "signal": "estimate",
+    "shift": "regime",
     "asr": "map_state",
     "asrcompare": "model",
     "cladefreq": "frequency",
@@ -188,8 +192,8 @@ def test_command_parser_reaches_its_real_handler(
     species = tmp_path / "species.txt"
     species.write_text("\n".join(names) + "\n")
     paths = {
-        "folds": folds,
         "tree": tree,
+        "folds": folds,
         "other": other,
         "data": data,
         "species": species,

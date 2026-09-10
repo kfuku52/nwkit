@@ -17,6 +17,7 @@ from nwkit.rooting_state import copy_rooting_info
 
 PATH_MODELS = frozenset(
     {
+        "BRANCH-GAUSSIAN",
         "BM",
         "BM-DRIFT",
         "BMS",
@@ -273,6 +274,12 @@ def simulate_fitted_paths(
     counts = _grid_counts(
         tree, steps, count, dimension, vector=model in _VECTOR_MODELS, mode=mode
     )
+    if model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_paths import simulate_branch_paths
+
+        return simulate_branch_paths(
+            tree, observed, errors, posterior, fit, counts, count, steps, mode, seed
+        )
     refined, chains, assignment = _refined_tree(tree, counts, regime_assignment)
     if model in _VECTOR_MODELS:
         nodes, values, description = _vector_samples(

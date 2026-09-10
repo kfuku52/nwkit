@@ -49,7 +49,9 @@ def validate_figure_options(args):
                 raise ValueError(f"--{name.replace('_', '-')} requires --figure-out.")
     if path in (None, ""):
         return
-    if Path(path).suffix.lower() not in {".pdf", ".svg", ".png"}:
+    if (
+        getattr(args, "_branch_figure_format", None) or Path(path).suffix[1:].lower()
+    ) not in {"pdf", "svg", "png"}:
         raise ValueError("--figure-out must use a .pdf, .svg, or .png extension.")
     inputs = [
         ("--" + name.replace("_", "-"), getattr(args, name, None))
@@ -62,6 +64,9 @@ def validate_figure_options(args):
             "rate_design",
             "transition_graph",
             "species_map_tsv",
+            "branch_models",
+            "branch_regimes",
+            "regime_models",
         )
     ]
     validate_outputs_do_not_replace_inputs(
@@ -394,6 +399,22 @@ def continuous_figure_width(tips, panels, *, wspace=0.24):
     )
 
 
+def _draw_prescribed_jumps(ax, nodes, values, depths, *, size=85):
+    """Mark post-event values at their original branch-end time."""
+    for node in nodes:
+        x = np.atleast_1d(values(node))
+        ax.scatter(
+            x,
+            np.full(len(x), depths[node]),
+            marker="*",
+            s=size,
+            facecolor="#E69F00",
+            edgecolor="#333333",
+            linewidth=0.7,
+            zorder=6,
+        )
+
+
 def build_continuous_asr_figure(
     tree,
     table,
@@ -415,6 +436,8 @@ def build_continuous_asr_figure(
     from nwkit.asr_heatmap import draw_tip_heatmap, heatmap_extra_space
 
     nodes, tips, positions, depths = _coordinates(tree)
+    prior_only = getattr(fit, "summary_kind", "posterior") == "prior"
+    jumps = getattr(fit, "jump_nodes", ())
     ids = assign_branch_ids(tree)
     traits = list(dict.fromkeys(table["trait"]))
     by_node, styles = _regime_styles(tree, regime_assignment)
@@ -443,6 +466,7 @@ def build_continuous_asr_figure(
         node_types,
         heatmap_traits=len(traits) if tip_heatmap else 0,
     )
+    _draw_prescribed_jumps(axes[0], jumps, lambda node: positions[node], depths)
     if tip_heatmap:
         draw_tip_heatmap(axes[0], table, tips, positions, overhang + 0.65)
     from nwkit.asr_tip_labels import draw_trait_tip_labels
@@ -459,6 +483,14 @@ def build_continuous_asr_figure(
         has_theta = has_theta or bool(theta)
         ax = axes[1 + index * panels_per_trait]
         _draw_trait(ax, rows, nodes, depths, ids, by_node, styles, theta, node_types)
+        _draw_prescribed_jumps(
+            ax,
+            jumps,
+            lambda node, rows=rows: float(rows.loc[ids[node], "mean"]),
+            depths,
+        )
+        if prior_only:
+            ax.set_title(f"{trait} | Prior", loc="left", fontweight="bold", pad=14)
         if trait_tip_labels:
             draw_trait_tip_labels(
                 ax,
@@ -466,7 +498,12 @@ def build_continuous_asr_figure(
                 tip_colors,
             )
         if simulation is not None:
-            ax.set_title(f"{trait} | ASR", loc="left", fontweight="bold", pad=14)
+            ax.set_title(
+                f"{trait} | {'Prior' if prior_only else 'ASR'}",
+                loc="left",
+                fontweight="bold",
+                pad=14,
+            )
             simulated_ax = axes[2 + index * panels_per_trait]
             _draw_simulation(
                 simulated_ax,
@@ -479,6 +516,15 @@ def build_continuous_asr_figure(
                 styles,
                 theta,
                 node_types,
+            )
+            _draw_prescribed_jumps(
+                simulated_ax,
+                jumps,
+                lambda node, index=index: simulation.branches[node].values[
+                    :, -1, index
+                ],
+                depths,
+                size=45,
             )
             limits = (
                 min(ax.get_xlim()[0], simulated_ax.get_xlim()[0]),
@@ -509,7 +555,7 @@ def build_continuous_asr_figure(
         ax.grid(axis="y", color="#EEEEEE", linewidth=0.7)
         ax.set_axisbelow(True)
     figure.suptitle(
-        f"Ancestral trait reconstruction | {model}",
+        f"{'Prior trait distribution' if prior_only else 'Ancestral trait reconstruction'} | {model}",
         x=0.08,
         ha="left",
         fontsize=16,
@@ -538,6 +584,21 @@ def build_continuous_asr_figure(
             label=f"{100 * level:g}% node interval",
         ),
     ]
+    if prior_only:
+        legend = [entry for entry in legend if entry.get_label() != "Observed tip"]
+    if jumps:
+        legend.append(
+            Line2D(
+                [],
+                [],
+                marker="*",
+                markersize=10,
+                markerfacecolor="#E69F00",
+                markeredgecolor="#333333",
+                linestyle="none",
+                label="Prescribed Gaussian end jump",
+            )
+        )
     if bool(table["is_imputed"].any()):
         legend.append(
             Line2D(
@@ -589,6 +650,10 @@ def build_continuous_asr_figure(
         "ASR lines connect node means; they are not reconstructed branch paths.\n"
         "Intervals condition on model parameters and the input tree."
     )
+    if prior_only:
+        notes = "Prior lines connect node means; intervals describe latent prior states.\nConditioned on the specified tree, branch assignments and parameters."
+    if jumps:
+        notes += " Stars mark prescribed branch-end jumps."
     if simulation is not None:
         conditioning = (
             "New histories, not conditioned on tips. "
@@ -642,11 +707,15 @@ def write_continuous_asr_figure(
             seed=getattr(args, "seed", None),
         )
     table = continuous_figure_table(tree, observed, errors, posterior, traits, settings)
+    if getattr(fit, "summary_kind", "posterior") == "prior":
+        table["is_imputed"] = False
     from matplotlib import rc_context
 
     from nwkit.asr_compare_figure import _font_family_for_text
 
     text = " ".join([*traits, *tree.leaf_names(), *table.trait.astype(str)])
+    if assignment is not None:
+        text += " " + " ".join(assignment.regimes)
     family = _font_family_for_text(text)
     with rc_context({"font.family": family} if family else {}):
         figure = build_continuous_asr_figure(
@@ -663,14 +732,18 @@ def write_continuous_asr_figure(
             trait_tip_labels=getattr(args, "figure_trait_tip_labels", "no") == "yes",
         )
         try:
-            with output_transaction([args.figure_out]) as staged:
-                figure.savefig(
-                    staged[args.figure_out],
-                    format=Path(args.figure_out).suffix[1:].lower(),
-                    dpi=180,
-                    bbox_inches="tight",
-                    facecolor="white",
-                )
+            options = dict(
+                format=getattr(args, "_branch_figure_format", None)
+                or Path(args.figure_out).suffix[1:].lower(),
+                dpi=180,
+                bbox_inches="tight",
+                facecolor="white",
+            )
+            if getattr(args, "_branch_output_staged", False):
+                figure.savefig(args.figure_out, **options)
+            else:
+                with output_transaction([args.figure_out]) as staged:
+                    figure.savefig(staged[args.figure_out], **options)
         finally:
             figure.clear()
 

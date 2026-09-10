@@ -601,3 +601,58 @@ Schema 7 also exports the null calibration method and each test's
 posterior probability. `grid_supremum` denotes a completed alpha-grid maximum.
 `plugin` denotes the known-error or later-stage approximation. Historical
 schema-6 files used a plug-in first-stage test as well.
+
+## Phylogenetic signal
+
+`signal --trait` follows the shared tip-keyed TSV, missing-value and unmatched
+policies. `--columns` selects continuous traits and `--standard-error-column`
+selects paired SE columns. Each trait/method retains a row, including
+unestimable traits; unavailable fields are empty. BH families are separate
+for K and lambda. See [SIGNAL.md](SIGNAL.md) for statistics and the schema.
+
+## Phylogenetic PCA
+
+`pca --trait` uses the shared tip-keyed TSV contract. `--columns` selects
+continuous traits, with missing rows rejected by default or jointly excluded
+by `--missing drop`. Primary output is `leaf_name, PC1, PC2, ...`.
+Auxiliary loadings, eigenvalues, model JSON, ancestral scores and figures use
+recoverable output installation and input-alias protection. Original input-tree
+branch IDs are retained in ancestral scores. See [PCA.md](PCA.md) for schemas.
+
+## Individual-level multivariate ASR
+
+With `asr --within-species-covariance full|diagonal`, `--trait` contains
+`leaf_name, individual_id, trait, value`; `--state-column` lists traits.
+Compound individual/trait keys must be unique. IDs remain literal strings,
+and missing-value tokens apply only to `value`. Outputs distinguish latent
+species/ancestral values from `--individual-out` predictions. Model output
+contains both evolutionary Sigma and within-species W. Details and all columns
+are documented in [ASR_INDIVIDUALS.md](ASR_INDIVIDUALS.md).
+
+## Discrete stochastic histories
+
+ASR map tables preserve original branch IDs. Histories use one-based draw and
+segment indices and local/root-relative branch-length coordinates. Duration
+summaries include zero-occupancy states; probabilities include both endpoints.
+Time-bin output reports durations and directed transitions normalized by actual
+lineage-time exposure. These are conditional map draws with fixed model
+parameters. See [STOCHASTIC_MAPS.md](STOCHASTIC_MAPS.md) for complete schemas,
+zero-length conventions, and the distinction between map variation and Monte
+Carlo error.
+
+## Branch-specific Gaussian models
+
+`asr --model BRANCH-GAUSSIAN` reads either a direct `branch_id, model, ...` TSV or separate
+`branch_id, regime` and `regime, model, ...` TSVs. Model names are `BM`, `OU`,
+and `JUMP`; numeric parameters are `sigma2`, `alpha`, `theta`, `jump_mean`, and
+`jump_variance`, as applicable. Unused cells must be blank, and all non-root IDs
+must appear exactly once. Unlike ASR's regime map, root 0 is excluded.
+
+Model tables reject duplicate/unknown columns, duplicate IDs, empty/ragged rows,
+non-finite numbers, missing required parameters and nonblank unused parameters.
+Trait missing markers do not apply to model tables. UTF-8 BOMs and one stdin
+input are supported. `--branch-models-out` emits a direct-assignment TSV suitable for
+reinput using 17 significant digits. `--model-out` remains the ASR model TSV;
+`--process-out` exports the process/run JSON. See
+[BRANCH_GAUSSIAN.md](BRANCH_GAUSSIAN.md) for required parameters, root treatment
+and the ASR, likelihood and simulation output schemas.

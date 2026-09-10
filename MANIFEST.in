@@ -43,3 +43,15 @@ include SHIFT_ALPHA.md
 include SHIFT_CALIBRATION.md
 include reviews/shift-calibration-review.md
 graft examples/shift
+
+include SIGNAL.md
+graft examples/signal
+
+include PCA.md
+graft examples/pca
+
+include ASR_INDIVIDUALS.md
+graft examples/individual_asr
+
+include STOCHASTIC_MAPS.md
+graft examples/stochastic_maps

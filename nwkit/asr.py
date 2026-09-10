@@ -2395,6 +2395,17 @@ def _uniformization_parameters(rate_matrix, branch_length):
             "floating-point indexing."
         )
     max_n = int(max(10, num_states - 1, poisson_limit))
+    if max_n <= _MAX_UNIFORMIZATION_TERMS and lam > 0:
+        # An unconditional Poisson tail is not a conditional bridge error bound:
+        # rare endpoints can put substantial conditional mass beyond that cutoff.
+        # Bound the omitted mass relative to every representable endpoint in P(t).
+        transition = _transition_matrix(rate_matrix, branch_length)
+        minimum = float(np.min(transition[transition > 0]))
+        log_target = math.log(minimum) + math.log(1e-12)
+        while _poisson_log_tail_bound(lam, max_n) > log_target:
+            max_n += max(8, max_n // 10)
+            if max_n > _MAX_UNIFORMIZATION_TERMS:
+                break
     if max_n > _MAX_UNIFORMIZATION_TERMS:
         raise ValueError(
             "Stochastic mapping would require more than "
@@ -2402,6 +2413,14 @@ def _uniformization_parameters(rate_matrix, branch_length):
             "reduce the rate/time scale or fitted rate bounds."
         )
     return omega, lam, max_n
+
+
+def _poisson_log_tail_bound(lam, max_n):
+    # Chernoff bound for Pr[N >= max_n + 1], evaluated without tail underflow.
+    first_omitted = max_n + 1
+    if first_omitted <= lam:
+        return 0.0
+    return -lam + first_omitted * (1.0 + math.log(lam) - math.log(first_omitted))
 
 
 def _build_uniformization_context(rate_matrix, branch_length):
@@ -2527,6 +2546,7 @@ def _sample_bridge_transition_counts(
     rng,
     uniformization_contexts=None,
     uniformization_context=None,
+    history=None,
 ):
     context = _resolve_uniformization_context(
         rate_matrix,
@@ -2551,6 +2571,8 @@ def _sample_bridge_transition_counts(
         if next_state != current_state:
             counts[(current_state, next_state)] += 1
         current_state = next_state
+        if history is not None:
+            history.append(current_state)
     return counts
 
 
@@ -2882,6 +2904,10 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
 
 
 def _write_stochastic_map(tree, states, fit, args):
+    from nwkit.stochastic_map_io import extended_maps_requested, write_extended_maps
+
+    if extended_maps_requested(args):
+        return write_extended_maps(tree, states, fit, args)
     stochastic_map_out = getattr(args, "stochastic_map_out", None)
     if stochastic_map_out in ["", None]:
         return
@@ -2899,11 +2925,16 @@ def _write_stochastic_map(tree, states, fit, args):
 def _validate_asr_output_paths(args):
     from nwkit.asr_figure import validate_figure_options
     from nwkit.asr_tree_ensemble import validate_tree_ensemble_options
+    from nwkit.stochastic_map_io import MAP_OUTPUTS, validate_map_options
     from nwkit.util import validate_outputs_do_not_replace_inputs
 
+    validate_map_options(args)
     validate_figure_options(args)
     validate_tree_ensemble_options(args)
     auxiliary_outputs = {
+        "--process-out": getattr(args, "process_out", None),
+        "--branch-models-out": getattr(args, "branch_models_out", None),
+        "--individual-out": getattr(args, "individual_out", None),
         "--latent-history-out": getattr(args, "latent_history_out", None),
         "--tree-ensemble-out": getattr(args, "tree_ensemble_out", None),
         "--figure-out": getattr(args, "figure_out", None),
@@ -2920,6 +2951,12 @@ def _validate_asr_output_paths(args):
         "--bootstrap-intervals-out": getattr(args, "bootstrap_intervals_out", None),
         "--model-comparison-out": getattr(args, "model_comparison_out", None),
     }
+    auxiliary_outputs.update(
+        {
+            "--" + name.replace("_", "-"): getattr(args, name, None)
+            for name in MAP_OUTPUTS
+        }
+    )
     stdout_auxiliary_outputs = [
         option_name for option_name, path in auxiliary_outputs.items() if path == "-"
     ]
@@ -2929,6 +2966,10 @@ def _validate_asr_output_paths(args):
             for name in (
                 "trait",
                 "infile",
+                "rate_matrix",
+                "rate_design",
+                "regime_map",
+                "transition_graph",
                 "tree_ensemble",
                 "measurement_covariance",
                 "replicate_observations",
@@ -2936,6 +2977,9 @@ def _validate_asr_output_paths(args):
                 "misclassification_matrix",
                 "latent_regime_config",
                 "species_map_tsv",
+                "branch_models",
+                "branch_regimes",
+                "regime_models",
             )
         ],
         [("--outfile", getattr(args, "outfile", None)), *auxiliary_outputs.items()],
@@ -2949,6 +2993,13 @@ def _validate_asr_output_paths(args):
         )
     validate_distinct_output_paths(
         [
+            ("--" + name.replace("_", "-"), getattr(args, name, None))
+            for name in MAP_OUTPUTS
+        ]
+        + [
+            ("--process-out", getattr(args, "process_out", None)),
+            ("--branch-models-out", getattr(args, "branch_models_out", None)),
+            ("--individual-out", getattr(args, "individual_out", None)),
             ("--latent-history-out", getattr(args, "latent_history_out", None)),
             ("--tree-ensemble-out", getattr(args, "tree_ensemble_out", None)),
             ("--figure-out", getattr(args, "figure_out", None)),
@@ -2991,6 +3042,20 @@ def _validate_asr_output_paths(args):
 
 
 def asr_main(args):
+    if getattr(args, "model", None) == "BRANCH-GAUSSIAN" and not getattr(
+        args, "_branch_output_staged", False
+    ):
+        from nwkit.branch_gaussian_output import run_branch_transaction
+
+        return run_branch_transaction(args, asr_main)
+    from nwkit.stochastic_map_io import extended_maps_requested, run_map_transaction
+
+    if extended_maps_requested(args) and not getattr(args, "_map_output_staged", False):
+        return run_map_transaction(args, asr_main)
+    return _asr_main_impl(args)
+
+
+def _asr_main_impl(args):
     from nwkit.asr_figure import validate_figure_trait
     from nwkit.asr_latent import regime_input_columns
     from nwkit.asr_paths import validate_path_model
@@ -2998,7 +3063,9 @@ def asr_main(args):
         validate_tree_ensemble_options,
         write_tree_ensemble,
     )
+    from nwkit.individual_asr import run_individual_asr, validate_individual_options
 
+    individual_settings = validate_individual_options(args)
     _validate_asr_output_paths(args)
     tree = read_tree(
         args.infile,
@@ -3007,7 +3074,19 @@ def asr_main(args):
         rooted=getattr(args, "input_rooted", "auto"),
     )
     _validate_tree_for_asr(tree)
+    if individual_settings is not None:
+        return run_individual_asr(tree, args, individual_settings)
     model = getattr(args, "model", None)
+    if model == "BRANCH-GAUSSIAN" and getattr(args, "output", None) == "prior-samples":
+        from nwkit.branch_gaussian_output import run_branch_prior
+
+        return run_branch_prior(tree, args)
+    if getattr(args, "trait", None) in (None, "") or getattr(
+        args, "state_column", None
+    ) in (None, ""):
+        raise ValueError(
+            "--trait and --state-column are required except for BRANCH-GAUSSIAN prior-samples."
+        )
     trait_columns = asr_trait_columns(args.state_column, model)
     standard_error_columns = asr_standard_error_columns(
         getattr(args, "standard_error_column", None), model, trait_columns
@@ -3766,6 +3845,12 @@ def _fit_continuous_model_impl(
     from nwkit.continuous_asr import compute_bm_marginals
 
     model = settings.model
+    if model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_asr import compute_branch_marginals
+
+        return compute_branch_marginals(
+            tree, observed, errors, args=args, compute_posterior=compute_posterior
+        )
     if getattr(args, "measurement_covariance", None) not in (None, ""):
         return _fit_correlated_measurement_model(
             tree, observed, errors, trait_columns, args, settings, compute_posterior
@@ -4038,7 +4123,19 @@ def _run_continuous_asr(tree, trait_df, args, settings, targets):
         args,
         settings,
         regime_assignment,
+        compute_posterior=settings.output != "likelihood",
     )
+    if settings.model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_output import write_branch_outputs
+
+        write_branch_outputs(tree, observed, errors, fit, args, settings)
+        regime_assignment = fit.display_assignment
+        if settings.output == "likelihood":
+            table = continuous_model_table(fit, args, settings.ci_level)
+            _write_table(table, args.outfile)
+            if getattr(args, "model_out", None):
+                _write_table(table, args.model_out)
+            return
     _write_continuous_model_comparison(tree, observed, errors, args, settings, fit)
     from nwkit.asr_figure import write_continuous_asr_figure
 

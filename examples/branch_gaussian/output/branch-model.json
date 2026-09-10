@@ -1,0 +1,150 @@
+{
+  "schema_version": 1,
+  "nwkit_version": "0.43.15",
+  "command": "branchgaussian",
+  "mode": "asr",
+  "parameters": "fixed; no parameter estimation or model search",
+  "root": {
+    "mode": "gaussian",
+    "mean": 0.3,
+    "variance": 0.9
+  },
+  "nodes": [
+    {
+      "branch_id": 0,
+      "parent": -1,
+      "node_class": "root",
+      "name": "R",
+      "length": null
+    },
+    {
+      "branch_id": 1,
+      "parent": 0,
+      "node_class": "intnode",
+      "name": "I",
+      "length": 0.4
+    },
+    {
+      "branch_id": 2,
+      "parent": 0,
+      "node_class": "leaf",
+      "name": "C",
+      "length": 1.1
+    },
+    {
+      "branch_id": 3,
+      "parent": 1,
+      "node_class": "leaf",
+      "name": "A",
+      "length": 0.3
+    },
+    {
+      "branch_id": 4,
+      "parent": 1,
+      "node_class": "leaf",
+      "name": "B",
+      "length": 0.7
+    }
+  ],
+  "branch_models": [
+    {
+      "branch_id": 1,
+      "model": "BM",
+      "sigma2": 0.8,
+      "alpha": null,
+      "theta": null,
+      "jump_mean": null,
+      "jump_variance": null
+    },
+    {
+      "branch_id": 2,
+      "model": "BM",
+      "sigma2": 0.8,
+      "alpha": null,
+      "theta": null,
+      "jump_mean": null,
+      "jump_variance": null
+    },
+    {
+      "branch_id": 3,
+      "model": "OU",
+      "sigma2": 1.3,
+      "alpha": 0.6,
+      "theta": 0.9,
+      "jump_mean": null,
+      "jump_variance": null
+    },
+    {
+      "branch_id": 4,
+      "model": "BM",
+      "sigma2": 0.8,
+      "alpha": null,
+      "theta": null,
+      "jump_mean": 0.2,
+      "jump_variance": 0.15
+    }
+  ],
+  "branch_regimes": null,
+  "transitions": [
+    {
+      "branch_id": 1,
+      "slope": 1.0,
+      "intercept": 0.0,
+      "variance": 0.32000000000000006
+    },
+    {
+      "branch_id": 2,
+      "slope": 1.0,
+      "intercept": 0.0,
+      "variance": 0.8800000000000001
+    },
+    {
+      "branch_id": 3,
+      "slope": 0.835270211411272,
+      "intercept": 0.14825680972985517,
+      "variance": 0.3275173134230497
+    },
+    {
+      "branch_id": 4,
+      "slope": 1.0,
+      "intercept": 0.2,
+      "variance": 0.71
+    }
+  ],
+  "jump_position": "branch_end_after_diffusion",
+  "observations": [
+    {
+      "leaf_name": "A",
+      "value": 1.2,
+      "standard_error": 0.2
+    },
+    {
+      "leaf_name": "B",
+      "value": -0.4,
+      "standard_error": 0.1
+    },
+    {
+      "leaf_name": "C",
+      "value": 2.1,
+      "standard_error": 0.4
+    }
+  ],
+  "state_column": "x",
+  "standard_error_column": "se",
+  "missing_values": ",NA,NaN,nan,?,missing,unknown",
+  "unmatched": "warn",
+  "ci_level": 0.95,
+  "n_sim": null,
+  "seed": null,
+  "root_value": null,
+  "inference": {
+    "model": "branch-heterogeneous",
+    "trait": "x",
+    "root_prior": "gaussian",
+    "log_likelihood": -5.487990617573634,
+    "likelihood_rank": 3,
+    "num_observed": 3,
+    "num_observed_positions": 3
+  },
+  "uncertainty": "Conditional on fixed tree, branch assignments and parameters. Simulation draws latent prior states without observation noise. Flat-root likelihoods use an improper constant-density root and are not comparable to proper-root likelihoods."
+}

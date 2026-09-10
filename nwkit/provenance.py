@@ -25,10 +25,21 @@ from nwkit.util import (
 
 OUTPUT_ARGUMENTS = frozenset(
     (
+        "branch_models_out",
+        "process_out",
         "outfile",
+        "loadings_out",
+        "eigenvalues_out",
+        "ancestral_out",
+        "individual_out",
         "summary_out",
         "clades_out",
         "simulations_out",
+        "map_history_out",
+        "map_summary_out",
+        "map_time_out",
+        "map_probabilities_out",
+        "map_figure_out",
         "report",
         "tree_out",
         "model_out",
@@ -60,6 +71,9 @@ OUTPUT_ARGUMENTS = frozenset(
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
+        "branch_models",
+        "branch_regimes",
+        "regime_models",
         "folds",
         "predictor_file",
         "infile",

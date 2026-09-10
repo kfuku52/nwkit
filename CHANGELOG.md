@@ -19,6 +19,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Fixed
 
+- Harden joint individual ASR against premature covariance-optimizer stopping,
+  unit-dependent matrix validation, variance underflow during unit restoration,
+  and cancellation in conditional covariance calculations. Make normalization
+  independent of row order and verify every reported converged start.
+
+- Harden signal diffusion-rate profiling for widely separated sampling-error
+  scales and exact observations; use logarithmic search and stable unit
+  restoration instead of losing small optima or overflowing intermediate scales.
+
 - Diagnose all THRESHOLD node liabilities, second moments, categories and free
   thresholds using rank/split/folded R-hat, multi-lag bulk/tail ESS and probability
   MCSE. Distinguish structural constants from unvisited/stuck quantities; add
@@ -29,6 +38,39 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   in extreme Gaussian tails using log-domain interval masses.
 
 ### Added
+
+- Add `asr --model BRANCH-GAUSSIAN` with strict direct/regime TSV assignments,
+  explicit root priors, fixed-parameter summary/likelihood/prior samples,
+  normalized model TSV and process JSON export, and transactional outputs.
+  Support common ASR figures, posterior diagnostics, and conditional/prior
+  histories with each prescribed Gaussian end jump shown exactly once.
+
+- Audit stochastic mapping: control truncation relative to rare endpoint
+  probabilities; stabilize duration variance and local-coordinate time-bin
+  integration; reject unresolved root coordinates and overflowing summaries;
+  bound probability-grid work and dense simulation arrays; render labels
+  literally even when they contain dollar signs.
+
+- Extend discrete ASR stochastic maps with conditional event-time histories,
+  branch/state duration summaries, lineage-time bin summaries, probability
+  grids, and PNG/PDF/SVG ribbons. Preserve seeded transition-count output and
+  worker-count reproducibility, and commit combined ASR exports transactionally.
+  See `STOCHASTIC_MAPS.md`.
+
+- Add individual-keyed multivariate BM ASR with simultaneous ML/REML estimation
+  of evolutionary Sigma and full/diagonal within-species W, partially observed
+  individuals, latent species/ancestor reconstruction, individual predictions,
+  and explicit identifiability and conditional-uncertainty diagnostics.
+  See `ASR_INDIVIDUALS.md`.
+
+- Add `nwkit pca` with BM/shared-lambda covariance or correlation PCA, score and
+  loading tables, evolutionary eigenvalues, reusable model JSON, conditional
+  ancestral scores and phylomorphospace figures. See `PCA.md`.
+
+- Add `nwkit signal` for batch Blomberg K and Pagel lambda estimation, known
+  sampling errors, K permutation tests, lambda profile intervals and likelihood
+  ratio tests, per-method BH correction, and explicit unestimable-trait rows.
+  See `SIGNAL.md` for statistical conventions and examples.
 
 - Audit calibrated shift selection: count only enabled candidates, use QR
   least squares, batch bootstrap residual calculations, reject unbounded mixed

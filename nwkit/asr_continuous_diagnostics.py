@@ -92,6 +92,17 @@ def _simulated_tip_data(process, observed, errors, seed, *, include_latent=False
 
 
 def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignment):
+    if settings.model == "BRANCH-GAUSSIAN":
+        from nwkit.branch_gaussian_asr import compute_branch_marginals
+
+        return compute_branch_marginals(
+            tree,
+            simulated,
+            errors,
+            assignment=original_fit.branch_assignment,
+            root=original_fit.process.root,
+            compute_posterior=False,
+        )[1]
     model = settings.model
     if model == "BM":
         from nwkit.continuous_asr import compute_bm_marginals

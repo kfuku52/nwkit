@@ -193,12 +193,12 @@ codes require explicit discrete mode.
 
 | Option | Discrete | Continuous |
 |---|---|---|
-| `--model` | ER (default), SYM, ARD, F81, GTR, MK-DESIGN, PAGEL-INDEPENDENT/DEPENDENT, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, MV-OU-DIAG, MV-OU-FULL, OU, OUM/OUMA/OUMV/OUMVA, JUMP-BM, MM-BM, MM-OU |
-| `--root-prior` | equal/empirical/stationary for CTMCs; identified Gaussian for THRESHOLD | flat for BM-family models; stationary for OU-family models; OU also supports fixed or Gaussian |
-| `--output` | probabilities (default), map | summary (default) |
+| `--model` | ER (default), SYM, ARD, F81, GTR, MK-DESIGN, PAGEL-INDEPENDENT/DEPENDENT, MK-REGIME, HRM, COVARION, MK-MIXTURE, THRESHOLD, CUSTOM | BM (default), BMS, BMS-DRIFT, LAMBDA, KAPPA, DELTA, EB, ACDC, BM-DRIFT, MV-BM, MV-OU, MV-OU-DIAG, MV-OU-FULL, OU, OUM/OUMA/OUMV/OUMVA, JUMP-BM, MM-BM, MM-OU, BRANCH-GAUSSIAN |
+| `--root-prior` | equal/empirical/stationary for CTMCs; identified Gaussian for THRESHOLD | flat for BM-family models; stationary for OU-family models; OU also supports fixed or Gaussian; BRANCH-GAUSSIAN requires an explicit fixed/flat/gaussian/stationary prior |
+| `--output` | probabilities (default), map | summary (default); BRANCH-GAUSSIAN also supports likelihood and prior-samples |
 | `--tree-annotation` | map (default), state, probability, all | summary (default), mean, all |
 | Rate controls | `--rate`, `--rate-bounds`, `--rate-design`, `--rate-matrix`; mixture/covarion controls | `--sigma2`, transform parameters, `--alpha`, `--alpha-by-trait`, `--theta`, and `--drift` as applicable |
-| Structure controls | states/graph/design/regime/hidden controls; multiple columns for MK-MIXTURE or Pagel | fixed or latent regime controls; multiple trait and SE columns for MV models |
+| Structure controls | states/graph/design/regime/hidden controls; multiple columns for MK-MIXTURE or Pagel | fixed or latent regime controls; direct/regime branch-model TSVs for BRANCH-GAUSSIAN; multiple trait and SE columns for MV models |
 | Observation uncertainty | Ambiguous states; THRESHOLD MCMC | Known per-trait measurement SEs for every continuous model |
 | Interval/parameter uncertainty | THRESHOLD posterior probabilities and liability moments | Conditional Gaussian intervals; optional transform profile CI, joint posterior samples, PPC, and bootstrap |
 | Simulation | CTMC stochastic maps except MK-MIXTURE/THRESHOLD | `--posterior-samples-out`, `--posterior-predictive-out`, `--bootstrap-out`, and `--seed` |
@@ -461,6 +461,10 @@ distributions fail explicitly. Equal and empirical root priors remain available.
 Marginal reconstruction, missing-tip imputation, zero-length branches,
 polytomies, and stochastic transition-count mapping all use the selected graph
 or fixed Q without binary tree resolution.
+
+Uniformization chooses a Poisson cutoff with omitted mass at most `1e-12`
+times the smallest positive branch transition probability, accounting for rare
+conditioned endpoints in both count-only and full-history mapping.
 
 Uniformization caches small branch calculations, but does not retain every dense
 matrix power or every state-pair event-count distribution for high-rate branches.
@@ -1480,8 +1484,30 @@ including imputed tips. Simulation labels use the first sampled history's tip
 endpoints, explicitly identified when several histories are drawn. Labels are
 off by default. The input names and numerical outputs are unchanged.
 
-## Branch-specific Gaussian Python API
+## Joint evolutionary and individual covariance
+
+For individual ID keyed data, `--model MV-BM --within-species-covariance full|diagonal`
+jointly estimates evolutionary Sigma and common within-species W using ML/REML.
+It supports partial traits, unequal replication, latent species means, ancestors,
+and individual missing-value predictions. See [ASR_INDIVIDUALS.md](ASR_INDIVIDUALS.md)
+for the long TSV schema, identifiability checks, conditional uncertainty and examples.
+
+## Stochastic history outputs
+
+Discrete CTMC ASR can export complete state-duration histories, branch occupancy
+summaries, time-bin transition and duration summaries, and state-probability
+ribbons with `--map-history-out`, `--map-summary-out`, `--map-time-out`,
+`--map-probabilities-out`, and `--map-figure-out`. All use the same draws as
+`--stochastic-map-out` when combined. See [STOCHASTIC_MAPS.md](STOCHASTIC_MAPS.md)
+for schemas, conditional-uncertainty conventions, limits, and a runnable example.
+
+## Fixed branch-specific Gaussian models
 
 For fixed BM/OU parameters and prescribed Gaussian end jumps on individual
 branches, see [the branch-specific Gaussian API](BRANCH_GAUSSIAN.md). The same
 process supports likelihood, ancestral-state conditioning and simulation.
+Use `asr --model BRANCH-GAUSSIAN` with direct/regime TSV assignments and an
+explicit root prior. It supports summary, likelihood and prior-sample outputs,
+standard ASR plots, conditional/unconditional histories and Gaussian end-jump
+markers. See the [plot examples](examples/branch_gaussian/plot/README.md).
+`--model-out` stays TSV; `--process-out` exports complete JSON run settings.

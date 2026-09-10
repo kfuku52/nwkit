@@ -587,6 +587,8 @@ def _validate_comparison_options(context, candidates, *, automatic=False):
 def _candidate_inapplicability(context, candidate):
     from nwkit.discrete_observation import UNSUPPORTED_MODELS
 
+    if candidate.model == "BRANCH-GAUSSIAN":
+        return "fixed branch assignments require asr --model BRANCH-GAUSSIAN with explicit model tables and root parameters"
     if candidate.model in {"JUMP-BM", "MM-BM", "MM-OU"}:
         return "fixed-parameter Monte Carlo latent-history models do not support IC comparison"
     if candidate.model in UNSUPPORTED_MODELS and any(

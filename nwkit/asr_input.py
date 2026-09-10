@@ -39,6 +39,13 @@ _DISCRETE_ONLY = (
     "liability_diagnostics_out",
     "ambiguous_separator",
     "stochastic_map_out",
+    "map_history_out",
+    "map_summary_out",
+    "map_time_out",
+    "map_probabilities_out",
+    "map_figure_out",
+    "map_time_bins",
+    "map_grid_points",
     "n_sim",
     "threads",
 )
@@ -129,6 +136,8 @@ def _resolve_mode_options(args, trait_type):
         )
     resolved = {"model": model, "root_prior": root_prior}
     for name, choices in _MODE_OPTIONS[trait_type].items():
+        if model == "BRANCH-GAUSSIAN" and name == "output":
+            choices = (*choices, "likelihood", "prior-samples")
         value = getattr(args, name, None)
         value = choices[0] if value is None else value
         if value not in choices:
@@ -269,7 +278,10 @@ def _validate_discrete_model_arguments(args, model):
     _validate_custom_and_graph_options(args, model)
     _validate_mixture_options(args, model)
     _validate_threshold_options(args, model)
-    if getattr(args, "stochastic_map_out", None) in (None, ""):
+    from nwkit.stochastic_map_io import any_maps_requested, validate_map_options
+
+    validate_map_options(args)
+    if not any_maps_requested(args):
         supplied = [
             "--" + name.replace("_", "-")
             for name in ("n_sim", "threads")
@@ -277,7 +289,7 @@ def _validate_discrete_model_arguments(args, model):
         ]
         if supplied:
             raise ValueError(
-                "These options require --stochastic-map-out: "
+                "These options require --stochastic-map-out or a map history/summary/probability output: "
                 + ", ".join(supplied)
                 + "."
             )
@@ -340,6 +352,8 @@ def _validate_profile_options(args, model, evolution_parameter):
 
 
 def _validate_ou_root_options(args, model, root_prior):
+    if model == "BRANCH-GAUSSIAN":
+        return
     root_mean = getattr(args, "root_mean", None)
     root_variance = getattr(args, "root_variance", None)
     if model != "OU" and any(value is not None for value in (root_mean, root_variance)):
@@ -480,7 +494,9 @@ def _validate_continuous_model_arguments(args, model, root_prior):
 def _validate_model_arguments(args, trait_type, model, root_prior=None):
     from nwkit.asr_discrete_cross_validation import validate_discrete_cv
     from nwkit.asr_latent import validate_latent_options
+    from nwkit.branch_gaussian_options import validate_branch_options
 
+    validate_branch_options(args, model)
     validate_latent_options(args, model)
     validate_discrete_cv(args, trait_type, model)
     _validate_regime_arguments(args, model)

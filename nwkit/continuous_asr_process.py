@@ -16,6 +16,12 @@ def fitted_scalar_process(tree, model, fit, *, root_prior=None, regime_assignmen
     """Return the exact affine-Gaussian process represented by an ASR fit."""
 
     model = str(model).upper()
+    if model == "BRANCH-GAUSSIAN":
+        if tree is not fit.process.tree:
+            raise ValueError(
+                "Branch assignments require their original tree; use branch path refinement for histories."
+            )
+        return fit.process
     if model == "BM":
         return build_evolutionary_process(
             tree,
