@@ -10,6 +10,52 @@ from nwkit.util import read_tree
 from tests.test_shift_native_model import TREE
 
 
+def test_auto_shift_cap_and_convergent_search_match_explicit_cap(
+    native_inputs, tmp_path
+):
+    args = native_inputs.copy()
+    index = args.index("--regime-map")
+    del args[index : index + 2]
+    args.extend(
+        [
+            "--max-shifts",
+            "auto",
+            "--criterion",
+            "AICc",
+            "--convergence",
+            "--search-strategy",
+            "lasso",
+            "--candidate-pool",
+            "3",
+            "--refit-budget",
+            "8",
+            "--bootstrap",
+            "1",
+        ]
+    )
+    main(args)
+    auto = json.loads((tmp_path / "model.json").read_text())
+    assert auto["configuration"]["max_shifts"] == "auto"
+    assert auto["configuration"]["convergence"]
+    assert auto["search"]["shift_limit"] == {
+        "requested": "auto",
+        "resolved": 3,
+        "constraints": {"tree": 6, "refit_budget": 7, "candidate_pool": 3},
+        "budget_limited": True,
+    }
+    assert any(
+        len(row["groups"]) < len(row["shift_branch_ids"]) + 1
+        for row in auto["candidates"]
+    )
+    args[args.index("--max-shifts") + 1] = "3"
+    main(args)
+    explicit = json.loads((tmp_path / "model.json").read_text())
+    assert auto["candidates"] == explicit["candidates"]
+    assert auto["shift_branch_ids"] == explicit["shift_branch_ids"]
+    assert auto["information_criterion"] == explicit["information_criterion"]
+    assert auto["selection_support"] == explicit["selection_support"]
+
+
 @pytest.fixture
 def native_inputs(tmp_path):
     tree = tmp_path / "tree.nwk"

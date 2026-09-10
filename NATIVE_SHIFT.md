@@ -81,14 +81,50 @@ and full covariance-component identifiability analysis remain outside this relea
 
 ## Discovery, calibration and stability
 
-Omit `--regime-map` to discover shifts. `--max-shifts` is an explicit cap, not an
-automatic small-tree/large-tree rule. `--convergence` enables shared regime groups
+Omit `--regime-map` to discover shifts. `--max-shifts` accepts a nonnegative
+integer (default 2) or native-only `auto`. `--convergence` enables shared regime groups
 and nested returns. `--search-strategy exhaustive` enumerates locations and
 regime partitions subject to `--exhaustive-max-configurations` (default 5000).
 `auto` uses exhaustive search if that budget admits it, otherwise the branch-pool
 beam search (`lasso`). The covariance-updated AIC path below is opt-in: independent
 100-tip validation improved weak-shift recovery, but exploratory tree/count
 changes did not consistently improve mean prediction error.
+
+### Automatic maximum shift count
+
+`--max-shifts auto` starts with NWKIT's structural search limit, **N−2** for
+N tips. If the complete space fits the exhaustive budget, that limit is used
+without applying heuristic budgets. Otherwise, beam search resolves the cap to
+`min(N−2, candidate_pool, refit_budget−1)`. Explicit `native-path` uses
+`min(N−2, refit_budget−1)` because its proposals do not use the candidate pool.
+These bounds preserve the existing search requirements; they do not estimate
+the true number of shifts or guarantee that every shift count is explored.
+Layout-specific observed-design rank and residual degrees of freedom are still
+checked, including missing coordinates. AICc eligibility is evaluated per
+candidate, allowing shared regimes to reduce the mean-parameter count.
+
+For example, with 1,000 tips and the default beam budgets the cap is 24;
+`--candidate-pool 128 --refit-budget 220` permits a cap of 128. Increase those
+budgets if the default coverage is insufficient. An integer cap is never
+silently reduced: incompatible heuristic budgets remain an error.
+`--search-strategy exhaustive` still errors if enumeration cannot fit its budget.
+The enumeration preflight stops counting once the traversal bound is exceeded,
+so a large automatic cap does not require computing enormous regime partitions.
+
+JSON `configuration.max_shifts` preserves the requested `auto` or integer.
+`search.shift_limit` records `requested`, `resolved`, the applicable `constraints`
+and `budget_limited`. Replay retains the same request and complete budget
+configuration; changing either invalidates reuse. Fixed-layout fitting does not
+apply a discovery cap.
+
+```bash
+nwkit shift --selection native --infile dated.nwk \
+  --trait traits.tsv --state-column root,leaf \
+  --criterion AICc --max-shifts auto --convergence --search-strategy auto \
+  --model-out fit.json --outfile regime-map.tsv
+```
+
+### Covariance-updated path search
 
 `--search-strategy native-path` explicitly selects the native AIC/AICc path search
 (without `--convergence`). It retains joint configurations from two group-lasso

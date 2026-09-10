@@ -64,14 +64,15 @@ def enumerate_native_layouts(data, max_shifts=2, *, convergence=False, limit=500
         )
     if limit < 1:
         raise ValueError("Exhaustive candidate limit must be positive.")
-    upper = sum(
-        math.comb(len(branches), k) * (_bell_number(k + 1) if convergence else 1)
-        for k in range(max_shifts + 1)
-    )
-    if upper > max(10000, 20 * limit):
-        raise ValueError(
-            "Exhaustive traversal budget exceeded before enumeration; use native heuristic search or explicitly increase the candidate limit."
+    upper = 0
+    for size in range(max_shifts + 1):
+        upper += math.comb(len(branches), size) * (
+            _bell_number(size + 1) if convergence else 1
         )
+        if upper > max(10000, 20 * limit):
+            raise ValueError(
+                "Exhaustive traversal budget exceeded before enumeration; use native heuristic search or explicitly increase the candidate limit."
+            )
     candidates, excluded, considered = [], 0, 0
     for size in range(max_shifts + 1):
         for shifts in itertools.combinations(branches, size):

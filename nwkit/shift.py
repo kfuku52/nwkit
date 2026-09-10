@@ -35,6 +35,8 @@ from nwkit.util import (
 
 
 def _validate_options(args):
+    if getattr(args, "max_shifts", None) == "auto":
+        raise ValueError("--max-shifts auto requires --selection native.")
     if getattr(args, "global_null_gate", False) and (
         args.selection != "native" or args.criterion != "AIC" or args.regime_map
     ):

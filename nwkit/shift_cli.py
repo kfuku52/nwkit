@@ -1,5 +1,16 @@
 """CLI registration for calibrated and external IC OU shift inference."""
 
+import argparse
+
+
+def maximum_shift_count(value):
+    if value == "auto":
+        return value
+    try:
+        return int(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("Expected an integer or 'auto'.") from exc
+
 
 def register_shift(subparsers, tree_input, table_output):
     parser = subparsers.add_parser(
@@ -60,9 +71,9 @@ def register_shift(subparsers, tree_input, table_output):
     parser.add_argument(
         "--max-shifts",
         "--max_shifts",
-        type=int,
+        type=maximum_shift_count,
         default=2,
-        help="Maximum number of shifts (default: 2).",
+        help="Maximum shifts (default: 2); native-only auto uses the tree limit and, for heuristic search, candidate-pool/refit budgets. The criterion selects the final count.",
     )
     parser.add_argument(
         "--criterion",

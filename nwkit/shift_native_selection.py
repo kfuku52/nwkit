@@ -6,6 +6,7 @@ from nwkit.shift_native_bootstrap import (
     native_selection_support,
 )
 from nwkit.shift_native_heuristic import NativeSearchOptions, heuristic_native_search
+from nwkit.shift_native_limits import native_shift_limit
 from nwkit.shift_native_path import sparse_native_search
 from nwkit.shift_native_search import (
     NativeLayoutEvaluator,
@@ -30,21 +31,12 @@ class NativeSearchRunner:
         self.fit_arguments = fit_arguments
         self.layouts = None
         self.metadata: dict = {}
-        self.options = NativeSearchOptions(
-            max_shifts=args.max_shifts,
-            convergence=args.convergence,
-            candidate_pool=args.candidate_pool,
-            refit_budget=args.refit_budget,
-            screening_budget=args.screening_budget,
-            beam_width=args.beam_width,
-            lasso_iterations=args.lasso_iterations,
-            memory_limit=args.search_memory_mb * 1024**2,
-        )
+        max_shifts, self.shift_limit = native_shift_limit(data, args)
         if args.search_strategy not in {"lasso", "native-path"}:
             try:
                 self.layouts, self.metadata = enumerate_native_layouts(
                     data,
-                    args.max_shifts,
+                    max_shifts,
                     convergence=args.convergence,
                     limit=args.exhaustive_max_configurations,
                 )
@@ -55,17 +47,31 @@ class NativeSearchRunner:
                 ):
                     raise
         if self.layouts is None:
+            max_shifts, self.shift_limit = native_shift_limit(data, args, budgeted=True)
+        self.options = NativeSearchOptions(
+            max_shifts=max_shifts,
+            convergence=args.convergence,
+            candidate_pool=args.candidate_pool,
+            refit_budget=args.refit_budget,
+            screening_budget=args.screening_budget,
+            beam_width=args.beam_width,
+            lasso_iterations=args.lasso_iterations,
+            memory_limit=args.search_memory_mb * 1024**2,
+        )
+        if self.layouts is None:
             self.options.validate(data, uses_candidate_pool=not self.use_path)
 
     def __call__(self, data):
         if self.layouts is None:
             search = sparse_native_search if self.use_path else heuristic_native_search
-            return search(
+            result = search(
                 data,
                 options=self.options,
                 fit_arguments=self.fit_arguments,
                 criterion=self.criterion,
             )
+            result.metadata["shift_limit"] = self.shift_limit
+            return result
         evaluator = NativeLayoutEvaluator(data, self.fit_arguments, self.criterion)
         for layout in self.layouts:
             evaluator.evaluate(layout)
@@ -73,6 +79,7 @@ class NativeSearchRunner:
             {
                 "strategy": "exhaustive",
                 **self.metadata,
+                "shift_limit": self.shift_limit,
                 "continuous_global_optimum_certified": False,
             }
         )
