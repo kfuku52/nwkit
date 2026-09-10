@@ -14,6 +14,12 @@ from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.stats import t as student_t
 
+from nwkit.event_regression import (
+    event_average_estimate,
+    event_average_fit,
+    prepare_shared_response_sampler,
+    resolve_event_weighting,
+)
 from nwkit.evolution import evolution_model_spec, validate_evolution_parameter
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
@@ -22,8 +28,6 @@ from nwkit.gaussian import (
     effective_likelihood_settings,
     factor_diagonal_low_rank_updates,
     factor_logdet,
-    grouped_average_marginal_logdet,
-    grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
     residual_variance_scale,
@@ -37,6 +41,7 @@ from nwkit.measurement_error import (
 )
 from nwkit.model_matrix import PredictorTerm
 from nwkit.optimization import FitResourceError
+from nwkit.regression_inference import objective_difference
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
     GmrfPredictorUncertainty,
@@ -164,6 +169,11 @@ RESULT_COLUMNS = [
     "zero_probability",
     "coefficient_penalty",
     "coefficient_prior_sd",
+    "objective_value",
+    "penalty_value",
+    "monte_carlo_se",
+    "coefficient_profile",
+    "observation_model",
     "separation_warning",
     "term",
     "source_term",
@@ -194,6 +204,16 @@ RESULT_COLUMNS = [
     "r_squared_uncentered",
     "intercept",
     "event_weighting",
+    "estimand",
+    "objective_kind",
+    "covariance_basis",
+    "nuisance_estimator",
+    "log_likelihood_basis",
+    "p_value_method",
+    "interval_method",
+    "bootstrap_attempted",
+    "bootstrap_succeeded",
+    "bootstrap_failed",
     "covariance_estimator",
     "contrast_transform",
     "response_evolution_model",
@@ -1172,6 +1192,8 @@ def _append_predictor_omnibus_rows(
                 "confidence_interval_upper": "",
                 "inference_status": "ok",
                 "inference_method": "wald",
+                "p_value_method": "asymptotic-chi-square",
+                "interval_method": "not-applicable",
             }
         )
         rows.append(template)
@@ -1312,6 +1334,13 @@ def _fit_model(
                 "r_squared_uncentered": r_squared,
                 "intercept": "no",
                 "event_weighting": event_weighting,
+                "estimand": "legacy-variance-weighted-sensitivity",
+                "objective_kind": "variance-normalized-weighted-least-squares",
+                "covariance_basis": "species-event-cluster-HC1",
+                "nuisance_estimator": "not-applicable",
+                "log_likelihood_basis": "not-applicable",
+                "p_value_method": "cluster-t-approximation",
+                "interval_method": "cluster-t-approximation",
                 "covariance_estimator": "species-event-cluster-HC1",
                 "contrast_transform": "gene-contrast-variance",
                 "coverage_policy": coverage_policy,
@@ -1558,7 +1587,7 @@ def _profile_covariance_fit(
 ):
     n_observations = len(y)
     num_parameters = design.shape[1]
-    effective_likelihood_count, logdet_weight, likelihood_logdet_offset = (
+    effective_likelihood_count, _logdet_weight, likelihood_logdet_offset = (
         effective_likelihood_settings(
             n_observations,
             num_parameters,
@@ -1568,17 +1597,9 @@ def _profile_covariance_fit(
         )
     )
     if likelihood_groups is not None:
-        likelihood_groups = np.asarray(likelihood_groups)
-        grouped_count = len(np.unique(likelihood_groups))
-        expected_count = (
-            n_observations
-            if likelihood_observations is None
-            else float(likelihood_observations)
+        raise ValueError(
+            "Grouped pseudo-likelihood is unsupported; use event-average estimation."
         )
-        if not math.isclose(
-            float(grouped_count), expected_count, rel_tol=1e-12, abs_tol=1e-12
-        ):
-            raise ValueError("Likelihood groups do not match likelihood_observations.")
     if n_observations > MAX_DENSE_GAUSSIAN_OBSERVATIONS and (
         _requires_dense_profile_covariance(
             fixed_covariance, components, component_factors
@@ -1684,26 +1705,7 @@ def _profile_covariance_fit(
                 covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
             except np.linalg.LinAlgError:
                 return float("inf")
-        if likelihood_groups is None:
-            determinant_term = logdet_weight * (
-                covariance_logdet - likelihood_logdet_offset
-            )
-        else:
-            if any(name == "species_event_variance" for name, _ in components):
-                determinant_term = grouped_average_marginal_logdet(
-                    covariance_representation, likelihood_groups
-                )
-            else:
-                grouped_variances = grouped_mean_covariance_diagonal(
-                    covariance_representation, likelihood_groups
-                )
-                if (
-                    np.any(grouped_variances <= 0.0)
-                    or not np.isfinite(grouped_variances).all()
-                ):
-                    return float("inf")
-                determinant_term = float(np.log(grouped_variances).sum())
-            determinant_term -= likelihood_logdet_offset
+        determinant_term = covariance_logdet - likelihood_logdet_offset
         objective = 0.5 * (
             effective_likelihood_count * math.log(2.0 * math.pi)
             + determinant_term
@@ -1760,19 +1762,20 @@ def _profile_covariance_fit(
         )
         return details
 
-    if starting_log_variances is None:
-        starts = [
-            np.log(
-                np.asarray(
-                    [response_scale]
-                    + [max(response_scale * 0.1, lower_variance)]
-                    * (len(normalized_components) - 1)
-                )
-            ),
-            np.log(np.repeat(max(response_scale, lower_variance), len(components))),
-        ]
-    else:
-        starts = [np.asarray(starting_log_variances, dtype=float)]
+    # A warm start can lie on a variance boundary where log-scale gradients
+    # vanish. Retain interior starts for each new response, including bootstrap.
+    starts = [
+        np.log(
+            np.asarray(
+                [response_scale]
+                + [max(response_scale * 0.1, lower_variance)]
+                * (len(normalized_components) - 1)
+            )
+        ),
+        np.log(np.repeat(max(response_scale, lower_variance), len(components))),
+    ]
+    if starting_log_variances is not None:
+        starts.insert(0, np.asarray(starting_log_variances, dtype=float))
     candidates = []
     for start in starts:
         result = _minimize_variance_components(
@@ -1865,13 +1868,14 @@ def _parametric_bootstrap_coefficients(
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
     likelihood_groups=None,
+    event_groups=None,
 ):
     if replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
     mean = design @ fit["beta"]
-    maximum_attempts = max(replicates * 3, replicates + 10)
+    maximum_attempts = replicates
     attempts = 0
     while len(coefficients) < replicates and attempts < maximum_attempts:
         attempts += 1
@@ -1896,7 +1900,11 @@ def _parametric_bootstrap_coefficients(
             continue
         if not bootstrap_fit["optimizer_converged"]:
             continue
-        coefficients.append(bootstrap_fit["beta"])
+        coefficients.append(
+            event_average_estimate(response, design, event_groups)[0]
+            if event_groups is not None
+            else bootstrap_fit["beta"]
+        )
     if len(coefficients) < replicates:
         raise ValueError(
             "Parametric bootstrap produced only {} successful fits in {} attempts.".format(
@@ -1922,13 +1930,14 @@ def _parametric_bootstrap_eiv_coefficients(
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
     likelihood_groups=None,
+    event_groups=None,
 ):
     if replicates < 2:
         raise ValueError("Parametric bootstrap requires at least two replicates.")
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
     mean = design @ fit["beta"]
-    maximum_attempts = max(replicates * 3, replicates + 10)
+    maximum_attempts = replicates
     attempts = 0
     starting = np.concatenate([fit["beta"], fit["log_variances"]])
     while len(coefficients) < replicates and attempts < maximum_attempts:
@@ -1956,7 +1965,11 @@ def _parametric_bootstrap_eiv_coefficients(
             continue
         if not bootstrap_fit["optimizer_converged"]:
             continue
-        coefficients.append(bootstrap_fit["beta"])
+        coefficients.append(
+            event_average_estimate(response, design, event_groups)[0]
+            if event_groups is not None
+            else bootstrap_fit["beta"]
+        )
     if len(coefficients) < replicates:
         raise ValueError(
             "Parametric bootstrap produced only {} successful errors-in-variables "
@@ -2034,9 +2047,8 @@ def _without_component(components, component_factors, omitted_name):
 
 
 def _likelihood_ratio(null_fit, full_fit):
-    return max(
-        0.0,
-        2.0 * (float(null_fit["objective"]) - float(full_fit["objective"])),
+    return objective_difference(
+        float(full_fit["objective"]), float(null_fit["objective"])
     )
 
 
@@ -2197,7 +2209,7 @@ def _parametric_bootstrap_likelihood_ratio(
     mean = null_model["design"] @ null_fit["beta"]
     statistics: list[float] = []
     attempts = 0
-    maximum_attempts = max(replicates * 3, replicates + 10)
+    maximum_attempts = replicates
     while len(statistics) < replicates and attempts < maximum_attempts:
         attempts += 1
         response = mean + draw_from_factor(
@@ -2278,20 +2290,9 @@ def _build_covariance_components(
         if isinstance(sampling_covariance, DiagonalLowRankCovariance)
         else sampling_covariance.copy()
     )
-    if not np.all(balance == 1.0):
-        if isinstance(fixed_covariance, DiagonalLowRankCovariance):
-            fixed_covariance = DiagonalLowRankCovariance(
-                fixed_covariance.diagonal * np.square(balance),
-                fixed_covariance.low_rank.multiply(balance[:, None])
-                if sparse.issparse(fixed_covariance.low_rank)
-                else fixed_covariance.low_rank * balance[:, None],
-            )
-        elif fixed_covariance.ndim == 1:
-            fixed_covariance *= np.square(balance)
-        else:
-            fixed_covariance *= np.outer(balance, balance)
+    # Event balancing is an estimating equation, not biological noise.
     raw_evolutionary_component = evolutionary_variances.copy()
-    evolutionary_component = evolutionary_variances * np.square(balance)
+    evolutionary_component = evolutionary_variances.copy()
     components = [("evolutionary_rate", evolutionary_component)]
     component_factors = {}
     raw_components = {"evolutionary_rate": raw_evolutionary_component}
@@ -2658,9 +2659,15 @@ def _append_lineage_inference_rows(
             )
             status = "ok"
         else:
-            p_value, status = _lineage_test_significance(
-                null_model["term_test"], statistic
-            )
+            if null_fit["boundary_warning"]:
+                p_value, status = (
+                    "",
+                    "parametric-bootstrap-required-for-nuisance-boundary",
+                )
+            else:
+                p_value, status = _lineage_test_significance(
+                    null_model["term_test"], statistic
+                )
         template = rows[0].copy()
         full_variances = full_fit["component_variances"]
         _, lineage_variance_by_source = _lineage_variances_by_term(
@@ -2675,6 +2682,27 @@ def _append_lineage_inference_rows(
                 "predictor_reference": "",
                 "factor_coding": "",
                 "term_test": null_model["term_test"],
+                "estimand": "common",
+                "objective_kind": "gaussian-likelihood",
+                "covariance_basis": "model-based-gls",
+                "nuisance_estimator": "gaussian-ML",
+                "log_likelihood_basis": "common-fit",
+                "p_value_method": "null-bootstrap-likelihood-ratio"
+                if lineage_inference == "parametric-bootstrap"
+                else status,
+                "monte_carlo_se": math.sqrt(
+                    float(p_value) * (1.0 - float(p_value)) / (bootstrap_replicates + 1)
+                )
+                if lineage_inference == "parametric-bootstrap"
+                else "",
+                "interval_method": "not-applicable",
+                "bootstrap_attempted": bootstrap_replicates
+                if lineage_inference == "parametric-bootstrap"
+                else 0,
+                "bootstrap_succeeded": bootstrap_replicates
+                if lineage_inference == "parametric-bootstrap"
+                else 0,
+                "bootstrap_failed": 0,
                 "coefficient": "",
                 "standard_error": "",
                 "statistic": statistic,
@@ -2849,6 +2877,38 @@ def _lineage_random_effect_rows(
     return rows
 
 
+def _coefficient_bootstrap_mcse(p_value, bootstrap_coefficients, replicates):
+    if bootstrap_coefficients is None or p_value == "":
+        return ""
+    probability = float(p_value)
+    return math.sqrt(probability * (1.0 - probability) / (replicates + 1))
+
+
+def _gaussian_inference_metadata(
+    event_weighting, reml, eiv, bootstrap_coefficients, replicates, exact_scale_model
+):
+    event = event_weighting == "event"
+    bootstrap = bootstrap_coefficients is not None
+    reference = "exact-t" if exact_scale_model else "asymptotic-normal"
+    return {
+        "estimand": "event-average" if event else "common",
+        "objective_kind": "estimating-equation" if event else "gaussian-likelihood",
+        "covariance_basis": "model-based-event-sandwich"
+        if event
+        else "model-based-gls",
+        "nuisance_estimator": "gaussian-REML" if reml else "gaussian-ML",
+        "p_value_method": "centered-parametric-bootstrap" if bootstrap else reference,
+        "interval_method": "parametric-percentile" if bootstrap else reference,
+        "bootstrap_attempted": replicates if bootstrap else 0,
+        "bootstrap_succeeded": replicates if bootstrap else 0,
+        "bootstrap_failed": 0,
+        "log_likelihood_basis": "auxiliary-common-fit" if event else "common-fit",
+        "covariance_estimator": "event-average-model-sandwich"
+        if event
+        else "gaussian{}-{}".format("-eiv" if eiv else "", "REML" if reml else "ML"),
+    }
+
+
 def _fit_covariance_model(
     dataframe,
     predictors,
@@ -2936,8 +2996,8 @@ def _fit_covariance_model(
             "Lineage inference was requested but lineage random slopes are not "
             "identifiable for model '{}'.".format(model_id)
         )
-    likelihood_observations = n_events if event_weighting == "event" else n_observations
-    likelihood_groups = event_inverse if event_weighting == "event" else None
+    likelihood_observations = n_observations
+    likelihood_groups = None
     likelihood_logdet_offset = 0.0
     index_by_predictor = {
         predictor: index for index, predictor in enumerate(predictors)
@@ -2982,7 +3042,10 @@ def _fit_covariance_model(
             likelihood_logdet_offset=likelihood_logdet_offset,
             likelihood_groups=likelihood_groups,
         )
-    effective_reml = bool(fit.get("reml", reml))
+    nuisance_fit = fit
+    if event_weighting == "event":
+        fit = event_average_fit(response_values, design, event_inverse, nuisance_fit)
+    effective_reml = bool(nuisance_fit.get("reml", reml))
     beta = fit["beta"]
     beta_covariance = fit["beta_covariance"]
     bootstrap_coefficients = None
@@ -3003,6 +3066,7 @@ def _fit_covariance_model(
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
                 likelihood_groups=likelihood_groups,
+                event_groups=event_inverse if event_weighting == "event" else None,
             )
         else:
             bootstrap_coefficients = _parametric_bootstrap_coefficients(
@@ -3018,20 +3082,38 @@ def _fit_covariance_model(
                 likelihood_observations=likelihood_observations,
                 likelihood_logdet_offset=likelihood_logdet_offset,
                 likelihood_groups=likelihood_groups,
+                event_groups=event_inverse if event_weighting == "event" else None,
             )
         standard_errors = np.std(bootstrap_coefficients, axis=0, ddof=1)
     elif inference == "wald":
         standard_errors = np.sqrt(np.maximum(np.diag(beta_covariance), 0.0))
     else:
         raise ValueError("Unsupported inference method: {}.".format(inference))
-    degrees_of_freedom = n_events - num_parameters
+    exact_scale_model = (
+        event_weighting == "contrast"
+        and not balanced_predictor_uncertainties
+        and len(components) == 1
+        and _covariance_is_zero(fixed_covariance)
+        and effective_reml
+    )
+    degrees_of_freedom = (
+        n_observations - num_parameters if exact_scale_model else math.inf
+    )
     critical = float(student_t.ppf(0.5 + confidence_level / 2.0, degrees_of_freedom))
-    inverse_y = _solve_positive_definite(fit["cholesky"], response_values)
-    total_quadratic = float(response_values @ inverse_y)
+    if event_weighting == "event":
+        loss_weights = 1.0 / event_counts[event_inverse]
+        total_quadratic = float(loss_weights @ np.square(response_values))
+        residual_quadratic = float(
+            loss_weights @ np.square(response_values - design @ beta)
+        )
+    else:
+        inverse_y = _solve_positive_definite(fit["cholesky"], response_values)
+        total_quadratic = float(response_values @ inverse_y)
+        residual_quadratic = fit["quadratic"]
     r_squared = (
         float("nan")
         if total_quadratic == 0.0
-        else 1.0 - fit["quadratic"] / total_quadratic
+        else 1.0 - residual_quadratic / total_quadratic
     )
     component_variances = fit["component_variances"]
     evolutionary_rate = component_variances["evolutionary_rate"]
@@ -3059,6 +3141,14 @@ def _fit_covariance_model(
         )
     sampling_fraction = (
         0.0 if fitted_variance == 0.0 else mean_sampling_variance / fitted_variance
+    )
+    inference_metadata = _gaussian_inference_metadata(
+        event_weighting,
+        effective_reml,
+        bool(balanced_predictor_uncertainties),
+        bootstrap_coefficients,
+        bootstrap_replicates,
+        exact_scale_model,
     )
     condition_number = float(np.linalg.cond(beta_covariance))
     rows = []
@@ -3122,14 +3212,14 @@ def _fit_covariance_model(
                 "num_parameters": num_parameters,
                 "matrix_rank": int(np.linalg.matrix_rank(design)),
                 "condition_number": condition_number,
-                "weighted_residual_sum_squares": fit["quadratic"],
+                "weighted_residual_sum_squares": residual_quadratic,
                 "residual_scale": evolutionary_rate,
                 "r_squared_uncentered": r_squared,
                 "intercept": "no",
                 "event_weighting": event_weighting,
-                "covariance_estimator": "gaussian{}-{}".format(
-                    "-eiv" if balanced_predictor_uncertainties else "",
-                    "REML" if effective_reml else "ML",
+                **inference_metadata,
+                "monte_carlo_se": _coefficient_bootstrap_mcse(
+                    p_value, bootstrap_coefficients, bootstrap_replicates
                 ),
                 "contrast_transform": "gene-evolutionary-plus-sampling-covariance",
                 "coverage_policy": coverage_policy,
@@ -3137,7 +3227,9 @@ def _fit_covariance_model(
                 "inference_status": inference_status,
                 "model": model,
                 "inference_method": inference,
-                "reml": "yes" if effective_reml else "no",
+                "reml": "not-applicable"
+                if event_weighting == "event"
+                else ("yes" if effective_reml else "no"),
                 "evolutionary_rate": evolutionary_rate,
                 "species_event_variance": event_variance,
                 "lineage_slope_variance": lineage_variance_by_term.get(predictor, 0.0),
@@ -3188,7 +3280,11 @@ def _fit_covariance_model(
     random_effect_rows = []
     if use_event:
         variance = event_variance
-        modes = variance * random_designs["species_event"].T @ fit["inverse_residual"]
+        modes = (
+            variance
+            * random_designs["species_event"].T
+            @ nuisance_fit["inverse_residual"]
+        )
         for index, event_id in enumerate(unique_events):
             random_effect_rows.append(
                 {
@@ -3207,7 +3303,7 @@ def _fit_covariance_model(
     if use_lineage:
         random_effect_rows.extend(
             _lineage_random_effect_rows(
-                fit,
+                nuisance_fit,
                 response_values,
                 design,
                 random_designs,
@@ -3228,6 +3324,15 @@ def _fit_covariance_model(
             "contrast_ids": dataframe["gene_clade_id"].astype(str).tolist(),
             "evolutionary_rate": float(evolutionary_rate),
             "fitted_covariance_factor": fit["cholesky"],
+            "sample_shared_effects": prepare_shared_response_sampler(
+                beta,
+                component_variances,
+                component_factors,
+                balanced_predictor_uncertainties,
+                predictor_uncertainty_columns,
+                n_observations,
+            ),
+            "estimand": "event-average" if event_weighting == "event" else "common",
         }
     else:
         fit_state = None
@@ -3699,7 +3804,8 @@ def fit_reconciled_pgls(
     predictors,
     *,
     confidence_level=0.95,
-    event_weighting="event",
+    event_weighting=None,
+    regression_estimand=None,
     coverage_policy="complete",
     model="hierarchical",
     response_sampling_covariance=None,
@@ -3721,6 +3827,7 @@ def fit_reconciled_pgls(
     predictor_group_uncertainties=None,
     allow_large_dense=False,
 ):
+    event_weighting = resolve_event_weighting(event_weighting, regression_estimand)
     _validate_reconciled_pgls_options(
         confidence_level=confidence_level,
         event_weighting=event_weighting,
@@ -4036,10 +4143,15 @@ PRECOMPUTED_UNSUPPORTED_MODELING_ARGUMENTS = {
     "response_trials": "--response-trials",
     "response_censor_lower": "--response-censor-lower",
     "response_censor_upper": "--response-censor-upper",
+    "response_observation_model": "--response-observation-model",
+    "response_detection_lower": "--response-detection-lower",
+    "response_detection_upper": "--response-detection-upper",
+    "response_observation_bins": "--response-observation-bins",
     "response_dispersion": "--response-dispersion",
     "response_zero_probability": "--response-zero-probability",
     "coefficient_penalty": "--coefficient-penalty",
     "coefficient_prior_sd": "--coefficient-prior-sd",
+    "coefficient_profile_grid": "--coefficient-profile-grid",
     "categorical_predictors": "--categorical-predictors",
     "ordered_predictors": "--ordered-predictors",
     "predictor_reference": "--predictor-reference",
@@ -4160,6 +4272,7 @@ def _ordinary_incompatible_options(args):
         option
         for name, option in [
             ("event_weighting", "--event-weighting"),
+            ("regression_estimand", "--regression-estimand"),
             ("speciation_coverage", "--speciation-coverage"),
             ("reconciled_model", "--reconciled-model"),
             ("event_random_effect", "--event-random-effect"),
@@ -4769,7 +4882,8 @@ def regress_main(args):
         responses,
         predictors,
         confidence_level=args.confidence_level,
-        event_weighting=getattr(args, "event_weighting", None) or "event",
+        event_weighting=getattr(args, "event_weighting", None),
+        regression_estimand=getattr(args, "regression_estimand", None),
         coverage_policy=getattr(args, "speciation_coverage", None) or "complete",
         model=getattr(args, "reconciled_model", None) or "hierarchical",
         response_sampling_covariance=sampling_covariance,

@@ -258,58 +258,47 @@ $\Omega_i/n_i$ を全cross-column項ごと伝播する。これは離散状態�
 $e(i)$ を持つ。このとき $X$ の同じ種形質contrastが複数行に現れるが、独立な
 種分化の反復が増えたわけではない。
 
-イベント $e$ に属する遺伝子contrast数を $k_e$ とすると、既定の
-`--event-weighting event` は、各イベントへ同じ総情報重みを与える。行固有の
-発現進化分散と発現sampling covarianceについては
-$B_{ii}=\sqrt{k_{e(i)}}$ としてworking covarianceを
+イベント $e$ の行数を $k_e$ とすると、既定の
+`--regression-estimand event-average`（旧指定 `--event-weighting event`）は、
+raw contrast単位で次の推定方程式を解く。
 
 $$
-V_{\mathrm{work}}=B(\sigma^2G+M)B
-+V_{\mathrm{shared}}
+U(\beta_E)=\sum_e\frac{1}{k_e}\sum_{i\in e}x_i(y_i-x_i^\mathsf T\beta_E)=0,
+\qquad W_{ii}=1/k_{e(i)}.
 $$
 
-へ変換する。$V_{\mathrm{shared}}$ はspecies-event効果、lineage効果、同じspecies
-contrastを再利用する説明変数誤差であり、パラログ行を追加してもそのprior variance
-自体は増えない。
+したがって $L=(X^\mathsf TWX)^{-1}X^\mathsf TW$ として
+$\hat\beta_E=Ly$ である。イベントに与える総損失重みは等しいが、実際の情報量は
+説明変数・誤差・相関に依存する。進化分散による追加の重みを掛けないので、分散が
+異なる場合は1対1orthologでも通常の標準化PIC回帰とは一致しないことがある。
 
-Gaussian ML/REMLでは行数そのものを尤度の標本数にせず、イベント数 $m$ を
-有効標本数とする。$A_{ei}=1/k_e$（$i\in e$、それ以外0）をイベント平均行列と
-すると、`replicate-reml` およびspecies-event random effectを含まないモデルの
-pseudo-determinant項は
+共通係数を仮定する補助解析は `--regression-estimand common`
+（旧指定 `--event-weighting contrast`）で選ぶ。生物学的共分散 $C$ は第3節の
+$V$（EIVではさらに係数依存項を加えたもの）であり、$k_e$ で膨らませない。
+分散成分は実際の行数 $n$、完全な $\log|C|$、同じ $C$ の逆行列を用いた
+正規化Gaussian尤度で推定する。従来のevent pseudo-determinantは使用しない。
 
-$$
-\sum_{e=1}^m\log\left[(AV_{\mathrm{work}}A^\mathsf T)_{ee}\right]
-$$
-
-とする。したがって、行固有の発現誤差だけでなくspecies側の説明変数誤差がある場合も、
-同一のparalog行を何コピー追加しても `replicate-reml` の係数、進化rate、標準誤差、
-log likelihoodは変わらない。
-
-species-event random effectを推定するモデルでは、イベント内変動とイベント間変動を
-識別する情報を残す必要がある。この場合は各行のworking marginal varianceを
-$v_i=(V_{\mathrm{work}})_{ii}$ として
+既知の $C$ に対するイベント平均推定量のsampling covarianceは
 
 $$
-\sum_{e=1}^m\frac{1}{k_e}\sum_{i\in e}
-\left(\log v_i-\log k_e\right)
+\operatorname{Var}(\hat\beta_E)=LCL^\mathsf T
 $$
 
-を用いる。これはイベントごとに正規化したcomposite pseudo-determinantであり、
-厳密な多変量Gaussian log determinantではない。二次形式はどちらも
-$\mathbf r^\mathsf TV_{\mathrm{work}}^{-1}\mathbf r$ を用いる。parametric bootstrapと
-lineage likelihood-ratio検定も、元のfitと同じevent-level目的関数で再fitする。
-species側の説明変数誤差がsparse precisionで表される場合も、必要な $v_i$ または
-$(AV_{\mathrm{work}}A^\mathsf T)_{ee}$ はbounded-block sparse solveで厳密に計算し、
-最適化前にcacheする。tip数によるstochastic diagonal近似への暗黙の切替は行わない。
+であり、GLSの逆Gram行列とは異なる。実装は補助階層モデルで推定した共分散を
+代入するmodel-based近似で、EIVの共分散は $\hat\beta_E$ で評価する。
+$L$ は応答や共分散nuisanceに依存しないため、それらに関する一次微分は0である。
+ただし条件付き説明変数平均自体のplug-in推定や、モデル外の平均異質性・依存性に
+対して一般的な頑健被覆を保証するものではない。
 
-さらに、識別可能なら同じ `species_event_id` を共有する行に
-species-event random effectを入れる。残差自由度も遺伝子contrast数ではなく
+Wald推論は原則として漸近正規近似を用いる。共通係数・単一scale・sampling/EIV
+誤差なしのREMLという厳密な場合には $n-p$ のt分布を用いる。イベント数から
+機械的に $m-p$ を推論自由度にしない。イベント平均行の `reml` は
+`not-applicable` とし、補助共分散推定法と尤度の帰属を別列に記録する。
 
-$$
-\mathrm{df}=n_{\mathrm{species\ events}}-p
-$$
-
-で計算する。ここで $p$ は固定効果の数である。
+parametric bootstrapは生物学的な $C$ から生成して選択された係数推定法を再fitする。
+lineage検定とrandom effectの出力は補助共通係数モデルに属する。EIVでは共有された
+種イベントの不確実性を同じ共分散として保つ。行コピーで係数が変わらなくても、
+新しい独立観測の追加に対してrate・標準誤差・尤度まで不変とは要求しない。
 
 ## 5. 最小の手計算例：2種、2パラログ
 

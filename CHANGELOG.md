@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Changed
+
+- Make event-average estimating equations the default reconciled coefficient
+  estimand, with a separate common-coefficient likelihood option and explicit
+  inference metadata. Remove event pseudo-determinants and row-count inflation
+  from biological covariance and bootstrap generation.
+- Require an explicit observation mechanism for censored-Gaussian bootstrap;
+  regenerate censoring labels and bounds from detection limits or interval bins.
+- Separate penalized point estimates from frequentist Wald/LR/profile inference.
+  Add null-generated GLMM objective-difference tests and optional pointwise
+  test inversion on an explicit coefficient grid, with Monte Carlo error.
+  Bootstrap failures abort inference rather than being replaced.
+
 ### Fixed
 
 - Diagnose all THRESHOLD node liabilities, second moments, categories and free

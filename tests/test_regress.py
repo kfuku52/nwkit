@@ -303,7 +303,9 @@ def test_pgls_matches_standard_pic_regression_for_one_to_one_orthologs():
         tree_id="OG1",
     )
 
-    result = fit_reconciled_pgls(response, predictor, ["expression"], ["body_size"])
+    result = fit_reconciled_pgls(
+        response, predictor, ["expression"], ["body_size"], regression_estimand="common"
+    )
 
     joined = response.merge(
         predictor[predictor["trait"] == "body_size"],
@@ -502,10 +504,10 @@ def test_equal_event_weighting_is_invariant_to_identical_paralog_copies():
     assert observation_result.iloc[0]["coefficient"] == pytest.approx(22.0 / 14.0)
     assert equal_result.iloc[0]["n_gene_contrasts"] == 11
     assert equal_result.iloc[0]["n_species_events"] == 2
-    assert equal_result.iloc[0]["degrees_of_freedom"] == 1
+    assert equal_result.iloc[0]["degrees_of_freedom"] == float("inf")
 
 
-def test_equal_event_pseudolikelihood_is_copy_invariant():
+def test_event_average_coefficient_is_copy_invariant_but_independent_noise_is_not():
     base = pd.DataFrame(
         [
             _response_row(index, value)
@@ -536,16 +538,19 @@ def test_equal_event_pseudolikelihood_is_copy_invariant():
         model="replicate-reml",
     ).iloc[0]
 
-    for column in [
-        "coefficient",
-        "standard_error",
-        "evolutionary_rate",
-        "log_likelihood",
-    ]:
-        assert repeated[column] == pytest.approx(baseline[column], rel=1e-10)
+    assert repeated["coefficient"] == pytest.approx(baseline["coefficient"], rel=1e-10)
+    # Distinct gene IDs with independent residuals add biological information.
+    # REML rate = RSS/(n-p); do not preserve the former pseudo-likelihood scale.
+    assert repeated["evolutionary_rate"] / baseline[
+        "evolutionary_rate"
+    ] == pytest.approx(25 / 29)
+    assert repeated["standard_error"] / baseline["standard_error"] == pytest.approx(
+        np.sqrt(5 / 29)
+    )
+    assert repeated["log_likelihood_basis"] == "auxiliary-common-fit"
 
 
-def test_equal_event_eiv_pseudolikelihood_is_uneven_copy_invariant():
+def test_event_average_eiv_preserves_shared_predictor_uncertainty_under_uneven_copies():
     values = (1.0, 6.0, 7.0, 11.0, 8.0, 13.0)
     predictor = _predictor_table(values=tuple(float(i) for i in range(1, 7)))
     predictor["contrast_variance"] = 1.0
@@ -579,13 +584,23 @@ def test_equal_event_eiv_pseudolikelihood_is_uneven_copy_invariant():
     baseline = fit_reconciled_pgls(response_contrasts=base, **common).iloc[0]
     duplicated = fit_reconciled_pgls(response_contrasts=repeated, **common).iloc[0]
 
-    for column in [
-        "coefficient",
-        "standard_error",
-        "evolutionary_rate",
-        "log_likelihood",
-    ]:
-        assert duplicated[column] == pytest.approx(baseline[column], rel=2e-6)
+    assert duplicated["coefficient"] == pytest.approx(baseline["coefficient"], rel=2e-6)
+    rho = float(duplicated["predictor_evolutionary_rate"])
+    latent_mean = (rho / (rho + 0.05)) * np.arange(1.0, 7.0)
+    posterior_variance = rho * 0.05 / (rho + 0.05)
+    membership = np.r_[np.zeros(5, dtype=int), np.arange(1, 6)]
+    design = latent_mean[membership]
+    weights = 1.0 / np.bincount(membership)[membership]
+    operator = weights * design / np.sum(weights * design**2)
+    covariance = float(duplicated["evolutionary_rate"]) * np.eye(len(membership))
+    covariance += (
+        float(duplicated["coefficient"]) ** 2
+        * posterior_variance
+        * (membership[:, None] == membership[None, :])
+    )
+    assert duplicated["standard_error"] ** 2 == pytest.approx(
+        float(operator @ covariance @ operator), rel=1e-6
+    )
 
 
 def test_categorical_omnibus_row_reports_its_actual_wald_inference():
@@ -896,7 +911,8 @@ def test_pgls_cli_writes_coefficient_table(tmp_path):
     output = pd.read_csv(output_path, sep="\t")
     assert output.iloc[0]["term"] == "body_size"
     assert output.iloc[0]["model"] == "hierarchical"
-    assert output.iloc[0]["covariance_estimator"] == "gaussian-REML"
+    assert output.iloc[0]["covariance_estimator"] == "event-average-model-sandwich"
+    assert output.iloc[0]["estimand"] == "event-average"
     assert output.iloc[0]["n_species_events"] == 3
 
 
@@ -958,6 +974,7 @@ def test_replicate_reml_matches_gls_with_evolutionary_and_sampling_covariance():
         ["expression"],
         ["body_size"],
         model="replicate-reml",
+        regression_estimand="common",
         response_sampling_covariance=sidecar,
     ).iloc[0]
 
@@ -1275,7 +1292,7 @@ def test_lineage_inference_and_leave_one_out_separate_average_and_subset_effects
     assert set(np.sign(sensitivity["coefficient_change"])) == {-1.0, 1.0}
 
 
-def test_lineage_joint_parametric_bootstrap_reports_calibrated_p_values():
+def test_lineage_joint_parametric_bootstrap_reports_empirical_tail_and_dispatch():
     rows = []
     for event_index in range(1, 7):
         for gene_index, slope in [(1, 1.5), (2, 2.5)]:
@@ -1828,7 +1845,8 @@ def test_reconciled_multilevel_factor_preserves_cross_column_uncertainty(tmp_pat
     assert len(coefficients) == 2
     assert set(coefficients["measurement_error_model"]) == {"latent-predictor"}
     assert coefficients["predictor_evolution_parameter"].nunique() == 1
-    assert set(coefficients["covariance_estimator"]) == {"gaussian-eiv-ML"}
+    assert set(coefficients["covariance_estimator"]) == {"event-average-model-sandwich"}
+    assert set(coefficients["nuisance_estimator"]) == {"gaussian-ML"}
     covariance = pd.read_csv(
         tmp_path / "multilevel-latent.predictor-sampling-covariance.tsv", sep="\t"
     )
@@ -2025,6 +2043,8 @@ def test_reconciled_negative_binomial_keeps_biological_count_replicates(tmp_path
             "body_size",
             "--response-biological-id",
             "sample",
+            "--coefficient-penalty",
+            "none",
             "--inference",
             "parametric-bootstrap",
             "--bootstrap-replicates",
@@ -2309,8 +2329,9 @@ def test_pgls_raw_mode_propagates_response_and_predictor_replicates_together(
     assert set(summary["n_biological"]) == {2}
     assert set(response_summary["n_biological"]) == {2}
     assert set(result["measurement_error_model"]) == {"latent-predictor"}
-    assert set(result["reml"]) == {"no"}
-    assert set(result["covariance_estimator"]) == {"gaussian-eiv-ML"}
+    assert set(result["reml"]) == {"not-applicable"}
+    assert set(result["nuisance_estimator"]) == {"gaussian-ML"}
+    assert set(result["covariance_estimator"]) == {"event-average-model-sandwich"}
     assert result.iloc[0]["mean_sampling_variance"] > 0.0
     assert result.iloc[0]["mean_predictor_sampling_variance"] > 0.0
     assert set(result["response_evolution_parameter_status"]) == {"estimated"}
@@ -2586,7 +2607,14 @@ def test_large_predictor_factor_loading_remains_structured(monkeypatch):
         lineage_random_slope="no",
     )
 
-    assert result.iloc[0]["coefficient"] == pytest.approx(1.5, rel=0.02)
+    rho = float(result.iloc[0]["predictor_evolutionary_rate"])
+    conditional_predictor = predictor_values * rho / (rho + 0.05)
+    expected = float(
+        conditional_predictor
+        @ response["raw_contrast"].to_numpy(float)
+        / (conditional_predictor @ conditional_predictor)
+    )
+    assert result.iloc[0]["coefficient"] == pytest.approx(expected, rel=1e-6)
     assert result.iloc[0]["measurement_error_model"] == "latent-predictor"
 
 

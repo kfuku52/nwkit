@@ -273,7 +273,7 @@ def checked_statistic(null_objective, full_objective):
 
 
 def rsc_null_bootstrap(case, data, replicates, seed):
-    """Reference composite-objective test; covariance terms fixed across models.
+    """Reference common-coefficient Gaussian ML test; covariance terms fixed across models.
 
     This does not claim a chi-squared reference distribution. Its unconditional
     calibration must be measured like that of the production procedures.
@@ -312,8 +312,6 @@ def rsc_null_bootstrap(case, data, replicates, seed):
             components,
             reml=False,
             component_factors=factors,
-            likelihood_observations=len(events),
-            likelihood_groups=event_inverse,
         )
         if not value["optimizer_converged"]:
             raise ValueError("Variance optimizer did not converge")
@@ -340,7 +338,7 @@ def rsc_null_bootstrap(case, data, replicates, seed):
         **null_tail(statistic, values),
         "coefficient": float(full["beta"][0]),
         "bootstrap_errors": errors,
-        "reference_objective": "event-balanced-composite-ML",
+        "reference_objective": "normalized-common-gaussian-ML",
         "interval_method": "not-computed",
     }
 

@@ -362,7 +362,7 @@ def test_sparse_precision_predictor_uncertainty_matches_dense_eiv_covariance():
     )
 
 
-def test_grouped_sparse_precision_eiv_objective_matches_dense_covariance():
+def test_normalized_sparse_precision_eiv_objective_matches_dense_covariance():
     response = np.asarray([1.0, 1.9, 3.2, 4.0])
     design = np.column_stack([np.ones(4), np.arange(4.0)])
     loading = sparse.eye(4, format="csr")
@@ -393,8 +393,6 @@ def test_grouped_sparse_precision_eiv_objective_matches_dense_covariance():
         fixed_covariance=np.full(4, 0.1),
         components=[("evolutionary", np.ones(4))],
         reml=False,
-        likelihood_observations=2,
-        likelihood_groups=np.asarray([0, 0, 1, 1]),
     )
 
     dense = fit_conditional_eiv_gaussian(
@@ -454,7 +452,7 @@ def test_sparse_precision_marginal_diagonal_is_exact_above_legacy_threshold():
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
 
 
-def test_grouped_gmrf_marginals_are_precomputed_once_for_optimization(monkeypatch):
+def test_normalized_gmrf_likelihood_does_not_need_grouped_marginals(monkeypatch):
     response = np.asarray([1.0, 2.0, 3.2, 4.1])
     design = np.column_stack([np.ones(4), np.arange(4.0)])
     loading = sparse.eye(4, format="csr")
@@ -498,13 +496,11 @@ def test_grouped_gmrf_marginals_are_precomputed_once_for_optimization(monkeypatc
         np.full(4, 0.1),
         [("evolutionary", np.ones(4))],
         reml=False,
-        likelihood_observations=2,
-        likelihood_groups=np.asarray([0, 0, 1, 1]),
     )
 
-    # One grouped profile before optimization and one row profile retained in
-    # the returned diagnostic covariance; never one exact solve per objective.
-    assert calls == 2
+    # Normalized determinants need no event pseudo-marginals. Only the final
+    # diagnostic covariance obtains a row-marginal profile.
+    assert calls == 1
 
 
 def test_structured_eiv_warns_and_attempts_above_validated_size(monkeypatch):

@@ -4,6 +4,10 @@ See [protocol and usage](../../REGRESSION_CALIBRATION.md) for the estimands,
 generators, model assumptions, acceptance bands and limitations. These are
 fixed-model experiments; they do not validate post-selection inference.
 
+These frozen experiments predate the event-average/normalized-likelihood
+revision. They remain evidence for their archived source versions and must
+not be treated as calibration of the revised estimators.
+
 ## Completed experiments
 
 | Directory | Generated datasets | Purpose |

@@ -1514,6 +1514,7 @@ def test_sparse_phylogenetic_glmm_supports_parametric_bootstrap(monkeypatch):
         np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)]),
         covariance,
         family="poisson",
+        coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=2,
         seed=7,
@@ -1523,6 +1524,7 @@ def test_sparse_phylogenetic_glmm_supports_parametric_bootstrap(monkeypatch):
         np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)]),
         covariance,
         family="poisson",
+        coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=2,
         seed=7,
@@ -1542,6 +1544,7 @@ def test_parametric_bootstrap_crosses_500_tip_backend_boundary():
         np.ones((size, 1)),
         evolutionary_covariance_factory(tree, names),
         family="poisson",
+        coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=2,
         seed=3,
@@ -1557,6 +1560,7 @@ def test_small_parametric_bootstrap_accepts_sparse_group_effect():
         evolutionary_covariance_factory(_tree(), LEAF_NAMES),
         family="poisson",
         group_covariance=sparse_group_covariance(["A", "A", "B", "C", "C"]),
+        coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=2,
         seed=3,
@@ -1834,6 +1838,7 @@ def test_sparse_bootstrap_samples_gmrf_predictor_uncertainty(monkeypatch):
             GmrfPredictorUncertainty(predictor_posterior, np.arange(5))
         ],
         predictor_columns=[1],
+        coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=2,
         seed=11,
@@ -2073,18 +2078,20 @@ def test_response_family_configuration_rejects_contradictory_or_ignored_options(
         )
 
 
-def test_categorical_separation_is_regularized_and_likelihood_tested():
+def test_categorical_separation_is_regularized_and_null_bootstrap_tested():
     result = fit_ordinary_regression(
         _tree(),
         {"state": _values(["no", "no", "no", "yes", "yes"])},
         {"body_size": _values([1.0, 2.0, 3.0, 4.0, 5.0])},
         ["state"],
         ["body_size"],
-        inference="likelihood-ratio",
+        inference="null-bootstrap",
+        bootstrap_replicates=2,
+        seed=6,
     )
 
     assert set(result["separation_warning"]) == {"yes"}
-    assert set(result["inference_method"]) == {"likelihood-ratio"}
+    assert set(result["inference_method"]) == {"null-bootstrap"}
     assert np.isfinite(pd.to_numeric(result["coefficient"])).all()
     assert np.isfinite(pd.to_numeric(result["p_value"])).all()
 
@@ -2098,6 +2105,7 @@ def test_non_gaussian_factor_omnibus_is_explicitly_labeled_wald():
         ["habitat"],
         categorical_predictors=["habitat"],
         response_families={"count": "poisson"},
+        coefficient_penalty="none",
         inference="likelihood-ratio",
     )
 
@@ -2115,6 +2123,7 @@ def test_non_gaussian_profile_likelihood_reports_asymmetric_intervals():
         ["state"],
         ["body_size"],
         response_families={"state": "poisson"},
+        coefficient_penalty="none",
         inference="profile-likelihood",
     )
 
@@ -2141,6 +2150,7 @@ def test_non_gaussian_parametric_bootstrap_refits_the_family(values, response_fa
         ["state"],
         ["body_size"],
         response_families=response_families,
+        coefficient_penalty="none",
         inference="parametric-bootstrap",
         bootstrap_replicates=4,
         seed=17,
@@ -2243,7 +2253,10 @@ def test_multivariate_cli_combines_biological_replicates_with_partial_missingnes
     }
 
 
-def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path):
+@pytest.mark.parametrize("observation_model", [False, True])
+def test_censored_gaussian_cli_preserves_censored_biological_replicates(
+    tmp_path, observation_model
+):
     tree_path = tmp_path / "species.nwk"
     data_path = tmp_path / "censored-replicates.tsv"
     output_path = tmp_path / "censored.tsv"
@@ -2259,6 +2272,7 @@ def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path
                     "sample": "{}-exact".format(leaf_name),
                     "state": float(index),
                     "upper": np.nan,
+                    "detection": float(index) - 0.5,
                     "body_size": predictor,
                 },
                 {
@@ -2266,6 +2280,7 @@ def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path
                     "sample": "{}-left".format(leaf_name),
                     "state": np.nan,
                     "upper": float(index) + 0.5,
+                    "detection": float(index) + 0.5,
                     "body_size": predictor,
                 },
             ]
@@ -2289,6 +2304,24 @@ def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path
             "state=censored-gaussian",
             "--response-censor-upper",
             "state=upper",
+            *(
+                [
+                    "--response-observation-model",
+                    "state=detection-limits",
+                    "--response-detection-lower",
+                    "state=detection",
+                    "--inference",
+                    "parametric-bootstrap",
+                    "--coefficient-penalty",
+                    "none",
+                    "--bootstrap-replicates",
+                    "2",
+                    "--seed",
+                    "7",
+                ]
+                if observation_model
+                else []
+            ),
             "--outfile",
             str(output_path),
         ]
@@ -2297,3 +2330,6 @@ def test_censored_gaussian_cli_preserves_censored_biological_replicates(tmp_path
     result = pd.read_csv(output_path, sep="\t")
     assert set(result["response_family"]) == {"censored-gaussian"}
     assert np.isfinite(result["coefficient"]).all()
+    if observation_model:
+        assert set(result["observation_model"]) == {"detection-limits"}
+        assert set(result["bootstrap_succeeded"]) == {2}

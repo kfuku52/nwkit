@@ -18,7 +18,6 @@ from nwkit.gaussian import (
     factor_diagonal_low_rank_updates,
     factor_diagonal_sparse_precision_updates,
     factor_logdet,
-    grouped_average_marginal_logdet,
     grouped_mean_covariance_diagonal,
     is_diagonal,
     materialize_covariance,
@@ -1351,7 +1350,7 @@ def fit_conditional_eiv_gaussian(
         )
     response = np.asarray(response, dtype=float)
     design = np.asarray(design, dtype=float)
-    effective_likelihood_count, logdet_weight, likelihood_logdet_offset = (
+    effective_likelihood_count, _logdet_weight, likelihood_logdet_offset = (
         effective_likelihood_settings(
             len(response),
             design.shape[1],
@@ -1361,17 +1360,9 @@ def fit_conditional_eiv_gaussian(
         )
     )
     if likelihood_groups is not None:
-        likelihood_groups = np.asarray(likelihood_groups)
-        grouped_count = len(np.unique(likelihood_groups))
-        expected_count = (
-            len(response)
-            if likelihood_observations is None
-            else float(likelihood_observations)
+        raise ValueError(
+            "Grouped pseudo-likelihood is unsupported; use event-average estimation."
         )
-        if not math.isclose(
-            float(grouped_count), expected_count, rel_tol=1e-12, abs_tol=1e-12
-        ):
-            raise ValueError("Likelihood groups do not match likelihood_observations.")
     component_factors = {} if component_factors is None else dict(component_factors)
     structured = _uses_structured_eiv_covariance(
         fixed_covariance, components, component_factors, predictor_uncertainties
@@ -1468,30 +1459,7 @@ def fit_conditional_eiv_gaussian(
                 gram_logdet = 0.0
         except np.linalg.LinAlgError:
             return float("inf")
-        if likelihood_groups is None:
-            determinant_term = logdet_weight * (
-                covariance_logdet - likelihood_logdet_offset
-            )
-        else:
-            if any(name == "species_event_variance" for name, _ in components):
-                determinant_term = grouped_average_marginal_logdet(
-                    covariance,
-                    likelihood_groups,
-                    precision_factor=cholesky,
-                )
-            else:
-                grouped_variances = grouped_mean_covariance_diagonal(
-                    covariance,
-                    likelihood_groups,
-                    precision_factor=cholesky,
-                )
-                if (
-                    np.any(grouped_variances <= 0.0)
-                    or not np.isfinite(grouped_variances).all()
-                ):
-                    return float("inf")
-                determinant_term = float(np.log(grouped_variances).sum())
-            determinant_term -= likelihood_logdet_offset
+        determinant_term = covariance_logdet - likelihood_logdet_offset
         objective = 0.5 * (
             effective_likelihood_count * math.log(2.0 * math.pi)
             + determinant_term
@@ -1526,16 +1494,15 @@ def fit_conditional_eiv_gaussian(
             "upper_variance": upper_variance,
         }
 
-    if starting_parameters is None:
-        starts = [
-            np.concatenate(
-                [ordinary_beta, np.log(np.repeat(response_scale, len(components)))]
-            )
-        ]
-    else:
+    starts = [
+        np.concatenate(
+            [ordinary_beta, np.log(np.repeat(response_scale, len(components)))]
+        )
+    ]
+    if starting_parameters is not None:
         start = np.asarray(starting_parameters, dtype=float).copy()
         start[:num_coefficients] -= beta_offset
-        starts = [start]
+        starts.insert(0, start)
     candidates = []
     with warnings.catch_warnings():
         warnings.filterwarnings(

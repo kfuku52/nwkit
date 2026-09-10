@@ -116,6 +116,7 @@ def test_null_bootstrap_refits_no_intercept_null_without_predictors():
     case = Case("null", size=5)
     result = evaluate(case, generate(case, 53), "null-bootstrap", 4, 29, 30)
     assert result["status"] == "completed", result
+    assert result["reference_objective"] == "normalized-common-gaussian-ML"
     assert result["bootstrap_attempts"] == 4
     assert result["bootstrap_successes"] == 4
     assert 0 < result["p_value"] <= 1

@@ -1,5 +1,6 @@
 """Laplace-approximated phylogenetic generalized linear mixed models."""
 
+import json
 import math
 import warnings
 from dataclasses import dataclass, replace
@@ -23,6 +24,13 @@ from scipy.stats import poisson as poisson_distribution
 
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
+from nwkit.regression_inference import (
+    BootstrapTest,
+    bootstrap_test,
+    invert_bootstrap_grid,
+    objective_difference,
+)
+from nwkit.regression_observation import CensoringModel
 from nwkit.sparse_laplace import (
     ContinuousPredictorUncertainty,
     GmrfPredictorUncertainty,
@@ -73,6 +81,11 @@ class PhylogeneticGlmmFit:
     coefficient_confidence_upper: np.ndarray | None = None
     coefficient_inference: str = "wald"
     coefficient_covariance_status: str = "ok"
+    bootstrap_attempted: int = 0
+    bootstrap_succeeded: int = 0
+    coefficient_monte_carlo_se: np.ndarray | None = None
+    coefficient_profile: tuple = ()
+    observation_model: str = "not-applicable"
 
 
 SCALAR_RESPONSE_FAMILIES = {
@@ -171,6 +184,12 @@ def _dense_glmm_memory_error(n_tips: int, random_dimension: int) -> MemoryError:
 
 
 def _wald_coefficient_summary(fit, flat_index, coefficient, critical):
+    if fit.coefficient_inference == "none":
+        return "", "", "", "", "", "not-requested"
+    if fit.coefficient_penalty != "none":
+        return "", "", "", "", "", "penalized-point-estimate"
+    if fit.coefficient_inference == "null-bootstrap":
+        return "", "", "", "", "", "null-bootstrap"
     variance = float(fit.coefficient_covariance[flat_index, flat_index])
     available = np.isfinite(variance) and variance >= 0.0
     if available and variance > 0.0:
@@ -199,6 +218,9 @@ def summarize_glmm_coefficient(fit, flat_index, coefficient, critical):
         statistic = float(fit.coefficient_statistics[flat_index])
         assert fit.coefficient_p_values is not None
         p_value = float(fit.coefficient_p_values[flat_index])
+        status = (
+            "null-bootstrap" if fit.coefficient_inference == "null-bootstrap" else "ok"
+        )
     if fit.coefficient_confidence_lower is not None and np.isfinite(
         fit.coefficient_confidence_lower[flat_index]
     ):
@@ -207,11 +229,28 @@ def summarize_glmm_coefficient(fit, flat_index, coefficient, critical):
         fit.coefficient_confidence_upper[flat_index]
     ):
         upper = float(fit.coefficient_confidence_upper[flat_index])
+    if fit.coefficient_inference == "profile-likelihood":
+        # A failed profile search is not evidence for the Wald interval.
+        if fit.coefficient_confidence_lower is None or not np.isfinite(
+            fit.coefficient_confidence_lower[flat_index]
+        ):
+            lower = ""
+            status = "profile-endpoint-not-found"
+        if fit.coefficient_confidence_upper is None or not np.isfinite(
+            fit.coefficient_confidence_upper[flat_index]
+        ):
+            upper = ""
+            status = "profile-endpoint-not-found"
     return standard_error, statistic, p_value, lower, upper, status
 
 
 def summarize_glmm_omnibus(fit, indices):
     """Return a Wald omnibus result or an explicit unavailable status."""
+    if fit.coefficient_penalty != "none" or fit.coefficient_inference in {
+        "none",
+        "null-bootstrap",
+    }:
+        return "", "", "omnibus-inference-not-requested"
     selected = fit.coefficients.reshape(-1)[indices]
     covariance = fit.coefficient_covariance[np.ix_(indices, indices)]
     if not np.isfinite(covariance).all():
@@ -222,6 +261,11 @@ def summarize_glmm_omnibus(fit, indices):
 
 def summarize_glmm_threshold(fit, threshold_index, critical):
     """Return one ordinal threshold's uncertainty fields."""
+    if fit.coefficient_penalty != "none" or fit.coefficient_inference in {
+        "none",
+        "null-bootstrap",
+    }:
+        return "", "", "", "threshold-inference-not-requested"
     threshold = float(fit.thresholds[threshold_index])
     variance = float(fit.threshold_covariance[threshold_index, threshold_index])
     if not np.isfinite(variance) or variance < 0.0:
@@ -1686,7 +1730,14 @@ def _fixed_parameter_covariances(
     coefficient_covariance: np.ndarray,
     *,
     numerical: bool,
+    inference: str = "wald",
 ) -> tuple[np.ndarray, np.ndarray, str]:
+    if inference == "none":
+        return (
+            coefficient_covariance,
+            np.full((threshold_count, threshold_count), np.nan),
+            "not-requested",
+        )
     if not numerical:
         return coefficient_covariance, np.empty((0, 0), dtype=float), "conditional"
     full_hessian = _finite_difference_hessian(objective, optimized_parameters)
@@ -1876,7 +1927,7 @@ def _coefficient_likelihood_inference(
     inference: str,
     confidence_level: float,
 ):
-    if inference == "wald":
+    if inference in {"wald", "none"}:
         return None, None, None, None
     fitted_objective = objective(optimized)
     statistics = np.empty(coefficient_count, dtype=float)
@@ -1888,7 +1939,7 @@ def _coefficient_likelihood_inference(
         null_objective = _optimize_with_fixed_coefficient(
             objective, optimized, bounds, index, 0.0
         )
-        statistics[index] = max(0.0, 2.0 * (null_objective - fitted_objective))
+        statistics[index] = objective_difference(fitted_objective, null_objective)
         p_values[index] = float(chi2.sf(statistics[index], 1))
         if inference == "profile-likelihood":
             standard_error = math.sqrt(
@@ -1913,6 +1964,66 @@ def _coefficient_likelihood_inference(
                 1.0,
             )
     return statistics, p_values, lower, upper
+
+
+def _constrain_coefficients(initial, bounds, coefficient_count, fixed):
+    initial = np.asarray(initial, dtype=float).copy()
+    bounds = list(bounds)
+    for index, value in (fixed or {}).items():
+        if (
+            not isinstance(index, (int, np.integer))
+            or not 0 <= index < coefficient_count
+            or not np.isfinite(value)
+        ):
+            raise ValueError("Fixed coefficients need valid indices and finite values.")
+        initial[index] = float(value)
+        bounds[index] = (float(value), float(value))
+    return initial, bounds
+
+
+def _glmm_objective(fit):
+    return -fit.log_likelihood + _coefficient_penalty_value(
+        fit.coefficients, fit.coefficient_penalty, fit.coefficient_prior_sd
+    )
+
+
+def glmm_inference_metadata(fit, flat_index=None):
+    """Keep likelihood, penalty, reference distribution and intervals distinct."""
+    inference = fit.coefficient_inference
+    penalty = _coefficient_penalty_value(
+        fit.coefficients, fit.coefficient_penalty, fit.coefficient_prior_sd
+    )
+    penalized_point = fit.coefficient_penalty != "none" and inference == "wald"
+    return {
+        "objective_kind": "penalized-laplace-likelihood"
+        if fit.coefficient_penalty != "none"
+        else "laplace-likelihood",
+        "objective_value": -fit.log_likelihood + penalty,
+        "penalty_value": penalty,
+        "covariance_basis": "penalized-curvature"
+        if fit.coefficient_penalty != "none"
+        else "nuisance-adjusted-likelihood",
+        "p_value_method": "none"
+        if penalized_point or inference == "none"
+        else "null-bootstrap-objective-difference"
+        if inference == "null-bootstrap"
+        else inference,
+        "interval_method": "none"
+        if penalized_point or inference in {"none", "null-bootstrap"}
+        else "percentile"
+        if inference == "parametric-bootstrap"
+        else inference,
+        "bootstrap_attempted": fit.bootstrap_attempted,
+        "bootstrap_succeeded": fit.bootstrap_succeeded,
+        "bootstrap_failed": fit.bootstrap_attempted - fit.bootstrap_succeeded,
+        "monte_carlo_se": ""
+        if flat_index is None or fit.coefficient_monte_carlo_se is None
+        else float(fit.coefficient_monte_carlo_se[flat_index]),
+        "coefficient_profile": ""
+        if flat_index is None or not fit.coefficient_profile
+        else json.dumps(fit.coefficient_profile[flat_index], separators=(",", ":")),
+        "observation_model": fit.observation_model,
+    }
 
 
 def _fitted_random_covariance(
@@ -2067,15 +2178,6 @@ def _draw_beta_binomial(rng, linear, dispersion, trials):
     return rng.binomial(trials.astype(int), probabilities).astype(float)
 
 
-def _draw_censored_gaussian(rng, linear, dispersion, censor_lower, censor_upper):
-    assert dispersion is not None
-    values = rng.normal(linear, dispersion)
-    lower = np.full(len(values), np.nan) if censor_lower is None else censor_lower
-    upper = np.full(len(values), np.nan) if censor_upper is None else censor_upper
-    values[~(np.isnan(lower) & np.isnan(upper))] = np.nan
-    return values
-
-
 def _draw_scalar_observations(
     rng: np.random.Generator,
     linear: np.ndarray,
@@ -2108,8 +2210,8 @@ def _draw_scalar_observations(
     if family == "beta-binomial":
         return _draw_beta_binomial(rng, linear, dispersion, trials)
     if family == "censored-gaussian":
-        return _draw_censored_gaussian(
-            rng, linear, dispersion, censor_lower, censor_upper
+        raise ValueError(
+            "Censored responses must be generated with their observation model and fresh bounds."
         )
     raise ValueError("Unsupported scalar response family: {}.".format(family))
 
@@ -2475,6 +2577,7 @@ def _fit_scalar_phylogenetic_glmm(
     inference: str,
     confidence_level: float,
     allow_large_dense: bool,
+    fixed_coefficients: Mapping[int, float] | None,
 ) -> PhylogeneticGlmmFit:
     tip_design = np.asarray(design, dtype=float)
     if tip_design.ndim != 2 or not np.isfinite(tip_design).all():
@@ -2569,6 +2672,10 @@ def _fit_scalar_phylogenetic_glmm(
                 float(evolution_parameter_bounds[1]),
             )
         )
+
+    initial, bounds = _constrain_coefficients(
+        initial, bounds, coefficient_count, fixed_coefficients
+    )
 
     def unpack(parameters: np.ndarray):
         position = coefficient_count
@@ -2750,6 +2857,7 @@ def _fit_scalar_phylogenetic_glmm(
         0,
         approximate_covariance,
         numerical=True,
+        inference=inference,
     )
     components = dict(zip(component_names, np.exp(log_variances), strict=True))
     if use_sparse:
@@ -2837,6 +2945,7 @@ class _GlmmCallOptions:
     trials: Sequence[float] | None
     censor_lower: Sequence[float] | None
     censor_upper: Sequence[float] | None
+    censoring_model: CensoringModel | None
     dispersion: float | None
     zero_probability: float | None
     coefficient_penalty: str
@@ -2846,6 +2955,8 @@ class _GlmmCallOptions:
     bootstrap_replicates: int
     seed: int
     allow_large_dense: bool
+    fixed_coefficients: Mapping[int, float] | None
+    coefficient_profile_grid: Sequence[float] | str | None
 
 
 def _validate_fixed_dispersion(value: float | None) -> None:
@@ -2884,6 +2995,16 @@ def _validate_glmm_call_options(options: _GlmmCallOptions) -> None:
         options.censor_lower is not None or options.censor_upper is not None
     ) and options.family != "censored-gaussian":
         raise ValueError("Censor bounds apply only to the censored-gaussian family.")
+    if options.censoring_model is not None and options.family != "censored-gaussian":
+        raise ValueError("Observation models apply only to censored-gaussian.")
+    if (
+        options.family == "censored-gaussian"
+        and options.inference in {"parametric-bootstrap", "null-bootstrap"}
+        and options.censoring_model is None
+    ):
+        raise ValueError(
+            "Censored bootstrap requires an observation model for every row; observed bounds alone do not define a censoring mechanism."
+        )
     if options.dispersion is not None and options.family not in DISPERSION_FAMILIES:
         raise ValueError(
             "A fixed dispersion does not apply to family '{}'.".format(options.family)
@@ -2907,6 +3028,8 @@ def _validate_glmm_call_options(options: _GlmmCallOptions) -> None:
         options.coefficient_penalty, options.coefficient_prior_sd
     )
     if options.inference not in {
+        "none",
+        "null-bootstrap",
         "wald",
         "parametric-bootstrap",
         "likelihood-ratio",
@@ -2915,6 +3038,40 @@ def _validate_glmm_call_options(options: _GlmmCallOptions) -> None:
         raise ValueError(
             "Unsupported non-Gaussian inference: {}.".format(options.inference)
         )
+    if options.coefficient_penalty != "none" and options.inference in {
+        "likelihood-ratio",
+        "profile-likelihood",
+        "parametric-bootstrap",
+    }:
+        raise ValueError(
+            "Penalized coefficients require null-bootstrap inference; use coefficient_penalty='none' for ordinary likelihood or percentile inference."
+        )
+    if options.fixed_coefficients and options.inference != "none":
+        raise ValueError("Constrained refits require inference='none'.")
+    if (
+        options.coefficient_profile_grid is not None
+        and options.inference != "null-bootstrap"
+    ):
+        raise ValueError("Coefficient profile grids require null-bootstrap inference.")
+    if options.coefficient_profile_grid is not None:
+        grid = options.coefficient_profile_grid
+        try:
+            values = np.asarray(
+                grid.split("|") if isinstance(grid, str) else grid, dtype=float
+            )
+        except ValueError as exc:
+            raise ValueError(
+                "Coefficient profile grid must contain numeric values."
+            ) from exc
+        if (
+            values.ndim != 1
+            or not len(values)
+            or not np.isfinite(values).all()
+            or np.any(np.diff(values) <= 0)
+        ):
+            raise ValueError(
+                "Bootstrap profile grid must be finite and strictly increasing."
+            )
     if not 0.0 < options.confidence_level < 1.0:
         raise ValueError("Confidence level must lie strictly between zero and one.")
     if (
@@ -2955,6 +3112,7 @@ def _call_phylogenetic_glmm(
         trials=options.trials,
         censor_lower=options.censor_lower,
         censor_upper=options.censor_upper,
+        censoring_model=options.censoring_model,
         dispersion=options.dispersion,
         zero_probability=options.zero_probability,
         coefficient_penalty=options.coefficient_penalty,
@@ -2964,6 +3122,8 @@ def _call_phylogenetic_glmm(
         bootstrap_replicates=options.bootstrap_replicates,
         seed=options.seed,
         allow_large_dense=options.allow_large_dense,
+        fixed_coefficients=options.fixed_coefficients,
+        coefficient_profile_grid=options.coefficient_profile_grid,
     )
 
 
@@ -2990,16 +3150,27 @@ def _draw_bootstrap_responses(
     )
 
 
-def _fit_parametric_bootstrap_glmm(
-    response_values,
-    design,
-    phylogenetic_covariance,
-    options: _GlmmCallOptions,
-) -> PhylogeneticGlmmFit:
-    wald_options = replace(options, inference="wald")
-    fit = _call_phylogenetic_glmm(
-        response_values, design, phylogenetic_covariance, wald_options
+def _draw_bootstrap_dataset(rng, response_values, design, fit, latent, options):
+    if options.family != "censored-gaussian":
+        return _draw_bootstrap_responses(
+            rng, response_values, design, fit, latent, options
+        ), options
+    if options.censoring_model is None:
+        raise ValueError("Censored bootstrap requires an observation model.")
+    _, expanded_design, mapping, *_ = _expand_replicated_scalar_inputs(
+        response_values, design, None, None, None, None
     )
+    linear = (expanded_design @ fit.coefficients)[:, 0] + latent.reshape(len(design))[
+        mapping
+    ]
+    latent_response = rng.normal(linear, fit.dispersion)
+    simulated, lower, upper = options.censoring_model.observe(
+        latent_response, response_values
+    )
+    return simulated, replace(options, censor_lower=lower, censor_upper=upper)
+
+
+def _prepare_glmm_sampler(fit, design, phylogenetic_covariance, options):
     design_array = np.asarray(design, dtype=float)
     sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
     sparse_capable = (
@@ -3041,11 +3212,29 @@ def _fit_parametric_bootstrap_glmm(
             raise _dense_glmm_memory_error(
                 len(design_array), fit.coefficients.shape[1]
             ) from exc
+    if sparse_sampler is not None:
+        return sparse_sampler.sample
+    assert random_cholesky is not None
+    return lambda rng: random_cholesky @ rng.normal(size=len(random_cholesky))
+
+
+def _fit_parametric_bootstrap_glmm(
+    response_values,
+    design,
+    phylogenetic_covariance,
+    options: _GlmmCallOptions,
+) -> PhylogeneticGlmmFit:
+    wald_options = replace(options, inference="none")
+    fit = _call_phylogenetic_glmm(
+        response_values, design, phylogenetic_covariance, wald_options
+    )
+    design_array = np.asarray(design, dtype=float)
+    sample_latent = _prepare_glmm_sampler(
+        fit, design_array, phylogenetic_covariance, options
+    )
     rng = np.random.default_rng(options.seed)
     samples: list[np.ndarray] = []
-    maximum_attempts = max(
-        options.bootstrap_replicates * 3, options.bootstrap_replicates + 10
-    )
+    maximum_attempts = options.bootstrap_replicates
     attempts = 0
     refit_options = replace(
         wald_options,
@@ -3054,17 +3243,13 @@ def _fit_parametric_bootstrap_glmm(
     )
     while len(samples) < options.bootstrap_replicates and attempts < maximum_attempts:
         attempts += 1
-        if sparse_sampler is not None:
-            latent = sparse_sampler.sample(rng)
-        else:
-            assert random_cholesky is not None
-            latent = random_cholesky @ rng.normal(size=len(random_cholesky))
-        simulated = _draw_bootstrap_responses(
-            rng, response_values, design_array, fit, latent, options
+        latent = sample_latent(rng)
+        simulated, generated_options = _draw_bootstrap_dataset(
+            rng, response_values, design_array, fit, latent, refit_options
         )
         try:
             refit = _call_phylogenetic_glmm(
-                simulated, design_array, phylogenetic_covariance, refit_options
+                simulated, design_array, phylogenetic_covariance, generated_options
             )
         except (ValueError, RuntimeError, np.linalg.LinAlgError):
             continue
@@ -3081,7 +3266,98 @@ def _fit_parametric_bootstrap_glmm(
             )
         )
     return _bootstrap_coefficient_inference(
-        fit, np.asarray(samples, dtype=float), options.confidence_level
+        replace(fit, bootstrap_attempted=attempts, bootstrap_succeeded=len(samples)),
+        np.asarray(samples, dtype=float),
+        options.confidence_level,
+    )
+
+
+def _fit_null_bootstrap_glmm(response_values, design, phylogenetic_covariance, options):
+    """Refit both hypotheses under data generated from each constrained null."""
+    point_options = replace(options, inference="none", coefficient_profile_grid=None)
+    full = _call_phylogenetic_glmm(
+        response_values, design, phylogenetic_covariance, point_options
+    )
+    point_options = replace(
+        point_options,
+        levels=full.levels or options.levels,
+        reference=full.reference or options.reference,
+    )
+    design = np.asarray(design, dtype=float)
+    full_objective = _glmm_objective(full)
+    statistics, p_values, mc_errors, profiles = [], [], [], []
+    attempted = 0
+    grid = options.coefficient_profile_grid
+    if isinstance(grid, str):
+        try:
+            grid = tuple(float(value) for value in grid.split("|"))
+        except ValueError as exc:
+            raise ValueError(
+                "Coefficient profile grid must contain numeric values separated by '|'."
+            ) from exc
+    for index in range(full.coefficients.size):
+        cache: dict[float, BootstrapTest] = {}
+
+        def test(value, index=index, cache=cache):
+            nonlocal attempted
+            if value in cache:
+                return cache[value]
+            null_options = replace(point_options, fixed_coefficients={index: value})
+            null = _call_phylogenetic_glmm(
+                response_values, design, phylogenetic_covariance, null_options
+            )
+            observed = objective_difference(full_objective, _glmm_objective(null))
+            sample_latent = _prepare_glmm_sampler(
+                null, design, phylogenetic_covariance, null_options
+            )
+
+            def simulate_statistic(rng):
+                simulated, generated_options = _draw_bootstrap_dataset(
+                    rng, response_values, design, null, sample_latent(rng), null_options
+                )
+                fitted_null = _call_phylogenetic_glmm(
+                    simulated, design, phylogenetic_covariance, generated_options
+                )
+                fitted_full = _call_phylogenetic_glmm(
+                    simulated,
+                    design,
+                    phylogenetic_covariance,
+                    replace(generated_options, fixed_coefficients=None),
+                )
+                return objective_difference(
+                    _glmm_objective(fitted_full), _glmm_objective(fitted_null)
+                )
+
+            result = bootstrap_test(
+                observed,
+                simulate_statistic,
+                replicates=options.bootstrap_replicates,
+                seed=options.seed + index,
+            )
+            attempted += options.bootstrap_replicates
+            cache[value] = result
+            return result
+
+        result = test(0.0)
+        statistics.append(result.statistic)
+        p_values.append(result.p_value)
+        mc_errors.append(result.monte_carlo_se)
+        profiles.append(
+            []
+            if grid is None
+            else invert_bootstrap_grid(test, grid, options.confidence_level)
+        )
+    return replace(
+        full,
+        coefficient_inference="null-bootstrap",
+        coefficient_statistics=np.asarray(statistics),
+        coefficient_p_values=np.asarray(p_values),
+        coefficient_confidence_lower=None,
+        coefficient_confidence_upper=None,
+        coefficient_monte_carlo_se=np.asarray(mc_errors),
+        coefficient_profile=tuple(profiles),
+        bootstrap_attempted=attempted,
+        bootstrap_succeeded=attempted,
     )
 
 
@@ -3104,6 +3380,7 @@ def fit_phylogenetic_glmm(
     trials: Sequence[float] | None = None,
     censor_lower: Sequence[float] | None = None,
     censor_upper: Sequence[float] | None = None,
+    censoring_model: CensoringModel | None = None,
     dispersion: float | None = None,
     zero_probability: float | None = None,
     coefficient_penalty: str = "student-t",
@@ -3113,6 +3390,8 @@ def fit_phylogenetic_glmm(
     bootstrap_replicates: int = 1000,
     seed: int = 1,
     allow_large_dense: bool = False,
+    fixed_coefficients: Mapping[int, float] | None = None,
+    coefficient_profile_grid: Sequence[float] | str | None = None,
 ) -> PhylogeneticGlmmFit:
     """Fit a categorical, count, positive, or proportion phylogenetic GLMM."""
     options = _GlmmCallOptions(
@@ -3130,6 +3409,7 @@ def fit_phylogenetic_glmm(
         trials=trials,
         censor_lower=censor_lower,
         censor_upper=censor_upper,
+        censoring_model=censoring_model,
         dispersion=dispersion,
         zero_probability=zero_probability,
         coefficient_penalty=coefficient_penalty,
@@ -3139,14 +3419,22 @@ def fit_phylogenetic_glmm(
         bootstrap_replicates=bootstrap_replicates,
         seed=seed,
         allow_large_dense=allow_large_dense,
+        fixed_coefficients=fixed_coefficients,
+        coefficient_profile_grid=coefficient_profile_grid,
     )
     _validate_glmm_call_options(options)
+    if censoring_model is not None:
+        censoring_model.validate_observed(response_values, censor_lower, censor_upper)
+    if inference == "null-bootstrap":
+        return _fit_null_bootstrap_glmm(
+            response_values, design, phylogenetic_covariance, options
+        )
     if inference == "parametric-bootstrap":
         return _fit_parametric_bootstrap_glmm(
             response_values, design, phylogenetic_covariance, options
         )
     if family in SCALAR_RESPONSE_FAMILIES:
-        return _fit_scalar_phylogenetic_glmm(
+        fitted = _fit_scalar_phylogenetic_glmm(
             response_values,
             design,
             phylogenetic_covariance,
@@ -3169,6 +3457,17 @@ def fit_phylogenetic_glmm(
             inference=inference,
             confidence_level=confidence_level,
             allow_large_dense=allow_large_dense,
+            fixed_coefficients=fixed_coefficients,
+        )
+        return replace(
+            fitted,
+            observation_model=(
+                censoring_model.kind
+                if censoring_model is not None
+                else "unspecified"
+                if family == "censored-gaussian"
+                else "not-applicable"
+            ),
         )
     values, design = _validate_glmm_inputs(response_values, design, family)
     sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
@@ -3232,6 +3531,10 @@ def fit_phylogenetic_glmm(
         component_count,
         evolution_parameter_bounds,
         evolution_parameter_initial,
+    )
+
+    initial, bounds = _constrain_coefficients(
+        initial, bounds, coefficient_count, fixed_coefficients
     )
 
     def unpack(parameters: np.ndarray):
@@ -3408,6 +3711,7 @@ def fit_phylogenetic_glmm(
         threshold_count,
         coefficient_covariance,
         numerical=True,
+        inference=inference,
     )
     variance_values = np.exp(log_variances)
     components = dict(zip(component_names, variance_values, strict=True))

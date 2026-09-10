@@ -12,6 +12,10 @@ Selection remains a separate exploratory procedure without post-selection
 p-values. Multi-family error control must be evaluated separately from the
 calibration of individual tests.
 
+The recorded 2026-09-10 studies predate the event-average/normalized-likelihood
+revision. Their frozen source archives remain the authority for those results;
+they do not validate the revised estimators. New calibration runs are required.
+
 ## Running
 
 Use a GeneGalleon container, with this NWKIT source mounted read-only and on
@@ -67,7 +71,7 @@ to biological expression observations; complete loss at a leaf is ineligible.
 ## Methods and interpretation
 
 * `wald` and `parametric-bootstrap` call the existing production estimators.
-  RSC Wald uses the existing event-based t degrees of freedom. The coefficient
+  RSC event-average Wald uses an asymptotic normal reference. The coefficient
   bootstrap uses centered coefficient samples and percentile intervals.
 * `oracle` is an independently calculated Gaussian GLS result with the true
   covariance known. It is a generator/linear-algebra control, not an available
@@ -76,8 +80,9 @@ to biological expression observations; complete loss at a leaf is ineligible.
 * `null-bootstrap` is a validation-only constrained-null comparison. It
   refits null and alternative variance parameters with ML. For RSC, covariance
   component definitions remain fixed between the two fits, and the statistic
-  is an event-balanced **composite objective** difference, not a chi-squared
-  likelihood ratio. The reference is currently limited to exact predictors.
+  is a normalized **common-coefficient Gaussian ML** objective difference,
+  calibrated by null simulation. This auxiliary test does not target the
+  event-average estimating equation. It is currently limited to exact predictors.
   It produces a p-value, not a confidence interval.
 * GLMM `profile-likelihood` and `likelihood-ratio` use NWKIT's existing paths.
   A finite likelihood or successful optimizer alone is not evidence of
@@ -85,8 +90,9 @@ to biological expression observations; complete loss at a leaf is ineligible.
 
 RSC physical-generation cases preserve shared species-event and paralog-lineage
 effects. Cases ending in `-working` instead generate from the event-inflated
-working covariance. The latter does not turn the composite objective into an
-ordinary normalized Gaussian likelihood. Both are sensitivity experiments;
+working covariance. Current production fits use biological covariance without
+that inflation, so the legacy working cases deliberately test misspecification.
+Both are sensitivity experiments;
 neither should be mislabeled as a generic phylogenetic validation.
 Contrast-scale predictor errors are generated from a conditional Gaussian
 distribution, shared across paralogs in the same event. Raw biological
@@ -108,8 +114,8 @@ rejection rates; interval availability, conditional coverage and joint
 delivery/coverage; error reasons; and bootstrap attempted/successful fits.
 An invariant binary sample is never regenerated to conceal unavailability.
 
-Production bootstrap's discarded refits are observed without changing its
-calls. The reference null bootstrap uses a fixed number of attempts: any
+Production bootstrap uses fixed attempts and aborts inference on failed refits;
+the instrumentation observes those calls without replacing failed datasets. The reference null bootstrap uses a fixed number of attempts: any
 failures make the point p-value unavailable and yield lower/upper p-value
 bounds. Raw-pipeline bootstrap currently explicitly reports that its internal
 attempt accounting is not instrumented; use the direct-engine experiment for

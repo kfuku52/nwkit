@@ -150,17 +150,45 @@ Non-Gaussian models use maximum likelihood with a Laplace approximation. Their
 phylogenetic random effect has covariance
 `sigma_phylo^2 C(theta)`, where `C(theta)` is built by the same Brownian,
 lambda, OU, kappa, delta, EB/ACDC, independent, or custom model used by
-Gaussian PGLS. A missing shape parameter is estimated jointly; a supplied
-parameter is fixed. Available coefficient inference is Wald,
-family-specific parametric bootstrap, likelihood-ratio, or profile likelihood.
-The bootstrap regenerates the selected response family and phylogenetic random
-effect and refits all estimated parameters. For censored Gaussian data it
-conditions on the supplied censoring pattern and bounds. Likelihood-ratio and
-profile calculations use the penalized objective when coefficient
-regularization is enabled; `--coefficient-penalty none` gives their
-unpenalized forms. The reported Laplace log likelihood excludes the coefficient
-penalty. Non-Gaussian fits use ML, not REML; evolutionary-model comparison
-remains Gaussian-only.
+Gaussian PGLS. A missing shape parameter is estimated jointly; a supplied parameter is fixed.
+Unpenalized fits support Wald, parametric-bootstrap percentile, likelihood-ratio,
+and profile-likelihood inference. Regularized fits retain point estimates;
+the default Wald request does not attach frequentist standard errors, intervals,
+or p-values to penalized curvature. Use `--inference null-bootstrap` to calibrate
+an objective-difference statistic under each coefficient's constrained null.
+Every generated dataset is refitted under both hypotheses with the same penalty.
+`--coefficient-penalty none` selects the unpenalized likelihood methods.
+The reported Laplace log likelihood excludes the penalty; `penalty_value` and
+`objective_value` record the other parts separately. Non-Gaussian fits use ML,
+not REML; evolutionary-model comparison remains Gaussian-only.
+
+Censored Gaussian bootstrap requires a known observation mechanism for all
+biological observations, including originally exact rows:
+
+- `--response-observation-model TRAIT=detection-limits` with
+  `--response-detection-lower TRAIT=COLUMN` and/or
+  `--response-detection-upper TRAIT=COLUMN` supplies the detection limits.
+- `--response-observation-model TRAIT=interval-bins` with quoted
+  `--response-observation-bins 'TRAIT=0|1|2'` supplies a complete interval
+  partition, including the two unbounded exterior intervals.
+- `--response-observation-model TRAIT=uncensored` explicitly specifies an
+  uncensored Gaussian observation process.
+
+The simulator draws latent effects and unobserved responses, then applies this
+mechanism to regenerate values, censoring labels, and bounds together. Observed
+`--response-censor-lower/upper` columns remain separate inputs for the observed
+likelihood; they do not define a bootstrap mechanism. Bounds-only data still
+support observed-data fitting. Informative censoring and truncation require a
+different model and are not implemented by these options.
+
+For penalized coefficients, optional quoted
+`--coefficient-profile-grid='-2|-1|0|1|2'` evaluates the null-bootstrap test at
+each candidate for each coefficient. `coefficient_profile` contains candidate
+values, p-values, Monte Carlo errors, and acceptance flags. This is inversion
+on an explicit grid, **not** a continuous confidence interval: points between
+or outside the grid have not been tested. Disconnected acceptance is retained;
+NWKIT does not invent finite interval endpoints from these results. Ordinary
+unpenalized profile likelihood remains available for continuous intervals.
 
 Use `--response-offset count=log_library_size` for a count exposure,
 `--response-trials successes=trials` for beta-binomial data, and
@@ -188,11 +216,12 @@ Unpenalized scalar and categorical fits also check multiple bounded starting
 points: a successful first optimization can otherwise have a worse Laplace
 objective than an embedded intercept-only model. This improves the numerical
 search; it does not certify a global optimum or calibrate Wald inference.
-Failed profile and bootstrap refits are discarded. If the nuisance-adjusted Wald
+Failed profile or bootstrap refits abort the requested inference; failed simulated
+datasets are not replaced by successful ones. If the nuisance-adjusted Wald
 information is singular, coefficients and the fit are retained but Wald
 standard errors, intervals, and p-values are left missing with an explicit
-`inference_status`; likelihood-ratio or parametric-bootstrap inference can then
-be selected instead.
+`inference_status`. Null-bootstrap tests do not require a nonsingular
+Wald covariance, but still require successful full and null fits.
 
 Changing inference method is not a guarantee of calibrated small-sample tests.
 In particular, the current coefficient bootstrap uses centered coefficient
@@ -784,33 +813,45 @@ identifiable covariance components. `yes` requires the component and fails if
 the data cannot identify it; `no` removes it.
 `--reconciled-model replicate-reml` retains `sigma^2 G + M` but omits both
 random effects. `--reconciled-model cluster-hc1` keeps the older event-cluster
-HC1 estimator only as a sensitivity analysis.
+HC1 estimator only as a sensitivity analysis. Its historical variance-normalized
+loss is retained and labeled `estimand=legacy-variance-weighted-sensitivity`;
+the event-average/common estimand definitions below apply to the covariance models.
 
-Rows sharing a `species_event_id` have equal total working weight by default,
-so a species split represented by ten paralogs does not dominate a split
-represented once. `--event-weighting contrast` is an explicit sensitivity
-analysis. Gaussian ML/REML uses the number of species events as the effective
-likelihood sample size. For `replicate-reml` and models without a species-event
-random effect, its pseudo-determinant is the sum of the log marginal variances
-of the equally weighted event means. This includes shared species-predictor
-uncertainty without counting it once per paralog. Consequently, identical
-paralog copies leave the coefficient, evolutionary rate, standard error, and
-event-level log likelihood unchanged in `replicate-reml`.
+The default `--regression-estimand event-average` estimates the equally
+weighted event association. In raw contrast units it solves
+`sum_e (1/k_e) sum_i x_ei (y_ei - x_ei' beta_E) = 0`.
+The weights depend only on event membership, not fitted residual variances.
+Equal total *loss weight* does not mean equal statistical information: design,
+measurement error and within-event dependence still matter. This estimator
+can differ from standard variance-normalized PIC even with one paralog per
+event when evolutionary variances differ.
 
-When a species-event random effect is fitted, the objective instead uses the
-within-event average of row-marginal log variances, corrected for the known row
-scaling. This composite pseudo-determinant retains the within-event information
-needed to distinguish evolutionary residual variance from event variance. It
-is deliberately an event-balanced composite objective, not the determinant of
-an ordinary observation-level multivariate Gaussian likelihood. Bootstrap and
-lineage likelihood refits always reuse the same objective as the fitted model.
-Sparse-precision predictor uncertainty does not change this objective at a
-size threshold: required row or event-mean marginal variances are computed
-exactly by bounded-block sparse solves and cached before coefficient/variance
-optimization. NWKIT never silently substitutes a stochastic diagonal estimate
-for analyses above 500 observations.
-In every model, reported residual degrees of freedom are
-`n_species_events - num_parameters`, never the number of gene-tree rows.
+`--regression-estimand common` explicitly selects the auxiliary common-coefficient
+Gaussian hierarchical likelihood. Legacy `--event-weighting event|contrast`
+aliases select event-average or common, respectively; conflicting new/old
+options are rejected. Neither option inflates biological covariance by the
+number of paralogs. Covariance components use the normalized observation-level
+likelihood, with the full determinant and actual row count. The former event
+pseudo-determinants are no longer used.
+
+For event-average estimates, write `L=(X'WX)^-1 X'W`. Their sampling covariance
+is `L C L'`, not inverse GLS information. The implementation uses the fitted
+auxiliary biological covariance C, and in EIV evaluates the conditional
+covariance at beta_E. This is model-based plug-in uncertainty, conditional on
+the supplied design and estimated predictor model. It does not provide general
+robust coverage for arbitrary unmodeled dependence or mean heterogeneity.
+Identical copies leave the event-average coefficient unchanged. Distinct
+biological observations may improve precision, so variance estimates, standard
+errors and likelihoods are no longer forced to be copy invariant.
+
+Outputs distinguish `estimand`, `objective_kind`, `covariance_basis`, and
+`nuisance_estimator`. For event-average rows, `reml=not-applicable`: REML may be
+used for the auxiliary covariance fit, but the coefficient estimating equation
+is not a REML likelihood. `log_likelihood_basis=auxiliary-common-fit` identifies
+that separate likelihood. Gaussian Wald tests use asymptotic normal inference,
+except a common-coefficient single-scale REML model with no sampling/EIV
+covariance, where the exact t reference uses n-p. Event counts are reported
+separately; m-p is not assigned as a universal inferential degree of freedom.
 
 Lineage random slopes have a separate variance component for each source
 predictor group. Before fitting, the columns within a group are whitened by
@@ -823,9 +864,10 @@ columns in that group plus one variance component.
 
 For Gaussian reconciled contrasts, Wald inference is the default.
 `--inference parametric-bootstrap` simulates
-from the fitted covariance, refits all variance components, reports bootstrap
-standard errors and percentile intervals, and computes a centered empirical
-p-value. `--bootstrap-replicates` and `--seed` make it reproducible. Models
+from the biological fitted covariance, refits variance components and the
+selected coefficient estimator, reports bootstrap standard errors and percentile
+intervals, and computes a centered empirical p-value. This centered coefficient
+bootstrap is a plug-in approximation, not the GLMM null-bootstrap test. `--bootstrap-replicates` and `--seed` make it reproducible. Models
 with fewer than 20 unique species events and fits at a variance boundary are
 flagged. Conditional event deviations and lineage slopes can be written with
 `--random-effects-out`.
@@ -841,7 +883,8 @@ branch can therefore be diluted when only one duplicated lineage responds.
 NWKIT provides three complementary diagnostics for this case:
 
 1. `--random-effects-out` reports each lineage's empirical-Bayes slope
-   deviation, conditional interval, total slope (fixed average plus deviation),
+   deviation, conditional interval, total slope (auxiliary common coefficient
+   plus deviation),
    total interval, and reliability (the data-supported fraction of lineage
    variance). These distinguish an average
    gene-family association from a response concentrated in one paralog lineage.
@@ -850,7 +893,9 @@ NWKIT provides three complementary diagnostics for this case:
    reports the average-plus-lineage joint likelihood ratio, but deliberately
    leaves its P-value blank because that mixed fixed/boundary null is not a
    regular chi-square problem. `--lineage-inference parametric-bootstrap`
-   supplies calibrated empirical P-values for both tests.
+   supplies null-generated empirical P-values for both tests. This does not by
+   itself establish finite-sample calibration; joint boundary and nuisance
+   effects require independent validation.
 3. `--lineage-leave-one-out yes` removes each `lineage_clade_id`, refits the
    model, and writes coefficient changes to `--sensitivity-out` or the bundle.
 

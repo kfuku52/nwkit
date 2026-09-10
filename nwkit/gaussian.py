@@ -134,10 +134,15 @@ def effective_likelihood_settings(
     likelihood_observations=None,
     likelihood_logdet_offset=0.0,
 ):
-    """Validate and normalize event-level Gaussian pseudo-likelihood settings."""
+    """Validate the observation count of a normalized Gaussian likelihood."""
     if likelihood_observations is None:
         likelihood_observations = n_observations
     likelihood_observations = float(likelihood_observations)
+    if likelihood_observations != n_observations:
+        raise ValueError(
+            "Gaussian likelihood requires the actual observation count; "
+            "event-average estimation must use separate estimating equations."
+        )
     if (
         not math.isfinite(likelihood_observations)
         or likelihood_observations <= 0.0
@@ -830,6 +835,27 @@ def materialize_covariance(
         return _materialize_sparse_precision_covariance(covariance)
     covariance = np.asarray(covariance, dtype=float)
     return np.diag(covariance) if covariance.ndim == 1 else covariance
+
+
+def project_covariance(covariance, operator):
+    """Return L C L' without materializing a structured n-by-n covariance."""
+    operator = np.asarray(operator, dtype=float)
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        projected = np.asarray(operator @ covariance.low_rank)
+        result = (operator * covariance.diagonal) @ operator.T
+        result += projected @ projected.T
+    elif isinstance(covariance, DiagonalSparsePrecisionCovariance):
+        projected = np.asarray(operator @ covariance.loading)
+        solver = _factor_sparse_lu(covariance.precision, "Sparse prior precision")
+        result = (operator * covariance.diagonal) @ operator.T
+        result += projected @ solver.solve(projected.T)
+    else:
+        covariance = np.asarray(covariance, dtype=float)
+        product = (
+            operator * covariance if covariance.ndim == 1 else operator @ covariance
+        )
+        result = product @ operator.T
+    return (result + result.T) / 2.0
 
 
 def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.ndarray:

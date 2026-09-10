@@ -3861,6 +3861,30 @@ pregress_response.add_argument(
     help="Upper censor-bound column for censored-Gaussian responses; missing means no upper bound.",
 )
 pregress_response.add_argument(
+    "--response-observation-model",
+    metavar="TRAIT=MODEL,...",
+    default=None,
+    help="Censored-Gaussian bootstrap mechanism: uncensored, detection-limits, or interval-bins. Observed censor bounds alone are insufficient.",
+)
+pregress_response.add_argument(
+    "--response-detection-lower",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    help="Lower detection-limit column for every biological observation, including exact rows; values at or below the limit are left-censored.",
+)
+pregress_response.add_argument(
+    "--response-detection-upper",
+    metavar="TRAIT=COLUMN,...",
+    default=None,
+    help="Upper detection-limit column for every biological observation; values at or above the limit are right-censored.",
+)
+pregress_response.add_argument(
+    "--response-observation-bins",
+    metavar="TRAIT=CUT1|CUT2|..., ...",
+    default=None,
+    help="Finite increasing cutpoints for interval-bins observation; exterior intervals extend to infinity. Quote the argument in the shell.",
+)
+pregress_response.add_argument(
     "--response-dispersion",
     dest="response_dispersion",
     metavar="TRAIT=FLOAT,...",
@@ -4399,6 +4423,12 @@ pregress_predictor_replicates.add_argument(
     help="Optional known-SE sample-size columns corresponding to --predictors.",
 )
 pregress_reconciled.add_argument(
+    "--regression-estimand",
+    default=None,
+    choices=["event-average", "common"],
+    help="default=event-average: Estimate the equally weighted event association; common selects the auxiliary Gaussian hierarchical likelihood.",
+)
+pregress_reconciled.add_argument(
     "--event-weighting",
     dest="event_weighting",
     metavar="event|contrast",
@@ -4407,7 +4437,7 @@ pregress_reconciled.add_argument(
     required=False,
     action="store",
     choices=["event", "contrast"],
-    help="default=event: Give each species event equal total weight, or give each gene contrast equal weight. Event weighting prevents copy-rich events from dominating.",
+    help="Legacy alias: event selects event-average estimating equations; contrast selects the common-coefficient likelihood. Does not scale biological covariance.",
 )
 pregress_reconciled.add_argument(
     "--speciation-coverage",
@@ -4463,18 +4493,19 @@ pregress_precomputed.add_argument(
 )
 pregress_inference.add_argument(
     "--inference",
-    metavar="wald|parametric-bootstrap|likelihood-ratio|profile-likelihood",
+    metavar="wald|parametric-bootstrap|null-bootstrap|likelihood-ratio|profile-likelihood",
     default="wald",
     type=str,
     required=False,
     action="store",
     choices=[
         "wald",
+        "null-bootstrap",
         "parametric-bootstrap",
         "likelihood-ratio",
         "profile-likelihood",
     ],
-    help="default=%(default)s: Wald, family-specific parametric bootstrap, likelihood-ratio, or profile-likelihood inference. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
+    help="default=%(default)s: Wald, parametric bootstrap, null-calibrated penalized GLMM tests, or unpenalized likelihood inference. Penalized Wald fits report point estimates without frequentist intervals. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
 )
 pregress_inference.add_argument(
     "--allow-large-dense",
@@ -4485,6 +4516,12 @@ pregress_inference.add_argument(
     required=False,
     action="store",
     help="default=%(default)s: Explicitly permit large Gaussian or non-Gaussian fits that require a dense covariance representation; nwkit reports an estimated dense working-memory requirement before attempting them.",
+)
+pregress_inference.add_argument(
+    "--coefficient-profile-grid",
+    metavar="VALUE1|VALUE2|...",
+    default=None,
+    help="Optional ordered coefficient values for null-bootstrap test inversion (GLMM). Quote the argument. Returns accepted grid points, not an interpolated confidence interval.",
 )
 pregress_inference.add_argument(
     "--bootstrap-replicates",

@@ -543,6 +543,29 @@ for any number of displayed traits, including one.
 `--figure-columns` and `--figure-scale` affect only display, independently of
 `--columns` and `--scale`. See [DTT](DTT.md) for definitions, units and limits.
 
+
+## Regression inference metadata
+
+Reconciled Gaussian results distinguish `estimand` (`event-average` by default,
+`common` for the auxiliary likelihood), `objective_kind`, `covariance_basis`,
+`nuisance_estimator`, and `log_likelihood_basis`. Event-average coefficient rows
+have `reml=not-applicable`; the covariance fit can separately use REML. New
+`--regression-estimand` and legacy `--event-weighting` options must agree.
+
+GLMM tables report `objective_value`, `penalty_value`, `p_value_method`,
+`interval_method`, and `observation_model`. Penalized point estimates do not
+carry frequentist Wald standard errors, p-values or intervals. Null-bootstrap
+rows report an objective-difference statistic (not a Wald z), Monte Carlo error,
+and attempted/successful/failed dataset counts; any failed refit aborts that
+inference. Counts for GLMM bootstrap are totals over coefficients and requested
+profile candidates. Gaussian coefficient and lineage rows count their own draws.
+
+`coefficient_profile` is a JSON array of tested coefficient candidates, their
+p-values, Monte Carlo standard errors and acceptance flags. It preserves
+non-connected acceptance on the specified grid. It is not a continuous
+confidence interval and does not classify values outside or between candidates.
+Missing interval endpoints must not be filled using penalized curvature.
+
 ## Shift inference
 
 `shift` writes the two-column `branch_id, regime` map consumed by ASR, including

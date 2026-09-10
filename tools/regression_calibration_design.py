@@ -1,8 +1,8 @@
 """Independent data generation for fixed-model regression calibration.
 
-This is a validation tool, not a production estimator. In particular, the RSC
-event-balanced objective is composite; its working covariance is not a claim
-that it defines an ordinary Gaussian likelihood.
+This is a validation tool, not a production estimator. The RSC
+physical and legacy working-covariance generators remain separate sensitivity
+cases; production fits now separate event-average coefficients from Gaussian ML.
 """
 
 import hashlib
