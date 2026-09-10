@@ -39,6 +39,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ### Added
 
+- Add paired known-error shift diagnostics and research-only nuisance-envelope
+  calibration with explicit unresolved results and certified variance-tail
+  extension. Retain the production CLI calibration limitations.
+
 - Add `asr --model BRANCH-GAUSSIAN` with strict direct/regime TSV assignments,
   explicit root priors, fixed-parameter summary/likelihood/prior samples,
   normalized model TSV and process JSON export, and transactional outputs.

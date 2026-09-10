@@ -202,3 +202,12 @@ A [worked CLI example](examples/shift/calibrated/model.json) exports the regime
 map, mean predictions, alpha diagnostics and missing optimum estimates.
 The [review and next work plan](reviews/shift-calibration-review.md) records the
 reproduced bugs, fixes, remaining limits and priorities.
+
+## Follow-up known-error diagnostics
+
+The [paired known-error study](examples/shift/known-error-diagnostic/README.md)
+compares fitted-nuisance bootstrap calibration with an oracle using the true
+generating mean and covariance, separately for no-shift and one-shift families.
+It also documents a research-only finite alpha/variance envelope that reports
+unresolved computations explicitly. Neither experiment changes the CLI default
+or establishes continuous-parameter or later-stage error control.
