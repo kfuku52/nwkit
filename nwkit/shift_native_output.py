@@ -302,6 +302,12 @@ def native_main(args):
         result, metadata = select_native(data, args, arguments)
     else:
         result = fit_native_layout(data, layout, **arguments)
+        if args.criterion is not None:
+            from nwkit.shift_native_ic import native_information_criterion
+
+            metadata["information_criterion"] = native_information_criterion(
+                data, result, args.criterion
+            )
     model = _model(data, result, native_tables(data, result, names))
     model.update(metadata)
     model.update(provenance)

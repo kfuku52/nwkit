@@ -8,6 +8,7 @@ import numpy as np
 
 from nwkit.shift_candidates import set_partitions
 from nwkit.shift_native_fit import fit_native_layout
+from nwkit.shift_native_ic import native_information_criterion
 from nwkit.shift_native_model import ShiftLayout
 
 
@@ -106,6 +107,7 @@ class NativeSearchResult:
     records: list[dict]
     best_by_complexity: dict[int, dict]
     metadata: dict
+    best_information: dict | None = None
 
     def families(self):
         families, best = [], None
@@ -119,7 +121,9 @@ class NativeSearchResult:
 class NativeLayoutEvaluator:
     """Retain scalar candidate records and at most one full fit per complexity."""
 
-    def __init__(self, data, fit_arguments):
+    def __init__(self, data, fit_arguments, criterion=None):
+        self.criterion = criterion
+        self.best_information = None
         self.data = data
         self.fit_arguments = fit_arguments
         self.records: list[dict] = []
@@ -165,6 +169,18 @@ class NativeLayoutEvaluator:
                 "A native search covariance mode failed; complete the fit before selection: "
                 + str(unresolved[0])
             )
+        information = None
+        if self.criterion is not None:
+            information = native_information_criterion(
+                self.data, result, self.criterion
+            )
+            result["information_criterion"] = information
+            if information["score"] is not None and (
+                self.best_information is None
+                or information["score"]
+                < self.best_information["information_criterion"]["score"] - 1e-9
+            ):
+                self.best_information = result
         score = result["log_likelihood"]
         self.scores[layout] = score
         complexity = layout_complexity(layout)
@@ -178,6 +194,7 @@ class NativeLayoutEvaluator:
                     r["optimizer"]["evaluations"] for r in result["traits"]
                 ),
                 "complete_covariance_modes": not unresolved,
+                **({"information_criterion": information} if information else {}),
             }
         )
         if (
@@ -188,16 +205,24 @@ class NativeLayoutEvaluator:
         return score
 
     def finish(self, metadata):
-        return NativeSearchResult(self.records, self.best, metadata)
+        return NativeSearchResult(
+            self.records, self.best, metadata, self.best_information
+        )
 
 
 def exhaustive_native_search(
-    data, *, max_shifts=2, convergence=False, limit=5000, fit_arguments=None
+    data,
+    *,
+    max_shifts=2,
+    convergence=False,
+    limit=5000,
+    fit_arguments=None,
+    criterion=None,
 ):
     layouts, metadata = enumerate_native_layouts(
         data, max_shifts, convergence=convergence, limit=limit
     )
-    evaluator = NativeLayoutEvaluator(data, fit_arguments or {})
+    evaluator = NativeLayoutEvaluator(data, fit_arguments or {}, criterion)
     for layout in layouts:
         evaluator.evaluate(layout)
     return evaluator.finish(

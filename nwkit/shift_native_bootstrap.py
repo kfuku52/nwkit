@@ -114,6 +114,77 @@ def calibrate_native_search(data, search, run_search, *, replicates, seed, level
     }
 
 
+def _aic_gain(search):
+    null = search.best_by_complexity.get(0)
+    selected = search.best_information
+    if null is None or selected is None:
+        raise ValueError(
+            "Global-null calibration requires the null fit and AIC winner."
+        )
+    scores = []
+    for result in (null, selected):
+        record = result.get("information_criterion", {})
+        score = record.get("score")
+        if (
+            record.get("criterion") != "AIC"
+            or score is None
+            or not math.isfinite(score)
+        ):
+            raise ValueError("Global-null calibration requires finite AIC scores.")
+        scores.append(score)
+    return max(0.0, scores[0] - scores[1])
+
+
+def gate_native_aic(data, search, run_search, *, replicates, seed, level=0.05):
+    """Test the global no-shift null by replaying the entire AIC search.
+
+    The statistic is max(0, AIC(null) - min AIC). Passing the gate retains
+    the original AIC winner; this does not test individual selected branches.
+    """
+    if (
+        isinstance(replicates, bool)
+        or not isinstance(replicates, int)
+        or replicates < 1
+    ):
+        raise ValueError("Native calibration requires a positive integer draw count.")
+    if not 0 < level < 1 or 1 / (replicates + 1) > level:
+        raise ValueError("Calibration draws cannot resolve the requested test level.")
+    statistic = _aic_gain(search)
+    null = search.best_by_complexity[0]
+    samples = []
+    for draw, stream in enumerate(np.random.SeedSequence(seed).spawn(replicates)):
+        try:
+            simulated = simulate_native_data(data, null, np.random.default_rng(stream))
+            samples.append(_aic_gain(run_search(simulated)))
+        except (ValueError, ArithmeticError, np.linalg.LinAlgError) as exc:
+            raise ValueError(
+                f"Native global-null calibration failed at draw {draw}; no draws discarded: {exc}"
+            ) from exc
+    exceedances = sum(
+        value >= statistic - 1e-10 * max(1, statistic) for value in samples
+    )
+    p_value = (1 + exceedances) / (replicates + 1)
+    rejected = p_value <= level
+    return (search.best_information if rejected else null), {
+        "method": "full_search_plugin_parametric_bootstrap_global_null_aic_gate",
+        "research_only": True,
+        "uniform_composite_null_control_proven": False,
+        "controls_false_branches_under_nonnull": False,
+        "full_search_repeated": True,
+        "failed_draw_policy": "abort_without_discarding",
+        "statistic_name": "max_zero_null_aic_minus_minimum_search_aic",
+        "seed": seed,
+        "replicates": replicates,
+        "level": level,
+        "statistic": statistic,
+        "exceedances": exceedances,
+        "p_value": p_value,
+        "rejected": rejected,
+        "bootstrap_statistics": samples,
+        "ungated_shift_branch_ids": list(search.best_information["layout"].shifts),
+    }
+
+
 def native_selection_support(data, selected, select_data, *, replicates, seed):
     """Stability frequencies; select_data replays the entire selection procedure."""
     if (

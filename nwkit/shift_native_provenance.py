@@ -83,6 +83,8 @@ def native_provenance(data, args, layout=None, names=None):
             "seed",
             "calibration_replicates",
             "calibration_level",
+            "global_null_gate",
+            "criterion",
             "bootstrap",
             "bootstrap_seed",
         )

@@ -35,18 +35,28 @@ from nwkit.util import (
 
 
 def _validate_options(args):
+    if getattr(args, "global_null_gate", False) and (
+        args.selection != "native" or args.criterion != "AIC" or args.regime_map
+    ):
+        raise ValueError(
+            "--global-null-gate requires native AIC search without --regime-map."
+        )
+    if args.search_strategy == "native-path" and args.selection != "native":
+        raise ValueError("--search-strategy native-path requires --selection native.")
     if args.selection == "ic" and args.criterion is None:
         args.criterion = "pBIC"
     if args.selection == "calibrated" and args.criterion is not None:
         raise ValueError(
-            "--criterion requires --selection ic; calibrated selection uses bootstrap tests."
+            "--criterion requires --selection ic or native; calibrated selection uses bootstrap tests."
         )
     if (
         args.selection == "ic"
         and args.convergence
-        and args.criterion not in {"AICc", "BIC", "pBIC"}
+        and args.criterion not in {"AIC", "AICc", "BIC", "pBIC"}
     ):
-        raise ValueError("--convergence supports only AICc, BIC and pBIC criteria.")
+        raise ValueError(
+            "--convergence supports only AIC, AICc, BIC and pBIC criteria."
+        )
     if not 0 <= args.bootstrap <= 2147483647:
         raise ValueError("--bootstrap must be between 0 and 2147483647.")
     if not 0 <= args.bootstrap_seed <= 2147483647:

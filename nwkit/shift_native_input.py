@@ -117,9 +117,19 @@ def read_native_layout(path, tree):
 
 
 def native_fit_arguments(args, data):
-    if args.fit_out or args.criterion is not None:
+    if getattr(args, "global_null_gate", False) and (
+        args.criterion != "AIC" or args.regime_map
+    ):
         raise ValueError(
-            "Native shift inference exports JSON; --fit-out and IC criteria belong to --selection ic."
+            "--global-null-gate requires native AIC search without --regime-map."
+        )
+    if args.search_strategy == "native-path" and (
+        args.criterion not in {"AIC", "AICc"} or args.convergence
+    ):
+        raise ValueError("Native path search requires AIC or AICc without convergence.")
+    if args.fit_out or args.criterion not in {None, "AIC", "AICc", "BIC", "pBIC"}:
+        raise ValueError(
+            "Native inference exports JSON and supports AIC, AICc, BIC, or pBIC; --fit-out requires --selection ic."
         )
     alpha = numeric_parameters(args.alpha, len(data.trait_names), "--alpha")
     if alpha is not None:

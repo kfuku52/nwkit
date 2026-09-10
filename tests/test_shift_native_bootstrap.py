@@ -140,3 +140,92 @@ def test_support_replays_selected_procedure_with_independent_seeds():
         ]
         == 1
     )
+
+
+def test_global_null_aic_gate_replays_search_and_preserves_ungated_winner():
+    from nwkit.shift_native_bootstrap import gate_native_aic
+
+    data = sample_data()
+    calls = []
+
+    def run(sample):
+        calls.append(sample)
+        return exhaustive_native_search(
+            sample,
+            max_shifts=1,
+            fit_arguments={"alpha_height": 0.7, "process_variance": 1},
+            criterion="AIC",
+        )
+
+    search = run(data)
+    selected, metadata = gate_native_aic(data, search, run, replicates=19, seed=18)
+    assert len(calls) == 20
+    assert metadata["p_value"] == (1 + metadata["exceedances"]) / 20
+    assert metadata["statistic"] == pytest.approx(
+        max(
+            0,
+            search.best_by_complexity[0]["information_criterion"]["score"]
+            - search.best_information["information_criterion"]["score"],
+        )
+    )
+    expected = (
+        search.best_information
+        if metadata["rejected"]
+        else search.best_by_complexity[0]
+    )
+    assert selected is expected
+    _, repeated = gate_native_aic(data, search, run, replicates=19, seed=18)
+    assert repeated == metadata
+    assert not metadata["controls_false_branches_under_nonnull"]
+
+
+def test_global_null_gate_ties_failures_and_resolution():
+    from nwkit.shift_native_bootstrap import gate_native_aic
+
+    data = sample_data()
+    search = exhaustive_native_search(data, max_shifts=0, criterion="AIC")
+    selected, metadata = gate_native_aic(
+        data,
+        search,
+        lambda _: search,
+        replicates=19,
+        seed=5,
+    )
+    assert metadata["statistic"] == 0
+    assert metadata["p_value"] == 1
+    assert not selected["layout"].shifts
+    for draws in [0, 18, True, 19.5]:
+        with pytest.raises(ValueError):
+            gate_native_aic(data, search, lambda _: search, replicates=draws, seed=5)
+
+    def fail(_):
+        raise ValueError("optimizer failure")
+
+    with pytest.raises(ValueError, match="draw 0; no draws discarded"):
+        gate_native_aic(data, search, fail, replicates=19, seed=5)
+
+
+def test_global_null_gate_rejects_large_gain_and_accepts_small_gain(monkeypatch):
+    from copy import deepcopy
+
+    from nwkit.shift_native_bootstrap import gate_native_aic
+
+    data = sample_data()
+    observed = exhaustive_native_search(data, max_shifts=1, criterion="AIC")
+    observed.best_information = deepcopy(observed.best_information)
+    observed.best_information["information_criterion"]["score"] = (
+        observed.best_by_complexity[0]["information_criterion"]["score"] - 10
+    )
+    no_gain = deepcopy(observed)
+    no_gain.best_information = no_gain.best_by_complexity[0]
+    selected, metadata = gate_native_aic(
+        data, observed, lambda _: no_gain, replicates=19, seed=5
+    )
+    assert metadata["p_value"] == 0.05
+    assert metadata["rejected"]
+    assert selected is observed.best_information
+    selected, metadata = gate_native_aic(
+        data, no_gain, lambda _: observed, replicates=19, seed=5
+    )
+    assert metadata["p_value"] == 1
+    assert selected is no_gain.best_by_complexity[0]

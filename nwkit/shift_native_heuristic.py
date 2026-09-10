@@ -25,12 +25,11 @@ class NativeSearchOptions:
     lasso_iterations: int = 150
     memory_limit: int = 512 * 1024**2
 
-    def validate(self, data):
+    def validate(self, data, *, uses_candidate_pool=True):
         if not 0 <= self.max_shifts < len(data.tree.leaf_names) - 1:
             raise ValueError("Maximum shifts must be smaller than tips minus one.")
-        if (
-            self.refit_budget <= self.max_shifts
-            or self.candidate_pool < self.max_shifts
+        if self.refit_budget <= self.max_shifts or (
+            uses_candidate_pool and self.candidate_pool < self.max_shifts
         ):
             raise ValueError(
                 "Search needs at least max_shifts+1 refits and a candidate pool covering max_shifts."
@@ -111,9 +110,9 @@ def neighboring_layouts(data, layout, pool, convergence):
 
 
 class _HeuristicSearch:
-    def __init__(self, data, options, fit_arguments):
+    def __init__(self, data, options, fit_arguments, criterion=None):
         self.data, self.options = data, options
-        self.evaluator = NativeLayoutEvaluator(data, fit_arguments)
+        self.evaluator = NativeLayoutEvaluator(data, fit_arguments, criterion)
         self.null = ShiftLayout.build(data.tree)
         self.evaluator.evaluate(self.null)
         null_fit = self.evaluator.best[0]
@@ -236,10 +235,10 @@ class _HeuristicSearch:
             self.refit(ranked, self.options.beam_width)
 
 
-def heuristic_native_search(data, *, options=None, fit_arguments=None):
+def heuristic_native_search(data, *, options=None, fit_arguments=None, criterion=None):
     options = NativeSearchOptions() if options is None else options
     options.validate(data)
-    search = _HeuristicSearch(data, options, fit_arguments or {})
+    search = _HeuristicSearch(data, options, fit_arguments or {}, criterion)
     search.forward()
     search.refine()
     metadata = {

@@ -163,3 +163,186 @@ def test_native_resume_rejects_changed_configuration(native_inputs, tmp_path):
     with pytest.raises(ValueError, match="configuration_sha256 differs"):
         main(native_inputs)
     assert not (tmp_path / "resumed.json").exists()
+
+
+@pytest.mark.parametrize("criterion", ["AIC", "AICc", "BIC", "pBIC"])
+def test_native_fixed_layout_exports_information_criterion(
+    native_inputs, tmp_path, criterion
+):
+    main(native_inputs + ["--criterion", criterion])
+    model = json.loads((tmp_path / "model.json").read_text())
+    assert model["information_criterion"]["criterion"] == criterion
+    assert model["information_criterion"]["status"] == "ok"
+
+
+@pytest.mark.parametrize("criterion", ["AIC", "AICc", "BIC", "pBIC"])
+def test_native_information_selection_replays_support_without_calibration(
+    native_inputs, tmp_path, criterion, monkeypatch
+):
+    def unexpected_calibration(*args, **kwargs):
+        raise AssertionError("Information criteria must not run calibration")
+
+    monkeypatch.setattr(
+        "nwkit.shift_native_selection.calibrate_native_search", unexpected_calibration
+    )
+    arguments = list(native_inputs)
+    index = arguments.index("--regime-map")
+    del arguments[index : index + 2]
+    main(
+        arguments
+        + [
+            "--criterion",
+            criterion,
+            "--max-shifts",
+            "1",
+            "--bootstrap",
+            "2",
+            "--calibration-replicates",
+            "0",
+        ]
+    )
+    model = json.loads((tmp_path / "model.json").read_text())
+    assert model["information_criterion"]["criterion"] == criterion
+    assert model["selection_calibration"] is None
+    assert model["selection_support"] is not None
+    arguments[arguments.index("--model-out") + 1] = str(tmp_path / "resumed.json")
+    with pytest.raises(ValueError, match="configuration"):
+        main(
+            arguments
+            + [
+                "--criterion",
+                "BIC" if criterion == "AIC" else "AIC",
+                "--resume-model",
+                str(tmp_path / "model.json"),
+                "--max-shifts",
+                "1",
+                "--bootstrap",
+                "2",
+                "--calibration-replicates",
+                "0",
+            ]
+        )
+
+
+@pytest.mark.parametrize(
+    "strategy, expected",
+    [
+        ("auto", "group_lasso_beam"),
+        ("native-path", "covariance_updated_optimum_path"),
+        ("lasso", "group_lasso_beam"),
+    ],
+)
+@pytest.mark.parametrize("criterion", ["AIC", "AICc"])
+def test_native_aic_strategy_dispatch_and_support_replay(
+    native_inputs, tmp_path, strategy, expected, criterion
+):
+    arguments = list(native_inputs)
+    index = arguments.index("--regime-map")
+    del arguments[index : index + 2]
+    main(
+        arguments
+        + [
+            "--criterion",
+            criterion,
+            "--max-shifts",
+            "1",
+            "--search-strategy",
+            strategy,
+            "--exhaustive-max-configurations",
+            "1",
+            "--bootstrap",
+            "2",
+        ]
+    )
+    model = json.loads((tmp_path / "model.json").read_text())
+    assert model["search"]["strategy"] == expected
+    assert model["selection_support"] is not None
+    assert model["selection_calibration"] is None
+
+
+def test_native_aic_global_null_gate_cli_and_resume(native_inputs, tmp_path):
+    index = native_inputs.index("--regime-map")
+    del native_inputs[index : index + 2]
+    native_inputs.extend(
+        [
+            "--criterion",
+            "AIC",
+            "--search-strategy",
+            "native-path",
+            "--global-null-gate",
+            "--max-shifts",
+            "1",
+            "--calibration-replicates",
+            "19",
+        ]
+    )
+    main(native_inputs)
+    model = json.loads((tmp_path / "model.json").read_text())
+    calibration = model["selection_calibration"]
+    assert calibration["full_search_repeated"]
+    assert calibration["replicates"] == 19
+    assert model["configuration"]["global_null_gate"] is True
+    if not calibration["rejected"]:
+        assert model["shift_branch_ids"] == []
+    native_inputs[native_inputs.index("--model-out") + 1] = str(
+        tmp_path / "resumed.json"
+    )
+    native_inputs.extend(["--resume-model", str(tmp_path / "model.json")])
+    main(native_inputs)
+    native_inputs.remove("--global-null-gate")
+    with pytest.raises(ValueError, match="configuration_sha256 differs"):
+        main(native_inputs)
+
+
+@pytest.mark.parametrize(
+    "selection,criterion", [("native", "BIC"), ("ic", "AIC"), ("calibrated", "AIC")]
+)
+def test_global_null_gate_rejects_other_selection_modes(
+    native_inputs, selection, criterion
+):
+    index = native_inputs.index("--regime-map")
+    del native_inputs[index : index + 2]
+    native_inputs[native_inputs.index("--selection") + 1] = selection
+    native_inputs.extend(["--criterion", criterion, "--global-null-gate"])
+    with pytest.raises(ValueError, match="requires native AIC search"):
+        main(native_inputs)
+
+
+def test_global_null_gate_rejects_fixed_layout(native_inputs):
+    native_inputs.extend(["--criterion", "AIC", "--global-null-gate"])
+    with pytest.raises(ValueError, match="without --regime-map"):
+        main(native_inputs)
+
+
+def test_native_support_repeats_global_gate_with_distinct_seeds(
+    native_inputs, tmp_path, monkeypatch
+):
+    import nwkit.shift_native_selection as selection
+
+    index = native_inputs.index("--regime-map")
+    del native_inputs[index : index + 2]
+    native_inputs.extend(
+        [
+            "--criterion",
+            "AIC",
+            "--global-null-gate",
+            "--max-shifts",
+            "1",
+            "--calibration-replicates",
+            "19",
+            "--bootstrap",
+            "2",
+        ]
+    )
+    original = selection.gate_native_aic
+    seeds = []
+
+    def gate(*args, **kwargs):
+        seeds.append(kwargs["seed"])
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(selection, "gate_native_aic", gate)
+    main(native_inputs)
+    assert len(seeds) == len(set(seeds)) == 3
+    model = json.loads((tmp_path / "model.json").read_text())
+    assert model["selection_support"]["replicates"] == 2

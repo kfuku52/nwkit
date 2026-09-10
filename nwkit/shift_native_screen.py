@@ -30,10 +30,33 @@ def descendant_design(tree):
     return matrix, tuple(columns)
 
 
-def _whitened_matrices(data, null_fit, memory_limit):
+def _effect_design(tree, design, alpha):
+    """Unstandardized optimum-increment columns, including near-ultrametric tips."""
+    depths = tree.times.copy()
+    for i in range(1, len(depths)):
+        depths[i] += depths[tree.compiled.parents[i]]
+    branches = sorted(set(tree.branch_ids) - {0})
+    indices = {branch: i for i, branch in enumerate(tree.branch_ids)}
+    parents = [tree.compiled.parents[indices[b]] for b in branches]
+    ages = np.maximum(
+        0, depths[list(tree.compiled.leaf_indices), None] - depths[parents]
+    )
+    weights = (
+        ages
+        if alpha == 0
+        else np.ones_like(ages)
+        if np.isinf(alpha)
+        else -np.expm1(-alpha * ages) / -np.expm1(-alpha)
+    )
+    return design * weights
+
+
+def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False):
     n, p = data.values.shape
     # Retained standardized matrices plus one working tree matrix and raw design.
-    estimated = 8 * n * (len(data.tree.branch_ids) - 1) * (p + 4)
+    estimated = (
+        8 * n * (len(data.tree.branch_ids) - 1) * (p + (8 if optimum_increments else 4))
+    )
     if estimated > memory_limit:
         raise ValueError(
             f"Group-lasso screening needs approximately {estimated} bytes; increase --search-memory-mb or reduce the input."
@@ -58,9 +81,14 @@ def _whitened_matrices(data, null_fit, memory_limit):
             data.variances[mask, trait] + fit.measurement_variance,
             root_variance=root_variance,
         )
+        trait_design = (
+            _effect_design(data.tree, design, fit.alpha_height)
+            if optimum_increments
+            else design
+        )
         white = factor.apply(
             np.column_stack(
-                (np.ones(np.sum(mask)), data.values[mask, trait], design[mask])
+                (np.ones(np.sum(mask)), data.values[mask, trait], trait_design[mask])
             )
         )
         intercept = white[:, 0] / np.linalg.norm(white[:, 0])
@@ -70,7 +98,8 @@ def _whitened_matrices(data, null_fit, memory_limit):
         informative = (
             norms > np.finfo(float).eps * max(1.0, np.linalg.norm(white[:, 2:])) * 100
         )
-        x[:, informative] /= norms[informative]
+        if not optimum_increments:
+            x[:, informative] /= norms[informative]
         x[:, ~informative] = 0
         matrices.append(x)
         responses.append(y)

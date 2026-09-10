@@ -15,6 +15,12 @@ def register_shift(subparsers, tree_input, table_output):
         help="Method (default: calibrated; 4..16 tips, <=2 shifts). Native fits multivariate fixed layouts or runs experimental calibrated search without R; IC is the legacy external method.",
     )
     parser.add_argument(
+        "--global-null-gate",
+        "--global_null_gate",
+        action="store_true",
+        help="Native AIC search only: full-search plug-in bootstrap gate for the no-shift null; does not control false branches when shifts exist.",
+    )
+    parser.add_argument(
         "--calibration-replicates",
         "--calibration_replicates",
         type=int,
@@ -26,7 +32,7 @@ def register_shift(subparsers, tree_input, table_output):
         "--calibration_level",
         type=float,
         default=0.05,
-        help="Sequential test level (default: 0.05; plug-in calibration, not an exact error guarantee).",
+        help="Calibration test level (default: 0.05; plug-in calibration, not an exact error guarantee).",
     )
     parser.add_argument(
         "--trait", required=True, help="TSV with leaf_name and a numeric trait column."
@@ -60,9 +66,9 @@ def register_shift(subparsers, tree_input, table_output):
     )
     parser.add_argument(
         "--criterion",
-        choices=["pBIC", "pBICess", "mBIC", "BIC", "AICc"],
+        choices=["pBIC", "pBICess", "mBIC", "BIC", "AIC", "AICc"],
         default=None,
-        help="IC-only score (default with --selection ic: pBIC). Uncorrected pBIC backends are rejected before fitting.",
+        help="Information criterion (native: AIC/AICc/BIC/pBIC; native default: bootstrap; ic default: pBIC). Uncorrected pBIC backends are rejected before fitting.",
     )
     parser.add_argument(
         "--root-model",
@@ -74,8 +80,9 @@ def register_shift(subparsers, tree_input, table_output):
     parser.add_argument(
         "--search-strategy",
         "--search_strategy",
-        choices=["auto", "lasso", "ensemble", "exhaustive"],
+        choices=["auto", "lasso", "ensemble", "exhaustive", "native-path"],
         default="auto",
+        help="Candidate search; native-path requires native AIC or AICc without convergence.",
     )
     parser.add_argument(
         "--exhaustive-max-configurations",
@@ -98,7 +105,7 @@ def register_shift(subparsers, tree_input, table_output):
     parser.add_argument(
         "--convergence",
         action="store_true",
-        help="Include shared-effect candidates; calibrated search enumerates them jointly, IC uses backward convergence (AICc/BIC/pBIC only).",
+        help="Include shared-effect candidates; calibrated search enumerates them jointly, IC uses backward convergence (AIC/AICc/BIC/pBIC only).",
     )
     parser.add_argument(
         "--bootstrap-seed",
@@ -194,6 +201,12 @@ def _register_native_options(parser):
 
 
 def _command_shift(args):
+    if args.global_null_gate and (
+        args.selection != "native" or args.criterion != "AIC" or args.regime_map
+    ):
+        raise ValueError(
+            "--global-null-gate requires native AIC search without --regime-map."
+        )
     if args.selection == "native":
         from nwkit.shift_native_output import native_main
 
