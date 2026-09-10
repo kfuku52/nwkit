@@ -4,6 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Diagnose all THRESHOLD node liabilities, second moments, categories and free
+  thresholds using rank/split/folded R-hat, multi-lag bulk/tail ESS and probability
+  MCSE. Distinguish structural constants from unvisited/stuck quantities; add
+  `--liability-diagnostics-out`, dispersed reproducible initialization, temporary
+  disk-backed traces, and diagnostic method metadata. Existing aggregate ESS
+  columns now summarize the new diagnostics, not lag-one ESS.
+- Preserve the relative probability of disjoint threshold observation intervals
+  in extreme Gaussian tails using log-domain interval masses.
+
 ### Added
 
 - Add a fixed-parameter branch-specific scalar Gaussian Python API combining

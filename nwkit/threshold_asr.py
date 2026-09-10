@@ -12,7 +12,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
-from scipy.special import ndtr, ndtri
+from scipy.special import log_ndtr, logsumexp, ndtri
 from scipy.stats import truncnorm
 
 from nwkit.compiled_tree import CompiledTree
@@ -23,6 +23,11 @@ from nwkit.gaussian_tree import (
     brownian_transition,
 )
 from nwkit.rooting_state import require_rooted
+from nwkit.threshold_diagnostics import (
+    diagnose_threshold_draws,
+    summarize_diagnostics,
+    trace_storage,
+)
 from nwkit.util import assign_branch_ids, get_node_class, validate_unique_named_leaves
 
 
@@ -39,6 +44,10 @@ class ThresholdFit:
     ess_min: float
     fit_status: str
     liability_marginals: dict
+    diagnostics: pd.DataFrame
+    ess_bulk_min: float
+    ess_tail_min: float
+    probability_mcse_max: float
 
 
 def parse_thresholds(value, num_states):
@@ -153,25 +162,24 @@ def _allowed_intervals(allowed, thresholds):
 
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
     intervals = _allowed_intervals(allowed, thresholds)
-    masses = []
+    log_masses = []
     for lower, upper in intervals:
-        z_lower = -math.inf if lower == -math.inf else (lower - mean) / sd
-        z_upper = math.inf if upper == math.inf else (upper - mean) / sd
-        masses.append(max(0.0, float(ndtr(z_upper) - ndtr(z_lower))))
-    total = math.fsum(masses)
-    if total > 0.0 and math.isfinite(total):
-        interval = intervals[
-            int(rng.choice(len(intervals), p=np.asarray(masses) / total))
-        ]
-    else:
-        interval = min(
-            intervals,
-            key=lambda bounds: (
-                0.0
-                if bounds[0] <= mean <= bounds[1]
-                else min(abs(mean - bounds[0]), abs(mean - bounds[1]))
-            ),
+        a = (lower - mean) / sd
+        b = (upper - mean) / sd
+        # Use survival probabilities in the positive tail, avoiding subtraction
+        # of two CDFs rounded to one. expm1 preserves narrow interval masses.
+        high, low = (
+            (log_ndtr(-a), log_ndtr(-b)) if a >= 0 else (log_ndtr(b), log_ndtr(a))
         )
+        log_masses.append(high + np.log(-np.expm1(low - high)))
+    normalization = logsumexp(log_masses)
+    if not math.isfinite(normalization):
+        raise ValueError(
+            "Threshold conditional interval masses are not numerically resolvable."
+        )
+    interval = intervals[
+        int(rng.choice(len(intervals), p=np.exp(log_masses - normalization)))
+    ]
     lower, upper = interval
     a = -math.inf if lower == -math.inf else (lower - mean) / sd
     b = math.inf if upper == math.inf else (upper - mean) / sd
@@ -203,22 +211,17 @@ def _conditional_parameters(index, values, compiled, process):
     return numerator * variance, math.sqrt(variance)
 
 
-def _initialize_values(compiled, constraints, thresholds):
-    values = np.zeros(len(compiled.nodes), dtype=float)
+def _initialize_values(compiled, constraints, thresholds, rng):
+    values = rng.normal(0.0, 2.0, len(compiled.nodes))
     for index, allowed in constraints.items():
-        candidates = []
-        for category in allowed:
-            lower, upper = _category_interval(int(category), thresholds)
-            if math.isfinite(lower) and math.isfinite(upper):
-                candidate = (lower + upper) / 2.0
-            elif math.isfinite(lower):
-                candidate = lower + 1.0
-            elif math.isfinite(upper):
-                candidate = upper - 1.0
-            else:
-                candidate = 0.0
-            candidates.append(candidate)
-        values[index] = min(candidates, key=abs)
+        category = int(rng.choice(allowed))
+        lower, upper = _category_interval(category, thresholds)
+        if math.isfinite(lower) and math.isfinite(upper):
+            values[index] = rng.uniform(lower, upper)
+        elif math.isfinite(lower):
+            values[index] = lower + rng.exponential(2.0)
+        elif math.isfinite(upper):
+            values[index] = upper - rng.exponential(2.0)
     return values
 
 
@@ -257,34 +260,6 @@ def _update_thresholds(values, allowed_categories, thresholds, rng):
                 "Ordinal threshold update collapsed; increase MCMC burn-in or fix --thresholds."
             )
         thresholds[threshold_index] = rng.uniform(lower, upper)
-
-
-def _rhat_and_ess(traces):
-    traces = np.asarray(traces, dtype=float)
-    chains, samples, dimensions = traces.shape
-    rhat = np.full(dimensions, np.nan, dtype=float)
-    ess = np.full(dimensions, chains * samples, dtype=float)
-    for dimension in range(dimensions):
-        values = traces[:, :, dimension]
-        if chains > 1 and samples > 1:
-            within = float(np.mean(np.var(values, axis=1, ddof=1)))
-            between = samples * float(np.var(np.mean(values, axis=1), ddof=1))
-            if within > 0.0:
-                pooled = ((samples - 1.0) / samples) * within + between / samples
-                rhat[dimension] = math.sqrt(max(0.0, pooled / within))
-            else:
-                rhat[dimension] = 1.0 if between == 0.0 else math.inf
-        if samples > 2:
-            centered = values - np.mean(values, axis=1, keepdims=True)
-            denominator = float(np.sum(centered * centered))
-            if denominator > 0.0:
-                rho = float(np.sum(centered[:, :-1] * centered[:, 1:]) / denominator)
-                rho = min(0.99, max(-0.99, rho))
-                ess[dimension] = min(
-                    chains * samples,
-                    chains * samples * (1.0 - rho) / (1.0 + rho),
-                )
-    return rhat, ess
 
 
 def compute_threshold_marginals(
@@ -360,44 +335,57 @@ def compute_threshold_marginals(
     liability_sum = np.zeros(len(compiled.nodes), dtype=float)
     liability_square_sum = np.zeros(len(compiled.nodes), dtype=float)
     threshold_sum = np.zeros(len(states) - 1, dtype=float)
-    diagnostic_traces = np.empty(
-        (chains, num_samples, 1 + max(0, len(states) - 2)), dtype=float
-    )
     total_sweeps = burnin + num_samples * thin
-    for chain_index, child_seed in enumerate(seed_sequences):
-        rng = np.random.default_rng(child_seed)
-        current_thresholds = initial_thresholds.copy()
-        values = _initialize_values(compiled, constraints, current_thresholds)
-        retained = 0
-        for sweep in range(total_sweeps):
-            for node_index in rng.permutation(len(compiled.nodes)):
-                mean, sd = _conditional_parameters(
-                    int(node_index), values, compiled, process
-                )
-                allowed = constraints.get(int(node_index))
-                values[node_index] = (
-                    rng.normal(mean, sd)
-                    if allowed is None
-                    else _truncated_draw(mean, sd, allowed, current_thresholds, rng)
-                )
+    shape = (chains, num_samples, len(compiled.nodes) + len(states) - 1)
+    with trace_storage(shape) as diagnostic_traces:
+        for chain_index, child_seed in enumerate(seed_sequences):
+            rng = np.random.default_rng(child_seed)
+            current_thresholds = initial_thresholds.copy()
             if estimate_thresholds:
-                _update_thresholds(
-                    values[constrained_indices],
-                    allowed_by_constraint,
-                    current_thresholds,
-                    rng,
+                gaps = np.diff(current_thresholds) * rng.lognormal(
+                    0.0, 0.5, len(current_thresholds) - 1
                 )
-            if sweep < burnin or (sweep - burnin) % thin:
-                continue
-            categories = np.searchsorted(current_thresholds, values, side="left")
-            probability_counts[np.arange(len(values)), categories] += 1.0
-            liability_sum += values
-            liability_square_sum += values * values
-            threshold_sum += current_thresholds
-            diagnostic_traces[chain_index, retained, 0] = values[0]
-            if len(current_thresholds) > 1:
-                diagnostic_traces[chain_index, retained, 1:] = current_thresholds[1:]
-            retained += 1
+                current_thresholds[1:] = np.cumsum(gaps)
+            values = _initialize_values(compiled, constraints, current_thresholds, rng)
+            retained = 0
+            for sweep in range(total_sweeps):
+                for node_index in rng.permutation(len(compiled.nodes)):
+                    mean, sd = _conditional_parameters(
+                        int(node_index), values, compiled, process
+                    )
+                    allowed = constraints.get(int(node_index))
+                    values[node_index] = (
+                        rng.normal(mean, sd)
+                        if allowed is None
+                        else _truncated_draw(mean, sd, allowed, current_thresholds, rng)
+                    )
+                if estimate_thresholds:
+                    _update_thresholds(
+                        values[constrained_indices],
+                        allowed_by_constraint,
+                        current_thresholds,
+                        rng,
+                    )
+                if sweep < burnin or (sweep - burnin) % thin:
+                    continue
+                categories = np.searchsorted(current_thresholds, values, side="left")
+                probability_counts[np.arange(len(values)), categories] += 1.0
+                liability_sum += values
+                liability_square_sum += values * values
+                threshold_sum += current_thresholds
+                diagnostic_traces[chain_index, retained, : len(values)] = values
+                diagnostic_traces[chain_index, retained, len(values) :] = (
+                    current_thresholds
+                )
+                retained += 1
+        diagnostics = diagnose_threshold_draws(
+            tree,
+            compiled.nodes,
+            states,
+            constraints,
+            diagnostic_traces,
+            estimated=estimate_thresholds,
+        )
     total_draws = chains * num_samples
     posterior = {
         node: probability_counts[index] / total_draws
@@ -410,17 +398,7 @@ def compute_threshold_marginals(
         for index, node in enumerate(compiled.nodes)
     }
     fitted_thresholds = tuple(float(value) for value in threshold_sum / total_draws)
-    rhat, ess = _rhat_and_ess(diagnostic_traces)
-    available_rhat = rhat[~np.isnan(rhat)]
-    rhat_max = float(np.max(available_rhat)) if len(available_rhat) else math.nan
-    ess_min = float(np.min(ess))
-    statuses = []
-    if math.isnan(rhat_max):
-        statuses.append("mcmc_rhat_unavailable")
-    elif rhat_max > 1.05:
-        statuses.append("mcmc_rhat")
-    if ess_min < max(100.0, 0.1 * total_draws):
-        statuses.append("mcmc_low_ess")
+    summary = summarize_diagnostics(diagnostics)
     fit = ThresholdFit(
         thresholds=fitted_thresholds,
         thresholds_estimated=estimate_thresholds,
@@ -429,9 +407,8 @@ def compute_threshold_marginals(
         thin=thin,
         chains=chains,
         seed=seed,
-        rhat_max=rhat_max,
-        ess_min=ess_min,
-        fit_status="+".join(statuses) if statuses else "ok",
+        **summary,
+        diagnostics=diagnostics,
         liability_marginals=liabilities,
     )
     return posterior, fit

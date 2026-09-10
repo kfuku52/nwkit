@@ -4,7 +4,11 @@ This document defines the shared interface conventions for NWKIT commands.
 Command-specific help remains authoritative for options and columns that are
 unique to one command.
 
-ASR diagnostic schemas are described in [ASR.md](ASR.md). Joint samples use one
+ASR diagnostic schemas are described in [ASR.md](ASR.md). THRESHOLD
+`--liability-diagnostics-out` uses one row per node/quantity or threshold;
+unavailable diagnostics are missing numeric fields with an explicit status,
+not zero ESS or apparent convergence. Its method version and aggregate status
+are included in `--model-out`. Joint samples use one
 row per sample/node/trait. Predictive checks add a topology-sensitive sister-clade
 discrepancy; multivariate checks identify trait pairs with `trait`/`other_trait`.
 Scalar cross-validation writes one row per held-out observed tip, including its

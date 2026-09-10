@@ -2123,6 +2123,8 @@ def _model_rate_bounds_text(fit):
 
 
 def _threshold_model_row(states, root_prior_mode, fit):
+    from nwkit.mcmc_diagnostics import DIAGNOSTIC_VERSION
+
     threshold_fit = fit["threshold_fit"]
     return {
         "trait_type": "discrete",
@@ -2146,6 +2148,26 @@ def _threshold_model_row(states, root_prior_mode, fit):
         "mcmc_seed": "" if threshold_fit.seed is None else threshold_fit.seed,
         "mcmc_rhat_max": threshold_fit.rhat_max,
         "mcmc_ess_min": threshold_fit.ess_min,
+        "mcmc_diagnostic_version": DIAGNOSTIC_VERSION,
+        "mcmc_ess_bulk_min": threshold_fit.ess_bulk_min,
+        "mcmc_ess_tail_min": threshold_fit.ess_tail_min,
+        "mcmc_probability_mcse_max": threshold_fit.probability_mcse_max,
+        "mcmc_monitored_variables": int(
+            (threshold_fit.diagnostics.status != "structural_constant").sum()
+        ),
+        "mcmc_unavailable_variables": int(
+            (
+                (threshold_fit.diagnostics.status != "structural_constant")
+                & threshold_fit.diagnostics.status.str.contains(
+                    "unavailable|constant_trace|insufficient_draws|unresolved_rare_category|nonfinite_trace"
+                )
+            ).sum()
+        ),
+        "mcmc_problem_variables": ";".join(
+            f"{row.branch_id}:{row.variable}:{row.state_or_threshold}"
+            for row in threshold_fit.diagnostics.itertuples()
+            if row.status not in ("ok", "structural_constant")
+        ),
         "fit_status": threshold_fit.fit_status,
     }
 
@@ -2890,6 +2912,7 @@ def _validate_asr_output_paths(args):
         "--stochastic-map-out": getattr(args, "stochastic_map_out", None),
         "--covariance-out": getattr(args, "covariance_out", None),
         "--liability-out": getattr(args, "liability_out", None),
+        "--liability-diagnostics-out": getattr(args, "liability_diagnostics_out", None),
         "--posterior-samples-out": getattr(args, "posterior_samples_out", None),
         "--posterior-predictive-out": getattr(args, "posterior_predictive_out", None),
         "--bootstrap-out": getattr(args, "bootstrap_out", None),
@@ -2935,6 +2958,10 @@ def _validate_asr_output_paths(args):
             ("--stochastic-map-out", getattr(args, "stochastic_map_out", None)),
             ("--covariance-out", getattr(args, "covariance_out", None)),
             ("--liability-out", getattr(args, "liability_out", None)),
+            (
+                "--liability-diagnostics-out",
+                getattr(args, "liability_diagnostics_out", None),
+            ),
             (
                 "--posterior-samples-out",
                 getattr(args, "posterior_samples_out", None),
@@ -3123,6 +3150,8 @@ def _run_discrete_asr(tree, trait_df, args, settings, targets):
             _write_table(
                 threshold_liability_table(tree, threshold_fit), args.liability_out
             )
+        if getattr(args, "liability_diagnostics_out", None) not in (None, ""):
+            _write_table(threshold_fit.diagnostics, args.liability_diagnostics_out)
         if threshold_fit.fit_status != "ok":
             sys.stderr.write(
                 "Threshold ASR MCMC diagnostics: "
