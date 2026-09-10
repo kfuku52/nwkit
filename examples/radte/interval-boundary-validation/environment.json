@@ -1,0 +1,7 @@
+{
+  "python": "3.10.14 | packaged by conda-forge | (main, Mar 20 2024, 12:53:34) [Clang 16.0.6 ]",
+  "platform": "macOS-26.6.2-x86_64-i386-64bit",
+  "numpy": "1.26.4",
+  "scipy": "1.15.2",
+  "numerical_threads": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 in recorded experiment commands"
+}

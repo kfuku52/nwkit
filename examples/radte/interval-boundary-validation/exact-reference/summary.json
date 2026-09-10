@@ -1,0 +1,92 @@
+{
+  "low-sd-independent:exact": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 960,
+    "availability": 1.0,
+    "conditional_coverage": 0.96,
+    "correct_return": 0.96,
+    "simultaneous_correct_return_lower": 0.9446645998173248,
+    "max_reference_error": 3.1086244689504383e-15
+  },
+  "low-sd-independent:laplace": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 809,
+    "availability": 1.0,
+    "conditional_coverage": 0.809,
+    "correct_return": 0.809,
+    "simultaneous_correct_return_lower": 0.7810133574853637,
+    "max_reference_error": null
+  },
+  "low-sd-independent:studentized": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 961,
+    "availability": 1.0,
+    "conditional_coverage": 0.961,
+    "correct_return": 0.961,
+    "simultaneous_correct_return_lower": 0.9458182044014315,
+    "max_reference_error": null
+  },
+  "medium-sd-correlated:exact": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 946,
+    "availability": 1.0,
+    "conditional_coverage": 0.946,
+    "correct_return": 0.946,
+    "simultaneous_correct_return_lower": 0.9287129626847243,
+    "max_reference_error": 2.220446049250313e-15
+  },
+  "medium-sd-correlated:laplace": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 803,
+    "availability": 1.0,
+    "conditional_coverage": 0.803,
+    "correct_return": 0.803,
+    "simultaneous_correct_return_lower": 0.7747227875706404,
+    "max_reference_error": null
+  },
+  "medium-sd-correlated:studentized": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 945,
+    "availability": 1.0,
+    "conditional_coverage": 0.945,
+    "correct_return": 0.945,
+    "simultaneous_correct_return_lower": 0.9275856581041462,
+    "max_reference_error": null
+  },
+  "high-sd-correlated:exact": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 942,
+    "availability": 1.0,
+    "conditional_coverage": 0.942,
+    "correct_return": 0.942,
+    "simultaneous_correct_return_lower": 0.9242119335779647,
+    "max_reference_error": 1.7763568394002505e-15
+  },
+  "high-sd-correlated:laplace": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 809,
+    "availability": 1.0,
+    "conditional_coverage": 0.809,
+    "correct_return": 0.809,
+    "simultaneous_correct_return_lower": 0.7810133574853637,
+    "max_reference_error": null
+  },
+  "high-sd-correlated:studentized": {
+    "families": 1000,
+    "returned": 1000,
+    "covered": 943,
+    "availability": 1.0,
+    "conditional_coverage": 0.943,
+    "correct_return": 0.943,
+    "simultaneous_correct_return_lower": 0.9253351771397265,
+    "max_reference_error": null
+  }
+}

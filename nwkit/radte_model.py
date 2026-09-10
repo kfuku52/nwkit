@@ -33,6 +33,7 @@ class DatingFit:
     sample_clade_presence: np.ndarray | None = None
     ensemble_metadata: dict | None = None
     conditional_intervals: list[dict] = field(default_factory=list)
+    calibration_profile: list[dict] = field(default_factory=list)
 
 
 def rate_precision(chronology, rho=0.0):
@@ -371,11 +372,14 @@ def solution_diagnostics(problem, x, ages, attempts, starts):
         diagnostics.append("absolute_age_scale_unidentified_within_hard_bounds")
     numerical_bounds, _ = problem.bounds_and_constraint()
     offset = len(problem.free)
-    if len(x) > offset and (
-        np.any(x[offset:] - numerical_bounds.lb[offset:] < 1e-5)
-        or np.any(numerical_bounds.ub[offset:] - x[offset:] < 1e-5)
-    ):
-        diagnostics.append("nuisance_parameter_at_numerical_bound")
+    if len(x) > offset:
+        lower_active = x[offset:] - numerical_bounds.lb[offset:] < 1e-5
+        if getattr(problem, "marginal", False) and problem.rate_sd is None:
+            lower_active[-1] = False  # Zero variance is a scientific boundary.
+        if np.any(lower_active) or np.any(
+            numerical_bounds.ub[offset:] - x[offset:] < 1e-5
+        ):
+            diagnostics.append("nuisance_parameter_at_numerical_bound")
     return diagnostics
 
 
@@ -484,7 +488,7 @@ def fit_dates(
         ages = problem.unpack_ages(x)
         mu = float(x[len(problem.free)])
         if marginal:
-            sd = float(np.exp(x[-1])) if rate_sd is None else float(rate_sd)
+            sd = float(np.sqrt(x[-1])) if rate_sd is None else float(rate_sd)
         rates = problem.posterior_rates(x)
         objective = problem.value_gradient(x)[0]
         diagnostics.append(
@@ -495,6 +499,10 @@ def fit_dates(
     else:
         diagnostics.append("conditional_on_input_branch_lengths_and_root_split")
     diagnostics.extend(solution_diagnostics(problem, x, ages, final_attempts, starts))
+    if getattr(problem, "marginal", False) and rate_sd is None:
+        diagnostics.append("marginal_variance_coordinate=variance")
+        if sd == 0:
+            diagnostics.append("estimated_rate_variance_at_zero_boundary")
     if sd > 1e-7 and "strict_clock_limit" in diagnostics:
         diagnostics.remove("strict_clock_limit")
     fit = DatingFit(
@@ -530,12 +538,27 @@ def curvature_covariance(fit, problem, level=0.95):
         return
     x = fit.parameters
     age = fit.ages[problem.free]
+    if (
+        getattr(problem, "marginal", False)
+        and problem.rate_variance_estimated
+        and fit.log_rate_sd == 0
+    ):
+        fit.interval_status = "unavailable-estimated-zero-rate-variance"
+        return
     numerical_bounds, _ = problem.bounds_and_constraint()
+    lower_distance = x - numerical_bounds.lb
+    variance_coordinate = (
+        getattr(problem, "marginal", False) and problem.rate_variance_estimated
+    )
+    if variance_coordinate:
+        # A fixed absolute tolerance in variance units would classify every
+        # small positive SD as an active constraint after reparameterization.
+        lower_distance[-1] = np.inf
     if (
         np.any(age - c.lower[problem.free] < 1e-5)
         or np.any(c.upper[problem.free] - age < 1e-5)
         or np.any(problem.constraints @ fit.ages < 1e-5)
-        or np.any(x - numerical_bounds.lb < 1e-5)
+        or np.any(lower_distance < 1e-5)
         or np.any(numerical_bounds.ub - x < 1e-5)
     ):
         fit.interval_status = "unavailable-active-bound-use-profile-or-bootstrap"
@@ -549,10 +572,17 @@ def curvature_covariance(fit, problem, level=0.95):
     hessian = np.empty((len(x), len(x)))
     for j in range(len(x)):
         step = 1e-5 * max(1.0, abs(x[j]))
+        if variance_coordinate and j == len(x) - 1:
+            step = min(step, x[j] / 4)
         plus, minus = x.copy(), x.copy()
         plus[j] += step
         minus[j] -= step
-        if not problem.feasible(plus) or not problem.feasible(minus):
+        if (
+            not problem.feasible(plus)
+            or not problem.feasible(minus)
+            or np.any(minus < numerical_bounds.lb)
+            or np.any(plus > numerical_bounds.ub)
+        ):
             fit.interval_status = "unavailable-near-constraint"
             return
         hessian[:, j] = (

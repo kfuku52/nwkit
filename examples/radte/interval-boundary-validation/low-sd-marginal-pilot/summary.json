@@ -1,0 +1,47 @@
+{
+  "laplace": {
+    "families": 20,
+    "completed": 3,
+    "intervals_available": 0,
+    "interval_return_fraction": 0.0,
+    "truth_covered": 0,
+    "coverage_among_available": null,
+    "correct_interval_returned_fraction": 0.0,
+    "unavailable_reasons": {
+      "failed": 17,
+      "unavailable-active-bound-use-profile-or-bootstrap": 3
+    },
+    "median_width": null,
+    "availability_wilson_95": [
+      0.0,
+      0.16112515805281935
+    ],
+    "correct_return_wilson_95": [
+      0.0,
+      0.16112515805281935
+    ]
+  },
+  "studentized": {
+    "families": 20,
+    "completed": 3,
+    "intervals_available": 0,
+    "interval_return_fraction": 0.0,
+    "truth_covered": 0,
+    "coverage_among_available": null,
+    "correct_interval_returned_fraction": 0.0,
+    "unavailable_reasons": {
+      "failed": 17,
+      "unavailable-active-bound-use-profile-or-bootstrap": 3
+    },
+    "median_width": null,
+    "availability_wilson_95": [
+      0.0,
+      0.16112515805281935
+    ],
+    "correct_return_wilson_95": [
+      0.0,
+      0.16112515805281935
+    ]
+  },
+  "elapsed_seconds": 6.400456083996687
+}

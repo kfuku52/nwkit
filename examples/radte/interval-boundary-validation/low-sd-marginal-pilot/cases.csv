@@ -1,0 +1,41 @@
+family,method,target,seed,status,interval_available,covered,error,age,truth,fitted_rate_sd,rate_variance_estimated,interval_status,lower,upper,width,fixed_target,optimizer_seed,actual_estimator
+0,laplace,D,92430000,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+0,studentized,D,92430000,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+1,laplace,D,92430001,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+1,studentized,D,92430001,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+2,laplace,D,92430002,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+2,studentized,D,92430002,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+3,laplace,D,92430003,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+3,studentized,D,92430003,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+4,laplace,D,92430004,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+4,studentized,D,92430004,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+5,laplace,D,92430005,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+5,studentized,D,92430005,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+6,laplace,D,92430006,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+6,studentized,D,92430006,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+7,laplace,D,92430007,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+7,studentized,D,92430007,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+8,laplace,D,92430008,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+8,studentized,D,92430008,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+9,laplace,D,92430009,completed,False,False,,20.87566283703214,20.0,0.0,True,unavailable-active-bound-use-profile-or-bootstrap,,,,False,92430009.0,marginal
+9,studentized,D,92430009,completed,False,False,,20.87566283703214,20.0,0.0,True,unavailable-active-bound-use-profile-or-bootstrap,,,,False,92430009.0,marginal
+10,laplace,D,92430010,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+10,studentized,D,92430010,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+11,laplace,D,92430011,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+11,studentized,D,92430011,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+12,laplace,D,92430012,completed,False,False,,20.5744294440645,20.0,0.0,True,unavailable-active-bound-use-profile-or-bootstrap,,,,False,92430012.0,marginal
+12,studentized,D,92430012,completed,False,False,,20.5744294440645,20.0,0.0,True,unavailable-active-bound-use-profile-or-bootstrap,,,,False,92430012.0,marginal
+13,laplace,D,92430013,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+13,studentized,D,92430013,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+14,laplace,D,92430014,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+14,studentized,D,92430014,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+15,laplace,D,92430015,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+15,studentized,D,92430015,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+16,laplace,D,92430016,completed,False,False,,19.323585515841984,20.0,0.0,True,unavailable-active-bound-use-profile-or-bootstrap,,,,False,92430016.0,marginal
+16,studentized,D,92430016,completed,False,False,,19.323585515841984,20.0,0.0,True,unavailable-active-bound-use-profile-or-bootstrap,,,,False,92430016.0,marginal
+17,laplace,D,92430017,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+17,studentized,D,92430017,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+18,laplace,D,92430018,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+18,studentized,D,92430018,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+19,laplace,D,92430019,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,
+19,studentized,D,92430019,failed,False,False,Quadratic likelihood failed exact-value/gradient validation; use --likelihood exact or auto.,,,,,,,,,,,

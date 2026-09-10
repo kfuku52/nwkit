@@ -184,6 +184,15 @@ Rate-bootstrap intervals are unavailable at the strict-clock limit.
   still make intervals unavailable.
 * `profile`: conditional likelihood-ratio intervals; endpoints limited by
   calibrations are explicitly marked. These use asymptotic reference thresholds.
+* `exact-log-duration`: a finite-sample Gaussian contrast interval for branch-only
+  input with one free age, where every affected duration is a positive multiple
+  of `age - offset`. A root duplication above fixed species ages is a common
+  eligible case. The method checks this structure and rejects other models.
+  It uses a t pivot with estimated variance, or a normal pivot with supplied
+  positive `--rate-sd`, then intersects the transformed confidence set with the
+  hard domain. It conditions on known rate correlation, the supplied branch
+  lengths and root split. It does not apply to sequence likelihoods or general
+  internal duplications. See [the derivation](RADTE_MATH.md#exact-log-duration-contrasts).
 * `bootstrap`: site resampling with an alignment, or parametric Gaussian-rate
   simulation for branch-only input. It refits each replicate. Marginal sequence
   replicates must pass exact approximation checks; fewer than 90% successful
@@ -191,7 +200,7 @@ Rate-bootstrap intervals are unavailable at the strict-clock limit.
 * `input-ensemble`: refit supplied gene-tree and/or species-chronogram samples
   as described below. Percentiles describe variation between conditional fits.
 
-Laplace, studentized, profile, and site/rate bootstrap condition on the supplied topology,
+Laplace, studentized, exact-log-duration, profile, and site/rate bootstrap condition on the supplied topology,
 reconciliation, and species calibration domain. Shared ages reduce parameter
 count but do not ensure identifiability. Inspect nonunique/local-optimum,
 boundary, approximation, and interval diagnostics. Fixed species calibrations
@@ -219,6 +228,22 @@ with a supplied SD), observation count, residual degrees of freedom, variance
 factor, and age transformation in its uncertainty status and diagnostics.
 See [the derivation](RADTE_MATH.md#small-sample-curvature-adjustment) and
 [the independent-family coverage checks](RADTE_VALIDATION.md#small-sample-interval-validation).
+
+For eligible branch-only data, `--uncertainty exact-log-duration` records
+`conditional-exact-log-duration-t` or `conditional-exact-log-duration-normal`
+in the existing tables and manifest. An empty confidence-set intersection is
+reported as `unavailable-empty-exact-log-duration-set`; an interval is never
+replaced by a point at the boundary. Point estimates are unchanged by this method.
+
+Marginal sequence inference now optimizes nonnegative rate **variance**, including
+zero, rather than imposing a positive log-SD floor. An estimated zero variance
+is a scientific boundary and is recorded as `estimated_rate_variance_at_zero_boundary`.
+Curvature intervals remain unavailable there (`unavailable-estimated-zero-rate-variance`);
+reaching zero is not evidence that rate-variance uncertainty disappeared.
+The general calibrated-profile prototype remains in the research validation
+tool, not the public CLI: current sequence pilots do not pass its availability
+criteria. [Boundary validation and limits](examples/radte/interval-boundary-validation/README.md)
+separate exact numerical checks from statistical acceptance criteria.
 
 The manifest's `optimizer_attempts` records profile fits with `phase` (`profile`
 or `profile-quadrature`), `profile_group`, `profile_age` in input time units,

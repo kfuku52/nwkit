@@ -506,6 +506,12 @@ separate from the hard `node`, `age_min`, `age_max` bounds table. The `.species.
 output retains external `input_interval_*` fields alongside the result's
 `interval_lower`, `interval_upper`, and `interval_status`.
 
+Eligible branch-only exact contrasts use `conditional-exact-log-duration-t`
+or `conditional-exact-log-duration-normal` in these existing status columns
+and the manifest. Empty confidence-set intersections and estimated zero
+marginal variance retain `NA` endpoints with explicit unavailable statuses;
+they are not zero-width estimates.
+
 RADTE also publishes `.conditional-intervals.tsv` and
 `.uncertainty-components.tsv`, empty when not applicable. Input sample IDs and
 shared-age IDs identify rows; missing estimates are `NA`, never zero.
