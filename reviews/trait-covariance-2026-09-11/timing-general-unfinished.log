@@ -1,0 +1,7 @@
+{"kind": "fixed_layout_covariance_ML", "traits": 2, "engine": "auto", "seconds": [0.001253750000614673, 0.001430208038073033, 0.0011432910105213523], "median_seconds": 0.001253750000614673, "log_likelihood": -207.5352204082394}
+{"kind": "fixed_layout_covariance_ML", "traits": 2, "engine": "pruning", "seconds": [2.1177580429939553, 2.282026085013058, 2.2296206680475734], "median_seconds": 2.2296206680475734, "log_likelihood": -207.53522040823987}
+{"kind": "exhaustive_zero_or_one_shift", "traits": 2, "mode": "diagonal", "alpha": "fixed_1", "seconds": [0.19186587497824803, 0.19656566600315273, 0.19428895798046142], "median_seconds": 0.19428895798046142, "candidates": 199}
+{"kind": "exhaustive_zero_or_one_shift", "traits": 2, "mode": "full", "alpha": "fixed_1", "seconds": [0.19714020803803578, 0.19632262497907504, 0.1906899170135148], "median_seconds": 0.19632262497907504, "candidates": 199}
+{"kind": "fixed_layout_covariance_ML", "traits": 5, "engine": "auto", "seconds": [0.001600207993760705, 0.001571333035826683, 0.0015837080427445471], "median_seconds": 0.0015837080427445471, "log_likelihood": -380.4765796283058}
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:686: RuntimeWarning: invalid value encountered in subtract
+  df = [f_eval - f0 for f_eval in f_evals]

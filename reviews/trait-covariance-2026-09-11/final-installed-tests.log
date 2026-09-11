@@ -1,0 +1,11 @@
+........................................................................ [ 87%]
+..........                                                               [100%]
+=============================== warnings summary ===============================
+../src/tests/test_cli_contracts.py:12
+  /src/tests/test_cli_contracts.py:12: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+
+tests/test_cli_contracts.py::test_command_parser_reaches_its_real_handler[shift]
+  /src/tests/test_shift.py:172: PytestUnknownMarkWarning: Unknown pytest.mark.integration - is this a typo?  You can register custom marks to avoid this warning - for details, see https://docs.pytest.org/en/stable/how-to/mark.html
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+82 passed, 2 warnings in 3.42s

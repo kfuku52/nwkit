@@ -1,0 +1,565 @@
+diff --git a/MANIFEST.in b/MANIFEST.in
+index 0e91672..eddaa7b 100644
+--- a/MANIFEST.in
++++ b/MANIFEST.in
+@@ -37,6 +37,7 @@ graft examples/regression_selection
+ 
+ include SHIFT.md
+ include NATIVE_SHIFT.md
++include SHIFT_COVARIANCE.md
+ include NATIVE_SHIFT_VALIDATION.md
+ include NATIVE_SHIFT_SCALING.md
+ graft reviews/native-scale-2026-09-10
+diff --git a/NATIVE_SHIFT.md b/NATIVE_SHIFT.md
+index 2db94cb..de9baa8 100644
+--- a/NATIVE_SHIFT.md
++++ b/NATIVE_SHIFT.md
+@@ -1,7 +1,8 @@
+ # Native multivariate OU shift inference
+ 
+ `nwkit shift --selection native` implements shared shift locations and shared
+-regime identities with independent OU processes for each trait. It needs no R
++regime identities, with independent OU processes per trait by default and optional
++[full evolutionary covariance and shared alpha](SHIFT_COVARIANCE.md). It needs no R
+ backend. Fixed layouts support parameter estimation; discovery and calibration
+ are **research-only** pending the [adoption protocol](NATIVE_SHIFT_VALIDATION.md).
+ The existing default `--selection calibrated` is a separate, restricted method.
+@@ -36,8 +37,10 @@ observation variance and regime coefficients. `--estimate-measurement-error`
+ estimates the extra variance in addition to supplied SE squared. Fixed
+ `--alpha`, `--process-tip-variance` and `--measurement-variance` accept either one
+ number or a comma-separated value per trait. Alpha uses original time units;
+-variances use original trait units squared. Full cross-trait covariance and
+-non-ultrametric trees are not implemented.
++variances use original trait units squared. Full cross-trait covariance is selected
++with `--trait-covariance full`; see its [model, output and simulation guide](SHIFT_COVARIANCE.md).
++The scalar parameterization below describes the default diagonal model.
++Non-ultrametric trees are not implemented.
+ 
+ ## Parameterization and numerical scope
+ 
+diff --git a/README.md b/README.md
+index ebe5971..1063fe0 100644
+--- a/README.md
++++ b/README.md
+@@ -64,7 +64,8 @@ minimal worked example, in
+ [the mathematical guide](https://github.com/kfuku52/nwkit/blob/master/RECONCILED_SPECIATION_CONTRAST_MATH.md).
+ 
+ - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
+-- [`shift`](SHIFT.md): Experimental OU shift selection, [native multivariate inference](NATIVE_SHIFT.md), and an optional legacy kfl1ou backend
++- [`shift`](SHIFT.md): Experimental OU shift selection, [native multivariate inference](NATIVE_SHIFT.md), [evolutionary covariance and simulation](SHIFT_COVARIANCE.md), and an optional legacy kfl1ou backend
++- [`shift-simulate`](SHIFT_COVARIANCE.md#simulation): Generating correlated OU shift datasets and known truth from explicit parameters or native model fits
+ - [`asr`](https://github.com/kfuku52/nwkit/blob/master/ASR.md): Inferring Mk/covarion/mixture/threshold or scalar/multivariate Gaussian ancestral traits, with regimes, joint evolutionary/individual covariance, model comparison, simulation diagnostics, and automatic trait-type detection; supports [branch-specific BM/OU and fixed Gaussian jumps](BRANCH_GAUSSIAN.md)
+ - [`asrcompare`](https://github.com/kfuku52/nwkit/blob/master/ASR.md#model-comparison-and-simulation-diagnostics): Batch-fitting applicable ASR models and comparing compatible likelihood/root groups with AIC, AICc, BIC, and an optional PDF
+ - [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
+diff --git a/SHIFT.md b/SHIFT.md
+index cec62dd..cbe0f2c 100644
+--- a/SHIFT.md
++++ b/SHIFT.md
+@@ -15,6 +15,8 @@ research searches use `--selection native`; historical IC methods use `--selecti
+ 
+ For shared multivariate layouts, missing observations, native discovery and
+ full-search bootstrap replay, see [Native OU shift inference](NATIVE_SHIFT.md).
++Full evolutionary covariance, shared alpha and unconditional `shift-simulate`
++generation are described in the [joint-covariance guide](SHIFT_COVARIANCE.md).
+ That research implementation is distinct from the restricted calibrated method
+ and has not passed its production-adoption gates.
+ 
+diff --git a/nwkit/shift_cli.py b/nwkit/shift_cli.py
+index 9b13822..4a042d5 100644
+--- a/nwkit/shift_cli.py
++++ b/nwkit/shift_cli.py
+@@ -149,9 +149,31 @@ def register_shift(subparsers, tree_input, table_output):
+     )
+     _register_native_options(parser)
+     parser.set_defaults(handler=_command_shift)
++    register_shift_simulate(subparsers, tree_input, table_output)
+ 
+ 
+ def _register_native_options(parser):
++    parser.add_argument(
++        "--covariance-engine",
++        "--covariance_engine",
++        choices=["auto", "pruning"],
++        default="auto",
++        help="Native joint covariance engine: auto uses exact separable profiling when applicable; pruning forces the general numerical fit for validation.",
++    )
++    parser.add_argument(
++        "--trait-covariance",
++        "--trait_covariance",
++        choices=["diagonal", "full"],
++        default="diagonal",
++        help="Native evolutionary covariance across traits (default: diagonal); full estimates one joint matrix shared across regimes.",
++    )
++    parser.add_argument(
++        "--alpha-model",
++        "--alpha_model",
++        choices=["shared", "trait-specific"],
++        default="trait-specific",
++        help="Native alpha parameterization (default: trait-specific). Shared alpha enables exact covariance profiling with complete error-free data.",
++    )
+     for key, default in NATIVE_SEARCH_DEFAULTS.items():
+         name = key.replace("_", "-")
+         parser.add_argument(
+@@ -232,6 +254,9 @@ def _command_shift(args):
+         or args.optimizer_starts != 3
+         or args.max_iterations != 300
+         or args.resume_model
++        or args.trait_covariance != "diagonal"
++        or args.alpha_model != "trait-specific"
++        or args.covariance_engine != "auto"
+         or any(
+             getattr(args, name) != value
+             for name, value in NATIVE_SEARCH_DEFAULTS.items()
+@@ -241,3 +266,52 @@ def _command_shift(args):
+     from nwkit.shift import shift_main
+ 
+     return shift_main(args)
++
++
++def register_shift_simulate(subparsers, tree_input, table_output):
++    parser = subparsers.add_parser(
++        "shift-simulate",
++        parents=[tree_input, table_output],
++        help="Simulate OU shift traits with correlated evolution and known generating truth.",
++    )
++    source = parser.add_mutually_exclusive_group(required=True)
++    source.add_argument(
++        "--parameters",
++        help="Explicit generating-parameter JSON; see SHIFT_COVARIANCE.md.",
++    )
++    source.add_argument(
++        "--model-in",
++        "--model_in",
++        help="Completed native shift model JSON fitted to the same tree.",
++    )
++    parser.add_argument(
++        "--truth-out",
++        "--truth_out",
++        required=True,
++        help="Generating truth and seed JSON (required file path).",
++    )
++    parser.add_argument(
++        "--latent-out",
++        "--latent_out",
++        help="Optional latent values at every node, before observation error.",
++    )
++    parser.add_argument(
++        "--replicates", type=int, default=1, help="Independent datasets (default: 1)."
++    )
++    parser.add_argument(
++        "--seed", type=int, default=1, help="Nonnegative generating seed (default: 1)."
++    )
++    parser.add_argument(
++        "--memory-mb",
++        "--memory_mb",
++        type=int,
++        default=512,
++        help="Simulation allocation budget in MiB (default: 512).",
++    )
++    parser.set_defaults(handler=_command_shift_simulate)
++
++
++def _command_shift_simulate(args):
++    from nwkit.shift_simulation_cli import shift_simulate_main
++
++    return shift_simulate_main(args)
+diff --git a/nwkit/shift_native_bootstrap.py b/nwkit/shift_native_bootstrap.py
+index 05bcbee..bc57714 100644
+--- a/nwkit/shift_native_bootstrap.py
++++ b/nwkit/shift_native_bootstrap.py
+@@ -10,6 +10,10 @@ from nwkit.shift_native_model import ShiftData, covariance_geometry
+ 
+ def simulate_native_data(data, result, rng):
+     """Simulate in original units, preserving errors and observation masks."""
++    if "joint_fit" in result:
++        from nwkit.shift_simulation import simulate_joint_data
++
++        return simulate_joint_data(data, result, rng)
+     values = np.empty_like(data.values)
+     tree = data.tree
+     for trait, fit in enumerate(result["fits"]):
+diff --git a/nwkit/shift_native_fit.py b/nwkit/shift_native_fit.py
+index e8a6506..8da70a5 100644
+--- a/nwkit/shift_native_fit.py
++++ b/nwkit/shift_native_fit.py
+@@ -24,8 +24,17 @@ class NativeFitOptions:
+     variance_bounds: tuple[float, float] = (1e-10, 1e4)
+     optimizer_starts: int = 3
+     maxiter: int = 300
++    trait_covariance: str = "diagonal"
++    alpha_model: str = "trait-specific"
++    joint_engine: str = "auto"
+ 
+     def validate(self):
++        if self.trait_covariance not in {"diagonal", "full"}:
++            raise ValueError("Trait covariance must be diagonal or full.")
++        if self.alpha_model not in {"shared", "trait-specific"}:
++            raise ValueError("Alpha model must be shared or trait-specific.")
++        if self.joint_engine not in {"auto", "pruning"}:
++            raise ValueError("Joint covariance engine must be auto or pruning.")
+         if self.root_model not in {"OUfixedRoot", "OUrandomRoot"}:
+             raise ValueError("Unknown native root model.")
+         for bounds in (self.alpha_height_bounds, self.variance_bounds):
+@@ -424,6 +433,7 @@ def fit_native_layout(
+     alpha_height=None,
+     process_variance=None,
+     measurement_variance=None,
++    _joint_context=None,
+ ):
+     """Fit independent trait covariances and shared shift/regime identities.
+ 
+@@ -431,6 +441,22 @@ def fit_native_layout(
+     Alpha-height coordinates are dimensionless, scalar or per-trait.
+     """
+     options = NativeFitOptions() if options is None else options
++    if options.trait_covariance == "full" or options.alpha_model == "shared":
++        from nwkit.shift_joint_fit import fit_joint_layout
++
++        return fit_joint_layout(
++            data,
++            layout,
++            options=options,
++            alpha_height=alpha_height,
++            process_variance=process_variance,
++            measurement_variance=measurement_variance,
++            _joint_context=_joint_context,
++        )
++    if options.joint_engine != "auto":
++        raise ValueError(
++            "A joint covariance engine requires full covariance or shared alpha."
++        )
+     dimension = len(data.trait_names)
+ 
+     def parameter(value, trait, variance=False):
+diff --git a/nwkit/shift_native_heuristic.py b/nwkit/shift_native_heuristic.py
+index 3f53d6c..1793916 100644
+--- a/nwkit/shift_native_heuristic.py
++++ b/nwkit/shift_native_heuristic.py
+@@ -4,6 +4,7 @@ import itertools
+ import math
+ from dataclasses import dataclass
+ 
++from nwkit.shift_joint_screen import JointQuickProfile, joint_group_lasso_screen
+ from nwkit.shift_native_limits import NATIVE_SEARCH_DEFAULTS
+ from nwkit.shift_native_model import ShiftLayout
+ from nwkit.shift_native_quick import NativeQuickProfile
+@@ -117,15 +118,27 @@ class _HeuristicSearch:
+         self.null = ShiftLayout.build(data.tree)
+         self.evaluator.evaluate(self.null)
+         null_fit = self.evaluator.best[0]
+-        self.pool, self.screen_metadata = group_lasso_screen(
++        screen = group_lasso_screen
++        profile: type[NativeQuickProfile] | type[JointQuickProfile] = NativeQuickProfile
++        if "joint_fit" in null_fit:
++            screen, profile = joint_group_lasso_screen, JointQuickProfile
++        self.pool, self.screen_metadata = screen(
+             data,
+             null_fit,
+             pool_size=options.candidate_pool,
+             iterations=options.lasso_iterations,
+             memory_limit=options.memory_limit,
+         )
+-        self.profile = NativeQuickProfile(
+-            data, null_fit, self.pool, fit_arguments.get("alpha_height")
++        self.profile = profile(
++            data,
++            null_fit,
++            self.pool,
++            fit_arguments.get("alpha_height"),
++            **(
++                {"memory_limit": options.memory_limit}
++                if "joint_fit" in null_fit
++                else {}
++            ),
+         )
+         self.quick_scores = {}
+ 
+@@ -254,6 +267,8 @@ def heuristic_native_search(data, *, options=None, fit_arguments=None, criterion
+         "budget_exhausted": len(search.evaluator.records) >= options.refit_budget
+         or search.profile.evaluations >= options.screening_budget,
+         "refinement": "one_pass_drop_move_merge_split",
+-        "candidate_ranking": "fixed_null_covariance_profiles; final candidates refitted without penalties",
++        "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
++        if "joint_fit" in search.evaluator.best[0]
++        else "fixed_null_covariance_profiles; final candidates refitted without penalties",
+     }
+     return search.evaluator.finish(metadata)
+diff --git a/nwkit/shift_native_ic.py b/nwkit/shift_native_ic.py
+index c0d42c0..30910b2 100644
+--- a/nwkit/shift_native_ic.py
++++ b/nwkit/shift_native_ic.py
+@@ -16,6 +16,8 @@ def native_information_criterion(data, result, criterion):
+         raise ValueError(
+             "Native information criterion must be AIC, AICc, BIC, or pBIC."
+         )
++    if "joint_covariance" in result:
++        return _joint_information_criterion(data, result, criterion)
+     shifts = len(result["layout"].shifts)
+     n = len(data.tree.leaf_names)
+     penalty = 2 * shifts if criterion in {"AIC", "AICc"} else shifts * math.log(n)
+@@ -91,3 +93,44 @@ def native_information_criterion(data, result, criterion):
+         "status": "ok" if math.isfinite(score) else "nonfinite_information",
+         **correction,
+     }
++
++
++def _joint_information_criterion(data, result, criterion):
++    if criterion == "pBIC":
++        raise ValueError(
++            "Joint covariance pBIC is not implemented; use AIC, AICc, BIC or bootstrap."
++        )
++    joint = result["joint_covariance"]
++    means = len(data.trait_names) * len(result["layout"].groups)
++    parameters = (
++        len(result["layout"].shifts)
++        + means
++        + joint["covariance_parameter_count"]
++        + joint["alpha_parameter_count"]
++        + joint["measurement_parameter_count"]
++    )
++    n = int(np.any(np.isfinite(data.values), axis=1).sum())
++    penalty = parameters * (math.log(n) if criterion == "BIC" else 2)
++    extra = 0.0
++    if criterion == "AICc":
++        if n <= parameters + 1:
++            return {
++                "criterion": criterion,
++                "score": None,
++                "penalty": None,
++                "parameter_count": parameters,
++                "sample_size": n,
++                "status": "insufficient_aicc_sample_size",
++            }
++        extra = 2 * parameters * (parameters + 1) / (n - parameters - 1)
++    return {
++        "criterion": criterion,
++        "score": -2 * result["log_likelihood"] + penalty + extra,
++        "penalty": penalty + extra,
++        "parameter_count": parameters,
++        "sample_size": n,
++        "small_sample_correction": extra if criterion == "AICc" else None,
++        "status": "ok",
++        "sample_size_convention": "observed_tip_vectors",
++        "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test",
++    }
+diff --git a/nwkit/shift_native_input.py b/nwkit/shift_native_input.py
+index c68702b..1ba3831 100644
+--- a/nwkit/shift_native_input.py
++++ b/nwkit/shift_native_input.py
+@@ -117,6 +117,14 @@ def read_native_layout(path, tree):
+ 
+ 
+ def native_fit_arguments(args, data):
++    joint = (
++        getattr(args, "trait_covariance", "diagonal") == "full"
++        or getattr(args, "alpha_model", "trait-specific") == "shared"
++    )
++    if joint and args.criterion == "pBIC":
++        raise ValueError(
++            "Joint covariance pBIC is not implemented; use AIC, AICc, BIC or bootstrap."
++        )
+     if getattr(args, "global_null_gate", False) and (
+         args.criterion != "AIC" or args.regime_map
+     ):
+@@ -147,6 +155,9 @@ def native_fit_arguments(args, data):
+         estimate_measurement_error=args.estimate_measurement_error,
+         optimizer_starts=args.optimizer_starts,
+         maxiter=args.max_iterations,
++        trait_covariance=getattr(args, "trait_covariance", "diagonal"),
++        alpha_model=getattr(args, "alpha_model", "trait-specific"),
++        joint_engine=getattr(args, "covariance_engine", "auto"),
+     )
+     options.validate()
+     return {
+diff --git a/nwkit/shift_native_output.py b/nwkit/shift_native_output.py
+index c648773..6e6fd34 100644
+--- a/nwkit/shift_native_output.py
++++ b/nwkit/shift_native_output.py
+@@ -165,7 +165,12 @@ def _model(data, result, tables):
+         "selection": "native",
+         "inference_role": "fixed_layout_parameter_estimation",
+         "nwkit_version": __version__,
+-        "trait_covariance": "diagonal",
++        "trait_covariance": result["trait_covariance"],
++        **(
++            {"joint_covariance": result["joint_covariance"]}
++            if "joint_covariance" in result
++            else {}
++        ),
+         "trait_names": list(data.trait_names),
+         "root_model": result["root_model"],
+         "likelihood": "ordinary_Gaussian_ML_profiled_means",
+diff --git a/nwkit/shift_native_path.py b/nwkit/shift_native_path.py
+index 4b37893..57310fc 100644
+--- a/nwkit/shift_native_path.py
++++ b/nwkit/shift_native_path.py
+@@ -40,6 +40,8 @@ def _path_layout(data, coefficients, branches, max_shifts):
+ 
+ 
+ def _candidate_path(data, fit, options, point_budget):
++    if "joint_fit" in fit:
++        return _joint_candidate_path(data, fit, options, point_budget)
+     matrices, responses, branches = _whitened_matrices(
+         data, fit, options.memory_limit, optimum_increments=True
+     )
+@@ -78,6 +80,36 @@ def _candidate_path(data, fit, options, point_budget):
+     return layouts, records
+ 
+ 
++def _joint_candidate_path(data, fit, options, point_budget):
++    from nwkit.shift_joint_screen import joint_path, joint_screen_matrix
++
++    matrix, response, branches, _ = joint_screen_matrix(
++        data, fit, normalize=False, memory_limit=options.memory_limit
++    )
++    layouts, records = [], []
++    for coefficients, record in joint_path(
++        matrix,
++        response,
++        len(data.trait_names),
++        iterations=options.lasso_iterations,
++        paths=np.geomspace(0.999, 0.005, 80)[:point_budget],
++    ):
++        layout, active = _path_layout(data, coefficients, branches, options.max_shifts)
++        records.append(
++            {
++                **record,
++                "active_branches": active,
++                "truncated_at_shift_cap": active > options.max_shifts,
++                "covariance": "joint",
++            }
++        )
++        if layout is not None and layout not in layouts:
++            layouts.append(layout)
++        if active > 2 * options.max_shifts:
++            break
++    return layouts, records
++
++
+ def _initial_covariance(data, evaluator, fit_arguments):
+     null_fit = evaluator.best[0]
+     options = fit_arguments.get("options", NativeFitOptions())
+diff --git a/nwkit/shift_native_provenance.py b/nwkit/shift_native_provenance.py
+index 51b99cf..070f343 100644
+--- a/nwkit/shift_native_provenance.py
++++ b/nwkit/shift_native_provenance.py
+@@ -89,6 +89,11 @@ def native_provenance(data, args, layout=None, names=None):
+             "bootstrap_seed",
+         )
+     }
++    configuration.update(
++        trait_covariance=getattr(args, "trait_covariance", "diagonal"),
++        alpha_model=getattr(args, "alpha_model", "trait-specific"),
++        covariance_engine=getattr(args, "covariance_engine", "auto"),
++    )
+     implementation = native_implementation()
+     return {
+         "analysis_input_sha256": _digest(inputs),
+diff --git a/nwkit/shift_native_search.py b/nwkit/shift_native_search.py
+index f19ac3c..a3c9a8f 100644
+--- a/nwkit/shift_native_search.py
++++ b/nwkit/shift_native_search.py
+@@ -127,6 +127,15 @@ class NativeLayoutEvaluator:
+         self.best_information = None
+         self.data = data
+         self.fit_arguments = fit_arguments
++        options = fit_arguments.get("options")
++        if options is not None and (
++            options.trait_covariance == "full" or options.alpha_model == "shared"
++        ):
++            from nwkit.shift_joint_fit import JointFitContext
++
++            self.fit_arguments = dict(
++                fit_arguments, _joint_context=JointFitContext(data, options.root_model)
++            )
+         self.records: list[dict] = []
+         self.scores: dict[ShiftLayout, float] = {}
+         self.best: dict[int, dict] = {}
+@@ -134,6 +143,22 @@ class NativeLayoutEvaluator:
+     def evaluate(self, layout):
+         if layout in self.scores:
+             return self.scores[layout]
++        if "_joint_context" in self.fit_arguments:
++            from nwkit.shift_joint_fit import joint_residual_rank_excluded
++
++            if joint_residual_rank_excluded(self.data, layout, self.fit_arguments):
++                self.scores[layout] = -math.inf
++                self.records.append(
++                    {
++                        "shift_branch_ids": list(layout.shifts),
++                        "groups": [list(g) for g in layout.groups],
++                        "complexity": layout_complexity(layout),
++                        "log_likelihood": None,
++                        "evaluations": 0,
++                        "status": "structurally_excluded_unbounded_covariance_ml",
++                    }
++                )
++                return -math.inf
+         fixed_alpha = self.fit_arguments.get("alpha_height")
+         if fixed_alpha is not None and not observable_layout(
+             self.data, layout, fixed_alpha
+@@ -194,7 +219,10 @@ class NativeLayoutEvaluator:
+                 "evaluations": sum(
+                     r["optimizer"]["evaluations"] for r in result["traits"]
+                 ),
+-                "complete_covariance_modes": not unresolved,
++                "complete_covariance_modes": not unresolved
++                and result.get("joint_covariance", {})
++                .get("optimizer", {})
++                .get("complete_alpha_modes", True),
+                 **({"information_criterion": information} if information else {}),
+             }
+         )
+diff --git a/tests/test_cli_contracts.py b/tests/test_cli_contracts.py
+index c770f1e..5ab7c93 100644
+--- a/tests/test_cli_contracts.py
++++ b/tests/test_cli_contracts.py
+@@ -34,6 +34,14 @@ CASES = {
+     "pca": ["--trait", "{data}", "--columns", "x,y"],
+     "signal": ["--trait", "{data}", "--columns", "x", "--n-sim", "9"],
+     "shift": ["--trait", "{data}", "--state-column", "x", "--model-out", "{model}"],
++    "shift-simulate": [
++        "--parameters",
++        "{simulation}",
++        "--truth-out",
++        "{model}",
++        "--input-rooted",
++        "yes",
++    ],
+     "annotate": ["--table", "{data}"],
+     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
+     "asrcompare": [
+@@ -133,6 +141,7 @@ TABLE_COLUMNS = {
+     "pca": "PC1",
+     "signal": "estimate",
+     "shift": "regime",
++    "shift-simulate": "replicate",
+     "asr": "map_state",
+     "asrcompare": "model",
+     "cladefreq": "frequency",
+@@ -191,6 +200,17 @@ def test_command_parser_reaches_its_real_handler(
+         ).to_csv(folds, sep="\t", index=False)
+     species = tmp_path / "species.txt"
+     species.write_text("\n".join(names) + "\n")
++    simulation = tmp_path / "simulation.json"
++    simulation.write_text(
++        json.dumps(
++            {
++                "trait_names": ["x", "y"],
++                "alpha": 1.0,
++                "process_tip_covariance": [[1.0, 0.5], [0.5, 1.0]],
++                "regime_optima": [[0.0, 0.0]],
++            }
++        )
++    )
+     paths = {
+         "tree": tree,
+         "folds": folds,
+@@ -201,6 +221,7 @@ def test_command_parser_reaches_its_real_handler(
+         "downloads": tmp_path / "downloads",
+         "pdf": tmp_path / "roots.pdf",
+         "model": tmp_path / "model.json",
++        "simulation": simulation,
+     }
+     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
+     if command == "shift":

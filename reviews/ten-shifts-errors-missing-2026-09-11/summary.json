@@ -1,0 +1,10495 @@
+{
+  "accuracy": {
+    "groups": [
+      {
+        "truth": "shared",
+        "mode": "shared",
+        "statuses": {
+          "complete": 5
+        },
+        "paired_complete": 4,
+        "criteria": {
+          "AIC": {
+            "tp": 7.5,
+            "fp": 4.25,
+            "fn": 2.5,
+            "precision": 0.6439393939393939,
+            "recall": 0.75,
+            "f1": 0.6926406926406926,
+            "estimated_shifts": 11.75,
+            "exact_set": 0
+          },
+          "BIC": {
+            "tp": 6.5,
+            "fp": 1.5,
+            "fn": 3.5,
+            "precision": 0.8522727272727273,
+            "recall": 0.65,
+            "f1": 0.6915480352980353,
+            "estimated_shifts": 8,
+            "exact_set": 0
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          10,
+          7,
+          6,
+          7,
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false,
+          false,
+          false,
+          false,
+          false
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.72,
+          "BIC": 0.62
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 5,
+              "fp": 7,
+              "fn": 5,
+              "precision": 0.4166666666666667,
+              "recall": 0.5,
+              "f1": 0.45454545454545453,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 1,
+              "tp": 6,
+              "fp": 6,
+              "fn": 4,
+              "precision": 0.5,
+              "recall": 0.6,
+              "f1": 0.5454545454545454,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 7,
+              "fp": 5,
+              "fn": 3,
+              "precision": 0.5833333333333334,
+              "recall": 0.7,
+              "f1": 0.6363636363636364,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 3,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.46153846153846156,
+              "estimated_shifts": 3,
+              "exact_set": false
+            },
+            {
+              "replicate": 1,
+              "tp": 5,
+              "fp": 1,
+              "fn": 5,
+              "precision": 0.8333333333333334,
+              "recall": 0.5,
+              "f1": 0.625,
+              "estimated_shifts": 6,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 5,
+              "fp": 1,
+              "fn": 5,
+              "precision": 0.8333333333333334,
+              "recall": 0.5,
+              "f1": 0.625,
+              "estimated_shifts": 6,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": 1144.027198147989,
+        "search_seconds": [
+          1070.0233068210073,
+          1014.8546045470284,
+          1429.5205101959873,
+          1218.031089474971
+        ]
+      },
+      {
+        "truth": "shared",
+        "mode": "trait-specific",
+        "statuses": {
+          "complete": 4,
+          "timeout": 1
+        },
+        "paired_complete": 4,
+        "criteria": {
+          "AIC": {
+            "tp": 7.5,
+            "fp": 4.25,
+            "fn": 2.5,
+            "precision": 0.6439393939393939,
+            "recall": 0.75,
+            "f1": 0.6926406926406926,
+            "estimated_shifts": 11.75,
+            "exact_set": 0
+          },
+          "BIC": {
+            "tp": 6.5,
+            "fp": 1.5,
+            "fn": 3.5,
+            "precision": 0.8522727272727273,
+            "recall": 0.65,
+            "f1": 0.6915480352980353,
+            "estimated_shifts": 8,
+            "exact_set": 0
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          10,
+          7,
+          7,
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false,
+          false,
+          false,
+          false
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.6,
+          "BIC": 0.52
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 5,
+              "fp": 7,
+              "fn": 5,
+              "precision": 0.4166666666666667,
+              "recall": 0.5,
+              "f1": 0.45454545454545453,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 7,
+              "fp": 5,
+              "fn": 3,
+              "precision": 0.5833333333333334,
+              "recall": 0.7,
+              "f1": 0.6363636363636364,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 3,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.46153846153846156,
+              "estimated_shifts": 3,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 5,
+              "fp": 1,
+              "fn": 5,
+              "precision": 0.8333333333333334,
+              "recall": 0.5,
+              "f1": 0.625,
+              "estimated_shifts": 6,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": 1551.0648584570154,
+        "search_seconds": [
+          1603.983703105012,
+          1498.1460138090188,
+          1715.9340283269994,
+          1234.465539480967
+        ]
+      },
+      {
+        "truth": "different",
+        "mode": "shared",
+        "statuses": {
+          "complete": 5
+        },
+        "paired_complete": 4,
+        "criteria": {
+          "AIC": {
+            "tp": 6.5,
+            "fp": 5.25,
+            "fn": 3.5,
+            "precision": 0.553030303030303,
+            "recall": 0.65,
+            "f1": 0.5974025974025974,
+            "estimated_shifts": 11.75,
+            "exact_set": 0
+          },
+          "BIC": {
+            "tp": 5.25,
+            "fp": 0.75,
+            "fn": 4.75,
+            "precision": 0.8731060606060606,
+            "recall": 0.525,
+            "f1": 0.6168727106227107,
+            "estimated_shifts": 6,
+            "exact_set": 0
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          10,
+          6,
+          9,
+          6,
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false,
+          false,
+          false,
+          false,
+          true
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.66,
+          "BIC": 0.54
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 0,
+              "tp": 7,
+              "fp": 5,
+              "fn": 3,
+              "precision": 0.5833333333333334,
+              "recall": 0.7,
+              "f1": 0.6363636363636364,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 1,
+              "tp": 4,
+              "fp": 8,
+              "fn": 6,
+              "precision": 0.3333333333333333,
+              "recall": 0.4,
+              "f1": 0.36363636363636365,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 6,
+              "fp": 6,
+              "fn": 4,
+              "precision": 0.5,
+              "recall": 0.6,
+              "f1": 0.5454545454545454,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 6,
+              "fp": 5,
+              "fn": 4,
+              "precision": 0.5454545454545454,
+              "recall": 0.6,
+              "f1": 0.5714285714285714,
+              "estimated_shifts": 11,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 2,
+              "fn": 0,
+              "precision": 0.8333333333333334,
+              "recall": 1.0,
+              "f1": 0.9090909090909091,
+              "estimated_shifts": 12,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 0,
+              "tp": 6,
+              "fp": 0,
+              "fn": 4,
+              "precision": 1.0,
+              "recall": 0.6,
+              "f1": 0.75,
+              "estimated_shifts": 6,
+              "exact_set": false
+            },
+            {
+              "replicate": 1,
+              "tp": 3,
+              "fp": 1,
+              "fn": 7,
+              "precision": 0.75,
+              "recall": 0.3,
+              "f1": 0.42857142857142855,
+              "estimated_shifts": 4,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 3,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.46153846153846156,
+              "estimated_shifts": 3,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 5,
+              "fp": 1,
+              "fn": 5,
+              "precision": 0.8333333333333334,
+              "recall": 0.5,
+              "f1": 0.625,
+              "estimated_shifts": 6,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": 1259.9215154285193,
+        "search_seconds": [
+          1321.741784185986,
+          1198.1012466710526,
+          1408.6344268950052,
+          811.7664537039818
+        ]
+      },
+      {
+        "truth": "different",
+        "mode": "trait-specific",
+        "statuses": {
+          "failed": 1,
+          "complete": 4
+        },
+        "paired_complete": 4,
+        "criteria": {
+          "AIC": {
+            "tp": 6.5,
+            "fp": 5,
+            "fn": 3.5,
+            "precision": 0.5719696969696969,
+            "recall": 0.65,
+            "f1": 0.6082251082251082,
+            "estimated_shifts": 11.5,
+            "exact_set": 0
+          },
+          "BIC": {
+            "tp": 5.5,
+            "fp": 0.75,
+            "fn": 4.5,
+            "precision": 0.8856060606060606,
+            "recall": 0.55,
+            "f1": 0.6430631868131869,
+            "estimated_shifts": 6.25,
+            "exact_set": 0
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          6,
+          9,
+          6,
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false,
+          false,
+          false,
+          true
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.52,
+          "BIC": 0.44000000000000006
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 1,
+              "tp": 4,
+              "fp": 8,
+              "fn": 6,
+              "precision": 0.3333333333333333,
+              "recall": 0.4,
+              "f1": 0.36363636363636365,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 6,
+              "fp": 6,
+              "fn": 4,
+              "precision": 0.5,
+              "recall": 0.6,
+              "f1": 0.5454545454545454,
+              "estimated_shifts": 12,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 6,
+              "fp": 5,
+              "fn": 4,
+              "precision": 0.5454545454545454,
+              "recall": 0.6,
+              "f1": 0.5714285714285714,
+              "estimated_shifts": 11,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 1,
+              "tp": 4,
+              "fp": 1,
+              "fn": 6,
+              "precision": 0.8,
+              "recall": 0.4,
+              "f1": 0.5333333333333333,
+              "estimated_shifts": 5,
+              "exact_set": false
+            },
+            {
+              "replicate": 2,
+              "tp": 3,
+              "fp": 0,
+              "fn": 7,
+              "precision": 1.0,
+              "recall": 0.3,
+              "f1": 0.46153846153846156,
+              "estimated_shifts": 3,
+              "exact_set": false
+            },
+            {
+              "replicate": 3,
+              "tp": 5,
+              "fp": 1,
+              "fn": 5,
+              "precision": 0.8333333333333334,
+              "recall": 0.5,
+              "f1": 0.625,
+              "estimated_shifts": 6,
+              "exact_set": false
+            },
+            {
+              "replicate": 4,
+              "tp": 10,
+              "fp": 1,
+              "fn": 0,
+              "precision": 0.9090909090909091,
+              "recall": 1.0,
+              "f1": 0.9523809523809523,
+              "estimated_shifts": 11,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": 1650.431260231504,
+        "search_seconds": [
+          1732.83639545599,
+          1568.026125007018,
+          1798.1836584460107,
+          1015.3032572150114
+        ]
+      }
+    ],
+    "paired_hash_checks": 10,
+    "planned_observed": 20,
+    "nesting_checks": [
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            11,
+            16,
+            17,
+            19,
+            20,
+            23,
+            25,
+            27,
+            29,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              11
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.21404063013437735,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            11,
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              11
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.31539158263549893,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            20,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.6045427166217223,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            20,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.557185437509446,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.05000610429303265,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.18494939164978064,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.6565427778860737,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.9548010780388267,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.17753704306193185,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            161,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.5264043082837588,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            161
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.8584984305805392,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.7782230240813135,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.2030669542954797,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.09265348225693515,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.03192710513033603,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.31809137150173683,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            23,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2887522310986981,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            20,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              20
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            10,
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            130,
+            149,
+            154,
+            166
+          ],
+          [
+            [
+              0
+            ],
+            [
+              10
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ],
+            [
+              166
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.26785643178041596,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            10,
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            130,
+            149,
+            154
+          ],
+          [
+            [
+              0
+            ],
+            [
+              10
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.23583832843127084,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            10,
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            90,
+            130,
+            149,
+            154
+          ],
+          [
+            [
+              0
+            ],
+            [
+              10
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.12047889320288618,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            15,
+            19,
+            27,
+            30,
+            82
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0014427763371998026,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            15,
+            27,
+            30,
+            82
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            15,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            90,
+            130,
+            149,
+            154,
+            166
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ],
+            [
+              166
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            90,
+            130,
+            149,
+            154
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            90,
+            130,
+            149,
+            166
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              166
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.001333710197286564,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            30,
+            52,
+            82,
+            90,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.011309751190907491,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            30,
+            82,
+            90,
+            130,
+            149,
+            166
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              166
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.08527163462323983,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            30,
+            82,
+            90,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.11120040671627862,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            27,
+            30,
+            52,
+            82,
+            90,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            27,
+            30,
+            82,
+            130
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            27,
+            30,
+            82,
+            90,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 2.842170943040401e-14,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            27,
+            30,
+            82,
+            90,
+            130
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            26,
+            27,
+            30,
+            82,
+            90,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.015845075739974845,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            30,
+            82,
+            130
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            30,
+            82,
+            90,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            30,
+            82,
+            90,
+            130
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            30,
+            82
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              82
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 2,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            17,
+            23,
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 8.730926556311317,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            23,
+            118
+          ],
+          [
+            [
+              0
+            ],
+            [
+              23
+            ],
+            [
+              118
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.04164578242748,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            23,
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 7.64401110307972,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            23,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              23
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.879992107832578,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            23
+          ],
+          [
+            [
+              0
+            ],
+            [
+              23
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.4885967498796049,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            24,
+            26,
+            28,
+            78,
+            118,
+            131,
+            162,
+            171,
+            174
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              118
+            ],
+            [
+              131
+            ],
+            [
+              162
+            ],
+            [
+              171
+            ],
+            [
+              174
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.9865682321922691,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            24,
+            26,
+            28,
+            78,
+            131,
+            162,
+            171,
+            174,
+            187
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              131
+            ],
+            [
+              162
+            ],
+            [
+              171
+            ],
+            [
+              174
+            ],
+            [
+              187
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.9869733433113481,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            118,
+            162
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              118
+            ],
+            [
+              162
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.647635838636347,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            118
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              118
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 4.458289340615181,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            162,
+            187
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              162
+            ],
+            [
+              187
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.6476375946890016,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            187
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              187
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 4.458289340556661,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            78,
+            118,
+            131,
+            162,
+            171,
+            174
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              118
+            ],
+            [
+              131
+            ],
+            [
+              162
+            ],
+            [
+              171
+            ],
+            [
+              174
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 2.010614571228672,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            78,
+            118,
+            131,
+            162
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              118
+            ],
+            [
+              131
+            ],
+            [
+              162
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.2391105358039454,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            78,
+            118,
+            162
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              118
+            ],
+            [
+              162
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.284298843013147,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            78,
+            131,
+            162,
+            187
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              131
+            ],
+            [
+              162
+            ],
+            [
+              187
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.2391105358642562,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28,
+            78,
+            162,
+            187
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              78
+            ],
+            [
+              162
+            ],
+            [
+              187
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.2842939930316106,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            17,
+            23,
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              17
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 5.9398819069621425,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            23,
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 5.108669728888373,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [
+            4,
+            23,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              4
+            ],
+            [
+              23
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.661458467970135,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 1,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3936258145109548,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            15,
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.040603118850981446,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            21,
+            22,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              21
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.3355158212861227,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            21,
+            22,
+            26,
+            27,
+            29,
+            82,
+            130,
+            149,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              21
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3208286542391363,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            22,
+            26,
+            27,
+            29,
+            52,
+            82,
+            90,
+            130,
+            149,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              90
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.6493060716197192,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            19,
+            26,
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              19
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.006472907211303891,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            22,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149,
+            154,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.42916857520154394,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            22,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3943559042554341,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149,
+            154,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149,
+            154
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              154
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            52,
+            82,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            52,
+            82,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              52
+            ],
+            [
+              82
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            82,
+            130,
+            149,
+            190
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ],
+            [
+              190
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            82,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            21,
+            26,
+            27,
+            29,
+            82,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              21
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            26,
+            27,
+            29,
+            82,
+            130,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            26,
+            27,
+            29,
+            82,
+            130
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              130
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            26,
+            27,
+            29,
+            82,
+            149
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ],
+            [
+              149
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            26,
+            27,
+            29,
+            82
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            26,
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            29,
+            82
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              82
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.017276780087200905,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            16,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.03376835088397456,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 2,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            19,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            65,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              65
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.005977705578146697,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            19,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            65,
+            90,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              65
+            ],
+            [
+              90
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.014302248272542784,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            19,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            175,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              175
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.017947156887061055,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            19,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            183,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              183
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.019710749754835888,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            19,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.03574395389154006,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            19,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              19
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.04440658890115401,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            65,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              65
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0003410646189934141,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.00020072646185553822,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.003892429350344173,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2673064831175509,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30,
+            47,
+            90,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 7.850059091651929e-08,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30,
+            47,
+            90
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 7.650975382489378e-05,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30,
+            47
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.638776154777588e-07,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30,
+            90
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              90
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.014389303743456594,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            28,
+            30,
+            47
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.12331241519760283,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            26,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              26
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [
+            26
+          ],
+          [
+            [
+              0
+            ],
+            [
+              26
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 3,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.05715876036509826,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.001063578460644976,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.10905322360108016,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            25,
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.9961676274496654,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30,
+            47,
+            90
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30,
+            47
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            22,
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.8987433119036154,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            15,
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              15
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0061201718949916994,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            28,
+            30,
+            47
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.0327414860921635,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            22,
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              22
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.22298488318318732,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            26,
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.025959414112776358,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            26,
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            28,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            28
+          ],
+          [
+            [
+              0
+            ],
+            [
+              28
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            65,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              65
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.18273937749043512,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            65,
+            90,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              65
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.248838711588661,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            74,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              74
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2950399316068797,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            175,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              175
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.022895749677132926,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.25524056875400447,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139,
+            198
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ],
+            [
+              198
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3116385057978164,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2310648670073192,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90,
+            197
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ],
+            [
+              197
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3953047092776387,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [
+            8,
+            15,
+            22,
+            25,
+            26,
+            28,
+            30,
+            47,
+            90
+          ],
+          [
+            [
+              0
+            ],
+            [
+              8
+            ],
+            [
+              15
+            ],
+            [
+              22
+            ],
+            [
+              25
+            ],
+            [
+              26
+            ],
+            [
+              28
+            ],
+            [
+              30
+            ],
+            [
+              47
+            ],
+            [
+              90
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.38266362283087574,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 3,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.04447598587020707,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            133,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              133
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.007238424306791558,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            139,
+            176
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ],
+            [
+              176
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0011896803094941788,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.003523531936366453,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            29,
+            30,
+            57,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              57
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.06335418763123357,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 4.716474774104398,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            30,
+            57,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              57
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 6.81740132657626,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 5.051153830555847,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            133,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              133
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.5218760177982631,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.1796820473493597,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            23,
+            24,
+            26,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2857809830812812,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            23,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.5058774509494697,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 2.398551984097111,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 4.315379786410972,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            29,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            24,
+            26,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            18,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              18
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            23,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              23
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            24,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 4,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.600855225455291,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 4.073392923464155,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            139,
+            176
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              139
+            ],
+            [
+              176
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.04074895257934941,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            23,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.05583820970656461,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            139,
+            176
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              139
+            ],
+            [
+              176
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.24411816050579205,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.38032983080825034,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.380056799360716,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            18,
+            20,
+            24,
+            26,
+            27,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              18
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 3.791513529922554,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            129,
+            140
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              129
+            ],
+            [
+              140
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.1043507250215896,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            28,
+            29,
+            30,
+            140
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              28
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              140
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.05515610954293493,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            29,
+            30,
+            139
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              139
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.1893214964032666,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            29,
+            30,
+            140
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ],
+            [
+              140
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 2.1428604762207044,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            29,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 2.2036567388909702,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            30,
+            140
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ],
+            [
+              140
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2393967668403434,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            26,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3262103131054914,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            20,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.4626064870244022,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            24,
+            26,
+            27,
+            29,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 2.1981695385875923,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            24,
+            26,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              24
+            ],
+            [
+              26
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.3955090418057239,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            17,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              17
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.41592310877851446,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            18,
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              18
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.938836607404312,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            23,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              23
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.0637536149103823,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            24,
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              24
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.29764553690162643,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            27,
+            30
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ],
+            [
+              30
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.004433707805986842,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "different",
+        "replicate": 4,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      }
+    ]
+  },
+  "timing": {
+    "groups": [
+      {
+        "truth": "shared",
+        "mode": "shared",
+        "statuses": {
+          "complete": 1
+        },
+        "paired_complete": 1,
+        "criteria": {
+          "AIC": {
+            "tp": 8,
+            "fp": 4,
+            "fn": 2,
+            "precision": 0.6666666666666666,
+            "recall": 0.8,
+            "f1": 0.7272727272727273,
+            "estimated_shifts": 12,
+            "exact_set": 0
+          },
+          "BIC": {
+            "tp": 8,
+            "fp": 4,
+            "fn": 2,
+            "precision": 0.6666666666666666,
+            "recall": 0.8,
+            "f1": 0.7272727272727273,
+            "estimated_shifts": 12,
+            "exact_set": 0
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.8,
+          "BIC": 0.8
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": 842.493005634984,
+        "search_seconds": [
+          842.493005634984
+        ]
+      },
+      {
+        "truth": "shared",
+        "mode": "trait-specific",
+        "statuses": {
+          "complete": 1
+        },
+        "paired_complete": 1,
+        "criteria": {
+          "AIC": {
+            "tp": 8,
+            "fp": 4,
+            "fn": 2,
+            "precision": 0.6666666666666666,
+            "recall": 0.8,
+            "f1": 0.7272727272727273,
+            "estimated_shifts": 12,
+            "exact_set": 0
+          },
+          "BIC": {
+            "tp": 8,
+            "fp": 4,
+            "fn": 2,
+            "precision": 0.6666666666666666,
+            "recall": 0.8,
+            "f1": 0.7272727272727273,
+            "estimated_shifts": 12,
+            "exact_set": 0
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.8,
+          "BIC": 0.8
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 0,
+              "tp": 8,
+              "fp": 4,
+              "fn": 2,
+              "precision": 0.6666666666666666,
+              "recall": 0.8,
+              "f1": 0.7272727272727273,
+              "estimated_shifts": 12,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": 1189.2310061239987,
+        "search_seconds": [
+          1189.2310061239987
+        ]
+      },
+      {
+        "truth": "different",
+        "mode": "shared",
+        "statuses": {
+          "complete": 1
+        },
+        "paired_complete": 0,
+        "criteria": {
+          "AIC": {
+            "tp": null,
+            "fp": null,
+            "fn": null,
+            "precision": null,
+            "recall": null,
+            "f1": null,
+            "estimated_shifts": null,
+            "exact_set": null
+          },
+          "BIC": {
+            "tp": null,
+            "fp": null,
+            "fn": null,
+            "precision": null,
+            "recall": null,
+            "f1": null,
+            "estimated_shifts": null,
+            "exact_set": null
+          }
+        },
+        "completed_candidate_pool_truth_counts": [
+          10
+        ],
+        "completed_lasso_paths_converged": [
+          false
+        ],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.7,
+          "BIC": 0.6
+        },
+        "all_completed_metrics": {
+          "AIC": [
+            {
+              "replicate": 0,
+              "tp": 7,
+              "fp": 5,
+              "fn": 3,
+              "precision": 0.5833333333333334,
+              "recall": 0.7,
+              "f1": 0.6363636363636364,
+              "estimated_shifts": 12,
+              "exact_set": false
+            }
+          ],
+          "BIC": [
+            {
+              "replicate": 0,
+              "tp": 6,
+              "fp": 0,
+              "fn": 4,
+              "precision": 1.0,
+              "recall": 0.6,
+              "f1": 0.75,
+              "estimated_shifts": 6,
+              "exact_set": false
+            }
+          ]
+        },
+        "paired_median_search_seconds": null,
+        "search_seconds": []
+      },
+      {
+        "truth": "different",
+        "mode": "trait-specific",
+        "statuses": {
+          "failed": 1
+        },
+        "paired_complete": 0,
+        "criteria": {
+          "AIC": {
+            "tp": null,
+            "fp": null,
+            "fn": null,
+            "precision": null,
+            "recall": null,
+            "f1": null,
+            "estimated_shifts": null,
+            "exact_set": null
+          },
+          "BIC": {
+            "tp": null,
+            "fp": null,
+            "fn": null,
+            "precision": null,
+            "recall": null,
+            "f1": null,
+            "estimated_shifts": null,
+            "exact_set": null
+          }
+        },
+        "completed_candidate_pool_truth_counts": [],
+        "completed_lasso_paths_converged": [],
+        "operational_recall_with_no_result_as_zero": {
+          "AIC": 0.0,
+          "BIC": 0.0
+        },
+        "all_completed_metrics": {
+          "AIC": [],
+          "BIC": []
+        },
+        "paired_median_search_seconds": null,
+        "search_seconds": []
+      }
+    ],
+    "paired_hash_checks": 2,
+    "planned_observed": 4,
+    "nesting_checks": [
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            11,
+            16,
+            17,
+            19,
+            20,
+            23,
+            25,
+            27,
+            29,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              11
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.21404063013437735,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            11,
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              11
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.31539158263549893,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            20,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.6045427166217223,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            20,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.557185437509446,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.05000610429303265,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.18494939164978064,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.6565427778860737,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            107,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.9548010780388267,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.17753704306193185,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            161,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.5264043082837588,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            161
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              161
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.8584984305805392,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.7782230240813135,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27,
+            29
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 1.2030669542954797,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            23,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.09265348225693515,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            19,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              19
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.03192710513033603,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            23,
+            25,
+            27,
+            29,
+            107,
+            161,
+            168,
+            178
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ],
+            [
+              29
+            ],
+            [
+              107
+            ],
+            [
+              161
+            ],
+            [
+              168
+            ],
+            [
+              178
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.31809137150173683,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            23,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              23
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.2887522310986981,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            20,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              20
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            25,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              25
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            17
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              17
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            20,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              20
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16,
+            27
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ],
+            [
+              27
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [
+            16
+          ],
+          [
+            [
+              0
+            ],
+            [
+              16
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      },
+      {
+        "truth": "shared",
+        "replicate": 0,
+        "layout": [
+          [],
+          [
+            [
+              0
+            ]
+          ]
+        ],
+        "specific_minus_shared_loglik": 0.0,
+        "nesting_violation": false
+      }
+    ]
+  }
+}

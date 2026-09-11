@@ -1,0 +1,31 @@
+{"branches": [], "status": "complete", "seconds": 42.509719269000925}
+{"branches": [23], "status": "complete", "seconds": 29.716702471952885}
+{"branches": [23, 28], "status": "complete", "seconds": 51.82898510701489}
+{"branches": [23, 118], "status": "complete", "seconds": 51.624467733025085}
+{"branches": [23, 26, 28], "status": "complete", "seconds": 86.29969312198227}
+{"branches": [4, 23, 28], "status": "complete", "seconds": 48.162458646984305}
+{"branches": [17, 23, 26, 28], "status": "complete", "seconds": 85.70095891400706}
+{"branches": [4, 23, 26, 28], "status": "complete", "seconds": 62.74809077801183}
+{"branches": [4, 17, 23, 26, 28], "status": "complete", "seconds": 79.87883637001505}
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:718: RuntimeWarning: invalid value encountered in add
+  df.append(-3.0 * f0 + 4 * f1 - f2)
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:721: RuntimeWarning: invalid value encountered in subtract
+  df.append(f2 - f1)
+{"branches": [17, 23, 26, 28, 118], "status": "complete", "seconds": 60.597411235037725}
+{"branches": [4, 17, 23, 26, 28, 118], "status": "complete", "seconds": 72.18413790798513}
+{"branches": [4, 17, 23, 26, 28, 187], "status": "complete", "seconds": 74.32604145101504}
+{"branches": [4, 17, 23, 26, 28, 162, 187], "status": "complete", "seconds": 59.07400606997544}
+{"branches": [4, 17, 23, 26, 28, 118, 162], "status": "complete", "seconds": 46.006464853009675}
+{"branches": [4, 17, 23, 26, 28, 78, 118, 162], "status": "complete", "seconds": 56.46513277600752}
+{"branches": [4, 17, 23, 26, 28, 78, 162, 187], "status": "complete", "seconds": 49.53346910601249}
+{"branches": [4, 17, 23, 26, 28, 78, 118, 131, 162], "status": "complete", "seconds": 74.73517686699051}
+{"branches": [4, 17, 23, 26, 28, 78, 131, 162, 187], "status": "complete", "seconds": 51.19548656599363}
+{"branches": [4, 17, 23, 26, 28, 78, 118, 131, 162, 174], "status": "complete", "seconds": 72.54188711498864}
+{"branches": [4, 17, 23, 26, 28, 78, 131, 162, 174, 187], "status": "complete", "seconds": 72.4612162419944}
+{"branches": [4, 17, 23, 26, 28, 78, 118, 131, 162, 171, 174], "status": "complete", "seconds": 66.13254173798487}
+{"branches": [4, 17, 23, 26, 28, 78, 131, 162, 171, 174, 187], "status": "complete", "seconds": 63.703167903993744}
+{"branches": [4, 17, 23, 24, 26, 28, 78, 118, 131, 162, 171, 174], "status": "complete", "seconds": 89.84696762397652}
+{"branches": [4, 17, 23, 24, 26, 28, 78, 131, 162, 171, 174, 187], "status": "complete", "seconds": 109.55208375898656}
+{"branches": [4, 17, 23, 26, 27, 28, 78, 131, 162, 171, 174, 187], "status": "complete", "seconds": 88.20280945702689}
+{"branches": [4, 17, 23, 24, 26, 28, 78, 131, 162, 174, 187], "status": "complete", "seconds": 87.32715383096365}
+{"job": {"truth": "different", "mode": "trait-specific", "replicate": 1, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete", "elapsed": 1732.863915415015, "error": null}

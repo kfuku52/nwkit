@@ -1,7 +1,8 @@
 # Native multivariate OU shift inference
 
 `nwkit shift --selection native` implements shared shift locations and shared
-regime identities with independent OU processes for each trait. It needs no R
+regime identities, with independent OU processes per trait by default and optional
+[full evolutionary covariance and shared alpha](SHIFT_COVARIANCE.md). It needs no R
 backend. Fixed layouts support parameter estimation; discovery and calibration
 are **research-only** pending the [adoption protocol](NATIVE_SHIFT_VALIDATION.md).
 The existing default `--selection calibrated` is a separate, restricted method.
@@ -36,8 +37,10 @@ observation variance and regime coefficients. `--estimate-measurement-error`
 estimates the extra variance in addition to supplied SE squared. Fixed
 `--alpha`, `--process-tip-variance` and `--measurement-variance` accept either one
 number or a comma-separated value per trait. Alpha uses original time units;
-variances use original trait units squared. Full cross-trait covariance and
-non-ultrametric trees are not implemented.
+variances use original trait units squared. Full cross-trait covariance is selected
+with `--trait-covariance full`; see its [model, output and simulation guide](SHIFT_COVARIANCE.md).
+The scalar parameterization below describes the default diagonal model.
+Non-ultrametric trees are not implemented.
 
 ## Parameterization and numerical scope
 

@@ -1,0 +1,29 @@
+{"branches": [], "status": "complete", "seconds": 25.231270263029728}
+{"branches": [27], "status": "complete", "seconds": 46.12096985295648}
+{"branches": [27, 30], "status": "complete", "seconds": 37.56316468497971}
+{"branches": [24, 27], "status": "complete", "seconds": 36.39748064096784}
+{"branches": [24, 27, 30], "status": "complete", "seconds": 44.34388810303062}
+{"branches": [23, 27, 30], "status": "complete", "seconds": 44.41164214501623}
+{"branches": [17, 24, 27, 30], "status": "complete", "seconds": 33.81454376602778}
+{"branches": [18, 24, 27, 30], "status": "complete", "seconds": 37.309341392014176}
+{"branches": [17, 24, 26, 27, 30], "status": "complete", "seconds": 31.061458764015697}
+{"branches": [17, 20, 24, 27, 30], "status": "complete", "seconds": 26.905116887006443}
+{"branches": [17, 20, 24, 26, 27, 30], "status": "complete", "seconds": 27.74919730500551}
+{"branches": [17, 20, 23, 24, 27, 30], "status": "complete", "seconds": 35.99080718297046}
+{"branches": [17, 20, 23, 24, 26, 27, 30], "status": "complete", "seconds": 40.995299561007414}
+{"branches": [17, 20, 24, 26, 27, 29, 30], "status": "complete", "seconds": 47.72473885596264}
+{"branches": [17, 20, 24, 26, 27, 28, 29, 30], "status": "complete", "seconds": 47.39589306397829}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 30], "status": "complete", "seconds": 48.57801527105039}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 30, 139], "status": "complete", "seconds": 44.114283603965305}
+{"branches": [17, 20, 24, 26, 27, 28, 29, 30, 139], "status": "complete", "seconds": 43.43839760200353}
+{"branches": [17, 18, 20, 24, 26, 27, 28, 29, 30, 139], "status": "complete", "seconds": 51.10701681498904}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 30, 57, 139], "status": "complete", "seconds": 42.71596868697088}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 139], "status": "complete", "seconds": 82.57452587102307}
+/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py:686: RuntimeWarning: invalid value encountered in subtract
+  df = [f_eval - f0 for f_eval in f_evals]
+{"branches": [17, 18, 20, 23, 24, 26, 27, 29, 30, 57, 139], "status": "complete", "seconds": 67.75715432298603}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 133, 139], "status": "complete", "seconds": 75.37038970098365}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 139, 176], "status": "complete", "seconds": 67.76196328102378}
+{"branches": [17, 18, 20, 23, 24, 26, 27, 28, 29, 30, 129, 139], "status": "complete", "seconds": 75.16102744999807}
+{"branches": [17, 18, 20, 24, 26, 27, 28, 29, 30, 133, 139], "status": "complete", "seconds": 71.32920928200474}
+{"job": {"truth": "shared", "mode": "trait-specific", "replicate": 4, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete", "elapsed": 1234.482309271989, "error": null}

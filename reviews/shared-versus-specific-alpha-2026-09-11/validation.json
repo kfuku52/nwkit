@@ -1,0 +1,14 @@
+{
+  "planned_outcomes": {
+    "timing": 12,
+    "pilot": 120,
+    "timing_errors": 4
+  },
+  "completed_pilot_pairs": 59,
+  "matched_layout_likelihood_checks": 246,
+  "nested_likelihood_violations": 0,
+  "paired_observed_data_hashes_match": true,
+  "generating_unit_process_variances_and_diffusion_correlation_verified": true,
+  "source_archive_and_benchmark_hashes_match_all_manifests": true,
+  "repeated_fit_likelihood_tolerance": 1e-07
+}

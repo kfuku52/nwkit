@@ -1,0 +1,808 @@
+{
+  "job": {
+    "kind": "pilot",
+    "traits": 2,
+    "truth": "different",
+    "scenario": "opposed",
+    "replicate": 8,
+    "mode": "shared",
+    "repeats": 3,
+    "timeout": 180
+  },
+  "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+  "generating": {
+    "parameters": {
+      "trait_names": [
+        "x0",
+        "x1"
+      ],
+      "alpha": [
+        0.25,
+        4.0
+      ],
+      "diffusion_covariance": [
+        [
+          1.2707470412683992,
+          2.5511582034451323
+        ],
+        [
+          2.5511582034451323,
+          8.00268460160673
+        ]
+      ],
+      "regime_optima": [
+        [
+          0.0,
+          0.0
+        ],
+        [
+          7.197842464278838,
+          -1.4582488623960275
+        ]
+      ],
+      "shift_branch_ids": [
+        5
+      ]
+    },
+    "seed": 722208,
+    "data_sha256": "021a26b5bfef03b88e20872d9d6ea2bd5ce1ddb1d9a95f02eb316ed1d31ff893",
+    "tip_names": [
+      "t0",
+      "t1",
+      "t2",
+      "t3",
+      "t4",
+      "t5",
+      "t6",
+      "t7",
+      "t8",
+      "t9",
+      "t10",
+      "t11",
+      "t12",
+      "t13",
+      "t14",
+      "t15",
+      "t16",
+      "t17",
+      "t18",
+      "t19",
+      "t20",
+      "t21",
+      "t22",
+      "t23",
+      "t24",
+      "t25",
+      "t26",
+      "t27",
+      "t28",
+      "t29",
+      "t30",
+      "t31",
+      "t32",
+      "t33",
+      "t34",
+      "t35",
+      "t36",
+      "t37",
+      "t38",
+      "t39",
+      "t40",
+      "t41",
+      "t42",
+      "t43",
+      "t44",
+      "t45",
+      "t46",
+      "t47",
+      "t48",
+      "t49",
+      "t50",
+      "t51",
+      "t52",
+      "t53",
+      "t54",
+      "t55",
+      "t56",
+      "t57",
+      "t58",
+      "t59",
+      "t60",
+      "t61",
+      "t62",
+      "t63",
+      "t64",
+      "t65",
+      "t66",
+      "t67",
+      "t68",
+      "t69",
+      "t70",
+      "t71",
+      "t72",
+      "t73",
+      "t74",
+      "t75",
+      "t76",
+      "t77",
+      "t78",
+      "t79",
+      "t80",
+      "t81",
+      "t82",
+      "t83",
+      "t84",
+      "t85",
+      "t86",
+      "t87",
+      "t88",
+      "t89",
+      "t90",
+      "t91",
+      "t92",
+      "t93",
+      "t94",
+      "t95",
+      "t96",
+      "t97",
+      "t98",
+      "t99"
+    ],
+    "true_alpha": [
+      0.25,
+      4.0
+    ]
+  },
+  "selected": {
+    "AIC": {
+      "branches": [
+        5
+      ],
+      "any_shift": true,
+      "exact_branch": true,
+      "false_branch": false,
+      "fit": {
+        "log_likelihood": -215.03880448949485,
+        "shift_branch_ids": [
+          5
+        ],
+        "alpha": [
+          0.4994847000989311,
+          0.4994847000989311
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.78928876138558,
+            0.6794965191781932
+          ],
+          [
+            0.6794965191781932,
+            1.3090326439209123
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 142,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 2.3493640492734045,
+              "optimizer": {
+                "evaluations": 140,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 1.5773538199157286,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -24.258923405828536,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 448.0776089789897,
+            "penalty": 18.0,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 471.5241406528825,
+            "penalty": 41.44653167389283,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    },
+    "BIC": {
+      "branches": [
+        5
+      ],
+      "any_shift": true,
+      "exact_branch": true,
+      "false_branch": false,
+      "fit": {
+        "log_likelihood": -215.03880448949485,
+        "shift_branch_ids": [
+          5
+        ],
+        "alpha": [
+          0.4994847000989311,
+          0.4994847000989311
+        ],
+        "alpha_status": [
+          "finite",
+          "finite"
+        ],
+        "process_tip_covariance": [
+          [
+            0.78928876138558,
+            0.6794965191781932
+          ],
+          [
+            0.6794965191781932,
+            1.3090326439209123
+          ]
+        ],
+        "optimizer": {
+          "evaluations": 142,
+          "invalid_evaluations": 0,
+          "alpha_candidates": [
+            {
+              "alpha_mode": "finite",
+              "success": true,
+              "log_likelihood": 2.3493640492734045,
+              "optimizer": {
+                "evaluations": 140,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "global grid search (17 points; 4 successful local refinement(s))"
+              }
+            },
+            {
+              "alpha_mode": "0.0",
+              "success": true,
+              "log_likelihood": 1.5773538199157286,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            },
+            {
+              "alpha_mode": "inf",
+              "success": true,
+              "log_likelihood": -24.258923405828536,
+              "optimizer": {
+                "evaluations": 1,
+                "invalid_evaluations": 0,
+                "success": true,
+                "message": "Exact covariance profile at fixed alpha"
+              }
+            }
+          ],
+          "continuous_globally_optimal": false,
+          "complete_alpha_modes": true,
+          "evaluated_alpha_modes_succeeded": true,
+          "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+          "alpha_height_bounds": [
+            1e-06,
+            1000.0
+          ],
+          "normalized_variance_bounds": [
+            0.0,
+            10000.0
+          ],
+          "alpha_estimated": true,
+          "process_variance_estimated": true,
+          "measurement_variance_estimated": false,
+          "nuisance_variance_at_numerical_bound": false,
+          "equivalent_modes_disagree_on_variance_decomposition": false,
+          "likelihood_scope": "joint_across_traits"
+        },
+        "engine": "separable_profile",
+        "criteria": {
+          "AIC": {
+            "criterion": "AIC",
+            "score": 448.0776089789897,
+            "penalty": 18.0,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          },
+          "BIC": {
+            "criterion": "BIC",
+            "score": 471.5241406528825,
+            "penalty": 41.44653167389283,
+            "parameter_count": 9,
+            "sample_size": 100,
+            "small_sample_correction": null,
+            "status": "ok",
+            "sample_size_convention": "observed_tip_vectors",
+            "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+          }
+        }
+      }
+    }
+  },
+  "retained": [
+    {
+      "log_likelihood": -232.22553664092095,
+      "shift_branch_ids": [],
+      "alpha": [
+        0.0,
+        0.0
+      ],
+      "alpha_status": [
+        "brownian_limit",
+        "brownian_limit"
+      ],
+      "process_tip_covariance": [
+        [
+          1.0920150649914164,
+          0.8219681330267152
+        ],
+        [
+          0.8219681330267152,
+          1.7619209505303794
+        ]
+      ],
+      "optimizer": {
+        "evaluations": 152,
+        "invalid_evaluations": 0,
+        "alpha_candidates": [
+          {
+            "alpha_mode": "finite",
+            "success": true,
+            "log_likelihood": -14.837376537450176,
+            "optimizer": {
+              "evaluations": 150,
+              "invalid_evaluations": 0,
+              "success": true,
+              "message": "global grid search (17 points; 4 successful local refinement(s))"
+            }
+          },
+          {
+            "alpha_mode": "0.0",
+            "success": true,
+            "log_likelihood": -14.837368102152723,
+            "optimizer": {
+              "evaluations": 1,
+              "invalid_evaluations": 0,
+              "success": true,
+              "message": "Exact covariance profile at fixed alpha"
+            }
+          },
+          {
+            "alpha_mode": "inf",
+            "success": true,
+            "log_likelihood": -88.52704463667843,
+            "optimizer": {
+              "evaluations": 1,
+              "invalid_evaluations": 0,
+              "success": true,
+              "message": "Exact covariance profile at fixed alpha"
+            }
+          }
+        ],
+        "continuous_globally_optimal": false,
+        "complete_alpha_modes": true,
+        "evaluated_alpha_modes_succeeded": true,
+        "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+        "alpha_height_bounds": [
+          1e-06,
+          1000.0
+        ],
+        "normalized_variance_bounds": [
+          0.0,
+          10000.0
+        ],
+        "alpha_estimated": true,
+        "process_variance_estimated": true,
+        "measurement_variance_estimated": false,
+        "nuisance_variance_at_numerical_bound": false,
+        "equivalent_modes_disagree_on_variance_decomposition": false,
+        "likelihood_scope": "joint_across_traits"
+      },
+      "engine": "separable_profile",
+      "criteria": {
+        "AIC": {
+          "criterion": "AIC",
+          "score": 476.4510732818419,
+          "penalty": 12.0,
+          "parameter_count": 6,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        },
+        "BIC": {
+          "criterion": "BIC",
+          "score": 492.08209439777045,
+          "penalty": 27.63102111592855,
+          "parameter_count": 6,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    },
+    {
+      "log_likelihood": -215.03880448949485,
+      "shift_branch_ids": [
+        5
+      ],
+      "alpha": [
+        0.4994847000989311,
+        0.4994847000989311
+      ],
+      "alpha_status": [
+        "finite",
+        "finite"
+      ],
+      "process_tip_covariance": [
+        [
+          0.78928876138558,
+          0.6794965191781932
+        ],
+        [
+          0.6794965191781932,
+          1.3090326439209123
+        ]
+      ],
+      "optimizer": {
+        "evaluations": 142,
+        "invalid_evaluations": 0,
+        "alpha_candidates": [
+          {
+            "alpha_mode": "finite",
+            "success": true,
+            "log_likelihood": 2.3493640492734045,
+            "optimizer": {
+              "evaluations": 140,
+              "invalid_evaluations": 0,
+              "success": true,
+              "message": "global grid search (17 points; 4 successful local refinement(s))"
+            }
+          },
+          {
+            "alpha_mode": "0.0",
+            "success": true,
+            "log_likelihood": 1.5773538199157286,
+            "optimizer": {
+              "evaluations": 1,
+              "invalid_evaluations": 0,
+              "success": true,
+              "message": "Exact covariance profile at fixed alpha"
+            }
+          },
+          {
+            "alpha_mode": "inf",
+            "success": true,
+            "log_likelihood": -24.258923405828536,
+            "optimizer": {
+              "evaluations": 1,
+              "invalid_evaluations": 0,
+              "success": true,
+              "message": "Exact covariance profile at fixed alpha"
+            }
+          }
+        ],
+        "continuous_globally_optimal": false,
+        "complete_alpha_modes": true,
+        "evaluated_alpha_modes_succeeded": true,
+        "alpha_boundary_scope": "shared_limits_only; mixed_trait_specific_boundary_faces_not_enumerated",
+        "alpha_height_bounds": [
+          1e-06,
+          1000.0
+        ],
+        "normalized_variance_bounds": [
+          0.0,
+          10000.0
+        ],
+        "alpha_estimated": true,
+        "process_variance_estimated": true,
+        "measurement_variance_estimated": false,
+        "nuisance_variance_at_numerical_bound": false,
+        "equivalent_modes_disagree_on_variance_decomposition": false,
+        "likelihood_scope": "joint_across_traits"
+      },
+      "engine": "separable_profile",
+      "criteria": {
+        "AIC": {
+          "criterion": "AIC",
+          "score": 448.0776089789897,
+          "penalty": 18.0,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        },
+        "BIC": {
+          "criterion": "BIC",
+          "score": 471.5241406528825,
+          "penalty": 41.44653167389283,
+          "parameter_count": 9,
+          "sample_size": 100,
+          "small_sample_correction": null,
+          "status": "ok",
+          "sample_size_convention": "observed_tip_vectors",
+          "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+        }
+      }
+    }
+  ],
+  "records": [
+    {
+      "shift_branch_ids": [],
+      "groups": [
+        [
+          0
+        ]
+      ],
+      "complexity": 0,
+      "log_likelihood": -232.22553664092095,
+      "evaluations": 152,
+      "complete_covariance_modes": true,
+      "information_criterion": {
+        "criterion": "AIC",
+        "score": 476.4510732818419,
+        "penalty": 12.0,
+        "parameter_count": 6,
+        "sample_size": 100,
+        "small_sample_correction": null,
+        "status": "ok",
+        "sample_size_convention": "observed_tip_vectors",
+        "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+      }
+    },
+    {
+      "shift_branch_ids": [
+        5
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          5
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -215.03880448949485,
+      "evaluations": 142,
+      "complete_covariance_modes": true,
+      "information_criterion": {
+        "criterion": "AIC",
+        "score": 448.0776089789897,
+        "penalty": 18.0,
+        "parameter_count": 9,
+        "sample_size": 100,
+        "small_sample_correction": null,
+        "status": "ok",
+        "sample_size_convention": "observed_tip_vectors",
+        "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+      }
+    },
+    {
+      "shift_branch_ids": [
+        28
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          28
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -223.22644618115092,
+      "evaluations": 151,
+      "complete_covariance_modes": true,
+      "information_criterion": {
+        "criterion": "AIC",
+        "score": 464.45289236230184,
+        "penalty": 18.0,
+        "parameter_count": 9,
+        "sample_size": 100,
+        "small_sample_correction": null,
+        "status": "ok",
+        "sample_size_convention": "observed_tip_vectors",
+        "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+      }
+    },
+    {
+      "shift_branch_ids": [
+        189
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          189
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -226.93233537515937,
+      "evaluations": 152,
+      "complete_covariance_modes": true,
+      "information_criterion": {
+        "criterion": "AIC",
+        "score": 471.86467075031874,
+        "penalty": 18.0,
+        "parameter_count": 9,
+        "sample_size": 100,
+        "small_sample_correction": null,
+        "status": "ok",
+        "sample_size_convention": "observed_tip_vectors",
+        "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+      }
+    },
+    {
+      "shift_branch_ids": [
+        194
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          194
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -227.15652157925757,
+      "evaluations": 153,
+      "complete_covariance_modes": true,
+      "information_criterion": {
+        "criterion": "AIC",
+        "score": 472.31304315851514,
+        "penalty": 18.0,
+        "parameter_count": 9,
+        "sample_size": 100,
+        "small_sample_correction": null,
+        "status": "ok",
+        "sample_size_convention": "observed_tip_vectors",
+        "calibration": "heuristic_information_criterion; not_a_calibrated_shift_test"
+      }
+    }
+  ],
+  "search_metadata": {
+    "strategy": "group_lasso_beam",
+    "complete_discrete_enumeration": false,
+    "continuous_global_optimum_certified": false,
+    "screening": {
+      "method": "joint_covariance_whitened_group_lasso",
+      "total_branches": 198,
+      "preliminary_branches": 64,
+      "pool_size": 4,
+      "pool": [
+        5,
+        28,
+        189,
+        194
+      ],
+      "path": [
+        {
+          "relative_strength": 0.95,
+          "strength": 5.025572296787009,
+          "iterations": 81,
+          "kkt_residual": 3.3774498059988006e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.43891950764785354,
+          "strength": 2.321917598057312,
+          "iterations": 16,
+          "kkt_residual": 4.0061257197509e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.20278982546719382,
+          "strength": 1.0727736094086335,
+          "iterations": 36,
+          "kkt_residual": 2.4110894308826498e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.09369306352637355,
+          "strength": 0.49564343627289287,
+          "iterations": 52,
+          "kkt_residual": 4.792500939680197e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.04328811927685784,
+          "strength": 0.2289974452818826,
+          "iterations": 73,
+          "kkt_residual": 5.276433415982413e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.02,
+          "strength": 0.10580152203762123,
+          "iterations": 122,
+          "kkt_residual": 5.024294081593864e-05,
+          "converged": true
+        }
+      ],
+      "all_paths_converged": true,
+      "candidate_generation_only": true
+    },
+    "quick_evaluations": 4,
+    "refitted_candidates": 5,
+    "refit_budget": 5,
+    "screening_budget": 10000,
+    "budget_exhausted": true,
+    "refinement": "one_pass_drop_move_merge_split",
+    "candidate_ranking": "fixed_joint_null_covariance_profile; final candidates refitted without penalties"
+  },
+  "status": "complete",
+  "elapsed_seconds_not_benchmark": 0.5338867920218036,
+  "worker_peak_rss_kib": 166716
+}

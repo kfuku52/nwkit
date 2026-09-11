@@ -1,0 +1,153 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+______ test_every_visible_long_option_has_a_canonical_kebab_case_spelling ______
+
+>   ???
+E   AssertionError: ('root', 'candidates_out', ['--candidates-out'])
+E   assert '--candidates_out' in ['--candidates-out']
+E    +  where '--candidates_out' = <built-in method format of str object at 0xffff9b342670>('candidates_out')
+E    +    where <built-in method format of str object at 0xffff9b342670> = '--{}'.format
+E    +    and   'candidates_out' = _StoreAction(option_strings=['--candidates-out'], dest='candidates_out', nargs=None, const=None, default=None, type=No...nciliation root as a Newick tree collection in deterministic order. Requires --method reconciliation.', metavar='PATH').dest
+
+/nwkit/tests/test_interface_conventions.py:51: AssertionError
+_______ test_archived_engine_requires_explicit_scope_and_intact_snapshot _______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-0/test_archived_engine_requires_0')
+
+    def test_archived_engine_requires_explicit_scope_and_intact_snapshot(tmp_path):
+        source = Path("examples/shift/null-contract-timing-pilot")
+        bundle = tmp_path / "archived"
+        shutil.copytree(source, bundle)
+        with pytest.raises(ValueError, match="Active generator/fitting hash mismatch"):
+            audit(bundle)
+        before = {
+            str(p.relative_to(bundle)): p.read_bytes()
+            for p in bundle.rglob("*")
+            if p.is_file()
+        }
+>       result = audit(bundle, replay_stride=1, frozen_engine=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_shift_null_contract_audit.py:95: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+directory = PosixPath('/tmp/pytest-of-root/pytest-0/test_archived_engine_requires_0/archived')
+replay_stride = 1, frozen_engine = True
+
+    def audit(directory, replay_stride=0, *, frozen_engine=False):
+        specification = json.loads((directory / "protocol.json").read_text())
+        if (
+            frozen_engine
+            and "nwkit/shift_calibration.py" not in specification["source_sha256"]
+        ):
+            raise ValueError("Archived engine lacks a declared source hash")
+        for name, sha in specification["source_sha256"].items():
+            archived = directory / "source-snapshot" / Path(name).name
+            if hashlib.sha256(archived.read_bytes()).hexdigest() != sha:
+                raise ValueError(f"Snapshot hash mismatch: {name}")
+            if hashlib.sha256(Path(name).read_bytes()).hexdigest() != sha:
+                if not frozen_engine or name != "nwkit/shift_calibration.py":
+                    raise ValueError(f"Active generator/fitting hash mismatch: {name}")
+        engine_class = CalibratedSearch
+        if frozen_engine:
+            frozen = directory / "source-snapshot" / "shift_calibration.py"
+            module = ModuleType("nwkit._archived_shift_calibration")
+            module.__file__ = str(frozen)
+            # Compile the verified source directly: import loaders would create a
+            # __pycache__ inside the input evidence, violating read-only auditing.
+            exec(compile(frozen.read_bytes(), str(frozen), "exec"), module.__dict__)
+            if not np.array_equal(module.ALPHA_HEIGHT_GRID, ALPHA_HEIGHT_GRID):
+                raise ValueError("Archived alpha grid differs from the audit grid")
+            engine_class = module.CalibratedSearch
+        designs = {c["cell_id"]: c for c in cells(specification["suite"])}
+        if any(c != designs[c["cell_id"]] for c in specification["cells"]):
+            raise ValueError("Protocol cells disagree with the frozen design")
+        expected = [
+            (c["cell_id"], r)
+            for c in specification["cells"]
+            for r in range(specification["replicates"])
+        ]
+        with gzip.open(directory / "records.jsonl.gz", "rt") as stream:
+            rows = [json.loads(line) for line in stream]
+        if [(r["cell_id"], r["replicate"]) for r in rows] != expected:
+            raise ValueError("Missing, duplicated or reordered datasets")
+        geometries, models, replay_engines = {}, {}, {}
+        maximum_error = 0.0
+        replays = 0
+        for index, row in enumerate(rows):
+            cell = designs[row["cell_id"]]
+            key = cell["tree"], cell["known_error"], cell["alpha_height"]
+            if key not in geometries:
+                tree = read_tree(cell["tree"], "auto", True, quiet=True)
+                variances = (
+                    np.geomspace(0.01, 0.25, cell["tips"])
+                    if cell["known_error"]
+                    else np.zeros(cell["tips"])
+                )
+                null = {"groups": [[0]], "shift_branch_ids": []}
+                reference = DenseOUReference(tree, null, variances)
+                a = np.inf if cell["alpha_height"] is None else cell["alpha_height"]
+                _, K = reference.branch_moments(a)
+                covariance = cell["process_tip_variance"] * K + np.diag(variances)
+                geometries[key] = tree, variances, covariance
+            tree, variances, covariance = geometries[key]
+            seed = np.random.SeedSequence(
+                [specification["seed"], cell["cell_id"], row["replicate"]]
+            )
+            data_seed, bootstrap_seed = seed.spawn(2)
+            boot = int(bootstrap_seed.generate_state(1)[0] % (2**31))
+            y = np.linalg.cholesky(covariance) @ np.random.default_rng(data_seed).normal(
+                size=cell["tips"]
+            )
+            if (
+                row["bootstrap_seed"] != boot
+                or not np.array_equal(y, row["observations"])
+                or not np.array_equal(covariance, row["generating_covariance"])
+                or not np.array_equal(variances, row["known_variances"])
+            ):
+                raise ValueError("Generated observations/covariance/seeds disagree")
+            if [lane["convergence"] for lane in row["lanes"]] != specification[
+                "convergence_lanes"
+            ]:
+                raise ValueError("Missing or reordered search lanes")
+            for lane in row["lanes"]:
+                if lane["status"] == "failed":
+                    if not lane.get("error"):
+                        raise ValueError("Failure lacks an explanation")
+                    continue
+                if lane["status"] != "completed":
+                    raise ValueError("Unknown fit status")
+                model_key = cell["tree"], lane["convergence"]
+                if model_key not in models:
+                    models[model_key], _ = enumerate_candidates(
+                        tree, convergence=lane["convergence"]
+                    )
+                fit = lane["fit"]
+                B = specification["bootstrap_replicates"]
+                if (
+                    fit["seed"] != boot
+                    or fit["calibration_replicates"] != B
+                    or fit["calibration_level"] != 0.05
+                ):
+                    raise ValueError("Fit settings disagree with protocol")
+                if lane["any_shift"] != check_stages(fit, bool(np.any(variances)), B, 0.05):
+                    raise ValueError("Saved any-shift flag disagrees with the model")
+                maximum_error = max(
+                    maximum_error, check_winner(tree, y, variances, fit, models[model_key])
+                )
+                if replay_stride and index % replay_stride == 0:
+                    engine_key = model_key, cell["known_error"]
+                    if engine_key not in replay_engines:
+                        replay_engines[engine_key] = engine_class(
+                            tree, convergence=lane["convergence"], variances=variances
+                        )
+                    replay = replay_engines[engine_key].fit(y, seed=boot, replicates=B)
+                    if replay["model"] != fit["model"] or replay["tests"] != fit["tests"]:
+>                       raise ValueError("Seeded complete-search replay disagrees")
+E                       ValueError: Seeded complete-search replay disagrees
+
+tools/verify_shift_null_contract.py:190: ValueError
+=========================== short test summary info ============================
+FAILED tests/test_interface_conventions.py::test_every_visible_long_option_has_a_canonical_kebab_case_spelling
+FAILED tests/test_shift_null_contract_audit.py::test_archived_engine_requires_explicit_scope_and_intact_snapshot
+2 failed in 0.69s

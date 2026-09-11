@@ -1,0 +1,265 @@
+{
+  "configuration": {
+    "part": "timing",
+    "output": "results/timing.json",
+    "tips": 100,
+    "traits": [
+      2,
+      5,
+      10
+    ],
+    "repeats": 3,
+    "pruning_max_traits": 2,
+    "replicates": 10,
+    "calibration_replicates": 19,
+    "workers": 4
+  },
+  "implementation_sha256": "7f8431b6dda064e71863fbe2a3ef286afe1d6bbda2fa3973c01d836c635edd46",
+  "environment": {
+    "python": "3.12.14 (main, Sep  2 2026, 23:29:55) [GCC 15.3.0]",
+    "numpy": "1.26.4",
+    "scipy": "1.17.1",
+    "platform": "Linux-6.12.76-linuxkit-aarch64-with-glibc2.39",
+    "machine": "aarch64",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    },
+    "parent_peak_rss_kib": 151036
+  },
+  "rows": [
+    {
+      "kind": "fixed_layout_covariance_ML",
+      "traits": 2,
+      "engine": "auto",
+      "seconds": [
+        0.0011255840072408319,
+        0.0010767499916255474,
+        0.0013552499585784972
+      ],
+      "median_seconds": 0.0011255840072408319,
+      "log_likelihood": -207.5352204082394
+    },
+    {
+      "kind": "fixed_layout_covariance_ML",
+      "traits": 2,
+      "engine": "pruning",
+      "seconds": [
+        2.244562583975494,
+        2.218752125976607,
+        2.0703335009748116
+      ],
+      "median_seconds": 2.218752125976607,
+      "log_likelihood": -207.53522040823987
+    },
+    {
+      "kind": "equivalence",
+      "traits": 2,
+      "absolute_loglik_error": 4.547473508864641e-13,
+      "max_covariance_error": 1.0252055582249398e-07
+    },
+    {
+      "kind": "exhaustive_zero_or_one_shift",
+      "traits": 2,
+      "mode": "diagonal",
+      "alpha": "fixed_1",
+      "seconds": [
+        0.17262962501263246,
+        0.17501604196149856,
+        0.1795494160032831
+      ],
+      "median_seconds": 0.17501604196149856,
+      "candidates": 199
+    },
+    {
+      "kind": "exhaustive_zero_or_one_shift",
+      "traits": 2,
+      "mode": "full",
+      "alpha": "fixed_1",
+      "seconds": [
+        0.1938397089834325,
+        0.17816962499637157,
+        0.17801433301065117
+      ],
+      "median_seconds": 0.17816962499637157,
+      "candidates": 199
+    },
+    {
+      "kind": "fixed_layout_estimated_alpha",
+      "traits": 2,
+      "seconds": [
+        0.0631204160163179,
+        0.06301558302948251,
+        0.06294224999146536
+      ],
+      "median_seconds": 0.06301558302948251,
+      "alpha_mode": [
+        "finite",
+        "finite"
+      ],
+      "alpha": [
+        1.7301952323817082,
+        1.7301952323817082
+      ]
+    },
+    {
+      "kind": "fixed_layout_covariance_ML",
+      "traits": 5,
+      "engine": "auto",
+      "seconds": [
+        0.001591250009369105,
+        0.0015720000374130905,
+        0.0015862089931033552
+      ],
+      "median_seconds": 0.0015862089931033552,
+      "log_likelihood": -380.4765796283058
+    },
+    {
+      "kind": "pruning_evaluation_at_profile_MLE",
+      "traits": 5,
+      "seconds": [
+        0.009333750000223517,
+        0.009399125003255904,
+        0.00935629103332758
+      ],
+      "median_seconds": 0.00935629103332758,
+      "absolute_loglik_error": 2.9274360713316128e-12,
+      "numerical_optimization_timed": false
+    },
+    {
+      "kind": "exhaustive_zero_or_one_shift",
+      "traits": 5,
+      "mode": "diagonal",
+      "alpha": "fixed_1",
+      "seconds": [
+        0.29771645803702995,
+        0.2946403329842724,
+        0.2955387080437504
+      ],
+      "median_seconds": 0.2955387080437504,
+      "candidates": 199
+    },
+    {
+      "kind": "exhaustive_zero_or_one_shift",
+      "traits": 5,
+      "mode": "full",
+      "alpha": "fixed_1",
+      "seconds": [
+        0.30005595803959295,
+        0.3257574589806609,
+        0.30488762498134747
+      ],
+      "median_seconds": 0.30488762498134747,
+      "candidates": 199
+    },
+    {
+      "kind": "fixed_layout_estimated_alpha",
+      "traits": 5,
+      "seconds": [
+        0.057444582984317094,
+        0.05808295903261751,
+        0.05718670802889392
+      ],
+      "median_seconds": 0.057444582984317094,
+      "alpha_mode": [
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite"
+      ],
+      "alpha": [
+        0.8677465242291656,
+        0.8677465242291656,
+        0.8677465242291656,
+        0.8677465242291656,
+        0.8677465242291656
+      ]
+    },
+    {
+      "kind": "fixed_layout_covariance_ML",
+      "traits": 10,
+      "engine": "auto",
+      "seconds": [
+        0.002683374972548336,
+        0.002662167011294514,
+        0.0026731250109151006
+      ],
+      "median_seconds": 0.0026731250109151006,
+      "log_likelihood": -668.2748829719656
+    },
+    {
+      "kind": "pruning_evaluation_at_profile_MLE",
+      "traits": 10,
+      "seconds": [
+        0.011115874978713691,
+        0.011259459017310292,
+        0.01121912500821054
+      ],
+      "median_seconds": 0.01121912500821054,
+      "absolute_loglik_error": 5.343281372915953e-12,
+      "numerical_optimization_timed": false
+    },
+    {
+      "kind": "exhaustive_zero_or_one_shift",
+      "traits": 10,
+      "mode": "diagonal",
+      "alpha": "fixed_1",
+      "seconds": [
+        0.5422447500168346,
+        0.5454322079895064,
+        0.5220938749844208
+      ],
+      "median_seconds": 0.5422447500168346,
+      "candidates": 199
+    },
+    {
+      "kind": "exhaustive_zero_or_one_shift",
+      "traits": 10,
+      "mode": "full",
+      "alpha": "fixed_1",
+      "seconds": [
+        0.5529421669780277,
+        0.5238558750133961,
+        0.5329771250253543
+      ],
+      "median_seconds": 0.5329771250253543,
+      "candidates": 199
+    },
+    {
+      "kind": "fixed_layout_estimated_alpha",
+      "traits": 10,
+      "seconds": [
+        0.07434537500375882,
+        0.07395691698184237,
+        0.07860766700468957
+      ],
+      "median_seconds": 0.07434537500375882,
+      "alpha_mode": [
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite",
+        "finite"
+      ],
+      "alpha": [
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126,
+        1.233039662319126
+      ]
+    }
+  ]
+}

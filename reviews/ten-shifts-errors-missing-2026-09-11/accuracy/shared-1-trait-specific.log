@@ -1,0 +1,25 @@
+{"branches": [], "status": "complete", "seconds": 72.94748457398964}
+{"branches": [28], "status": "complete", "seconds": 49.84725706401514}
+{"branches": [23, 28], "status": "complete", "seconds": 42.92501943698153}
+{"branches": [26, 28], "status": "complete", "seconds": 30.46067447203677}
+{"branches": [23, 26, 28], "status": "complete", "seconds": 43.9375047700014}
+{"branches": [17, 23, 28], "status": "complete", "seconds": 47.0660752709955}
+{"branches": [17, 23, 26, 28], "status": "complete", "seconds": 112.59055538498797}
+{"branches": [4, 23, 26, 28], "status": "complete", "seconds": 28.95048522099387}
+{"branches": [17, 23, 26, 28, 118], "status": "complete", "seconds": 68.3394066549954}
+{"branches": [17, 23, 26, 28, 187], "status": "complete", "seconds": 79.24750299402513}
+{"branches": [17, 21, 23, 26, 28, 118], "status": "complete", "seconds": 82.58712358004414}
+{"branches": [17, 21, 23, 26, 28, 187], "status": "complete", "seconds": 71.12891815701732}
+{"branches": [17, 21, 23, 26, 28, 118, 162], "status": "complete", "seconds": 78.33163574500941}
+{"branches": [17, 21, 23, 26, 28, 162, 187], "status": "complete", "seconds": 68.25651640602155}
+{"branches": [4, 17, 21, 23, 26, 28, 118, 162], "status": "complete", "seconds": 76.15249391098041}
+{"branches": [4, 17, 21, 23, 26, 28, 162, 187], "status": "complete", "seconds": 95.63866675202735}
+{"branches": [4, 17, 21, 23, 26, 28, 118, 142, 162], "status": "complete", "seconds": 101.89729508705204}
+{"branches": [4, 17, 21, 23, 26, 28, 142, 162, 187], "status": "complete", "seconds": 83.50290732900612}
+{"branches": [4, 17, 21, 23, 26, 28, 118, 131, 142, 162], "status": "complete", "seconds": 87.73300216597272}
+{"branches": [4, 17, 21, 23, 26, 28, 131, 142, 162, 187], "status": "complete", "seconds": 74.34194457402918}
+{"branches": [4, 17, 21, 23, 24, 26, 28, 118, 131, 142, 162], "status": "complete", "seconds": 104.6431051720283}
+{"branches": [4, 17, 21, 23, 24, 26, 28, 131, 142, 162, 187], "status": "complete", "seconds": 130.58573101798538}
+{"branches": [4, 14, 17, 21, 23, 24, 26, 28, 118, 131, 142, 162], "status": "complete", "seconds": 81.85570053802803}
+{"branches": [4, 14, 17, 21, 23, 24, 26, 28, 131, 142, 162, 187], "status": "failed_or_interrupted", "seconds": 86.69004074903205}
+{"job": {"truth": "shared", "mode": "trait-specific", "replicate": 1, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "timeout", "elapsed": 1800.0230306119774, "error": "Prespecified per-fit/search wall-time budget exceeded."}

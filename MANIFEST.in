@@ -37,6 +37,7 @@ graft examples/regression_selection
 
 include SHIFT.md
 include NATIVE_SHIFT.md
+include SHIFT_COVARIANCE.md
 include NATIVE_SHIFT_VALIDATION.md
 include NATIVE_SHIFT_SCALING.md
 graft reviews/native-scale-2026-09-10

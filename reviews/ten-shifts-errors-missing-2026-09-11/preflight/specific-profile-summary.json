@@ -1,0 +1,90 @@
+[
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/shift_native_heuristic.py",
+    "line": 252,
+    "function": "heuristic_native_search",
+    "calls": 1,
+    "self_seconds": 7.5840000000000006e-06,
+    "cumulative_seconds": 600.0107277320001
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/shift_joint_model.py",
+    "line": 164,
+    "function": "evaluate_joint",
+    "calls": 24445,
+    "self_seconds": 0.6924416560000001,
+    "cumulative_seconds": 595.249775339
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/scipy/optimize/_numdiff.py",
+    "line": 278,
+    "function": "approx_derivative",
+    "calls": 2489,
+    "self_seconds": 0.09993275,
+    "cumulative_seconds": 522.368798105
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/shift_joint_model.py",
+    "line": 145,
+    "function": "joint_factor",
+    "calls": 24447,
+    "self_seconds": 0.271583503,
+    "cumulative_seconds": 502.972018814
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/vector_whitening.py",
+    "line": 48,
+    "function": "build",
+    "calls": 24447,
+    "self_seconds": 65.305126348,
+    "cumulative_seconds": 497.92101658900003
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/vector_whitening.py",
+    "line": 17,
+    "function": "_cholesky",
+    "calls": 4767014,
+    "self_seconds": 22.614626069,
+    "cumulative_seconds": 201.49222122700002
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/vector_whitening.py",
+    "line": 186,
+    "function": "vector_gls",
+    "calls": 24444,
+    "self_seconds": 1.0598581870000001,
+    "cumulative_seconds": 89.442546424
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/vector_whitening.py",
+    "line": 146,
+    "function": "apply",
+    "calls": 24461,
+    "self_seconds": 14.951204652000001,
+    "cumulative_seconds": 84.29626363300001
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/scipy/linalg/_basic.py",
+    "line": 650,
+    "function": "solve_triangular",
+    "calls": 9561350,
+    "self_seconds": 13.083607663,
+    "cumulative_seconds": 83.002463739
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/shift_joint_model.py",
+    "line": 133,
+    "function": "joint_design",
+    "calls": 24444,
+    "self_seconds": 0.175381486,
+    "cumulative_seconds": 1.384128892
+  },
+  {
+    "file": "/opt/conda/lib/python3.12/site-packages/nwkit/shift_native_model.py",
+    "line": 95,
+    "function": "build",
+    "calls": 124,
+    "self_seconds": 0.001280838,
+    "cumulative_seconds": 0.007569289000000001
+  }
+]

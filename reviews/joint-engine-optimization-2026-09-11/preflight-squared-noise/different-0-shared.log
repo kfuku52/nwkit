@@ -1,0 +1,27 @@
+{"branches": [], "status": "complete", "seconds": 0.47995829198043793}
+{"branches": [16], "status": "complete", "seconds": 0.5439397090231068}
+{"branches": [16, 27], "status": "complete", "seconds": 0.6178747499943711}
+{"branches": [16, 17], "status": "complete", "seconds": 0.5860706669627689}
+{"branches": [16, 17, 27], "status": "complete", "seconds": 0.5315771669847891}
+{"branches": [16, 20, 27], "status": "complete", "seconds": 0.6464182510389946}
+{"branches": [16, 17, 19, 27], "status": "complete", "seconds": 0.6875026670168154}
+{"branches": [16, 17, 24, 27], "status": "complete", "seconds": 0.5985465419944376}
+{"branches": [16, 17, 19, 25, 27], "status": "complete", "seconds": 0.7236386670265347}
+{"branches": [16, 17, 20, 24, 27], "status": "complete", "seconds": 0.63188329100376}
+{"branches": [16, 17, 19, 23, 25, 27], "status": "complete", "seconds": 0.6388598750345409}
+{"branches": [11, 16, 17, 20, 24, 27], "status": "complete", "seconds": 0.5587350830319338}
+{"branches": [16, 17, 19, 23, 25, 27, 29], "status": "complete", "seconds": 0.7214537499821745}
+{"branches": [16, 17, 19, 23, 25, 27, 178], "status": "complete", "seconds": 0.7181743340333924}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 178], "status": "complete", "seconds": 0.6347862079855986}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161], "status": "complete", "seconds": 0.7976490840082988}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 178], "status": "complete", "seconds": 0.736263416998554}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 178], "status": "complete", "seconds": 0.6794878750224598}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 0.6582761250319891}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 0.7266323750372976}
+{"branches": [11, 16, 17, 19, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 0.8021890009986237}
+{"branches": [16, 17, 19, 23, 24, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 0.7562134170439094}
+{"branches": [11, 16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 0.8913918339530937}
+{"branches": [16, 17, 19, 23, 24, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 0.8737796670175157}
+{"branches": [11, 16, 17, 19, 24, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 0.8801220420282334}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 0.8524030840490013}
+{"job": {"truth": "different", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "failed", "elapsed": 18.25683350802865, "error": "ValueError: A native search covariance mode failed; complete the fit before selection: {'alpha_mode': 'finite', 'success': False, 'message': \"Joint covariance optimizer failed checked convergence: [{'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.0013079457517051196}, {'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.0013079272775939899}, {'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.0013079286986794614}]\"}"}

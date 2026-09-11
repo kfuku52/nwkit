@@ -1,0 +1,70 @@
+{
+  "accuracy": {
+    "outcomes": 20,
+    "retained_fits_checked": 234
+  },
+  "timing": {
+    "outcomes": 4,
+    "retained_fits_checked": 39
+  },
+  "kernel": {
+    "cases": 16,
+    "maximum_output_error": 4.547473508864641e-13
+  },
+  "replays": [
+    {
+      "truth": "shared",
+      "mode": "shared",
+      "accuracy_status": "complete",
+      "timing_status": "complete",
+      "criteria": {
+        "AIC": {
+          "same_branches": true,
+          "loglik_difference": 0.0
+        },
+        "BIC": {
+          "same_branches": true,
+          "loglik_difference": 0.0
+        }
+      }
+    },
+    {
+      "truth": "shared",
+      "mode": "trait-specific",
+      "accuracy_status": "complete",
+      "timing_status": "complete",
+      "criteria": {
+        "AIC": {
+          "same_branches": true,
+          "loglik_difference": 0.0
+        },
+        "BIC": {
+          "same_branches": true,
+          "loglik_difference": 0.0
+        }
+      }
+    },
+    {
+      "truth": "different",
+      "mode": "trait-specific",
+      "accuracy_status": "failed",
+      "timing_status": "failed"
+    },
+    {
+      "truth": "different",
+      "mode": "shared",
+      "accuracy_status": "complete",
+      "timing_status": "complete",
+      "criteria": {
+        "AIC": {
+          "same_branches": true,
+          "loglik_difference": 0.0
+        },
+        "BIC": {
+          "same_branches": true,
+          "loglik_difference": 0.0
+        }
+      }
+    }
+  ]
+}

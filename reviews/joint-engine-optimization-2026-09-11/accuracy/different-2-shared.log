@@ -1,0 +1,27 @@
+{"branches": [], "status": "complete", "seconds": 0.8528966250014491}
+{"branches": [27], "status": "complete", "seconds": 0.737917625985574}
+{"branches": [16, 27], "status": "complete", "seconds": 0.8012609179713763}
+{"branches": [27, 29], "status": "complete", "seconds": 0.9481522089918144}
+{"branches": [16, 27, 29], "status": "complete", "seconds": 0.9877615419682115}
+{"branches": [15, 27, 29], "status": "complete", "seconds": 0.9962683760095388}
+{"branches": [16, 26, 27, 29], "status": "complete", "seconds": 1.2084910010453314}
+{"branches": [16, 27, 29, 82], "status": "complete", "seconds": 1.0953242509858683}
+{"branches": [16, 26, 27, 29, 82], "status": "complete", "seconds": 1.1238548749824986}
+{"branches": [16, 19, 26, 27, 29], "status": "complete", "seconds": 1.0889666670118459}
+{"branches": [16, 26, 27, 29, 82, 149], "status": "complete", "seconds": 1.0854577089776285}
+{"branches": [16, 26, 27, 29, 82, 130], "status": "complete", "seconds": 1.2735551680088975}
+{"branches": [16, 21, 26, 27, 29, 82, 149], "status": "complete", "seconds": 1.2916962510207668}
+{"branches": [16, 26, 27, 29, 82, 130, 149], "status": "complete", "seconds": 1.143166333960835}
+{"branches": [16, 21, 26, 27, 29, 82, 130, 149], "status": "complete", "seconds": 1.310140917019453}
+{"branches": [16, 21, 26, 27, 29, 52, 82, 149], "status": "complete", "seconds": 1.2165161250159144}
+{"branches": [16, 21, 26, 27, 29, 52, 82, 130, 149], "status": "complete", "seconds": 1.223369001003448}
+{"branches": [16, 21, 26, 27, 29, 82, 130, 149, 190], "status": "complete", "seconds": 1.3218763759941794}
+{"branches": [16, 21, 26, 27, 29, 52, 82, 130, 149, 190], "status": "complete", "seconds": 1.318076208990533}
+{"branches": [16, 21, 26, 27, 29, 52, 82, 130, 149, 154], "status": "complete", "seconds": 1.307839041983243}
+{"branches": [16, 21, 26, 27, 29, 52, 82, 130, 149, 154, 190], "status": "complete", "seconds": 1.3828981679980643}
+{"branches": [16, 21, 22, 26, 27, 29, 52, 82, 130, 149, 190], "status": "complete", "seconds": 1.5020865009864792}
+{"branches": [16, 19, 21, 22, 26, 27, 29, 52, 82, 130, 149, 190], "status": "complete", "seconds": 1.5608550420147367}
+{"branches": [16, 21, 22, 26, 27, 29, 52, 82, 130, 149, 154, 190], "status": "complete", "seconds": 1.7033506259904243}
+{"branches": [16, 19, 22, 26, 27, 29, 52, 82, 90, 130, 149, 190], "status": "complete", "seconds": 1.802979251020588}
+{"branches": [16, 19, 21, 22, 26, 27, 29, 82, 130, 149, 190], "status": "complete", "seconds": 1.8153294590301812}
+{"job": {"truth": "different", "mode": "shared", "replicate": 2, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "accuracy"}, "status": "complete", "elapsed": 32.52338551502908, "error": null}

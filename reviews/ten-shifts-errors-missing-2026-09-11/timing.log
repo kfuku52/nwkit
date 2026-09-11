@@ -1,0 +1,4 @@
+{"completed": 1, "total": 4, "job": {"truth": "shared", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}
+{"completed": 2, "total": 4, "job": {"truth": "shared", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}
+{"completed": 3, "total": 4, "job": {"truth": "different", "mode": "trait-specific", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "failed"}
+{"completed": 4, "total": 4, "job": {"truth": "different", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "complete"}

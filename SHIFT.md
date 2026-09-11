@@ -15,6 +15,8 @@ research searches use `--selection native`; historical IC methods use `--selecti
 
 For shared multivariate layouts, missing observations, native discovery and
 full-search bootstrap replay, see [Native OU shift inference](NATIVE_SHIFT.md).
+Full evolutionary covariance, shared alpha and unconditional `shift-simulate`
+generation are described in the [joint-covariance guide](SHIFT_COVARIANCE.md).
 That research implementation is distinct from the restricted calibrated method
 and has not passed its production-adoption gates.
 

@@ -1,0 +1,23 @@
+{"branches": [], "status": "complete", "seconds": 0.5760991250281222}
+{"branches": [16], "status": "complete", "seconds": 0.5633279170142487}
+{"branches": [16, 27], "status": "complete", "seconds": 0.5573854999965988}
+{"branches": [16, 17], "status": "complete", "seconds": 0.6108440009993501}
+{"branches": [16, 17, 27], "status": "complete", "seconds": 0.6548445000080392}
+{"branches": [16, 20, 27], "status": "complete", "seconds": 0.6428631669841707}
+{"branches": [16, 17, 25, 27], "status": "complete", "seconds": 0.6735450419946574}
+{"branches": [16, 17, 20, 27], "status": "complete", "seconds": 0.7770549999549985}
+{"branches": [16, 17, 19, 25, 27], "status": "complete", "seconds": 0.8765492090024054}
+{"branches": [16, 17, 20, 25, 27], "status": "complete", "seconds": 0.8205267920275219}
+{"branches": [16, 17, 19, 23, 25, 27], "status": "complete", "seconds": 0.9648828759673052}
+{"branches": [16, 17, 20, 23, 25, 27], "status": "complete", "seconds": 0.9951132089481689}
+{"branches": [16, 17, 19, 23, 25, 27, 29], "status": "complete", "seconds": 0.9293972920277156}
+{"branches": [16, 17, 19, 23, 25, 27, 178], "status": "complete", "seconds": 1.0582943339832127}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161], "status": "complete", "seconds": 0.8647416260209866}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 178], "status": "complete", "seconds": 1.0313959589693695}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 178], "status": "complete", "seconds": 1.0668283340055496}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 178], "status": "complete", "seconds": 1.1794753339490853}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 1.3145241679740138}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 161, 168, 178], "status": "complete", "seconds": 1.379538709006738}
+{"branches": [16, 17, 19, 23, 25, 27, 29, 107, 161, 168, 178], "status": "complete", "seconds": 1.4198708339827135}
+{"branches": [16, 17, 19, 20, 23, 25, 27, 29, 107, 161, 178], "status": "complete", "seconds": 1.303831667988561}
+{"job": {"truth": "shared", "mode": "shared", "replicate": 0, "traits": 2, "missing_rate": 0.2, "timeout": 1800, "part": "timing"}, "status": "failed", "elapsed": 20.454394508036785, "error": "ValueError: A native search covariance mode failed; complete the fit before selection: {'alpha_mode': '0.0', 'success': False, 'message': \"Joint covariance optimizer failed checked convergence: [{'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.0010867566402339877}, {'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.0010713179676713916}, {'success': False, 'message': 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'projected_score': 0.001079774136769673}]\"}"}

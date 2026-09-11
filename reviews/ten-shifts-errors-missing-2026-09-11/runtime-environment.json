@@ -1,0 +1,27 @@
+{
+  "python": "3.12.14 (main, Sep  2 2026, 23:29:55) [GCC 15.3.0]",
+  "platform": "Linux-6.12.76-linuxkit-aarch64-with-glibc2.39",
+  "numpy": "1.26.4",
+  "scipy": "1.17.1",
+  "ete4": "4.4.0",
+  "threadpools": [
+    {
+      "user_api": "blas",
+      "internal_api": "openblas",
+      "num_threads": 1,
+      "prefix": "libopenblas",
+      "filepath": "/opt/conda/lib/libopenblasp-r0.3.34.so",
+      "version": "0.3.34",
+      "threading_layer": "openmp",
+      "architecture": "neoversen1"
+    },
+    {
+      "user_api": "openmp",
+      "internal_api": "openmp",
+      "num_threads": 1,
+      "prefix": "libomp",
+      "filepath": "/opt/conda/lib/libomp.so",
+      "version": null
+    }
+  ]
+}

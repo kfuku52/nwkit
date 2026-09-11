@@ -34,6 +34,14 @@ CASES = {
     "pca": ["--trait", "{data}", "--columns", "x,y"],
     "signal": ["--trait", "{data}", "--columns", "x", "--n-sim", "9"],
     "shift": ["--trait", "{data}", "--state-column", "x", "--model-out", "{model}"],
+    "shift-simulate": [
+        "--parameters",
+        "{simulation}",
+        "--truth-out",
+        "{model}",
+        "--input-rooted",
+        "yes",
+    ],
     "annotate": ["--table", "{data}"],
     "asr": ["--trait", "{data}", "--state-column", "state", "--rate", "0.2"],
     "asrcompare": [
@@ -133,6 +141,7 @@ TABLE_COLUMNS = {
     "pca": "PC1",
     "signal": "estimate",
     "shift": "regime",
+    "shift-simulate": "replicate",
     "asr": "map_state",
     "asrcompare": "model",
     "cladefreq": "frequency",
@@ -191,6 +200,17 @@ def test_command_parser_reaches_its_real_handler(
         ).to_csv(folds, sep="\t", index=False)
     species = tmp_path / "species.txt"
     species.write_text("\n".join(names) + "\n")
+    simulation = tmp_path / "simulation.json"
+    simulation.write_text(
+        json.dumps(
+            {
+                "trait_names": ["x", "y"],
+                "alpha": 1.0,
+                "process_tip_covariance": [[1.0, 0.5], [0.5, 1.0]],
+                "regime_optima": [[0.0, 0.0]],
+            }
+        )
+    )
     paths = {
         "tree": tree,
         "folds": folds,
@@ -201,6 +221,7 @@ def test_command_parser_reaches_its_real_handler(
         "downloads": tmp_path / "downloads",
         "pdf": tmp_path / "roots.pdf",
         "model": tmp_path / "model.json",
+        "simulation": simulation,
     }
     arguments = [command, *(argument.format(**paths) for argument in CASES[command])]
     if command == "shift":
