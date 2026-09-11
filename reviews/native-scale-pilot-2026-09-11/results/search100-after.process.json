@@ -1,0 +1,5 @@
+{
+  "status": "cancelled",
+  "completed": false,
+  "reason": "Prototype rejected after estimated-error parameter equivalence failure; not a timing result."
+}

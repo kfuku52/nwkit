@@ -1,0 +1,14 @@
+{
+  "command": "SOURCE_DATE_EPOCH=1789090000 python tools/check.py dist",
+  "returncode": 0,
+  "report_paths_checked": [
+    "REPORT.md",
+    "final.patch",
+    "benchmark.py",
+    "verify_final.py",
+    "final-verification.json",
+    "final-comparisons/search10-after-0.json",
+    "final-followups/search100-after.json"
+  ],
+  "no_python_caches": true
+}

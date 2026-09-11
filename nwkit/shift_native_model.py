@@ -119,11 +119,9 @@ class ShiftLayout:
             )
         result = cls(shifts, tuple(sorted(groups)))
         labels = result.node_groups(tree)
-        for index, branch in enumerate(tree.branch_ids):
-            if (
-                branch in shifts
-                and labels[index] == labels[tree.compiled.parents[index]]
-            ):
+        for branch in shifts:
+            index = tree.indices_by_branch[branch]
+            if labels[index] == labels[tree.compiled.parents[index]]:
                 raise ValueError("A shift cannot retain its immediate parent's regime.")
         return result
 
@@ -132,12 +130,14 @@ class ShiftLayout:
             branch: index for index, group in enumerate(self.groups) for branch in group
         }
         labels = np.zeros(len(tree.branch_ids), dtype=int)
-        for index, branch in enumerate(tree.branch_ids):
-            labels[index] = (
-                aliases[branch]
-                if branch in aliases
-                else labels[tree.compiled.parents[index]]
-            )
+        # Preorder makes each subtree contiguous. Apply ancestral regimes first,
+        # then overwrite their descendant intervals with each nested shift.
+        for index, group in sorted(
+            (tree.indices_by_branch[branch], group) for branch, group in aliases.items()
+        ):
+            last_tip = tree.tip_intervals[index][1] - 1
+            stop = tree.compiled.leaf_indices[last_tip] + 1
+            labels[index:stop] = group
         return labels
 
     def design(self, tree, alpha_height, *, node_groups=None):

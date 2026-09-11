@@ -1,0 +1,90 @@
+[
+  {
+    "shape": "balanced",
+    "kind": "terminal",
+    "shifts": 10,
+    "seconds_per_assignment": [
+      0.0003829204099019989,
+      0.00038027083035558463,
+      0.0003841695899609476
+    ],
+    "labels_sha256": "64e98ea9b1a7b6a4eceb1d9e962dca7346008f72b0cebd9e7702a8d55583a3a2"
+  },
+  {
+    "shape": "balanced",
+    "kind": "terminal",
+    "shifts": 100,
+    "seconds_per_assignment": [
+      0.0003908516600495204,
+      0.0003843420901102945,
+      0.00037905375007539987
+    ],
+    "labels_sha256": "e2243ae0099c64b0b55163ad4bba10f326ff2a2a80a3580b64c029893a925aad"
+  },
+  {
+    "shape": "balanced",
+    "kind": "internal",
+    "shifts": 10,
+    "seconds_per_assignment": [
+      0.00038200707989744843,
+      0.00037832083995454014,
+      0.00037857624993193896
+    ],
+    "labels_sha256": "a008e7988668fbd9ba14593ea26e2890552eda86661b24c02ab26675ef242f50"
+  },
+  {
+    "shape": "balanced",
+    "kind": "internal",
+    "shifts": 100,
+    "seconds_per_assignment": [
+      0.0003856733301654458,
+      0.0003630062495358288,
+      0.00039684207993559537
+    ],
+    "labels_sha256": "572f19bd38554f134f6d9862c206c0b16a5121ebb673ae8d9785030fe8084872"
+  },
+  {
+    "shape": "pectinate",
+    "kind": "terminal",
+    "shifts": 10,
+    "seconds_per_assignment": [
+      0.0003516004100674763,
+      0.0003599137504352257,
+      0.00035873290966264903
+    ],
+    "labels_sha256": "7069b79dd9e9b487855c97a6cf9d321d65e0c0f6f0cd9199f423dbd59c75e4eb"
+  },
+  {
+    "shape": "pectinate",
+    "kind": "terminal",
+    "shifts": 100,
+    "seconds_per_assignment": [
+      0.0003537204198073596,
+      0.0003561583301052451,
+      0.00035309209022670984
+    ],
+    "labels_sha256": "63adc80bfa22004c96ed8cad0d7d08eab32cda7524c71e6064c8d1376b19234c"
+  },
+  {
+    "shape": "pectinate",
+    "kind": "internal",
+    "shifts": 10,
+    "seconds_per_assignment": [
+      0.00036058500001672655,
+      0.000357828339911066,
+      0.0003516049997415394
+    ],
+    "labels_sha256": "43146aa85701e441b2b026cb4c8f59874b5d45173ed921cc47df55c0c2b0c6bc"
+  },
+  {
+    "shape": "pectinate",
+    "kind": "internal",
+    "shifts": 100,
+    "seconds_per_assignment": [
+      0.0003553570801159367,
+      0.00036903083033394067,
+      0.00036106583022046837
+    ],
+    "labels_sha256": "1bfbe0b214735f96da37bf80f2734aff980cd25fbda05d9e9a2e88f3be972686"
+  }
+]

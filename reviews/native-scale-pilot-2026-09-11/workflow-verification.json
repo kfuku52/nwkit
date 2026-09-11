@@ -1,0 +1,8 @@
+{
+  "expected_search_calls": 60,
+  "actual_search_calls": 60,
+  "all_searches_completed": true,
+  "calibration_draws_per_test": 19,
+  "support_replicates": 2,
+  "all_nested_draws_retained": true
+}

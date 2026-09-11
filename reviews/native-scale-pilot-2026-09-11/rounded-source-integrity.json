@@ -1,0 +1,14 @@
+{
+  "nwkit/gaussian_whitening.py": {
+    "measured_sha256": "ad97906843f896943057a8d752ff73e2ee1dcb2da5b93cbf7ffe31cac9632570",
+    "integrated_sha256": "ad97906843f896943057a8d752ff73e2ee1dcb2da5b93cbf7ffe31cac9632570",
+    "ast_identical": true,
+    "byte_identical": true
+  },
+  "nwkit/shift_native_model.py": {
+    "measured_sha256": "5a92b96f99cf0312ddcc643edf71a08f038451bba6abc59b5984ffb5942e50a4",
+    "integrated_sha256": "225933ff991a7e92f9648f252520835548deb03cb765491f0f8ff727668266ff",
+    "ast_identical": true,
+    "byte_identical": false
+  }
+}

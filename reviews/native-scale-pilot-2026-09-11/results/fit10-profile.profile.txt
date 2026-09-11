@@ -1,0 +1,90 @@
+Fri Sep 11 10:20:15 2026    reviews/native-scale-pilot-2026-09-11/results/fit10-profile.prof
+
+         1624216 function calls (1622015 primitive calls) in 0.933 seconds
+
+   Ordered by: cumulative time
+   List reduced from 536 to 80 due to restriction <80>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.000    0.000    0.936    0.936 benchmark_scale_pilot.py:92(execute)
+        1    0.000    0.000    0.862    0.862 shift_native_fit.py:419(fit_native_layout)
+        1    0.000    0.000    0.858    0.858 shift_native_fit.py:273(fit_native_trait)
+        3    0.000    0.000    0.853    0.284 shift_native_fit.py:235(_profile_alpha)
+      141    0.000    0.000    0.849    0.006 shift_native_fit.py:162(at_alpha)
+      141    0.003    0.000    0.849    0.006 shift_native_fit.py:106(analytic_scale)
+      141    0.002    0.000    0.839    0.006 shift_native_fit.py:93(evaluate)
+      141    0.023    0.000    0.837    0.006 shift_native_model.py:298(evaluate_trait)
+        1    0.000    0.000    0.836    0.836 optimization.py:77(global_bounded_scalar_minimize)
+      138    0.000    0.000    0.832    0.006 shift_native_fit.py:243(objective)
+        4    0.000    0.000    0.702    0.176 optimization.py:61(_bounded_scalar_minimize)
+        4    0.000    0.000    0.701    0.175 _minimize.py:785(minimize_scalar)
+        4    0.002    0.001    0.701    0.175 _optimize.py:2251(_minimize_scalar_bounded)
+      141    0.359    0.003    0.531    0.004 gaussian_whitening.py:83(build)
+      141    0.014    0.000    0.249    0.002 gaussian_whitening.py:196(tree_gls)
+        1    0.000    0.000    0.133    0.133 optimization.py:86(<listcomp>)
+      141    0.102    0.001    0.109    0.001 linalg.py:789(qr)
+      290    0.029    0.000    0.096    0.000 {built-in method builtins.any}
+      141    0.087    0.001    0.091    0.001 gaussian_whitening.py:158(apply)
+        1    0.000    0.000    0.074    0.074 benchmark_scale_pilot.py:28(fixture)
+        1    0.002    0.002    0.053    0.053 util.py:1274(read_tree)
+   282000    0.039    0.000    0.051    0.000 gaussian_whitening.py:95(<genexpr>)
+        1    0.000    0.000    0.043    0.043 util.py:132(normalize_phylogenetic_tree_text)
+        1    0.000    0.000    0.032    0.032 util.py:116(_convert_paml_figtree_intervals)
+        1    0.004    0.004    0.032    0.032 tree_formats.py:402(transform_annotations)
+   281718    0.031    0.000    0.031    0.000 {built-in method math.hypot}
+   141142    0.017    0.000    0.017    0.000 {built-in method math.log}
+      146    0.002    0.000    0.017    0.000 linalg.py:1825(matrix_rank)
+        2    0.000    0.000    0.015    0.008 shift_native_model.py:235(build)
+     2999    0.010    0.000    0.015    0.000 tree_formats.py:342(_node_suffix)
+   141141    0.015    0.000    0.015    0.000 gaussian_whitening.py:103(<genexpr>)
+   141141    0.015    0.000    0.015    0.000 shift_native_model.py:319(<genexpr>)
+316724/316665    0.014    0.000    0.014    0.000 {built-in method builtins.len}
+        1    0.006    0.006    0.014    0.014 shift_native_model.py:30(build)
+        1    0.008    0.008    0.013    0.013 tree_formats.py:34(tokens)
+      144    0.009    0.000    0.012    0.000 shift_native_model.py:143(design)
+        1    0.000    0.000    0.011    0.011 util.py:123(_extract_paml_main_output_tree)
+        1    0.000    0.000    0.011    0.011 <frozen importlib._bootstrap>:1022(_find_and_load)
+      146    0.009    0.000    0.010    0.000 linalg.py:1499(svd)
+        1    0.000    0.000    0.010    0.010 <frozen importlib._bootstrap>:987(_find_and_load_unlocked)
+        1    0.000    0.000    0.010    0.010 <frozen importlib._bootstrap>:664(_load_unlocked)
+        1    0.000    0.000    0.010    0.010 <frozen importlib._bootstrap_external>:877(exec_module)
+     2175    0.010    0.000    0.010    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+      142    0.004    0.000    0.009    0.000 shift_native_model.py:200(covariance_geometry)
+        2    0.000    0.000    0.009    0.005 <frozen importlib._bootstrap>:233(_call_with_frames_removed)
+   140859    0.009    0.000    0.009    0.000 {built-in method math.sqrt}
+      144    0.005    0.000    0.008    0.000 linalg.py:2383(norm)
+      423    0.004    0.000    0.007    0.000 gaussian_whitening.py:17(_vector)
+        1    0.000    0.000    0.007    0.007 <frozen importlib._bootstrap_external>:950(get_code)
+        1    0.003    0.003    0.007    0.007 util.py:632(_read_tree_auto)
+        1    0.000    0.000    0.006    0.006 <frozen importlib._bootstrap_external>:942(source_to_code)
+        1    0.006    0.006    0.006    0.006 {built-in method builtins.compile}
+     1551    0.004    0.000    0.006    0.000 gaussian_whitening.py:144(<genexpr>)
+      282    0.003    0.000    0.005    0.000 linalg.py:329(solve)
+      142    0.005    0.000    0.005    0.000 shift_native_model.py:187(mean_geometry)
+      853    0.001    0.000    0.005    0.000 {method 'all' of 'numpy.ndarray' objects}
+      141    0.001    0.000    0.004    0.000 twodim_base.py:485(triu)
+      736    0.002    0.000    0.004    0.000 fromnumeric.py:71(_wrapreduction)
+        1    0.003    0.003    0.004    0.004 util.py:510(_internal_node_label_kinds)
+        1    0.000    0.000    0.004    0.004 shift_native_identifiability.py:56(covariance_identifiability)
+      141    0.000    0.000    0.004    0.000 nanfunctions.py:623(nansum)
+      575    0.001    0.000    0.004    0.000 fromnumeric.py:2322(any)
+      142    0.004    0.000    0.004    0.000 shape_base.py:612(column_stack)
+      853    0.000    0.000    0.004    0.000 _methods.py:61(_all)
+        1    0.002    0.002    0.004    0.004 shift_native_identifiability.py:8(_observed_pair_heights)
+        1    0.002    0.002    0.003    0.003 gaussian_whitening.py:37(_whitening_structure)
+        1    0.002    0.002    0.003    0.003 compiled_tree.py:26(from_tree)
+        5    0.003    0.001    0.003    0.001 shift_native_model.py:130(node_groups)
+      141    0.000    0.000    0.003    0.000 twodim_base.py:366(tri)
+        3    0.000    0.000    0.003    0.001 shift_native_fit.py:262(_require_observed_mean_rank)
+      864    0.003    0.000    0.003    0.000 {built-in method numpy.zeros}
+     2999    0.002    0.000    0.003    0.000 tree_formats.py:286(validate_age_attributes)
+      7/1    0.000    0.000    0.003    0.003 {built-in method builtins.exec}
+        1    0.000    0.000    0.003    0.003 tree_formats.py:1(<module>)
+     7994    0.003    0.000    0.003    0.000 <string>:2(__init__)
+      146    0.000    0.000    0.003    0.000 numeric.py:415(count_nonzero)
+       12    0.000    0.000    0.002    0.000 re.py:288(_compile)
+    38389    0.002    0.000    0.002    0.000 {method 'append' of 'list' objects}
+      143    0.002    0.000    0.002    0.000 nanfunctions.py:68(_replace_nan)
+      141    0.002    0.000    0.002    0.000 dataclasses.py:1405(replace)
+
+

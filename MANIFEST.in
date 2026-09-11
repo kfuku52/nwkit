@@ -41,6 +41,7 @@ include NATIVE_SHIFT_VALIDATION.md
 include NATIVE_SHIFT_SCALING.md
 graft reviews/native-scale-2026-09-10
 graft reviews/native-optimization-2026-09-11
+graft reviews/native-scale-pilot-2026-09-11
 include SHIFT_VALIDATION.md
 include SHIFT_JOINT.md
 include SHIFT_PBIC.md

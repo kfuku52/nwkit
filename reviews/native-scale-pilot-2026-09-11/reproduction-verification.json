@@ -1,0 +1,8 @@
+{
+  "baseline": "bb70467",
+  "patch_applies": true,
+  "matches_measured_source": {
+    "gaussian_whitening.py": true,
+    "shift_native_model.py": true
+  }
+}

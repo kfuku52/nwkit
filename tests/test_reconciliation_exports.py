@@ -146,19 +146,33 @@ def test_candidate_export_rejects_invalid_request_before_replacing_files(
 
 @pytest.mark.parametrize("target", ["", "-"])
 def test_candidate_export_rejects_non_file_target(tmp_path, target):
-    source, species, selected = (tmp_path / name for name in ("gene", "species", "selected"))
+    source, species, selected = (
+        tmp_path / name for name in ("gene", "species", "selected")
+    )
     source.write_text("(A_a_1:1,B_b_1:1);")
     species.write_text("(A_a:1,B_b:1);")
     selected.write_text("previous")
-    result = cli("root", "--method", "reconciliation", "--infile", source,
-                 "--species-tree", species, "--outfile", selected,
-                 "--candidates-out", target)
+    result = cli(
+        "root",
+        "--method",
+        "reconciliation",
+        "--infile",
+        source,
+        "--species-tree",
+        species,
+        "--outfile",
+        selected,
+        "--candidates-out",
+        target,
+    )
     assert result.returncode != 0
     assert selected.read_text() == "previous"
 
 
 @pytest.mark.parametrize("failure_call", [2, 6])
-def test_candidate_write_failure_preserves_both_outputs(tmp_path, monkeypatch, failure_call):
+def test_candidate_write_failure_preserves_both_outputs(
+    tmp_path, monkeypatch, failure_call
+):
     from types import SimpleNamespace
 
     import nwkit.root as root_module
@@ -166,7 +180,10 @@ def test_candidate_write_failure_preserves_both_outputs(tmp_path, monkeypatch, f
     gene = Tree("((A_a_1:1,A_a_2:2):3,(A_a_3:4,A_a_4:5):6);", parser=1)
     species = Tree("(A_a:1,B_b:1);", parser=1)
     rooted, evaluation = reconciliation_rooting(
-        gene, species, {name: "A_a" for name in gene.leaf_names()}, _return_evaluation=True
+        gene,
+        species,
+        {name: "A_a" for name in gene.leaf_names()},
+        _return_evaluation=True,
     )
     selected, collection = tmp_path / "selected", tmp_path / "collection"
     selected.write_text("old selected")
@@ -182,7 +199,9 @@ def test_candidate_write_failure_preserves_both_outputs(tmp_path, monkeypatch, f
         return original_write(*args, **kwargs)
 
     monkeypatch.setattr(root_module, "write_tree", fail_second_write)
-    args = SimpleNamespace(outfile=str(selected), candidates_out=str(collection), outformat=1)
+    args = SimpleNamespace(
+        outfile=str(selected), candidates_out=str(collection), outformat=1
+    )
     with pytest.raises(OSError, match="injected disk failure"):
         root_module._write_reconciliation_candidates(rooted, evaluation, args, set())
     assert selected.read_text() == "old selected"
@@ -197,7 +216,11 @@ def test_optimal_root_scores_match_independent_lca_counts(weights):
     gene = Tree("(((A_a_1:1,C_c_1:2):1,B_b_1:3):1,(A_a_2:4,D_d_1:5):1);", parser=1)
     mapping = {name: "_".join(name.split("_")[:2]) for name in gene.leaf_names()}
     rooted, evaluation = reconciliation_rooting(
-        gene, species, mapping, duplication_cost=weights[0], loss_cost=weights[1],
+        gene,
+        species,
+        mapping,
+        duplication_cost=weights[0],
+        loss_cost=weights[1],
         _return_evaluation=True,
     )
     # Enumerate every physical edge independently of the rooting optimizer.
@@ -211,11 +234,16 @@ def test_optimal_root_scores_match_independent_lca_counts(weights):
         duplications = int(table.event_type.eq("duplication").sum())
         losses = int(table.implied_losses.sum())
         scored[projected_root_split(candidate, names)] = (duplications, losses)
-    scores = {split: dup * weights[0] + loss * weights[1]
-              for split, (dup, loss) in scored.items()}
+    scores = {
+        split: dup * weights[0] + loss * weights[1]
+        for split, (dup, loss) in scored.items()
+    }
     best = min(scores.values())
     assert {candidate.split for candidate in evaluation.candidates} == {
         split for split, score in scores.items() if score == pytest.approx(best)
     }
     for candidate in evaluation.candidates:
-        assert (candidate.metrics["duplications"], candidate.metrics["losses"]) == scored[candidate.split]
+        assert (
+            candidate.metrics["duplications"],
+            candidate.metrics["losses"],
+        ) == scored[candidate.split]

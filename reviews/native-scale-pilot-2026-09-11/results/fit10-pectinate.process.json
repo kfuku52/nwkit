@@ -1,0 +1,16 @@
+{
+  "returncode": 0,
+  "command": [
+    "/Users/kf/miniforge3/bin/python",
+    "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-scale-pilot-vorx95ng/tools/benchmark_scale_pilot.py",
+    "--mode",
+    "fit",
+    "--shape",
+    "pectinate",
+    "--shifts",
+    "10",
+    "--output",
+    "/Users/kf/repos/nwkit/reviews/native-scale-pilot-2026-09-11/results/fit10-pectinate.json"
+  ],
+  "process_seconds": 2.433457040984649
+}

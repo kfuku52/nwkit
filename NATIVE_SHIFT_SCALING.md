@@ -117,3 +117,17 @@ are in [the optimization report](reviews/native-optimization-2026-09-11/REPORT.m
 
 Measured results and verification are recorded in
 [the development report](reviews/native-scale-2026-09-10/REPORT.md).
+
+## Follow-up scale pilot
+
+The 1,000-tip estimated-covariance pilot now separates known-layout fitting,
+location/regime search, calibration and nested support. Distinct-regime search
+reached 100 shifts, while the shared-regime run exhausted its 100,000 scoring
+budget at 43 shifts. Known measurement-error search exceeded the 600-second
+pilot limit. These are computational limits, not evidence of calibrated recovery.
+
+Regime labels now use preorder subtree intervals, and numeric whitening rotations
+are batched on sufficiently wide levels. Narrow trees retain scalar construction.
+Repeated measurements, equivalence checks, convergence diagnostics and the
+small-bootstrap scope are recorded in the
+[scale pilot report](reviews/native-scale-pilot-2026-09-11/REPORT.md).

@@ -1,0 +1,16 @@
+{
+  "status": "censored",
+  "completed": false,
+  "timeout_seconds": 600,
+  "command": [
+    "/Users/kf/miniforge3/bin/python",
+    "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-scale-pilot-vorx95ng-after-qr-numpy-cutoff16-exact-final/tools/benchmark_scale_pilot.py",
+    "--shifts",
+    "10",
+    "--error",
+    "known",
+    "--output",
+    "/Users/kf/repos/nwkit/reviews/native-scale-pilot-2026-09-11/final-followups/search10-known-after.json"
+  ],
+  "process_seconds": 600.0190357909887
+}

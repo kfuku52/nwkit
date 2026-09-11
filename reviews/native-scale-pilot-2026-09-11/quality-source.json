@@ -1,0 +1,6 @@
+{
+  "head": "e1cff9870be81c4ce4051a0241ad7d7a0747dff7",
+  "source": "/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-scale-qa-22xjdb1x",
+  "scope": "committed HEAD plus only this optimization and its tests/docs",
+  "additional_format_only_fix": "tests/test_reconciliation_exports.py (existing e1cff98 formatting violation; no semantic change)"
+}

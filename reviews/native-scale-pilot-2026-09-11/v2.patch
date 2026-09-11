@@ -1,0 +1,105 @@
+--- a/nwkit/shift_native_model.py
++++ b/nwkit/shift_native_model.py
+@@ -122,5 +122,3 @@
+-        for index, branch in enumerate(tree.branch_ids):
+-            if (
+-                branch in shifts
+-                and labels[index] == labels[tree.compiled.parents[index]]
+-            ):
++        for branch in shifts:
++            index = tree.indices_by_branch[branch]
++            if labels[index] == labels[tree.compiled.parents[index]]:
+@@ -135,6 +133,9 @@
+-        for index, branch in enumerate(tree.branch_ids):
+-            labels[index] = (
+-                aliases[branch]
+-                if branch in aliases
+-                else labels[tree.compiled.parents[index]]
+-            )
++        # Preorder makes each subtree contiguous. Apply ancestral regimes first,
++        # then overwrite their descendant intervals with each nested shift.
++        for index, group in sorted(
++            (tree.indices_by_branch[branch], group)
++            for branch, group in aliases.items()
++        ):
++            last_tip = tree.tip_intervals[index][1] - 1
++            stop = tree.compiled.leaf_indices[last_tip] + 1
++            labels[index:stop] = group
+--- a/nwkit/gaussian_whitening.py
++++ b/nwkit/gaussian_whitening.py
+@@ -12,0 +13 @@
++from scipy.linalg import qr
+@@ -72,0 +74,28 @@
++def _level_rotations(structure, precision_roots, slopes, innovations, root_variance):
++    """Eliminate independent nodes together when levels contain many nodes."""
++    n = len(precision_roots)
++    cosines, sines, scales, divisors = np.ones(n), np.zeros(n), np.ones(n), np.ones(n)
++    for destinations, first, second, rows in structure:
++        left, right = precision_roots[first], precision_roots[second]
++        paired = rows >= 0
++        norms = np.hypot(left[paired], right[paired])
++        cosines[destinations[paired]] = np.divide(
++            left[paired], norms, out=np.ones_like(norms), where=norms != 0
++        )
++        sines[destinations[paired]] = np.divide(
++            right[paired], norms, out=np.zeros_like(norms), where=norms != 0
++        )
++        roots = left.copy()
++        roots[paired] = norms
++        variance = np.where(destinations == 0, root_variance, innovations[destinations])
++        divisor = np.hypot(1.0, roots * np.sqrt(variance))
++        divisors[destinations] = divisor
++        scales[destinations] = 1 / divisor
++        precision_roots[destinations] = roots
++        nonroot = destinations != 0
++        precision_roots[destinations[nonroot]] *= (
++            slopes[destinations[nonroot]] / divisor[nonroot]
++        )
++    return cosines, sines, scales, divisors
++
++
+@@ -126,16 +155,25 @@
+-        cosines, sines, scales = np.ones(n), np.zeros(n), np.ones(n)
+-        for index, first, second, row in steps:
+-            precision_roots[index] = precision_roots[first]
+-            if row >= 0:
+-                left, right = precision_roots[first], precision_roots[second]
+-                norm = math.hypot(left, right)
+-                cosines[index], sines[index] = (
+-                    (left / norm, right / norm) if norm else (1.0, 0.0)
+-                )
+-                precision_roots[index] = norm
+-            variance = root_variance if index == 0 else innovations[index]
+-            divisor = math.hypot(1.0, precision_roots[index] * math.sqrt(variance))
+-            logdet += 2 * math.log(divisor)
+-            scales[index] = 1 / divisor
+-            if index:
+-                precision_roots[index] *= slopes[index] / divisor
++        if len(steps) >= 8 * len(structure):
++            cosines, sines, scales, divisors = _level_rotations(
++                structure, precision_roots, slopes, innovations, root_variance
++            )
++            # Retain the original determinant accumulation order.
++            for index, _, _, _ in steps:
++                logdet += 2 * math.log(divisors[index])
++        else:
++            # Narrow/deep trees do not amortize vectorized per-level setup.
++            cosines, sines, scales = np.ones(n), np.zeros(n), np.ones(n)
++            for index, first, second, row in steps:
++                precision_roots[index] = precision_roots[first]
++                if row >= 0:
++                    left, right = precision_roots[first], precision_roots[second]
++                    norm = math.hypot(left, right)
++                    cosines[index], sines[index] = (
++                        (left / norm, right / norm) if norm else (1.0, 0.0)
++                    )
++                    precision_roots[index] = norm
++                variance = root_variance if index == 0 else innovations[index]
++                divisor = math.hypot(1.0, precision_roots[index] * math.sqrt(variance))
++                logdet += 2 * math.log(divisor)
++                scales[index] = 1 / divisor
++                if index:
++                    precision_roots[index] *= slopes[index] / divisor
+@@ -208 +246 @@
+-    q, r = np.linalg.qr(predictors / norms)
++    q, r = qr(predictors / norms, mode="economic", check_finite=False)
