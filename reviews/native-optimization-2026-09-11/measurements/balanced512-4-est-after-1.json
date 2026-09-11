@@ -1,0 +1,581 @@
+{
+  "scope": "single search; excludes calibration/support; not a speedup claim",
+  "configuration": {
+    "tips": 512,
+    "traits": 4,
+    "shifts": 3,
+    "candidate_pool": 24,
+    "refit_budget": 24,
+    "screening_budget": 1000,
+    "beam_width": 2,
+    "search_memory_mb": 512,
+    "convergence": true,
+    "shape": "balanced",
+    "fit_covariance": true,
+    "compare_exhaustive": false,
+    "seed": 2026091001,
+    "output": "/Users/kf/repos/nwkit/reviews/native-optimization-2026-09-11/measurements/balanced512-4-est-after-1.json"
+  },
+  "input_sha256": "0cd025463aeb82045a9405e487f2c85cccc6f013067dd60c0660f55520aaa21a",
+  "wall_seconds": 19.72400024998933,
+  "peak_rss_bytes": 176844800,
+  "best_log_likelihood": -2919.311820869381,
+  "selected_shifts_without_penalty_or_calibration": [
+    1,
+    676,
+    747
+  ],
+  "largest_fitted_shift_count": 3,
+  "metadata": {
+    "strategy": "group_lasso_beam",
+    "complete_discrete_enumeration": false,
+    "continuous_global_optimum_certified": false,
+    "screening": {
+      "method": "null_whitened_group_lasso",
+      "total_branches": 1022,
+      "preliminary_branches": 96,
+      "pool_size": 24,
+      "pool": [
+        1,
+        2,
+        747,
+        676,
+        638,
+        522,
+        552,
+        669,
+        528,
+        984,
+        644,
+        1018,
+        976,
+        613,
+        866,
+        578,
+        758,
+        566,
+        745,
+        844,
+        1005,
+        657,
+        794,
+        1015
+      ],
+      "path": [
+        {
+          "relative_strength": 0.95,
+          "strength": 11.371883948984317,
+          "iterations": 61,
+          "kkt_residual": 9.428660434031232e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.43891950764785354,
+          "strength": 5.2540438988597105,
+          "iterations": 14,
+          "kkt_residual": 7.275167463370045e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.20278982546719382,
+          "strength": 2.4274761697344345,
+          "iterations": 21,
+          "kkt_residual": 7.543470381956285e-05,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.09369306352637355,
+          "strength": 1.1215438371018267,
+          "iterations": 16,
+          "kkt_residual": 0.00010253398205422119,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.04328811927685784,
+          "strength": 0.5181762829328614,
+          "iterations": 26,
+          "kkt_residual": 0.00011358842890106153,
+          "converged": true
+        },
+        {
+          "relative_strength": 0.02,
+          "strength": 0.23940808313651196,
+          "iterations": 45,
+          "kkt_residual": 0.00011868319883340425,
+          "converged": true
+        }
+      ],
+      "all_paths_converged": true,
+      "candidate_generation_only": true
+    },
+    "quick_evaluations": 324,
+    "refitted_candidates": 23,
+    "refit_budget": 24,
+    "screening_budget": 1000,
+    "budget_exhausted": false,
+    "refinement": "one_pass_drop_move_merge_split",
+    "candidate_ranking": "fixed_null_covariance_profiles; final candidates refitted without penalties"
+  },
+  "candidates": [
+    {
+      "shift_branch_ids": [],
+      "groups": [
+        [
+          0
+        ]
+      ],
+      "complexity": 0,
+      "log_likelihood": -3190.6047691993863,
+      "evaluations": 550,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -2940.9673436117655,
+      "evaluations": 512,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        2
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          2
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -2940.9673436117655,
+      "evaluations": 512,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -3179.8286152149126,
+      "evaluations": 546,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        638
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          638
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -3180.1616768987196,
+      "evaluations": 550,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2931.045873383764,
+      "evaluations": 505,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        745
+      ],
+      "groups": [
+        [
+          0,
+          745
+        ],
+        [
+          1
+        ]
+      ],
+      "complexity": 3,
+      "log_likelihood": -2941.3126012098764,
+      "evaluations": 476,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        2,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          2
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2931.045873383764,
+      "evaluations": 518,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        638
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          638
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2933.2059562292116,
+      "evaluations": 522,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        638,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          638
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -2923.2698574633387,
+      "evaluations": 508,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        676,
+        745
+      ],
+      "groups": [
+        [
+          0,
+          676,
+          745
+        ],
+        [
+          1
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2940.1853604342514,
+      "evaluations": 469,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        552,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          552,
+          747
+        ]
+      ],
+      "complexity": 5,
+      "log_likelihood": -2928.0822753691427,
+      "evaluations": 513,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        676,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          676
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -2919.311820869381,
+      "evaluations": 525,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        2,
+        676,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          2
+        ],
+        [
+          676
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -2919.311820869381,
+      "evaluations": 525,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        676
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          676
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2929.3575995260535,
+      "evaluations": 511,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        552,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          552
+        ],
+        [
+          747
+        ]
+      ],
+      "complexity": 6,
+      "log_likelihood": -2924.70669059748,
+      "evaluations": 541,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        552,
+        747
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          552,
+          747
+        ]
+      ],
+      "complexity": 3,
+      "log_likelihood": -3175.2066148970425,
+      "evaluations": 550,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        669
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          669
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2933.193619461782,
+      "evaluations": 495,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        747
+      ],
+      "groups": [
+        [
+          0,
+          747
+        ],
+        [
+          1
+        ]
+      ],
+      "complexity": 3,
+      "log_likelihood": -2949.9157327676344,
+      "evaluations": 468,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        745
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          1
+        ],
+        [
+          745
+        ]
+      ],
+      "complexity": 4,
+      "log_likelihood": -2934.9243731487245,
+      "evaluations": 509,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        1,
+        676
+      ],
+      "groups": [
+        [
+          0,
+          676
+        ],
+        [
+          1
+        ]
+      ],
+      "complexity": 3,
+      "log_likelihood": -2939.919407945843,
+      "evaluations": 523,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        669
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          669
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -3181.07465669362,
+      "evaluations": 549,
+      "complete_covariance_modes": true
+    },
+    {
+      "shift_branch_ids": [
+        676
+      ],
+      "groups": [
+        [
+          0
+        ],
+        [
+          676
+        ]
+      ],
+      "complexity": 2,
+      "log_likelihood": -3181.300462536943,
+      "evaluations": 547,
+      "complete_covariance_modes": true
+    }
+  ]
+}

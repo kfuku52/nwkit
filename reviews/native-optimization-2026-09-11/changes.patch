@@ -1,0 +1,257 @@
+--- a/nwkit/gaussian_whitening.py
++++ b/nwkit/gaussian_whitening.py
+@@ -9,0 +10 @@
++from functools import lru_cache
+@@ -36,31 +37,34 @@
+-def _batches(compiled, rotations, node_scales):
+-    heights = np.zeros(len(compiled.nodes), dtype=int)
+-    for i in compiled.postorder:
+-        if i:
+-            parent = compiled.parents[i]
+-            heights[parent] = max(heights[parent], heights[i] + 1)
+-    records = {}
+-    for destination, source, cosine, sine, row in rotations:
+-        if row == -1:
+-            records[destination] = [source, source, 1.0, 0.0, -1]
+-        else:
+-            records[destination][1:] = [source, cosine, sine, row]
+-    levels: dict[int, list[int]] = {}
+-    for destination in records:
+-        levels.setdefault(heights[destination], []).append(destination)
+-    scales = dict(node_scales)
+-    result = []
+-    for _, destinations in sorted(levels.items()):
+-        rows = [records[d] for d in destinations]
+-        result.append(
+-            _WhiteningBatch(
+-                np.array(destinations),
+-                np.array([r[0] for r in rows], dtype=int),
+-                np.array([r[1] for r in rows], dtype=int),
+-                np.array([r[2] for r in rows]),
+-                np.array([r[3] for r in rows]),
+-                np.array([r[4] for r in rows], dtype=int),
+-                np.array([scales[d] for d in destinations]),
+-            )
+-        )
+-    return tuple(result)
++@lru_cache(maxsize=16)
++def _whitening_structure(children, postorder, parents, observed):
++    """Cache topology only; covariance-dependent rotations are always rebuilt.
++
++    Keys contain immutable topology and the ordered observation mask, never tree
++    objects or numeric covariance values. The bounded cache retains no trait data.
++    """
++    heights = [0] * len(children)
++    active = set(observed)
++    steps = []
++    levels: dict[int, list[tuple[int, int, int, int]]] = {}
++    row = 0
++    for index in postorder:
++        if index:
++            parent = parents[index]
++            heights[parent] = max(heights[parent], heights[index] + 1)
++        sources = [child for child in children[index] if child in active]
++        if not sources:
++            continue
++        active.add(index)
++        paired = len(sources) == 2
++        step = (index, sources[0], sources[-1], row if paired else -1)
++        steps.append(step)
++        levels.setdefault(heights[index], []).append(step)
++        row += paired
++    batches = []
++    for _, records in sorted(levels.items()):
++        columns = tuple(
++            np.array(column, dtype=int) for column in zip(*records, strict=True)
++        )
++        for column in columns:
++            column.flags.writeable = False
++        batches.append(columns)
++    return tuple(steps), tuple(batches), row
+@@ -118 +122,3 @@
+-        active = set(indices)
++        steps, structure, rows = _whitening_structure(
++            compiled.children, compiled.postorder, compiled.parents, indices
++        )
+@@ -120,9 +126,2 @@
+-        rotations = []
+-        node_scales = []
+-        row = 0
+-        for index in compiled.postorder:
+-            children = [child for child in compiled.children[index] if child in active]
+-            if not children:
+-                continue
+-            active.add(index)
+-            first = children[0]
++        cosines, sines, scales = np.ones(n), np.zeros(n), np.ones(n)
++        for index, first, second, row in steps:
+@@ -130,3 +129,2 @@
+-            rotations.append((index, first, 0.0, 1.0, -1))
+-            for child in children[1:]:
+-                left, right = precision_roots[index], precision_roots[child]
++            if row >= 0:
++                left, right = precision_roots[first], precision_roots[second]
+@@ -134,2 +132,3 @@
+-                cosine, sine = (left / norm, right / norm) if norm else (1.0, 0.0)
+-                rotations.append((index, child, cosine, sine, row))
++                cosines[index], sines[index] = (
++                    (left / norm, right / norm) if norm else (1.0, 0.0)
++                )
+@@ -137 +135,0 @@
+-                row += 1
+@@ -141 +139 @@
+-            node_scales.append((index, 1 / divisor))
++            scales[index] = 1 / divisor
+@@ -144 +142 @@
+-        if row != len(indices) - 1 or not math.isfinite(logdet):
++        if rows != len(indices) - 1 or not math.isfinite(logdet):
+@@ -146,3 +144,13 @@
+-        return cls(
+-            n, indices, leaf_scales, _batches(compiled, rotations, node_scales), logdet
+-        )
++        batches = tuple(
++            _WhiteningBatch(
++                destinations,
++                first,
++                second,
++                cosines[destinations],
++                sines[destinations],
++                residual_rows,
++                scales[destinations],
++            )
++            for destinations, first, second, residual_rows in structure
++        )
++        return cls(n, indices, leaf_scales, batches, logdet)
+--- a/nwkit/shift_native_quick.py
++++ b/nwkit/shift_native_quick.py
+@@ -18,2 +18 @@
+-        design, all_branches = descendant_design(data.tree)
+-        design = design[:, [all_branches.index(b) for b in branches]]
++        design, _ = descendant_design(data.tree, branches)
+--- a/nwkit/shift_native_screen.py
++++ b/nwkit/shift_native_screen.py
+@@ -13,5 +13,12 @@
+-
+-def descendant_design(tree):
+-    """Contiguous preorder tip intervals avoid repeated descendant traversals."""
+-    n = len(tree.leaf_names)
+-    matrix = np.zeros((n, len(tree.branch_ids) - 1))
++# Bound temporary whitening storage independently of the number of branches.
++_SCREEN_BLOCK_COLUMNS = 512
++
++
++def _screen_block_width(factor):
++    # Deep trees have many small rotation batches: amortize their traversal over
++    # more columns. Round up to a power of two, with bounded temporary storage.
++    traversal_width = 1 << (2 * len(factor.batches) - 1).bit_length()
++    return min(4096, max(_SCREEN_BLOCK_COLUMNS, traversal_width))
++
++
++def _descendant_intervals(tree):
+@@ -19,4 +25,0 @@
+-    columns = {
+-        branch: column
+-        for column, branch in enumerate(sorted(set(tree.branch_ids) - {0}))
+-    }
+@@ -24,10 +27,25 @@
+-        if tree.compiled.children[index]:
+-            intervals = [ranges[child] for child in tree.compiled.children[index]]
+-            ranges[index] = (intervals[0][0], intervals[-1][1])
+-        if index:
+-            first, last = ranges[index]
+-            matrix[first:last, columns[tree.branch_ids[index]]] = 1
+-    return matrix, tuple(columns)
+-
+-
+-def _effect_design(tree, design, alpha):
++        children = tree.compiled.children[index]
++        if children:
++            ranges[index] = (ranges[children[0]][0], ranges[children[-1]][1])
++    return {tree.branch_ids[index]: interval for index, interval in ranges.items()}
++
++
++def descendant_design(tree, branches=None):
++    """Construct only requested columns using contiguous descendant intervals."""
++    branches = tuple(
++        sorted(set(tree.branch_ids) - {0}) if branches is None else branches
++    )
++    return _interval_design(
++        len(tree.leaf_names), _descendant_intervals(tree), branches
++    ), branches
++
++
++def _interval_design(tips, intervals, branches):
++    matrix = np.zeros((tips, len(branches)))
++    for column, branch in enumerate(branches):
++        first, last = intervals[branch]
++        matrix[first:last, column] = 1
++    return matrix
++
++
++def _effect_design(tree, design, alpha, branches=None):
+@@ -38 +56 @@
+-    branches = sorted(set(tree.branch_ids) - {0})
++    branches = sorted(set(tree.branch_ids) - {0}) if branches is None else branches
+@@ -56 +74,2 @@
+-    # Retained standardized matrices plus one working tree matrix and raw design.
++    # Keep the existing conservative admission budget. Blocking reduces actual
++    # temporary storage, but this guard is not a whole-process peak RAM bound.
+@@ -64 +83,2 @@
+-    design, branches = descendant_design(data.tree)
++    branches = tuple(sorted(set(data.tree.branch_ids) - {0}))
++    intervals = _descendant_intervals(data.tree)
+@@ -84,8 +104,24 @@
+-        trait_design = (
+-            _effect_design(data.tree, design, fit.alpha_height)
+-            if optimum_increments
+-            else design
+-        )
+-        white = factor.apply(
+-            np.column_stack(
+-                (np.ones(np.sum(mask)), data.values[mask, trait], trait_design[mask])
++        x = np.empty((sum(mask), len(branches)))
++        white_squared_norm = 0.0
++        block_width = _screen_block_width(factor)
++        for first in range(0, len(branches), block_width):
++            selected = branches[first : first + block_width]
++            design = _interval_design(n, intervals, selected)
++            if optimum_increments:
++                design = _effect_design(data.tree, design, fit.alpha_height, selected)
++            if first == 0:
++                # Share the first traversal with the response and intercept,
++                # especially when a deep tree fits into one column block.
++                white = factor.apply(
++                    np.column_stack(
++                        (np.ones(sum(mask)), data.values[mask, trait], design[mask])
++                    )
++                )
++                intercept = white[:, 0] / np.linalg.norm(white[:, 0])
++                y = white[:, 1] - intercept * (intercept @ white[:, 1])
++                white = white[:, 2:]
++            else:
++                white = factor.apply(design[mask])
++            white_squared_norm += float(np.sum(white * white))
++            x[:, first : first + len(selected)] = (
++                white - intercept[:, None] * (intercept @ white)[None, :]
+@@ -93,4 +128,0 @@
+-        )
+-        intercept = white[:, 0] / np.linalg.norm(white[:, 0])
+-        y = white[:, 1] - intercept * (intercept @ white[:, 1])
+-        x = white[:, 2:] - intercept[:, None] * (intercept @ white[:, 2:])[None, :]
+@@ -98,6 +130,10 @@
+-        informative = (
+-            norms > np.finfo(float).eps * max(1.0, np.linalg.norm(white[:, 2:])) * 100
+-        )
+-        if not optimum_increments:
+-            x[:, informative] /= norms[informative]
+-        x[:, ~informative] = 0
++        # Preserve the full-design threshold, not a block-dependent threshold.
++        informative = norms > (
++            np.finfo(float).eps * max(1.0, np.sqrt(white_squared_norm)) * 100
++        )
++        for first in range(0, len(branches), block_width):
++            block = x[:, first : first + block_width]
++            keep = informative[first : first + block_width]
++            if not optimum_increments:
++                block[:, keep] /= norms[first : first + block_width][keep]
++            block[:, ~keep] = 0

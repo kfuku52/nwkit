@@ -89,11 +89,24 @@ and thread limits between source snapshots.
 
 ## Remaining scale work
 
+Screening now constructs and whitens branch columns in blocks of 512–4,096 columns,
+using wider blocks for deep trees to amortize traversal costs. Candidate profiles
+construct only their requested branch columns. The final
+whitened screening matrices are still dense; this is a reduction in temporary
+storage, not a matrix-free algorithm. The existing conservative screening
+admission budget is retained and does not bound whole-process peak RAM.
+
+Repeated covariance fits also reuse a bounded cache of tree topology and ordered
+observed-tip indices. Covariance-dependent rotations, variances and determinants
+are recomputed on every fit. The cache holds at most 16 structures and no trait
+values or fitted covariance parameters. Measurements and numerical comparisons
+are in [the optimization report](reviews/native-optimization-2026-09-11/REPORT.md).
+
 - Structural rank checks and final covariance estimation remain outside the
   compressed candidate kernel. Profile full searches before selecting the next
   optimization.
-- Screening constructs dense tip-by-branch matrices. Its memory budget is a
-  screening guard, not a bound on peak RAM of the complete analysis.
+- Screening retains dense tip-by-branch matrices. Matrix-free products remain
+  a separate scale improvement to evaluate.
 - Candidate, scoring and refit budgets must permit the requested complexity.
   Shared-regime search has many more candidates than distinct-regime search.
 - Calibration repeats the complete configured search; support bootstrap nests

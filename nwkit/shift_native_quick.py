@@ -15,8 +15,7 @@ class NativeQuickProfile:
         self.columns = {branch: i for i, branch in enumerate(branches)}
         self.node_indices = {b: i for i, b in enumerate(data.tree.branch_ids)}
         self.age = self._ages()
-        design, all_branches = descendant_design(data.tree)
-        design = design[:, [all_branches.index(b) for b in branches]]
+        design, _ = descendant_design(data.tree, branches)
         dimension = len(data.trait_names)
         alphas = [np.asarray([fit.alpha_height for fit in null_fit["fits"]])]
         if fixed_alpha is None:

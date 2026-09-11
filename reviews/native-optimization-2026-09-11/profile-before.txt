@@ -1,0 +1,43 @@
+Fri Sep 11 09:17:53 2026    /tmp/nwkit-shift-opt-20260911/search.prof
+
+         20671254 function calls (20649070 primitive calls) in 11.895 seconds
+
+   Ordered by: cumulative time
+   List reduced from 4259 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+   1134/1    0.028    0.000   11.974   11.974 {built-in method builtins.exec}
+        1    0.000    0.000   11.974   11.974 benchmark_native_search.py:1(<module>)
+        1    0.000    0.000   10.781   10.781 benchmark_native_search.py:20(main)
+        1    0.000    0.000   10.768   10.768 shift_native_heuristic.py:239(heuristic_native_search)
+       23    0.000    0.000   10.324    0.449 shift_native_search.py:134(evaluate)
+       23    0.001    0.000   10.324    0.449 shift_native_fit.py:419(fit_native_layout)
+       46    0.001    0.000   10.293    0.224 shift_native_fit.py:273(fit_native_trait)
+      138    0.001    0.000   10.272    0.074 shift_native_fit.py:235(_profile_alpha)
+     6510    0.007    0.000   10.157    0.002 shift_native_fit.py:162(at_alpha)
+     6510    0.064    0.000   10.150    0.002 shift_native_fit.py:106(analytic_scale)
+       46    0.003    0.000   10.058    0.219 optimization.py:77(global_bounded_scalar_minimize)
+     6372    0.012    0.000    9.958    0.002 shift_native_fit.py:243(objective)
+     6510    0.059    0.000    9.912    0.002 shift_native_fit.py:93(evaluate)
+        9    0.000    0.000    9.901    1.100 shift_native_heuristic.py:152(refit)
+     6510    0.278    0.000    9.853    0.002 shift_native_model.py:298(evaluate_trait)
+      184    0.001    0.000    8.832    0.048 optimization.py:61(_bounded_scalar_minimize)
+      184    0.003    0.000    8.825    0.048 _minimize.py:785(minimize_scalar)
+      184    0.079    0.000    8.820    0.048 _optimize.py:2251(_minimize_scalar_bounded)
+     6518    2.916    0.000    6.807    0.001 gaussian_whitening.py:79(build)
+        1    0.000    0.000    5.642    5.642 shift_native_heuristic.py:180(forward)
+        1    0.000    0.000    4.620    4.620 shift_native_heuristic.py:223(refine)
+       90    0.003    0.000    3.059    0.034 __init__.py:1(<module>)
+     6510    0.228    0.000    2.434    0.000 gaussian_whitening.py:188(tree_gls)
+     6518    1.369    0.000    2.373    0.000 gaussian_whitening.py:36(_batches)
+       46    0.001    0.000    1.219    0.027 optimization.py:86(<listcomp>)
+     6518    1.136    0.000    1.198    0.000 gaussian_whitening.py:150(apply)
+    975/9    0.004    0.000    1.195    0.133 <frozen importlib._bootstrap>:1022(_find_and_load)
+    944/9    0.003    0.000    1.194    0.133 <frozen importlib._bootstrap>:987(_find_and_load_unlocked)
+    901/9    0.003    0.000    1.193    0.133 <frozen importlib._bootstrap>:664(_load_unlocked)
+    751/8    0.001    0.000    1.192    0.149 <frozen importlib._bootstrap_external>:877(exec_module)
+  1327/12    0.001    0.000    1.188    0.099 <frozen importlib._bootstrap>:233(_call_with_frames_removed)
+        1    0.000    0.000    1.030    1.030 benchmark_native_shift.py:1(<module>)
+   606/78    0.001    0.000    0.851    0.011 {built-in method builtins.__import__}
+        1    0.000    0.000    0.757    0.757 shift_native_model.py:1(<module>)
+        2    0.000    0.000    0.751    0.375 util.py:1(<module>)

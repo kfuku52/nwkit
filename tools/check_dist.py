@@ -88,6 +88,13 @@ def main() -> int:
 
     with tarfile.open(sdist, "r:gz") as archive:
         sdist_members = set(archive.getnames())
+    if any(
+        "__pycache__" in member.split("/") or member.endswith((".pyc", ".pyo"))
+        for member in sdist_members
+    ):
+        raise RuntimeError(
+            "Source distribution contains Python bytecode or cache directories."
+        )
     required_sdist = {"/" + member for member in required_wheel} | {
         "/BRANCH_GAUSSIAN.md",
         "/examples/branch_gaussian/mixed_process.py",
@@ -135,6 +142,11 @@ def main() -> int:
         "/NATIVE_SHIFT.md",
         "/NATIVE_SHIFT_VALIDATION.md",
         "/NATIVE_SHIFT_SCALING.md",
+        "/reviews/native-optimization-2026-09-11/REPORT.md",
+        "/reviews/native-optimization-2026-09-11/run_benchmarks.py",
+        "/reviews/native-optimization-2026-09-11/final-measurements/equivalence.json",
+        "/reviews/native-optimization-2026-09-11/final-measurements/manifest.json",
+        "/tools/benchmark_native_screen.py",
         "/SHIFT_VALIDATION.md",
         "/SHIFT_JOINT.md",
         "/SHIFT_PBIC.md",

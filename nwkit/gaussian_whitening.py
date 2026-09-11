@@ -7,6 +7,7 @@ The root has known mean zero and an explicitly supplied variance (zero is fixed)
 
 import math
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 
@@ -33,37 +34,40 @@ class _WhiteningBatch:
     scales: np.ndarray
 
 
-def _batches(compiled, rotations, node_scales):
-    heights = np.zeros(len(compiled.nodes), dtype=int)
-    for i in compiled.postorder:
-        if i:
-            parent = compiled.parents[i]
-            heights[parent] = max(heights[parent], heights[i] + 1)
-    records = {}
-    for destination, source, cosine, sine, row in rotations:
-        if row == -1:
-            records[destination] = [source, source, 1.0, 0.0, -1]
-        else:
-            records[destination][1:] = [source, cosine, sine, row]
-    levels: dict[int, list[int]] = {}
-    for destination in records:
-        levels.setdefault(heights[destination], []).append(destination)
-    scales = dict(node_scales)
-    result = []
-    for _, destinations in sorted(levels.items()):
-        rows = [records[d] for d in destinations]
-        result.append(
-            _WhiteningBatch(
-                np.array(destinations),
-                np.array([r[0] for r in rows], dtype=int),
-                np.array([r[1] for r in rows], dtype=int),
-                np.array([r[2] for r in rows]),
-                np.array([r[3] for r in rows]),
-                np.array([r[4] for r in rows], dtype=int),
-                np.array([scales[d] for d in destinations]),
-            )
+@lru_cache(maxsize=16)
+def _whitening_structure(children, postorder, parents, observed):
+    """Cache topology only; covariance-dependent rotations are always rebuilt.
+
+    Keys contain immutable topology and the ordered observation mask, never tree
+    objects or numeric covariance values. The bounded cache retains no trait data.
+    """
+    heights = [0] * len(children)
+    active = set(observed)
+    steps = []
+    levels: dict[int, list[tuple[int, int, int, int]]] = {}
+    row = 0
+    for index in postorder:
+        if index:
+            parent = parents[index]
+            heights[parent] = max(heights[parent], heights[index] + 1)
+        sources = [child for child in children[index] if child in active]
+        if not sources:
+            continue
+        active.add(index)
+        paired = len(sources) == 2
+        step = (index, sources[0], sources[-1], row if paired else -1)
+        steps.append(step)
+        levels.setdefault(heights[index], []).append(step)
+        row += paired
+    batches = []
+    for _, records in sorted(levels.items()):
+        columns = tuple(
+            np.array(column, dtype=int) for column in zip(*records, strict=True)
         )
-    return tuple(result)
+        for column in columns:
+            column.flags.writeable = False
+        batches.append(columns)
+    return tuple(steps), tuple(batches), row
 
 
 @dataclass(frozen=True)
@@ -115,37 +119,41 @@ class TreeWhitening:
         leaf_scales = 1 / np.sqrt(variances)
         precision_roots = np.zeros(n)
         precision_roots[list(indices)] = slopes[list(indices)] * leaf_scales
-        active = set(indices)
+        steps, structure, rows = _whitening_structure(
+            compiled.children, compiled.postorder, compiled.parents, indices
+        )
         logdet = float(np.log(variances).sum())
-        rotations = []
-        node_scales = []
-        row = 0
-        for index in compiled.postorder:
-            children = [child for child in compiled.children[index] if child in active]
-            if not children:
-                continue
-            active.add(index)
-            first = children[0]
+        cosines, sines, scales = np.ones(n), np.zeros(n), np.ones(n)
+        for index, first, second, row in steps:
             precision_roots[index] = precision_roots[first]
-            rotations.append((index, first, 0.0, 1.0, -1))
-            for child in children[1:]:
-                left, right = precision_roots[index], precision_roots[child]
+            if row >= 0:
+                left, right = precision_roots[first], precision_roots[second]
                 norm = math.hypot(left, right)
-                cosine, sine = (left / norm, right / norm) if norm else (1.0, 0.0)
-                rotations.append((index, child, cosine, sine, row))
+                cosines[index], sines[index] = (
+                    (left / norm, right / norm) if norm else (1.0, 0.0)
+                )
                 precision_roots[index] = norm
-                row += 1
             variance = root_variance if index == 0 else innovations[index]
             divisor = math.hypot(1.0, precision_roots[index] * math.sqrt(variance))
             logdet += 2 * math.log(divisor)
-            node_scales.append((index, 1 / divisor))
+            scales[index] = 1 / divisor
             if index:
                 precision_roots[index] *= slopes[index] / divisor
-        if row != len(indices) - 1 or not math.isfinite(logdet):
+        if rows != len(indices) - 1 or not math.isfinite(logdet):
             raise ValueError("Invalid or unrepresentable Gaussian elimination.")
-        return cls(
-            n, indices, leaf_scales, _batches(compiled, rotations, node_scales), logdet
+        batches = tuple(
+            _WhiteningBatch(
+                destinations,
+                first,
+                second,
+                cosines[destinations],
+                sines[destinations],
+                residual_rows,
+                scales[destinations],
+            )
+            for destinations, first, second, residual_rows in structure
         )
+        return cls(n, indices, leaf_scales, batches, logdet)
 
     def apply(self, values):
         matrix = np.asarray(values, dtype=float)

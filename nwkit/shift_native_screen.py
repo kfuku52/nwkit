@@ -10,32 +10,50 @@ import numpy as np
 from nwkit.gaussian_whitening import TreeWhitening
 from nwkit.shift_native_model import covariance_geometry
 
+# Bound temporary whitening storage independently of the number of branches.
+_SCREEN_BLOCK_COLUMNS = 512
 
-def descendant_design(tree):
-    """Contiguous preorder tip intervals avoid repeated descendant traversals."""
-    n = len(tree.leaf_names)
-    matrix = np.zeros((n, len(tree.branch_ids) - 1))
+
+def _screen_block_width(factor):
+    # Deep trees have many small rotation batches: amortize their traversal over
+    # more columns. Round up to a power of two, with bounded temporary storage.
+    traversal_width = 1 << (2 * len(factor.batches) - 1).bit_length()
+    return min(4096, max(_SCREEN_BLOCK_COLUMNS, traversal_width))
+
+
+def _descendant_intervals(tree):
     ranges = {node: (i, i + 1) for i, node in enumerate(tree.compiled.leaf_indices)}
-    columns = {
-        branch: column
-        for column, branch in enumerate(sorted(set(tree.branch_ids) - {0}))
-    }
     for index in tree.compiled.postorder:
-        if tree.compiled.children[index]:
-            intervals = [ranges[child] for child in tree.compiled.children[index]]
-            ranges[index] = (intervals[0][0], intervals[-1][1])
-        if index:
-            first, last = ranges[index]
-            matrix[first:last, columns[tree.branch_ids[index]]] = 1
-    return matrix, tuple(columns)
+        children = tree.compiled.children[index]
+        if children:
+            ranges[index] = (ranges[children[0]][0], ranges[children[-1]][1])
+    return {tree.branch_ids[index]: interval for index, interval in ranges.items()}
 
 
-def _effect_design(tree, design, alpha):
+def descendant_design(tree, branches=None):
+    """Construct only requested columns using contiguous descendant intervals."""
+    branches = tuple(
+        sorted(set(tree.branch_ids) - {0}) if branches is None else branches
+    )
+    return _interval_design(
+        len(tree.leaf_names), _descendant_intervals(tree), branches
+    ), branches
+
+
+def _interval_design(tips, intervals, branches):
+    matrix = np.zeros((tips, len(branches)))
+    for column, branch in enumerate(branches):
+        first, last = intervals[branch]
+        matrix[first:last, column] = 1
+    return matrix
+
+
+def _effect_design(tree, design, alpha, branches=None):
     """Unstandardized optimum-increment columns, including near-ultrametric tips."""
     depths = tree.times.copy()
     for i in range(1, len(depths)):
         depths[i] += depths[tree.compiled.parents[i]]
-    branches = sorted(set(tree.branch_ids) - {0})
+    branches = sorted(set(tree.branch_ids) - {0}) if branches is None else branches
     indices = {branch: i for i, branch in enumerate(tree.branch_ids)}
     parents = [tree.compiled.parents[indices[b]] for b in branches]
     ages = np.maximum(
@@ -53,7 +71,8 @@ def _effect_design(tree, design, alpha):
 
 def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False):
     n, p = data.values.shape
-    # Retained standardized matrices plus one working tree matrix and raw design.
+    # Keep the existing conservative admission budget. Blocking reduces actual
+    # temporary storage, but this guard is not a whole-process peak RAM bound.
     estimated = (
         8 * n * (len(data.tree.branch_ids) - 1) * (p + (8 if optimum_increments else 4))
     )
@@ -61,7 +80,8 @@ def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False
         raise ValueError(
             f"Group-lasso screening needs approximately {estimated} bytes; increase --search-memory-mb or reduce the input."
         )
-    design, branches = descendant_design(data.tree)
+    branches = tuple(sorted(set(data.tree.branch_ids) - {0}))
+    intervals = _descendant_intervals(data.tree)
     matrices, responses = [], []
     for trait, fit in enumerate(null_fit["fits"]):
         mask = np.isfinite(data.values[:, trait])
@@ -81,26 +101,42 @@ def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False
             data.variances[mask, trait] + fit.measurement_variance,
             root_variance=root_variance,
         )
-        trait_design = (
-            _effect_design(data.tree, design, fit.alpha_height)
-            if optimum_increments
-            else design
-        )
-        white = factor.apply(
-            np.column_stack(
-                (np.ones(np.sum(mask)), data.values[mask, trait], trait_design[mask])
+        x = np.empty((sum(mask), len(branches)))
+        white_squared_norm = 0.0
+        block_width = _screen_block_width(factor)
+        for first in range(0, len(branches), block_width):
+            selected = branches[first : first + block_width]
+            design = _interval_design(n, intervals, selected)
+            if optimum_increments:
+                design = _effect_design(data.tree, design, fit.alpha_height, selected)
+            if first == 0:
+                # Share the first traversal with the response and intercept,
+                # especially when a deep tree fits into one column block.
+                white = factor.apply(
+                    np.column_stack(
+                        (np.ones(sum(mask)), data.values[mask, trait], design[mask])
+                    )
+                )
+                intercept = white[:, 0] / np.linalg.norm(white[:, 0])
+                y = white[:, 1] - intercept * (intercept @ white[:, 1])
+                white = white[:, 2:]
+            else:
+                white = factor.apply(design[mask])
+            white_squared_norm += float(np.sum(white * white))
+            x[:, first : first + len(selected)] = (
+                white - intercept[:, None] * (intercept @ white)[None, :]
             )
-        )
-        intercept = white[:, 0] / np.linalg.norm(white[:, 0])
-        y = white[:, 1] - intercept * (intercept @ white[:, 1])
-        x = white[:, 2:] - intercept[:, None] * (intercept @ white[:, 2:])[None, :]
         norms = np.linalg.norm(x, axis=0)
-        informative = (
-            norms > np.finfo(float).eps * max(1.0, np.linalg.norm(white[:, 2:])) * 100
+        # Preserve the full-design threshold, not a block-dependent threshold.
+        informative = norms > (
+            np.finfo(float).eps * max(1.0, np.sqrt(white_squared_norm)) * 100
         )
-        if not optimum_increments:
-            x[:, informative] /= norms[informative]
-        x[:, ~informative] = 0
+        for first in range(0, len(branches), block_width):
+            block = x[:, first : first + block_width]
+            keep = informative[first : first + block_width]
+            if not optimum_increments:
+                block[:, keep] /= norms[first : first + block_width][keep]
+            block[:, ~keep] = 0
         matrices.append(x)
         responses.append(y)
     return matrices, responses, branches
