@@ -1,6 +1,8 @@
 """External library discovery and explicit setup never build during analysis."""
 
 import json
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -90,7 +92,27 @@ def test_library_setup_requires_a_library_not_an_executable(tmp_path):
         iqtree_library.build_worker(tmp_path, tmp_path / "install")
 
 
-def test_adapter_build_reuses_matching_compile_settings(tmp_path, monkeypatch):
+@pytest.mark.parametrize(
+    "cache_lines, expected_zlib",
+    [
+        ("", None),
+        (
+            "ZLIB_LIBRARY_RELEASE:FILEPATH=/path with spaces/libz.so\n",
+            "/path with spaces/libz.so",
+        ),
+        ("ZLIB_LIBRARY_RELEASE:FILEPATH=ZLIB_LIBRARY_RELEASE-NOTFOUND\n", None),
+        (
+            "CMAKE_BUILD_TYPE:STRING=Debug\nZLIB_LIBRARY_DEBUG:FILEPATH=/debug/libz.a\n"
+            "ZLIB_LIBRARY_RELEASE:FILEPATH=/release/libz.a\n",
+            "/debug/libz.a",
+        ),
+        ("IQTREE_FLAGS:STRING=static\nZLIB_LIBRARY_RELEASE:FILEPATH=/libz.so\n", None),
+        ("IQTREE_FLAGS:STRING=nozlib\nZLIB_LIBRARY_RELEASE:FILEPATH=/libz.so\n", None),
+    ],
+)
+def test_adapter_build_reuses_matching_compile_settings(
+    tmp_path, monkeypatch, cache_lines, expected_zlib
+):
     upstream = tmp_path / "official source"
     (upstream / "tree").mkdir(parents=True)
     (upstream / "tree/phylotree.h").touch()
@@ -99,7 +121,7 @@ def test_adapter_build_reuses_matching_compile_settings(tmp_path, monkeypatch):
     (build / "CMakeCache.txt").write_text(
         "BUILD_LIB:BOOL=ON\nCMAKE_BUILD_TYPE:STRING=Release\n"
         f"CMAKE_HOME_DIRECTORY:INTERNAL={upstream}\n"
-        "CMAKE_EXE_LINKER_FLAGS:STRING=-pthread\n"
+        "CMAKE_EXE_LINKER_FLAGS:STRING=-pthread\n" + cache_lines
     )
     original = str(upstream / "main/main.cpp")
     (build / "compile_commands.json").write_text(
@@ -137,6 +159,10 @@ def test_adapter_build_reuses_matching_compile_settings(tmp_path, monkeypatch):
     assert str(source) in command and str(library) in command
     assert "-Llibrary path" in command
     assert command[command.index("-o") + 1] == str(output)
+    if expected_zlib:
+        assert command.index(expected_zlib) > command.index(str(library))
+    else:
+        assert not any("libz." in argument for argument in command)
 
 
 def test_check_auto_reports_absence_without_installing(monkeypatch, capsys):
@@ -158,3 +184,66 @@ def test_source_distribution_contains_no_iqtree_implementation():
     source = Path(iqtree_library.__file__).with_name("data_iqtree")
     assert [p.name for p in source.iterdir()] == ["worker.cpp"]
     assert "SPDX-License-Identifier: MIT" in (source / "worker.cpp").read_text()
+
+
+@pytest.mark.skipif(
+    not sys.platform.startswith("linux")
+    or not shutil.which("c++")
+    or not shutil.which("ar"),
+    reason="Requires a Linux C++ toolchain and zlib development library",
+)
+def test_adapter_command_links_archive_that_uses_system_zlib(tmp_path):
+    compiler = shutil.which("c++")
+    zlib = subprocess.check_output(
+        [compiler, "-print-file-name=libz.so"], text=True
+    ).strip()
+    if zlib == "libz.so":
+        pytest.skip("System zlib development library is unavailable")
+    upstream = tmp_path / "source"
+    (upstream / "tree").mkdir(parents=True)
+    (upstream / "tree/phylotree.h").touch()
+    build = tmp_path / "build"
+    build.mkdir()
+    original = str(upstream / "main/main.cpp")
+    (build / "CMakeCache.txt").write_text(
+        "BUILD_LIB:BOOL=ON\nCMAKE_BUILD_TYPE:STRING=Release\n"
+        f"CMAKE_HOME_DIRECTORY:INTERNAL={upstream}\n"
+        f"ZLIB_LIBRARY_RELEASE:FILEPATH={zlib}\n"
+    )
+    (build / "compile_commands.json").write_text(
+        json.dumps(
+            [
+                dict(
+                    directory=str(build),
+                    file=original,
+                    arguments=[compiler, "-c", original, "-o", "main.o"],
+                )
+            ]
+        )
+    )
+    implementation = tmp_path / "archive.cpp"
+    implementation.write_text(
+        'extern "C" const char* zlibVersion();\n'
+        "const char* library_version() { return zlibVersion(); }\n"
+    )
+    obj, library = tmp_path / "archive.o", build / "libiqtree.a"
+    subprocess.run([compiler, "-c", str(implementation), "-o", str(obj)], check=True)
+    subprocess.run(["ar", "rcs", str(library), str(obj)], check=True)
+    source, output = tmp_path / "worker.cpp", tmp_path / "worker"
+    source.write_text(
+        "const char* library_version();\n"
+        "int main() { return library_version()[0] ? 0 : 1; }\n"
+    )
+    command, cwd, _ = iqtree_library._compile_command(
+        build, source, output, library, {}
+    )
+    broken = subprocess.run(
+        [arg for arg in command if arg != zlib],
+        cwd=cwd,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert broken.returncode != 0 and "zlibVersion" in broken.stderr
+    subprocess.run(command, cwd=cwd, check=True)
+    subprocess.run([str(output)], check=True)

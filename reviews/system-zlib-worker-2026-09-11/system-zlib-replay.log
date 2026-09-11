@@ -1,0 +1,35 @@
+/usr/bin/ld: /tmp/iqtree-zlib/system-only/libiqtree.a(gzstream.cpp.o): in function `gzstreambuf::underflow()':
+/tmp/iqtree-zlib/source/utils/gzstream.cpp:121:(.text._ZN11gzstreambuf9underflowEv+0x78): undefined reference to `gzread'
+/usr/bin/ld: /tmp/iqtree-zlib/source/utils/gzstream.cpp:125:(.text._ZN11gzstreambuf9underflowEv+0x94): undefined reference to `gzoffset'
+/usr/bin/ld: /tmp/iqtree-zlib/system-only/libiqtree.a(gzstream.cpp.o): in function `gzstreambuf::open(char const*, int, int)':
+/tmp/iqtree-zlib/source/utils/gzstream.cpp:86:(.text._ZN11gzstreambuf4openEPKcii+0xb8): undefined reference to `gzopen'
+/usr/bin/ld: /tmp/iqtree-zlib/source/utils/gzstream.cpp:93:(.text._ZN11gzstreambuf4openEPKcii+0x16c): undefined reference to `gzsetparams'
+/usr/bin/ld: /tmp/iqtree-zlib/system-only/libiqtree.a(gzstream.cpp.o): in function `gzstreambuf::flush_buffer()':
+/tmp/iqtree-zlib/source/utils/gzstream.cpp:140:(.text._ZN11gzstreambuf12flush_bufferEv+0x24): undefined reference to `gzwrite'
+/usr/bin/ld: /tmp/iqtree-zlib/system-only/libiqtree.a(gzstream.cpp.o): in function `gzstreambuf::close()':
+/tmp/iqtree-zlib/source/utils/gzstream.cpp:103:(.text._ZN11gzstreambuf5closeEv+0x4c): undefined reference to `gzclose'
+/usr/bin/ld: /tmp/iqtree-zlib/source/utils/gzstream.cpp:103:(.text._ZN11gzstreambuf5closeEv+0x84): undefined reference to `gzclose'
+/usr/bin/ld: /tmp/iqtree-zlib/source/utils/gzstream.cpp:103:(.text._ZN11gzstreambuf5closeEv+0xac): undefined reference to `gzclose'
+/usr/bin/ld: /tmp/iqtree-zlib/system-only/libiqtree.a(gzstream.cpp.o): in function `gzstreambase::get_raw_bytes()':
+/tmp/iqtree-zlib/source/utils/gzstream.cpp:204:(.text._ZN12gzstreambase13get_raw_bytesEv+0x4): undefined reference to `gztell'
+collect2: error: ld returned 1 exit status
+IQ-TREE library setup failed: Command '['/usr/bin/c++', '-DBUILD_LIB', '-DIQTREE_TERRAPHAST', '-DIQ_TREE', '-DUSE_BOOST', '-DUSE_BOOSTER', '-DUSE_LSD2', '-D_USE_PTHREADS', '-D__NOAVX__', '-I/tmp/iqtree-zlib/source', '-I/tmp/iqtree-zlib/source/yaml-cpp/include', '-I/tmp/iqtree-zlib/build', '-fopenmp', '-pthread', '-O2', '-g', '-ffunction-sections', '-fdata-sections', '-fPIC', '-I/usr/include/eigen3', '-I/usr/include', '-D__SSE3', '-march=armv8-a+fp+simd+crypto+crc', '-DNWKIT_IQTREE_LIBRARY_SHA256="e43ac03400cc40497e8e5742d3e30b62da348c0cd4bf727965a3d73507f26cec"', '-DNWKIT_IQTREE_ADAPTER_SHA256="e36fa69a2981d099f96334d9cecea68d1d2da14368d382750ab50015dab18d04"', '-DNWKIT_IQTREE_SOURCE_REVISION="unavailable"', '/tmp/iqtree-zlib/old-adapter/data_iqtree/worker.cpp', '/tmp/iqtree-zlib/system-only/libiqtree.a', '-o', '/tmp/iqtree-zlib/system-old-install/bin/.nwkit-iqtree-build-_zxpns_i/nwkit-iqtree-worker', '-ldl', '-lm']' returned non-zero exit status 1.
+{
+  "executable": "/tmp/iqtree-zlib/system-install/bin/nwkit-iqtree-worker",
+  "protocol": 1,
+  "engine": "iqtree3",
+  "library_version": "3.1.4",
+  "library_sha256": "e43ac03400cc40497e8e5742d3e30b62da348c0cd4bf727965a3d73507f26cec",
+  "adapter_sha256": "e36fa69a2981d099f96334d9cecea68d1d2da14368d382750ab50015dab18d04",
+  "upstream_revision": "unavailable"
+}
+{
+  "executable": "/tmp/iqtree-zlib/system-install/bin/nwkit-iqtree-worker",
+  "protocol": 1,
+  "engine": "iqtree3",
+  "library_version": "3.1.4",
+  "library_sha256": "e43ac03400cc40497e8e5742d3e30b62da348c0cd4bf727965a3d73507f26cec",
+  "adapter_sha256": "e36fa69a2981d099f96334d9cecea68d1d2da14368d382750ab50015dab18d04",
+  "upstream_revision": "unavailable",
+  "worker_sha256": "d9f9947260976839978d6f08e6ed25e5a2499a6d05743daf18dcb54ee5302ca1"
+}

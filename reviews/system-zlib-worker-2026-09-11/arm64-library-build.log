@@ -1,0 +1,663 @@
+debconf: delaying package configuration, since apt-utils is not installed
+-- The C compiler identification is GNU 13.3.0
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found Boost: /usr/lib/aarch64-linux-gnu/cmake/Boost-1.83.0/BoostConfig.cmake (found version "1.83.0")
+-- Looking for gettimeofday
+-- Looking for gettimeofday - found
+-- Looking for getrusage
+-- Looking for getrusage - found
+-- Looking for GlobalMemoryStatusEx
+-- Looking for GlobalMemoryStatusEx - not found
+-- Looking for strndup
+-- Looking for strndup - found
+-- Looking for strtok_r
+-- Looking for strtok_r - found
+-- Looking for unistd.h
+-- Looking for unistd.h - found
+-- Looking for backtrace
+-- Looking for backtrace - found
+-- backtrace facility detected in default set of libraries
+-- Found Backtrace: /usr/include
+IQ-TREE flags :
+Build mode   : Release
+Build lib    : ON
+Unix/Linux ARM64 DETECTED!
+Integrate CMAPLE: OFF
+Integrate CMAPLE_AA: OFF
+Compile Rust Dependencies: OFF
+Build IQTREE library: ON
+Target OS     : Unix
+Compiler      : GNU Compiler (gcc)
+Compiler version: 13.3.0
+Target binary : 64-bit
+OpenMP        : Yes
+MPI           : NONE
+C flags       :  -pthread  -O2 -g -ffunction-sections -fdata-sections
+CXX flags     :  -fopenmp -pthread  -O2 -g -ffunction-sections -fdata-sections
+LINKER flags  :  -rdynamic  -Wl,--gc-sections
+-- Found ZLIB: /usr/lib/aarch64-linux-gnu/libz.so (found version "1.3")
+Using system zlib
+-- Performing Test FLAG_WEXTRA
+-- Performing Test FLAG_WEXTRA - Success
+-- clang-tidy not found.
+-- Configuring done (0.5s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/iqtree-zlib/build
+[  1%] Building CXX object CMakeFiles/kernelsse.dir/tree/phylokernelsse.cpp.o
+[  1%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/confidence_interval.cpp.o
+[  1%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/dating.cpp.o
+[  2%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/estimate_root.cpp.o
+[  2%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/lsd.cpp.o
+[  2%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/options.cpp.o
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp: In function ‘Pr* getInterface()’:
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:306:14: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  306 |         fgets(letter,3,stdin);
+      |         ~~~~~^~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:311:22: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  311 |                 fgets( letter1, 3, stdin );
+      |                 ~~~~~^~~~~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:338:10: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  338 |     fgets( letter, 3, stdin );
+      |     ~~~~~^~~~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:342:14: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  342 |         fgets( letter, 3, stdin );
+      |         ~~~~~^~~~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp: In function ‘void setOptionsWithLetter(Pr*, char)’:
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:872:22: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  872 |                 fgets(letter,3,stdin);
+      |                 ~~~~~^~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:877:30: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  877 |                         fgets( letter1, 3, stdin );
+      |                         ~~~~~^~~~~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/lsd2/src/options.cpp:923:22: warning: ignoring return value of ‘char* fgets(char*, int, FILE*)’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  923 |                 fgets( letter, 3, stdin );
+      |                 ~~~~~^~~~~~~~~~~~~~~~~~~~
+[  3%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/outliers.cpp.o
+[  3%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/readData.cpp.o
+[  3%] Building CXX object lsd2/CMakeFiles/lsd2.dir/src/utils.cpp.o
+[  4%] Linking CXX static library liblsd2.a
+[  4%] Built target lsd2
+[  4%] Building C object booster/CMakeFiles/booster.dir/bitset_index.c.o
+[  5%] Building C object booster/CMakeFiles/booster.dir/hashmap.c.o
+[  5%] Building C object booster/CMakeFiles/booster.dir/io.c.o
+[  5%] Building C object booster/CMakeFiles/booster.dir/sort.c.o
+[  6%] Building C object booster/CMakeFiles/booster.dir/tree.c.o
+[  6%] Building C object booster/CMakeFiles/booster.dir/booster.c.o
+[  6%] Building C object booster/CMakeFiles/booster.dir/hashtables_bfields.c.o
+[  7%] Building C object booster/CMakeFiles/booster.dir/prng.c.o
+[  7%] Building C object booster/CMakeFiles/booster.dir/stats.c.o
+[  7%] Building C object booster/CMakeFiles/booster.dir/tree_utils.c.o
+[  8%] Linking C static library libbooster.a
+[  8%] Built target booster
+[  9%] Building C object pll/CMakeFiles/pll.dir/alignment.c.o
+[  9%] Linking CXX static library libkernelsse.a
+[  9%] Built target kernelsse
+[  9%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsassumptionsblock.cpp.o
+[  9%] Building C object pll/CMakeFiles/pll.dir/bipartitionList.c.o
+In file included from /tmp/iqtree-zlib/source/pll/bipartitionList.c:29:
+/tmp/iqtree-zlib/source/pll/bipartitionList.c: In function ‘insertHashRF’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/bipartitionList.c:326:3: note: in expansion of macro ‘rax_posix_memalign’
+  326 |   rax_posix_memalign ((void **)&(e->bitVector), PLL_BYTE_ALIGNMENT, (size_t)vectorLength * sizeof(unsigned int));
+      |   ^~~~~~~~~~~~~~~~~~
+[  9%] Building C object pll/CMakeFiles/pll.dir/evaluateGenericSpecial.c.o
+[  9%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsblock.cpp.o
+[ 10%] Building C object pll/CMakeFiles/pll.dir/evaluatePartialGenericSpecial.c.o
+[ 11%] Building CXX object ncl/CMakeFiles/ncl.dir/nxscharactersblock.cpp.o
+In file included from /tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c:31:
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c: In function ‘evaluatePartialGTRCAT’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c:1173:3: note: in expansion of macro ‘rax_posix_memalign’
+ 1173 |   rax_posix_memalign ((void **) &lVector, PLL_BYTE_ALIGNMENT, sizeof(double) * 4 * mxtips);
+      |   ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c: In function ‘evaluatePartialGTRGAMMA’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c:1015:3: note: in expansion of macro ‘rax_posix_memalign’
+ 1015 |   rax_posix_memalign ((void **)&lVector, PLL_BYTE_ALIGNMENT, sizeof(double) * 16 * mxtips);
+      |   ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c: In function ‘evaluatePartialGTRCATPROT’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c:1324:3: note: in expansion of macro ‘rax_posix_memalign’
+ 1324 |   rax_posix_memalign ((void **)&lVector, PLL_BYTE_ALIGNMENT, sizeof(double) * 20 * mxtips);
+      |   ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c: In function ‘evaluatePartialGTRGAMMAPROT’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/evaluatePartialGenericSpecial.c:934:3: note: in expansion of macro ‘rax_posix_memalign’
+  934 |   rax_posix_memalign ((void **)&lVector, PLL_BYTE_ALIGNMENT, sizeof(double) * 80 * mxtips);
+      |   ^~~~~~~~~~~~~~~~~~
+[ 11%] Building C object pll/CMakeFiles/pll.dir/fastDNAparsimony.c.o
+In file included from /tmp/iqtree-zlib/source/pll/fastDNAparsimony.c:29:
+/tmp/iqtree-zlib/source/pll/fastDNAparsimony.c: In function ‘compressDNA’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/fastDNAparsimony.c:1701:7: note: in expansion of macro ‘rax_posix_memalign’
+ 1701 |       rax_posix_memalign ((void **) &(pr->partitionData[model]->parsVect), PLL_BYTE_ALIGNMENT, (size_t)compressedEntriesPadded * states * totalNodes * sizeof(parsimonyNumber));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/fastDNAparsimony.c:1777:3: note: in expansion of macro ‘rax_posix_memalign’
+ 1777 |   rax_posix_memalign ((void **) &(tr->parsimonyScore), PLL_BYTE_ALIGNMENT, sizeof(unsigned int) * totalNodes);
+      |   ^~~~~~~~~~~~~~~~~~
+[ 11%] Building C object pll/CMakeFiles/pll.dir/hardware.c.o
+/tmp/iqtree-zlib/source/pll/hardware.c: In function ‘pll_probe_cpu’:
+/tmp/iqtree-zlib/source/pll/hardware.c:97:9: warning: ignoring return value of ‘fscanf’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   97 |         fscanf (fd, "%d", &id);
+      |         ^~~~~~~~~~~~~~~~~~~~~~
+[ 12%] Building C object pll/CMakeFiles/pll.dir/hash.c.o
+[ 12%] Building C object pll/CMakeFiles/pll.dir/lexer.c.o
+[ 12%] Building C object pll/CMakeFiles/pll.dir/makenewzGenericSpecial.c.o
+In file included from /tmp/iqtree-zlib/source/pll/makenewzGenericSpecial.c:29:
+/tmp/iqtree-zlib/source/pll/makenewzGenericSpecial.c: In function ‘coreGTRCAT’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/makenewzGenericSpecial.c:2686:3: note: in expansion of macro ‘rax_posix_memalign’
+ 2686 |   rax_posix_memalign ((void **) &d_start, PLL_BYTE_ALIGNMENT, numberOfCategories * 4 * sizeof(double));
+      |   ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/makenewzGenericSpecial.c: In function ‘coreGTRCATPROT’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/makenewzGenericSpecial.c:3061:3: note: in expansion of macro ‘rax_posix_memalign’
+ 3061 |   rax_posix_memalign ((void **)&d_start, PLL_BYTE_ALIGNMENT, numberOfCategories * 20 * sizeof(double));
+      |   ^~~~~~~~~~~~~~~~~~
+[ 13%] Building C object pll/CMakeFiles/pll.dir/models.c.o
+[ 13%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsdatablock.cpp.o
+[ 13%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsdiscretedatum.cpp.o
+[ 14%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsdiscretematrix.cpp.o
+[ 14%] Building C object pll/CMakeFiles/pll.dir/newick.c.o
+[ 14%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsdistancedatum.cpp.o
+[ 14%] Building C object pll/CMakeFiles/pll.dir/newviewGenericSpecial.c.o
+In file included from /tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c:32:
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c: In function ‘pllNewviewIterative’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c:2766:13: note: in expansion of macro ‘rax_posix_memalign’
+ 2766 |             rax_posix_memalign ((void **)&x3_start, PLL_BYTE_ALIGNMENT, requiredLength);
+      |             ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c:2795:17: note: in expansion of macro ‘rax_posix_memalign’
+ 2795 |                 rax_posix_memalign ((void **)&ex3, PLL_BYTE_ALIGNMENT, requiredExpLength);
+      |                 ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c: In function ‘newviewAncestralIterative’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c:3733:11: note: in expansion of macro ‘rax_posix_memalign’
+ 3733 |           rax_posix_memalign ((void **)&diagptable, PLL_BYTE_ALIGNMENT, categories * states * states * sizeof(double));
+      |           ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c: In function ‘pllGetCLV’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/newviewGenericSpecial.c:3803:3: note: in expansion of macro ‘rax_posix_memalign’
+ 3803 |   rax_posix_memalign ((void **)&diagptable, PLL_BYTE_ALIGNMENT, categories * states * states * sizeof (double));
+      |   ^~~~~~~~~~~~~~~~~~
+[ 14%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsdistancesblock.cpp.o
+[ 15%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsemptyblock.cpp.o
+[ 15%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsexception.cpp.o
+[ 16%] Building C object pll/CMakeFiles/pll.dir/genericParallelization.c.o
+[ 16%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsreader.cpp.o
+[ 16%] Building C object pll/CMakeFiles/pll.dir/optimizeModel.c.o
+[ 17%] Building CXX object ncl/CMakeFiles/ncl.dir/nxssetreader.cpp.o
+[ 17%] Building C object pll/CMakeFiles/pll.dir/parsePartition.c.o
+[ 17%] Building CXX object ncl/CMakeFiles/ncl.dir/nxsstring.cpp.o
+[ 18%] Building C object pll/CMakeFiles/pll.dir/queue.c.o
+[ 18%] Building C object pll/CMakeFiles/pll.dir/randomTree.c.o
+[ 18%] Building CXX object ncl/CMakeFiles/ncl.dir/nxstaxablock.cpp.o
+[ 18%] Building C object pll/CMakeFiles/pll.dir/recom.c.o
+[ 19%] Building C object pll/CMakeFiles/pll.dir/restartHashTable.c.o
+[ 19%] Building C object pll/CMakeFiles/pll.dir/searchAlgo.c.o
+[ 20%] Building CXX object ncl/CMakeFiles/ncl.dir/nxstoken.cpp.o
+[ 20%] Building C object pll/CMakeFiles/pll.dir/ssort.c.o
+[ 20%] Building CXX object ncl/CMakeFiles/ncl.dir/nxstreesblock.cpp.o
+[ 21%] Building C object pll/CMakeFiles/pll.dir/stack.c.o
+[ 21%] Building C object pll/CMakeFiles/pll.dir/topologies.c.o
+[ 22%] Building C object pll/CMakeFiles/pll.dir/trash.c.o
+[ 22%] Linking CXX static library libncl.a
+[ 22%] Built target ncl
+[ 22%] Building C object pll/CMakeFiles/pll.dir/treeIO.c.o
+[ 22%] Building C object pll/CMakeFiles/pll.dir/utils.c.o
+In file included from /tmp/iqtree-zlib/source/pll/utils.c:44:
+/tmp/iqtree-zlib/source/pll/utils.c: In function ‘initializePartitionData’:
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:596:7: note: in expansion of macro ‘rax_posix_memalign’
+  596 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->left),  PLL_BYTE_ALIGNMENT, (size_t)pl->leftLength * (maxCategories + 1) * sizeof(double));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:597:7: note: in expansion of macro ‘rax_posix_memalign’
+  597 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->right), PLL_BYTE_ALIGNMENT, (size_t)pl->rightLength * (maxCategories + 1) * sizeof(double));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:599:7: note: in expansion of macro ‘rax_posix_memalign’
+  599 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->EV),    PLL_BYTE_ALIGNMENT, (size_t)pl->evLength * sizeof(double));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:605:7: note: in expansion of macro ‘rax_posix_memalign’
+  605 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->tipVector), PLL_BYTE_ALIGNMENT, (size_t)pl->tipVectorLength * sizeof(double));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:617:15: note: in expansion of macro ‘rax_posix_memalign’
+  617 |               rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->EV_LG4[k]), PLL_BYTE_ALIGNMENT, pl->evLength * sizeof(double));
+      |               ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:621:15: note: in expansion of macro ‘rax_posix_memalign’
+  621 |               rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->tipVector_LG4[k]), PLL_BYTE_ALIGNMENT, pl->tipVectorLength * sizeof(double));
+      |               ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:687:7: note: in expansion of macro ‘rax_posix_memalign’
+  687 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->sumBuffer), PLL_BYTE_ALIGNMENT, width *
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:694:7: note: in expansion of macro ‘rax_posix_memalign’
+  694 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->perSiteLikelihoods), PLL_BYTE_ALIGNMENT, width * sizeof(double));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:724:7: note: in expansion of macro ‘rax_posix_memalign’
+  724 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->ancestralBuffer), PLL_BYTE_ALIGNMENT, width *
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:744:7: note: in expansion of macro ‘rax_posix_memalign’
+  744 |       rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->wgt), PLL_BYTE_ALIGNMENT, width * sizeof(int));
+      |       ^~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/pll/mem_alloc.h:37:32: warning: ignoring return value of ‘posix_memalign’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+   37 |     #define rax_posix_memalign posix_memalign
+/tmp/iqtree-zlib/source/pll/utils.c:756:11: note: in expansion of macro ‘rax_posix_memalign’
+  756 |           rax_posix_memalign ((void **)&(localPartitions->partitionData[model]->gapColumn),PLL_BYTE_ALIGNMENT, ((size_t)localTree->mxtips) *
+      |           ^~~~~~~~~~~~~~~~~~
+[ 23%] Building CXX object nclextra/CMakeFiles/nclextra.dir/mpdablock.cpp.o
+[ 24%] Linking C static library libpll.a
+[ 24%] Built target pll
+[ 24%] Building C object sprng/CMakeFiles/sprng.dir/lcg64.c.o
+[ 24%] Building C object sprng/CMakeFiles/sprng.dir/makeseed.c.o
+[ 25%] Building C object sprng/CMakeFiles/sprng.dir/memory.c.o
+[ 25%] Building C object sprng/CMakeFiles/sprng.dir/store.c.o
+[ 25%] Building C object sprng/CMakeFiles/sprng.dir/primes-lcg64.c.o
+[ 26%] Building C object sprng/CMakeFiles/sprng.dir/checkid.c.o
+[ 26%] Linking C static library libsprng.a
+[ 26%] Built target sprng
+[ 26%] Building CXX object lbfgsb/CMakeFiles/lbfgsb.dir/lbfgsb_new.cpp.o
+[ 26%] Building CXX object nclextra/CMakeFiles/nclextra.dir/msetsblock.cpp.o
+[ 27%] Linking CXX static library liblbfgsb.a
+[ 27%] Built target lbfgsb
+[ 28%] Building C object whtest/CMakeFiles/whtest.dir/eigen.c.o
+[ 28%] Building C object whtest/CMakeFiles/whtest.dir/eigen_sym.c.o
+[ 28%] Building C object whtest/CMakeFiles/whtest.dir/random.c.o
+[ 28%] Building CXX object nclextra/CMakeFiles/nclextra.dir/msplitsblock.cpp.o
+[ 29%] Building C object whtest/CMakeFiles/whtest.dir/weisslambda.c.o
+[ 29%] Building C object whtest/CMakeFiles/whtest.dir/weisslambda_sub.c.o
+[ 30%] Building C object whtest/CMakeFiles/whtest.dir/whtest.c.o
+[ 30%] Building C object whtest/CMakeFiles/whtest.dir/whtest_sub.c.o
+/tmp/iqtree-zlib/source/whtest/whtest_sub.c: In function ‘ReadData’:
+/tmp/iqtree-zlib/source/whtest/whtest_sub.c:205:25: warning: ignoring return value of ‘fscanf’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  205 |                         fscanf ( ifp, "%c", &c );
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~
+/tmp/iqtree-zlib/source/whtest/whtest_sub.c:221:25: warning: ignoring return value of ‘fscanf’ declared with attribute ‘warn_unused_result’ [-Wunused-result]
+  221 |                         fscanf ( ifp, "%c", &c );
+      |                         ^~~~~~~~~~~~~~~~~~~~~~~~
+[ 30%] Building CXX object whtest/CMakeFiles/whtest.dir/whtest_wrapper.cpp.o
+[ 31%] Building CXX object nclextra/CMakeFiles/nclextra.dir/modelsblock.cpp.o
+[ 32%] Linking CXX static library libwhtest.a
+[ 32%] Built target whtest
+[ 32%] Building CXX object vectorclass/CMakeFiles/vectorclass.dir/instrset_detect.cpp.o
+[ 32%] Linking CXX static library libnclextra.a
+[ 32%] Built target nclextra
+[ 33%] Building CXX object gsl/CMakeFiles/gsl.dir/binomial_tpe.cpp.o
+[ 33%] Building CXX object gsl/CMakeFiles/gsl.dir/multinomial.cpp.o
+[ 33%] Building CXX object gsl/CMakeFiles/gsl.dir/pow_int.cpp.o
+[ 33%] Linking CXX static library libvectorclass.a
+[ 33%] Built target vectorclass
+[ 33%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/binary.cpp.o
+[ 34%] Building CXX object gsl/CMakeFiles/gsl.dir/gauss.cpp.o
+[ 34%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/convert.cpp.o
+[ 34%] Building CXX object gsl/CMakeFiles/gsl.dir/gaussinv.cpp.o
+[ 34%] Building CXX object gsl/CMakeFiles/gsl.dir/gausspdf.cpp.o
+[ 35%] Linking CXX static library libgsl.a
+[ 35%] Built target gsl
+[ 36%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/advanced.cpp.o
+[ 37%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/directives.cpp.o
+[ 37%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/emit.cpp.o
+[ 37%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/emitfromevents.cpp.o
+[ 38%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/emitter.cpp.o
+[ 38%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/emitterstate.cpp.o
+[ 38%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/bigint.cpp.o
+[ 38%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/bipartitions.cpp.o
+[ 38%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/emitterutils.cpp.o
+[ 39%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/bitmatrix.cpp.o
+[ 39%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/clamped_uint.cpp.o
+[ 39%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/constraints.cpp.o
+[ 40%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/errors.cpp.o
+[ 40%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/multitree.cpp.o
+[ 41%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/exceptions.cpp.o
+[ 41%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/exp.cpp.o
+[ 42%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/multitree_iterator.cpp.o
+[ 42%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/nodes.cpp.o
+[ 42%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/memory.cpp.o
+[ 42%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/parser.cpp.o
+[ 43%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/node.cpp.o
+[ 43%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/node_data.cpp.o
+[ 44%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/rooting.cpp.o
+[ 44%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/nodebuilder.cpp.o
+[ 44%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/simple.cpp.o
+[ 45%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/nodeevents.cpp.o
+[ 45%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/subtree_extraction.cpp.o
+[ 45%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/null.cpp.o
+[ 45%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/ostream_wrapper.cpp.o
+[ 46%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/parse.cpp.o
+[ 47%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/supertree_helpers.cpp.o
+[ 47%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/parser.cpp.o
+[ 47%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/trees.cpp.o
+[ 47%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/regex_yaml.cpp.o
+[ 47%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/union_find.cpp.o
+[ 48%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/scanner.cpp.o
+[ 49%] Building CXX object terraphast/CMakeFiles/terraphast.dir/lib/validation.cpp.o
+[ 49%] Linking CXX static library libterraphast.a
+[ 49%] Built target terraphast
+[ 49%] Building CXX object utils/CMakeFiles/decentTree.dir/decenttree.cpp.o
+[ 50%] Building CXX object utils/CMakeFiles/decentTree.dir/starttree.cpp.o
+[ 50%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/scanscalar.cpp.o
+[ 50%] Building CXX object utils/CMakeFiles/decentTree.dir/bionj.cpp.o
+In file included from /usr/include/stdio.h:980,
+                 from /tmp/iqtree-zlib/source/utils/bionj.cpp:25:
+In function ‘int snprintf(char*, size_t, const char*, ...)’,
+    inlined from ‘int BioNj::create(const char*, const char*)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:772:25,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:853:27,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:845:18:
+/usr/include/aarch64-linux-gnu/bits/stdio2.h:54:35: warning: ‘int __builtin___snprintf_chk(char*, long unsigned int, int, long unsigned int, const char*, ...)’ specified bound 1000 exceeds destination size 999 [-Wstringop-overflow=]
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+In function ‘int snprintf(char*, size_t, const char*, ...)’,
+    inlined from ‘int BioNj::create(const char*, const char*)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:780:25,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:853:27,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:845:18:
+/usr/include/aarch64-linux-gnu/bits/stdio2.h:54:35: warning: ‘int __builtin___snprintf_chk(char*, long unsigned int, int, long unsigned int, const char*, ...)’ specified bound 1000 exceeds destination size 999 [-Wstringop-overflow=]
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+[ 50%] Building CXX object utils/CMakeFiles/decentTree.dir/bionj2.cpp.o
+[ 50%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/scantag.cpp.o
+[ 51%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/scantoken.cpp.o
+[ 51%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/simplekey.cpp.o
+[ 51%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/singledocparser.cpp.o
+[ 52%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/stream.cpp.o
+[ 52%] Building CXX object yaml-cpp/CMakeFiles/yaml-cpp.dir/src/tag.cpp.o
+[ 53%] Linking CXX static library libyaml-cpp.a
+[ 53%] Built target yaml-cpp
+[ 54%] Building CXX object utils/CMakeFiles/decentTree.dir/gzstream.cpp.o
+[ 54%] Building CXX object utils/CMakeFiles/decentTree.dir/progress.cpp.o
+[ 54%] Building CXX object utils/CMakeFiles/decentTree.dir/operatingsystem.cpp.o
+[ 55%] Linking CXX executable decentTree
+[ 55%] Building CXX object utils/CMakeFiles/utils.dir/eigendecomposition.cpp.o
+[ 55%] Built target decentTree
+[ 55%] Building CXX object pda/CMakeFiles/pda.dir/circularnetwork.cpp.o
+[ 55%] Building CXX object utils/CMakeFiles/utils.dir/gzstream.cpp.o
+[ 56%] Building CXX object utils/CMakeFiles/utils.dir/optimization.cpp.o
+[ 57%] Building CXX object pda/CMakeFiles/pda.dir/greedy.cpp.o
+[ 57%] Building CXX object utils/CMakeFiles/utils.dir/stoprule.cpp.o
+[ 57%] Building CXX object pda/CMakeFiles/pda.dir/gurobiwrapper.cpp.o
+[ 57%] Building CXX object pda/CMakeFiles/pda.dir/hashsplitset.cpp.o
+[ 57%] Building CXX object utils/CMakeFiles/utils.dir/tools.cpp.o
+[ 58%] Building CXX object pda/CMakeFiles/pda.dir/pdnetwork.cpp.o
+[ 58%] Building CXX object pda/CMakeFiles/pda.dir/pruning.cpp.o
+[ 58%] Building CXX object pda/CMakeFiles/pda.dir/split.cpp.o
+[ 59%] Building CXX object pda/CMakeFiles/pda.dir/splitgraph.cpp.o
+[ 60%] Building CXX object utils/CMakeFiles/utils.dir/pllnni.cpp.o
+[ 60%] Building CXX object pda/CMakeFiles/pda.dir/splitset.cpp.o
+[ 61%] Building C object pda/CMakeFiles/pda.dir/lpwrapper.c.o
+[ 61%] Building CXX object pda/CMakeFiles/pda.dir/ecopd.cpp.o
+[ 61%] Building CXX object utils/CMakeFiles/utils.dir/checkpoint.cpp.o
+[ 61%] Building CXX object utils/CMakeFiles/utils.dir/MPIHelper.cpp.o
+[ 61%] Building CXX object pda/CMakeFiles/pda.dir/graph.cpp.o
+[ 62%] Building CXX object utils/CMakeFiles/utils.dir/starttree.cpp.o
+[ 63%] Building CXX object pda/CMakeFiles/pda.dir/pdtree.cpp.o
+[ 63%] Building CXX object utils/CMakeFiles/utils.dir/bionj.cpp.o
+In file included from /usr/include/stdio.h:980,
+                 from /tmp/iqtree-zlib/source/utils/bionj.cpp:25:
+In function ‘int snprintf(char*, size_t, const char*, ...)’,
+    inlined from ‘int BioNj::create(const char*, const char*)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:772:25,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:853:27,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:845:18:
+/usr/include/aarch64-linux-gnu/bits/stdio2.h:54:35: warning: ‘int __builtin___snprintf_chk(char*, long unsigned int, int, long unsigned int, const char*, ...)’ specified bound 1000 exceeds destination size 999 [-Wstringop-overflow=]
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+In function ‘int snprintf(char*, size_t, const char*, ...)’,
+    inlined from ‘int BioNj::create(const char*, const char*)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:780:25,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:853:27,
+    inlined from ‘virtual bool BIONJ2009Adapter::constructTree(const std::string&, const std::string&)’ at /tmp/iqtree-zlib/source/utils/bionj.cpp:845:18:
+/usr/include/aarch64-linux-gnu/bits/stdio2.h:54:35: warning: ‘int __builtin___snprintf_chk(char*, long unsigned int, int, long unsigned int, const char*, ...)’ specified bound 1000 exceeds destination size 999 [-Wstringop-overflow=]
+   54 |   return __builtin___snprintf_chk (__s, __n, __USE_FORTIFY_LEVEL - 1,
+      |          ~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   55 |                                    __glibc_objsize (__s), __fmt,
+      |                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   56 |                                    __va_arg_pack ());
+      |                                    ~~~~~~~~~~~~~~~~~
+[ 63%] Building CXX object utils/CMakeFiles/utils.dir/bionj2.cpp.o
+[ 63%] Building CXX object pda/CMakeFiles/pda.dir/pdtreeset.cpp.o
+[ 63%] Building CXX object pda/CMakeFiles/pda.dir/ecopdmtreeset.cpp.o
+[ 64%] Linking CXX static library libpda.a
+[ 64%] Built target pda
+[ 64%] Building CXX object phylo-yaml/CMakeFiles/phyloYAML.dir/statespace.cpp.o
+[ 65%] Building CXX object utils/CMakeFiles/utils.dir/progress.cpp.o
+[ 65%] Building CXX object utils/CMakeFiles/utils.dir/operatingsystem.cpp.o
+[ 65%] Building CXX object utils/CMakeFiles/utils.dir/mutsel_wrapper.cpp.o
+[ 65%] Linking CXX static library libphyloYAML.a
+[ 65%] Built target phyloYAML
+[ 66%] Linking CXX static library libutils.a
+[ 66%] Built target utils
+[ 66%] Building CXX object model/CMakeFiles/model.dir/modelbin.cpp.o
+[ 67%] Building CXX object model/CMakeFiles/model.dir/modelmarkov.cpp.o
+[ 68%] Building CXX object model/CMakeFiles/model.dir/modeldna.cpp.o
+[ 68%] Building CXX object model/CMakeFiles/model.dir/modeldnaerror.cpp.o
+[ 68%] Building CXX object model/CMakeFiles/model.dir/modelfactory.cpp.o
+[ 69%] Building CXX object model/CMakeFiles/model.dir/modelprotein.cpp.o
+[ 69%] Building CXX object model/CMakeFiles/model.dir/modelset.cpp.o
+[ 69%] Building CXX object model/CMakeFiles/model.dir/modelsubst.cpp.o
+[ 70%] Building CXX object model/CMakeFiles/model.dir/partitionmodel.cpp.o
+[ 70%] Building CXX object model/CMakeFiles/model.dir/partitionmodelplen.cpp.o
+[ 70%] Building CXX object model/CMakeFiles/model.dir/rategamma.cpp.o
+[ 71%] Building CXX object model/CMakeFiles/model.dir/rategammainvar.cpp.o
+[ 71%] Building CXX object model/CMakeFiles/model.dir/ratecontinuousgamma.cpp.o
+[ 71%] Building CXX object model/CMakeFiles/model.dir/ratecontinuousgammainvar.cpp.o
+[ 72%] Building CXX object model/CMakeFiles/model.dir/rateheterogeneity.cpp.o
+[ 72%] Building CXX object model/CMakeFiles/model.dir/rateinvar.cpp.o
+[ 72%] Building CXX object model/CMakeFiles/model.dir/ratemeyerdiscrete.cpp.o
+[ 73%] Building CXX object model/CMakeFiles/model.dir/ratemeyerhaeseler.cpp.o
+[ 73%] Building CXX object model/CMakeFiles/model.dir/ratekategory.cpp.o
+[ 73%] Building CXX object model/CMakeFiles/model.dir/ratefree.cpp.o
+[ 74%] Building CXX object model/CMakeFiles/model.dir/ratefreeinvar.cpp.o
+[ 74%] Building CXX object model/CMakeFiles/model.dir/rateheterotachy.cpp.o
+[ 74%] Building CXX object model/CMakeFiles/model.dir/rateheterotachyinvar.cpp.o
+[ 75%] Building CXX object model/CMakeFiles/model.dir/modelcodon.cpp.o
+[ 75%] Building CXX object model/CMakeFiles/model.dir/modelmorphology.cpp.o
+[ 75%] Building CXX object model/CMakeFiles/model.dir/modelmixture.cpp.o
+[ 76%] Building CXX object model/CMakeFiles/model.dir/modelunrest.cpp.o
+[ 76%] Building CXX object model/CMakeFiles/model.dir/modelliemarkov.cpp.o
+[ 76%] Building CXX object model/CMakeFiles/model.dir/modelpomo.cpp.o
+[ 77%] Building CXX object model/CMakeFiles/model.dir/modelpomomixture.cpp.o
+[ 77%] Building CXX object model/CMakeFiles/model.dir/modelhmm.cpp.o
+[ 77%] Building CXX object model/CMakeFiles/model.dir/modelhmmgm.cpp.o
+[ 78%] Building CXX object model/CMakeFiles/model.dir/modelhmmtm.cpp.o
+[ 78%] Building CXX object model/CMakeFiles/model.dir/modelcodonmixture.cpp.o
+[ 79%] Linking CXX static library libmodel.a
+[ 79%] Built target model
+[ 79%] Building CXX object simulator/CMakeFiles/simulator.dir/alisimulator.cpp.o
+[ 80%] Building CXX object simulator/CMakeFiles/simulator.dir/alisimulatorinvar.cpp.o
+[ 80%] Building CXX object simulator/CMakeFiles/simulator.dir/alisimulatorheterogeneity.cpp.o
+[ 80%] Building CXX object simulator/CMakeFiles/simulator.dir/alisimulatorheterogeneityinvar.cpp.o
+[ 81%] Linking CXX static library libsimulator.a
+[ 81%] Built target simulator
+[ 81%] Building CXX object alignment/CMakeFiles/alignment.dir/substitution.cpp.o
+[ 81%] Building CXX object alignment/CMakeFiles/alignment.dir/pattern.cpp.o
+[ 82%] Building CXX object alignment/CMakeFiles/alignment.dir/alignment.cpp.o
+[ 82%] Building CXX object alignment/CMakeFiles/alignment.dir/alignmentpairwise.cpp.o
+[ 82%] Building CXX object alignment/CMakeFiles/alignment.dir/alignmentsummary.cpp.o
+[ 83%] Building CXX object alignment/CMakeFiles/alignment.dir/maalignment.cpp.o
+In file included from /usr/include/boost/math/distributions/binomial.hpp:83,
+                 from /tmp/iqtree-zlib/source/alignment/alignment.cpp:27:
+/usr/include/boost/math/special_functions/beta.hpp: In instantiation of ‘boost::math::detail::ibeta_fraction2_t<T>::result_type boost::math::detail::ibeta_fraction2_t<T>::operator()() [with T = long double; result_type = std::pair<long double, long double>]’:
+/usr/include/boost/math/tools/fraction.hpp:123:20:   required from ‘typename boost::math::tools::detail::fraction_traits<Gen>::result_type boost::math::tools::continued_fraction_b(Gen&, const U&, uintmax_t&) [with Gen = boost::math::detail::ibeta_fraction2_t<long double>; U = long double; typename detail::fraction_traits<Gen>::result_type = long double; uintmax_t = long unsigned int]’
+/usr/include/boost/math/tools/fraction.hpp:156:31:   required from ‘typename boost::math::tools::detail::fraction_traits<Gen>::result_type boost::math::tools::continued_fraction_b(Gen&, const U&) [with Gen = boost::math::detail::ibeta_fraction2_t<long double>; U = long double; typename detail::fraction_traits<Gen>::result_type = long double]’
+/usr/include/boost/math/special_functions/beta.hpp:732:54:   required from ‘T boost::math::detail::ibeta_fraction2(T, T, T, T, const Policy&, bool, T*) [with T = long double; Policy = boost::math::policies::policy<boost::math::policies::promote_float<false>, boost::math::policies::promote_double<false>, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]’
+/usr/include/boost/math/special_functions/beta.hpp:1377:36:   required from ‘T boost::math::detail::ibeta_imp(T, T, T, const Policy&, bool, bool, T*) [with T = long double; Policy = boost::math::policies::policy<boost::math::policies::promote_float<false>, boost::math::policies::promote_double<false>, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]’
+/usr/include/boost/math/special_functions/beta.hpp:1414:20:   required from ‘T boost::math::detail::ibeta_imp(T, T, T, const Policy&, bool, bool) [with T = long double; Policy = boost::math::policies::policy<boost::math::policies::promote_float<false>, boost::math::policies::promote_double<false>, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy, boost::math::policies::default_policy>]’
+/usr/include/boost/math/special_functions/beta.hpp:1570:93:   required from ‘boost::math::tools::promote_args_t<RT1, RT2, A> boost::math::ibeta(RT1, RT2, RT3, const Policy&) [with RT1 = double; RT2 = double; RT3 = double; Policy = policies::policy<policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy>; tools::promote_args_t<RT1, RT2, A> = double]’
+/usr/include/boost/math/distributions/binomial.hpp:648:21:   required from ‘RealType boost::math::cdf(const complemented2_type<binomial_distribution<RealType, Policy>, RealType>&) [with RealType = double; Policy = policies::policy<policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy, policies::default_policy>]’
+/usr/include/boost/math/distributions/detail/derived_accessors.hpp:150:14:   required from ‘typename Distribution::value_type boost::math::cdf(const complemented2_type<Dist, RealType>&) [with Distribution = binomial_distribution<>; RealType = int; typename Distribution::value_type = double]’
+/tmp/iqtree-zlib/source/alignment/alignment.cpp:5701:23:   required from here
+/usr/include/boost/math/special_functions/beta.hpp:695:16: note: parameter passing for argument of type ‘std::pair<long double, long double>’ when C++17 is enabled changed to match C++14 in GCC 10.1
+  695 |    result_type operator()()
+      |                ^~~~~~~~
+[ 83%] Building CXX object alignment/CMakeFiles/alignment.dir/superalignment.cpp.o
+[ 83%] Building CXX object alignment/CMakeFiles/alignment.dir/superalignmentpairwise.cpp.o
+[ 84%] Building CXX object alignment/CMakeFiles/alignment.dir/superalignmentpairwiseplen.cpp.o
+[ 84%] Building CXX object alignment/CMakeFiles/alignment.dir/superalignmentunlinked.cpp.o
+[ 84%] Building CXX object alignment/CMakeFiles/alignment.dir/sequence.cpp.o
+[ 85%] Building CXX object alignment/CMakeFiles/alignment.dir/sequencechunkstr.cpp.o
+[ 85%] Linking CXX static library libalignment.a
+[ 85%] Built target alignment
+[ 85%] Building CXX object tree/CMakeFiles/tree.dir/constrainttree.cpp.o
+[ 86%] Building CXX object tree/CMakeFiles/tree.dir/candidateset.cpp.o
+[ 86%] Building CXX object tree/CMakeFiles/tree.dir/iqtree.cpp.o
+[ 86%] Building CXX object tree/CMakeFiles/tree.dir/iqtreemix.cpp.o
+[ 87%] Building CXX object tree/CMakeFiles/tree.dir/iqtreemixhmm.cpp.o
+[ 87%] Building CXX object tree/CMakeFiles/tree.dir/matree.cpp.o
+[ 87%] Building CXX object tree/CMakeFiles/tree.dir/memslot.cpp.o
+[ 88%] Building CXX object tree/CMakeFiles/tree.dir/mexttree.cpp.o
+[ 88%] Building CXX object tree/CMakeFiles/tree.dir/mtree.cpp.o
+[ 88%] Building CXX object tree/CMakeFiles/tree.dir/mtreeset.cpp.o
+[ 89%] Building CXX object tree/CMakeFiles/tree.dir/ncbitree.cpp.o
+[ 89%] Building CXX object tree/CMakeFiles/tree.dir/node.cpp.o
+[ 89%] Building CXX object tree/CMakeFiles/tree.dir/genomenode.cpp.o
+[ 90%] Building CXX object tree/CMakeFiles/tree.dir/genometree.cpp.o
+[ 90%] Building CXX object tree/CMakeFiles/tree.dir/phylonode.cpp.o
+[ 90%] Building CXX object tree/CMakeFiles/tree.dir/phylonodemixlen.cpp.o
+[ 91%] Building CXX object tree/CMakeFiles/tree.dir/phylosuperhmm.cpp.o
+[ 91%] Building CXX object tree/CMakeFiles/tree.dir/phylosupertree.cpp.o
+[ 91%] Building CXX object tree/CMakeFiles/tree.dir/phylosupertreeplen.cpp.o
+[ 92%] Building CXX object tree/CMakeFiles/tree.dir/phylosupertreeunlinked.cpp.o
+[ 92%] Building CXX object tree/CMakeFiles/tree.dir/phylotree.cpp.o
+[ 93%] Building CXX object tree/CMakeFiles/tree.dir/phylotreemixlen.cpp.o
+[ 93%] Building CXX object tree/CMakeFiles/tree.dir/phylotreepars.cpp.o
+[ 93%] Building CXX object tree/CMakeFiles/tree.dir/phylotreesse.cpp.o
+[ 94%] Building CXX object tree/CMakeFiles/tree.dir/quartet.cpp.o
+[ 94%] Building CXX object tree/CMakeFiles/tree.dir/supernode.cpp.o
+[ 94%] Building CXX object tree/CMakeFiles/tree.dir/tinatree.cpp.o
+[ 95%] Building CXX object tree/CMakeFiles/tree.dir/parstree.cpp.o
+[ 95%] Building CXX object tree/CMakeFiles/tree.dir/discordance.cpp.o
+[ 95%] Building CXX object tree/CMakeFiles/tree.dir/phylohmm.cpp.o
+[ 96%] Linking CXX static library libtree.a
+[ 96%] Built target tree
+[ 96%] Building CXX object terrace/CMakeFiles/terrace.dir/terracenode.cpp.o
+[ 96%] Building CXX object terracetphast/CMakeFiles/terracetphast.dir/terracetphast.cpp.o
+[ 97%] Building CXX object terrace/CMakeFiles/terrace.dir/terracetree.cpp.o
+[ 97%] Linking CXX static library libterracetphast.a
+[ 97%] Built target terracetphast
+[ 97%] Building CXX object terrace/CMakeFiles/terrace.dir/presenceabsencematrix.cpp.o
+[ 97%] Building CXX object terrace/CMakeFiles/terrace.dir/terrace.cpp.o
+[ 98%] Linking CXX static library libterrace.a
+[ 98%] Built target terrace
+[ 98%] Building CXX object main/CMakeFiles/main.dir/main.cpp.o
+[ 98%] Building CXX object main/CMakeFiles/main.dir/phyloanalysis.cpp.o
+[ 99%] Building CXX object main/CMakeFiles/main.dir/phylotesting.cpp.o
+/tmp/iqtree-zlib/source/main/phylotesting.cpp: In function ‘char* initFreqSet(PML::SeqType)’:
+/tmp/iqtree-zlib/source/main/phylotesting.cpp:7010:34: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+ 7010 |         case SEQ_CODON:   return ",F1X4,F3X4";
+      |                                  ^~~~~~~~~~~~
+/tmp/iqtree-zlib/source/main/phylotesting.cpp:7011:34: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+ 7011 |         case SEQ_MORPH:   return "FQ";
+      |                                  ^~~~
+/tmp/iqtree-zlib/source/main/phylotesting.cpp:7012:34: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+ 7012 |         case SEQ_PROTEIN: return ",FO";
+      |                                  ^~~~~
+/tmp/iqtree-zlib/source/main/phylotesting.cpp:7013:34: warning: ISO C++ forbids converting a string constant to ‘char*’ [-Wwrite-strings]
+ 7013 |         default:          return "FO";
+      |                                  ^~~~
+[ 99%] Building CXX object main/CMakeFiles/main.dir/treetesting.cpp.o
+[ 99%] Building CXX object main/CMakeFiles/main.dir/timetree.cpp.o
+[100%] Building CXX object main/CMakeFiles/main.dir/alisim.cpp.o
+[100%] Building CXX object main/CMakeFiles/main.dir/terraceanalysis.cpp.o
+[100%] Linking CXX static library libmain.a
+[100%] Built target main
+[100%] Building CXX object CMakeFiles/iqtree3.dir/obsolete/parsmultistate.cpp.o
+[100%] Linking CXX static library libiqtree3.a
+Extracting objects to /tmp/unify-static-libs...
+all_libs/libalignment.a
+all_libs/libbooster.a
+all_libs/libgsl.a
+all_libs/libiqtree3.a
+all_libs/libkernelsse.a
+all_libs/liblbfgsb.a
+all_libs/liblsd2.a
+all_libs/libmain.a
+all_libs/libmodel.a
+all_libs/libncl.a
+all_libs/libnclextra.a
+all_libs/libomp.a
+all_libs/libpda.a
+all_libs/libphyloYAML.a
+all_libs/libpll.a
+all_libs/libsimulator.a
+all_libs/libsprng.a
+all_libs/libterrace.a
+all_libs/libterracetphast.a
+all_libs/libterraphast.a
+all_libs/libtree.a
+all_libs/libutils.a
+all_libs/libvectorclass.a
+all_libs/libwhtest.a
+all_libs/libyaml-cpp.a
+all_libs/libz.a
+Done.
+[100%] Built target iqtree3
+{
+  "executable": "/tmp/iqtree-zlib/install/bin/nwkit-iqtree-worker",
+  "protocol": 1,
+  "engine": "iqtree3",
+  "library_version": "3.1.4",
+  "library_sha256": "ce4e36ef7f23eda278c2583054d2bfb60e355cbede617e51f42420a5f2db6221",
+  "adapter_sha256": "e36fa69a2981d099f96334d9cecea68d1d2da14368d382750ab50015dab18d04",
+  "upstream_revision": "unavailable"
+}
+{
+  "executable": "/tmp/iqtree-zlib/install/bin/nwkit-iqtree-worker",
+  "protocol": 1,
+  "engine": "iqtree3",
+  "library_version": "3.1.4",
+  "library_sha256": "ce4e36ef7f23eda278c2583054d2bfb60e355cbede617e51f42420a5f2db6221",
+  "adapter_sha256": "e36fa69a2981d099f96334d9cecea68d1d2da14368d382750ab50015dab18d04",
+  "upstream_revision": "unavailable",
+  "worker_sha256": "d5b9a692d0ade4210ae652e5a723159332fd2ec3c1fb3b8d65b3f9f94021b0f1"
+}

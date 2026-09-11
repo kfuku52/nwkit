@@ -141,6 +141,20 @@ def _compile_command(build, source, output, library, metadata):
             "CMAKE_EXE_LINKER_FLAGS_" + cache.get("CMAKE_BUILD_TYPE", "").upper(), ""
         )
     )
+    # IQ-TREE folds its bundled zlib into libiqtree.a, but a system zlib
+    # selected by CMake remains an external dependency of the static archive.
+    # Use the same configuration-specific library and put it after the archive.
+    if not re.search(r"nozlib|static", cache.get("IQTREE_FLAGS", "")):
+        configurations = (
+            ("DEBUG", "RELEASE")
+            if cache.get("CMAKE_BUILD_TYPE", "").upper() == "DEBUG"
+            else ("RELEASE", "DEBUG")
+        )
+        for configuration in configurations:
+            zlib = cache.get("ZLIB_LIBRARY_" + configuration, "")
+            if zlib and not zlib.endswith("-NOTFOUND"):
+                command.extend(zlib.split(";"))
+                break
     command += shlex.split(os.environ.get("LDFLAGS", ""))
     if sys.platform.startswith("linux"):
         command += ["-ldl", "-lm"]

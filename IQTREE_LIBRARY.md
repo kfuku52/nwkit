@@ -93,7 +93,8 @@ python -m nwkit.iqtree_library check
 
 The setup command compiles only NWKIT's adapter and links it with the existing
 `libiqtree.a`. It inherits the matching library build's compiler, include paths
-and compile definitions. It does not download or rebuild IQ-TREE. It installs
+and compile definitions, and links the system zlib selected by CMake when it
+was not bundled into the archive. It does not download or rebuild IQ-TREE. It installs
 `$HOME/.local/bin/nwkit-iqtree-worker`, outside the NWKIT Python package, after
 checking its protocol and version. A failed rebuild preserves the old worker.
 

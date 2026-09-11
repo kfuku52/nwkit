@@ -1,0 +1,483 @@
+debconf: delaying package configuration, since apt-utils is not installed
+Obtaining file:///tmp/nwkit
+  Installing build dependencies: started
+  Installing build dependencies: finished with status 'done'
+  Checking if build backend supports build_editable: started
+  Checking if build backend supports build_editable: finished with status 'done'
+  Getting requirements to build editable: started
+  Getting requirements to build editable: finished with status 'done'
+  Preparing editable metadata (pyproject.toml): started
+  Preparing editable metadata (pyproject.toml): finished with status 'done'
+Requirement already satisfied: defusedxml>=0.7 in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (0.7.1)
+Requirement already satisfied: ete4>=4.4.0 in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (4.4.0)
+Requirement already satisfied: pandas in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (3.0.5)
+Requirement already satisfied: requests>=2.32.2 in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (2.34.2)
+Requirement already satisfied: urllib3>=2 in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (2.7.0)
+Requirement already satisfied: numpy in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (1.26.4)
+Requirement already satisfied: scipy in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (1.17.1)
+Requirement already satisfied: matplotlib in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (3.10.9)
+Requirement already satisfied: Pillow in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (12.3.0)
+Collecting CairoSVG (from nwkit==0.43.17)
+  Downloading cairosvg-2.9.0-py3-none-any.whl.metadata (2.7 kB)
+Collecting bandit>=1.9 (from nwkit==0.43.17)
+  Downloading bandit-1.9.4-py3-none-any.whl.metadata (7.1 kB)
+Collecting build>=1.3 (from nwkit==0.43.17)
+  Downloading build-1.5.0-py3-none-any.whl.metadata (5.7 kB)
+Collecting check-wheel-contents>=0.6 (from nwkit==0.43.17)
+  Downloading check_wheel_contents-0.6.3-py3-none-any.whl.metadata (24 kB)
+Collecting coverage>=7.13 (from nwkit==0.43.17)
+  Downloading coverage-7.15.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (8.6 kB)
+Collecting diff-cover>=10.5 (from nwkit==0.43.17)
+  Downloading diff_cover-10.5.1-py3-none-any.whl.metadata (22 kB)
+Collecting hypothesis>=6.165 (from nwkit==0.43.17)
+  Downloading hypothesis-6.165.10-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (5.7 kB)
+Collecting mypy>=1.19 (from nwkit==0.43.17)
+  Downloading mypy-2.3.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (2.4 kB)
+Collecting pip-audit>=2.10 (from nwkit==0.43.17)
+  Downloading pip_audit-2.10.1-py3-none-any.whl.metadata (28 kB)
+Requirement already satisfied: pytest>=7 in /opt/conda/lib/python3.12/site-packages (from nwkit==0.43.17) (9.1.1)
+Collecting radon>=6 (from nwkit==0.43.17)
+  Downloading radon-6.0.1-py2.py3-none-any.whl.metadata (8.2 kB)
+Collecting ruff>=0.15 (from nwkit==0.43.17)
+  Downloading ruff-0.16.4-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (26 kB)
+Collecting twine>=6 (from nwkit==0.43.17)
+  Downloading twine-7.0.0-py3-none-any.whl.metadata (3.5 kB)
+Requirement already satisfied: PyYAML>=5.3.1 in /opt/conda/lib/python3.12/site-packages (from bandit>=1.9->nwkit==0.43.17) (6.0.3)
+Collecting stevedore>=1.20.0 (from bandit>=1.9->nwkit==0.43.17)
+  Downloading stevedore-5.9.1-py3-none-any.whl.metadata (2.3 kB)
+Requirement already satisfied: rich in /opt/conda/lib/python3.12/site-packages (from bandit>=1.9->nwkit==0.43.17) (15.0.0)
+Requirement already satisfied: packaging>=24.0 in /opt/conda/lib/python3.12/site-packages (from build>=1.3->nwkit==0.43.17) (26.3)
+Collecting pyproject_hooks (from build>=1.3->nwkit==0.43.17)
+  Downloading pyproject_hooks-1.2.0-py3-none-any.whl.metadata (1.3 kB)
+Collecting attrs>=18.1 (from check-wheel-contents>=0.6->nwkit==0.43.17)
+  Downloading attrs-26.1.0-py3-none-any.whl.metadata (8.8 kB)
+Requirement already satisfied: click!=8.2.2,~=8.2 in /opt/conda/lib/python3.12/site-packages (from check-wheel-contents>=0.6->nwkit==0.43.17) (8.5.0)
+Collecting pydantic~=2.0 (from check-wheel-contents>=0.6->nwkit==0.43.17)
+  Downloading pydantic-2.13.5-py3-none-any.whl.metadata (110 kB)
+Collecting wheel-filename~=1.1 (from check-wheel-contents>=0.6->nwkit==0.43.17)
+  Downloading wheel_filename-1.4.2-py3-none-any.whl.metadata (5.4 kB)
+Collecting annotated-types>=0.6.0 (from pydantic~=2.0->check-wheel-contents>=0.6->nwkit==0.43.17)
+  Downloading annotated_types-0.8.0-py3-none-any.whl.metadata (15 kB)
+Collecting pydantic-core==2.46.5 (from pydantic~=2.0->check-wheel-contents>=0.6->nwkit==0.43.17)
+  Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (6.6 kB)
+Requirement already satisfied: typing-extensions>=4.14.1 in /opt/conda/lib/python3.12/site-packages (from pydantic~=2.0->check-wheel-contents>=0.6->nwkit==0.43.17) (4.16.0)
+Collecting typing-inspection>=0.4.2 (from pydantic~=2.0->check-wheel-contents>=0.6->nwkit==0.43.17)
+  Downloading typing_inspection-0.4.4-py3-none-any.whl.metadata (2.6 kB)
+Requirement already satisfied: Jinja2>=2.7.1 in /opt/conda/lib/python3.12/site-packages (from diff-cover>=10.5->nwkit==0.43.17) (3.1.6)
+Requirement already satisfied: Pygments<3.0.0,>=2.19.1 in /opt/conda/lib/python3.12/site-packages (from diff-cover>=10.5->nwkit==0.43.17) (2.21.0)
+Collecting chardet>=3.0.0 (from diff-cover>=10.5->nwkit==0.43.17)
+  Downloading chardet-7.6.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (9.6 kB)
+Requirement already satisfied: pluggy<2,>=0.13.1 in /opt/conda/lib/python3.12/site-packages (from diff-cover>=10.5->nwkit==0.43.17) (1.6.0)
+Requirement already satisfied: bottle in /opt/conda/lib/python3.12/site-packages (from ete4>=4.4.0->nwkit==0.43.17) (0.13.4)
+Requirement already satisfied: cheroot in /opt/conda/lib/python3.12/site-packages (from ete4>=4.4.0->nwkit==0.43.17) (11.1.2)
+Requirement already satisfied: brotli in /opt/conda/lib/python3.12/site-packages (from ete4>=4.4.0->nwkit==0.43.17) (1.2.0)
+Collecting sortedcontainers<3.0.0,>=2.1.0 (from hypothesis>=6.165->nwkit==0.43.17)
+  Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl.metadata (10 kB)
+Requirement already satisfied: MarkupSafe>=2.0 in /opt/conda/lib/python3.12/site-packages (from Jinja2>=2.7.1->diff-cover>=10.5->nwkit==0.43.17) (3.0.3)
+Collecting mypy_extensions>=1.0.0 (from mypy>=1.19->nwkit==0.43.17)
+  Downloading mypy_extensions-1.1.0-py3-none-any.whl.metadata (1.1 kB)
+Collecting pathspec>=1.0.0 (from mypy>=1.19->nwkit==0.43.17)
+  Downloading pathspec-1.1.1-py3-none-any.whl.metadata (14 kB)
+Collecting librt>=0.13.0 (from mypy>=1.19->nwkit==0.43.17)
+  Downloading librt-0.15.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (1.3 kB)
+Collecting ast-serialize<1.0.0,>=0.6.0 (from mypy>=1.19->nwkit==0.43.17)
+  Downloading ast_serialize-0.11.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (1.4 kB)
+Collecting CacheControl>=0.13.0 (from CacheControl[filecache]>=0.13.0->pip-audit>=2.10->nwkit==0.43.17)
+  Downloading cachecontrol-0.14.4-py3-none-any.whl.metadata (3.1 kB)
+Collecting cyclonedx-python-lib<12,>=5 (from pip-audit>=2.10->nwkit==0.43.17)
+  Downloading cyclonedx_python_lib-11.12.0-py3-none-any.whl.metadata (6.9 kB)
+Collecting pip-api>=0.0.28 (from pip-audit>=2.10->nwkit==0.43.17)
+  Downloading pip_api-0.0.35-py3-none-any.whl.metadata (17 kB)
+Collecting pip-requirements-parser>=32.0.0 (from pip-audit>=2.10->nwkit==0.43.17)
+  Downloading pip_requirements_parser-32.0.1-py3-none-any.whl.metadata (9.3 kB)
+Requirement already satisfied: tomli>=2.2.1 in /opt/conda/lib/python3.12/site-packages (from pip-audit>=2.10->nwkit==0.43.17) (2.4.1)
+Collecting tomli-w>=1.2.0 (from pip-audit>=2.10->nwkit==0.43.17)
+  Downloading tomli_w-1.2.0-py3-none-any.whl.metadata (5.7 kB)
+Requirement already satisfied: platformdirs>=4.2.0 in /opt/conda/lib/python3.12/site-packages (from pip-audit>=2.10->nwkit==0.43.17) (4.11.8)
+Collecting license-expression<31,>=30 (from cyclonedx-python-lib<12,>=5->pip-audit>=2.10->nwkit==0.43.17)
+  Downloading license_expression-30.4.4-py3-none-any.whl.metadata (11 kB)
+Collecting packageurl-python<2,>=0.11 (from cyclonedx-python-lib<12,>=5->pip-audit>=2.10->nwkit==0.43.17)
+  Downloading packageurl_python-0.17.6-py3-none-any.whl.metadata (5.1 kB)
+Collecting py-serializable<3.0.0,>=2.1.0 (from cyclonedx-python-lib<12,>=5->pip-audit>=2.10->nwkit==0.43.17)
+  Downloading py_serializable-2.1.0-py3-none-any.whl.metadata (4.3 kB)
+Collecting boolean.py>=4.0 (from license-expression<31,>=30->cyclonedx-python-lib<12,>=5->pip-audit>=2.10->nwkit==0.43.17)
+  Downloading boolean_py-5.0-py3-none-any.whl.metadata (2.3 kB)
+Collecting msgpack<2.0.0,>=0.5.2 (from CacheControl>=0.13.0->CacheControl[filecache]>=0.13.0->pip-audit>=2.10->nwkit==0.43.17)
+  Downloading msgpack-1.2.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl.metadata (8.3 kB)
+Requirement already satisfied: filelock>=3.8.0 in /opt/conda/lib/python3.12/site-packages (from CacheControl[filecache]>=0.13.0->pip-audit>=2.10->nwkit==0.43.17) (3.32.6)
+Requirement already satisfied: pip in /opt/conda/lib/python3.12/site-packages (from pip-api>=0.0.28->pip-audit>=2.10->nwkit==0.43.17) (26.2.1)
+Requirement already satisfied: pyparsing in /opt/conda/lib/python3.12/site-packages (from pip-requirements-parser>=32.0.0->pip-audit>=2.10->nwkit==0.43.17) (3.3.2)
+Requirement already satisfied: iniconfig>=1.0.1 in /opt/conda/lib/python3.12/site-packages (from pytest>=7->nwkit==0.43.17) (2.3.0)
+Collecting mando<0.8,>=0.6 (from radon>=6->nwkit==0.43.17)
+  Downloading mando-0.7.1-py2.py3-none-any.whl.metadata (7.4 kB)
+Requirement already satisfied: colorama>=0.4.1 in /opt/conda/lib/python3.12/site-packages (from radon>=6->nwkit==0.43.17) (0.4.6)
+Requirement already satisfied: six in /opt/conda/lib/python3.12/site-packages (from mando<0.8,>=0.6->radon>=6->nwkit==0.43.17) (1.17.0)
+Requirement already satisfied: charset_normalizer<4,>=2 in /opt/conda/lib/python3.12/site-packages (from requests>=2.32.2->nwkit==0.43.17) (3.5.1)
+Requirement already satisfied: idna<4,>=2.5 in /opt/conda/lib/python3.12/site-packages (from requests>=2.32.2->nwkit==0.43.17) (3.19)
+Requirement already satisfied: certifi>=2023.5.7 in /opt/conda/lib/python3.12/site-packages (from requests>=2.32.2->nwkit==0.43.17) (2026.7.22)
+Requirement already satisfied: markdown-it-py>=2.2.0 in /opt/conda/lib/python3.12/site-packages (from rich->bandit>=1.9->nwkit==0.43.17) (4.2.0)
+Requirement already satisfied: mdurl~=0.1 in /opt/conda/lib/python3.12/site-packages (from markdown-it-py>=2.2.0->rich->bandit>=1.9->nwkit==0.43.17) (0.1.2)
+Collecting readme-renderer>=35.0 (from twine>=6->nwkit==0.43.17)
+  Downloading readme_renderer-46.0-py3-none-any.whl.metadata (3.0 kB)
+Collecting requests-toolbelt!=0.9.0,>=0.8.0 (from twine>=6->nwkit==0.43.17)
+  Downloading requests_toolbelt-1.0.0-py2.py3-none-any.whl.metadata (14 kB)
+Collecting keyring>=21.2.0 (from twine>=6->nwkit==0.43.17)
+  Downloading keyring-25.7.0-py3-none-any.whl.metadata (21 kB)
+Collecting rfc3986>=1.4.0 (from twine>=6->nwkit==0.43.17)
+  Downloading rfc3986-2.0.0-py2.py3-none-any.whl.metadata (6.6 kB)
+Collecting id (from twine>=6->nwkit==0.43.17)
+  Downloading id-1.6.1-py3-none-any.whl.metadata (5.1 kB)
+Collecting SecretStorage>=3.2 (from keyring>=21.2.0->twine>=6->nwkit==0.43.17)
+  Downloading secretstorage-3.5.0-py3-none-any.whl.metadata (4.0 kB)
+Collecting jeepney>=0.4.2 (from keyring>=21.2.0->twine>=6->nwkit==0.43.17)
+  Downloading jeepney-0.9.0-py3-none-any.whl.metadata (1.2 kB)
+Collecting jaraco.classes (from keyring>=21.2.0->twine>=6->nwkit==0.43.17)
+  Downloading jaraco.classes-3.4.0-py3-none-any.whl.metadata (2.6 kB)
+Requirement already satisfied: jaraco.functools in /opt/conda/lib/python3.12/site-packages (from keyring>=21.2.0->twine>=6->nwkit==0.43.17) (4.6.0)
+Collecting jaraco.context (from keyring>=21.2.0->twine>=6->nwkit==0.43.17)
+  Downloading jaraco_context-6.1.2-py3-none-any.whl.metadata (4.2 kB)
+Collecting nh3>=0.2.14 (from readme-renderer>=35.0->twine>=6->nwkit==0.43.17)
+  Downloading nh3-0.3.7-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl.metadata (2.0 kB)
+Collecting docutils>=0.21.2 (from readme-renderer>=35.0->twine>=6->nwkit==0.43.17)
+  Downloading docutils-0.23-py3-none-any.whl.metadata (15 kB)
+Collecting cryptography>=2.0 (from SecretStorage>=3.2->keyring>=21.2.0->twine>=6->nwkit==0.43.17)
+  Downloading cryptography-50.0.1-cp311-abi3-manylinux_2_34_aarch64.whl.metadata (4.3 kB)
+Requirement already satisfied: cffi>=2.0.0 in /opt/conda/lib/python3.12/site-packages (from cryptography>=2.0->SecretStorage>=3.2->keyring>=21.2.0->twine>=6->nwkit==0.43.17) (2.1.1)
+Requirement already satisfied: pycparser in /opt/conda/lib/python3.12/site-packages (from cffi>=2.0.0->cryptography>=2.0->SecretStorage>=3.2->keyring>=21.2.0->twine>=6->nwkit==0.43.17) (3.0)
+Collecting cairocffi (from CairoSVG->nwkit==0.43.17)
+  Downloading cairocffi-1.7.1-py3-none-any.whl.metadata (3.3 kB)
+Collecting cssselect2 (from CairoSVG->nwkit==0.43.17)
+  Downloading cssselect2-0.10.1-py3-none-any.whl.metadata (2.9 kB)
+Collecting tinycss2 (from CairoSVG->nwkit==0.43.17)
+  Downloading tinycss2-1.5.1-py3-none-any.whl.metadata (3.0 kB)
+Requirement already satisfied: more-itertools>=2.6 in /opt/conda/lib/python3.12/site-packages (from cheroot->ete4>=4.4.0->nwkit==0.43.17) (11.1.0)
+Collecting webencodings (from cssselect2->CairoSVG->nwkit==0.43.17)
+  Downloading webencodings-0.6.1-py3-none-any.whl.metadata (3.4 kB)
+Requirement already satisfied: contourpy>=1.0.1 in /opt/conda/lib/python3.12/site-packages (from matplotlib->nwkit==0.43.17) (1.3.3)
+Requirement already satisfied: cycler>=0.10 in /opt/conda/lib/python3.12/site-packages (from matplotlib->nwkit==0.43.17) (0.12.1)
+Requirement already satisfied: fonttools>=4.22.0 in /opt/conda/lib/python3.12/site-packages (from matplotlib->nwkit==0.43.17) (4.65.0)
+Requirement already satisfied: kiwisolver>=1.3.1 in /opt/conda/lib/python3.12/site-packages (from matplotlib->nwkit==0.43.17) (1.5.1)
+Requirement already satisfied: python-dateutil>=2.7 in /opt/conda/lib/python3.12/site-packages (from matplotlib->nwkit==0.43.17) (2.9.0.post0)
+Downloading bandit-1.9.4-py3-none-any.whl (134 kB)
+Downloading build-1.5.0-py3-none-any.whl (26 kB)
+Downloading check_wheel_contents-0.6.3-py3-none-any.whl (27 kB)
+Downloading pydantic-2.13.5-py3-none-any.whl (472 kB)
+Downloading pydantic_core-2.46.5-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (2.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 2.0/2.0 MB 24.7 MB/s  0:00:00
+Downloading wheel_filename-1.4.2-py3-none-any.whl (6.2 kB)
+Downloading annotated_types-0.8.0-py3-none-any.whl (13 kB)
+Downloading attrs-26.1.0-py3-none-any.whl (67 kB)
+Downloading coverage-7.15.4-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (258 kB)
+Downloading diff_cover-10.5.1-py3-none-any.whl (62 kB)
+Downloading chardet-7.6.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (1.5 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.5/1.5 MB 26.0 MB/s  0:00:00
+Downloading hypothesis-6.165.10-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (1.1 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.1/1.1 MB 14.5 MB/s  0:00:00
+Downloading sortedcontainers-2.4.0-py2.py3-none-any.whl (29 kB)
+Downloading mypy-2.3.1-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (14.2 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 14.2/14.2 MB 24.3 MB/s  0:00:00
+Downloading ast_serialize-0.11.1-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (1.3 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 1.3/1.3 MB 23.2 MB/s  0:00:00
+Downloading librt-0.15.0-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (503 kB)
+Downloading mypy_extensions-1.1.0-py3-none-any.whl (5.0 kB)
+Downloading pathspec-1.1.1-py3-none-any.whl (57 kB)
+Downloading pip_audit-2.10.1-py3-none-any.whl (62 kB)
+Downloading cyclonedx_python_lib-11.12.0-py3-none-any.whl (529 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 529.5/529.5 kB 18.4 MB/s  0:00:00
+Downloading license_expression-30.4.4-py3-none-any.whl (120 kB)
+Downloading packageurl_python-0.17.6-py3-none-any.whl (36 kB)
+Downloading py_serializable-2.1.0-py3-none-any.whl (23 kB)
+Downloading boolean_py-5.0-py3-none-any.whl (26 kB)
+Downloading cachecontrol-0.14.4-py3-none-any.whl (22 kB)
+Downloading msgpack-1.2.2-cp312-cp312-manylinux2014_aarch64.manylinux_2_17_aarch64.manylinux_2_28_aarch64.whl (409 kB)
+Downloading pip_api-0.0.35-py3-none-any.whl (123 kB)
+Downloading pip_requirements_parser-32.0.1-py3-none-any.whl (35 kB)
+Downloading radon-6.0.1-py2.py3-none-any.whl (52 kB)
+Downloading mando-0.7.1-py2.py3-none-any.whl (28 kB)
+Downloading ruff-0.16.4-py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (10.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 10.0/10.0 MB 25.5 MB/s  0:00:00
+Downloading stevedore-5.9.1-py3-none-any.whl (54 kB)
+Downloading tomli_w-1.2.0-py3-none-any.whl (6.7 kB)
+Downloading twine-7.0.0-py3-none-any.whl (43 kB)
+Downloading keyring-25.7.0-py3-none-any.whl (39 kB)
+Downloading jeepney-0.9.0-py3-none-any.whl (49 kB)
+Downloading readme_renderer-46.0-py3-none-any.whl (14 kB)
+Downloading docutils-0.23-py3-none-any.whl (634 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 634.7/634.7 kB 23.5 MB/s  0:00:00
+Downloading nh3-0.3.7-cp38-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl (859 kB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 859.6/859.6 kB 27.2 MB/s  0:00:00
+Downloading requests_toolbelt-1.0.0-py2.py3-none-any.whl (54 kB)
+Downloading rfc3986-2.0.0-py2.py3-none-any.whl (31 kB)
+Downloading secretstorage-3.5.0-py3-none-any.whl (15 kB)
+Downloading cryptography-50.0.1-cp311-abi3-manylinux_2_34_aarch64.whl (4.7 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 4.7/4.7 MB 26.0 MB/s  0:00:00
+Downloading typing_inspection-0.4.4-py3-none-any.whl (14 kB)
+Downloading cairosvg-2.9.0-py3-none-any.whl (45 kB)
+Downloading cairocffi-1.7.1-py3-none-any.whl (75 kB)
+Downloading cssselect2-0.10.1-py3-none-any.whl (15 kB)
+Downloading id-1.6.1-py3-none-any.whl (14 kB)
+Downloading jaraco.classes-3.4.0-py3-none-any.whl (6.8 kB)
+Downloading jaraco_context-6.1.2-py3-none-any.whl (7.9 kB)
+Downloading pyproject_hooks-1.2.0-py3-none-any.whl (10 kB)
+Downloading tinycss2-1.5.1-py3-none-any.whl (28 kB)
+Downloading webencodings-0.6.1-py3-none-any.whl (8.7 kB)
+Building wheels for collected packages: nwkit
+  Building editable for nwkit (pyproject.toml): started
+  Building editable for nwkit (pyproject.toml): finished with status 'done'
+  Created wheel for nwkit: filename=nwkit-0.43.17-0.editable-py3-none-any.whl size=8629 sha256=8715dde8c5dd603ed913f800caf90194dde3f18ad2ed156430d4899ef5fd1fa0
+  Stored in directory: /tmp/pip-ephem-wheel-cache-8ayt_9fm/wheels/9d/27/02/47589fac65c8f423d89737035acc946ae50d32426f41b5545d
+Successfully built nwkit
+Installing collected packages: sortedcontainers, boolean.py, wheel-filename, webencodings, typing-inspection, tomli-w, stevedore, ruff, rfc3986, pyproject_hooks, pydantic-core, py-serializable, pip-requirements-parser, pip-api, pathspec, packageurl-python, nh3, mypy_extensions, msgpack, mando, license-expression, librt, jeepney, jaraco.context, jaraco.classes, id, hypothesis, docutils, coverage, chardet, attrs, ast-serialize, annotated-types, tinycss2, requests-toolbelt, readme-renderer, radon, pydantic, mypy, diff-cover, cyclonedx-python-lib, cryptography, cairocffi, CacheControl, build, SecretStorage, cssselect2, check-wheel-contents, bandit, pip-audit, nwkit, keyring, CairoSVG, twine
+  Attempting uninstall: nwkit
+    Found existing installation: nwkit 0.43.16
+    Uninstalling nwkit-0.43.16:
+      Successfully uninstalled nwkit-0.43.16
+
+Successfully installed CacheControl-0.14.4 CairoSVG-2.9.0 SecretStorage-3.5.0 annotated-types-0.8.0 ast-serialize-0.11.1 attrs-26.1.0 bandit-1.9.4 boolean.py-5.0 build-1.5.0 cairocffi-1.7.1 chardet-7.6.0 check-wheel-contents-0.6.3 coverage-7.15.4 cryptography-50.0.1 cssselect2-0.10.1 cyclonedx-python-lib-11.12.0 diff-cover-10.5.1 docutils-0.23 hypothesis-6.165.10 id-1.6.1 jaraco.classes-3.4.0 jaraco.context-6.1.2 jeepney-0.9.0 keyring-25.7.0 librt-0.15.0 license-expression-30.4.4 mando-0.7.1 msgpack-1.2.2 mypy-2.3.1 mypy_extensions-1.1.0 nh3-0.3.7 nwkit-0.43.17 packageurl-python-0.17.6 pathspec-1.1.1 pip-api-0.0.35 pip-audit-2.10.1 pip-requirements-parser-32.0.1 py-serializable-2.1.0 pydantic-2.13.5 pydantic-core-2.46.5 pyproject_hooks-1.2.0 radon-6.0.1 readme-renderer-46.0 requests-toolbelt-1.0.0 rfc3986-2.0.0 ruff-0.16.4 sortedcontainers-2.4.0 stevedore-5.9.1 tinycss2-1.5.1 tomli-w-1.2.0 twine-7.0.0 typing-inspection-0.4.4 webencodings-0.6.1 wheel-filename-1.4.2
+WARNING: Running pip as the 'root' user can result in broken permissions and conflicting behaviour with the system package manager, possibly rendering your system unusable. It is recommended to use a virtual environment instead: https://pip.pypa.io/warnings/venv. Use the --root-user-action option if you know what you are doing and want to suppress this warning.
+....................                                                     [100%]
+20 passed in 0.59s
++ /opt/conda/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /opt/conda/bin/python -m ruff format --check nwkit tests setup.py tools
+509 files already formatted
++ /opt/conda/bin/python -m mypy --no-incremental
+Success: no issues found in 227 source files
++ /opt/conda/bin/python -m pip check
+No broken requirements found.
++ /opt/conda/bin/python -m bandit -r nwkit -ll -ii -q
++ /opt/conda/bin/python -m pip_audit .
+No known vulnerabilities found
++ /opt/conda/bin/python -m coverage erase
++ /opt/conda/bin/python -m coverage run -m pytest tests/ -q
+........................................................................ [  1%]
+.........................................s.............................. [  3%]
+........................................................................ [  5%]
+........................................................................ [  6%]
+........................................................................ [  8%]
+........................................................................ [ 10%]
+........................................................................ [ 11%]
+........................................................................ [ 13%]
+........................................................................ [ 15%]
+........................................................................ [ 17%]
+........................................................................ [ 18%]
+........................................................................ [ 20%]
+........................................................................ [ 22%]
+........................................................................ [ 23%]
+........................................................................ [ 25%]
+........................................................................ [ 27%]
+........................................................................ [ 28%]
+........................................................................ [ 30%]
+........s............................................................... [ 32%]
+........................................................................ [ 34%]
+........................................................................ [ 35%]
+........................................................................ [ 37%]
+........................................................................ [ 39%]
+........................................................................ [ 40%]
+........................................................................ [ 42%]
+........................................................................ [ 44%]
+........................................................................ [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 49%]
+........................................................................ [ 51%]
+........................................................................ [ 52%]
+........................................................................ [ 54%]
+........................................................................ [ 56%]
+........................................................................ [ 57%]
+........................................................................ [ 59%]
+........................................................................ [ 61%]
+........................................................................ [ 63%]
+........................................................................ [ 64%]
+........................................................................ [ 66%]
+........................................................................ [ 68%]
+........................................................................ [ 69%]
+........................................................................ [ 71%]
+........................................................................ [ 73%]
+........................................................................ [ 74%]
+........................................................................ [ 76%]
+........ssss..................................sss........sssss.......... [ 78%]
+.ss...ssss.............................................................. [ 80%]
+....................ssss..sssss.........ssss............................ [ 81%]
+........................................................................ [ 83%]
+........................................................................ [ 85%]
+........................................................................ [ 86%]
+...............................F......s....ssssssssssssssssssss......... [ 88%]
+........................................................................ [ 90%]
+........................................................................ [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 95%]
+........................................................................ [ 97%]
+........................................................................ [ 98%]
+...................................................                      [100%]
+=================================== FAILURES ===================================
+_______ test_archived_engine_requires_explicit_scope_and_intact_snapshot _______
+
+tmp_path = PosixPath('/tmp/pytest-of-root/pytest-1/test_archived_engine_requires_0')
+
+    def test_archived_engine_requires_explicit_scope_and_intact_snapshot(tmp_path):
+        source = Path("examples/shift/null-contract-timing-pilot")
+        bundle = tmp_path / "archived"
+        shutil.copytree(source, bundle)
+        with pytest.raises(ValueError, match="Active generator/fitting hash mismatch"):
+            audit(bundle)
+        before = {
+            str(p.relative_to(bundle)): p.read_bytes()
+            for p in bundle.rglob("*")
+            if p.is_file()
+        }
+>       result = audit(bundle, replay_stride=1, frozen_engine=True)
+                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_shift_null_contract_audit.py:140:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+directory = PosixPath('/tmp/pytest-of-root/pytest-1/test_archived_engine_requires_0/archived')
+replay_stride = 1, frozen_engine = True
+
+    def audit(directory, replay_stride=0, *, frozen_engine=False):
+        specification = json.loads((directory / "protocol.json").read_text())
+        if (
+            frozen_engine
+            and "nwkit/shift_calibration.py" not in specification["source_sha256"]
+        ):
+            raise ValueError("Archived engine lacks a declared source hash")
+        for name, sha in specification["source_sha256"].items():
+            archived = directory / "source-snapshot" / Path(name).name
+            if hashlib.sha256(archived.read_bytes()).hexdigest() != sha:
+                raise ValueError(f"Snapshot hash mismatch: {name}")
+            if hashlib.sha256(Path(name).read_bytes()).hexdigest() != sha:
+                if not frozen_engine or name != "nwkit/shift_calibration.py":
+                    raise ValueError(f"Active generator/fitting hash mismatch: {name}")
+        engine_class = CalibratedSearch
+        if frozen_engine:
+            frozen = directory / "source-snapshot" / "shift_calibration.py"
+            module = ModuleType("nwkit._archived_shift_calibration")
+            module.__file__ = str(frozen)
+            # Compile the verified source directly: import loaders would create a
+            # __pycache__ inside the input evidence, violating read-only auditing.
+            exec(compile(frozen.read_bytes(), str(frozen), "exec"), module.__dict__)
+            if not np.array_equal(module.ALPHA_HEIGHT_GRID, ALPHA_HEIGHT_GRID):
+                raise ValueError("Archived alpha grid differs from the audit grid")
+            engine_class = module.CalibratedSearch
+        designs = {c["cell_id"]: c for c in cells(specification["suite"])}
+        if any(c != designs[c["cell_id"]] for c in specification["cells"]):
+            raise ValueError("Protocol cells disagree with the frozen design")
+        expected = [
+            (c["cell_id"], r)
+            for c in specification["cells"]
+            for r in range(specification["replicates"])
+        ]
+        with gzip.open(directory / "records.jsonl.gz", "rt") as stream:
+            rows = [json.loads(line) for line in stream]
+        if [(r["cell_id"], r["replicate"]) for r in rows] != expected:
+            raise ValueError("Missing, duplicated or reordered datasets")
+        geometries, models, replay_engines = {}, {}, {}
+        maximum_error = 0.0
+        replays = 0
+        for index, row in enumerate(rows):
+            cell = designs[row["cell_id"]]
+            key = cell["tree"], cell["known_error"], cell["alpha_height"]
+            if key not in geometries:
+                tree = read_tree(cell["tree"], "auto", True, quiet=True)
+                variances = (
+                    np.geomspace(0.01, 0.25, cell["tips"])
+                    if cell["known_error"]
+                    else np.zeros(cell["tips"])
+                )
+                null = {"groups": [[0]], "shift_branch_ids": []}
+                reference = DenseOUReference(tree, null, variances)
+                a = np.inf if cell["alpha_height"] is None else cell["alpha_height"]
+                _, K = reference.branch_moments(a)
+                covariance = cell["process_tip_variance"] * K + np.diag(variances)
+                geometries[key] = tree, variances, covariance
+            tree, variances, covariance = geometries[key]
+            seed = np.random.SeedSequence(
+                [specification["seed"], cell["cell_id"], row["replicate"]]
+            )
+            data_seed, bootstrap_seed = seed.spawn(2)
+            boot = int(bootstrap_seed.generate_state(1)[0] % (2**31))
+            y = np.linalg.cholesky(covariance) @ np.random.default_rng(data_seed).normal(
+                size=cell["tips"]
+            )
+            if (
+                row["bootstrap_seed"] != boot
+                # BLAS/eigensolver roundoff is not a change of generating data.
+                # Keep RNG seeds and discrete error inputs exact; compare the
+                # computed real-valued quantities at near-machine precision.
+                or not same_generated_array(y, row["observations"])
+                or not same_generated_array(covariance, row["generating_covariance"])
+                or not np.array_equal(variances, row["known_variances"])
+            ):
+                raise ValueError("Generated observations/covariance/seeds disagree")
+            if [lane["convergence"] for lane in row["lanes"]] != specification[
+                "convergence_lanes"
+            ]:
+                raise ValueError("Missing or reordered search lanes")
+            for lane in row["lanes"]:
+                if lane["status"] == "failed":
+                    if not lane.get("error"):
+                        raise ValueError("Failure lacks an explanation")
+                    continue
+                if lane["status"] != "completed":
+                    raise ValueError("Unknown fit status")
+                model_key = cell["tree"], lane["convergence"]
+                if model_key not in models:
+                    models[model_key], _ = enumerate_candidates(
+                        tree, convergence=lane["convergence"]
+                    )
+                fit = lane["fit"]
+                B = specification["bootstrap_replicates"]
+                if (
+                    fit["seed"] != boot
+                    or fit["calibration_replicates"] != B
+                    or fit["calibration_level"] != 0.05
+                ):
+                    raise ValueError("Fit settings disagree with protocol")
+                if lane["any_shift"] != check_stages(fit, bool(np.any(variances)), B, 0.05):
+                    raise ValueError("Saved any-shift flag disagrees with the model")
+                maximum_error = max(
+                    maximum_error, check_winner(tree, y, variances, fit, models[model_key])
+                )
+                if replay_stride and index % replay_stride == 0:
+                    engine_key = model_key, cell["known_error"]
+                    if engine_key not in replay_engines:
+                        replay_engines[engine_key] = engine_class(
+                            tree, convergence=lane["convergence"], variances=variances
+                        )
+                    replay = replay_engines[engine_key].fit(y, seed=boot, replicates=B)
+                    if replay["model"] != fit["model"] or not same_replayed_tests(
+                        replay["tests"], fit["tests"]
+                    ):
+>                       raise ValueError("Seeded complete-search replay disagrees")
+E                       ValueError: Seeded complete-search replay disagrees
+
+tools/verify_shift_null_contract.py:236: ValueError
+=============================== warnings summary ===============================
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+tests/test_shift_calibration_audit.py::test_audit_cli_leaves_source_evidence_unchanged
+  /opt/conda/lib/python3.12/multiprocessing/popen_fork.py:66: DeprecationWarning: This process (pid=741) is multi-threaded, use of fork() may lead to deadlocks in the child.
+    self.pid = os.fork()
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED tests/test_shift_null_contract_audit.py::test_archived_engine_requires_explicit_scope_and_intact_snapshot
+1 failed, 4172 passed, 54 skipped, 8 warnings in 693.43s (0:11:33)
+Traceback (most recent call last):
+  File "/tmp/nwkit/tools/check.py", line 150, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/tmp/nwkit/tools/check.py", line 140, in main
+    run_full_checks()
+  File "/tmp/nwkit/tools/check.py", line 63, in run_full_checks
+    run(PYTHON, "-m", "coverage", "run", "-m", "pytest", "tests/", "-q")
+  File "/tmp/nwkit/tools/check.py", line 20, in run
+    subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=env)
+  File "/opt/conda/lib/python3.12/subprocess.py", line 571, in run
+    raise CalledProcessError(retcode, process.args,
+subprocess.CalledProcessError: Command '('/opt/conda/bin/python', '-m', 'coverage', 'run', '-m', 'pytest', 'tests/', '-q')' returned non-zero exit status 1.

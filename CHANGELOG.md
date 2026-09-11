@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.17] - 2026-09-11
+
+### Fixed
+
+- Link the external IQ-TREE worker with the system zlib selected by its CMake
+  build, fixing unresolved gzip symbols when zlib is not bundled into the
+  static IQ-TREE library. Preserve the selected Debug/Release library path.
+
 ## [0.43.16] - 2026-09-11
 
 ### Added
