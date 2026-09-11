@@ -346,7 +346,9 @@ def selection_main(args):
     predictor_text = (
         args.predictors
         if args.predictors is not None
-        else ",".join(Path(args.predictor_file).read_text().splitlines())
+        else ",".join(
+            Path(args.predictor_file).read_text(encoding="utf-8").splitlines()
+        )
     )
     names, free_names = _names(predictor_text), _names(args.unpenalized)
     if (

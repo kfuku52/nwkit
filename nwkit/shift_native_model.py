@@ -94,6 +94,7 @@ class ShiftLayout:
 
     @classmethod
     def build(cls, tree: ShiftTree, shifts=(), groups=None):
+        shifts = tuple(shifts)
         if any(
             isinstance(b, bool) or not isinstance(b, (int, np.integer)) for b in shifts
         ):

@@ -41,11 +41,13 @@ def _solve(problem, *, starts, maxiter, seed):
         validate_profile_approximation(problem, parameters)
     if any(a.get("nonunique_age_solution") for a in attempts):
         raise ValueError("Calibrated profile found a nonunique age optimum.")
-    bounds, _ = problem.bounds_and_constraint()
     offset = len(problem.free)
     # Zero rate variance is a scientific boundary; mean/upper variance bounds
     # are numerical protections and cannot define a bootstrap generating fit.
     nuisance = parameters[offset:]
+    if not len(nuisance):
+        return problem, parameters
+    bounds, _ = problem.bounds_and_constraint()
     lower = nuisance - bounds.lb[offset:]
     if getattr(problem, "marginal", False) and problem.fixed_sd is None:
         lower = lower[:-1]

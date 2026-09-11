@@ -2016,7 +2016,7 @@ def glmm_inference_metadata(fit, flat_index=None):
         "bootstrap_attempted": fit.bootstrap_attempted,
         "bootstrap_succeeded": fit.bootstrap_succeeded,
         "bootstrap_failed": fit.bootstrap_attempted - fit.bootstrap_succeeded,
-        "monte_carlo_se": ""
+        "monte_carlo_se": np.nan
         if flat_index is None or fit.coefficient_monte_carlo_se is None
         else float(fit.coefficient_monte_carlo_se[flat_index]),
         "coefficient_profile": ""

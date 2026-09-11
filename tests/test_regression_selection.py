@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -204,13 +205,19 @@ def test_fail_closed_for_unusable_inner_binary_fold():
         validate_inputs(x, np.arange(18) + 0.1, covariance, "negative-binomial")
 
 
-def test_cli_bundle_and_input_protection(tmp_path):
+@pytest.mark.parametrize("predictor_file", [False, True])
+def test_cli_bundle_and_input_protection(tmp_path, monkeypatch, predictor_file):
     x, y, _, groups = example()
     names = [f"s{i}" for i in range(len(y))]
     tree = tmp_path / "tree.nwk"
     tree.write_text("(" + ",".join(f"{name}:1" for name in names) + ");")
     data = tmp_path / "data.tsv"
-    table = pd.DataFrame(x, columns=["OG1", "OG2", "OG3", "OG4"])
+    columns = (
+        ["遺伝子1", "OG2", "OG3", "OG4"]
+        if predictor_file
+        else ["OG1", "OG2", "OG3", "OG4"]
+    )
+    table = pd.DataFrame(x, columns=columns)
     table.insert(0, "leaf_name", names)
     table["trait"] = y
     table.to_csv(data, sep="\t", index=False)
@@ -232,7 +239,7 @@ def test_cli_bundle_and_input_protection(tmp_path):
         "--response",
         "trait",
         "--predictors",
-        "OG1,OG2,OG3,OG4",
+        ",".join(columns),
         "--strengths",
         "0.2,0.05",
         "--l1-ratios",
@@ -240,14 +247,31 @@ def test_cli_bundle_and_input_protection(tmp_path):
         "--out-prefix",
         str(prefix),
     ]
+    if predictor_file:
+        path = tmp_path / "predictors.txt"
+        path.write_text("\n".join(columns), encoding="utf-8")
+        original = Path.read_text
+
+        def locale_read(source, encoding=None, errors=None, **kwargs):
+            if source == path and encoding is None:
+                encoding = "cp1252"
+            return original(source, encoding=encoding, errors=errors, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", locale_read)
+        index = args.index("--predictors")
+        args[index : index + 2] = ["--predictor-file", str(path)]
     audit = tmp_path / "audit.json"
     assert main([*args, "--audit", str(audit)]) == 0
     record = json.loads(audit.read_text())
     assert len(record["outputs"]) == 6
-    assert {row["argument"] for row in record["inputs"]} == {"tree", "data", "folds"}
+    assert {row["argument"] for row in record["inputs"]} == (
+        {"tree", "data", "folds", "predictor_file"}
+        if predictor_file
+        else {"tree", "data", "folds"}
+    )
     assert record["primary_input"]["kind"] == "newick"
     coefficients = pd.read_csv(str(prefix) + ".coefficients.tsv", sep="\t")
-    assert coefficients.loc[coefficients.term == "OG1", "selected"].item()
+    assert coefficients.loc[coefficients.term == columns[0], "selected"].item()
     assert not any("p_value" in col or "pval" in col for col in coefficients)
     metadata = json.loads((tmp_path / "result.metadata.json").read_text())
     assert metadata["n_folds"] == 3

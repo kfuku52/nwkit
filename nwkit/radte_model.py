@@ -329,6 +329,9 @@ def solve_problem(
             attempts,
         )
     best = min(solutions, key=lambda res: res.fun)
+    best = _checked_zero_variance_boundary(
+        problem, best, bounds, constraint, maxiter, attempts
+    )
     close = [
         res
         for res in solutions
@@ -348,6 +351,50 @@ def solve_problem(
             )
         )
     return best.x, attempts
+
+
+def _checked_zero_variance_boundary(
+    problem, best, bounds, constraint, maxiter, attempts
+):
+    """Resolve a numerically tied marginal variance using its exact boundary."""
+    if (
+        not getattr(problem, "marginal", False)
+        or problem.fixed_sd is not None
+        or best.x[-1] == 0
+    ):
+        return best
+    point = best.x.copy()
+    point[-1] = 0.0
+    tolerance = 16 * np.finfo(float).eps * max(1.0, abs(best.fun))
+    if problem.value_gradient(point)[0] > best.fun + tolerance:
+        return best
+    upper = bounds.ub.copy()
+    upper[-1] = 0.0
+    boundary = minimize(
+        problem.value_gradient,
+        point,
+        jac=True,
+        method="SLSQP",
+        bounds=Bounds(bounds.lb.copy(), upper),
+        constraints=[constraint] if constraint.A.shape[0] else [],
+        options={"maxiter": maxiter, "ftol": 1e-10},
+    )
+    accepted = bool(
+        boundary.success
+        and problem.feasible(boundary.x)
+        and np.isfinite(boundary.fun)
+        and boundary.fun <= best.fun + tolerance
+        and problem.value_gradient(boundary.x)[1][-1] >= 0
+    )
+    attempts.append(
+        dict(
+            success=accepted,
+            objective=float(boundary.fun),
+            iterations=int(boundary.nit),
+            message="Checked zero-variance boundary: " + str(boundary.message),
+        )
+    )
+    return boundary if accepted else best
 
 
 def solution_diagnostics(problem, x, ages, attempts, starts):
@@ -370,9 +417,9 @@ def solution_diagnostics(problem, x, ages, attempts, starts):
         and scale_upper - scale_lower > 1e-6
     ):
         diagnostics.append("absolute_age_scale_unidentified_within_hard_bounds")
-    numerical_bounds, _ = problem.bounds_and_constraint()
     offset = len(problem.free)
     if len(x) > offset:
+        numerical_bounds, _ = problem.bounds_and_constraint()
         lower_active = x[offset:] - numerical_bounds.lb[offset:] < 1e-5
         if getattr(problem, "marginal", False) and problem.rate_sd is None:
             lower_active[-1] = False  # Zero variance is a scientific boundary.

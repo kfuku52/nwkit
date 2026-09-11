@@ -262,7 +262,7 @@ def shift_simulate_main(args):
     require_rooted(tree, "Shift simulation requires a rooted tree.")
     validate_unique_named_leaves(tree, "--infile")
     prepared = ShiftTree.build(tree)
-    payload = json.loads(Path(source).read_text())
+    payload = json.loads(Path(source).read_text(encoding="utf-8"))
     spec = (
         explicit_simulation(prepared, payload)
         if args.parameters
@@ -333,7 +333,7 @@ def shift_simulate_main(args):
     )
     with output_transaction(paths) as staged:
         Path(staged[args.truth_out]).write_text(
-            json.dumps(truth, indent=2, allow_nan=False) + "\n"
+            json.dumps(truth, indent=2, allow_nan=False) + "\n", encoding="utf-8"
         )
         if args.outfile != "-":
             table.to_csv(staged[args.outfile], sep="\t", index=False, na_rep="NA")

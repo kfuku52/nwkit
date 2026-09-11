@@ -1656,7 +1656,7 @@ def _categorical_coefficient_rows(
                 else "none",
                 "interval_method": "not-applicable",
                 "coefficient_profile": "",
-                "monte_carlo_se": "",
+                "monte_carlo_se": np.nan,
             }
         )
         rows.append(template_row)

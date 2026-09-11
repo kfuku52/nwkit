@@ -13,7 +13,14 @@ import pytest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from compare_shift_null_calibration import summarize  # noqa: E402
 from validate_shift_null_contract import tree_text  # noqa: E402
-from verify_shift_null_contract import audit, check_stages, check_winner  # noqa: E402
+from verify_shift_null_contract import (  # noqa: E402
+    audit,
+    check_stages,
+    check_winner,
+    same_generated_array,
+    same_replayed_summary,
+    same_replayed_tests,
+)
 
 from nwkit.shift_calibration import CalibratedSearch  # noqa: E402
 from nwkit.util import read_tree  # noqa: E402
@@ -65,6 +72,44 @@ def test_paired_power_failure_remains_a_loss():
     assert result["attempted"] == 100
     assert result["failed"] == 1
     assert result["power_loss_upper_one_sided_95"] > 0.04
+
+
+def test_replay_roundoff_does_not_relax_discrete_decisions(evidence):
+    saved = evidence[-1]["tests"]
+    replayed = copy.deepcopy(saved)
+    replayed[0]["statistic"] = np.nextafter(saved[0]["statistic"], np.inf)
+    assert same_replayed_tests(replayed, saved)
+    for field in ("stage", "candidate_count", "p_value", "statistic"):
+        changed = copy.deepcopy(replayed)
+        changed[0][field] += 1e-6
+        assert not same_replayed_tests(changed, saved)
+    changed = copy.deepcopy(replayed)
+    changed[0]["null_alpha_evaluations"][0]["p_value"] += 1e-6
+    assert not same_replayed_tests(changed, saved)
+
+
+def test_summary_roundoff_cannot_hide_changed_counts_or_acceptance():
+    saved = json.loads(
+        Path("examples/shift/null-contract-timing-pilot/summary.json").read_text()
+    )
+    replayed = copy.deepcopy(saved)
+    field = "simultaneous_one_sided_95_upper"
+    replayed["cell_results"][0][field] = np.nextafter(
+        saved["cell_results"][0][field], np.inf
+    )
+    assert same_replayed_summary(replayed, saved)
+    for key in (field, "attempted", "any_shift", "acceptance_upper"):
+        changed = copy.deepcopy(replayed)
+        changed["cell_results"][0][key] += 1e-6
+        assert not same_replayed_summary(changed, saved)
+
+
+def test_generated_array_roundoff_does_not_allow_broadcasting_or_changed_data():
+    observed = np.array([0.1, 0.2])
+    assert same_generated_array(observed, np.nextafter(observed, np.inf))
+    assert not same_generated_array(observed, observed + 1e-6)
+    assert not same_generated_array(observed, observed[None, :])
+    assert not same_generated_array(observed, [np.nan, 0.2])
 
 
 def test_all_failed_pairs_have_missing_rmse_and_worst_case_bound():

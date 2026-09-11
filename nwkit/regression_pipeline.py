@@ -2239,7 +2239,7 @@ def _reconciled_pglmm_rows(
                 else "none",
                 "interval_method": "not-applicable",
                 "coefficient_profile": "",
-                "monte_carlo_se": "",
+                "monte_carlo_se": np.nan,
                 "inference_status": omnibus_status,
             }
         )

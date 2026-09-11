@@ -1,0 +1,220 @@
+{
+  "base_manifest": "reviews/shift-implementation-base.json",
+  "note": "Review inventory, not a patch to apply over the separately changing original checkout. The original checkout was read only.",
+  "changes": [
+    {
+      "path": "SHIFT.md",
+      "category": "modified_import",
+      "imported_sha256": "edcbc4e60a42e531c3de0936fa88cc2df56a5ba1791872949ffaad234e9483a2",
+      "response_sha256": "9b8631c6a53dc9d165d30fc7523e1b3ec1a170e8dadc9b5742642ca918f8614b",
+      "original_checkout_still_matches_import": false
+    },
+    {
+      "path": "SHIFT_ALPHA.md",
+      "category": "modified_import",
+      "imported_sha256": "afd16aed46c061a93f3ed9cbda14323a44b7480a84508d31c61f860021f49b4e",
+      "response_sha256": "68089bf83e5faef44bf700d795632636e972652b703b913908edc20a10ddf115",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "SHIFT_CALIBRATION.md",
+      "category": "modified_import",
+      "imported_sha256": "a71a7e537241b009036d047f5a5917fb0cd4b8b6e66d3562de9cfb7646def34e",
+      "response_sha256": "a750d5057727c88faf925d6b704fc81a1769334fb116ac36a9e8def2744213e8",
+      "original_checkout_still_matches_import": false
+    },
+    {
+      "path": "SHIFT_JOINT.md",
+      "category": "modified_import",
+      "imported_sha256": "83c7d39ad2090574ac881b7a0a3c0aaa298b1cc2289f7f211ab668b2759198ac",
+      "response_sha256": "ec4c1005e717ef7c89ebe008fde4a069b796eb89c57190fb5c7439874e177ccf",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "SHIFT_PBIC.md",
+      "category": "modified_import",
+      "imported_sha256": "206a70612af68b4d7b2c258b8d2ddb82fe95902e49df48350e7feb64eec7c0f7",
+      "response_sha256": "e653f3fac7076fd82d98f2693c41d29f9ff48979cbc790bfde143fd5e18b0159",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "SHIFT_VALIDATION.md",
+      "category": "modified_import",
+      "imported_sha256": "5401783b971a5f075225ccb87f7ba0c795a67310f0dd764788f6b7603c6ebc0b",
+      "response_sha256": "22e38134847685615782afe4a573393c2781e32a60e1da1f44f66d7488f86423",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "examples/shift/README.md",
+      "category": "modified_import",
+      "imported_sha256": "b784b30be5d28cea0399be4294021c84fe2ea9fb6a972d1342f605efa9d79795",
+      "response_sha256": "a3b43a459ecfb559ff46b966aa82223fb4412073877e8da0a813ae6210361f64",
+      "original_checkout_still_matches_import": false
+    },
+    {
+      "path": "nwkit/shift_backend.py",
+      "category": "modified_import",
+      "imported_sha256": "8946565fda853185329b9e702cbd9d42accb7d14941d81bd5d64efc8eb55613e",
+      "response_sha256": "7bdcbd068e952d25f0c4c2e5243cc3ee12e9f85f3adc36c12035d0c731b77095",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "nwkit/shift_calibrated_output.py",
+      "category": "modified_import",
+      "imported_sha256": "8ce7d65f4d8cdee7ad3d1383fec66e285341f01a8f02aeab2fdb801aa79f16e5",
+      "response_sha256": "86c2cad7d0c182707803713a17005db7bb1d60d81ec7502fa3c99a172403c371",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "nwkit/shift_cli.py",
+      "category": "modified_import",
+      "imported_sha256": "aed23bff31baa4f939191046574182dfe7d63765e0ecdc6a7ed2e17f625bab50",
+      "response_sha256": "8d80e96e3ab3d25f805bc5f12bd94fb784869a43ff9c01a099a64674723846ee",
+      "original_checkout_still_matches_import": false
+    },
+    {
+      "path": "tests/test_shift_calibration_audit.py",
+      "category": "modified_import",
+      "imported_sha256": "9e1092dc712cd19709c538f1cf2d6bf3dc8e0e80db604410f6d2542a01304292",
+      "response_sha256": "c6aeb0bb3d922a189bd34849af3fe3bbd8e44527597ebcc4587694f858d3eb61",
+      "original_checkout_still_matches_import": false
+    },
+    {
+      "path": "tools/shift_alpha_backend.R",
+      "category": "modified_import",
+      "imported_sha256": "2d3577347ea6e808855d10ec0230a6b14b66e70e555c6bd0a578ed8e8358223a",
+      "response_sha256": "0c0352f52940bfe8e03bbbfeeed9a449de0584a83f92e22fb7aec7736326de51",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "tools/shift_joint_backend.py",
+      "category": "modified_import",
+      "imported_sha256": "78d57289395c19184348824efa1d137f89d933089c11f045456c2958fc9977e9",
+      "response_sha256": "c4936aaa0a8cdc9d5f553c95b5aa3ea0c019f2ce987734bcea52aedecd07148a",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "tools/summarize_shift_alpha.py",
+      "category": "modified_import",
+      "imported_sha256": "d59aa5148c3da4c3d955bedfe24fb8ca502e183c3a972c4678c8f1a56ae26b87",
+      "response_sha256": "de0291510f47edae94e26b75c3d610998d49668b2f9d20f02e82fa2b3ce30770",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "tools/validate_shift_alpha.py",
+      "category": "modified_import",
+      "imported_sha256": "1c59d1be5fee9102fc23825bd1751177e5ef099a4774bc6db945660b843065cd",
+      "response_sha256": "9c47635770e956e1f5ca0b2594ca7db4c74f176451e69bcc36607c67c6630f2e",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "tools/validate_shift_joint.py",
+      "category": "modified_import",
+      "imported_sha256": "97862e4f123536d398065c4bcff528f4028bbba31cad73a289e813af186c3d14",
+      "response_sha256": "10c0c25e16dc0b8d7b028e82180bd2721e512df556dd366e0405c7a3b600f7bb",
+      "original_checkout_still_matches_import": true
+    },
+    {
+      "path": "tools/verify_shift_calibration.py",
+      "category": "modified_import",
+      "imported_sha256": "c9f2118251e1b5b3ab71b0160a55c24e89140729927497b06a6809c31e86b610",
+      "response_sha256": "3966bb3c9f8cc4a91914ccdf546b41ba5a77e7b41a336824a2b3266a9c48393c",
+      "original_checkout_still_matches_import": false
+    },
+    {
+      "path": "ASR.md",
+      "category": "tracked_base_change",
+      "response_sha256": "1f79b53338023887bc11913e1d38635c2ba5d50eb27f1d31af6202a9069c544f"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "category": "tracked_base_change",
+      "response_sha256": "89c26cc226ecdec05b9920f398f6b579bcb932fdbc8d65bbddcde36f937d6195"
+    },
+    {
+      "path": "CLI_TSV_CONVENTIONS.md",
+      "category": "tracked_base_change",
+      "response_sha256": "bae1b9eef2d186f6ba05efc78ce6f10a572d846c0570cd279d17965ad0a9ad7d"
+    },
+    {
+      "path": "MANIFEST.in",
+      "category": "tracked_base_change",
+      "response_sha256": "ee089d951a36f3e5292b7b8e0079e08e64aa248587fe1bec8626e1987cd07380"
+    },
+    {
+      "path": "README.md",
+      "category": "tracked_base_change",
+      "response_sha256": "3125882bf5bf6bda12475829913728620dae5e72ad57673f4fb585c55eb5ebef"
+    },
+    {
+      "path": "nwkit/cli.py",
+      "category": "tracked_base_change",
+      "response_sha256": "8ca92887cf787af4e11d784992c4d3af485929e438e5d0f0a45f344b8767f048"
+    },
+    {
+      "path": "nwkit/provenance.py",
+      "category": "tracked_base_change",
+      "response_sha256": "ecb47a80741486e1580a401cad83aa8320926be43b334e520d90a467ba4847ca"
+    },
+    {
+      "path": "tests/test_cli_contracts.py",
+      "category": "tracked_base_change",
+      "response_sha256": "5e8a754ed62d14b50818b5ad430f00a7e312cf6c314269e362720e52cd434bc6"
+    },
+    {
+      "path": "tools/check_dist.py",
+      "category": "tracked_base_change",
+      "response_sha256": "483d178a6f92c1b4f18f2ad9128adb9e5d495ee1eacdbb7f2e81f0090b88bf1d"
+    },
+    {
+      "path": "SHIFT_RESPONSE_VALIDATION.md",
+      "category": "new_response_file",
+      "response_sha256": "0e9ed4587eb3d47cfbd50736597360ad55fc23cd9bda7b905525b5b5703b76e7"
+    },
+    {
+      "path": "nwkit/shift_backend_probe.py",
+      "category": "new_response_file",
+      "response_sha256": "cbea922b11deeeed206d0ed1572fb06eb408e6d728e06928874ae48290c3f505"
+    },
+    {
+      "path": "tests/test_shift_backend_probe.py",
+      "category": "new_response_file",
+      "response_sha256": "670e90faa02825cad02488f4247ed2946f796e0d406e1f58d8f535ae5221ef37"
+    },
+    {
+      "path": "tests/test_shift_continuous_reference.py",
+      "category": "new_response_file",
+      "response_sha256": "e5e003c107704cd2b2494f665159dadac4e6f7682e38883233837acde0902dd2"
+    },
+    {
+      "path": "tests/test_shift_null_contract_audit.py",
+      "category": "new_response_file",
+      "response_sha256": "d0e73df6076973f83f71aeb537d3380203f85712207ede3938682154bc1a21b7"
+    },
+    {
+      "path": "tools/compare_shift_null_calibration.py",
+      "category": "new_response_file",
+      "response_sha256": "2f94ab103f249f359d43650924c9e37924b111860948cb8761635c63e2d89c57"
+    },
+    {
+      "path": "tools/shift_continuous_reference.py",
+      "category": "new_response_file",
+      "response_sha256": "daeb3310c0a4869768388834a97721a9a63bdb708cd9ba7cbce2c1f8052469c5"
+    },
+    {
+      "path": "tools/validate_shift_null_contract.py",
+      "category": "new_response_file",
+      "response_sha256": "b18ef01535147553f20ebff5453ed78674f3bbc14a75bde0ee803beb59df5316"
+    },
+    {
+      "path": "tools/verify_shift_null_contract.py",
+      "category": "new_response_file",
+      "response_sha256": "e28784071a0a69833cda34bc36b407a29914d8d6368fde87df7d0f953d6fb9a4"
+    },
+    {
+      "path": "tools/verify_shift_paired.py",
+      "category": "new_response_file",
+      "response_sha256": "78ac04f2f5a24223c58bb6af884d0772de6ed7e03890918a3666deafd1e71613"
+    }
+  ]
+}

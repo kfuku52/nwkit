@@ -1,14 +1,16 @@
 import copy
 import importlib.util
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
+from scipy.optimize import Bounds, LinearConstraint, OptimizeResult
 from scipy.stats import t
 
 from nwkit.radte_calibrated import calibrated_profile_intervals, calibrated_profile_test
 from nwkit.radte_marginal import MarginalDatingProblem
-from nwkit.radte_model import fit_dates
+from nwkit.radte_model import _checked_zero_variance_boundary, fit_dates
 from nwkit.radte_sequence import SequenceLikelihood
 from nwkit.radte_simulation import simulate_rate_lengths, simulate_sequence_likelihood
 from tests.test_radte import small_chronology
@@ -50,6 +52,33 @@ def test_estimated_marginal_variance_can_reach_the_true_zero_boundary():
 
     studentized_intervals(fit, problem)
     assert fit.interval_status == "unavailable-estimated-zero-rate-variance"
+
+
+@pytest.mark.parametrize("true_variance", [0.0, 1e-8])
+def test_zero_boundary_refit_preserves_genuine_small_positive_variance(true_variance):
+    def objective(x):
+        residual = x - np.array([0.5, true_variance])
+        return float(residual @ residual), 2 * residual
+
+    point = np.array([0.5, true_variance or 8e-17])
+    best = OptimizeResult(x=point, fun=objective(point)[0], success=True)
+    problem = SimpleNamespace(
+        marginal=True,
+        fixed_sd=None,
+        value_gradient=objective,
+        feasible=lambda x: x[-1] >= 0,
+    )
+    attempts = []
+    result = _checked_zero_variance_boundary(
+        problem,
+        best,
+        Bounds([-30.0, 0.0], [30.0, 50.0]),
+        LinearConstraint(np.empty((0, 2)), [], []),
+        100,
+        attempts,
+    )
+    assert result.x[-1] == true_variance
+    assert attempts[-1]["success"] == (true_variance == 0)
 
 
 def test_dense_reference_matches_independent_two_group_t_formula():

@@ -10,6 +10,7 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import expm
 from scipy.optimize import OptimizeResult, minimize
+from scipy.sparse.csgraph import connected_components
 from scipy.special import logsumexp
 from scipy.stats import gamma as gamma_distribution
 from scipy.stats import poisson
@@ -1356,6 +1357,21 @@ def _transition_matrices_for_tree(tree, rate_matrix):
     return by_node
 
 
+def _symmetric_generator_spectrum(matrix):
+    """Diagonalize disconnected components at their own numerical scales."""
+    count, labels = connected_components(matrix > 0, directed=False)
+    eigenvalues = np.empty(len(matrix))
+    eigenvectors = np.zeros_like(matrix)
+    stationary = []
+    for component in range(count):
+        indices = np.flatnonzero(labels == component)
+        values, vectors = np.linalg.eigh(matrix[np.ix_(indices, indices)])
+        eigenvalues[indices] = values
+        eigenvectors[np.ix_(indices, indices)] = vectors
+        stationary.append(indices[-1])
+    return eigenvalues, eigenvectors, stationary
+
+
 def _symmetric_transition_matrices(rate_matrix, lengths):
     """Exponentiate an exactly reversible symmetric generator once per Q."""
 
@@ -1364,10 +1380,16 @@ def _symmetric_transition_matrices(rate_matrix, lengths):
     tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(matrix))
     if not np.allclose(matrix, matrix.T, rtol=0.0, atol=tolerance):
         return None
-    eigenvalues, eigenvectors = np.linalg.eigh((matrix + matrix.T) / 2.0)
+    eigenvalues, eigenvectors, stationary = _symmetric_generator_spectrum(
+        (matrix + matrix.T) / 2.0
+    )
     if float(np.max(eigenvalues)) > tolerance:
         return None
     eigenvalues = np.minimum(eigenvalues, 0.0)
+    # A symmetric generator has one exact stationary mode per connected
+    # component. Negative roundoff in these zero modes otherwise leaks mass
+    # as branch lengths grow, including for disconnected transition graphs.
+    eigenvalues[stationary] = 0.0
     row_norm = float(np.max(np.sum(np.abs(matrix), axis=1), initial=0.0))
     result = {}
     for raw_length in lengths:

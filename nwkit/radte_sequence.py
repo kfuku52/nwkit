@@ -239,6 +239,10 @@ class SequenceLikelihood:
         symmetric = rootpi[:, None] * self.q / rootpi[None, :]
         self.eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
         self.eigenvalues = np.minimum(self.eigenvalues, 0.0)
+        # Every irreducible rate generator has an exact stationary eigenvalue.
+        # A tiny negative eigensolver residual otherwise destroys probability
+        # mass on long branches, including valid optimizer trial parameters.
+        self.eigenvalues[-1] = 0.0
         self.left = eigenvectors / rootpi[:, None]
         self.right = eigenvectors.T * rootpi[None, :]
 

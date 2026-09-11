@@ -78,6 +78,47 @@ def check_stages(fit, known_error, B, level):
     return shifted
 
 
+def _same_numeric_records(replayed, saved, field):
+    """Allow roundoff only in the specified computed field, not the decisions."""
+    if len(replayed) != len(saved):
+        return False
+    for actual, expected in zip(replayed, saved, strict=True):
+        actual, expected = actual.copy(), expected.copy()
+        if (
+            not np.isclose(
+                actual.pop(field),
+                expected.pop(field),
+                rtol=1e-12,
+                atol=1e-12,
+            )
+            or actual != expected
+        ):
+            return False
+    return True
+
+
+def same_replayed_tests(replayed, saved):
+    return _same_numeric_records(replayed, saved, "statistic")
+
+
+def same_replayed_summary(replayed, saved):
+    replayed, saved = replayed.copy(), saved.copy()
+    return (
+        _same_numeric_records(
+            replayed.pop("cell_results"),
+            saved.pop("cell_results"),
+            "simultaneous_one_sided_95_upper",
+        )
+        and replayed == saved
+    )
+
+
+def same_generated_array(actual, expected):
+    return np.shape(actual) == np.shape(expected) and np.allclose(
+        actual, expected, rtol=1e-13, atol=1e-14
+    )
+
+
 def audit(directory, replay_stride=0, *, frozen_engine=False):
     specification = json.loads((directory / "protocol.json").read_text())
     if (
@@ -145,8 +186,11 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
         )
         if (
             row["bootstrap_seed"] != boot
-            or not np.array_equal(y, row["observations"])
-            or not np.array_equal(covariance, row["generating_covariance"])
+            # BLAS/eigensolver roundoff is not a change of generating data.
+            # Keep RNG seeds and discrete error inputs exact; compare the
+            # computed real-valued quantities at near-machine precision.
+            or not same_generated_array(y, row["observations"])
+            or not same_generated_array(covariance, row["generating_covariance"])
             or not np.array_equal(variances, row["known_variances"])
         ):
             raise ValueError("Generated observations/covariance/seeds disagree")
@@ -186,11 +230,15 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
                         tree, convergence=lane["convergence"], variances=variances
                     )
                 replay = replay_engines[engine_key].fit(y, seed=boot, replicates=B)
-                if replay["model"] != fit["model"] or replay["tests"] != fit["tests"]:
+                if replay["model"] != fit["model"] or not same_replayed_tests(
+                    replay["tests"], fit["tests"]
+                ):
                     raise ValueError("Seeded complete-search replay disagrees")
                 replays += 1
     summary = summarize(rows, specification)
-    if summary != json.loads((directory / "summary.json").read_text()):
+    if not same_replayed_summary(
+        summary, json.loads((directory / "summary.json").read_text())
+    ):
         raise ValueError("Summary differs from reconstructed counts")
     for result in summary["cell_results"]:
         upper = result["simultaneous_one_sided_95_upper"]

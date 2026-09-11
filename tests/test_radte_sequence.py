@@ -68,6 +68,14 @@ def test_pruning_gradient_matches_finite_difference(tmp_path, model):
     p, dp = likelihood.transition(0.2, 1.3)
     np.testing.assert_allclose(p, expm(likelihood.q * 0.26), atol=1e-13)
     np.testing.assert_allclose(dp, likelihood.q @ p * 1.3, atol=1e-13)
+    # Every supported irreducible model tends to its stationary distribution,
+    # even when optimization explores branch lengths far beyond saturation.
+    p, dp = likelihood.transition(1e20, 1.3)
+    np.testing.assert_allclose(p, np.tile(likelihood.pi, (len(p), 1)), atol=1e-13)
+    np.testing.assert_allclose(p.sum(axis=1), 1.0, atol=1e-13)
+    np.testing.assert_allclose(dp, 0.0, atol=1e-13)
+    value, gradient = likelihood.value_gradient(np.full(len(c.edges), 1e20))
+    assert np.isfinite(value) and np.isfinite(gradient).all()
 
 
 def test_sequence_date_gradient_and_root_split_invariance(tmp_path):

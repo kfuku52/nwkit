@@ -5417,6 +5417,7 @@ proot.add_argument(
 )
 proot.add_argument(
     "--candidates-out",
+    "--candidates_out",
     metavar="PATH",
     default=None,
     help="Write every equally optimal reconciliation root as a Newick tree collection in deterministic order. Requires --method reconciliation.",

@@ -4,7 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.16] - 2026-09-11
+
 ### Added
+
+- Add experimental native multivariate OU shift inference with bounded path
+  search, automatic search caps, AIC/AICc/BIC, calibrated selection and bootstrap
+  support. Support joint trait covariance, shared or trait-specific attraction,
+  bounded dense GLS with checked analytic gradients, and reproducible
+  `shift-simulate` generation from explicit parameters or fitted models.
+  See `NATIVE_SHIFT.md` and `SHIFT_JOINT.md`.
 
 - Export all optimal reconciliation roots with `root --candidates-out` as a
   transactional Newick collection. Add nullable per-event `implied_losses` to
@@ -29,6 +38,26 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   Bootstrap failures abort inference rather than being replaced.
 
 ### Fixed
+
+- Preserve exact stationary modes in sequence and symmetric Mk transition
+  matrices, including extremely long branches and disconnected Mk graphs.
+- Avoid constructing empty optimizer bounds for fixed-age, branch-only RADTE
+  diagnostics and calibrated profiles with recent SciPy versions.
+- Resolve numerically tied marginal rate-variance fits by explicitly refitting
+  the zero boundary and checking its one-sided score, retaining genuine small
+  positive variances and the corresponding interval diagnostics.
+- Keep missing bootstrap Monte Carlo standard errors numeric so shape-refitted
+  regression bootstrap can populate them with pandas 3.
+- Restore the `root --candidates_out` compatibility alias and four historical
+  review artifacts recovered from an archived worktree.
+- Make archived shift audits portable across numerical libraries: tolerate only
+  near-machine roundoff in generated arrays, LR statistics and confidence bounds,
+  while retaining exact seeds, counts, Monte Carlo p-values and decisions.
+
+- Preserve requested shift regimes and duplicate validation when Python callers
+  supply a one-pass iterator of branch IDs.
+- Read simulation parameter/model JSON and regression predictor lists as UTF-8
+  so non-ASCII trait and predictor names work under non-UTF-8 locales.
 
 - Preserve branch-fit likelihood resolution for extremely poor initial rates,
   center large trait offsets before fitting, and reject nonfinite convergence
@@ -179,14 +208,6 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Add a fixed-parameter branch-specific scalar Gaussian Python API combining
   BM, OU and prescribed Gaussian end jumps, with explicit roots and shared
   likelihood, ancestral-state conditioning and simulation.
-
-- Add `nwkit dtt` for scalar or joint continuous-trait disparity through time,
-  fitted Brownian simulations, MDI, transactional TSV/JSON outputs and figures
-  with aligned observed-trait trees, compact heatmaps by default for any trait count, and independent
-  display-column selection and color scaling.
-  Include geiger reference checks and a reproducible example. Harden deep-tree
-  pruning, event-time rounding, extreme-unit color scales, and literal/Unicode
-  figure labels.
 
 ## [0.43.15] - 2026-09-10
 

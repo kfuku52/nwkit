@@ -2879,7 +2879,7 @@ def _lineage_random_effect_rows(
 
 def _coefficient_bootstrap_mcse(p_value, bootstrap_coefficients, replicates):
     if bootstrap_coefficients is None or p_value == "":
-        return ""
+        return np.nan
     probability = float(p_value)
     return math.sqrt(probability * (1.0 - probability) / (replicates + 1))
 

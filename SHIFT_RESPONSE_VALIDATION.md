@@ -221,7 +221,8 @@ Distribution validation uses `python tools/check.py dist`: separate wheel/sdist
 builds, required archive contents and metadata, and byte reproducibility.
 The final distribution run log and outcome are retained as
 `reviews/shift-distribution-check.log` and `reviews/shift-distribution-check.json`
-in the original response worktree; these historical operational records are
-outside the sdist. Current integration checks are recorded in the decision report.
+restored from the archived response worktree; these historical operational
+records are outside the sdist and do not validate subsequent code changes.
+Current integration checks are recorded in the decision report.
 That initial phase made no commit, GitHub push or release. The final integration
 commit is covered by the linked decision report.
