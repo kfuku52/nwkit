@@ -1,5 +1,14 @@
 """Resolve automatic search caps without changing explicit integer requests."""
 
+NATIVE_SEARCH_DEFAULTS = {
+    "candidate_pool": 128,
+    "refit_budget": 256,
+    "screening_budget": 100000,
+    "beam_width": 2,
+    "lasso_iterations": 150,
+    "search_memory_mb": 512,
+}
+
 
 def native_shift_limit(data, args, *, budgeted=False):
     requested = args.max_shifts

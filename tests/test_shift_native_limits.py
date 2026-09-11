@@ -34,6 +34,21 @@ def arguments(**overrides):
     )
 
 
+def test_default_auto_cap_can_cover_one_hundred_shifts():
+    from nwkit.shift_native_limits import NATIVE_SEARCH_DEFAULTS
+
+    data = SimpleNamespace(tree=SimpleNamespace(leaf_names=range(1000)))
+    args = arguments(**NATIVE_SEARCH_DEFAULTS)
+    cap, record = native_shift_limit(data, args, budgeted=True)
+    assert cap == 128
+    assert record["constraints"] == {
+        "tree": 998,
+        "candidate_pool": 128,
+        "refit_budget": 255,
+    }
+    assert args.screening_budget == 100000
+
+
 @pytest.mark.parametrize(
     "tips,strategy,pool,refits,expected",
     [

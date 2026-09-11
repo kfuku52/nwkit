@@ -4,10 +4,46 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from nwkit.cli import main
+from nwkit.cli import main, parser
 from nwkit.shift_native_model import ShiftLayout, ShiftTree
 from nwkit.util import read_tree
 from tests.test_shift_native_model import TREE
+
+
+@pytest.mark.parametrize("selection", ["native", "calibrated", "ic"])
+def test_search_budget_defaults_agree_across_cli_api_and_legacy_dispatch(
+    selection, monkeypatch
+):
+    from nwkit.shift_cli import _command_shift
+    from nwkit.shift_native_heuristic import NativeSearchOptions
+    from nwkit.shift_native_limits import NATIVE_SEARCH_DEFAULTS
+
+    args = parser.parse_args(
+        [
+            "shift",
+            "--selection",
+            selection,
+            "--trait",
+            "traits.tsv",
+            "--state-column",
+            "x",
+            "--model-out",
+            "model.json",
+        ]
+    )
+    options = NativeSearchOptions()
+    for name, expected in NATIVE_SEARCH_DEFAULTS.items():
+        assert getattr(args, name) == expected
+        actual = (
+            options.memory_limit // 1024**2
+            if name == "search_memory_mb"
+            else getattr(options, name)
+        )
+        assert actual == expected
+    if selection != "native":
+        sentinel = object()
+        monkeypatch.setattr("nwkit.shift.shift_main", lambda _: sentinel)
+        assert _command_shift(args) is sentinel
 
 
 def test_auto_shift_cap_and_convergent_search_match_explicit_cap(

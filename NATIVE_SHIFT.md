@@ -103,9 +103,9 @@ Layout-specific observed-design rank and residual degrees of freedom are still
 checked, including missing coordinates. AICc eligibility is evaluated per
 candidate, allowing shared regimes to reduce the mean-parameter count.
 
-For example, with 1,000 tips and the default beam budgets the cap is 24;
-`--candidate-pool 128 --refit-budget 220` permits a cap of 128. Increase those
-budgets if the default coverage is insufficient. An integer cap is never
+For example, with 1,000 tips and the default beam budgets the cap is 128.
+`--candidate-pool 24 --refit-budget 48 --screening-budget 2000` restores the
+former smaller budgets. Increase budgets if the default coverage is insufficient. An integer cap is never
 silently reduced: incompatible heuristic budgets remain an error.
 `--search-strategy exhaustive` still errors if enumeration cannot fit its budget.
 The enumeration preflight stops counting once the traversal bound is exceeded,
@@ -148,9 +148,12 @@ The `lasso` strategy whitens under a fitted null covariance and uses a group-las
 path to propose locations. Cached covariance profiles rank additions, then
 unpenalized likelihoods refit retained models. Beam search includes shared and
 distinct regimes and a drop/move/merge/split refinement pass. Defaults are
-`--candidate-pool 24 --refit-budget 48 --screening-budget 2000 --beam-width 2
+`--candidate-pool 128 --refit-budget 256 --screening-budget 100000 --beam-width 2
 --lasso-iterations 150 --search-memory-mb 512`. These are explicit budgets;
 coverage is incomplete and lasso coefficients never become final effect estimates.
+These defaults are shared by the CLI and Python API. They are counts, not a
+wall-clock deadline; runtime depends on tree size, traits, covariance fitting
+and resampling. See [scaling measurements](NATIVE_SHIFT_SCALING.md) for scope.
 
 By default, nested families have complexity `locations + free regime offsets`. Each family
 is compared against the largest family; a plug-in parametric bootstrap repeats

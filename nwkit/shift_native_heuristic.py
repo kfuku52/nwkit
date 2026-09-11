@@ -4,6 +4,7 @@ import itertools
 import math
 from dataclasses import dataclass
 
+from nwkit.shift_native_limits import NATIVE_SEARCH_DEFAULTS
 from nwkit.shift_native_model import ShiftLayout
 from nwkit.shift_native_quick import NativeQuickProfile
 from nwkit.shift_native_screen import group_lasso_screen
@@ -18,12 +19,12 @@ from nwkit.shift_native_search import (
 class NativeSearchOptions:
     max_shifts: int = 2
     convergence: bool = False
-    candidate_pool: int = 24
-    refit_budget: int = 48
-    screening_budget: int = 2000
-    beam_width: int = 2
-    lasso_iterations: int = 150
-    memory_limit: int = 512 * 1024**2
+    candidate_pool: int = NATIVE_SEARCH_DEFAULTS["candidate_pool"]
+    refit_budget: int = NATIVE_SEARCH_DEFAULTS["refit_budget"]
+    screening_budget: int = NATIVE_SEARCH_DEFAULTS["screening_budget"]
+    beam_width: int = NATIVE_SEARCH_DEFAULTS["beam_width"]
+    lasso_iterations: int = NATIVE_SEARCH_DEFAULTS["lasso_iterations"]
+    memory_limit: int = NATIVE_SEARCH_DEFAULTS["search_memory_mb"] * 1024**2
 
     def validate(self, data, *, uses_candidate_pool=True):
         if not 0 <= self.max_shifts < len(data.tree.leaf_names) - 1:

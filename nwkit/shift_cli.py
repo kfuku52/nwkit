@@ -2,6 +2,8 @@
 
 import argparse
 
+from nwkit.shift_native_limits import NATIVE_SEARCH_DEFAULTS
+
 
 def maximum_shift_count(value):
     if value == "auto":
@@ -150,14 +152,8 @@ def register_shift(subparsers, tree_input, table_output):
 
 
 def _register_native_options(parser):
-    for name, default in [
-        ("candidate-pool", 24),
-        ("refit-budget", 48),
-        ("screening-budget", 2000),
-        ("beam-width", 2),
-        ("lasso-iterations", 150),
-        ("search-memory-mb", 512),
-    ]:
+    for key, default in NATIVE_SEARCH_DEFAULTS.items():
+        name = key.replace("_", "-")
         parser.add_argument(
             "--" + name,
             "--" + name.replace("-", "_"),
@@ -238,14 +234,7 @@ def _command_shift(args):
         or args.resume_model
         or any(
             getattr(args, name) != value
-            for name, value in [
-                ("candidate_pool", 24),
-                ("refit_budget", 48),
-                ("screening_budget", 2000),
-                ("beam_width", 2),
-                ("lasso_iterations", 150),
-                ("search_memory_mb", 512),
-            ]
+            for name, value in NATIVE_SEARCH_DEFAULTS.items()
         )
     ):
         raise ValueError("Native fitting options require --selection native.")

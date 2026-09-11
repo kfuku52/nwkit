@@ -5,6 +5,38 @@ This development target is separate from the production-adoption gates in
 covariance search does not establish calibrated selection or support-bootstrap
 runtime, statistical error control, or replacement readiness for GeneGalleon.
 
+## Default budget tuning
+
+Production candidate/refit/screening defaults are now **128 / 256 / 100,000**,
+up from **24 / 48 / 2,000**, with beam width 2 unchanged. The CLI and Python API
+share the values in `nwkit/shift_native_limits.py`. These are computational
+counts, not a deadline; calibration and support bootstraps repeat whole searches.
+
+Sequential single-thread measurements in the GeneGalleon Docker runtime on an
+Apple M2 Max used balanced 1,000-tip inputs with 100 true shifts and five repeated
+nonbaseline regimes, AICc, convergence enabled, and estimated alpha/process/
+observation variance. The algorithm source was identical between settings.
+
+| Traits | Old wall seconds | New wall seconds | Old/new peak MiB | Old/new largest fitted shifts |
+| --- | ---: | ---: | ---: | ---: |
+| 1 | 88.15 | 452.54 | 219.16 / 330.33 | 13 / 41 |
+| 2 | 139.61 | 770.29 | 258.70 / 333.67 | 13 / 41 |
+
+Both expanded runs finished well below the approximately one-hour per-family
+tuning target. They were each measured once, with startup included. This does
+not establish a runtime bound for other hardware, trees, trait counts or
+resampling. All runs exhausted their screening budget: a resolved cap of 128
+is not evidence that 100 or 128 shifts were fitted. Expanded settings improved
+AICc on these inputs but introduced 9 and 6 false branches respectively and
+missed 68 and 65 true branches; they do not establish better statistical
+performance. Shared candidate layouts had exactly equal likelihoods (27 and
+20 shared layouts). Selected output changes are intentional, not a speedup claim.
+
+The frozen source, input hashes, generator, protocol, environment, raw models,
+logs and reproduction commands are kept in GeneGalleon's
+`docs/benchmarks/native-ou-default-budgets/` with the paired integration change.
+The existing standalone benchmark examples below retain their explicit settings.
+
 ## First implementation step
 
 Candidate likelihood profiles now retain an orthogonal reduction of the joint
@@ -22,8 +54,8 @@ different masks or alpha values retain their separate checks.
 
 ## Reproducible development measurements
 
-The search benchmark accepts explicit budgets, so its requested shift count need
-not fit the small default candidate pool. For example:
+The search benchmark accepts explicit budgets independently of production
+defaults. For example:
 
 ```sh
 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 OMP_NUM_THREADS=1 PYTHONPATH=. \
