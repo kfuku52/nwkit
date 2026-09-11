@@ -671,3 +671,11 @@ fixed. `--branch-models-out` contains fitted values; the model TSV includes a
 `parameter_estimation` JSON cell, and process JSON schema 2 has an `estimation`
 object with estimates, bounds, local rank and optimizer diagnostics. See the
 [fixed-assignment estimation contract](BRANCH_GAUSSIAN.md#estimation-at-a-fixed-assignment).
+
+### Reconciliation loss counts
+
+`reconcile` includes nullable integer `implied_losses` per gene-tree event.
+For LCA events these count missing lineages on species-tree edges below the
+event; leaves have zero losses. Losses above the gene root are excluded.
+Non-LCA and unmapped events have missing values, never fabricated zeros.
+See [reconciliation exports](RECONCILIATION_EXPORTS.md).

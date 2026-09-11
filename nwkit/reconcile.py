@@ -31,6 +31,7 @@ RECONCILIATION_COLUMNS = [
     "lineage_clade_id",
     "event_type",
     "event_source",
+    "implied_losses",
     "event_status",
     "collapsed_event_boundary",
     "transfer_source_species",
@@ -681,6 +682,10 @@ def build_reconciliation_table(
     )
     lineage_root_by_node = _lineage_roots(gene_tree, event_type_by_node)
     rows = list()
+    species_depths = {
+        node: species_lca.depth[index]
+        for node, index in species_lca.index_by_node.items()
+    }
     for node in gene_tree.traverse():
         mapped_species_node = species_node_by_gene_node[node]
         mapping_status, orientation, reason = _reconciliation_state(
@@ -713,7 +718,22 @@ def build_reconciliation_table(
                 species_mask_by_gene_node,
             )
         )
-    return pd.DataFrame(rows, columns=RECONCILIATION_COLUMNS)
+        # LCA losses below this event, excluding losses above the gene root.
+        # NHX/overlap events are not an LCA loss model; keep them undefined.
+        losses = None
+        if event_source == "lca" and mapping_status == "mapped":
+            if node.is_leaf:
+                losses = 0
+            else:
+                _, losses = lca_duplication_loss_contribution(
+                    mapped_species_node,
+                    [species_node_by_gene_node[child] for child in node.children],
+                    species_depths,
+                )
+        rows[-1]["implied_losses"] = losses
+    table = pd.DataFrame(rows, columns=RECONCILIATION_COLUMNS)
+    table["implied_losses"] = pd.array(table["implied_losses"], dtype="Int64")
+    return table
 
 
 def _parsed_species_labels(gene_tree, args):

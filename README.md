@@ -93,12 +93,12 @@ minimal worked example, in
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
 - [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
-- [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree
+- [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree, with [LCA loss counts](RECONCILIATION_EXPORTS.md)
 - [`radte`](https://github.com/kfuku52/nwkit/wiki/nwkit-radte): Experimental reconciled gene-tree dating with shared speciation ages, native relaxed clocks, and an optional MCMCTree reference backend
 - [`radte-compare`](RADTE_SPECIES_UNCERTAINTY.md): Comparing fixed, bounded, and sampled species-age analyses for one gene family
 See [reconciliation and dating figures](RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
-- [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root
+- [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root, with [all optimal roots export](RECONCILIATION_EXPORTS.md)
 - [`rootcompare`](https://github.com/kfuku52/nwkit/wiki/nwkit-rootcompare): Comparing rooting methods in a TSV summary and a branch-marked PDF
 - [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
 - [`sample`](https://github.com/kfuku52/nwkit/wiki/nwkit-sample): Selecting a representative leaf subset by filters, ranks, and sampling method

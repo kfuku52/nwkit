@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Added
+
+- Export all optimal reconciliation roots with `root --candidates-out` as a
+  transactional Newick collection. Add nullable per-event `implied_losses` to
+  LCA reconciliation tables for downstream duplication/loss summaries.
+
 ### Changed
 
 - Require a same-process numerical capability probe for pBIC backends; export

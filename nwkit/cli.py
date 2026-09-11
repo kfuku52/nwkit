@@ -5416,6 +5416,12 @@ proot.add_argument(
     help="default=%(default)s: ETE tree format for --species-tree.",
 )
 proot.add_argument(
+    "--candidates-out",
+    metavar="PATH",
+    default=None,
+    help="Write every equally optimal reconciliation root as a Newick tree collection in deterministic order. Requires --method reconciliation.",
+)
+proot.add_argument(
     "--duplication-cost",
     "--duplication_cost",
     dest="duplication_cost",

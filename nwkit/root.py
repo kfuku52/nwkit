@@ -2958,13 +2958,57 @@ def reconciliation_rooting(
     return rooted, evaluation
 
 
+def _write_reconciliation_candidates(tree, evaluation, args, output_properties):
+    """Publish the selected tree and all optimal edges together."""
+    from copy import copy
+
+    from nwkit.output_transaction import output_transaction
+
+    paths = [args.candidates_out]
+    if args.outfile != "-":
+        paths.append(args.outfile)
+    with output_transaction(paths) as staged:
+        candidate_args = copy(args)
+        with open(staged[args.candidates_out], "w", encoding="utf-8") as handle:
+            candidate_args.outfile = handle
+            for candidate in evaluation.candidates:
+                rooted = _root_by_outgroup_set(
+                    tree, set(candidate.split[0]), verbose=False
+                )
+                write_tree(
+                    rooted,
+                    candidate_args,
+                    format=args.outformat,
+                    props=output_properties,
+                    quiet=True,
+                )
+                handle.write("\n")
+        if args.outfile != "-":
+            selected_args = copy(args)
+            selected_args.outfile = staged[args.outfile]
+            write_tree(
+                tree, selected_args, format=args.outformat, props=output_properties
+            )
+    if args.outfile == "-":
+        write_tree(tree, args, format=args.outformat, props=output_properties)
+
+
 def root_main(args):
+    candidates_out = getattr(args, "candidates_out", None)
+    if candidates_out is not None and (
+        args.method != "reconciliation" or candidates_out in ("", "-")
+    ):
+        raise ValueError(
+            "--candidates-out requires --method reconciliation and a file path."
+        )
     if args.method == "reconciliation":
         if getattr(args, "species_tree", None) in (None, ""):
             raise ValueError(
                 "'--species-tree' is required when '--method reconciliation' is used."
             )
         outputs = [("--outfile", args.outfile)]
+        if candidates_out:
+            outputs.append(("--candidates-out", candidates_out))
         validate_distinct_output_paths(outputs)
         validate_outputs_do_not_replace_inputs(
             [
@@ -3044,7 +3088,10 @@ def root_main(args):
             _parsed_species_labels(tree, args),
             duplication_cost=getattr(args, "duplication_cost", 1.0),
             loss_cost=getattr(args, "loss_cost", 1.0),
+            _return_evaluation=bool(candidates_out),
         )
+        if candidates_out:
+            tree, evaluation = tree
     elif args.method == "taxonomy":
         tree = taxonomy_rooting(
             tree=tree,
@@ -3059,4 +3106,7 @@ def root_main(args):
     else:
         raise ValueError("Unknown rooting method: {}".format(args.method))
     output_properties.update(get_tree_property_names(tree))
-    write_tree(tree, args, format=args.outformat, props=output_properties)
+    if candidates_out:
+        _write_reconciliation_candidates(tree, evaluation, args, output_properties)
+    else:
+        write_tree(tree, args, format=args.outformat, props=output_properties)
