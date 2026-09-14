@@ -134,7 +134,8 @@ def test_regime_tables_are_equivalent_and_preserve_names(inputs, tmp_path):
         encoding="utf-8-sig",
     )
     definitions.write_text(
-        "regime\tmodel\tsigma2\talpha\ttheta\tjump_mean\tjump_variance\n背景\tBM\t0.8\t\t\t\t\nother\tBM\t0.7\t\t\t\t\nselected\tOU\t1.3\t0.6\t0.9\t0.2\t0.15\njump\tJUMP\t\t\t\t-0.4\t0.5\n"
+        "regime\tmodel\tsigma2\talpha\ttheta\tjump_mean\tjump_variance\n背景\tBM\t0.8\t\t\t\t\nother\tBM\t0.7\t\t\t\t\nselected\tOU\t1.3\t0.6\t0.9\t0.2\t0.15\njump\tJUMP\t\t\t\t-0.4\t0.5\n",
+        encoding="utf-8",
     )
     args = command(inputs)
     position = args.index("--branch-models")

@@ -1,6 +1,7 @@
 """External library discovery and explicit setup never build during analysis."""
 
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -22,6 +23,12 @@ def capabilities():
 
 
 def fake_worker(tmp_path, data):
+    if os.name == "nt":
+        script = tmp_path / "worker.cmd"
+        payload = tmp_path / "worker.py"
+        payload.write_text(f"print({json.dumps(data)!r})\n", encoding="utf-8")
+        script.write_text(f'@"{sys.executable}" "{payload}" %*\n', encoding="utf-8")
+        return str(script)
     script = tmp_path / "worker"
     script.write_text(f"#!{sys.executable}\nprint({json.dumps(data)!r})\n")
     script.chmod(0o755)
@@ -88,7 +95,8 @@ def test_no_arbitrary_upper_version_bound(tmp_path):
 
 def test_library_setup_requires_a_library_not_an_executable(tmp_path):
     (tmp_path / "iqtree3").write_bytes(b"not a library")
-    with pytest.raises(ValueError, match="No libiqtree.a"):
+    message = "supports Linux and macOS" if os.name == "nt" else "No libiqtree.a"
+    with pytest.raises(ValueError, match=message):
         iqtree_library.build_worker(tmp_path, tmp_path / "install")
 
 

@@ -6,12 +6,14 @@ import json
 import shutil
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "tools"))
 from compare_shift_null_calibration import summarize  # noqa: E402
+from shift_calibration_audit import check_probability_metadata  # noqa: E402
 from validate_shift_null_contract import tree_text  # noqa: E402
 from verify_shift_null_contract import (  # noqa: E402
     audit,
@@ -40,6 +42,25 @@ def test_valid_winner_and_stage_contract(evidence):
     tree, models, y, fit = evidence
     assert check_winner(tree, y, np.zeros(4), fit, models) < 1e-10
     assert check_stages(fit, False, 19, 0.05) == bool(fit["model"]["shift_branch_ids"])
+
+
+def test_nuisance_grid_accepts_only_machine_roundoff():
+    search = SimpleNamespace(known_error=False, grid=[0.1, np.inf])
+    test = dict(
+        p_value=1.0,
+        p_value_lower_bound=1.0,
+        p_value_kind="grid_supremum",
+        null_alpha_evaluations=[
+            dict(alpha_height=np.nextafter(0.1, np.inf), p_value=1.0),
+            dict(alpha_height=None, p_value=1.0),
+        ],
+    )
+    check_probability_metadata(test, 0, search, 19, 0.05)
+    for value in [0.100001, None, np.nan]:
+        changed = copy.deepcopy(test)
+        changed["null_alpha_evaluations"][0]["alpha_height"] = value
+        with pytest.raises(ValueError, match="evaluation grid"):
+            check_probability_metadata(changed, 0, search, 19, 0.05)
 
 
 @pytest.mark.parametrize(

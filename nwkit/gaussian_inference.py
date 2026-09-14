@@ -107,7 +107,10 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
     base_weight = first.log_weight + second.log_weight
     base_rank = first.density_rank + second.density_rank
     if variance_sum == 0.0:
-        if first.mean != second.mean:
+        # Deterministic affine messages can arrive a few ulps apart after
+        # forward/backward transforms, even for identical exact observations.
+        tolerance = 8 * max(math.ulp(first.mean), math.ulp(second.mean))
+        if abs(first.mean - second.mean) > tolerance:
             raise ValueError(
                 "Conflicting exact observations have zero likelihood under the "
                 "Gaussian tree process."

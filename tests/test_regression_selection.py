@@ -286,11 +286,11 @@ def test_cli_bundle_and_input_protection(tmp_path, monkeypatch, predictor_file):
         main([*args, "--audit", str(tmp_path / "result.coefficients.tsv")])
     assert (tmp_path / "result.coefficients.tsv").read_bytes() == saved
     protected = tmp_path / "result.cv.tsv"
-    protected.write_text(data.read_text())
+    protected.write_bytes(data.read_bytes())
     args[args.index("--data") + 1] = str(protected)
     with pytest.raises(ValueError, match="input"):
         main(args)
-    assert protected.read_text() == data.read_text()
+    assert protected.read_bytes() == data.read_bytes()
 
 
 @pytest.mark.parametrize("invalid_mode", [False, True])

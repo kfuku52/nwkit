@@ -1,5 +1,6 @@
 """Reconstruct calibration selection metrics instead of trusting saved flags."""
 
+import math
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 
@@ -21,7 +22,20 @@ def check_probability_metadata(test, index, search, B, level):
     grid = [None if np.isinf(a) else float(a) for a in search.grid]
     if (
         not evaluated
-        or [r["alpha_height"] for r in evaluated] != grid[: len(evaluated)]
+        or len(evaluated) > len(grid)
+        or any(
+            actual != expected
+            and (
+                actual is None
+                or expected is None
+                or not math.isclose(
+                    actual, expected, rel_tol=8 * np.finfo(float).eps, abs_tol=0.0
+                )
+            )
+            for actual, expected in zip(
+                [r["alpha_height"] for r in evaluated], grid, strict=False
+            )
+        )
     ):
         raise ValueError("Invalid null nuisance evaluation grid")
     values = [r["p_value"] for r in evaluated]

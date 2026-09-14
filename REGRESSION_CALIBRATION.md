@@ -43,6 +43,11 @@ count, case ordering or method ordering. The same case/master seed/replicate
 produces the same input for all methods and for before/after comparisons.
 Use an independent master seed for a final confirmation study.
 
+`--fit-timeout-seconds` remains enforced on Windows: each outer worker reuses a
+spawned calculation worker, terminates it on timeout, records `fit_failed`, and
+starts a fresh worker for the next calculation. POSIX hosts use their existing
+signal timer. Windows startup time is included in the timeout budget.
+
 `--case-file` accepts a JSON array of `Case` fields; omitted fields use the
 defaults in `tools/regression_calibration_design.py`. This supports additional
 sample sizes, effect sizes, copy imbalance, predictor correlations, sampling

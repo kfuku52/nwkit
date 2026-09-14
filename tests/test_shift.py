@@ -166,7 +166,7 @@ def test_missing_rscript(shift_inputs):
 def test_stdout_is_table(shift_inputs, monkeypatch, capsys):
     monkeypatch.setattr("nwkit.shift.run_backend", fake_backend)
     main(shift_inputs)
-    assert capsys.readouterr().out.startswith("branch_id\tregime\n")
+    assert capsys.readouterr().out.splitlines()[0] == "branch_id\tregime"
 
 
 @pytest.mark.integration

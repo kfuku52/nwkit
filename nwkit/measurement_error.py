@@ -1098,12 +1098,28 @@ def _add_structured_eiv_components(
 
 
 def _factor_structured_eiv(diagonal, updates, n_observations):
-    cholesky = factor_diagonal_low_rank_updates(diagonal, updates)
     low_rank = (
         sparse.hstack([sparse.csr_matrix(update) for update in updates], format="csr")
         if updates
         else sparse.csr_matrix((n_observations, 0), dtype=float)
     )
+    if n_observations <= 64 and low_rank.shape[1] <= 512:
+        if np.any(np.asarray(diagonal) <= 0) or not np.isfinite(diagonal).all():
+            raise np.linalg.LinAlgError(
+                "Covariance diagonal is not positive and finite."
+            )
+        if not np.isfinite(low_rank.data).all():
+            raise ValueError("Low-rank covariance update is non-finite.")
+        # At variance boundaries Woodbury subtraction can lose the likelihood
+        # curvature. Factor the rectangular covariance root directly for small
+        # fits; QR avoids both subtraction and forming an ill-conditioned Gram
+        # matrix. Larger fits retain their bounded-memory structured route.
+        root = np.column_stack([np.diag(np.sqrt(diagonal)), low_rank.toarray()])
+        _, triangular = np.linalg.qr(root.T, mode="reduced")
+        signs = np.where(np.diag(triangular) < 0, -1.0, 1.0)
+        cholesky = (signs[:, None] * triangular).T
+    else:
+        cholesky = factor_diagonal_low_rank_updates(diagonal, updates)
     return DiagonalLowRankCovariance(diagonal, low_rank), cholesky
 
 

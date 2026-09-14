@@ -60,6 +60,22 @@ def test_oracle_calibrates_independent_null_generator():
     assert 0.90 < np.mean(covered) < 0.99
 
 
+def test_evaluation_without_posix_signals_keeps_fit_results(monkeypatch):
+    import regression_calibration_engine as engine
+    from calibration_timeout import close_worker
+
+    case = Case("portable", size=6)
+    data = generate(case, 35)
+    expected = evaluate(case, data, "oracle", 2, 1, 30)
+    monkeypatch.delattr(engine.signal, "SIGALRM", raising=False)
+    try:
+        actual = evaluate(case, data, "oracle", 2, 1, 30)
+        assert actual["status"] == expected["status"] == "completed"
+        assert actual["p_value"] == pytest.approx(expected["p_value"])
+    finally:
+        close_worker()
+
+
 def test_missingness_and_repeated_events_are_retained_in_truth():
     case = Case(
         "missing",

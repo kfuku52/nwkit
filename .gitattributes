@@ -1,6 +1,9 @@
 *.svg -whitespace
 *.tsv -whitespace
 
+# Source hashes in calibration evidence refer to repository LF bytes.
+*.py text eol=lf
+
 # Preserve generated logs, patch context, and the original simulator fixture.
 reviews/**/*.log -whitespace
 reviews/native-scale-2026-09-10/changes.patch -whitespace

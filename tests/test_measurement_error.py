@@ -30,6 +30,33 @@ from nwkit.sparse_laplace import (
 )
 
 
+def test_small_eiv_boundary_factor_preserves_covariance_root():
+    diagonal = np.full(12, 1e-12)
+    groups = sparse.csr_matrix(np.eye(6)[np.arange(12) // 2])
+    slopes = np.column_stack([np.arange(12) % 2, 1 - np.arange(12) % 2])
+    covariance, factor = measurement_error_mod._factor_structured_eiv(
+        diagonal, [groups, slopes], 12
+    )
+    assert isinstance(factor, np.ndarray)
+    assert np.all(np.diag(factor) > 0)
+    np.testing.assert_allclose(
+        factor @ factor.T, materialize_covariance(covariance), atol=1e-14
+    )
+
+
+def test_large_eiv_factor_keeps_structured_route(monkeypatch):
+    sentinel = object()
+    monkeypatch.setattr(
+        measurement_error_mod,
+        "factor_diagonal_low_rank_updates",
+        lambda diagonal, updates: sentinel,
+    )
+    _, factor = measurement_error_mod._factor_structured_eiv(
+        np.ones(65), [sparse.eye(65)], 65
+    )
+    assert factor is sentinel
+
+
 def test_latent_predictor_posterior_matches_gaussian_conditioning():
     observed = np.asarray([1.0, 2.0, -0.5])
     evolutionary = np.diag([1.0, 2.0, 3.0])

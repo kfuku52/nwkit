@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.19] - 2026-09-14
+
+### Fixed
+
+- Factor small errors-in-variables covariance roots with QR to retain likelihood
+  curvature near zero residual variance without Woodbury cancellation.
+- Limit deterministic Gaussian-message and archived nuisance-grid comparisons
+  to machine-roundoff tolerance, while rejecting substantive changes.
+- Retain hard regression-calibration timeouts on Windows with a reusable spawned
+  worker that is terminated and replaced after a timeout.
+- Preserve LF source bytes for calibration hashes and make Unicode, fake-worker,
+  and table-output test fixtures portable across Windows and POSIX systems.
+
 ## [0.43.18] - 2026-09-14
 
 ### Fixed

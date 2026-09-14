@@ -5,7 +5,13 @@ import signal
 import tempfile
 import time
 import warnings
-from contextlib import ExitStack, contextmanager, redirect_stderr, redirect_stdout
+from contextlib import (
+    ExitStack,
+    contextmanager,
+    nullcontext,
+    redirect_stderr,
+    redirect_stdout,
+)
 from pathlib import Path
 from unittest.mock import patch
 
@@ -422,6 +428,28 @@ def time_limit(seconds):
 
 
 def evaluate(case, data, method, replicates, seed, timeout):
+    if not hasattr(signal, "SIGALRM"):
+        from calibration_timeout import run_with_timeout
+
+        started = time.monotonic()
+        try:
+            return run_with_timeout(
+                _evaluate,
+                (case, data, method, replicates, seed, timeout, False),
+                timeout,
+            )
+        except TimeoutError as exc:
+            return dict(
+                method=method,
+                status="fit_failed",
+                target_beta=case.beta,
+                error=f"TimeoutError: {exc}",
+                seconds=time.monotonic() - started,
+            )
+    return _evaluate(case, data, method, replicates, seed, timeout)
+
+
+def _evaluate(case, data, method, replicates, seed, timeout, use_signal=True):
     started = time.monotonic()
     result = {"method": method, "status": "completed", "target_beta": case.beta}
     if not is_applicable(case, method):
@@ -445,7 +473,10 @@ def evaluate(case, data, method, replicates, seed, timeout):
     if not eligible:
         return {**result, "status": "ineligible", "reason": reason, "seconds": 0.0}
     try:
-        with time_limit(timeout), warnings.catch_warnings(record=True) as caught:
+        with (
+            time_limit(timeout) if use_signal else nullcontext(),
+            warnings.catch_warnings(record=True) as caught,
+        ):
             warnings.simplefilter("always")
             with record_refits(
                 case.engine,

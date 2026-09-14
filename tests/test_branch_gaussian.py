@@ -357,3 +357,13 @@ def test_deterministic_mixed_process_and_posterior_sampling():
         process, {"A": 2.4, "B": 2.4}, num_samples=3, seed=42
     )
     np.testing.assert_allclose(samples.values, np.array([[2, 2.4, 2.4]] * 3))
+
+
+def test_exact_gaussian_messages_allow_only_affine_roundoff():
+    from nwkit.gaussian_inference import _combine, _Factor
+
+    first = _Factor(-1.5999999999999996, 0.0)
+    second = _Factor(-1.600000000000001, 0.0)
+    assert _combine(first, second).variance == 0.0
+    with pytest.raises(ValueError, match="Conflicting"):
+        _combine(first, _Factor(first.mean + 1e-12, 0.0))
