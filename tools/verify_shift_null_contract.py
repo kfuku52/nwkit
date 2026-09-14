@@ -17,7 +17,7 @@ from shift_continuous_reference import DenseOUReference  # noqa: E402
 from validate_shift_null_contract import cells, summarize  # noqa: E402
 
 from nwkit.shift_calibration import ALPHA_HEIGHT_GRID, CalibratedSearch  # noqa: E402
-from nwkit.shift_candidates import enumerate_candidates  # noqa: E402
+from nwkit.shift_candidates import enumerate_candidates, tip_groups  # noqa: E402
 from nwkit.util import read_tree  # noqa: E402
 
 
@@ -99,6 +99,24 @@ def _same_numeric_records(replayed, saved, field):
 
 def same_replayed_tests(replayed, saved):
     return _same_numeric_records(replayed, saved, "statistic")
+
+
+def same_replayed_model(tree, replayed, saved):
+    """Accept a numerically tied branch representation with the same tip partition.
+
+    The exhaustive candidate space retains alternative branch configurations that
+    induce the same observable tip partition.  Near machine precision, the
+    contrast likelihood can choose a different representative on another BLAS
+    implementation.  The partition is the discrete selection being audited;
+    changed partitions remain a hard mismatch.
+    """
+    if replayed == saved:
+        return True
+    replayed_partition = tip_groups(
+        tree, replayed["shift_branch_ids"], replayed["groups"]
+    )
+    saved_partition = tip_groups(tree, saved["shift_branch_ids"], saved["groups"])
+    return replayed_partition == saved_partition
 
 
 def same_replayed_summary(replayed, saved):
@@ -230,9 +248,9 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
                         tree, convergence=lane["convergence"], variances=variances
                     )
                 replay = replay_engines[engine_key].fit(y, seed=boot, replicates=B)
-                if replay["model"] != fit["model"] or not same_replayed_tests(
-                    replay["tests"], fit["tests"]
-                ):
+                if not same_replayed_model(
+                    tree, replay["model"], fit["model"]
+                ) or not same_replayed_tests(replay["tests"], fit["tests"]):
                     raise ValueError("Seeded complete-search replay disagrees")
                 replays += 1
     summary = summarize(rows, specification)

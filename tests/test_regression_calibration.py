@@ -9,6 +9,7 @@ from ete4 import Tree
 
 TOOLS = Path(__file__).resolve().parents[1] / "tools"
 sys.path.insert(0, str(TOOLS))
+import validate_regression_calibration as regression_validation  # noqa: E402
 from regression_calibration_design import (  # noqa: E402
     Case,
     generate,
@@ -165,6 +166,11 @@ def test_seed_and_clean_serialization():
         "a": [1, None],
         "b": True,
     }
+
+
+def test_peak_rss_is_optional_on_non_posix_hosts(monkeypatch):
+    monkeypatch.setattr(regression_validation, "_resource", None)
+    assert regression_validation.worker_peak_rss_kib() is None
 
 
 def test_observer_restores_estimator_on_failure():

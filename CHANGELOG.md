@@ -4,6 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.18] - 2026-09-14
+
+### Fixed
+
+- Keep archived calibrated-shift audits stable when equivalent branch
+  representations differ only by numerical-library roundoff, while retaining
+  exact tip-partition and calibration decisions.
+- Make regression-calibration peak-memory reporting portable to Windows, where
+  the POSIX `resource` module is unavailable.
+
 ## [0.43.17] - 2026-09-11
 
 ### Fixed

@@ -9,7 +9,6 @@ import importlib.metadata
 import json
 import os
 import platform
-import resource
 import sys
 import tarfile
 import time
@@ -19,6 +18,11 @@ from pathlib import Path
 
 import numpy as np
 from scipy.stats import norm
+
+try:
+    import resource as _resource
+except ImportError:  # pragma: no cover - exercised on Windows CI
+    _resource = None
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from regression_calibration_design import (  # noqa: E402
@@ -99,6 +103,13 @@ def within(metric, lower, upper):
     if metric["mc95_upper"] < lower or metric["mc95_lower"] > upper:
         return "outside_prespecified_band"
     return "insufficient_precision_or_overlapping_boundary"
+
+
+def worker_peak_rss_kib():
+    """Return peak resident memory when the host exposes POSIX ``resource``."""
+    if _resource is None:
+        return None
+    return _resource.getrusage(_resource.RUSAGE_SELF).ru_maxrss
 
 
 def summarize_records(records):
@@ -228,7 +239,7 @@ def execute(task):
             for method in methods
             if is_applicable(case, method)
         ],
-        "worker_peak_rss_kib": resource.getrusage(resource.RUSAGE_SELF).ru_maxrss,
+        "worker_peak_rss_kib": worker_peak_rss_kib(),
     }
     return clean(result)
 

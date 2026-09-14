@@ -18,11 +18,13 @@ from verify_shift_null_contract import (  # noqa: E402
     check_stages,
     check_winner,
     same_generated_array,
+    same_replayed_model,
     same_replayed_summary,
     same_replayed_tests,
 )
 
 from nwkit.shift_calibration import CalibratedSearch  # noqa: E402
+from nwkit.shift_candidates import enumerate_candidates  # noqa: E402
 from nwkit.util import read_tree  # noqa: E402
 
 
@@ -86,6 +88,16 @@ def test_replay_roundoff_does_not_relax_discrete_decisions(evidence):
     changed = copy.deepcopy(replayed)
     changed[0]["null_alpha_evaluations"][0]["p_value"] += 1e-6
     assert not same_replayed_tests(changed, saved)
+
+
+def test_replay_accepts_only_same_tip_partition_representation(evidence):
+    tree, _, _, _ = evidence
+    models, _ = enumerate_candidates(tree, convergence=False)
+    saved = models[8]
+    equivalent = models[7]
+    changed_partition = models[9]
+    assert same_replayed_model(tree, equivalent, saved)
+    assert not same_replayed_model(tree, changed_partition, saved)
 
 
 def test_summary_roundoff_cannot_hide_changed_counts_or_acceptance():
