@@ -53,6 +53,7 @@ class _Factor:
     variance: float = 0.0
     log_weight: float = 0.0
     density_rank: int = 0
+    roundoff: float = 0.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -91,6 +92,7 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             second.variance,
             first.log_weight + second.log_weight,
             first.density_rank + second.density_rank,
+            second.roundoff,
         )
     if second.mean is None:
         return _Factor(
@@ -98,6 +100,7 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             first.variance,
             first.log_weight + second.log_weight,
             first.density_rank + second.density_rank,
+            first.roundoff,
         )
     variance_sum = first.variance + second.variance
     if not math.isfinite(variance_sum):
@@ -109,13 +112,22 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
     if variance_sum == 0.0:
         # Deterministic affine messages can arrive a few ulps apart after
         # forward/backward transforms, even for identical exact observations.
-        tolerance = 8 * max(math.ulp(first.mean), math.ulp(second.mean))
+        tolerance = max(
+            first.roundoff + second.roundoff,
+            8 * max(math.ulp(first.mean), math.ulp(second.mean)),
+        )
         if abs(first.mean - second.mean) > tolerance:
             raise ValueError(
                 "Conflicting exact observations have zero likelihood under the "
                 "Gaussian tree process."
             )
-        return _Factor(first.mean, 0.0, base_weight, base_rank)
+        return _Factor(
+            first.mean,
+            0.0,
+            base_weight,
+            base_rank,
+            max(first.roundoff, second.roundoff),
+        )
     log_overlap = _normal_log_density(first.mean, second.mean, variance_sum)
     if not math.isfinite(log_overlap):
         raise ValueError("Observed values have zero Gaussian likelihood.")
@@ -138,6 +150,11 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
         variance,
         base_weight + log_overlap,
         base_rank + 1,
+        first.roundoff
+        if first.variance == 0.0
+        else second.roundoff
+        if second.variance == 0.0
+        else 0.0,
     )
 
 
@@ -170,11 +187,15 @@ def _push_up(
             density_rank=factor.density_rank + 1,
         )
     if total == 0.0:
+        difference = factor.mean - intercept
+        parent_mean = difference / slope
         return _Factor(
-            (factor.mean - intercept) / slope,
+            parent_mean,
             0.0,
             factor.log_weight - math.log(absolute_slope),
             factor.density_rank,
+            (factor.roundoff + math.ulp(difference)) / absolute_slope
+            + math.ulp(parent_mean),
         )
     log_parent_variance = math.log(total) - 2.0 * math.log(absolute_slope)
     if log_parent_variance >= _LOG_MAX:
@@ -209,7 +230,12 @@ def _push_down(
     mean = slope * factor.mean + intercept
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A Gaussian smoothing message exceeds floating-point range.")
-    return _Factor(mean, variance, factor.log_weight, factor.density_rank)
+    roundoff = (
+        abs(slope) * factor.roundoff + math.ulp(slope * factor.mean) + math.ulp(mean)
+        if variance == 0.0
+        else 0.0
+    )
+    return _Factor(mean, variance, factor.log_weight, factor.density_rank, roundoff)
 
 
 def _finite_number(value, label: str, *, nonnegative: bool = False) -> float:

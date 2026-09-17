@@ -164,7 +164,7 @@ def test_regime_tables_are_equivalent_and_preserve_names(inputs, tmp_path):
             str(audit),
         ]
     )
-    metadata = json.loads(saved.read_text())
+    metadata = json.loads(saved.read_text(encoding="utf-8"))
     assert metadata["branch_regimes"][0] == {"branch_id": 1, "regime": "背景"}
     process, direct = process_from(inputs)
     parsed = load_branch_gaussian_assignment(

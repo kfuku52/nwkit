@@ -4,6 +4,14 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.20] - 2026-09-17
+
+### Fixed
+
+- Propagate affine-operation roundoff bounds for exact Gaussian messages through
+  cancellation to zero while retaining rejection of conflicting observations.
+- Read the Unicode process-output fixture explicitly as UTF-8 on Windows.
+
 ## [0.43.19] - 2026-09-14
 
 ### Fixed

@@ -367,3 +367,24 @@ def test_exact_gaussian_messages_allow_only_affine_roundoff():
     assert _combine(first, second).variance == 0.0
     with pytest.raises(ValueError, match="Conflicting"):
         _combine(first, _Factor(first.mean + 1e-12, 0.0))
+
+
+def test_exact_message_roundoff_survives_cancellation_to_zero():
+    from dataclasses import replace
+
+    from nwkit.gaussian_inference import _combine, _Factor, _push_down, _push_up
+
+    # A round trip through a nonzero affine coordinate can cancel to zero.
+    factor = _Factor(0.0, 0.0)
+    upward = _push_up(factor, math.exp(-0.5), 1.2, 0.0)
+    upward = replace(upward, mean=math.nextafter(upward.mean, math.inf))
+    downward = _push_down(upward, math.exp(-0.5), 1.2, 0.0)
+    assert downward.mean != 0.0
+    assert downward.roundoff > 0.0
+    assert _combine(downward, factor).variance == 0.0
+    assert _combine(downward, _Factor(1.0, 1.0)).roundoff == downward.roundoff
+    assert _combine(_Factor(1.0, 1.0), downward).roundoff == downward.roundoff
+    with pytest.raises(ValueError, match="Conflicting"):
+        _combine(downward, _Factor(1e-12, 0.0))
+    with pytest.raises(ValueError, match="Conflicting"):
+        _combine(factor, _Factor(1e-20, 0.0))
