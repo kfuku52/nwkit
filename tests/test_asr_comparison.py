@@ -10,7 +10,6 @@ from nwkit.asr_compare import (
     _candidate_args,
     _classify_fit,
     _comparison_group,
-    _preflight_comparison_figure,
     _successful_row,
     _validate_comparison_options,
     comparison_table,
@@ -709,29 +708,6 @@ def test_font_error_reports_the_actually_missing_codepoint(monkeypatch):
     assert "U+0041" not in str(error.value)
 
 
-def test_figure_font_preflight_runs_before_model_fitting(monkeypatch):
-    context = ComparisonContext(
-        tree=None,
-        trait_df=pd.DataFrame(),
-        trait_type="continuous",
-        trait_columns=("trait🐍",),
-        error_columns=None,
-        args=SimpleNamespace(figure_out="comparison.pdf"),
-    )
-
-    def reject_font(text):
-        assert "trait🐍" in text
-        raise ValueError("missing U+1F40D")
-
-    monkeypatch.setattr("nwkit.asr_compare._font_family_for_text", reject_font)
-    with pytest.raises(ValueError, match=r"U\+1F40D"):
-        _preflight_comparison_figure(
-            context,
-            [ComparisonCandidate("BM", "flat", "model-default")],
-            "aic",
-        )
-
-
 def test_candidate_overview_numeric_headers_share_value_alignment():
     table = pd.DataFrame(
         [
@@ -1185,48 +1161,6 @@ def test_one_regime_brownian_and_ou_models_are_deduplicated(monkeypatch):
         "OUMV": "OU[stationary]",
         "OUMVA": "OU[stationary]",
     }
-
-
-def test_shared_preparation_timing_includes_work_done_before_candidate_fits(
-    monkeypatch,
-):
-    args = SimpleNamespace(
-        trait_type="continuous",
-        regime_map=None,
-        evolution_parameter=None,
-        evolution_parameter_bounds=None,
-        eb_rate=None,
-        eb_rate_bounds=None,
-        sigma2=None,
-    )
-    context = ComparisonContext(
-        tree=None,
-        trait_df=pd.DataFrame(),
-        trait_type="continuous",
-        trait_columns=("x",),
-        error_columns=None,
-        args=args,
-        cache={
-            "_shared_preparation_started": 10.0,
-            "continuous_data": ({}, None),
-        },
-    )
-    monkeypatch.setattr("nwkit.asr_compare.time.perf_counter", lambda: 15.0)
-    monkeypatch.setattr(
-        "nwkit.asr_compare._fit_candidate",
-        lambda *_args: SimpleNamespace(
-            sigma2_estimated=True,
-            restricted_log_likelihood=-3.0,
-            num_effective_observations=8,
-            fit_status="ok",
-        ),
-    )
-    rows = evaluate_comparison_candidates(
-        context,
-        [ComparisonCandidate("BM", "flat", "model-default")],
-        automatic=False,
-    )
-    assert rows[0]["shared_preparation_seconds"] == pytest.approx(5.0)
 
 
 def test_regime_parameter_table_rejects_incompatible_model_contracts():

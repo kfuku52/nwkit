@@ -477,28 +477,6 @@ class TestAsrMain:
         assert matrix[1, 0] == pytest.approx(0.5 - 0.5 * decay)
         assert matrix[1, 1] == pytest.approx(0.5 + 0.5 * decay)
 
-    def test_inside_likelihood_reuses_transition_matrix_for_equal_branch_lengths(
-        self, monkeypatch
-    ):
-        tree = Tree("((A:1,B:1):1,C:1);", parser=1)
-        states = ["red", "blue"]
-        likelihood_by_leaf = {
-            "A": pd.Series([1.0, 0.0]).to_numpy(),
-            "B": pd.Series([1.0, 0.0]).to_numpy(),
-            "C": pd.Series([0.0, 1.0]).to_numpy(),
-        }
-        rate_matrix = asr._build_rate_matrix("ER", states, [0.2])
-        call_count = {"value": 0}
-        original_transition_matrix = asr._transition_matrix
-
-        def counted_transition_matrix(rate_matrix_arg, branch_length_arg):
-            call_count["value"] += 1
-            return original_transition_matrix(rate_matrix_arg, branch_length_arg)
-
-        monkeypatch.setattr(asr, "_transition_matrix", counted_transition_matrix)
-        asr._compute_inside_likelihoods(tree, likelihood_by_leaf, rate_matrix)
-        assert call_count["value"] == 1
-
     def test_model_out_reports_fixed_er_metadata(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("((A:1,B:1):1,C:2);", "tree.nwk")
         trait = _write_trait(
@@ -801,47 +779,6 @@ class TestAsrMain:
             "num_simulations",
         }.issubset(first.columns)
         assert set(first["num_simulations"]) == {20}
-
-    def test_stochastic_map_reuses_uniformization_context_for_equal_branch_lengths(
-        self, tmp_nwk, tmp_path, monkeypatch
-    ):
-        infile = tmp_nwk("((A:1,B:1):1,C:1);", "tree.nwk")
-        trait = _write_trait(
-            tmp_path,
-            [
-                {"leaf_name": "A", "state": "red"},
-                {"leaf_name": "B", "state": "red"},
-                {"leaf_name": "C", "state": "blue"},
-            ],
-        )
-        call_lengths = list()
-        original_builder = asr._build_uniformization_context
-
-        def counted_builder(rate_matrix, branch_length):
-            call_lengths.append(float(branch_length))
-            return original_builder(rate_matrix, branch_length)
-
-        monkeypatch.setattr(asr, "_build_uniformization_context", counted_builder)
-        args = make_args(
-            infile=infile,
-            outfile=str(tmp_path / "asr.tsv"),
-            trait=trait,
-            state_column="state",
-            states="red,blue",
-            missing_values=None,
-            model="ER",
-            rate=0.5,
-            rate_bounds=None,
-            root_prior="equal",
-            target="intnode",
-            output="map",
-            stochastic_map_out=str(tmp_path / "smap.tsv"),
-            n_sim=5,
-            seed=7,
-            threads=1,
-        )
-        asr_main(args)
-        assert call_lengths == [1.0]
 
     def test_threaded_stochastic_map_matches_single_thread_with_seed(
         self,

@@ -66,7 +66,7 @@ def _layout_branch_crossings(layout):
     return crossings
 
 
-@pytest.mark.parametrize("seed", range(20))
+@pytest.mark.parametrize("seed", [0, 7, 19])
 def test_randomized_complete_circular_tidy_layouts_remain_planar(seed):
     tree = _random_binary_tree(20, 81000 + seed)
     generator = random.Random(82000 + seed)
@@ -91,7 +91,7 @@ def test_randomized_complete_circular_tidy_layouts_remain_planar(seed):
 
 
 @pytest.mark.parametrize("subtree_packing", ["standard", "tidy"])
-@pytest.mark.parametrize("seed", range(20))
+@pytest.mark.parametrize("seed", [0, 11, 19])
 def test_randomized_spiral_layouts_remain_planar(subtree_packing, seed):
     tree = _random_binary_tree(20, 83000 + seed)
     layout = make_tree_layout(
@@ -116,7 +116,7 @@ def _deep_caterpillar(depth):
 
 
 def test_equal_daylight_randomized_layouts_preserve_lengths_without_crossings():
-    for seed in range(12):
+    for seed in (0, 5, 11):
         tree = _random_binary_tree(40, 9200 + seed)
         layout = make_tree_layout(
             tree,

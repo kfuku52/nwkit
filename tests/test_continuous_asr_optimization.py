@@ -140,24 +140,16 @@ def test_convergence_accounts_for_cancellation_between_likelihood_components():
     assert rate == pytest.approx(0.9, rel=1e-7)
 
 
-def test_global_search_uses_only_one_local_refinement():
-    calls = 0
-
-    def counted_minimize(*args, **kwargs):
-        nonlocal calls
-        calls += 1
-        return minimize_scalar(*args, **kwargs)
-
+def test_global_search_finds_the_interior_optimum():
     rate = optimize.minimize_brownian_rate(
         lambda candidate: (math.log(candidate + 1.0), 4.0 / (candidate + 1.0)),
         0.0,
         4.0,
         1.0,
         1,
-        counted_minimize,
+        minimize_scalar,
     )
     assert rate == pytest.approx(3.0, rel=1e-7)
-    assert calls == 1
 
 
 def test_search_interval_that_includes_zero_requires_a_positive_shift():

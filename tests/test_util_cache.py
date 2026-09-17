@@ -26,11 +26,9 @@ from tests.util_test_support import (
 
 
 class TestDownloadDirHelpers:
-    def test_resolve_download_dir_returns_none_for_auto(self, tmp_path):
-        outfile = tmp_path / "out" / "tree.nwk"
-        args = make_args(outfile=str(outfile), download_dir="auto")
-        resolved = resolve_download_dir(args)
-        assert resolved is None
+    @pytest.mark.parametrize("resolver", [resolve_download_dir, resolve_ete_data_dir])
+    def test_auto_download_locations_are_unresolved(self, resolver):
+        assert resolver(make_args(download_dir="auto")) is None
 
     def test_resolve_download_dir_uses_outfile_parent_for_inferred(self, tmp_path):
         outfile = tmp_path / "out" / "tree.nwk"
@@ -58,10 +56,6 @@ class TestDownloadDirHelpers:
         assert resolve_ete_data_dir(args) == os.path.join(
             os.path.realpath(explicit_dir), "ete4"
         )
-
-    def test_resolve_ete_data_dir_returns_none_for_auto(self):
-        args = make_args(download_dir="auto")
-        assert resolve_ete_data_dir(args) is None
 
     def test_acquire_exclusive_lock_creates_and_removes_file(self, tmp_path):
         lock_path = tmp_path / ".lock"

@@ -10,9 +10,7 @@ from tests.test_shift_native_search import sample_data
 
 @pytest.mark.parametrize("different_mask", [False, True])
 @pytest.mark.parametrize("alphas", [1.0, [0.0, float("inf")]])
-def test_structural_screen_keeps_trait_specific_masks_and_alpha(
-    monkeypatch, different_mask, alphas
-):
+def test_structural_screen_keeps_trait_specific_masks_and_alpha(different_mask, alphas):
     base = sample_data()
     values = base.values.copy()
     if different_mask:
@@ -29,13 +27,4 @@ def test_structural_screen_keeps_trait_specific_masks_and_alpha(
             np.all(norms > 0)
             and np.linalg.matrix_rank(design / norms) == design.shape[1]
         )
-    calls = []
-    original = ShiftLayout.design
-
-    def counted(self, tree, alpha_height, **kwargs):
-        calls.append(alpha_height)
-        return original(self, tree, alpha_height, **kwargs)
-
-    monkeypatch.setattr(ShiftLayout, "design", counted)
     assert observable_layout(data, layout, alphas) == expected
-    assert len(calls) == (1 if not different_mask and np.ndim(alphas) == 0 else 2)

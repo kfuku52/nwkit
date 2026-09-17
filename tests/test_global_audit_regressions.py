@@ -1,7 +1,5 @@
 """Boundary and complexity regressions from the September whole-program audit."""
 
-import gzip
-import io
 import itertools
 
 import pandas as pd
@@ -84,47 +82,6 @@ def test_consensus_deep_tree_is_iterative(tmp_path):
     assert len(list(tree.leaves())) == 1100
 
 
-@pytest.mark.parametrize("column", ["name", "parent", "branch_id", "support"])
-@pytest.mark.parametrize("bom", ["", "\ufeff"])
-def test_table2nwk_rejects_duplicate_columns(tmp_path, column, bom):
-    source = tmp_path / "table.tsv"
-    source.write_text(
-        f"{bom}branch_id\tparent\tname\tsupport\t{column}\n0\t-1\tR\t\t0\n1\t0\tA\t\t0\n",
-        encoding="utf-8",
-    )
-    output = tmp_path / "tree.nwk"
-    with pytest.raises(ValueError, match="duplicated"):
-        main(["table2nwk", "--infile", str(source), "--outfile", str(output)])
-    assert not output.exists()
-
-
-@pytest.mark.parametrize("mode", ["stdin", "gzip", "plain"])
-def test_table2nwk_preserves_input_containers_and_text_names(
-    tmp_path, monkeypatch, mode
-):
-    text = "\ufeffbranch_id\tparent\tname\n0\t-1\tR\n1\t0\t001\n2\t0\tNA\n"
-    source = tmp_path / ("input.tsv.gz" if mode == "gzip" else "input.tsv")
-    if mode == "gzip":
-        with gzip.open(source, "wt", encoding="utf-8") as handle:
-            handle.write(text)
-    elif mode == "stdin":
-        monkeypatch.setattr("sys.stdin", io.StringIO(text))
-    else:
-        source.write_text(text, encoding="utf-8")
-    output = tmp_path / "out.nwk"
-    main(
-        [
-            "table2nwk",
-            "--infile",
-            "-" if mode == "stdin" else str(source),
-            "--outfile",
-            str(output),
-        ]
-    )
-    tree = read_tree(str(output), "1", True, quiet=True)
-    assert list(tree.leaf_names()) == ["001", "NA"]
-
-
 def test_leaf_interval_does_not_consume_prefix():
     class IndexOnlyTuple(tuple):
         def __iter__(self):
@@ -159,32 +116,3 @@ def test_bitmask_rf_matches_set_oracle(rooted):
             len(a ^ b),
             len(a) + len(b),
         )
-
-
-def test_ranked_sample_only_computes_selected_paths(tmp_path, monkeypatch):
-    from nwkit import sample
-
-    original = sample._leaf_path_edges
-    called = []
-
-    def record(leaf):
-        called.append(leaf.name)
-        return original(leaf)
-
-    monkeypatch.setattr(sample, "_leaf_path_edges", record)
-    main(
-        [
-            "sample",
-            "--infile",
-            "(A:1,B:2,C:3)R;",
-            "--format",
-            "1",
-            "--method",
-            "ranked",
-            "--n",
-            "1",
-            "--outfile",
-            str(tmp_path / "out.nwk"),
-        ]
-    )
-    assert called == ["A"]

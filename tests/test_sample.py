@@ -256,106 +256,43 @@ class TestSampleMain:
 
     @pytest.mark.parametrize("method", ["max-pd", "ranked"])
     @pytest.mark.parametrize(
-        "bad_length",
-        ["-1", "inf", "nan"],
-        ids=("negative", "infinite", "nan"),
+        ("newick", "n", "match"),
+        [
+            ("(A:-1,B:1,C:1);", 1, "finite"),
+            (
+                "((A:1e308,B:1):1e308,C:1);",
+                1,
+                "gain exceeds the finite floating-point range",
+            ),
+            (
+                "(A:1e308,B:1e308,C:1);",
+                2,
+                "total exceeds the finite floating-point range",
+            ),
+            (
+                f"(A:{float.fromhex('0x1.fffffffffffffp+1023')},B:1,C:0);",
+                2,
+                "total exceeds the finite floating-point range",
+            ),
+        ],
+        ids=("invalid-length", "path-gain", "pd-total", "pd-total-overflow"),
     )
-    def test_rejects_invalid_branch_lengths_before_outputs(
-        self, tmp_path, method, bad_length
+    def test_rejects_unrepresentable_inputs_before_outputs(
+        self, tmp_path, method, newick, n, match
     ):
         tree_path = tmp_path / "tree.nwk"
         out_tree = tmp_path / "sampled.nwk"
         out_table = tmp_path / "sampled.tsv"
-        tree_path.write_text(
-            "(A:{},B:1,C:1);".format(bad_length),
-            encoding="utf-8",
-        )
+        tree_path.write_text(newick, encoding="utf-8")
         args = make_sample_args(
             infile=str(tree_path),
             outfile=str(out_tree),
             report=str(out_table),
             method=method,
+            n=n,
         )
 
-        with pytest.raises(ValueError, match="finite"):
-            sample_main(args)
-
-        assert not out_tree.exists()
-        assert not out_table.exists()
-
-    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
-    def test_rejects_unrepresentable_path_gain_before_outputs(self, tmp_path, method):
-        tree_path = tmp_path / "tree.nwk"
-        out_tree = tmp_path / "sampled.nwk"
-        out_table = tmp_path / "sampled.tsv"
-        tree_path.write_text(
-            "((A:1e308,B:1):1e308,C:1);",
-            encoding="utf-8",
-        )
-        args = make_sample_args(
-            infile=str(tree_path),
-            outfile=str(out_tree),
-            report=str(out_table),
-            method=method,
-        )
-
-        with pytest.raises(
-            ValueError,
-            match="gain exceeds the finite floating-point range",
-        ):
-            sample_main(args)
-
-        assert not out_tree.exists()
-        assert not out_table.exists()
-
-    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
-    def test_rejects_unrepresentable_pd_total_before_outputs(self, tmp_path, method):
-        tree_path = tmp_path / "tree.nwk"
-        out_tree = tmp_path / "sampled.nwk"
-        out_table = tmp_path / "sampled.tsv"
-        tree_path.write_text(
-            "(A:1e308,B:1e308,C:1);",
-            encoding="utf-8",
-        )
-        args = make_sample_args(
-            infile=str(tree_path),
-            outfile=str(out_tree),
-            report=str(out_table),
-            method=method,
-            n=2,
-        )
-
-        with pytest.raises(
-            ValueError,
-            match="total exceeds the finite floating-point range",
-        ):
-            sample_main(args)
-
-        assert not out_tree.exists()
-        assert not out_table.exists()
-
-    @pytest.mark.parametrize("method", ["max-pd", "ranked"])
-    def test_rejects_total_just_above_maximum_float(self, tmp_path, method):
-        tree_path = tmp_path / "tree.nwk"
-        out_tree = tmp_path / "sampled.nwk"
-        out_table = tmp_path / "sampled.tsv"
-        maximum_float = float.fromhex("0x1.fffffffffffffp+1023")
-        tree_path.write_text(
-            "(A:{},B:1,C:0);".format(maximum_float),
-            encoding="utf-8",
-        )
-        args = make_sample_args(
-            infile=str(tree_path),
-            outfile=str(out_tree),
-            report=str(out_table),
-            method=method,
-            n=2,
-        )
-
-        with pytest.raises(
-            ValueError,
-            match="total exceeds the finite floating-point range",
-        ):
+        with pytest.raises(ValueError, match=match):
             sample_main(args)
 
         assert not out_tree.exists()

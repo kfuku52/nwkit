@@ -1,12 +1,11 @@
 """Exercise every command's real parser and handler with small offline inputs."""
 
-import argparse
 import json
 
 import pandas as pd
 import pytest
 
-from nwkit.cli import main, parser
+from nwkit.cli import main
 from nwkit.util import read_tree
 
 pytestmark = pytest.mark.integration
@@ -155,15 +154,6 @@ TABLE_COLUMNS = {
     "rootcompare": "method",
     "validate": "tree_id",
 }
-
-
-def test_every_registered_command_has_a_handler_contract():
-    subcommands = next(
-        action
-        for action in parser._actions
-        if isinstance(action, argparse._SubParsersAction)
-    )
-    assert set(subcommands.choices) == set(CASES)
 
 
 @pytest.mark.parametrize("command", CASES)

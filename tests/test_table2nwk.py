@@ -1,22 +1,37 @@
 import gzip
+import io
 
 import pandas as pd
 import pytest
 
 from nwkit.nwk2table import nwk2table_main
-from nwkit.table2nwk import _validate_parent_map, table2nwk_main
+from nwkit.table2nwk import table2nwk_main
 from nwkit.util import read_tree
 from tests.helpers import make_args
 
 
 class TestTable2NwkMain:
-    def test_compressed_table_preserves_literal_node_names(self, tmp_path):
-        table_path = tmp_path / "nodes.tsv.gz"
-        with gzip.open(table_path, "wt") as handle:
-            handle.write("branch_id\tparent\tname\n0\t-1\tR\n1\t0\t001\n2\t0\tNA\n")
-        outfile = tmp_path / "output.nwk"
-        table2nwk_main(make_args(infile=str(table_path), outfile=str(outfile)))
-        tree = read_tree(str(outfile), "auto", True, quiet=True)
+    @pytest.mark.parametrize("mode", ["stdin", "gzip", "plain"])
+    def test_input_containers_preserve_literal_node_names(
+        self, tmp_path, monkeypatch, mode
+    ):
+        text = "\ufeffbranch_id\tparent\tname\n0\t-1\tR\n1\t0\t001\n2\t0\tNA\n"
+        source = tmp_path / ("input.tsv.gz" if mode == "gzip" else "input.tsv")
+        if mode == "gzip":
+            with gzip.open(source, "wt", encoding="utf-8") as handle:
+                handle.write(text)
+        elif mode == "stdin":
+            monkeypatch.setattr("sys.stdin", io.StringIO(text))
+        else:
+            source.write_text(text, encoding="utf-8")
+        output = tmp_path / "out.nwk"
+        table2nwk_main(
+            make_args(
+                infile="-" if mode == "stdin" else str(source),
+                outfile=str(output),
+            )
+        )
+        tree = read_tree(str(output), "1", True, quiet=True)
         assert list(tree.leaf_names()) == ["001", "NA"]
 
     @pytest.mark.parametrize("column", ["branch_id", "parent", "name", "dist"])
@@ -110,23 +125,3 @@ class TestTable2NwkMain:
                     outformat="auto",
                 )
             )
-
-    def test_parent_validation_is_linear_for_reverse_ordered_chain(self):
-        class CountingDict(dict):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.get_calls = 0
-
-            def get(self, key, default=None):
-                self.get_calls += 1
-                return super().get(key, default)
-
-        node_count = 5000
-        parent_map = CountingDict({0: -1})
-        parent_map.update(
-            (branch_id, branch_id - 1) for branch_id in range(node_count - 1, 0, -1)
-        )
-
-        _validate_parent_map(parent_map, root_id=0)
-
-        assert parent_map.get_calls <= node_count

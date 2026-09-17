@@ -9,7 +9,6 @@ from nwkit.image import (
     PhylopicProvider,
     allowed_candidates_from_scored_candidates,
     build_download_session,
-    build_providers,
     build_retry_config,
     candidate_score,
     classify_wikimedia_asset,
@@ -738,30 +737,6 @@ class TestNCBIHelpers:
 
         with pytest.raises(MediaDownloadError, match="HTTPS"):
             image_module.validate_candidate_media_url(candidate)
-
-    def test_build_providers_does_not_initialize_ncbi_eagerly(
-        self, monkeypatch, tmp_path
-    ):
-        call_counter = {"count": 0}
-
-        def fake_get_ete_ncbitaxa(args=None):
-            call_counter["count"] += 1
-            raise AssertionError(
-                "NCBI taxonomy should not initialize during provider construction"
-            )
-
-        monkeypatch.setattr("nwkit.image.get_ete_ncbitaxa", fake_get_ete_ncbitaxa)
-
-        session, ncbi, providers = build_providers(
-            args=make_image_args(out_dir=str(tmp_path / "out")),
-            sources=["ncbi"],
-            session=DummySession(),
-        )
-
-        assert session is not None
-        assert ncbi is not None
-        assert "ncbi" in providers
-        assert call_counter["count"] == 0
 
     def test_collect_candidates_skips_ncbi_when_earlier_provider_has_allowed_candidate(
         self,

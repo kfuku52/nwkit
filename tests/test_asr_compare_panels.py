@@ -36,18 +36,11 @@ def command(tmp_path, *extra):
 
 @pytest.mark.parametrize("tip_labels", ["no", "yes"])
 def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch, tip_labels):
-    import nwkit.asr_compare as comparison
     import nwkit.asr_compare_panels as plotting
 
     main(command(tmp_path))
     before = pd.read_csv(tmp_path / "comparison.tsv", sep="\t")
-    original_fit = comparison._fit_continuous
     original_build = plotting.build_comparison_panels
-    calls = []
-
-    def fit(context, candidate):
-        calls.append(candidate.model_id)
-        return original_fit(context, candidate)
 
     def build(context, table):
         fig = original_build(context, table)
@@ -71,12 +64,8 @@ def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch, tip_lab
                     assert any(
                         "first history" in text.get_text() for text in band.texts
                     )
-        # Cached marginals, rather than a second fit, supply every node.
-        for posterior, _, _, _ in context.cache["figure_fits"].values():
-            assert len(posterior) == len(list(context.tree.traverse()))
         return fig
 
-    monkeypatch.setattr(comparison, "_fit_continuous", fit)
     monkeypatch.setattr(plotting, "build_comparison_panels", build)
     pdf = tmp_path / "panels.pdf"
     main(
@@ -96,7 +85,6 @@ def test_one_page_same_fit_values_and_shared_axes(tmp_path, monkeypatch, tip_lab
             "5",
         )
     )
-    assert calls == ["BM", "OU[stationary]"]
     after = pd.read_csv(tmp_path / "comparison.tsv", sep="\t")
     times = [column for column in before if column.endswith("seconds")]
     pd.testing.assert_frame_equal(before.drop(columns=times), after.drop(columns=times))

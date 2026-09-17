@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.21] - 2026-09-17
+
+### Changed
+
+- Remove tests that duplicated production implementations, inspected private
+  optimization details, or re-tested mock data without exercising the product
+  path. Consolidate transport and numerical boundary cases in their canonical
+  suites.
+
 ## [0.43.20] - 2026-09-17
 
 ### Fixed

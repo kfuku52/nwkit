@@ -3,7 +3,7 @@ import pytest
 from ete4 import Tree
 
 import nwkit.root as root_mod
-from nwkit.root import DEFAULT_TAXONOMY_SOURCE_CHAIN, taxonomy_rooting
+from nwkit.root import taxonomy_rooting
 from tests.helpers import make_args
 from tests.root_test_support import (
     install_fake_ncbi,
@@ -64,9 +64,6 @@ class TestTaxonomyRooting:
         assert {"A", "B"} in [
             set(child.leaf_names()) for child in rooted.get_children()
         ]
-
-    def test_default_source_chain_constant(self):
-        assert DEFAULT_TAXONOMY_SOURCE_CHAIN == "ncbi,opentree,timetree"
 
     def test_ncbi_source_passes_args_to_ncbi_helpers(self, monkeypatch, tmp_path):
         observed = dict()

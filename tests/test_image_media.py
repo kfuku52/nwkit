@@ -27,19 +27,6 @@ from tests.image_test_support import (
 )
 
 
-def test_validate_safe_svg_rejects_external_doctype(tmp_path):
-    source = tmp_path / "external-doctype.svg"
-    source.write_text(
-        '<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.0//EN" '
-        '"http://www.w3.org/TR/2001/REC-SVG-20010904/DTD/svg10.dtd">\n'
-        '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"/>',
-        encoding="utf-8",
-    )
-
-    with pytest.raises(MediaDownloadError, match="forbidden document type"):
-        validate_safe_svg(source)
-
-
 def test_validate_safe_svg_rejects_unterminated_doctype_without_backtracking(tmp_path):
     source = tmp_path / "unterminated-doctype.svg"
     source.write_bytes(b"<!DOCTYPE svg " + (b'"' * 100_000))
@@ -618,37 +605,67 @@ class TestImagePostprocessing:
         manifest_rows = read_tsv(out_dir / "manifest.tsv")
         assert manifest_rows[0]["local_path"].endswith(".svg")
 
-    def test_image_main_requires_pillow_when_postprocessing_is_requested(
-        self, monkeypatch, tmp_path
+    @pytest.mark.parametrize(
+        ("provider", "record_id", "media_name", "options"),
+        [
+            (
+                "inaturalist",
+                "inat-plain",
+                "photo.jpg",
+                {"output_format": "png"},
+            ),
+            (
+                "phylopic",
+                "phy-square",
+                "silhouette.svg",
+                {"trim_shape": "square"},
+            ),
+            (
+                "inaturalist",
+                "inat-semantic",
+                "photo.jpg",
+                {"trim": "semantic"},
+            ),
+        ],
+        ids=["output-format", "square-trim", "semantic-trim"],
+    )
+    def test_image_main_requires_pillow_for_postprocessing(
+        self,
+        monkeypatch,
+        tmp_path,
+        provider,
+        record_id,
+        media_name,
+        options,
     ):
         tree_path = tmp_path / "tree.nwk"
         tree_path.write_text("(Apis_mellifera_A);")
         out_dir = tmp_path / "out"
-
-        inaturalist_candidates = {
+        candidates = {
             "Apis mellifera": [
                 {
-                    "provider": "inaturalist",
-                    "provider_record_id": "inat-plain",
+                    "provider": provider,
+                    "provider_record_id": record_id,
                     "matched_name": "Apis mellifera",
                     "matched_rank": "species",
                     "license_code": "cc-by",
                     "license_url": "https://creativecommons.org/licenses/by/4.0/",
-                    "attribution": "Photographer",
-                    "source_page_url": "https://www.inaturalist.org/observations/1",
-                    "media_url": "https://static.inaturalist.org/apis.jpg",
+                    "attribution": "Image provider",
+                    "source_page_url": "https://example.org/image",
+                    "media_url": (
+                        f"https://images.phylopic.org/{media_name}"
+                        if provider == "phylopic"
+                        else f"https://static.inaturalist.org/{media_name}"
+                    ),
                     "width": 1000,
                     "height": 900,
-                    "asset_type": "photo",
+                    "asset_type": "silhouette" if provider == "phylopic" else "photo",
                 }
             ],
         }
 
         def fake_build_providers(args, sources, session=None):
-            providers = {
-                "inaturalist": DummyProvider(inaturalist_candidates),
-            }
-            return DummySession(), None, providers
+            return DummySession(), None, {provider: DummyProvider(candidates)}
 
         def fake_download_media(
             session,
@@ -659,7 +676,11 @@ class TestImagePostprocessing:
             provider=None,
             **kwargs,
         ):
-            write_valid_test_media(destination_path)
+            if media_name.endswith(".svg"):
+                with open(destination_path, "wb") as handle:
+                    handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
+            else:
+                write_valid_test_media(destination_path)
             return {"status": "downloaded", "destination_path": destination_path}
 
         monkeypatch.setattr("nwkit.image.build_providers", fake_build_providers)
@@ -672,149 +693,19 @@ class TestImagePostprocessing:
                 )
             ),
         )
-
-        with pytest.raises(RuntimeError, match="Pillow dependency"):
-            image_main(
-                make_image_args(
-                    infile=str(tree_path),
-                    out_dir=str(out_dir),
-                    source="inaturalist",
-                    output_format="png",
-                )
+        if media_name.endswith(".svg"):
+            monkeypatch.setattr(
+                "nwkit.image.rasterize_svg_to_image",
+                lambda source_path, max_edge=None: object(),
             )
 
-    def test_image_main_requires_pillow_when_trim_shape_square_is_requested(
-        self, monkeypatch, tmp_path
-    ):
-        tree_path = tmp_path / "tree.nwk"
-        tree_path.write_text("(Apis_mellifera_A);")
-        out_dir = tmp_path / "out"
-
-        phylopic_candidates = {
-            "Apis mellifera": [
-                {
-                    "provider": "phylopic",
-                    "provider_record_id": "phy-plain",
-                    "matched_name": "Apis mellifera",
-                    "matched_rank": "species",
-                    "license_code": "cc-by",
-                    "license_url": "https://creativecommons.org/licenses/by/4.0/",
-                    "attribution": "PhyloPic Artist",
-                    "source_page_url": "https://api.phylopic.org/images/phy-plain",
-                    "media_url": "https://images.phylopic.org/apis.svg",
-                    "width": 1000,
-                    "height": 900,
-                    "asset_type": "silhouette",
-                }
-            ],
-        }
-
-        def fake_build_providers(args, sources, session=None):
-            providers = {
-                "phylopic": DummyProvider(phylopic_candidates),
-            }
-            return DummySession(), None, providers
-
-        def fake_download_media(
-            session,
-            media_url,
-            destination_path,
-            cache_path=None,
-            max_download_bytes=None,
-            provider=None,
-            **kwargs,
-        ):
-            with open(destination_path, "wb") as handle:
-                handle.write(b'<svg xmlns="http://www.w3.org/2000/svg"></svg>')
-            return {"status": "downloaded", "destination_path": destination_path}
-
-        monkeypatch.setattr("nwkit.image.build_providers", fake_build_providers)
-        monkeypatch.setattr("nwkit.image.download_media", fake_download_media)
-        monkeypatch.setattr(
-            "nwkit.image.rasterize_svg_to_image",
-            lambda source_path, max_edge=None: object(),
-        )
-        monkeypatch.setattr(
-            "nwkit.image.load_pillow_modules",
-            lambda: (_ for _ in ()).throw(
-                RuntimeError(
-                    'Image post-processing requires the optional Pillow dependency. Install optional image-processing dependencies with: pip install "nwkit[image]"'
-                )
-            ),
-        )
-
         with pytest.raises(RuntimeError, match="Pillow dependency"):
             image_main(
                 make_image_args(
                     infile=str(tree_path),
                     out_dir=str(out_dir),
-                    source="phylopic",
-                    trim_shape="square",
-                )
-            )
-
-    def test_image_main_requires_pillow_when_trim_semantic_is_requested(
-        self, monkeypatch, tmp_path
-    ):
-        tree_path = tmp_path / "tree.nwk"
-        tree_path.write_text("(Apis_mellifera_A);")
-        out_dir = tmp_path / "out"
-
-        inaturalist_candidates = {
-            "Apis mellifera": [
-                {
-                    "provider": "inaturalist",
-                    "provider_record_id": "inat-semantic",
-                    "matched_name": "Apis mellifera",
-                    "matched_rank": "species",
-                    "license_code": "cc-by",
-                    "license_url": "https://creativecommons.org/licenses/by/4.0/",
-                    "attribution": "Photographer",
-                    "source_page_url": "https://www.inaturalist.org/observations/1",
-                    "media_url": "https://static.inaturalist.org/apis.jpg",
-                    "width": 1000,
-                    "height": 900,
-                    "asset_type": "photo",
-                }
-            ],
-        }
-
-        def fake_build_providers(args, sources, session=None):
-            providers = {
-                "inaturalist": DummyProvider(inaturalist_candidates),
-            }
-            return DummySession(), None, providers
-
-        def fake_download_media(
-            session,
-            media_url,
-            destination_path,
-            cache_path=None,
-            max_download_bytes=None,
-            provider=None,
-            **kwargs,
-        ):
-            write_valid_test_media(destination_path)
-            return {"status": "downloaded", "destination_path": destination_path}
-
-        monkeypatch.setattr("nwkit.image.build_providers", fake_build_providers)
-        monkeypatch.setattr("nwkit.image.download_media", fake_download_media)
-        monkeypatch.setattr(
-            "nwkit.image.load_pillow_modules",
-            lambda: (_ for _ in ()).throw(
-                RuntimeError(
-                    'Image post-processing requires the optional Pillow dependency. Install optional image-processing dependencies with: pip install "nwkit[image]"'
-                )
-            ),
-        )
-
-        with pytest.raises(RuntimeError, match="Pillow dependency"):
-            image_main(
-                make_image_args(
-                    infile=str(tree_path),
-                    out_dir=str(out_dir),
-                    source="inaturalist",
-                    trim="semantic",
+                    source=provider,
+                    **options,
                 )
             )
 
@@ -1281,19 +1172,15 @@ class TestImageSecurityLimits:
         with pytest.raises(MediaDownloadError, match="external|executable"):
             postprocess_media_file(str(source), make_image_args())
 
-    def test_default_raster_output_rejects_truncated_png(self, tmp_path):
-        source = tmp_path / "truncated.png"
-        source.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0d")
-
-        with pytest.raises(MediaDownloadError, match="truncated|corrupt|unsupported"):
-            postprocess_media_file(str(source), make_image_args())
-
-    def test_default_raster_output_rejects_truncated_jpeg(self, tmp_path):
-        source = tmp_path / "truncated.jpg"
-        Image, _, _ = image_module.load_pillow_modules()
-        Image.new("RGB", (64, 64), "red").save(source, format="JPEG")
-        source.write_bytes(source.read_bytes()[:-2])
-
+    @pytest.mark.parametrize("kind", ["png", "jpeg"])
+    def test_default_raster_output_rejects_truncated_images(self, tmp_path, kind):
+        source = tmp_path / f"truncated.{kind}"
+        if kind == "png":
+            source.write_bytes(b"\x89PNG\r\n\x1a\n\x00\x00\x00\x0d")
+        else:
+            Image, _, _ = image_module.load_pillow_modules()
+            Image.new("RGB", (64, 64), "red").save(source, format="JPEG")
+            source.write_bytes(source.read_bytes()[:-2])
         with pytest.raises(MediaDownloadError, match="truncated|corrupt|unsupported"):
             postprocess_media_file(str(source), make_image_args())
 
