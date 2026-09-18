@@ -53,6 +53,7 @@ def main() -> int:
         "nwkit/root_evaluation.py",
         "nwkit/sparse_laplace.py",
         "nwkit/data_tree/apgiv.nwk",
+        "nwkit/data_tree/apgv.nwk",
         "nwkit/data_model/lg.txt",
         "nwkit/data_iqtree/worker.cpp",
     }

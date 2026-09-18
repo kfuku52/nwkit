@@ -2,7 +2,14 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
-## [Unreleased]
+## [0.43.22] - 2026-09-18
+
+### Added
+
+- Add `constrain --backbone ncbi_apgv` with a 68-tip backbone transcribed from
+  APG V Figure 1 (66 orders plus Huaceae and Columelliaceae), preserving its
+  polytomies and prioritizing the two unplaced families in taxonomy matching
+  ([DOI](https://doi.org/10.1111/jse.70096)).
 
 ## [0.43.21] - 2026-09-17
 

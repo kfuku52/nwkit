@@ -22,6 +22,21 @@ from nwkit.util import (
     write_tree,
 )
 
+_APG_BACKBONE_FILES = {
+    "ncbi_apgiv": "data_tree/apgiv.nwk",
+    "ncbi_apgv": "data_tree/apgv.nwk",
+}
+_APG_V_UNPLACED_FAMILIES = frozenset({"Huaceae", "Columelliaceae"})
+
+
+def _read_apg_backbone(backbone):
+    file_path = _APG_BACKBONE_FILES[backbone]
+    package_name = __package__ or "nwkit"
+    nwk_string = (
+        resources.files(package_name).joinpath(file_path).read_text(encoding="utf-8")
+    )
+    return ete4.Tree(nwk_string, parser=0)
+
 
 def _close_ncbi_db(ncbi):
     if ncbi is None:
@@ -191,6 +206,12 @@ def match_taxa(tree, labels, backbone_method, args=None):
                 ancestor = list(
                     leaf_name_set.intersection(set(ancestor_names.values()))
                 )
+                if backbone_method == "ncbi_apgv":
+                    unplaced_family_hits = list(
+                        set(ancestor).intersection(_APG_V_UNPLACED_FAMILIES)
+                    )
+                    if unplaced_family_hits:
+                        ancestor = unplaced_family_hits
                 if len(ancestor) > 1:
                     txt = "Multiple hits. Excluded from the output. Taxon in the list = {}, Taxa in the tree = {}\n"
                     sys.stderr.write(txt.format(sp, ",".join(list(ancestor))))
@@ -499,15 +520,8 @@ def constrain_main(args):
             validate_unique_named_leaves(
                 tree, option_name="--infile", context=" for '--backbone user'"
             )
-        elif args.backbone == "ncbi_apgiv":
-            file_path = "data_tree/apgiv.nwk"
-            package_name = __package__ or "nwkit"
-            nwk_string = (
-                resources.files(package_name)
-                .joinpath(file_path)
-                .read_text(encoding="utf-8")
-            )
-            tree = ete4.Tree(nwk_string, parser=0)
+        elif args.backbone in _APG_BACKBONE_FILES:
+            tree = _read_apg_backbone(args.backbone)
         tree = initialize_tree(tree)
         tree = match_taxa(tree, labels, args.backbone, args=args)
         if not any(leaf.props.get("has_taxon") for leaf in tree.leaves()):

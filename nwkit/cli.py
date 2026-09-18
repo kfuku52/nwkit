@@ -1513,16 +1513,17 @@ pconstrain.add_argument(
 )
 pconstrain.add_argument(
     "--backbone",
-    metavar="ncbi|ncbi_apgiv|ncbi_user|user",
+    metavar="ncbi|ncbi_apgiv|ncbi_apgv|ncbi_user|user",
     default="ncbi",
     type=str,
     required=False,
     action="store",
-    choices=["ncbi", "ncbi_apgiv", "ncbi_user", "user"],
+    choices=["ncbi", "ncbi_apgiv", "ncbi_apgv", "ncbi_user", "user"],
     help="default=%(default)s: The backbone for tree constraint. "
     '--infile is not required except for "user". '
     "ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. "
     "ncbi_apgiv: Infer NCBI Taxonomy ID from species name, and match it with the order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). "
+    "ncbi_apgv: Infer NCBI Taxonomy ID from species name, and match it with the APG V angiosperm backbone (66 orders plus Huaceae and Columelliaceae; https://doi.org/10.1111/jse.70096). "
     "ncbi_user: Infer NCBI Taxonomy ID from species name, and match the ranks with the labels of the user-provided tree. "
     "user: User-provided tree in --infile.",
 )
