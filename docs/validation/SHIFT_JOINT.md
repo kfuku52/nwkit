@@ -123,7 +123,7 @@ PYTHONPATH=. python tools/validate_shift_joint.py \
 The raw run retains every candidate score, error and warning, the generated R
 script, baseline and winning RDS objects, tip predictions, branch effects,
 inputs and execution source snapshots. The portable
-[evidence bundle](examples/shift/joint-validation/) includes all candidate
+[evidence bundle](../../examples/shift/joint-validation/) includes all candidate
 records, model tables, inputs, seeds and execution source text without binary
 R objects. Its exporter checks input hashes, winner likelihood, score audit,
 truth metrics and source snapshots before publishing a complete bundle.

@@ -56,7 +56,7 @@ of the proper root draw.
 
 ## Example
 
-Run the complete [mixed-model example](examples/branch_gaussian/mixed_process.py):
+Run the complete [mixed-model example](../../examples/branch_gaussian/mixed_process.py):
 
 ```sh
 python examples/branch_gaussian/mixed_process.py
@@ -113,7 +113,7 @@ uniform BM/OU reductions, the alpha→0 limit, and zero-duration end jumps.
 ## CLI and TSV inputs
 
 `nwkit asr --model BRANCH-GAUSSIAN` provides `--output summary` (default),
-`likelihood`, and `prior-samples`. See the [runnable CLI example](examples/branch_gaussian/README.md).
+`likelihood`, and `prior-samples`. See the [runnable CLI example](../../examples/branch_gaussian/README.md).
 All modes require a rooted tree and one of these assignment forms:
 
 - `--branch-models FILE`: direct `branch_id`, `model` and parameter columns.
@@ -231,7 +231,7 @@ measurement-error input and tree ensembles are rejected for this fixed branch
 assignment interface. `asrcompare --models all` records it as not applicable;
 use the explicit ASR command to evaluate a supplied assignment.
 
-See the [eight-tip plotting example](examples/branch_gaussian/plot/README.md)
+See the [eight-tip plotting example](../../examples/branch_gaussian/plot/README.md)
 for rendered posterior and prior figures and their exact inputs.
 
 
@@ -314,5 +314,5 @@ requires observations and is rejected with `--output prior-samples`. All fit
 inputs participate in stdin, input-alias protection and audit recording; all
 outputs retain transactional publication.
 
-See the [fitted eight-tip example](examples/branch_gaussian/fit/README.md) for
+See the [fitted eight-tip example](../../examples/branch_gaussian/fit/README.md) for
 complete inputs, fitted values, plots and a reproduction script.

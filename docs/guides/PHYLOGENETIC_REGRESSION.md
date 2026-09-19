@@ -227,7 +227,7 @@ Changing inference method is not a guarantee of calibrated small-sample tests.
 In particular, the current coefficient bootstrap uses centered coefficient
 samples for p-values and percentile intervals, not a null-constrained test or
 a studentized pivot. Re-estimating variances in every refit alone does not
-remove its small-sample plug-in error. See [regression calibration](REGRESSION_CALIBRATION.md)
+remove its small-sample plug-in error. See [regression calibration](../validation/REGRESSION_CALIBRATION.md)
 for the fixed-model validation protocol and recorded limitations.
 
 Categorical biological replicates are not averaged. Response replicates enter

@@ -593,7 +593,7 @@ Calibrated shift selection (the default) writes schema-7 JSON: `selection=calibr
 At the independent limit, `alpha` and `sigma2` are JSON null. Optimum fields are
 null in JSON / `NA` in TSV whenever an α limit is supported; finite mean predictions
 remain available. Legacy `--selection ic` retains schema 5. See
-[calibrated selection](SHIFT_CALIBRATION.md) for limits and grid semantics.
+[calibrated selection](../validation/SHIFT_CALIBRATION.md) for limits and grid semantics.
 `model_family` distinguishes finite OU, the scaled-effect drift limit and the
 independent-tip limit. Calibration metadata separates likelihood scale from
 bootstrap generation scale and labels later-stage family selection. Legacy

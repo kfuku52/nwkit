@@ -30,4 +30,4 @@ The example requests conditional profile intervals for every ensemble sample.
 Inspect statuses and diagnostics: hard-bound-limited intervals and local-optimum
 warnings are deliberately retained. The comparison is not a combined posterior
 or a guarantee of coverage. For schemas and bootstrap options, see
-[RADTE species uncertainty](../../../RADTE_SPECIES_UNCERTAINTY.md).
+[RADTE species uncertainty](../../../docs/guides/RADTE_SPECIES_UNCERTAINTY.md).

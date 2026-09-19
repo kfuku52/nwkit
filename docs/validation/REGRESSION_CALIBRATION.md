@@ -149,7 +149,7 @@ and posterior Hessian, then compares increasing sample sizes and independent
 scrambles. This measures integration error **at fitted parameters**; it does
 not establish an accurate reference optimum, SE or frequentist coverage.
 
-See the [recorded pilot evidence](examples/regression_calibration/README.md).
+See the [recorded pilot evidence](../../examples/regression_calibration/README.md).
 The validation approach follows [Morris et al.](https://doi.org/10.1002/sim.8086);
 the need to distinguish Laplace approximation error from statistical calibration
 is consistent with [Ogden](https://arxiv.org/abs/1808.06341).

@@ -15,5 +15,5 @@ nwkit signal -i examples/signal/tree.nwk \
 
 Without SEs, K is approximately 2.164516 for `clustered` and 0.476939 for
 `mixed`; their constrained lambda estimates are 1 and 0 respectively.
-The boundary status is expected. See [the signal guide](../../SIGNAL.md) for
+The boundary status is expected. See [the signal guide](../../docs/guides/SIGNAL.md) for
 error-aware fits, confidence intervals, test interpretation and output columns.

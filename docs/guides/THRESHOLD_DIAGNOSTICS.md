@@ -141,7 +141,7 @@ Full traces are not persistently exported by this option.
   binary root/internal-node posteriors and a free ordinal threshold posterior,
   including a disjoint ambiguous observation. Integration tolerances are
   tightened independently before comparison with MCMC.
-- A [small prior-predictive pilot](examples/threshold/README.md) compares short
+- A [small prior-predictive pilot](../../examples/threshold/README.md) compares short
   and longer computations on balanced, pectinate, short-branch, polytomy, rare
   ordinal and missing-tip cases. It retains failed diagnostics and root interval
   coverage denominators; it is not a precise calibration experiment.

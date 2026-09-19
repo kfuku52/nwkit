@@ -96,7 +96,7 @@ this mode.
 - Ordinary `nwkit draw` without a result-table option retains its existing
   behavior and default width.
 
-See [the reproducible figure examples](examples/radte/visualization/README.md)
+See [the reproducible figure examples](../../examples/radte/visualization/README.md)
 for the small shared-age illustration and the bundled GeneRax example.
 
 For external species intervals, separate hard-range and fitted-interval layers,

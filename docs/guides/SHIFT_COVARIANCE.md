@@ -189,9 +189,9 @@ compare dense likelihoods to the pruning and separable implementations.
 
 ## Validation
 
-The [implementation validation report](reviews/trait-covariance-2026-09-11/README.md)
+The [implementation validation report](../../reviews/trait-covariance-2026-09-11/README.md)
 records container checks, actual native timings and the limited fitted-null pilot.
-The [shared versus trait-specific alpha comparison](reviews/shared-versus-specific-alpha-2026-09-11/REPORT.md)
+The [shared versus trait-specific alpha comparison](../../reviews/shared-versus-specific-alpha-2026-09-11/REPORT.md)
 estimates alpha in both models and separates error-free timing, observation-error
 timing and a limited AIC/BIC discovery pilot.
 

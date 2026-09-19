@@ -11,7 +11,7 @@ independent evidence, tested scope and unmet power criterion.
 This is a small, reproducible statistical pilot, not a calibration guarantee.
 It tests whether `shift` recovers independently generated changes and shared
 optima, how often it selects shifts when none exist, and whether bootstrap
-support and failures are reported honestly. See [SHIFT.md](SHIFT.md) for the
+support and failures are reported honestly. See [SHIFT.md](../guides/SHIFT.md) for the
 model and command contract.
 
 ## Pilot results (2026-09-09)
@@ -39,8 +39,8 @@ pBIC reduced false shift selections in this paired pilot, but also missed more
 of the distinct and convergent two-shift patterns. These observations do not
 justify declaring either criterion generally superior or assigning a nominal
 false-positive rate. Five replicates per cell leave large Monte Carlo uncertainty.
-The [full table](examples/shift/validation/table.md) also reports expected-tip
-RMSE; the [cell summaries](examples/shift/validation/cell-summary.json) retain
+The [full table](../../examples/shift/validation/table.md) also reports expected-tip
+RMSE; the [cell summaries](../../examples/shift/validation/cell-summary.json) retain
 root and SE differences and Wilson intervals.
 
 For `null`, `single`, and `distinct` combined, BIC produced 12/60 merge events
@@ -82,8 +82,8 @@ strength effect on a no-shift model.
 The stronger single shifts were often recovered, while convergence remained
 hard even at the stronger effect. Shared-optimum recovery can succeed using a
 different ancestral shift partition, hence 4/12 shared recoveries versus 2/12
-ancestry recoveries. The [full table](examples/shift/validation-16tip/table.md)
-and [cell summaries](examples/shift/validation-16tip/cell-summary.json) retain
+ancestry recoveries. The [full table](../../examples/shift/validation-16tip/table.md)
+and [cell summaries](../../examples/shift/validation-16tip/cell-summary.json) retain
 all outcomes. Only three replicates per root/SE/effect cell were used.
 
 Across both studies, all 672 outer runs completed on 176 distinct simulated
@@ -154,7 +154,7 @@ A secondary pBIC grid uses 16 tips, effect magnitudes 0.5 and 2, both roots,
 both SE levels and three replicates per cell: 96 further datasets. It evaluates
 point estimates with and without convergence; bootstrap is disabled in this
 extension. Its inputs and results are archived separately under
-[validation-16tip](examples/shift/validation-16tip/records.json). Effect magnitude
+[validation-16tip](../../examples/shift/validation-16tip/records.json). Effect magnitude
 has no effect in a `null` generating model; the two null cells use independent
 seeds and are kept separately in the summaries. With unit branches, total tree
 height is 3 for eight tips and 4 for sixteen tips; the shifted clades also have
@@ -195,9 +195,9 @@ while holding tree height or the induced tip-mean effect fixed.
   has unknown inner counts and is reported separately, never as zero failures.
   Three inner replicates provide only a coarse diagnostic.
 
-The archived [inputs](examples/shift/validation/inputs.json),
-[per-run records](examples/shift/validation/records.json), and
-[cell summaries](examples/shift/validation/cell-summary.json) permit independent
+The archived [inputs](../../examples/shift/validation/inputs.json),
+[per-run records](../../examples/shift/validation/records.json), and
+[cell summaries](../../examples/shift/validation/cell-summary.json) permit independent
 recalculation. The CSV is an alternative export: when reading it with pandas,
 use `keep_default_na=False` so the scenario name `null` stays a string.
 

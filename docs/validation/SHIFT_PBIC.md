@@ -102,9 +102,9 @@ unchanged. The corrected estimated-alpha scores differ by `1.42e-7` because
 separate optimizations return slightly different alpha estimates; fixed-alpha
 scores agree exactly in this fixture.
 
-[Before](examples/shift/pbic-correction/before.csv) and
-[after](examples/shift/pbic-correction/after.csv) CSVs retain full precision.
-[Backend provenance](examples/shift/pbic-correction/backend-provenance.json)
+[Before](../../examples/shift/pbic-correction/before.csv) and
+[after](../../examples/shift/pbic-correction/after.csv) CSVs retain full precision.
+[Backend provenance](../../examples/shift/pbic-correction/backend-provenance.json)
 records the base commit and modified-source hashes. Both installations report
 3.0.9 because this work has not been committed or released; use the source
 hashes and isolated library identity to distinguish them.
@@ -128,7 +128,7 @@ PDF-manual step because `pdflatex` is unavailable and warned about missing
 validation/math-rendering tools. The full check is therefore not clean.
 NWKIT's 179 shift-related tests also pass against the corrected library.
 
-The [replay bundle](examples/shift/joint-validation-pbic-fixed/) uses the exact
+The [replay bundle](../../examples/shift/joint-validation-pbic-fixed/) uses the exact
 same 12 datasets as the earlier joint pilot. It is a software regression replay,
 not independent statistical replication. All 4,138 candidate attempts completed.
 All 12 BIC summary records are unchanged. Both additional pBIC cases pass the

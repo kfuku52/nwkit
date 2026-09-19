@@ -78,4 +78,4 @@ python reviews/native-optimization-2026-09-11/run_benchmarks.py \
 
 今回の計測では共分散再推定が支配的だったため、active setや新しいEM探索の実装を先行させなかった。次は100シフトや既知/推定測定誤差を含む再推定をプロファイルし、QR更新や共分散最適化の初期値・導関数を検討する。lassoが支配的になる条件ではactive setとmatrix-free演算を比較する。
 
-EM型候補提案、回収率・偽陽性率の比較、校正とsupportを含む大規模性能測定は未実施である。[既存の本番採用条件](../../NATIVE_SHIFT_VALIDATION.md)を満たしたという主張や、既定手法の切り替えは行わない。
+EM型候補提案、回収率・偽陽性率の比較、校正とsupportを含む大規模性能測定は未実施である。[既存の本番採用条件](../../docs/validation/NATIVE_SHIFT_VALIDATION.md)を満たしたという主張や、既定手法の切り替えは行わない。

@@ -40,8 +40,8 @@ the pBIC approximation; see the [mathematical boundary diagnosis](SHIFT_PBIC.md)
 A real CLI test confirms rejection before reading user data and preservation of
 pre-existing outputs. Another accepts BIC with the original backend, and a real
 corrected-backend pBIC fit exports the attestation. See the
-[IC example](examples/shift/response-ic/model.json) and the
-[calibrated example](examples/shift/response-calibrated/model.json).
+[IC example](../../examples/shift/response-ic/model.json) and the
+[calibrated example](../../examples/shift/response-calibrated/model.json).
 
 Schema-7 output now explicitly distinguishes finite OU, the scaled-effect drift
 limit, and the independent-tip limit; it records likelihood and simulation scale
@@ -95,8 +95,8 @@ separately, not as a joint 95% guarantee across all 28 comparisons.
 
 The protocols, source snapshots, observations, generating covariances, seeds,
 every attempted fit and cell summaries are retained in
-[primary evidence](examples/shift/null-contract-validation/protocol.json) and
-[B=999 evidence](examples/shift/null-contract-b999/protocol.json).
+[primary evidence](../../examples/shift/null-contract-validation/protocol.json) and
+[B=999 evidence](../../examples/shift/null-contract-b999/protocol.json).
 The read-only verifier regenerates every input, independently checks the selected
 likelihood and predicted means, checks stage probability metadata and denominators,
 reconstructs all cellwise bounds, and optionally replays the complete search.
@@ -129,17 +129,17 @@ Both B=999 cells and convergence lanes also passed, with zero failures:
 | 0.2 | 42 / 42 | 5.85% / 5.85% |
 | 2.1 | 40 / 40 | 5.62% / 5.62% |
 
-The [B=999 audit](examples/shift/response-audits/b999.json) regenerated every
+The [B=999 audit](../../examples/shift/response-audits/b999.json) regenerated every
 input, independently checked 4,000 winning fits and replayed four complete
 searches. Maximum independent likelihood error was 1.20e-14.
-The [primary audit](examples/shift/response-audits/primary.json) regenerated all
+The [primary audit](../../examples/shift/response-audits/primary.json) regenerated all
 12,000 inputs, independently checked all 24,000 winning fits and mean predictions,
 and replayed 24 complete searches. Maximum independent likelihood error was
 7.38e-12. All saved counts, probability metadata and simultaneous bounds matched.
 
 These cells do not validate arbitrary tree shapes, shallow/long-branch extremes,
 continuous alpha, exact endpoint generating distributions or measurement errors.
-A separate [12-dataset known-error timing pilot](examples/shift/known-error-timing-pilot/summary.json)
+A separate [12-dataset known-error timing pilot](../../examples/shift/known-error-timing-pilot/summary.json)
 completed 24 fits, but is not a
 calibration validation. Known-error and later-stage procedures remain plug-in
 methods. Selecting a shared-effect family does not prove biological convergence.
@@ -148,7 +148,7 @@ cellwise success.
 
 ## Paired detection and recovery
 
-The [paired replay](examples/shift/calibration-paired/summary.json) uses all 600
+The [paired replay](../../examples/shift/calibration-paired/summary.json) uses all 600
 no-error datasets in the existing 700-dataset grid-envelope bundle. It reruns the
 archived plug-in engine (`e30e9aab8c4886811c315817e0b730e7d3966bfddb743899ec18c6cded6809cf`)
 on the same observations with the same B=199 and Monte Carlo seeds. This isolates
@@ -173,7 +173,7 @@ The planned power criterion is therefore **not demonstrated**, and point estimat
 also show a real caution against treating conservatism as cost-free. The evidence
 retains exact tip-partition recovery and mean RMSE separately from detection.
 It does not establish recovery of each true shift location or correctness of
-convergence claims. The [independent audit](examples/shift/response-audits/paired.json) checked all
+convergence claims. The [independent audit](../../examples/shift/response-audits/paired.json) checked all
 1,200 selected fits with maximum likelihood error 2.85e-14.
 No tuning or further sampling was performed after these
 results to manufacture a pass.
@@ -213,8 +213,8 @@ Ruff, nonincremental mypy (173 modules), dependency consistency, Bandit,
 `pip-audit` and complexity checks passed. The original and corrected R libraries
 were both enabled for the real backend tests. The subsequent static check also
 passed for all 368 files after the final audit/distribution utility additions.
-See [software results](examples/shift/response-audits/software-checks.json) and
-[the complete check log](examples/shift/response-audits/full-check.log).
+See [software results](../../examples/shift/response-audits/software-checks.json) and
+[the complete check log](../../examples/shift/response-audits/full-check.log).
 Other Python versions and CI operating systems were not executed in this task.
 
 Distribution validation uses `python tools/check.py dist`: separate wheel/sdist

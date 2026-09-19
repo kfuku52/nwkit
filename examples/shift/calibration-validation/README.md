@@ -29,4 +29,4 @@ The source snapshot and `protocol.json` record the exact implementation used.
 `audit.json` verifies regenerated inputs and source hashes and adds a separate
 250-dataset null check of the default mode without convergence candidates
 (10/250 false selections). `default-null-records.jsonl.gz` retains those fits.
-See [method and interpretation](../../../SHIFT_CALIBRATION.md).
+See [method and interpretation](../../../docs/validation/SHIFT_CALIBRATION.md).

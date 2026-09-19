@@ -60,5 +60,5 @@ reference-posterior error and diagnostic pass/fail rates. Free ordinal threshold
 have an improper prior, so their prior-predictive SBC cannot reuse this generator;
 independent integrated posterior checks cover that setting instead.
 
-See [the diagnostic definitions](../../THRESHOLD_DIAGNOSTICS.md) for references,
+See [the diagnostic definitions](../../docs/guides/THRESHOLD_DIAGNOSTICS.md) for references,
 constant/rare-category handling and the output contract.

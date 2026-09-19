@@ -25,5 +25,5 @@ are excluded. `--map-history-out` retains actual sampled histories and can be
 used for custom event-time plots or summaries. The count table is identical to
 running the same command with only `--stochastic-map-out` as its map output.
 
-See [STOCHASTIC_MAPS.md](../../STOCHASTIC_MAPS.md) for all column definitions,
+See [STOCHASTIC_MAPS.md](../../docs/guides/STOCHASTIC_MAPS.md) for all column definitions,
 limits, and uncertainty conventions.

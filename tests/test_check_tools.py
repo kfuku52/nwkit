@@ -207,7 +207,9 @@ def test_ci_keeps_minimum_and_latest_python_for_numerical_changes():
 
 
 def test_ci_docs_only_skips_numerical_suites_but_dependencies_restore_all_versions():
-    docs = ci_matrix.select_coverage(["README.md", "PHYLOGENETIC_REGRESSION.md"])
+    docs = ci_matrix.select_coverage(
+        ["README.md", "docs/guides/PHYLOGENETIC_REGRESSION.md"]
+    )
     assert not docs["source_checks"] and docs["matrix"]["include"] == []
     dependencies = ci_matrix.select_coverage(["pyproject.toml"])
     assert len(dependencies["matrix"]["include"]) == 6

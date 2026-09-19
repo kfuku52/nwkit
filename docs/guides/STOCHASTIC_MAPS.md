@@ -17,7 +17,7 @@ nwkit asr --infile examples/stochastic_maps/tree.nwk \
   --map-probabilities-out probabilities.tsv --map-figure-out probabilities.png
 ```
 
-![Conditional state probabilities](examples/stochastic_maps/probabilities.png)
+![Conditional state probabilities](../../examples/stochastic_maps/probabilities.png)
 
 Each colored ribbon has constant total thickness; the thickness of each color
 estimates its state's conditional probability at that position. This is a
@@ -136,5 +136,5 @@ subtraction of large root depths. Reduce the disparity between root depths and
 branch/event durations for coordinate exports; multiplying every branch by the
 same factor does not generally resolve that disparity.
 
-See the [runnable example](examples/stochastic_maps/README.md) and
+See the [runnable example](../../examples/stochastic_maps/README.md) and
 [ASR guide](ASR.md) for input and model conventions.

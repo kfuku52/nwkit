@@ -1,70 +1,37 @@
-include CLI_TSV_CONVENTIONS.md
-include CONVERT.md
-include ASR.md
-include THRESHOLD_DIAGNOSTICS.md
-graft examples/threshold
-include RADTE.md
-include RADTE_SPECIES_UNCERTAINTY.md
-include RECONCILIATION_PLOTS.md
-include RECONCILIATION_EXPORTS.md
-include RADTE_MATH.md
-include RADTE_VALIDATION.md
-include ASR_PERFORMANCE.md
 include DEVELOPMENT.md
 include CHANGELOG.md
 include RELEASING.md
-include PHYLOGENETIC_REGRESSION.md
-include REGRESSION_CALIBRATION.md
-graft examples/regression_calibration
-include RECONCILED_SPECIATION_CONTRAST_MATH.md
 include constraints-dev.txt
 include scripts/make_draw_layout_gallery.py
+graft docs
+
+graft examples/threshold
+graft examples/regression_calibration
 graft examples/asr_figure
 graft examples/radte
 graft tests
 graft tools
 
-include IQTREE_LIBRARY.md
-
-include DTT.md
 graft examples/dtt
 
-include BRANCH_GAUSSIAN.md
 graft examples/branch_gaussian
 
-include REGRESSION_SELECTION.md
 graft examples/regression_selection
 
-include SHIFT.md
-include NATIVE_SHIFT.md
-include SHIFT_COVARIANCE.md
-include NATIVE_SHIFT_VALIDATION.md
-include NATIVE_SHIFT_SCALING.md
 graft reviews/native-scale-2026-09-10
 graft reviews/native-optimization-2026-09-11
 graft reviews/native-scale-pilot-2026-09-11
-include SHIFT_VALIDATION.md
-include SHIFT_JOINT.md
-include SHIFT_PBIC.md
-include SHIFT_ALPHA.md
-include SHIFT_CALIBRATION.md
 include reviews/shift-calibration-review.md
 graft examples/shift
 
-include SIGNAL.md
 graft examples/signal
 
-include PCA.md
 graft examples/pca
 
-include ASR_INDIVIDUALS.md
 graft examples/individual_asr
 
-include STOCHASTIC_MAPS.md
 graft examples/stochastic_maps
 
-include SHIFT_RESPONSE_VALIDATION.md
-include SHIFT_CALIBRATION_DECISION.md
 include reviews/shift-calibration-final-protocol.md
 include reviews/shift-implementation-base.json
 global-exclude __pycache__ *.py[cod]

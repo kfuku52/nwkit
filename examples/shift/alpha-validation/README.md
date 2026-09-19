@@ -1,7 +1,7 @@
 # Independent paired OU sensitivity evidence
 
 Open [report.html](report.html) for the technical report. The full design,
-definitions and reproduction commands are in [SHIFT_ALPHA.md](../../../SHIFT_ALPHA.md).
+definitions and reproduction commands are in [SHIFT_ALPHA.md](../../../docs/validation/SHIFT_ALPHA.md).
 This bundle uses 520 new datasets and a locally corrected, unreleased kfl1ou
 backend. It must not be confused with the earlier 12-dataset regression replay.
 

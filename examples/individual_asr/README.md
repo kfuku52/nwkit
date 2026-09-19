@@ -28,4 +28,4 @@ they do not include covariance-parameter uncertainty.
 
 `Rscript examples/individual_asr/reference.R` reproduces the independent
 Rphylopars comparisons when that optional R package is installed.
-See [ASR_INDIVIDUALS.md](../../ASR_INDIVIDUALS.md) for assumptions and schemas.
+See [ASR_INDIVIDUALS.md](../../docs/guides/ASR_INDIVIDUALS.md) for assumptions and schemas.

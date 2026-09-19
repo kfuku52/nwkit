@@ -1,7 +1,7 @@
 # Preliminary RADTE validation, 2026-09-09
 
 The tables below retain the historical implementations identified by their
-saved source hashes. The later [variance-boundary and exact-contrast work](examples/radte/interval-boundary-validation/README.md)
+saved source hashes. The later [variance-boundary and exact-contrast work](../../examples/radte/interval-boundary-validation/README.md)
 has separate evidence and does not retrospectively re-label these results as
 validation of the current implementation. In particular, the general sequence
 calibrated-profile prototype has not met its availability criteria.
@@ -14,10 +14,10 @@ conditional MAP fallback was common and curvature intervals were often
 unavailable in the wider-calibration cases.
 
 Raw measurements and settings are in
-[`examples/radte/validation-results.json`](examples/radte/validation-results.json).
+[`examples/radte/validation-results.json`](../../examples/radte/validation-results.json).
 The scripts retain individual command lines, inputs, process logs, manifests,
-and complete results in their output directories. See [RADTE.md](RADTE.md) for
-reproduction commands and [RADTE_MATH.md](RADTE_MATH.md) for the estimator.
+and complete results in their output directories. See [RADTE.md](../guides/RADTE.md) for
+reproduction commands and [RADTE_MATH.md](../guides/RADTE_MATH.md) for the estimator.
 
 ## Numerical and behavioral checks
 
@@ -175,7 +175,7 @@ The new method uses residual rate degrees of freedom, an `n/df` curvature
 variance correction, a t critical value, and a bounded age transformation.
 The formula is derived from a local Gaussian regression approximation; no
 multiplier was fitted to achieve a target coverage on these data. See
-[the mathematical definition and limits](RADTE_MATH.md#small-sample-curvature-adjustment).
+[the mathematical definition and limits](../guides/RADTE_MATH.md#small-sample-curvature-adjustment).
 
 ### Independent-family results
 
@@ -188,7 +188,7 @@ recomputed original Laplace endpoints agree with the archived ones to within
 `4e-15` age units. These are development-checkout results; source-file hashes,
 not the package version string alone, identify the tested implementation.
 
-![RADTE interval coverage, availability and width](examples/radte/interval-coverage.png)
+![RADTE interval coverage, availability and width](../../examples/radte/interval-coverage.png)
 
 Coverage denominators below are **returned intervals**. Comparing them with the
 family count exposes unavailable intervals. Widths are medians among returned
@@ -225,8 +225,8 @@ conditions do not establish universal 95% calibration.
 
 ### Reproduction and evidence
 
-[Per-family paired results](examples/radte/interval-coverage.csv) and
-[summary, parameters, source hashes and environment](examples/radte/interval-coverage-summary.json)
+[Per-family paired results](../../examples/radte/interval-coverage.csv) and
+[summary, parameters, source hashes and environment](../../examples/radte/interval-coverage-summary.json)
 are included. The runs used Python 3.10.14, NumPy 1.26.4 and SciPy 1.15.2 with
 x86_64 executables under Rosetta on the same Apple M2 Max host. This is a
 statistical validation study, not a new runtime benchmark.
@@ -271,7 +271,7 @@ IQ2MC/session extension.
 
 ## Native GY94 default-profile study (2026-09-10)
 
-The [external-sequence default-profile study](examples/radte/default-profile-validation/README.md)
+The [external-sequence default-profile study](../../examples/radte/default-profile-validation/README.md)
 records 400 primary and 250 stress families with fixed species ages, independently
 generated AliSim codon alignments, and refitted native GY94/F3x4 + G4 likelihoods.
 This is a distinct experiment from branch-observation interval validation above.

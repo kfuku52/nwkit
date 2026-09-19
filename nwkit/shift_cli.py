@@ -277,7 +277,7 @@ def register_shift_simulate(subparsers, tree_input, table_output):
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument(
         "--parameters",
-        help="Explicit generating-parameter JSON; see SHIFT_COVARIANCE.md.",
+        help="Explicit generating-parameter JSON; see docs/guides/SHIFT_COVARIANCE.md.",
     )
     source.add_argument(
         "--model-in",

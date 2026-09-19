@@ -11,7 +11,7 @@ nwkit dtt -i examples/dtt/tree.nwk --trait examples/dtt/traits.tsv \
   --model-out model.json
 ```
 
-![Example observed DTT and Brownian comparison](examples/dtt/dtt.png)
+![Example observed DTT and Brownian comparison](../../examples/dtt/dtt.png)
 
 ## Inputs and definition
 
@@ -39,7 +39,7 @@ the present. A final zero point is included even when the last split is earlier.
 These conventions reproduce `geiger::dtt(index="avg.sq")` after combining its
 repeated event times and adding the zero tail. See the
 [geiger reference](https://search.r-project.org/CRAN/refmans/geiger/html/dtt.html)
-and the runnable [R comparison](examples/dtt/reference.R).
+and the runnable [R comparison](../../examples/dtt/reference.R).
 
 `--scale raw` preserves squared-Euclidean geometry, so input units affect the
 relative importance of traits. `--scale standardize` divides each trait by its

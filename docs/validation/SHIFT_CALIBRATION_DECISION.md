@@ -9,7 +9,7 @@ integrated in the main checkout.
 
 ## Prespecified experiment and result
 
-The [protocol](reviews/shift-calibration-final-protocol.md) was frozen before
+The [protocol](../../reviews/shift-calibration-final-protocol.md) was frozen before
 100 independent development blocks (seed 20260930). Each block contains four
 paired observations: no shift, one shift, two distinct shifts, and two shared
 shifts. Conditions share generating innovations; these are **100 independent
@@ -72,9 +72,9 @@ attempt rather than turning either study into complete scientific acceptance.
 
 ## Audit and reproduction
 
-[Development evidence](examples/shift/confidence-development/summary.json)
+[Development evidence](../../examples/shift/confidence-development/summary.json)
 retains all observations, truths, seeds, pointwise exceedance counts, confidence
-sets and source hashes. The [full replay audit](examples/shift/confidence-development/audit.json)
+sets and source hashes. The [full replay audit](../../examples/shift/confidence-development/audit.json)
 regenerated all inputs, independently recomputed the selected and 27 null
 likelihoods, reconstructed decisions and summaries, and replayed all 100 complete
 simulation banks exactly. Maximum independent likelihood error was 2.67e-14.
@@ -104,7 +104,7 @@ These checks used an isolated copy of the base commit plus this response,
 excluding other work in progress. Other Python versions and CI operating systems
 were not run.
 
-[Integration check records](examples/shift/integration-audits/software-checks.json)
+[Integration check records](../../examples/shift/integration-audits/software-checks.json)
 retain exact outcomes and logs. The final distribution outcome is recorded in
 `reviews/shift-integration-distribution.json` in the repository, outside the
 source archive. No GitHub push or release is included.

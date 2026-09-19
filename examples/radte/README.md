@@ -1,6 +1,6 @@
 # Shared speciation ages
 
-Run the quick-start command in [RADTE.md](../../RADTE.md) from the repository
+Run the quick-start command in [RADTE.md](../../docs/guides/RADTE.md) from the repository
 root. Both `S1` and `S2` must have age 10. The symmetric branch-rate example
 has an inferred duplication age of 20. The two copies have rates 0.01 and 0.02;
 this is a small deterministic illustration, not an accuracy benchmark.
@@ -9,7 +9,7 @@ this is a small deterministic illustration, not an accuracy benchmark.
 The `interval-coverage.csv`, `interval-coverage-summary.json`, and
 `interval-coverage.png` files record the independent-family validation of
 Laplace and studentized curvature intervals. See
-[the study, limitations and reproduction commands](../../RADTE_VALIDATION.md#small-sample-interval-validation).
+[the study, limitations and reproduction commands](../../docs/validation/RADTE_VALIDATION.md#small-sample-interval-validation).
 
 [Variance-boundary and exact-contrast validation](interval-boundary-validation/README.md)
 records the later changes, frozen protocol, family-level results, and criteria

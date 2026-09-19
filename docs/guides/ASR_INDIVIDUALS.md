@@ -174,9 +174,9 @@ technical-replicate layers, shared-lambda and OU extensions are deferred.
 
 ## Verification
 
-[The runnable example](examples/individual_asr/README.md) has eight species,
+[The runnable example](../../examples/individual_asr/README.md) has eight species,
 three or four individuals per species, two correlated traits, and one missing
-coordinate. [reference.R](examples/individual_asr/reference.R) uses Rphylopars
+coordinate. [reference.R](../../examples/individual_asr/reference.R) uses Rphylopars
 0.3.10 with matched BM, W structure, ML/REML and individual grouping.
 Tests also use independently assembled dense covariance/GLS and conditional
 prediction calculations, finite-difference gradient checks, unit and row-order

@@ -31,7 +31,7 @@ positive-SD cells do not exercise that guard, which has a separate unit test.
   discarded. Its finite-grid hull and nuisance plug-in remain approximations.
   It is available to the research runner, **not** the public uncertainty CLI.
 
-The local derivation and restrictions are in [RADTE_MATH.md](../../../RADTE_MATH.md).
+The local derivation and restrictions are in [RADTE_MATH.md](../../../docs/guides/RADTE_MATH.md).
 MCMCTree was not used as a truth standard; no MCMCTree accuracy/coverage study
 was run. The available PAML command-contract tests did execute their small
 external inference cases during regression testing.

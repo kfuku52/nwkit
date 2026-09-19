@@ -20,7 +20,7 @@ WORKER = "nwkit-iqtree-worker"
 BUILD_HELP = (
     "Build and install the optional worker with "
     "python -m nwkit.iqtree_library build --build-dir IQTREE_BUILD --prefix PREFIX. "
-    "See IQTREE_LIBRARY.md or the IQ-TREE-library wiki page."
+    "See docs/guides/IQTREE_LIBRARY.md or the IQ-TREE-library wiki page."
 )
 
 

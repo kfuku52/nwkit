@@ -48,7 +48,7 @@
 
 ## 再現と範囲
 
-手順・明示的な予算設定は [NATIVE_SHIFT_SCALING.md](../../NATIVE_SHIFT_SCALING.md) に記載した。`PYTHONPATH` を比較するソースへ向け、同じベンチマークスクリプトを使用する。`before_shift_native_quick.py` と `before_shift_native_search.py` は比較前のソース、`changes.patch` は今回の核となる実装差分である。環境・ソースhashは [metadata.json](metadata.json) に記録した。
+手順・明示的な予算設定は [NATIVE_SHIFT_SCALING.md](../../docs/validation/NATIVE_SHIFT_SCALING.md) に記載した。`PYTHONPATH` を比較するソースへ向け、同じベンチマークスクリプトを使用する。`before_shift_native_quick.py` と `before_shift_native_search.py` は比較前のソース、`changes.patch` は今回の核となる実装差分である。環境・ソースhashは [metadata.json](metadata.json) に記録した。
 
 比較元は `e2465b0` に既存の未コミットnative実装等を含めた作業ツリーの一時コピー。比較先には今回の2実装ファイルだけを重ねた。コミット同士の比較ではない。Apple M2 Max上のx86_64 Python 3.10.14、NumPy 1.26.4、SciPy 1.15.2。OpenBLAS/MKL/OMPは1スレッドに固定。無計装の新規プロセスで測定し、測定中にこちらのテストを並行実行していない。ほかの作業が動く共有ホストなので、完全に専有した性能測定環境ではない。
 

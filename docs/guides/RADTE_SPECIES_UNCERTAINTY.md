@@ -153,7 +153,7 @@ source/output hashes. Missing intervals remain visibly unavailable. Source
 bundles are validated and protected against overwriting, including by audit
 output. A failed render/publication preserves existing comparison outputs.
 
-Run the complete [synthetic example](examples/radte/species-uncertainty/README.md)
+Run the complete [synthetic example](../../examples/radte/species-uncertainty/README.md)
 to generate all three analyses and the two-page comparison report.
 
 The branch-only `exact-log-duration` method can appear in saved single-family

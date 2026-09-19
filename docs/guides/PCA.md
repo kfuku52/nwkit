@@ -12,7 +12,7 @@ nwkit pca -i examples/pca/tree.nwk --trait examples/pca/traits.tsv \
   --model-out pca.json --ancestral-out ancestors.tsv --figure-out morphospace.png
 ```
 
-![Synthetic phylogenetic PCA example](examples/pca/morphospace.png)
+![Synthetic phylogenetic PCA example](../../examples/pca/morphospace.png)
 
 The figure connects observed tips to conditional ancestral means in PC space.
 Its shaded ellipses condition on fitted parameters and axes; lines are not

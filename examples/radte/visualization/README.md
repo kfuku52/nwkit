@@ -3,7 +3,7 @@
 The small example in the parent directory has two gene speciation nodes, S1
 and S2, sharing the species event AB at age 10. Its symmetric-rate duplication
 has age 20. It is a deterministic illustration, not an accuracy benchmark.
-Commands for drawing both reports are in [RECONCILIATION_PLOTS.md](../../../RECONCILIATION_PLOTS.md).
+Commands for drawing both reports are in [RECONCILIATION_PLOTS.md](../../../docs/guides/RECONCILIATION_PLOTS.md).
 
 `generax-gene.nhx` and `generax-species.nwk` are copied from
 `kfuku52/RADTE/data/example_generax_01/gene_tree.nhx` and `species_tree.nwk`.

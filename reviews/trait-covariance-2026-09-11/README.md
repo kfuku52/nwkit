@@ -1,7 +1,7 @@
 # Native evolutionary covariance implementation validation (2026-09-11)
 
 This report concerns the actual NWKIT implementation described in
-[SHIFT_COVARIANCE.md](../../SHIFT_COVARIANCE.md). No commit, push or release was
+[SHIFT_COVARIANCE.md](../../docs/guides/SHIFT_COVARIANCE.md). No commit, push or release was
 performed. GeneGalleon forwards opt-in `full` covariance and `shared` alpha; its
 defaults remain diagonal covariance and trait-specific alpha.
 

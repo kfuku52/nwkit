@@ -155,12 +155,12 @@ refits its own model and does not inherit the boundary model or selection
 uncertainty. Schema 7 uses `contrast_log_likelihood`, not a BIC/pBIC score.
 Schema 5 belongs to the explicit legacy IC backend.
 
-The current [700-dataset validation](examples/shift/calibration-envelope/README.md)
+The current [700-dataset validation](../../examples/shift/calibration-envelope/README.md)
 uses seed 20260918 and a frozen implementation snapshot. It covers primary
 8-tip null, single, distinct and shared effects, plus weak pull, known errors
 and 16 tips. All datasets are generated branch by branch independently of the
-fitting kernel. Separate studies contain [120 random-tree null datasets](examples/shift/calibration-envelope-stress/summary.json)
-(seed 20260919) and [1,000 weak-pull null datasets](examples/shift/calibration-weak-null/README.md)
+fitting kernel. Separate studies contain [120 random-tree null datasets](../../examples/shift/calibration-envelope-stress/summary.json)
+(seed 20260919) and [1,000 weak-pull null datasets](../../examples/shift/calibration-weak-null/README.md)
 (seed 20260920). These studies use the alpha-envelope correction.
 
 The preceding `calibration-validation`, `calibration-review` and
@@ -211,14 +211,14 @@ OPENBLAS_NUM_THREADS=1 python tools/validate_shift_calibration.py \
   --extension-replicates 500 --seed 20260920 --workers 4
 ```
 
-A [worked CLI example](examples/shift/calibrated/model.json) exports the regime
+A [worked CLI example](../../examples/shift/calibrated/model.json) exports the regime
 map, mean predictions, alpha diagnostics and missing optimum estimates.
-The [earlier review and work plan](reviews/shift-calibration-review.md) records the
+The [earlier review and work plan](../../reviews/shift-calibration-review.md) records the
 reproduced bugs, fixes, remaining limits and priorities.
 
 ## Follow-up known-error diagnostics
 
-The [paired known-error study](examples/shift/known-error-diagnostic/README.md)
+The [paired known-error study](../../examples/shift/known-error-diagnostic/README.md)
 compares fitted-nuisance bootstrap calibration with an oracle using the true
 generating mean and covariance, separately for no-shift and one-shift families.
 It also documents a research-only finite alpha/variance envelope that reports

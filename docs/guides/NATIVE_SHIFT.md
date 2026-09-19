@@ -4,7 +4,7 @@
 regime identities, with independent OU processes per trait by default and optional
 [full evolutionary covariance and shared alpha](SHIFT_COVARIANCE.md). It needs no R
 backend. Fixed layouts support parameter estimation; discovery and calibration
-are **research-only** pending the [adoption protocol](NATIVE_SHIFT_VALIDATION.md).
+are **research-only** pending the [adoption protocol](../validation/NATIVE_SHIFT_VALIDATION.md).
 The existing default `--selection calibrated` is a separate, restricted method.
 
 ## Inputs and fixed layouts
@@ -156,7 +156,7 @@ distinct regimes and a drop/move/merge/split refinement pass. Defaults are
 coverage is incomplete and lasso coefficients never become final effect estimates.
 These defaults are shared by the CLI and Python API. They are counts, not a
 wall-clock deadline; runtime depends on tree size, traits, covariance fitting
-and resampling. See [scaling measurements](NATIVE_SHIFT_SCALING.md) for scope.
+and resampling. See [scaling measurements](../validation/NATIVE_SHIFT_SCALING.md) for scope.
 
 By default, nested families have complexity `locations + free regime offsets`. Each family
 is compared against the largest family; a plug-in parametric bootstrap repeats
@@ -197,7 +197,7 @@ GLS for balanced or pectinate trees. Those measurements do not establish an
 end-to-end search or kfl1ou speedup.
 
 The 1,000-tip/100-shift development target and reproducible measurements are
-described in [the scaling guide](NATIVE_SHIFT_SCALING.md).
+described in [the scaling guide](../validation/NATIVE_SHIFT_SCALING.md).
 
 ## Information-criterion selection
 
@@ -242,7 +242,7 @@ the global criterion minimum: beam search ranks quick likelihoods, while the
 native AIC path retains joint penalized configurations before unpenalized
 refitting. pBIC is evaluated for every refitted layout because its penalty varies
 within a shift count. Small-alpha pBIC behavior is nonregular;
-see [pBIC audit](SHIFT_PBIC.md).
+see [pBIC audit](../validation/SHIFT_PBIC.md).
 
 
 ## Global no-shift gate for AIC

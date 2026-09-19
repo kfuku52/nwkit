@@ -14,4 +14,4 @@ nwkit pca -i examples/pca/tree.nwk --trait examples/pca/traits.tsv \
 
 The displayed image uses the command above. Blue regions are conditional
 ancestral uncertainty, treating the estimated axes and variances as fitted.
-See [PCA.md](../../PCA.md) for the statistical assumptions and output schemas.
+See [PCA.md](../../docs/guides/PCA.md) for the statistical assumptions and output schemas.

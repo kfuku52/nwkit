@@ -100,7 +100,7 @@ Repeated covariance fits also reuse a bounded cache of tree topology and ordered
 observed-tip indices. Covariance-dependent rotations, variances and determinants
 are recomputed on every fit. The cache holds at most 16 structures and no trait
 values or fitted covariance parameters. Measurements and numerical comparisons
-are in [the optimization report](reviews/native-optimization-2026-09-11/REPORT.md).
+are in [the optimization report](../../reviews/native-optimization-2026-09-11/REPORT.md).
 
 - Structural rank checks and final covariance estimation remain outside the
   compressed candidate kernel. Profile full searches before selecting the next
@@ -116,7 +116,7 @@ are in [the optimization report](reviews/native-optimization-2026-09-11/REPORT.m
   convergence failures, recovery and false selection before production adoption.
 
 Measured results and verification are recorded in
-[the development report](reviews/native-scale-2026-09-10/REPORT.md).
+[the development report](../../reviews/native-scale-2026-09-10/REPORT.md).
 
 ## Follow-up scale pilot
 
@@ -130,4 +130,4 @@ Regime labels now use preorder subtree intervals, and numeric whitening rotation
 are batched on sufficiently wide levels. Narrow trees retain scalar construction.
 Repeated measurements, equivalence checks, convergence diagnostics and the
 small-bootstrap scope are recorded in the
-[scale pilot report](reviews/native-scale-pilot-2026-09-11/REPORT.md).
+[scale pilot report](../../reviews/native-scale-pilot-2026-09-11/REPORT.md).

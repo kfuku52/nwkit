@@ -12,7 +12,7 @@ coverage validation is still needed before treating it as an established
 replacement for a Bayesian dating analysis.
 
 The objective functions and rate integration are derived in [RADTE_MATH.md](RADTE_MATH.md).
-Measured workloads and their limitations are recorded in [RADTE_VALIDATION.md](RADTE_VALIDATION.md).
+Measured workloads and their limitations are recorded in [RADTE_VALIDATION.md](../validation/RADTE_VALIDATION.md).
 
 External species-age intervals, fixed/bounded/ensemble comparisons, and separate
 input versus conditional uncertainty summaries are described in
@@ -227,7 +227,7 @@ dating command to request the adjusted intervals. The manifest records
 with a supplied SD), observation count, residual degrees of freedom, variance
 factor, and age transformation in its uncertainty status and diagnostics.
 See [the derivation](RADTE_MATH.md#small-sample-curvature-adjustment) and
-[the independent-family coverage checks](RADTE_VALIDATION.md#small-sample-interval-validation).
+[the independent-family coverage checks](../validation/RADTE_VALIDATION.md#small-sample-interval-validation).
 
 For eligible branch-only data, `--uncertainty exact-log-duration` records
 `conditional-exact-log-duration-t` or `conditional-exact-log-duration-normal`
@@ -242,7 +242,7 @@ Curvature intervals remain unavailable there (`unavailable-estimated-zero-rate-v
 reaching zero is not evidence that rate-variance uncertainty disappeared.
 The general calibrated-profile prototype remains in the research validation
 tool, not the public CLI: current sequence pilots do not pass its availability
-criteria. [Boundary validation and limits](examples/radte/interval-boundary-validation/README.md)
+criteria. [Boundary validation and limits](../../examples/radte/interval-boundary-validation/README.md)
 separate exact numerical checks from statistical acceptance criteria.
 
 The manifest's `optimizer_attempts` records profile fits with `phase` (`profile`
@@ -486,6 +486,6 @@ happens in the joint sequence path, NWKIT uses the existing interior chronology
 start and records `sequence_initial_ages_reset_from_duration_boundary`. This
 changes initialization only; the fitted objective, calibration constraints and
 final minimum duration remain unchanged. See the [external GY94 validation
-record](examples/radte/default-profile-validation/README.md) for the retained
+record](../../examples/radte/default-profile-validation/README.md) for the retained
 failure, regression fixture and separate post-fix checks. The repair does not
 establish nominal profile-interval coverage.

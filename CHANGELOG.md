@@ -2,6 +2,14 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.23] - 2026-09-20
+
+### Changed
+
+- Group repository documentation under `docs/guides/` and `docs/validation/`,
+  update links and CLI references, and keep the documentation in distribution
+  archives.
+
 ## [0.43.22] - 2026-09-18
 
 ### Added

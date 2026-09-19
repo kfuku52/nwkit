@@ -19,7 +19,7 @@ The upper tree shares an aligned relative-time axis with DTT below. The heatmap
 shows observed traits using per-trait z scores for display, independently of the
 raw geometry used by DTT. Gray branches do not show inferred ancestral states.
 The teal curve is observed DTT; the dashed line and band show the BM median and
-95% pointwise null envelope. See [DTT documentation](../../DTT.md) for conventions.
+95% pointwise null envelope. See [DTT documentation](../../docs/guides/DTT.md) for conventions.
 
 ## Compact multi-trait view
 

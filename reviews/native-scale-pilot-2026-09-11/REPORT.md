@@ -61,7 +61,7 @@ BLAS関連設定は1スレッド、各試験を新規プロセスで順番に実
 [照合記録](workflow-verification.json)と[生データ](results/workflow.json)を参照。
 
 この少数反復は実行経路と費用の検証であり、support頻度の精度、偽陽性率、検出力を保証しない。
-[NATIVE_SHIFT_VALIDATION.md](../../NATIVE_SHIFT_VALIDATION.md)の本番採用条件を満たしたという主張はしない。
+[NATIVE_SHIFT_VALIDATION.md](../../docs/validation/NATIVE_SHIFT_VALIDATION.md)の本番採用条件を満たしたという主張はしない。
 
 ## 採用した変更と最終反復測定
 

@@ -47,7 +47,7 @@ level-order tree ID. Reordering the children changes those IDs, so assignments
 must be regenerated for a reordered tree. Root ID 0 never belongs in a model
 or regime assignment TSV.
 
-See [BRANCH_GAUSSIAN.md](../../BRANCH_GAUSSIAN.md) for input validation, explicit
+See [BRANCH_GAUSSIAN.md](../../docs/guides/BRANCH_GAUSSIAN.md) for input validation, explicit
 root treatments and output schemas.
 
 The [eight-tip plotting example](plot/README.md) includes posterior histories,

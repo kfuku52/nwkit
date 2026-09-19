@@ -52,9 +52,9 @@ Figure output cannot alias the input or another output. Figure replacement is
 recoverable on a handled rendering failure; ASR's full set of outputs is not one
 transaction.
 
-A complete [synthetic OUM example](examples/asr_figure/README.md) is included:
+A complete [synthetic OUM example](../../examples/asr_figure/README.md) is included:
 
-![Continuous ancestral reconstruction with three supplied OU regimes](examples/asr_figure/preview.png)
+![Continuous ancestral reconstruction with three supplied OU regimes](../../examples/asr_figure/preview.png)
 
 ### Observed tip heatmap
 
@@ -147,7 +147,7 @@ limit the refined tree to 100,000 nodes, the samples to 2,000,000 trait values,
 and the rendered branch traces (branches times histories) to 50,000.
 Reduce history count or grid resolution if the guard is reached.
 
-![Synthetic OUM reconstruction beside an unconditional model history](examples/asr_figure/simulation.png)
+![Synthetic OUM reconstruction beside an unconditional model history](../../examples/asr_figure/simulation.png)
 
 ## Input and automatic type selection
 
@@ -785,7 +785,7 @@ overlap leaves it absent from every independent flat-root contrast.
 
 The generic pruning path is substantially slower on the measured small/medium
 fixtures; its purpose is to avoid dense-memory limits. See
-[measurements and reproduction commands](ASR_PERFORMANCE.md) for the time/memory
+[measurements and reproduction commands](../validation/ASR_PERFORMANCE.md) for the time/memory
 tradeoff and an actual fit above 1,000 observed coordinates.
 
 `--model MV-OU` fits a stationary separable process with one shared positive
@@ -899,7 +899,7 @@ simulation panels. The existing comparison table remains the default
 simulation controls require `--figure-layout panels`; the latter requires
 continuous traits and `--figure-out`. The PDF and comparison TSV are installed
 together only after rendering succeeds. See the
-[reproducible three-model example](examples/asr_figure/README.md#compare-models-on-one-page).
+[reproducible three-model example](../../examples/asr_figure/README.md#compare-models-on-one-page).
 
 `--models all` is the default. It includes every registered model for the
 resolved trait type. Models needing unavailable inputs, such as BMS without a
@@ -1515,5 +1515,5 @@ Use `asr --model BRANCH-GAUSSIAN` with direct/regime TSV assignments and an
 explicit root prior. It supports summary, likelihood and prior-sample outputs,
 standard ASR plots, conditional/unconditional histories and Gaussian end-jump
 markers. Add `--branch-fit` to estimate explicitly shared BM/OU parameters while
-keeping the branch assignment, root parameters and jumps fixed. See the [plot examples](examples/branch_gaussian/plot/README.md).
+keeping the branch assignment, root parameters and jumps fixed. See the [plot examples](../../examples/branch_gaussian/plot/README.md).
 `--model-out` stays TSV; `--process-out` exports complete JSON run settings.

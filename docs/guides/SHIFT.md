@@ -2,11 +2,11 @@
 
 The default is now **calibrated selection** for 4–16 tips and at most two shifts.
 It repeats the full candidate search inside a parametric bootstrap and includes
-both exact α limits. The no-error null test covers the entire fitted α grid. See [calibration, boundary semantics and validation](SHIFT_CALIBRATION.md).
-The [current independent audit](SHIFT_RESPONSE_VALIDATION.md) gives its tested
+both exact α limits. The no-error null test covers the entire fitted α grid. See [calibration, boundary semantics and validation](../validation/SHIFT_CALIBRATION.md).
+The [current independent audit](../validation/SHIFT_RESPONSE_VALIDATION.md) gives its tested
 scope and the unmet power criterion. Known-error calibration and claims about
 convergence remain research uses.
-The [final calibration attempt](SHIFT_CALIBRATION_DECISION.md) found no improvement
+The [final calibration attempt](../validation/SHIFT_CALIBRATION_DECISION.md) found no improvement
 and is closed without adopting its prototype.
 No R installation is needed for this mode. Native multivariate fitting and larger
 research searches use `--selection native`; historical IC methods use `--selection ic`.
@@ -32,7 +32,7 @@ Install R and kfl1ou using the [kfl1ou installation guide](https://github.com/kf
 NWKIT's Python installation does not install R. Runs use `Rscript --vanilla`,
 so dependencies must be available without user R startup files.
 
-Before pBIC inference, NWKIT runs the [shared capability probe](SHIFT_PBIC.md)
+Before pBIC inference, NWKIT runs the [shared capability probe](../validation/SHIFT_PBIC.md)
 in that same R process. A package version alone is insufficient: unmodified
 3.0.9 is rejected. The corrected backend must pass independent dense-score,
 coordinate and parameter-count checks. Model JSON records the probe results,
@@ -205,13 +205,13 @@ default. AICc, BIC and pBIC are supported; mBIC and pBICess are rejected before
 fitting. Convergent pBIC is a heuristic extension of the unconstrained criterion.
 No claim of a globally optimal convergence grouping is made.
 
-A [joint-search reference](SHIFT_JOINT.md) found inconsistent pBIC penalties in
-released kfl1ou 3.0.9. The [backend correction](SHIFT_PBIC.md) fixes coefficient
+A [joint-search reference](../validation/SHIFT_JOINT.md) found inconsistent pBIC penalties in
+released kfl1ou 3.0.9. The [backend correction](../validation/SHIFT_PBIC.md) fixes coefficient
 coordinates, fitted-alpha evaluation and fixed-alpha parameter counting in a
 local unreleased kfl1ou checkout. Recompute pBIC analyses with that correction;
 installing unmodified 3.0.9 does not include it and fails the pBIC probe. Statistical calibration and
 convergence-model weights remain unvalidated.
-An [independent sensitivity study](SHIFT_ALPHA.md) compares BIC/pBIC, two-stage
+An [independent sensitivity study](../validation/SHIFT_ALPHA.md) compares BIC/pBIC, two-stage
 and joint selection, and alpha lower bounds on 520 new simulated datasets.
 
 This is a refit under equality constraints on OU optima, not a relabeling of
@@ -352,7 +352,7 @@ Regimes without extant tips retain their reconstructed optimum; background
 always uses the fitted intercept under the stated root convention.
 
 A reproducible independent simulation harness and a small paired BIC/pBIC
-pilot are documented in [SHIFT_VALIDATION.md](SHIFT_VALIDATION.md). It measures
+pilot are documented in [SHIFT_VALIDATION.md](../validation/SHIFT_VALIDATION.md). It measures
 false shift selections, recovery of shifts and shared-optimum groups, and
 bootstrap failures under both root treatments and observation SEs. Broader
 calibration across tree sizes and signal strengths should precede model averaging. kfl1ou's current `model_average_l1ou`

@@ -7,7 +7,7 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         parents=[audit_parent, species_parent],
         help="Date reconciled gene trees with shared speciation ages and native relaxed clocks",
         description="Experimental gene-tree dating with one time parameter per species event. "
-        "See RADTE.md for conditional inference, sequence models, and uncertainty limits.",
+        "See docs/guides/RADTE.md for conditional inference, sequence models, and uncertainty limits.",
     )
 
     def add(name, **kwargs):

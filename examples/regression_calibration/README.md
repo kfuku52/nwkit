@@ -1,6 +1,6 @@
 # Regression calibration evidence — 2026-09-10
 
-See [protocol and usage](../../REGRESSION_CALIBRATION.md) for the estimands,
+See [protocol and usage](../../docs/validation/REGRESSION_CALIBRATION.md) for the estimands,
 generators, model assumptions, acceptance bands and limitations. These are
 fixed-model experiments; they do not validate post-selection inference.
 

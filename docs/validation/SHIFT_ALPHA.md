@@ -7,9 +7,9 @@ data. This is historical research evidence, not the settings of the current
 explicit bounds recorded below. Current reruns additionally use the shared
 [backend capability check](SHIFT_PBIC.md).
 
-The [technical report](examples/shift/alpha-validation/report.html) contains the
+The [technical report](../../examples/shift/alpha-validation/report.html) contains the
 results, uncertainty, diagnostics, and interpretation. The
-[protocol](examples/shift/alpha-validation/protocol.json) was written before any
+[protocol](../../examples/shift/alpha-validation/protocol.json) was written before any
 primary fits. This study uses new datasets, unlike the earlier correction replay.
 
 ## Frozen design
