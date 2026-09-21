@@ -199,7 +199,7 @@ def split_key(node, names: frozenset[str]):
     return min((first, second), key=lambda value: (len(value), value))
 
 
-def read_export(prefix, *, single_tip_root=False):
+def read_export(prefix, *, single_tip_root=False, derivatives=True):
     export = Path(str(prefix) + ".mcmctree.hessian")
     if not export.is_file():
         raise ValueError(
@@ -228,18 +228,23 @@ def read_export(prefix, *, single_tip_root=False):
         raise ValueError("Unsupported IQ-TREE Hessian export layout.")
     if not np.allclose(lengths, [n.dist for n in nodes], rtol=1e-5, atol=1e-9):
         raise ValueError("IQ-TREE Hessian branch order does not match its tree.")
-    for label, array in (
-        ("lengths", lengths),
-        ("gradient", gradient),
-        ("Hessian", hessian),
-    ):
-        if not np.isfinite(array).all():
-            raise ValueError(
-                f"Nonfinite IQ-TREE {label} export at lengths {lengths.tolist()}; tree {lines[1]}."
-            )
+    if not np.isfinite(lengths).all():
+        raise ValueError("Nonfinite IQ-TREE lengths export.")
+    if derivatives:
+        validate_derivatives(lengths, gradient, hessian)
     data = checkpoint(str(prefix) + ".ckp.gz")
     score = float(data["CandidateSet.0"].split()[0])
+    if not np.isfinite(score):
+        raise ValueError("Nonfinite IQ-TREE likelihood export.")
     return tree, nodes, lengths, -score, -gradient, -hessian, data
+
+
+def validate_derivatives(lengths, gradient, hessian):
+    for label, array in (("gradient", gradient), ("Hessian", hessian)):
+        if not np.isfinite(array).all():
+            raise ValueError(
+                f"Nonfinite IQ-TREE {label} export at lengths {lengths.tolist()}."
+            )
 
 
 class IQTreeLikelihood:
@@ -307,7 +312,11 @@ class IQTreeLikelihood:
             self._temporary.cleanup()
             raise ValueError("IQ-TREE 3 or later is required: " + self.version)
         self.initial_lengths = np.array([node.dist for node in self.edges])
-        fitted = self._evaluate(self.initial_lengths, model, fixed=False)
+        # Model prefit and its frozen-model check consume lengths, model
+        # parameters and likelihood only, not the IQ2MC derivative export.
+        fitted = self._evaluate(
+            self.initial_lengths, model, fixed=False, derivatives=False
+        )
         try:
             self.frozen_model = freeze_model(model, fitted[-1])
         except KeyError as exc:
@@ -321,7 +330,10 @@ class IQTreeLikelihood:
                 checked = self._worker_evaluate(self.initial_lengths)
             else:
                 checked = self._evaluate(
-                    self.initial_lengths, self.frozen_model, fixed=True
+                    self.initial_lengths,
+                    self.frozen_model,
+                    fixed=True,
+                    derivatives=False,
                 )
         except BaseException:
             self.close()
@@ -431,7 +443,7 @@ class IQTreeLikelihood:
             parts[node] = value
         return parts[self.chronology.gene] + ";"
 
-    def _evaluate(self, lengths, model, *, fixed):
+    def _evaluate(self, lengths, model, *, fixed, derivatives=True):
         with tempfile.TemporaryDirectory(dir=self.directory) as scratch:
             prefix = Path(scratch) / "run"
             treepath = Path(scratch) / "tree.nwk"
@@ -466,7 +478,9 @@ class IQTreeLikelihood:
                 command += ["-blfix"]
             self._command(command)
             tree, nodes, exported, nll, gradient, hessian, data = read_export(
-                prefix, single_tip_root=self.chronology.gene.children[0].is_leaf
+                prefix,
+                single_tip_root=self.chronology.gene.children[0].is_leaf,
+                derivatives=derivatives,
             )
         keys = [split_key(node, self.all_aliases) for node in nodes]
         source = Tree(self._newick(lengths), parser=1)
@@ -511,7 +525,7 @@ class IQTreeLikelihood:
         self.evaluations += 1
         return fitted_lengths, nll, gradient, hessian, mapping, data
 
-    def evaluate(self, lengths):
+    def evaluate(self, lengths, *, derivatives=True):
         lengths = np.asarray(lengths, dtype=float)
         if not np.isfinite(lengths).all() or np.any(lengths <= 0):
             raise ValueError(
@@ -522,11 +536,22 @@ class IQTreeLikelihood:
             self.cache[key] = (
                 self._worker_evaluate(lengths)
                 if self.worker is not None
-                else self._evaluate(lengths, self.frozen_model, fixed=True)
+                else self._evaluate(
+                    lengths, self.frozen_model, fixed=True, derivatives=derivatives
+                )
             )
             if len(self.cache) > 32:
                 self.cache.popitem(last=False)
-        return self.cache[key]
+        result = self.cache[key]
+        if derivatives:
+            validate_derivatives(result[0], result[2], result[3])
+        return result
+
+    def value(self, lengths):
+        # A rejected line-search trial needs only the likelihood. IQ2MC can
+        # export a finite score but nonfinite derivatives at tiny positive
+        # lengths; never pass those derivatives to the optimizer.
+        return self.evaluate(lengths, derivatives=False)[1]
 
     def value_gradient(self, lengths):
         _, nll, gradient, _, mapping, _ = self.evaluate(lengths)

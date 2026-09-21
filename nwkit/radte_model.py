@@ -161,7 +161,13 @@ class DatingProblem:
         sse = float(residual @ qres)
         return duration, mean, residual, qres, max(0.0, sse)
 
+    def value(self, x):
+        return self._value_gradient(x, derivatives=False)[0]
+
     def value_gradient(self, x):
+        return self._value_gradient(x, derivatives=True)
+
+    def _value_gradient(self, x, *, derivatives):
         ages = self.unpack_ages(x)
         duration = self.chronology.durations(ages)
         if np.any(duration <= 0):
@@ -183,6 +189,12 @@ class DatingProblem:
         mu = x[offset]
         deviations = x[offset + 1 :] if self.rate_sd > 0 else np.zeros_like(duration)
         lengths = np.exp(mu + deviations) * duration
+        if not derivatives and hasattr(self.likelihood, "value"):
+            nll = self.likelihood.value(lengths)
+            if self.rate_sd > 0:
+                prior_gradient = self.precision @ deviations / self.rate_sd**2
+                nll += 0.5 * deviations @ prior_gradient
+            return float(nll), None
         nll, branch_gradient = self.likelihood.value_gradient(lengths)
         log_length_gradient = branch_gradient * lengths
         age_gradient = self.free_design.T @ (log_length_gradient / duration)
@@ -300,10 +312,16 @@ def solve_problem(
             and problem.rate_sd > 0
         ):
             start[len(problem.free) + 1 :] += rng.normal(0, 0.1, len(problem.observed))
+        # SLSQP requests a score first and derivatives only after accepting
+        # a line-search trial. Do not demand unused IQ2MC derivatives at
+        # rejected trial points, where they may be numerically undefined.
+        separate_score = hasattr(problem.likelihood, "value") and not getattr(
+            problem, "marginal", False
+        )
         result = minimize(
-            problem.value_gradient,
+            problem.value if separate_score else problem.value_gradient,
             start,
-            jac=True,
+            jac=(lambda x: problem.value_gradient(x)[1]) if separate_score else True,
             method="SLSQP",
             bounds=bounds,
             constraints=[constraint] if constraint.A.shape[0] else [],

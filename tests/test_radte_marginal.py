@@ -32,6 +32,7 @@ def test_root_rate_integration_matches_independent_two_dimensional_quadrature():
     )
     x = np.array([np.log(0.15)])
     value, gradient = problem.value_gradient(x)
+    assert problem.value(x) == value
     grid, weights = hermgauss(160)
     r = np.exp(x[0] + np.sqrt(2) * 0.5 * grid)
     lengths = r[:, None] + r[None, :]

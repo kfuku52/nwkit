@@ -447,6 +447,15 @@ approximation fails. Substitution parameters remain conditional throughout datin
 Bootstrap replicates resample complete codons (or NT/AA columns) and refit the
 requested IQ-TREE model.
 
+Model prefit and frozen-model consistency checks require the likelihood and model
+parameters, without consuming IQ2MC derivatives. Exact clock optimization
+evaluates trial likelihoods before requesting derivatives.
+A standard IQ2MC trial with a finite likelihood can be rejected by line search
+without consuming its nonfinite gradient or Hessian. Accepted points still require
+finite derivatives, including when their likelihood is cached; nonfinite
+likelihoods always fail. This does not clip branch lengths, change models, or
+switch likelihood engines.
+
 Marginal profile fits share immutable covariance and likelihood matrices across
 age constraints; a changed model, Hessian, mapping or correlation invalidates
 that shared structure. This does not alter the profile search or its validation.

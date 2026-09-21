@@ -2,6 +2,16 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.24] - 2026-09-21
+
+### Fixed
+
+- Separate IQ-TREE trial likelihoods from derivative requests so exact dating
+  can reject poor trial points with nonfinite unused IQ2MC derivatives.
+  Keep finite-score checks and strict derivative validation wherever derivatives
+  are consumed, including cached evaluations; avoid requiring unused derivatives
+  during model prefit and frozen-model consistency checks.
+
 ## [0.43.23] - 2026-09-20
 
 ### Changed

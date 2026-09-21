@@ -202,6 +202,9 @@ class MarginalDatingProblem(DatingProblem):
         )
         return value, duration, sd, z, root_weight, precision_residual, inverse, weights
 
+    def value(self, x):
+        return self.value_gradient(x)[0]
+
     def value_gradient(self, x):
         duration = self.chronology.durations(self.unpack_ages(x))
         if np.any(duration <= 0):
