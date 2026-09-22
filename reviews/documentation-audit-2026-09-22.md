@@ -1,5 +1,9 @@
 # Documentation and implementation audit — 2026-09-22
 
+The original findings below describe the audit at 0.43.28. The two B findings
+were subsequently addressed as described in [Follow-up remediation](#follow-up-remediation):
+an input-label fix and a verified same-version SciPy wheel recovery.
+
 ## Scope and source state
 
 Started on `master` at `a5ffa952ad3b1775cfbe6c8f1e7ed7f60d0a3688`.
@@ -149,3 +153,73 @@ variants, every docstring and historical validation-study commands were not
 exhaustively audited. Local links in historical documents were inspected but
 historical results and changelog descriptions were not modernized. This audit
 establishes the listed cases, not repository-wide absence of discrepancies.
+
+## Follow-up remediation
+
+`info` now follows the same input-selection order as `read_input_text`: `-`
+is stdin, an existing file is a file, and other accepted tree text is inline.
+It prints `Tree input: stdin` or `Tree input: inline text` for non-file input;
+real files retain `Tree file PATH:` and their resolved absolute path. The
+regression test calls the real parser/handler for all three modes, including
+stdin when a file literally named `-` exists, and checks that the tree
+statistics are unchanged.
+
+The SciPy failure was isolated to the official
+`scipy-1.15.3-cp310-cp310-macosx_14_0_arm64.whl` binary on this host. A fresh,
+cache-free download has the same `_spropack` bytes as the failing installation.
+Both downloaded wheels matched the SHA-256 values published by the
+[PyPI release metadata](https://pypi.org/pypi/scipy/1.15.3/json):
+
+| Wheel platform tag (same SciPy 1.15.3 / CPython 3.10) | SHA-256 | Observed result on macOS 27.0 ARM64 |
+| --- | --- | --- |
+| `macosx_14_0_arm64` | `aef683a9ae6eb00728a542b796f52a5477b78252edede72b8327a886ab63293f` | `_spropack` import fails with the loader error above |
+| `macosx_12_0_arm64` | `ad3432cb0f9ed87477a8d97f03b763fd1d57709f1bbde3c9369b1dff5503b253` | Compiled imports, linear solve, PROPACK SVD and quick start pass |
+
+Installing the second official wheel with `--no-deps --force-reinstall` repaired
+only the isolated Python 3.10.21 environment. It did not alter dependency
+versions, package requirements, the existing repository `.venv`, or system
+packages. No binary was patched and no numerical backend was disabled.
+`DEVELOPMENT.md` now gives the exact recovery commands, scope and retirement
+condition; the quick start links to them. The upstream `macosx_14_0_arm64`
+wheel remains incompatible with this host, so a normal unconstrained reinstall
+can reintroduce the failure. This is a validated installation workaround, not
+an upstream binary fix or a claim about all macOS installations.
+
+After recovery, `pip check`, `import scipy.linalg, scipy.sparse.linalg` and a
+PROPACK SVD of `diag(1,2,3,4,5)` (largest singular values 4 and 5) passed.
+Both quick-start shell blocks then completed on Python 3.10.21: validation,
+node table, BM ASR and table round-trip. The earlier failed-run evidence remains
+above to distinguish the original installation from the repaired environment.
+
+Focused follow-up checks:
+
+```sh
+# Python 3.14.7: lint, format, types and 135 passing tests.
+python tools/check.py quick -- tests/test_info.py tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py -rs
+# Repaired Python 3.10.21: 391 passing tests, including numerical invariance.
+python tools/check.py test -- tests/test_info.py tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py tests/test_nwk2table.py tests/test_table2nwk.py tests/test_asr.py tests/test_branch_gaussian_cli.py tests/test_signal.py tests/test_pca.py tests/test_dtt.py tests/test_numerical_invariance.py -rs
+```
+
+Neither focused run skipped tests. The recovery block was also extracted from
+`DEVELOPMENT.md` and replayed with `sh -e` in the isolated Python 3.10 environment;
+it completed successfully without changing the SciPy version.
+
+Follow-up delivery check: `PYTEST_ADDOPTS=-rs python tools/check.py release`
+completed successfully on Python 3.14.7: **3984 passed, 83 skipped**, 85%
+coverage, all static/security gates and distribution reproducibility passed.
+The working source copy included the pre-existing uncommitted `mark` refactor
+and its five additional tests; those changes are not part of this fix commit.
+The skipped cases were 28 IQ-TREE integrations, two PAML integrations, 52
+R/kfl1ou integrations and one Linux-specific C++/zlib worker-build test.
+
+Before publication, a separate source copy was made from **only the intended
+index**, excluding the unrelated `mark` changes and their pending changelog
+entry. `python tools/check.py quick -- tests/test_info.py tests/test_mark.py
+tests/test_cli_contracts.py -rs` passed all static gates and **74 tests** in
+that copy; `python tools/check.py dist` passed metadata, contents and byte
+reproducibility again for the exact intended package. Its 0.43.30 wheel was
+installed with `--no-deps --force-reinstall` into the repaired Python 3.10.21
+environment. From outside the checkout with no `PYTHONPATH` override, both
+quick-start blocks passed, with seven-row node/ASR outputs, an imputed tip D
+and valid original/restored trees. Installed CLI checks confirmed all three
+`info` source labels and `nwkit --version` reported 0.43.30.

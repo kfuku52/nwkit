@@ -46,6 +46,38 @@ identify the failing binary/package before repairing only the isolated environme
 For an ETE wheel import failure, a same-version source rebuild is an option when
 a compiler is available; do not change dependency versions to hide the problem.
 
+### SciPy 1.15.3 wheel on macOS 27 ARM64 / Python 3.10
+
+On macOS 27.0 (26A428), the PyPI `macosx_14_0_arm64` wheel for SciPy 1.15.3
+fails to load `_spropack` with `__thread_bss` / `offset field is not zero`.
+This also reproduces with `import scipy.sparse.linalg` outside NWKIT. A fresh
+download matches the published wheel, so clearing pip's cache does not fix it.
+
+For this specific failure, use the same SciPy version's compatible
+`macosx_12_0_arm64` wheel in an isolated Python 3.10 environment. The platform
+tag selects a different binary build; it does not change your macOS version.
+After installing NWKIT in that environment, run:
+
+```sh
+python -c 'import platform, sys, scipy; assert sys.version_info[:2] == (3, 10) and platform.system() == "Darwin" and platform.machine() == "arm64" and scipy.__version__ == "1.15.3"'
+NWKIT_SCIPY_WHEELS=$(mktemp -d)
+python -m pip download --only-binary=:all: --no-deps \
+  --platform macosx_12_0_arm64 --python-version 3.10 --implementation cp --abi cp310 \
+  'scipy==1.15.3' --dest "$NWKIT_SCIPY_WHEELS"
+python -m pip install --no-deps --force-reinstall \
+  "$NWKIT_SCIPY_WHEELS/scipy-1.15.3-cp310-cp310-macosx_12_0_arm64.whl"
+python -m pip check
+python -c 'import scipy.linalg, scipy.sparse.linalg'
+```
+
+Then run [the quick start](docs/guides/QUICK_START.md) and the affected tests.
+This recovery was verified with Python 3.10.21, including a PROPACK SVD and
+the tree/ASR example. An unconstrained reinstall may select the failing wheel
+again. This is a binary-build workaround, not a global SciPy version pin or a
+claim that all macOS/Python 3.10 builds are broken. Retire it when the normally
+selected upstream wheel passes the compiled imports and command tests on the
+affected platform; do not patch installed binaries or suppress import errors.
+
 ## Choose the smallest useful check
 
 | Command | Checks |

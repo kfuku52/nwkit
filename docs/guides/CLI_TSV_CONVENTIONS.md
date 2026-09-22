@@ -41,6 +41,9 @@ are distinct from fitted-parameter conditional intervals in the primary table.
 Files read by the shared tree/trait-table input reader use UTF-8, with an
 optional byte-order mark (BOM), on all operating systems. Tree file output also
 uses UTF-8. Standard input is already decoded by the Python input stream.
+`info` identifies non-file inputs as `Tree input: stdin` or
+`Tree input: inline text`; real files retain the `Tree file PATH:` line with
+their resolved absolute path.
 
 ### Configuration and external resources
 

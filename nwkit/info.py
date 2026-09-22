@@ -5,6 +5,14 @@ from nwkit.species_parser import DEFAULT_SPECIES_PARSER, DEFAULT_SPECIES_REGEX
 from nwkit.util import extract_species_label, read_tree
 
 
+def _input_description(infile):
+    if infile == "-":
+        return "Tree input: stdin"
+    if os.path.isfile(infile):
+        return f"Tree file PATH: {os.path.realpath(infile)}"
+    return "Tree input: inline text"
+
+
 def info_main(args):
     tree = read_tree(
         args.infile,
@@ -44,7 +52,7 @@ def info_main(args):
     species_names = sorted(species_name_set)
     num_species = len(species_names)
     lines = [
-        f"Tree file PATH: {os.path.realpath(args.infile)}",
+        _input_description(args.infile),
         f"Tree length: {tree_length}",
         f"Number of leaves: {num_leaves}",
         f"Number of nodes: {num_nodes}",

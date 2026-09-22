@@ -1,5 +1,32 @@
+import io
+
+import pytest
+
+from nwkit.cli import main
 from nwkit.info import info_main
 from tests.helpers import make_args
+
+
+@pytest.mark.parametrize("source", ["stdin", "inline", "file"])
+def test_cli_reports_actual_input_source(source, tmp_path, monkeypatch, capsys):
+    monkeypatch.chdir(tmp_path)
+    text = "(A:1,B:1);"
+    if source == "stdin":
+        # '-' always means stdin, even when a file with that name exists.
+        (tmp_path / "-").write_text("(C:2,D:2,E:2);")
+        monkeypatch.setattr("sys.stdin", io.StringIO(text))
+        infile, expected = "-", "Tree input: stdin"
+    elif source == "inline":
+        infile, expected = text, "Tree input: inline text"
+    else:
+        (tmp_path / "tree.nwk").write_text(text)
+        infile = "tree.nwk"
+        expected = f"Tree file PATH: {(tmp_path / infile).resolve()}"
+    main(["info", "-i", infile])
+    output = capsys.readouterr().out
+    assert output.splitlines()[0] == expected
+    assert "Number of leaves: 2\n" in output
+    assert "Tree length: 2.0\n" in output
 
 
 class TestInfoMain:

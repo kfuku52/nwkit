@@ -2,6 +2,16 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.30] - 2026-09-22
+
+### Fixed
+
+- Report stdin and inline tree input accurately in `info`, while retaining
+  resolved file paths for file input.
+- Document and verify a same-version SciPy wheel recovery for the Python 3.10
+  native-extension import failure on macOS 27 ARM64, without changing runtime
+  dependency constraints.
+
 ## [0.43.28] - 2026-09-22
 
 ### Fixed

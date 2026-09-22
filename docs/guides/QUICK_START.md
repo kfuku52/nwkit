@@ -14,6 +14,9 @@ Metadata checks and `--help` alone do not establish that compiled dependencies
 can load. Keep the traceback and use the
 [isolated environment troubleshooting guidance](../../DEVELOPMENT.md) before
 changing an existing environment. A failed example is not a validated install.
+For the specific SciPy 1.15.3 `_spropack` / `__thread_bss` error on macOS 27
+ARM64 with Python 3.10, use the
+[verified same-version wheel recovery](../../DEVELOPMENT.md#scipy-1153-wheel-on-macos-27-arm64--python-310).
 
 ## Create small inputs
 
