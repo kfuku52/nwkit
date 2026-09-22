@@ -121,10 +121,20 @@ def _extract_species_label_with_regex(label, species_pattern):
 def read_species_map_tsv(species_map_tsv):
     if species_map_tsv in ["", None]:
         return dict()
-    handle = sys.stdin if species_map_tsv == "-" else open(species_map_tsv, newline="")
+    handle = (
+        sys.stdin
+        if species_map_tsv == "-"
+        else open(species_map_tsv, encoding="utf-8-sig", newline="")
+    )
     try:
         reader = csv.DictReader(handle, delimiter="\t")
         fieldnames = reader.fieldnames or list()
+        if any(not name.strip() for name in fieldnames) or len(fieldnames) != len(
+            set(fieldnames)
+        ):
+            raise ValueError(
+                "--species-map-tsv requires unique, nonempty column headers."
+            )
         if "leaf_name" not in fieldnames:
             raise ValueError('--species-map-tsv must contain a "leaf_name" column.')
         if ("species_label" not in fieldnames) and ("taxonomy_query" not in fieldnames):
@@ -133,6 +143,12 @@ def read_species_map_tsv(species_map_tsv):
             )
         overrides = dict()
         for row in reader:
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(
+                    "--species-map-tsv row {} has a different number of fields than its header.".format(
+                        reader.line_num
+                    )
+                )
             raw_leaf_name = row.get("leaf_name")
             leaf_name = "" if raw_leaf_name is None else str(raw_leaf_name)
             if leaf_name.strip() == "":

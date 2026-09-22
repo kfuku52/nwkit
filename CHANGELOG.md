@@ -2,6 +2,15 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.32] - 2026-09-22
+
+### Fixed
+
+- Reject duplicate or empty headers and ragged rows in shared and image-specific
+  species mapping TSVs instead of silently overwriting or ignoring fields.
+- Read species and rename mapping files as UTF-8 with an optional BOM, while
+  preserving literal keys and support for standard input.
+
 ## [0.43.31] - 2026-09-22
 
 ### Changed

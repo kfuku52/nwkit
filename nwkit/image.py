@@ -689,11 +689,17 @@ def parse_sources(style, source_arg):
 
 
 def read_name_tsv(path):
-    handle = sys.stdin if path == "-" else open(path, newline="")
+    handle = sys.stdin if path == "-" else open(path, encoding="utf-8-sig", newline="")
     try:
         reader = csv.DictReader(handle, delimiter="\t")
         if reader.fieldnames is None:
             raise ValueError("--species-name-tsv is empty.")
+        if any(not name.strip() for name in reader.fieldnames) or len(
+            reader.fieldnames
+        ) != len(set(reader.fieldnames)):
+            raise ValueError(
+                "--species-name-tsv requires unique, nonempty column headers."
+            )
         required = {"leaf_name", "species_name"}
         missing = required.difference(reader.fieldnames)
         if missing:
@@ -702,6 +708,12 @@ def read_name_tsv(path):
             )
         mapping = dict()
         for row in reader:
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(
+                    "--species-name-tsv row {} has a different number of fields than its header.".format(
+                        reader.line_num
+                    )
+                )
             raw_leaf_name = row.get("leaf_name")
             leaf_name = "" if raw_leaf_name is None else str(raw_leaf_name)
             species_name = normalize_species_name(row.get("species_name"))

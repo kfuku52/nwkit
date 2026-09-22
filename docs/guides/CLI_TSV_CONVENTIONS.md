@@ -214,6 +214,12 @@ contract:
 
 ## Specialized input TSV schemas
 
+Species mappings (`--species-map-tsv` and `image --species-name-tsv`) and
+rename mappings (`--name-tsv`) accept UTF-8 files with an optional BOM.
+Headers must be unique and nonempty, and every row must have the same number
+of fields as its header. Additional named columns are allowed; leave optional
+cells explicitly empty rather than omitting their fields.
+
 | Option or command | Required columns | Additional rules |
 |---|---|---|
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |

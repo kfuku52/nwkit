@@ -13,7 +13,7 @@ from nwkit.util import (
 
 
 def read_name_tsv(path):
-    handle = sys.stdin if path == "-" else open(path, newline="")
+    handle = sys.stdin if path == "-" else open(path, encoding="utf-8-sig", newline="")
     try:
         reader = csv.DictReader(handle, delimiter="\t")
         fieldnames = reader.fieldnames or list()
