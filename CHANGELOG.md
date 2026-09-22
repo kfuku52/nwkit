@@ -2,6 +2,19 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.27] - 2026-09-22
+
+### Changed
+
+- Add repository-specific agent guidance and a change-validation skill; centralize
+  environment preflight, affected-test selection, and check cost boundaries in
+  the development guide.
+
+### Fixed
+
+- Replace the removed wiki-example test path in source-distribution CI checks
+  with the maintained CLI/TSV interface suite.
+
 ## [0.43.26] - 2026-09-22
 
 ### Changed

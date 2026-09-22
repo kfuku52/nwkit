@@ -1,8 +1,10 @@
 # Developing NWKIT
 
-Use an isolated environment and the same development-tool constraints as CI:
+Run commands below from the repository root. Use Python 3.10 or newer and an
+isolated environment with the same development-tool constraints as CI:
 
 ```sh
+python --version
 python -m venv .venv
 . .venv/bin/activate
 python -m pip install -U pip
@@ -13,6 +15,33 @@ The image extra needs a native Cairo installation; see the installation notes
 in the [README](README.md). Runtime dependency ranges are intentionally separate
 from `constraints-dev.txt`; do not add upper bounds without a demonstrated
 incompatibility.
+
+Before reusing an environment, run its Python and check imports, not just
+`pip check` (which checks metadata):
+
+```sh
+python -c 'import sys; assert sys.version_info >= (3, 10); print(sys.version)'
+python -m pip check
+python -c 'from ete4 import Tree; import numpy, scipy, pandas, matplotlib, PIL; assert len(list(Tree("(A:1,B:1);", parser=1).leaves())) == 2'
+python -m nwkit --version
+```
+
+Success means all commands exit zero and the last prints the checkout version.
+Activate the environment first; a system `python3` may be older than supported.
+If `.venv` belongs to another host/architecture or cannot start, preserve it and
+create a separate environment with a working supported interpreter. On POSIX:
+
+```sh
+NWKIT_DEV_DIR=$(mktemp -d)
+python -m venv "$NWKIT_DEV_DIR/venv"
+. "$NWKIT_DEV_DIR/venv/bin/activate"
+python -m pip install -c constraints-dev.txt -e '.[dev,image]'
+```
+
+If imports fail despite consistent package metadata, retain the traceback and
+identify the failing binary/package before repairing only the isolated environment.
+For an ETE wheel import failure, a same-version source rebuild is an option when
+a compiler is available; do not change dependency versions to hide the problem.
 
 ## Choose the smallest useful check
 
@@ -37,6 +66,54 @@ checks, not unreliable tests. Every full source CI run still executes them.
 Keep small invariance tests and `tests/test_cli_contracts.py` in the quick
 suite. The latter invokes the real parser and handler for every subcommand;
 only external service boundaries are replaced with offline fixtures.
+
+### Select checks by change
+
+Use the rows as starting points, then follow callers of changed shared helpers.
+Pass selected paths to `python tools/check.py quick -- ...`; use `test` instead
+when static checks already passed on the same code. Add a regression case for a
+new behavior or verified bug rather than duplicating existing assertions.
+
+| Changed surface | Minimum focused coverage |
+| --- | --- |
+| CLI options, command examples, shared TSV policy | `tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py`, plus the affected command's tests |
+| Tree reading/writing or rootedness | `tests/test_util_tree_io.py tests/test_tree_outputs.py tests/test_rooting_state.py`, plus affected commands; staged writes also need `tests/test_output_transaction.py` |
+| Numerical/model code | The affected model tests and its CLI consumer; shared Gaussian/regression changes also need `tests/test_numerical_invariance.py`. Preserve independent reference comparisons and include relevant `slow` cases explicitly |
+| Drawing/media | Affected `tests/test_draw*.py` or `tests/test_image*.py`; inspect representative rendered outputs as described below |
+| Check/build tooling | `tests/test_check_tools.py tests/test_distribution_reproducibility.py`, then the changed runner mode; package changes also need `dist` |
+| Prose/agent instructions only | Verify linked paths and try changed commands; `dist` matches documentation CI. A plain patch-version bump does not require numerical tests by itself |
+
+A small offline starting check exercises real command handlers, output schemas,
+and CLI compatibility using pytest temporary directories:
+
+```sh
+python tools/check.py quick -- tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py
+```
+
+Expect a nonempty pytest selection, no failures, and successful lint/format/type
+checks. Exit status 5 (no tests collected) is not success. Add `-rs` after `--`
+to explain skipped tests. `quick` without targets still runs thousands of tests;
+it is not a tiny smoke test. Explicit `-m` replaces its `not slow` selection.
+
+### Cost and environment boundaries
+
+- The focused CLI check above uses small local fixtures; image services and the
+  legacy SHIFT backend are replaced at external boundaries. It does not validate
+  those live services or the R backend itself.
+- `slow` is a cost marker, not an offline/network marker. Optional IQ-TREE,
+  IQ-TREE library worker, PAML/MCMCTree and R backend tests may skip when their
+  runtimes are absent. Inspect the selected tests and report those skips; do not
+  install/download external runtimes merely to make the summary green.
+- `full`/`release` include `pip-audit`, which needs package/advisory service
+  access. `dist`/`release` use isolated builds that may fetch build dependencies.
+  A failed audit or unavailable network is an incomplete gate, not a pass.
+- Calibration and benchmark programs under `tools/` and study scripts under
+  `examples/` are separate from routine checks. Read the relevant guide and
+  runtime/data requirements before running them; use small inputs and a fresh
+  temporary output directory for exploratory work.
+
+Before a requested push/release, use the complete delivery checks in
+[RELEASING.md](RELEASING.md). Focused successes do not replace that gate.
 
 ## CI coverage
 

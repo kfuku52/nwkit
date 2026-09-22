@@ -34,3 +34,58 @@ Repository-specific instructions override these defaults.
 - For GitHub Actions edits, use `optimize-github-actions` in `.agents/skills/`.
   Preserve required coverage; never run untrusted PR code on self-hosted runners.
 <!-- END KF AGENT POLICY -->
+
+# Working in NWKIT
+
+## Start here
+
+- Read [DEVELOPMENT.md](DEVELOPMENT.md) for environment setup and the
+  change-to-test table. [README.md](README.md) describes the command surface;
+  [docs/README.md](docs/README.md) routes to command guides and research evidence.
+- For CLI, tree I/O, or table changes, read
+  [CLI/TSV conventions](docs/guides/CLI_TSV_CONVENTIONS.md) first.
+- `nwkit/cli.py` defines parsing and dispatch; command modules expose
+  `*_main` handlers. Shared tree/table I/O is in `nwkit/util.py`, conventions in
+  `nwkit/conventions.py`, and staged writes in `nwkit/output_transaction.py`.
+  Follow imports into the numerical model modules for scientific changes.
+- Before a push, read [RELEASING.md](RELEASING.md) and use
+  `.agents/skills/prepare-github-push/SKILL.md`. For selecting affected checks,
+  use `.agents/skills/validate-change/SKILL.md`.
+
+## Run and verify
+
+Run from the repository root with an activated Python >=3.10 environment.
+Use the setup/import preflight in DEVELOPMENT.md before trusting an existing
+`.venv`; do not replace someone else's environment to repair it.
+
+```sh
+python -m nwkit --help
+python tools/check.py quick -- tests/test_cli.py tests/test_cli_contracts.py tests/test_interface_conventions.py
+```
+
+The second command runs lint, formatting checks, incremental mypy, and small
+offline CLI/interface cases using temporary test outputs. It is a starting
+check, not sufficient validation for every change. Select affected tests from
+DEVELOPMENT.md; `test` runs only pytest, `quick` adds static checks, and `release`
+is the delivery gate. Report skipped optional backends separately from passes.
+
+## Preserve scientific and output contracts
+
+- Consult the affected guide before changing root assumptions, time/trait
+  units, ML/REML likelihoods, missing-data handling, uncertainty interpretation,
+  or random-seed behavior. ASR and native SHIFT have different tree requirements;
+  do not apply one model's assumptions to another.
+- Preserve documented CLI/Python interfaces, Newick/NHX properties, TSV columns,
+  saved-model schemas and original-unit parameters. Include relevant consumer,
+  round-trip and failure/rollback tests when changing shared serialization.
+- Treat `examples/`, `reviews/`, and `docs/validation/` as evidence with their own
+  inputs, seeds and protocols. Do not regenerate results or adjust scientific
+  parameters/tolerances merely to make a check pass. Read the local study guide
+  before intentionally revising an experiment.
+- Keep bundled reference data in `nwkit/data_*` intact unless the task requires
+  it. Avoid hand-editing build outputs, caches, `.venv`, `*.egg-info`, or local
+  `output/` and `tmp/` contents. Put trial outputs in a fresh temporary directory;
+  `dist`/`release` clear build directories, so preserve existing artifacts first.
+
+At completion, review the diff and report changed behavior, exact checks and
+results, skipped/unrun checks with reasons, and any remaining limitations.

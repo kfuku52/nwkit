@@ -3,13 +3,10 @@
 1. Update `nwkit.__version__` for every change merged to `master` and move the
    relevant entries in `CHANGELOG.md` from `Unreleased` into a dated version
    section.
-2. Run the local release checks:
+2. From the repository root, use the environment setup and import preflight in
+   [DEVELOPMENT.md](DEVELOPMENT.md), then run the local release checks:
 
    ```sh
-   python -m venv .venv
-   . .venv/bin/activate
-   python -m pip install -U pip
-   python -m pip install -c constraints-dev.txt -e ".[dev,image]"
    python tools/check.py release
    ```
 

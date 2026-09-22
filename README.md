@@ -121,24 +121,13 @@ There is no published paper on NWKIT itself, but we used and cited NWKIT in seve
 
 ## Development
 
-Create an isolated environment, install the development and optional image
-dependencies with the reproducible tool constraints, then use the same check
-runner as CI:
-
-```sh
-python -m venv .venv
-. .venv/bin/activate
-python -m pip install -U pip
-python -m pip install -c constraints-dev.txt -e ".[dev,image]"
-python tools/check.py quick
-```
-
-`quick` runs formatting, linting, incremental type checks, and tests excluding
-the `slow` group. Use `full` for all tests and the
-security, dependency, coverage, and maintainability gates; `dist` for
-reproducible package validation; or `release` for the complete pre-release
-suite. Focused checks, CI coverage, and benchmarks are described in
-[DEVELOPMENT.md](https://github.com/kfuku52/nwkit/blob/master/DEVELOPMENT.md).
+Start with [DEVELOPMENT.md](DEVELOPMENT.md) for environment setup, import
+checks, a small offline CLI check, and test selection by changed code.
+Local work and CI share `python tools/check.py`: `quick` adds lint/format/types
+to selected tests, `full` runs all source gates, `dist` verifies reproducible
+packages, and `release` runs both. Agent-specific entry points and scientific
+compatibility notes are in
+[AGENTS.md](https://github.com/kfuku52/nwkit/blob/master/AGENTS.md).
 
 Formatting is required. Function-complexity increases are review warnings; a
 common hard limit and documented exceptions guard against excessive branching.
