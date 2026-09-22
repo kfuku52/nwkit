@@ -2,6 +2,16 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.28] - 2026-09-22
+
+### Fixed
+
+- Correct the annotated-tree conversion example to remove all properties
+  explicitly before plain-Newick output, and route documentation links to
+  their respective command guides.
+- Add a runnable first analysis and clarify installation isolation, table
+  columns and units, configuration precedence, cache controls and rerun behavior.
+
 ## [0.43.27] - 2026-09-22
 
 ### Changed

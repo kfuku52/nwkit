@@ -23,7 +23,8 @@ are distinct from fitted-parameter conditional intervals in the primary table.
   aliases. Using one writes a deprecation warning to standard error naming its
   canonical replacement. New documentation and scripts should use the
   canonical kebab-case names.
-- Boolean options use explicit `yes|no` values. `mcmctree --add-header`
+- Most boolean options use explicit `yes|no` values; `--debug` is a value-less
+  flag. `mcmctree --add-header`
   continues to accept the historical value-less form as well as `yes|no`.
 - `-i/--infile`, `-o/--outfile`, and `-of/--outformat` are reserved for the
   primary input, primary output, and Newick output format. Commands producing
@@ -40,6 +41,30 @@ are distinct from fitted-parameter conditional intervals in the primary table.
 Files read by the shared tree/trait-table input reader use UTF-8, with an
 optional byte-order mark (BOM), on all operating systems. Tree file output also
 uses UTF-8. Standard input is already decoded by the Python input stream.
+
+### Configuration and external resources
+
+The CLI does not load a global NWKIT configuration file. Command options use
+their parser defaults unless supplied explicitly; model/configuration input
+files are read only by the options that name them. The optional IQ-TREE worker
+has its own [CLI/environment/PATH precedence](IQTREE_LIBRARY.md#runtime-selection).
+
+`image` also reads `NWKIT_IMAGE_LOOKUP_WORKERS` and
+`NWKIT_IMAGE_DOWNLOAD_WORKERS` as positive integer worker counts, capped at the
+number of species. Download workers default to four; lookup workers default to
+two when taxonomy is needed (PhyloPic, NCBI, or family fallback), otherwise four.
+Invalid or nonpositive environment values fall back to four. There are no
+corresponding CLI worker options for `image`.
+
+With `image --download-dir auto` (the default), image and provider-query caches
+live under `<out-dir>/.nwkit-cache/`; an explicit download directory instead
+uses `<download-dir>/nwkit/image-cache` and `image-query-cache`.
+`--refresh-cache yes` bypasses provider-query caches, not cached media.
+`--query-cache-max-age-hours` defaults to 168; zero disables query expiration.
+NCBI taxonomy uses separate `--taxonomy-cache-max-age-days` and
+`--refresh-taxonomy-cache` controls. These external-resource caches are distinct
+from analysis result files; ordinary tree/trait analyses do not resume a saved
+fit automatically on rerun.
 
 ## Related outputs and node editing
 
@@ -262,6 +287,13 @@ uncertainty.
 - `nwk2table` adds the optional root-only `rooted` column when needed to preserve
   a rooting interpretation. Without this column, `table2nwk` uses the legacy
   root-degree inference described above.
+- `nwk2table` always writes `branch_id`, `parent`, `name`, `dist`, and `support`.
+  Its default `--sister yes` adds the ID of **one** sister, not all sisters at a
+  polytomy; `-1` means none. `--age yes` requires an ultrametric tree and adds
+  node ages in input branch-length units (tips at zero). It does not infer
+  calendar dates or convert substitution lengths to time. `table2nwk` uses
+  `dist` to restore lengths; it does not reconstruct them from `age` or use
+  `sister` to determine the topology.
 - `reconcile` qualifies gene- and species-tree IDs as `gene_branch_id` and
   `species_branch_id`. It retains repeated species-tree IDs when distinct
   paralog lineages map to the same speciation event. `tree_id` plus

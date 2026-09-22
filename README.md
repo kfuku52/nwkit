@@ -27,13 +27,28 @@ conda install bioconda::nwkit
 nwkit -h
 ```
 
+Help output checks the entry point, but does not load every numerical backend.
+Run [the first analysis](docs/guides/QUICK_START.md) to check actual tree and
+trait processing in your environment.
+
 #### (For advanced users) Install the development version from GitHub
 
-```
-pip install git+https://github.com/kfuku52/nwkit
+Use a fresh environment with Python 3.10 or newer and Git on `PATH`:
+
+```sh
+python -m venv nwkit-env
+. nwkit-env/bin/activate
+python -m pip install git+https://github.com/kfuku52/nwkit
+nwkit --version
 ```
 
-NWKIT requires Python 3.10 or newer.
+This installs the current default branch, which can differ from a tagged or
+Bioconda release. To install the checkout whose documentation you are reading,
+run `python -m pip install .` from its repository root instead.
+
+On Windows, activate with `nwkit-env\Scripts\Activate.ps1` in PowerShell.
+If pip builds ETE4 4.4.0 from source on Windows, it needs the
+[source-path workaround used by CI](DEVELOPMENT.md#ci-coverage).
 
 #### Optional SVG rasterization support
 
@@ -52,6 +67,13 @@ was installed from Bioconda, install the native Cairo library and then run
 `pip install CairoSVG` in the same environment. These steps enable SVG
 normalization, trimming, resizing with `nwkit image`, and rendering SVG tip
 images with `nwkit draw`.
+
+## First run
+
+After installation, [the quick start](docs/guides/QUICK_START.md) creates a
+small tree and trait table, checks the input, and runs continuous ancestral
+reconstruction. It explains the generated columns, units, missing values and
+rerun behavior without requiring downloaded example data or external programs.
 
 ## Subcommands
 See [Wiki](https://github.com/kfuku52/nwkit/wiki) for usage.

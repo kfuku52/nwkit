@@ -7,10 +7,17 @@ ages or credible intervals. It accepts Newick, NHX, FigTree NEXUS and the
 ```sh
 nwkit convert -i mcmctree.out --from mcmctree-output --to figtree --time-factor 1000 -o FigTree.tre
 nwkit convert -i FigTree.tre --to nhx -o dated.nhx
-nwkit convert -i dated.nhx --to newick --age-ci drop -o dated.nwk
+nwkit convert -i dated.nhx --to newick --properties drop -o dated.nwk
 nwkit label -i dated.nwk --target intnode --prefix s --start 1 --force yes -o labeled.nwk
 nwkit validate -i dated.nhx --require-all-lengths yes --fail-on-issue yes
 ```
+
+The first command requires your own MCMCtree output; these filenames are not
+bundled example inputs. The plain-Newick step explicitly discards normalized
+properties, including ages and intervals, while keeping branch lengths. Use
+`--age-ci drop` instead only when removing intervals is sufficient: any remaining
+`age` or other NHX property prevents plain-Newick output. Keep `dated.nhx` for
+analyses that need those annotations.
 
 Input and output default to stdin/stdout (`-`). `--from` defaults to `auto` and
 accepts `newick`, `nhx`, `figtree`, and `mcmctree-output`. `--to` defaults to `nhx`

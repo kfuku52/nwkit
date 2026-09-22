@@ -9,11 +9,16 @@ User-facing command, data-format, model, and mathematical documentation lives
 in [`guides/`](guides/):
 
 - [ASR and ancestral-trait models](guides/ASR.md)
+- [Installation check and first analysis](guides/QUICK_START.md)
 - [CLI and TSV conventions](guides/CLI_TSV_CONVENTIONS.md)
 - [Phylogenetic regression](guides/PHYLOGENETIC_REGRESSION.md)
 - [RADTE dating](guides/RADTE.md)
 - [SHIFT inference](guides/SHIFT.md)
-- [DTT, PCA, signal, and stochastic maps](guides/DTT.md)
+- [Disparity through time](guides/DTT.md)
+- [Phylogenetic PCA](guides/PCA.md)
+- [Phylogenetic signal](guides/SIGNAL.md)
+- [Discrete stochastic maps](guides/STOCHASTIC_MAPS.md)
+- [Tree format conversion](guides/CONVERT.md)
 - [All optimal reconciliation roots and loss exports](guides/RECONCILIATION_EXPORTS.md)
 
 The complete guide list is available in the directory; filenames retain the

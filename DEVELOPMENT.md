@@ -22,11 +22,14 @@ Before reusing an environment, run its Python and check imports, not just
 ```sh
 python -c 'import sys; assert sys.version_info >= (3, 10); print(sys.version)'
 python -m pip check
-python -c 'from ete4 import Tree; import numpy, scipy, pandas, matplotlib, PIL; assert len(list(Tree("(A:1,B:1);", parser=1).leaves())) == 2'
+python -c 'from ete4 import Tree; import numpy, scipy.linalg, scipy.sparse.linalg, pandas, matplotlib, PIL; assert len(list(Tree("(A:1,B:1);", parser=1).leaves())) == 2'
 python -m nwkit --version
 ```
 
 Success means all commands exit zero and the last prints the checkout version.
+The SciPy submodule imports exercise compiled libraries that a top-level
+`import scipy` can leave unloaded. Passing preflight is still not a substitute
+for the affected command tests below.
 Activate the environment first; a system `python3` may be older than supported.
 If `.venv` belongs to another host/architecture or cannot start, preserve it and
 create a separate environment with a working supported interpreter. On POSIX:
