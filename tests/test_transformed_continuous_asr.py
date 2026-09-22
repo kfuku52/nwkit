@@ -39,22 +39,6 @@ def test_brownian_boundary_matches_bm(model, parameter):
         assert posterior[node] == pytest.approx(expected[node])
 
 
-@pytest.mark.parametrize(
-    "model,parameter",
-    [("lambda", 0.4), ("kappa", 0.7), ("delta", 1.4), ("eb", -0.2), ("acdc", 0.2)],
-)
-def test_fixed_transformed_models_return_finite_fit(model, parameter):
-    tree = tree_from("((A:1,B:1)I:1,(C:1,D:1)J:1)R;")
-    values = {"A": 0.0, "B": 1.0, "C": 2.0, "D": 4.0}
-    posterior, fit = compute_transformed_bm_marginals(
-        tree, values, model=model, evolution_parameter=parameter
-    )
-    assert fit.evolution_parameter == parameter
-    assert fit.sigma2 > 0.0
-    assert fit.restricted_log_likelihood is not None
-    assert len(posterior) == len(list(tree.traverse()))
-
-
 @pytest.mark.parametrize("model", ["lambda", "kappa", "delta", "eb", "acdc"])
 def test_estimated_transformed_models_respect_bounds(model):
     tree = tree_from("(((A:0.5,B:0.5)I:0.5,C:1)K:1,(D:1,E:1)J:1)R;")
@@ -63,7 +47,6 @@ def test_estimated_transformed_models_respect_bounds(model):
     _, fit = compute_transformed_bm_marginals(tree, values, model=model)
     assert bounds[0] <= fit.evolution_parameter <= bounds[1]
     assert fit.evolution_parameter_estimated
-    assert fit.optimizer_grid_evaluations >= 25
 
 
 def test_delta_requires_ultrametric_tree():

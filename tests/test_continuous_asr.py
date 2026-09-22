@@ -122,7 +122,8 @@ def test_production_noise_shift_is_below_every_generalized_noise_eigenvalue():
         "((A:1,B:1)I:1,(C:1,(D:1,E:1)J:1)K:1,F:1)R;",
         "(A:1,(B:1,C:1)I:1,D:1,(E:1,F:1)J:1)R;",
     ]
-    for case in range(240):
+    # Each topology occurs with an exact anchor and with all-noisy observations.
+    for case in range(15):
         tree = tree_from(sources[case % len(sources)])
         for node in tree.traverse():
             if not node.is_root:

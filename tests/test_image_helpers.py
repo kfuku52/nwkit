@@ -9,22 +9,16 @@ from nwkit.image import (
     PhylopicProvider,
     allowed_candidates_from_scored_candidates,
     build_download_session,
-    build_retry_config,
     candidate_score,
     classify_wikimedia_asset,
     collect_candidates_for_species,
     collect_candidates_for_species_map,
     get_aspect_fit_bonus,
-    get_provider_quality_bonus,
-    get_style_priority,
     license_allowed,
     normalize_license_code,
     parse_ncbi_images_dmp_line,
     parse_sources,
-    resolve_download_worker_count,
-    resolve_lookup_worker_count,
     resolve_ncbi_taxonomy_image_cache_dir,
-    resolve_provider_fetch_limit,
     wikimedia_page_mentions_query,
 )
 from tests.image_test_support import (
@@ -144,11 +138,6 @@ class TestLicenseHelpers:
 
 
 class TestFetchLimits:
-    def test_resolve_provider_fetch_limit_scales_with_max_per_species(self):
-        assert resolve_provider_fetch_limit(make_image_args(max_per_species=1)) == 10
-        assert resolve_provider_fetch_limit(make_image_args(max_per_species=8)) == 12
-        assert resolve_provider_fetch_limit(make_image_args(max_per_species=99)) == 30
-
     def test_candidate_score_prioritizes_source_order_before_license_and_quality(self):
         first_source = {
             "matched_rank": "species",
@@ -265,12 +254,6 @@ class TestFetchLimits:
         )
 
         assert allowed == [fallback]
-
-    def test_style_and_provider_quality_helpers(self):
-        candidate = {"asset_type": "silhouette", "provider_quality": 12}
-        assert get_style_priority(candidate, style="silhouette") == 2
-        assert get_style_priority(candidate, style="photo") == 0
-        assert get_provider_quality_bonus(candidate) == 12
 
     def test_candidate_score_normalizes_numeric_strings_and_nonfinite_values(
         self,
@@ -583,32 +566,7 @@ class TestNCBIHelpers:
         retries = adapter.max_retries
         assert retries.total == 4
         assert 429 in retries.status_forcelist
-
-    def test_build_retry_config_limits_retries_to_get_requests(self):
-        retries = build_retry_config()
-        allowed_methods = getattr(retries, "allowed_methods", None)
-        if allowed_methods is None:
-            allowed_methods = getattr(retries, "method_whitelist", None)
-        assert allowed_methods == frozenset(["GET"])
-
-    def test_resolve_lookup_worker_count_defaults_to_four_without_taxonomy(self):
-        workers = resolve_lookup_worker_count(
-            args=make_image_args(),
-            sources=["wikimedia", "openverse"],
-            species_count=20,
-        )
-        assert workers == 4
-
-    def test_resolve_lookup_worker_count_defaults_to_two_with_taxonomy(self):
-        workers = resolve_lookup_worker_count(
-            args=make_image_args(),
-            sources=["phylopic", "wikimedia"],
-            species_count=20,
-        )
-        assert workers == 2
-
-    def test_resolve_download_worker_count_defaults_to_four(self):
-        assert resolve_download_worker_count(species_count=20) == 4
+        assert retries.allowed_methods == frozenset({"GET"})
 
     def test_parallel_lookup_closes_taxonomy_handles_in_their_worker_threads(
         self, monkeypatch, tmp_path

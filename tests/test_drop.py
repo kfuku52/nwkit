@@ -1,6 +1,5 @@
-import os
-
 import pytest
+from ete4 import Tree
 
 from nwkit.drop import drop_main
 from nwkit.util import read_tree
@@ -46,23 +45,6 @@ class TestDropMain:
         assert "B" not in content.replace("AB", "")
         assert "AB" in content
 
-    def test_drop_intnode_names(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk("((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;")
-        args = make_args(
-            infile=path,
-            outfile=tmp_outfile,
-            target="intnode",
-            name=True,
-            support=False,
-            length=False,
-            fill=None,
-        )
-        drop_main(args)
-        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
-        # Leaf names should be preserved
-        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
-        assert "-999999" not in open(tmp_outfile).read()
-
     def test_drop_without_fill_omits_values_instead_of_serializing_a_sentinel(
         self, tmp_nwk, tmp_outfile
     ):
@@ -81,22 +63,6 @@ class TestDropMain:
         assert content == "((A:1,B:2),(C:4,D:5));"
         assert "-999999" not in content
 
-    def test_drop_with_fill(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk("((A:1,B:1)AB:1,(C:1,D:1)CD:1)root;")
-        args = make_args(
-            infile=path,
-            outfile=tmp_outfile,
-            target="leaf",
-            name=True,
-            support=False,
-            length=False,
-            fill="UNKNOWN",
-        )
-        drop_main(args)
-        tree = read_tree(tmp_outfile, format="auto", quoted_node_names=True, quiet=True)
-        for leaf in tree.leaves():
-            assert leaf.name == "UNKNOWN"
-
     def test_drop_support(self, tmp_nwk, tmp_outfile):
         path = tmp_nwk("((A:1,B:1)90:1,(C:1,D:1)85:1);")
         args = make_args(
@@ -110,22 +76,9 @@ class TestDropMain:
             fill=None,
         )
         drop_main(args)
-        # Should complete without error
-        assert os.path.exists(tmp_outfile)
-
-    def test_drop_length(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk("((A:1,B:2):3,(C:4,D:5):6);")
-        args = make_args(
-            infile=path,
-            outfile=tmp_outfile,
-            target="all",
-            name=False,
-            support=False,
-            length=True,
-            fill=None,
-        )
-        drop_main(args)
-        assert os.path.exists(tmp_outfile)
+        tree = Tree(open(tmp_outfile).read(), parser=0)
+        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
+        assert all(node.support is None for node in tree.traverse())
 
     def test_issue10_drop_root_length_no_trailing_colon(self, tmp_nwk, tmp_outfile):
         """Regression test for GitHub issue #10.

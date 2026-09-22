@@ -30,63 +30,7 @@ def make_mark_args(**kwargs):
     return Namespace(**defaults)
 
 
-class TestAnnotateTreeAttr:
-    def test_annotate_all_leaves(self):
-        tree = Tree("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;", parser=1)
-        args = make_mark_args(pattern=".*")
-        tree = annotate_tree_attr(tree, args)
-        for leaf in tree.leaves():
-            assert leaf.props.get("is_target_leaf") is True
-
-    def test_annotate_pattern_match(self):
-        tree = Tree("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;", parser=1)
-        args = make_mark_args(pattern="A.*")
-        tree = annotate_tree_attr(tree, args)
-        for leaf in tree.leaves():
-            if leaf.name.startswith("A"):
-                assert leaf.props.get("is_target_leaf") is True
-            else:
-                assert leaf.props.get("is_target_leaf") is False
-
-    def test_mrca_annotation(self):
-        tree = Tree("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;", parser=1)
-        args = make_mark_args(pattern="B.*")
-        tree = annotate_tree_attr(tree, args)
-        # The MRCA of B1 and B2 should be marked
-        mrca_nodes = [n for n in tree.traverse() if n.props.get("is_target_only_mrca")]
-        assert len(mrca_nodes) >= 1
-
-    def test_no_match(self):
-        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
-        args = make_mark_args(pattern="Z.*")
-        tree = annotate_tree_attr(tree, args)
-        for leaf in tree.leaves():
-            assert leaf.props.get("is_target_leaf") is False
-
-
 class TestGetInsertNodes:
-    def test_mrca_target(self):
-        tree = Tree("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;", parser=1)
-        args = make_mark_args(pattern="B.*", target="mrca", target_only_clade=True)
-        tree = annotate_tree_attr(tree, args)
-        nodes = get_insert_nodes(tree, args)
-        assert len(nodes) >= 1
-
-    def test_leaf_target(self):
-        tree = Tree("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;", parser=1)
-        args = make_mark_args(pattern="A.*", target="leaf")
-        tree = annotate_tree_attr(tree, args)
-        nodes = get_insert_nodes(tree, args)
-        assert len(nodes) == 2  # A1, A2
-        assert all(n.is_leaf for n in nodes)
-
-    def test_clade_target(self):
-        tree = Tree("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;", parser=1)
-        args = make_mark_args(pattern="B.*", target="clade", target_only_clade=True)
-        tree = annotate_tree_attr(tree, args)
-        nodes = get_insert_nodes(tree, args)
-        assert len(nodes) >= 2  # B1, B2, and their MRCA
-
     def test_unknown_target_raises(self):
         tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
         args = make_mark_args(pattern="A", target="unknown")
@@ -113,16 +57,6 @@ class TestGetInsertNodes:
 
 
 class TestLabelInsertNodes:
-    def test_suffix(self):
-        tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
-        args = make_mark_args(
-            pattern="A", target="leaf", insert_txt="Fg", insert_pos="suffix"
-        )
-        tree = annotate_tree_attr(tree, args)
-        tree = label_insert_nodes(tree, args)
-        a_leaf = [l for l in tree.leaves() if "A" in l.name][0]
-        assert a_leaf.name.endswith("Fg")
-
     def test_prefix(self):
         tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
         args = make_mark_args(
@@ -149,22 +83,6 @@ class TestLabelInsertNodes:
 
 
 class TestMarkMain:
-    def test_mark_main_suffix(self, tmp_nwk, tmp_outfile):
-        path = tmp_nwk("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;")
-        args = make_mark_args(
-            infile=path,
-            outfile=tmp_outfile,
-            pattern="A.*",
-            target="leaf",
-            insert_txt="Foreground",
-            insert_pos="suffix",
-        )
-        mark_main(args)
-        tree = read_tree(tmp_outfile, format="1", quoted_node_names=True, quiet=True)
-        for leaf in tree.leaves():
-            if "A1" in leaf.name or "A2" in leaf.name:
-                assert "Foreground" in leaf.name
-
     def test_wiki_codeml_clade_marking(self, tmp_nwk, tmp_outfile):
         """Wiki example: mark clade with #1 for PAML codeml two-ratio mode.
 
@@ -197,26 +115,16 @@ class TestMarkMain:
         c_leaves = [l for l in tree.leaves() if l.name.startswith("C")]
         for leaf in c_leaves:
             assert "#1" not in leaf.name
-
-    def test_wiki_pipe_separated_regex(self, tmp_nwk, tmp_outfile):
-        """Test pipe-separated regex pattern matching multiple leaf groups."""
-        path = tmp_nwk("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;")
-        args = make_mark_args(
-            infile=path,
-            outfile=tmp_outfile,
-            pattern="A.*|B.*",
-            target="leaf",
-            insert_txt="FG",
-            insert_sep="",
-            insert_pos="suffix",
-        )
-        mark_main(args)
-        tree = read_tree(tmp_outfile, format="1", quoted_node_names=True, quiet=True)
-        for leaf in tree.leaves():
-            if leaf.name.replace("FG", "").startswith(("A", "B")):
-                assert "FG" in leaf.name
-            else:
-                assert "FG" not in leaf.name
+        assert {leaf.name: leaf.dist for leaf in tree.leaves()} == {
+            "A1#1": 2.0,
+            "A2#1": 1.0,
+            "B1#1": 1.0,
+            "B2#1": 1.0,
+            "C1": 1.0,
+            "C2": 4.0,
+        }
+        assert tree.common_ancestor(["B1#1", "B2#1"]).name == "#1"
+        assert tree.common_ancestor(["A1#1", "B1#1"]).name == "#1"
 
     def test_mark_all_mrca_clade(self, tmp_nwk, tmp_outfile):
         """Test --target clade --target-only-clade no marks the entire clade
@@ -326,29 +234,3 @@ class TestMarkMain:
         for node in tree.traverse():
             if not node.is_leaf:
                 assert not node.name or "#1" not in node.name
-
-    def test_wiki_clade_branch_lengths_preserved(self, tmp_nwk, tmp_outfile):
-        """Marking should not alter branch lengths."""
-        path = tmp_nwk("(((A1:2,(B1:1,B2:1):1):1,(A2:1,C1:1):2):1,C2:4):0.25;")
-        args = make_mark_args(
-            infile=path,
-            outfile=tmp_outfile,
-            pattern="B.*",
-            target="clade",
-            target_only_clade=True,
-            insert_txt="#1",
-            insert_sep="",
-            insert_pos="suffix",
-        )
-        mark_main(args)
-        tree = read_tree(tmp_outfile, format="1", quoted_node_names=True, quiet=True)
-        leaves = {}
-        for l in tree.leaves():
-            clean_name = l.name.replace("#1", "")
-            leaves[clean_name] = l.dist
-        assert abs(leaves["A1"] - 2.0) < 1e-6
-        assert abs(leaves["B1"] - 1.0) < 1e-6
-        assert abs(leaves["B2"] - 1.0) < 1e-6
-        assert abs(leaves["A2"] - 1.0) < 1e-6
-        assert abs(leaves["C1"] - 1.0) < 1e-6
-        assert abs(leaves["C2"] - 4.0) < 1e-6

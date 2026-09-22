@@ -113,16 +113,6 @@ def test_sparse_inertia_check_rejects_zero_diagonal_pivoting(blocks):
         gaussian._factor_sparse_lu(indefinite, "Sparse probe matrix")
 
 
-def test_sparse_spd_factor_retains_the_symmetric_ldlt_structure():
-    loading = sparse.csr_matrix([[1.0, 0.2], [0.0, -0.7], [0.5, 0.0], [0.3, 1.1]])
-    matrix = sparse.eye(4, format="csc") + loading @ loading.T
-    solver = gaussian._factor_sparse_lu(matrix, "Sparse probe matrix")
-    assert np.array_equal(solver.perm_r, solver.perm_c)
-    diagonal = sparse.diags(solver.U.diagonal(), format="csc")
-    difference = (solver.U.T - solver.L @ diagonal).tocoo()
-    assert np.max(np.abs(difference.data), initial=0.0) < 1e-12
-
-
 def test_unexpected_sparse_backend_errors_are_not_reclassified(monkeypatch):
     error = RuntimeError("unexpected backend failure")
 

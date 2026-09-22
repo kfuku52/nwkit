@@ -14,22 +14,6 @@ def _read_tsv(path):
 
 
 class TestDistMain:
-    def test_identical_trees(self, tmp_nwk, tmp_outfile):
-        nwk = "((A:1,B:1):1,(C:1,D:1):1);"
-        path1 = tmp_nwk(nwk, "tree1.nwk")
-        path2 = tmp_nwk(nwk, "tree2.nwk")
-        args = make_args(
-            infile=path1,
-            infile2=path2,
-            outfile=tmp_outfile,
-            dist="RF",
-            format2="auto",
-        )
-        dist_main(args)
-        with open(tmp_outfile) as f:
-            content = f.read()
-        assert "0" in content
-
     def test_file_output_has_header_and_data_on_separate_lines(
         self, tmp_nwk, tmp_outfile
     ):
@@ -133,24 +117,6 @@ class TestDistMain:
         )
         with pytest.raises(ValueError, match="Empty leaf labels"):
             dist_main(args)
-
-    def test_rf_dist_zero_for_identical(self, tmp_nwk, capsys):
-        """RF distance should be 0 for identical trees."""
-        nwk = "(((A:1,B:1):1,C:1):1,(D:1,E:1):1);"
-        path1 = tmp_nwk(nwk, "tree1.nwk")
-        path2 = tmp_nwk(nwk, "tree2.nwk")
-        args = make_args(
-            infile=path1,
-            infile2=path2,
-            outfile="-",
-            dist="RF",
-            format2="auto",
-        )
-        dist_main(args)
-        captured = capsys.readouterr()
-        lines = captured.out.strip().split("\n")
-        vals = lines[1].split("\t")
-        assert int(vals[0]) == 0
 
     def test_unrooted_tree_raises_clear_error(self, tmp_nwk):
         path1 = tmp_nwk("(A:1,B:1,C:1);", "tree1.nwk")

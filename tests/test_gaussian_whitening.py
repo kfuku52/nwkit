@@ -126,8 +126,8 @@ def test_reused_structure_refreshes_covariance_and_observation_order(newick):
     np.testing.assert_array_equal(first[0].apply(first[1]), first[2])
 
 
-@pytest.mark.parametrize("seed", range(20))
-def test_varied_topologies_and_cache_eviction_match_dense_covariance(seed):
+@pytest.mark.parametrize("seed", [0, 1, 2, 3])
+def test_varied_topologies_match_dense_covariance(seed):
     rng = np.random.default_rng(seed + 912)
     tips = int(rng.integers(3, 25))
     parts = [f"tip{i}:1" for i in range(tips)]

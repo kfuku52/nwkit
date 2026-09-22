@@ -15,8 +15,7 @@ def balanced_names(count):
     return nodes[0] + ";"
 
 
-@pytest.mark.parametrize("root_variance", [0.0, 0.7])
-@pytest.mark.parametrize("observations", [319, 448, 512])
+@pytest.mark.parametrize("root_variance,observations", [(0.0, 319), (0.7, 512)])
 def test_wide_tree_gls_matches_dense_with_signed_and_zero_slopes(
     root_variance, observations
 ):

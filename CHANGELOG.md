@@ -2,6 +2,15 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.26] - 2026-09-22
+
+### Changed
+
+- Consolidate redundant test scenarios and replace weak output smoke checks with
+  exact behavior assertions; remove internal/library self-checks and excessive
+  numerical repetitions while retaining independent scientific and failure-path
+  regression coverage. See `reviews/test-suite-2026-09-22/README.md` for decisions.
+
 ## [0.43.25] - 2026-09-22
 
 ### Fixed

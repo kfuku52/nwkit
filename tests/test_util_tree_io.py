@@ -19,16 +19,6 @@ from tests.helpers import make_args
 
 
 class TestReadTree:
-    def test_read_from_file(self, tmp_nwk):
-        path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
-        tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
-        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
-
-    def test_read_with_explicit_format(self, tmp_nwk):
-        path = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);")
-        tree = read_tree(path, format="1", quoted_node_names=True, quiet=True)
-        assert len(list(tree.leaves())) == 4
-
     def test_read_paml_header_treefile_and_ignore_end_marker(self, tmp_path):
         path = tmp_path / "species.trees"
         path.write_text("4 1\n((A,B)'B(2,4,0.025,0.025)',(C,D));\n//end of file\n")

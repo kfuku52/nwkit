@@ -95,9 +95,14 @@ def test_rooting_property_is_copied_before_canonicalization(target, rooted):
     assert ("[&U]" if rooted == "no" else "[&R]") in result
 
 
-@pytest.mark.parametrize("property_value", ["name=old", "dist=9", "support=95"])
-@pytest.mark.parametrize("properties", ["keep", "drop"])
-@pytest.mark.parametrize("target", ["nhx", "newick", "figtree"])
+@pytest.mark.parametrize(
+    "property_value,properties,target",
+    [
+        ("name=old", "keep", "nhx"),
+        ("dist=9", "drop", "newick"),
+        ("support=95", "drop", "figtree"),
+    ],
+)
 def test_reserved_properties_cannot_silently_override_converted_fields(
     property_value, properties, target
 ):

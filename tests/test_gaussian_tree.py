@@ -9,7 +9,6 @@ from nwkit.continuous_asr import compute_bm_marginals
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_evolutionary_process,
-    evolutionary_covariance_factory,
 )
 from nwkit.gaussian_tree import (
     GaussianRootPrior,
@@ -218,11 +217,3 @@ def test_flat_root_process_refuses_finite_covariance_views():
         process.tip_covariance(["A", "B", "C"])
     with pytest.raises(ValueError, match="flat-root"):
         process.sparse_tip_model(["A", "B", "C"])
-
-
-def test_covariance_factory_exposes_its_shared_process():
-    tree = tree_from("((A:1,B:1):1,(C:1,D:1):1)R;")
-    names = [str(leaf.name) for leaf in tree.leaves()]
-    factory = evolutionary_covariance_factory(tree, names, model="ou")
-    process = factory.process(0.6)
-    np.testing.assert_allclose(process.tip_covariance(names), factory(0.6))

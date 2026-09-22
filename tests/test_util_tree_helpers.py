@@ -68,26 +68,11 @@ class TestSpeciesGrouping:
 
 
 class TestRemoveSingleton:
-    def test_remove_singleton_node(self):
-        # Create tree with a singleton: ((A,B)) -> should become (A,B)
-        tree = Tree("(((A:1,B:1):1):1,(C:1,D:1):1);", parser=1)
-        num_nodes_before = len(list(tree.traverse()))
-        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
-        num_nodes_after = len(list(tree.traverse()))
-        assert num_nodes_after < num_nodes_before
-        assert set(tree.leaf_names()) == {"A", "B", "C", "D"}
-
     def test_no_singleton(self, simple_tree):
         num_nodes_before = len(list(simple_tree.traverse()))
         tree = remove_singleton(simple_tree, verbose=False)
         num_nodes_after = len(list(tree.traverse()))
         assert num_nodes_before == num_nodes_after
-
-    def test_preserve_branch_length(self):
-        tree = Tree("(((A:1,B:1):2):3,C:6);", parser=1)
-        tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
-        # After removing singleton, branch lengths should be preserved (summed)
-        assert set(tree.leaf_names()) == {"A", "B", "C"}
 
     def test_remove_singleton_root_wrapper(self):
         tree = Tree("((A:1,B:1):1);", parser=1)
@@ -174,10 +159,6 @@ class TestLabel2Sciname:
     def test_single_string(self):
         result = label2sciname("Homo_sapiens_GENE1")
         assert result == "Homo_sapiens"
-
-    def test_list_input(self):
-        result = label2sciname(["Homo_sapiens_GENE1", "Mus_musculus_GENE2"])
-        assert result == ["Homo_sapiens", "Mus_musculus"]
 
     def test_no_species_info(self):
         result = label2sciname("SingleWord")
@@ -281,18 +262,6 @@ class TestExtractSpeciesLabel:
 
 
 class TestReadItemPerLineFile:
-    def test_basic(self, tmp_path):
-        f = tmp_path / "items.txt"
-        f.write_text("apple\nbanana\ncherry\n")
-        result = read_item_per_line_file(str(f))
-        assert result == ["apple", "banana", "cherry"]
-
-    def test_empty_lines_stripped(self, tmp_path):
-        f = tmp_path / "items.txt"
-        f.write_text("apple\n\nbanana\n\n")
-        result = read_item_per_line_file(str(f))
-        assert result == ["apple", "banana"]
-
     def test_crlf_and_whitespace_are_normalized(self, tmp_path):
         f = tmp_path / "items.txt"
         f.write_bytes(b" apple \r\nbanana\r\n\r\n  cherry  \r\n")

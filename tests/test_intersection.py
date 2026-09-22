@@ -12,9 +12,6 @@ from nwkit.intersection import (
     get_remove_names,
     get_seq_names,
     intersection_main,
-    match_backward,
-    match_complete,
-    match_prefix,
 )
 from nwkit.util import read_tree
 from tests.helpers import make_args
@@ -55,22 +52,6 @@ class TestGetSeqNames:
             get_seq_names(seqs)
 
 
-class TestMatchFunctions:
-    def test_complete_match(self):
-        assert match_complete("abc", "abc") is True
-        assert match_complete("abc", "ab") is False
-
-    def test_prefix_match(self):
-        assert match_prefix("abcdef", "abc") is True
-        assert match_prefix("abc", "abcdef") is True
-        assert match_prefix("abc", "xyz") is False
-
-    def test_backward_match(self):
-        assert match_backward("abcdef", "def") is True
-        assert match_backward("def", "abcdef") is True
-        assert match_backward("abc", "xyz") is False
-
-
 class TestGetRemoveNames:
     def test_complete(self):
         arr1 = ["A", "B", "C", "D"]
@@ -91,14 +72,14 @@ class TestGetRemoveNames:
         assert result == ["A", "B", "C"]
 
     def test_prefix_mode(self):
-        arr1 = ["ABC_001", "DEF_002", "GHI_003"]
-        arr2 = ["ABC", "DEF"]
+        arr1 = ["ABC_001", "DEF", "GHI_003"]
+        arr2 = ["ABC", "DEF_002"]
         result = get_remove_names(arr1, arr2, "prefix")
         assert result == ["GHI_003"]
 
     def test_backward_mode(self):
-        arr1 = ["pre_ABC", "pre_DEF", "pre_GHI"]
-        arr2 = ["ABC", "DEF"]
+        arr1 = ["pre_ABC", "DEF", "pre_GHI"]
+        arr2 = ["ABC", "pre_DEF"]
         result = get_remove_names(arr1, arr2, "backward")
         assert result == ["pre_GHI"]
 

@@ -596,12 +596,25 @@ def test_candidate_overview_draws_every_ranked_and_unranked_model():
         if text.get_text() in {"BM", "LAMBDA"}
     }
     assert positions["BM"] > positions["LAMBDA"]
+    artists = pdf.figures[0].axes[0].texts
+    for header, value in {
+        "n": "20",
+        "k": "1",
+        "logL": "-10.000",
+        "AICc": "22.200",
+        "Delta AICc": "0.000",
+        "Weight": "0.750",
+    }.items():
+        header_text = next(text for text in artists if text.get_text() == header)
+        value_text = next(text for text in artists if text.get_text() == value)
+        assert header_text.get_position()[0] == value_text.get_position()[0]
+        assert header_text.get_ha() == value_text.get_ha() == "right"
     assert any(
         text.startswith("Comparison set 1: Continuous | single trait") for text in texts
     )
 
 
-def test_candidate_overview_bounds_long_text_and_aligns_numeric_headers():
+def test_candidate_overview_bounds_long_text():
     long_name = ",".join(f"trait_{index}_{'x' * 35}" for index in range(20))
     table = pd.DataFrame(
         [
@@ -706,55 +719,6 @@ def test_font_error_reports_the_actually_missing_codepoint(monkeypatch):
         _font_family_for_text("A🐍")
     assert "U+1F40D" in str(error.value)
     assert "U+0041" not in str(error.value)
-
-
-def test_candidate_overview_numeric_headers_share_value_alignment():
-    table = pd.DataFrame(
-        [
-            {
-                "model_id": "BM",
-                "trait_type": "continuous",
-                "trait_columns": "x",
-                "status": "ok",
-                "rankable": "yes",
-                "message": "",
-                "comparison_group": "continuous:scalar:flat_root_integrated:flat",
-                "criterion_rank": 1,
-                "num_comparable_models": 2,
-                "is_best": "yes",
-                "sample_size": 20,
-                "num_parameters": 1,
-                "log_likelihood": -10.0,
-                "aic": 22.0,
-                "aic_weight": 0.75,
-                "delta_aic": 0.0,
-            }
-        ]
-    )
-
-    class CapturePdf:
-        def __init__(self):
-            self.figure = None
-
-        def savefig(self, figure):
-            self.figure = figure
-
-    pdf = CapturePdf()
-    _draw_candidate_overview(pdf, table, "aic")
-    texts = pdf.figure.axes[0].texts
-    expected = {
-        "n": "20",
-        "k": "1",
-        "logL": "-10.000",
-        "AIC": "22.000",
-        "Delta AIC": "0.000",
-        "Weight": "0.750",
-    }
-    for header, value in expected.items():
-        header_text = next(text for text in texts if text.get_text() == header)
-        value_text = next(text for text in texts if text.get_text() == value)
-        assert header_text.get_position()[0] == value_text.get_position()[0]
-        assert header_text.get_ha() == value_text.get_ha() == "right"
 
 
 def test_candidate_resolution_supports_ou_root_variants_and_exclusions():
