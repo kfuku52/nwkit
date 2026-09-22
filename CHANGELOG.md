@@ -2,6 +2,13 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.31] - 2026-09-22
+
+### Changed
+
+- Share descendant flag propagation between the two mark clade-selection modes,
+  preserving their separate ancestor selection, traversal order, and outputs.
+
 ## [0.43.30] - 2026-09-22
 
 ### Fixed

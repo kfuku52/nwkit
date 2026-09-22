@@ -31,6 +31,30 @@ def make_mark_args(**kwargs):
 
 
 class TestGetInsertNodes:
+    @pytest.mark.parametrize(
+        "pattern,only_targets,all_targets",
+        [
+            ("NONE", [], []),
+            ("A", ["A"], ["A"]),
+            ("A|B", ["X", "A", "B"], ["X", "A", "B"]),
+            ("A|C", ["A", "C"], ["R", "X", "Y", "A", "B", "C", "D"]),
+            (
+                ".*",
+                ["R", "X", "Y", "A", "B", "C", "D"],
+                ["R", "X", "Y", "A", "B", "C", "D"],
+            ),
+        ],
+    )
+    def test_clade_selection_preserves_membership_and_order(
+        self, pattern, only_targets, all_targets
+    ):
+        tree = Tree("((A:1,B:2)X:3,(C:4,D:5)Y:6)R;", parser=1)
+        args = make_mark_args(pattern=pattern, target="clade")
+        annotate_tree_attr(tree, args)
+        for target_only_clade, expected in [(True, only_targets), (False, all_targets)]:
+            args.target_only_clade = target_only_clade
+            assert [node.name for node in get_insert_nodes(tree, args)] == expected
+
     def test_unknown_target_raises(self):
         tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
         args = make_mark_args(pattern="A", target="unknown")

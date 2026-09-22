@@ -5,6 +5,19 @@ from typing import Any
 from nwkit.util import read_tree, write_tree
 
 
+def _propagate_clade_flag(tree, source_property, clade_property):
+    """Mark descendants of flagged nodes, visiting parents before children."""
+    clade_flags: dict[Any, bool] = {}
+    for node in tree.traverse(strategy="preorder"):
+        if node.is_root:
+            in_clade = bool(node.props.get(source_property))
+        else:
+            in_clade = clade_flags[node.up] or bool(node.props.get(source_property))
+        clade_flags[node] = in_clade
+        if in_clade:
+            node.props[clade_property] = True
+
+
 def annotate_tree_attr(tree, args):
     pattern = re.compile(args.pattern)
     leaf_counts = dict()
@@ -42,17 +55,7 @@ def annotate_tree_attr(tree, args):
             "is_descendant_all_target"
         ):
             node.props["is_target_only_mrca"] = True
-    target_only_clade_flags: dict[Any, bool] = {}
-    for node in tree.traverse(strategy="preorder"):
-        if node.is_root:
-            is_target_only_clade = bool(node.props.get("is_target_only_mrca"))
-        else:
-            is_target_only_clade = target_only_clade_flags[node.up] or bool(
-                node.props.get("is_target_only_mrca")
-            )
-        target_only_clade_flags[node] = is_target_only_clade
-        if is_target_only_clade:
-            node.props["is_target_only_mrca_clade"] = True
+    _propagate_clade_flag(tree, "is_target_only_mrca", "is_target_only_mrca_clade")
     target_leaves = [leaf for leaf in tree.leaves() if leaf.props.get("is_target_leaf")]
     num_target_leaves = len(target_leaves)
     if num_target_leaves > 0:
@@ -61,17 +64,7 @@ def annotate_tree_attr(tree, args):
         else:
             all_mrca_node = tree.common_ancestor(target_leaves)
         all_mrca_node.props["is_all_mrca"] = True
-    all_mrca_clade_flags: dict[Any, bool] = {}
-    for node in tree.traverse(strategy="preorder"):
-        if node.is_root:
-            is_all_mrca_clade = bool(node.props.get("is_all_mrca"))
-        else:
-            is_all_mrca_clade = all_mrca_clade_flags[node.up] or bool(
-                node.props.get("is_all_mrca")
-            )
-        all_mrca_clade_flags[node] = is_all_mrca_clade
-        if is_all_mrca_clade:
-            node.props["is_all_mrca_clade"] = True
+    _propagate_clade_flag(tree, "is_all_mrca", "is_all_mrca_clade")
     return tree
 
 
