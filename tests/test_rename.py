@@ -1,8 +1,24 @@
 import pytest
 
-from nwkit.rename import rename_main
+from nwkit.rename import read_name_tsv, rename_main
 from nwkit.util import read_tree
 from tests.helpers import make_args
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "old_name\tnew_name\tnew_name\nA\tB\tC\n",
+        "old_name\tnew_name\t\nA\tB\tC\n",
+        "old_name\tnew_name\nA\tB\tC\n",
+        "old_name\tnew_name\nA\n",
+    ],
+)
+def test_mapping_rejects_ambiguous_columns_and_row_width(tmp_path, text):
+    source = tmp_path / "mapping.tsv"
+    source.write_text(text)
+    with pytest.raises(ValueError, match="column headers|number of fields"):
+        read_name_tsv(source)
 
 
 class TestRenameMain:

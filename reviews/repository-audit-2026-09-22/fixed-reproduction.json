@@ -1,0 +1,24 @@
+{
+  "optimizer": {
+    "selected_x": 9.25,
+    "selected_objective": -10.0,
+    "success": true,
+    "known_optimal_x": 9.25,
+    "known_optimal_objective": -10.0
+  },
+  "duplicate_headers": "rejected",
+  "annotation_input_replaced": false,
+  "existing_output_after_write_failure": "ORIGINAL",
+  "simulation_audit": {
+    "inputs": [
+      "infile",
+      "parameters"
+    ],
+    "outputs": [
+      "outfile",
+      "truth_out"
+    ]
+  },
+  "audit_collision_parameters_remains_valid_json": true,
+  "audit_collision_truth_remains_valid_json": true
+}

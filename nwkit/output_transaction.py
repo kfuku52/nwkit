@@ -12,6 +12,7 @@ import shutil
 import stat
 import tempfile
 from contextlib import ExitStack, contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass
 
 from nwkit.file_paths import normalized_missing_path_key, validate_distinct_output_paths
@@ -78,6 +79,11 @@ class _Stage:
     mode: int
 
 
+_ACTIVE_STAGES: ContextVar[dict[str, _Stage] | None] = ContextVar(
+    "nwkit_output_stages", default=None
+)
+
+
 def _new_stage(target):
     directory = os.path.dirname(target)
     mode = regular_output_mode(target)
@@ -131,6 +137,21 @@ class _StagedOutputs(dict):
             raise
         with stream:
             writer(stream)
+
+
+def write_text_output(path, writer):
+    """Publish text atomically, or write through its enclosing verified stage.
+
+    Shared serializers can be called by either standalone commands or a
+    multi-output transaction. Replacing an enclosing stage would invalidate
+    its inode guard, so reuse that stage's descriptor instead.
+    """
+    stage = (_ACTIVE_STAGES.get() or {}).get(os.path.abspath(os.fspath(path)))
+    if stage is not None:
+        _StagedOutputs([path], [stage]).write_text(path, writer)
+    else:
+        with output_transaction([path]) as staged:
+            staged.write_text(path, writer)
 
 
 def _finish_stage(stage):
@@ -276,7 +297,15 @@ def output_transaction(
                 )
             for target in targets.values():
                 stages.append(_new_stage(target))
-            yield _StagedOutputs(targets, stages)
+            active = {
+                **(_ACTIVE_STAGES.get() or {}),
+                **{stage.path: stage for stage in stages},
+            }
+            token = _ACTIVE_STAGES.set(active)
+            try:
+                yield _StagedOutputs(targets, stages)
+            finally:
+                _ACTIVE_STAGES.reset(token)
             for stage in stages:
                 _finish_stage(stage)
             staged_outputs = [(stage.target, stage.path) for stage in stages]

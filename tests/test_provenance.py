@@ -21,6 +21,85 @@ def _sha256(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+@pytest.fixture
+def shift_simulation_arguments(tmp_path):
+    tree = tmp_path / "tree.nwk"
+    tree.write_text("((A:1,B:1):1,(C:1,D:1):1);")
+    parameters = tmp_path / "parameters.json"
+    parameters.write_text(
+        json.dumps(
+            {
+                "trait_names": ["x"],
+                "alpha": 1.0,
+                "regime_optima": [[0.0]],
+                "process_tip_covariance": [[1.0]],
+            }
+        )
+    )
+    paths = {
+        "infile": tree,
+        "parameters": parameters,
+        "truth-out": tmp_path / "truth.json",
+        "latent-out": tmp_path / "latent.tsv",
+        "outfile": tmp_path / "observed.tsv",
+    }
+    return paths
+
+
+def _simulation_command(paths, audit):
+    return [
+        "shift-simulate",
+        "--input-rooted",
+        "yes",
+        "--audit",
+        str(audit),
+        *[token for role, path in paths.items() for token in ("--" + role, str(path))],
+    ]
+
+
+def test_simulation_audit_hashes_generating_input_and_all_outputs(
+    shift_simulation_arguments, tmp_path
+):
+    paths = shift_simulation_arguments
+    audit = tmp_path / "audit.jsonl"
+    main(_simulation_command(paths, audit))
+    record = json.loads(audit.read_text())
+    for field, roles in [
+        ("inputs", ["infile", "parameters"]),
+        ("outputs", ["outfile", "truth-out", "latent-out"]),
+    ]:
+        entries = {entry["argument"]: entry for entry in record[field]}
+        for role in roles:
+            assert entries[role.replace("-", "_")]["sha256"] == _sha256(paths[role])
+
+
+@pytest.mark.parametrize("role", ["parameters", "model-in", "truth-out", "latent-out"])
+@pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+def test_simulation_rejects_audit_collision_before_modifying_files(
+    shift_simulation_arguments, tmp_path, role, alias
+):
+    paths = shift_simulation_arguments
+    if role == "model-in":
+        paths[role] = paths.pop("parameters")
+    target = paths[role]
+    if not target.exists():
+        target.write_text("previous output\n")
+    before = target.read_bytes(), stat.S_IMODE(target.stat().st_mode)
+    audit = target
+    if alias != "same":
+        audit = tmp_path / "alias"
+        try:
+            if alias == "symlink":
+                audit.symlink_to(target)
+            else:
+                audit.hardlink_to(target)
+        except OSError:
+            pytest.skip("Filesystem links are unavailable")
+    with pytest.raises(ValueError, match="distinct|overwrite|collid"):
+        main(_simulation_command(paths, audit))
+    assert (target.read_bytes(), stat.S_IMODE(target.stat().st_mode)) == before
+
+
 def test_argument_dict_omits_private_runtime_caches():
     args = Namespace(
         command="constrain",

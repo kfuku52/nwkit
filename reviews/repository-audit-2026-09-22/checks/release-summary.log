@@ -1,0 +1,28 @@
++ /tmp/nwkit-audit-fix-env/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-audit-fix-env/bin/python -m ruff format --check nwkit tests setup.py tools
++ /tmp/nwkit-audit-fix-env/bin/python -m mypy --no-incremental
+Success: no issues found in 227 source files
++ /tmp/nwkit-audit-fix-env/bin/python -m pip check
+No broken requirements found.
++ /tmp/nwkit-audit-fix-env/bin/python -m bandit -r nwkit -ll -ii -q
++ /tmp/nwkit-audit-fix-env/bin/python -m pip_audit .
+No known vulnerabilities found
++ /tmp/nwkit-audit-fix-env/bin/python -m coverage erase
++ /tmp/nwkit-audit-fix-env/bin/python -m coverage run -m pytest tests/ -q
+4090 passed, 83 skipped in 407.71s (0:06:47)
++ /tmp/nwkit-audit-fix-env/bin/python -m coverage report
+TOTAL                                    48951   5828  19708   3575    85%
++ /tmp/nwkit-audit-fix-env/bin/python tools/check_maintainability.py
+Radon: 3378 functions, 6.80 average (informational), 50 maximum; all hard limits respected.
++ /tmp/nwkit-audit-fix-env/bin/python -m build --wheel --outdir direct-dist
+Successfully built nwkit-0.43.25-py3-none-any.whl
++ /tmp/nwkit-audit-fix-env/bin/python -m build --sdist --outdir direct-dist
+Successfully built nwkit-0.43.25.tar.gz
++ /tmp/nwkit-audit-fix-env/bin/python tools/normalize_sdist.py direct-dist/nwkit-0.43.25.tar.gz
++ /tmp/nwkit-audit-fix-env/bin/python -m build
+Successfully built nwkit-0.43.25.tar.gz and nwkit-0.43.25-py3-none-any.whl
++ /tmp/nwkit-audit-fix-env/bin/python tools/normalize_sdist.py dist/nwkit-0.43.25.tar.gz
++ /tmp/nwkit-audit-fix-env/bin/python tools/check_dist.py
+Distribution reproducibility and contents are valid.
+Exit code: 0

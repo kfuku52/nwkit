@@ -2,6 +2,21 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.25] - 2026-09-22
+
+### Fixed
+
+- Protect shift simulation inputs and truth/latent outputs from audit-log
+  collisions and include their hashes in audit records.
+- Reject annotation outputs that replace input trait tables, and reports that
+  replace input trees; preserve intentional in-place tree annotation.
+- Stage standalone Newick file writes so handled write failures preserve
+  existing results, and reject ambiguous rename-table headers and row widths.
+- Refine the best scalar-search basin before less promising minima and report
+  convergence for the selected solution rather than an unrelated basin.
+- Validate Mk boundary diagnostics against the fitted rates and an independent
+  likelihood calculation across numerical environments.
+
 ## [0.43.24] - 2026-09-21
 
 ### Fixed

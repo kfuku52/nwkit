@@ -120,3 +120,57 @@ def test_successful_stream_and_table(tmp_path, capsys):
     )
     assert capsys.readouterr().out == "(A:1,B:1)R;\n"
     assert path.read_text() == "x\n1\n"
+
+
+def test_standalone_tree_preserves_existing_output_on_partial_write(
+    tmp_path, monkeypatch
+):
+    import os
+
+    from nwkit import output_transaction as transaction
+    from nwkit.util import write_tree
+
+    path = tmp_path / "tree.nwk"
+    path.write_text("previous output\n")
+    original_fdopen = os.fdopen
+
+    class FailingWriter:
+        def __init__(self, handle):
+            self.handle = handle
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            self.handle.close()
+
+        def write(self, text):
+            self.handle.write(text[:5])
+            self.handle.flush()
+            raise OSError("injected partial write")
+
+    def fdopen(descriptor, mode, **kwargs):
+        handle = original_fdopen(descriptor, mode, **kwargs)
+        return FailingWriter(handle) if mode == "w" else handle
+
+    monkeypatch.setattr(transaction.os, "fdopen", fdopen)
+    tree = read_tree("(A:1,B:1);", "1", True, quiet=True)
+    with pytest.raises(OSError, match="injected partial write"):
+        write_tree(tree, make_args(outfile=str(path)), format=1)
+    assert path.read_text() == "previous output\n"
+    assert list(tmp_path.iterdir()) == [path]
+
+
+def test_tree_serializer_reuses_enclosing_transaction_stage(tmp_path):
+    from nwkit.output_transaction import output_transaction
+    from nwkit.util import write_tree
+
+    path = tmp_path / "tree.nwk"
+    tree = read_tree("(A:1,B:1);", "1", True, quiet=True)
+    with output_transaction([path]) as staged:
+        write_tree(tree, make_args(outfile=staged[path]), format=1)
+        assert not path.exists()
+    assert path.read_text() == "(A:1,B:1);"
+    # Leaving the context must also restore normal standalone publication.
+    write_tree(tree, make_args(outfile=str(path)), format=1)
+    assert path.read_text() == "(A:1,B:1);"

@@ -1,0 +1,10 @@
++ /tmp/nwkit-audit-fix-env/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_output_transaction.py tests/test_tree_outputs.py tests/test_asr_output.py tests/test_stochastic_history_audit.py tests/test_branch_gaussian_cli.py
+........................................................................ [ 63%]
+..........................................                               [100%]
+============================= slowest 20 durations =============================
+0.37s call     tests/test_asr_output.py::test_ensemble_publishes_stdout_and_figure
+0.18s call     tests/test_stochastic_history_audit.py::test_asymmetric_three_state_bridge_matches_independent_integrals
+0.06s call     tests/test_stochastic_history_audit.py::test_figure_uses_literal_state_and_tip_labels
+
+(17 durations < 0.05s hidden.)
+114 passed in 1.99s

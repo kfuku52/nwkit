@@ -75,7 +75,7 @@ def _bounded_scalar_minimize(function, bounds):
 
 
 def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
-    """Search a bounded one-dimensional objective without assuming unimodality."""
+    """Search a grid and at most four basins; no global-optimality guarantee."""
 
     lower, upper = (float(bounds[0]), float(bounds[1]))
     if not all(math.isfinite(value) for value in (lower, upper)) or lower >= upper:
@@ -109,7 +109,14 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
         key=lambda index: grid_values[index],
     )
     refinement_indices = []
-    for index in local_indices + ranked_indices:
+    # Always refine the best interior grid point, including when more than
+    # four local minima were found. Coordinate order must not choose basins.
+    priority = (
+        ranked_indices[:1]
+        + sorted(local_indices, key=lambda index: grid_values[index])
+        + ranked_indices
+    )
+    for index in priority:
         if index not in refinement_indices:
             refinement_indices.append(index)
         if len(refinement_indices) == 4:
@@ -134,13 +141,21 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
             candidates.append(refined)
             successful_refinements += int(bool(refined.success))
     best = min(candidates, key=lambda candidate: float(candidate.fun))
-    best_is_boundary = math.isclose(float(best.x), lower) or math.isclose(
-        float(best.x), upper
+    # A grid point may be marginally better than the numerical refinement of
+    # that same minimum. Only a nearby converged candidate can confirm it;
+    # convergence in a different basin says nothing about the selected point.
+    converged = bool(best.success) or any(
+        bool(candidate.success)
+        and math.isclose(float(candidate.x), float(best.x), rel_tol=0, abs_tol=1e-7)
+        and math.isclose(
+            float(candidate.fun), float(best.fun), rel_tol=1e-12, abs_tol=1e-12
+        )
+        for candidate in candidates
     )
     return SimpleNamespace(
         x=float(best.x),
         fun=float(best.fun),
-        success=bool(best_is_boundary or successful_refinements),
+        success=converged,
         message=(
             "global grid search ({} points; {} successful local refinement(s))"
         ).format(grid_size, successful_refinements),

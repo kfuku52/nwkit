@@ -66,12 +66,16 @@ OUTPUT_ARGUMENTS = frozenset(
         "group_table_prefix",
         "figure_out",
         "audit",
+        "truth_out",
+        "latent_out",
     )
 )
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
         "branch_fit",
+        "parameters",
+        "model_in",
         "branch_models",
         "branch_regimes",
         "regime_models",

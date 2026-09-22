@@ -15,6 +15,7 @@ from nwkit.util import (
     read_tip_table,
     read_tree,
     validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
 )
 
@@ -466,6 +467,16 @@ def annotate_main(args):
             ("--outfile", getattr(args, "outfile", None)),
             ("--report", getattr(args, "report", None)),
         ]
+    )
+    # A primary tree may intentionally be updated in place; auxiliary tables
+    # must never replace either input, nor may the tree replace the trait table.
+    validate_outputs_do_not_replace_inputs(
+        [("--table", args.table)],
+        [("--outfile", args.outfile), ("--report", getattr(args, "report", None))],
+    )
+    validate_outputs_do_not_replace_inputs(
+        [("--infile", args.infile)],
+        [("--report", getattr(args, "report", None))],
     )
     tree = read_tree(
         args.infile,

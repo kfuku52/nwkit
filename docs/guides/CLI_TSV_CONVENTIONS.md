@@ -51,6 +51,12 @@ stdout, serialization finishes first, but bytes already delivered to a stream
 cannot be retracted. Strict `transfer`/`compose` failures intentionally still
 produce their diagnostic report without writing the result tree.
 
+Standalone Newick file outputs are also staged before replacement. `annotate`
+rejects tree/report outputs that replace its input trait table and report outputs
+that replace its input tree; intentional in-place primary tree updates remain
+supported. Audit logs must be distinct from all declared inputs and outputs,
+including `shift-simulate` generating JSON, truth JSON, and latent tables.
+
 `label` skips names already retained anywhere in the tree, including nodes
 outside `--target`. `--force yes` releases the old names of nodes being renamed,
 but does not overwrite names outside that target. Numbering may therefore skip
@@ -185,7 +191,7 @@ contract:
 | `--species-map-tsv` | `leaf_name`, and at least one of `species_label` or `taxonomy_query` | Every row must define at least one mapping value. |
 | `image --species-name-tsv` | `leaf_name`, `species_name` | Legacy image-only mapping; prefer `--species-map-tsv` for new workflows. |
 | `draw --tip-image-manifest` | `leaf_name`, `local_path` | Multiple rows per tip are allowed and the first is used. Relative paths use the manifest directory or `--tip-image-root`; broken paths are rejected. |
-| `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. |
+| `rename --name-tsv` | `old_name`, `new_name` | Both values are non-empty and `old_name` is unique. Headers must be nonempty and unique, and every row must match the header width. |
 | `--taxid-tsv` | `leaf_name`, `taxid` | `taxid` must be a non-missing integer. |
 | `--weight-tsv` | `weight` | Positive finite weights. Optional `tree_id` values are unique, 1-based input-tree numbers; without it, row order is used and row count must equal tree count. |
 | `contrast --reconciliation` | Output columns from `nwkit reconcile` | Stable `gene_clade_id` values must uniquely and exactly cover the contrast tree. Event/status enums, orientation clades, coverage states, and `tree_id` consistency are validated. |

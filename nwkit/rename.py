@@ -17,6 +17,10 @@ def read_name_tsv(path):
     try:
         reader = csv.DictReader(handle, delimiter="\t")
         fieldnames = reader.fieldnames or list()
+        if any(not name.strip() for name in fieldnames) or len(fieldnames) != len(
+            set(fieldnames)
+        ):
+            raise ValueError("--name-tsv requires unique, nonempty column headers.")
         required = {"old_name", "new_name"}
         if not required.issubset(fieldnames):
             raise ValueError(
@@ -24,6 +28,12 @@ def read_name_tsv(path):
             )
         mapping = dict()
         for row in reader:
+            if None in row or any(value is None for value in row.values()):
+                raise ValueError(
+                    "--name-tsv row {} has a different number of fields than its header.".format(
+                        reader.line_num
+                    )
+                )
             raw_old_name = row.get("old_name")
             raw_new_name = row.get("new_name")
             old_name = "" if raw_old_name is None else str(raw_old_name)

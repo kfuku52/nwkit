@@ -4,8 +4,52 @@ import pandas as pd
 import pytest
 
 from nwkit.annotate import annotate_main
+from nwkit.cli import main
 from nwkit.util import read_tree
 from tests.helpers import make_args
+
+
+@pytest.mark.parametrize(
+    "input_role,output_role",
+    [("table", "report"), ("table", "outfile"), ("infile", "report")],
+)
+@pytest.mark.parametrize("alias", ["same", "symlink", "hardlink"])
+def test_annotate_preserves_inputs_on_output_collision(
+    tmp_path, input_role, output_role, alias
+):
+    tree = tmp_path / "tree.nwk"
+    table = tmp_path / "traits.tsv"
+    tree.write_text("(A:1,B:1);")
+    table.write_text("leaf_name\tx\nA\t1\nB\t2\n")
+    original = {path: path.read_bytes() for path in (tree, table)}
+    target = {"table": table, "infile": tree}[input_role]
+    if alias != "same":
+        link = tmp_path / "alias"
+        try:
+            if alias == "symlink":
+                link.symlink_to(target)
+            else:
+                link.hardlink_to(target)
+        except OSError:
+            pytest.skip("Filesystem links are unavailable")
+        target = link
+    options = {"outfile": tmp_path / "out.nwk", "report": tmp_path / "report.tsv"}
+    options[output_role] = target
+    with pytest.raises(ValueError, match="must not overwrite input"):
+        main(
+            [
+                "annotate",
+                "--infile",
+                str(tree),
+                "--table",
+                str(table),
+                "--outfile",
+                str(options["outfile"]),
+                "--report",
+                str(options["report"]),
+            ]
+        )
+    assert all(path.read_bytes() == content for path, content in original.items())
 
 
 def test_annotate_tips_and_aggregate_internal_properties(tmp_nwk, tmp_path):

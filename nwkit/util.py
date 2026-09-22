@@ -1441,8 +1441,9 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
     elif hasattr(args.outfile, "write"):
         args.outfile.write(tree_str)
     else:
-        with open(args.outfile, mode="w", encoding="utf-8") as f:
-            f.write(tree_str)
+        from nwkit.output_transaction import write_text_output
+
+        write_text_output(args.outfile, lambda handle: handle.write(tree_str))
 
 
 def split_newick_stream(newick_text):

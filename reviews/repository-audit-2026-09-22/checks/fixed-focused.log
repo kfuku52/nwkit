@@ -1,0 +1,24 @@
++ /tmp/nwkit-audit-fix-env/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-audit-fix-env/bin/python -m ruff format --check nwkit tests setup.py tools
+514 files already formatted
++ /tmp/nwkit-audit-fix-env/bin/python -m mypy
+Success: no issues found in 227 source files
++ /tmp/nwkit-audit-fix-env/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_provenance.py tests/test_annotate.py tests/test_rename.py tests/test_optimization.py tests/test_tree_outputs.py tests/test_util_tree_io.py tests/test_discrete_asr_models.py
+........................................................................ [ 38%]
+........................................................................ [ 77%]
+...........................................                              [100%]
+============================= slowest 20 durations =============================
+4.39s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[GTR]
+3.37s call     tests/test_provenance.py::test_audit_records_draw_tip_image_manifest_and_assets
+1.88s call     tests/test_discrete_asr_models.py::test_frequency_model_cli_fits_stationary_root_and_reports_equilibrium[F81]
+1.00s call     tests/test_discrete_asr_models.py::test_mk_multistart_handles_penalty_regions_on_long_branches
+0.76s call     tests/test_discrete_asr_models.py::test_mk_fit_recovers_from_scipy_bound_roundoff
+0.57s call     tests/test_discrete_asr_models.py::test_directed_ard_multistart_avoids_single_start_local_optimum
+0.35s call     tests/test_provenance.py::test_audit_records_replicate_contrast_inputs_and_auxiliary_outputs
+0.13s call     tests/test_provenance.py::test_simulation_audit_hashes_generating_input_and_all_outputs
+0.07s call     tests/test_provenance.py::test_asrcompare_audit_hashes_auxiliary_model_inputs
+0.06s call     tests/test_provenance.py::test_audit_records_pgls_sampling_covariance_and_random_effect_output
+
+(10 durations < 0.05s hidden.)
+187 passed in 24.93s

@@ -1,8 +1,10 @@
 import math
+from itertools import product
 
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.linalg import expm
 
 import nwkit.asr as asr
 from nwkit.asr_models import default_model
@@ -536,7 +538,30 @@ def test_mk_multistart_handles_penalty_regions_on_long_branches():
     )
     assert fit["log_likelihood"] == pytest.approx(-3.666938522, abs=2e-7)
     assert fit["optimizer_converged_starts"] == fit["optimizer_starts"]
-    assert fit["fit_status"] == "ok"
+    # Independently sum all assignments to the three internal nodes. A flat
+    # near-zero transition rate can reach the bound on some SciPy/platforms;
+    # the likelihood and the diagnostic must remain correct in either case.
+    q = fit["rate_matrix"]
+    transitions = {
+        node: expm(q * node.dist) for node in tree.traverse() if not node.is_root
+    }
+    internal = [node for node in tree.traverse() if not node.is_leaf]
+    probability = 0.0
+    for assignment in product(range(3), repeat=len(internal)):
+        state = dict(zip(internal, assignment, strict=True))
+        state.update(
+            {leaf: states.index(observed[leaf.name]) for leaf in tree.leaves()}
+        )
+        term = 1 / 3
+        for node, transition in transitions.items():
+            term *= transition[state[node.up], state[node]]
+        probability += term
+    assert math.log(probability) == pytest.approx(fit["log_likelihood"], abs=1e-10)
+    lower, upper = fit["rate_bounds"]
+    assert np.all(fit["rates"] >= lower * (1 - 1e-12))
+    assert np.all(fit["rates"] < upper * (1 - 1e-5))
+    at_lower_bound = np.any(fit["rates"] <= lower * (1 + 1e-5))
+    assert fit["fit_status"] == ("rate_lower_boundary" if at_lower_bound else "ok")
 
 
 def test_default_models_do_not_depend_on_registry_order():
