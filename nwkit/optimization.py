@@ -123,11 +123,14 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
             break
 
     candidates = [
-        SimpleNamespace(
-            x=float(grid[index]),
-            fun=float(grid_values[index]),
-            success=index in {0, grid_size - 1},
-            message="global grid point",
+        (
+            SimpleNamespace(
+                x=float(grid[index]),
+                fun=float(grid_values[index]),
+                success=index in {0, grid_size - 1},
+                message="global grid point",
+            ),
+            int(index),
         )
         for index in finite_indices
     ]
@@ -138,24 +141,30 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
             (float(grid[index - 1]), float(grid[index + 1])),
         )
         if math.isfinite(float(refined.fun)):
-            candidates.append(refined)
+            candidates.append((refined, index))
             successful_refinements += int(bool(refined.success))
-    best = min(candidates, key=lambda candidate: float(candidate.fun))
-    # A grid point may be marginally better than the numerical refinement of
-    # that same minimum. Only a nearby converged candidate can confirm it;
-    # convergence in a different basin says nothing about the selected point.
-    converged = bool(best.success) or any(
-        bool(candidate.success)
-        and math.isclose(float(candidate.x), float(best.x), rel_tol=0, abs_tol=1e-7)
-        and math.isclose(
-            float(candidate.fun), float(best.fun), rel_tol=1e-12, abs_tol=1e-12
-        )
-        for candidate in candidates
+    best, best_index = min(candidates, key=lambda entry: float(entry[0].fun))
+    # A flat profile can give the grid point and its converged refinement the
+    # same objective at distant coordinates. Confirm it only with a refinement
+    # of that grid interval, never with convergence from another basin.
+    confirming = next(
+        (
+            candidate
+            for candidate, index in candidates
+            if index == best_index
+            and bool(candidate.success)
+            and math.isclose(
+                float(candidate.fun), float(best.fun), rel_tol=1e-12, abs_tol=1e-12
+            )
+        ),
+        None,
     )
+    if confirming is not None:
+        best = confirming
     return SimpleNamespace(
         x=float(best.x),
         fun=float(best.fun),
-        success=converged,
+        success=bool(best.success),
         message=(
             "global grid search ({} points; {} successful local refinement(s))"
         ).format(grid_size, successful_refinements),

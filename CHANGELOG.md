@@ -2,6 +2,14 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.33] - 2026-09-23
+
+### Fixed
+
+- Recognize a converged refinement of the selected scalar-search interval when
+  a flat objective has equal values at separated coordinates, without borrowing
+  convergence from another interval.
+
 ## [0.43.32] - 2026-09-22
 
 ### Fixed

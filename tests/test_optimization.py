@@ -35,6 +35,15 @@ def test_scalar_search_does_not_borrow_convergence_from_another_basin(monkeypatc
     assert not result.success
 
 
+def test_scalar_search_accepts_a_flat_profile_confirmed_in_the_same_interval():
+    result = optimization.global_bounded_scalar_minimize(
+        lambda x: max(abs(x - 0.5) - 0.25, 0.0) ** 2, (0, 1)
+    )
+    assert result.success
+    assert result.fun == 0.0
+    assert 0.25 <= result.x <= 0.75
+
+
 @pytest.mark.parametrize("center", [0.0, 0.5, 1.0])
 def test_scalar_search_keeps_convergence_at_exact_grid_and_boundary_minima(center):
     result = optimization.global_bounded_scalar_minimize(
