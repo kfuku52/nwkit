@@ -2,6 +2,19 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.35] - 2026-09-28
+
+### Fixed
+
+- Reject CLI output paths that would overwrite input trees, tables, mappings,
+  or sequence files, while retaining supported in-place tree edits.
+- Include the missing input and output roles in provenance records and prevent
+  audit logs from replacing those paths.
+- Stage image metadata outputs together and restrict frozen SHIFT audit replay
+  to a trusted archived engine digest.
+- Include repository tools in the security gate, correct coverage terminology,
+  and repair local-only links in historical reviews.
+
 ## [0.43.34] - 2026-09-28
 
 ### Added
