@@ -2986,6 +2986,66 @@ def _gaussian_inference_metadata(
     }
 
 
+def _summarize_gaussian_coefficient(
+    coefficient,
+    standard_error,
+    index,
+    bootstrap_coefficients,
+    bootstrap_standard_errors,
+    confidence_level,
+    critical,
+    degrees_of_freedom,
+):
+    """Report one coefficient using the selected Gaussian reference."""
+    if (
+        bootstrap_coefficients is not None
+        and bootstrap_standard_errors is not None
+        and standard_error > 0.0
+    ):
+        pivot = (
+            bootstrap_coefficients[:, index] - coefficient
+        ) / bootstrap_standard_errors[:, index]
+        alpha = (1.0 - confidence_level) / 2.0
+        lower_pivot, upper_pivot = np.quantile(pivot, [alpha, 1.0 - alpha])
+        lower = float(coefficient - upper_pivot * standard_error)
+        upper = float(coefficient - lower_pivot * standard_error)
+    elif bootstrap_coefficients is None:
+        lower = coefficient - critical * standard_error
+        upper = coefficient + critical * standard_error
+    else:
+        alpha = (1.0 - confidence_level) / 2.0
+        lower, upper = np.quantile(
+            bootstrap_coefficients[:, index], [alpha, 1.0 - alpha]
+        )
+        lower = float(lower)
+        upper = float(upper)
+    if standard_error == 0.0:
+        statistic: float | str = ""
+        p_value: float | str = ""
+        inference_status = "zero-model-variance"
+    else:
+        statistic_value = coefficient / standard_error
+        statistic = statistic_value
+        if bootstrap_coefficients is not None and bootstrap_standard_errors is not None:
+            pivot = (
+                bootstrap_coefficients[:, index] - coefficient
+            ) / bootstrap_standard_errors[:, index]
+            p_value = float(
+                (1 + np.sum(np.abs(pivot) >= abs(statistic_value))) / (len(pivot) + 1)
+            )
+        elif bootstrap_coefficients is None:
+            p_value = float(
+                2.0 * student_t.sf(abs(statistic_value), degrees_of_freedom)
+            )
+        else:
+            centered = bootstrap_coefficients[:, index] - coefficient
+            p_value = float(
+                (1 + np.sum(np.abs(centered) >= abs(coefficient))) / (len(centered) + 1)
+            )
+        inference_status = "ok"
+    return statistic, p_value, lower, upper, inference_status
+
+
 def _fit_covariance_model(
     dataframe,
     predictors,
@@ -3254,57 +3314,18 @@ def _fit_covariance_model(
     for index, predictor in enumerate(predictors):
         coefficient = float(beta[index])
         standard_error = float(standard_errors[index])
-        if (
-            bootstrap_coefficients is not None
-            and bootstrap_standard_errors is not None
-            and standard_error > 0.0
-        ):
-            pivot = (
-                bootstrap_coefficients[:, index] - coefficient
-            ) / bootstrap_standard_errors[:, index]
-            alpha = (1.0 - confidence_level) / 2.0
-            lower_pivot, upper_pivot = np.quantile(pivot, [alpha, 1.0 - alpha])
-            lower = float(coefficient - upper_pivot * standard_error)
-            upper = float(coefficient - lower_pivot * standard_error)
-        elif bootstrap_coefficients is None:
-            lower = coefficient - critical * standard_error
-            upper = coefficient + critical * standard_error
-        else:
-            alpha = (1.0 - confidence_level) / 2.0
-            lower, upper = np.quantile(
-                bootstrap_coefficients[:, index], [alpha, 1.0 - alpha]
+        statistic, p_value, lower, upper, inference_status = (
+            _summarize_gaussian_coefficient(
+                coefficient,
+                standard_error,
+                index,
+                bootstrap_coefficients,
+                bootstrap_standard_errors,
+                confidence_level,
+                critical,
+                degrees_of_freedom,
             )
-            lower = float(lower)
-            upper = float(upper)
-        if standard_error == 0.0:
-            statistic: float | str = ""
-            p_value: float | str = ""
-            inference_status = "zero-model-variance"
-        else:
-            statistic_value = coefficient / standard_error
-            statistic = statistic_value
-            if (
-                bootstrap_coefficients is not None
-                and bootstrap_standard_errors is not None
-            ):
-                pivot = (
-                    bootstrap_coefficients[:, index] - coefficient
-                ) / bootstrap_standard_errors[:, index]
-                p_value = float(
-                    (1 + np.sum(np.abs(pivot) >= abs(statistic_value)))
-                    / (len(pivot) + 1)
-                )
-            elif bootstrap_coefficients is None:
-                p_value = float(
-                    2.0 * student_t.sf(abs(statistic_value), degrees_of_freedom)
-                )
-            else:
-                centered = bootstrap_coefficients[:, index] - coefficient
-                p_value = float(
-                    (1 + np.sum(np.abs(centered) >= abs(coefficient)))
-                    / (len(centered) + 1)
-                )
-            inference_status = "ok"
+        )
         rows.append(
             {
                 "model_id": model_id,

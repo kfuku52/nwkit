@@ -2,6 +2,30 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [0.43.34] - 2026-09-28
+
+### Added
+
+- Add opt-in studentized bootstrap inference for Gaussian phylogenetic
+  regression and an opt-in parametric-bootstrap test for Pagel's lambda.
+- Retain independent calibration records and audit tools for regression,
+  RADTE interval methods, and phylogenetic signal.
+
+### Fixed
+
+- Preserve event-average coefficient inference during regression bootstrap
+  refits and clarify errors-in-variables identifiability diagnostics.
+- Guard RADTE profile intervals against inferior reference fits and improve
+  their constrained-search diagnostics.
+- Skip lambda bootstrap draws when the observed likelihood ratio is zero and
+  reduce repeated work in known-SE likelihood evaluations.
+
+### Validation
+
+- Document remaining limits: RADTE profile undercoverage, predictor-error
+  regression undercoverage, and uninformative eight-tip lambda profile
+  intervals. These findings do not change the default inference methods.
+
 ## [0.43.33] - 2026-09-23
 
 ### Fixed
