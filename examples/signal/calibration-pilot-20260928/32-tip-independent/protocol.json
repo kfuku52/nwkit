@@ -1,0 +1,23 @@
+{
+  "completed": true,
+  "elapsed_seconds": 98.35442970902659,
+  "generator": "direct Gaussian covariance Cholesky; root mean 1.2, rate 0.7",
+  "inner": 199,
+  "level": 0.05,
+  "numpy": "2.5.3",
+  "outer": 1000,
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "profile_ci": false,
+  "python": "3.14.7 | packaged by conda-forge | (main, Sep  2 2026, 21:04:32) [Clang 20.1.8 ]",
+  "scenarios": [
+    "balanced-32-null"
+  ],
+  "scipy": "1.18.1",
+  "seed": 20261030,
+  "source_sha256": {
+    "nwkit/signal.py": "ac9b9585d371745a2a8357ddb343bbe1b116d5c9b91a0a6f14abaece7db78164",
+    "nwkit/signal_stats.py": "7f29ca4eff989c6a3b16da8c555374a0e07135424679d7c62c646f97bce0fba5",
+    "tools/validate_signal_calibration.py": "aa87a1451b73c3360db453cf452b200354914a9af149a1002a3195881eaa4923"
+  },
+  "workers": 8
+}

@@ -1,0 +1,452 @@
+[
+  {
+    "bootstrap_failure_reasons": {},
+    "bootstrap_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "bootstrap_rejection_all": {
+      "count": 9,
+      "mc95": [
+        0.023852543001492997,
+        0.0832967040018196
+      ],
+      "rate": 0.045,
+      "total": 200
+    },
+    "bootstrap_rejection_available": {
+      "count": 9,
+      "mc95": [
+        0.023852543001492997,
+        0.0832967040018196
+      ],
+      "rate": 0.045,
+      "total": 200
+    },
+    "chi2_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "chi2_rejection_all": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "chi2_rejection_available": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "generated": 200,
+    "profile_interval_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_all": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "scenario": "balanced-8-null",
+    "status_counts": {
+      "boundary": 184,
+      "ok": 16
+    }
+  },
+  {
+    "bootstrap_failure_reasons": {},
+    "bootstrap_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "bootstrap_rejection_all": {
+      "count": 10,
+      "mc95": [
+        0.02738264560076393,
+        0.08957814813877599
+      ],
+      "rate": 0.05,
+      "total": 200
+    },
+    "bootstrap_rejection_available": {
+      "count": 10,
+      "mc95": [
+        0.02738264560076393,
+        0.08957814813877599
+      ],
+      "rate": 0.05,
+      "total": 200
+    },
+    "chi2_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "chi2_rejection_all": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "chi2_rejection_available": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "generated": 200,
+    "profile_interval_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_all": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "scenario": "pectinate-8-null",
+    "status_counts": {
+      "boundary": 196,
+      "ok": 4
+    }
+  },
+  {
+    "bootstrap_failure_reasons": {},
+    "bootstrap_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "bootstrap_rejection_all": {
+      "count": 16,
+      "mc95": [
+        0.049840585889759974,
+        0.12598948826714396
+      ],
+      "rate": 0.08,
+      "total": 200
+    },
+    "bootstrap_rejection_available": {
+      "count": 16,
+      "mc95": [
+        0.049840585889759974,
+        0.12598948826714396
+      ],
+      "rate": 0.08,
+      "total": 200
+    },
+    "chi2_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "chi2_rejection_all": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "chi2_rejection_available": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "generated": 200,
+    "profile_interval_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_all": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "scenario": "balanced-8-missing-null",
+    "status_counts": {
+      "boundary": 190,
+      "ok": 10
+    }
+  },
+  {
+    "bootstrap_failure_reasons": {},
+    "bootstrap_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "bootstrap_rejection_all": {
+      "count": 20,
+      "mc95": [
+        0.06567044866909588,
+        0.1494058124327174
+      ],
+      "rate": 0.1,
+      "total": 200
+    },
+    "bootstrap_rejection_available": {
+      "count": 20,
+      "mc95": [
+        0.06567044866909588,
+        0.1494058124327174
+      ],
+      "rate": 0.1,
+      "total": 200
+    },
+    "chi2_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "chi2_rejection_all": {
+      "count": 2,
+      "mc95": [
+        0.0027466581335444384,
+        0.0357217617161768
+      ],
+      "rate": 0.01,
+      "total": 200
+    },
+    "chi2_rejection_available": {
+      "count": 2,
+      "mc95": [
+        0.0027466581335444384,
+        0.0357217617161768
+      ],
+      "rate": 0.01,
+      "total": 200
+    },
+    "generated": 200,
+    "profile_interval_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_all": {
+      "count": 198,
+      "mc95": [
+        0.9642782382838231,
+        0.9972533418664555
+      ],
+      "rate": 0.99,
+      "total": 200
+    },
+    "profile_interval_coverage_available": {
+      "count": 198,
+      "mc95": [
+        0.9642782382838231,
+        0.9972533418664555
+      ],
+      "rate": 0.99,
+      "total": 200
+    },
+    "scenario": "balanced-32-null",
+    "status_counts": {
+      "boundary": 145,
+      "ok": 55
+    }
+  },
+  {
+    "bootstrap_failure_reasons": {},
+    "bootstrap_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "bootstrap_rejection_all": {
+      "count": 19,
+      "mc95": [
+        0.06166310271738653,
+        0.1436016116481994
+      ],
+      "rate": 0.095,
+      "total": 200
+    },
+    "bootstrap_rejection_available": {
+      "count": 19,
+      "mc95": [
+        0.06166310271738653,
+        0.1436016116481994
+      ],
+      "rate": 0.095,
+      "total": 200
+    },
+    "chi2_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "chi2_rejection_all": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "chi2_rejection_available": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "generated": 200,
+    "profile_interval_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_all": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "profile_interval_coverage_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "scenario": "balanced-8-alternative",
+    "status_counts": {
+      "boundary": 179,
+      "ok": 21
+    }
+  }
+]

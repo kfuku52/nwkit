@@ -30,6 +30,7 @@ from nwkit.radte_exact_interval import exact_log_duration_intervals
 from nwkit.radte_inputs import read_inputs
 from nwkit.radte_model import laplace_intervals
 from nwkit.radte_studentized import chronology_domain, studentized_intervals
+from nwkit.radte_uncertainty import profile_intervals
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -180,6 +181,14 @@ def evaluate_family(directory, options, family):
                     starts=options.starts,
                     seed=args.seed,
                 )
+            elif method == "profile":
+                profile_intervals(
+                    result,
+                    problem,
+                    level=options.level,
+                    starts=options.starts,
+                    seed=args.seed,
+                )
             else:
                 evaluated = evaluators[method](result, problem, options.level)
                 if evaluated is False:
@@ -314,7 +323,13 @@ def options():
     ap.add_argument(
         "--methods",
         nargs="+",
-        choices=["laplace", "studentized", "exact-log-duration", "calibrated-profile"],
+        choices=[
+            "laplace",
+            "studentized",
+            "profile",
+            "exact-log-duration",
+            "calibrated-profile",
+        ],
         default=["laplace", "studentized"],
     )
     ap.add_argument("--replicates", type=int, default=199)

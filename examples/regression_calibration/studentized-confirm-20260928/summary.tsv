@@ -1,0 +1,9 @@
+case	method	generated	p_available	rejection_given_available	coverage_given_interval	fit_failures	seconds
+rsc-e2	oracle	5000	1.0	0.0488	0.9512	0	1.5059596138307825
+rsc-e2	parametric-bootstrap	5000	1.0	0.2898	0.6928	0	377.5028749965131
+rsc-e2	studentized-bootstrap	5000	1.0	0.0442	0.9384	0	391.82560878642835
+rsc-e2	wald	5000	1.0	0.2978	0.7022	0	99.03739433863666
+rsc-e5	oracle	5000	1.0	0.0542	0.9458	0	1.6257610976463184
+rsc-e5	parametric-bootstrap	5000	1.0	0.1216	0.8618	0	407.88509101816453
+rsc-e5	studentized-bootstrap	5000	1.0	0.0478	0.9356	0	421.38321052584797
+rsc-e5	wald	5000	1.0	0.1252	0.8748	0	99.96375421760604

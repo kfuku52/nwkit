@@ -70,6 +70,32 @@ def test_interval_exception_does_not_erase_other_methods(runner, monkeypatch, tm
     assert indexed["studentized", "absent"]["status"] == "target-unmatched"
 
 
+def test_runner_compares_profile_on_the_same_point_fit(runner, monkeypatch, tmp_path):
+    from radte_interval_simulation import simulate
+
+    directory = tmp_path / "input"
+    simulate(directory, 2, 50, 13, 0.3)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "validate",
+            "--output",
+            str(tmp_path / "out"),
+            "--branch-only",
+            "--methods",
+            "studentized",
+            "profile",
+        ],
+    )
+    rows = runner.evaluate_family(directory, runner.options(), 0)
+    assert len(rows) == 2
+    assert [row["method"] for row in rows] == ["studentized", "profile"]
+    assert all(row["status"] == "completed" for row in rows)
+    assert rows[0]["age"] == rows[1]["age"]
+    assert rows[1]["interval_status"].startswith("conditional-profile")
+
+
 def test_validation_role_requires_frozen_protocol(runner, monkeypatch, tmp_path):
     monkeypatch.setattr(
         sys,

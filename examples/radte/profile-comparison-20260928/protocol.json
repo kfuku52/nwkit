@@ -1,0 +1,25 @@
+{
+  "purpose": "Independent JC69 comparison of current RADTE sequence interval methods, descriptive only",
+  "frozen_before_independent_runs": true,
+  "generator": "tools/radte_interval_simulation.py independent dense-rate covariance and CTMC expm",
+  "gene_tips": 4,
+  "species": 2,
+  "sites": 2000,
+  "scenario": "root",
+  "true_duplication_age": 20,
+  "substitution_model": "JC69 generated and fitted",
+  "inference": "conditional joint-MAP with exact sequence likelihood",
+  "fit_rate_sd": "estimated",
+  "rate_correlation": 0,
+  "methods": ["laplace", "studentized", "profile"],
+  "level": 0.95,
+  "point_optimizer_starts": 3,
+  "families_per_case": 200,
+  "cases": [
+    {"name": "base", "rate_sd": 0.3, "seed": 20261010},
+    {"name": "high_sd", "rate_sd": 0.6, "seed": 20261011},
+    {"name": "low_sd", "rate_sd": 0.1, "seed": 20261012}
+  ],
+  "reporting": "R/N, C/R, C/N, unavailable reasons, and Wilson intervals; no method selection from these results",
+  "scope_limit": "Does not validate marginal inference, GY94, topology uncertainty or general 95% coverage"
+}

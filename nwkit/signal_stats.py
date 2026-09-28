@@ -198,6 +198,10 @@ def lambda_parametric_bootstrap(
     standard_deviation = np.sqrt(null_rate * diagonal + errors**2)
     if not np.all(np.isfinite(standard_deviation)):
         raise ValueError("Non-finite lambda null simulation variance.")
+    # Every refitted likelihood ratio is nonnegative. At observed LR=0 all
+    # simulations would count as exceedances, so the Monte Carlo P is 1.
+    if observed_lr == 0:
+        return 1.0
     exceed = 0
     tolerance = 1e-12 * max(1.0, abs(observed_lr))
     for _ in range(simulations):

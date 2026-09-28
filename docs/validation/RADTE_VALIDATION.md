@@ -13,6 +13,15 @@ coverage**. The native estimator remains experimental. In particular,
 conditional MAP fallback was common and curvature intervals were often
 unavailable in the wider-calibration cases.
 
+A later [600-family independent JC69 comparison](../../examples/radte/profile-comparison-20260928/README.md)
+evaluated ordinary profile intervals on the same exact conditional joint-MAP
+point fits as Laplace and studentized curvature. Ordinary profile undercovered
+at generating log-rate SD 0.3 and 0.6 (167/200 and 162/200); studentized
+covered 196/200 and 193/200 with much wider intervals. At SD 0.1,
+studentized covered 200/200, indicating conservatism. This comparison does
+not resolve the marginal variance-boundary failures or external GY94
+undercoverage; no general sequence interval is promoted.
+
 Raw measurements and settings are in
 [`examples/radte/validation-results.json`](../../examples/radte/validation-results.json).
 The scripts retain individual command lines, inputs, process logs, manifests,

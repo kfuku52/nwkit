@@ -104,11 +104,17 @@ root mean and diffusion rate under both the null and free-lambda models, and
 reestimates lambda within `[0,1]`. The upper-tail P-value is
 `(1 + number(LR_sim >= LR_observed))/(B+1)`, including numerical ties; its
 minimum is `1/(B+1)`. A simulated zero-rate or flat lambda fit has LR zero.
-The fitted null is held fixed while simulating, so this is a plug-in parametric
-bootstrap, not an exact finite-sample test. A zero-rate or otherwise
-unidentifiable **observed** lambda fit still has no P-value. A numerical failure
-in any bootstrap fit fails that trait's lambda result instead of silently
-discarding the replicate.
+When the observed LR is exactly zero, the bootstrap P-value is exactly one;
+no simulation is needed because every refitted LR is nonnegative.
+With all SEs zero, the Gaussian likelihood ratio is invariant to a location
+and scale change of the trait, making its null simulation independent of the
+fitted root mean and diffusion rate. The plus-one Monte Carlo test then has
+finite-simulation level control under the supplied Gaussian tree model. With
+nonzero known SEs, the fitted null is held fixed while simulating, so this is
+a plug-in parametric bootstrap requiring separate calibration. A zero-rate or
+otherwise unidentifiable **observed** lambda fit still has no P-value. A
+numerical failure in any performed bootstrap fit fails that trait's lambda
+result instead of silently discarding the replicate.
 
 The confidence limits are the connected profile-likelihood interval containing
 the selected maximum, with cutoff `logL_max - chi2_quantile(ci_level,1)/2`.
@@ -182,3 +188,5 @@ tighter optimization tolerances than the default R calculation. Phytools can
 search lambda above 1 up to a tree-specific maximum, so unconstrained phytools
 lambda estimates need not equal NWKIT's. Permutation p-values also need not
 match R because the RNG and finite-simulation correction differ.
+The [independent-family calibration protocol](../validation/SIGNAL_CALIBRATION.md)
+records scenarios and acceptance criteria for evaluating lambda inference.

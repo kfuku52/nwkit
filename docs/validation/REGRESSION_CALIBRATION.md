@@ -155,7 +155,16 @@ and posterior Hessian, then compares increasing sample sizes and independent
 scrambles. This measures integration error **at fitted parameters**; it does
 not establish an accurate reference optimum, SE or frequentist coverage.
 
-See the [recorded pilot evidence](../../examples/regression_calibration/README.md).
+See the [recorded pilot evidence](../../examples/regression_calibration/README.md)
+and the [independent 10,000-dataset studentized-bootstrap confirmation](../../examples/regression_calibration/studentized-confirm-20260928/README.md).
+The latter substantially improves two raw-tip RSC small-event cases, but its
+prespecified rejection and coverage precision criteria are not both met in
+either case. It does not justify changing the default or generalizing to
+heterogeneous measurement error.
+The [separate 800-dataset error/missingness pilot](../../examples/regression_calibration/heterogeneity-pilot-20260928/README.md)
+returned 174/196 studentized intervals covering truth with predictor
+measurement error, and four fits unavailable. That exploratory result
+reinforces the need for condition-specific confirmation.
 The validation approach follows [Morris et al.](https://doi.org/10.1002/sim.8086);
 the need to distinguish Laplace approximation error from statistical calibration
 is consistent with [Ogden](https://arxiv.org/abs/1808.06341).

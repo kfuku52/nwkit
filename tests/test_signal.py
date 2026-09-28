@@ -90,6 +90,19 @@ def test_lambda_bootstrap_matches_independent_null_draws():
     assert actual == (1 + exceed) / 13
 
 
+def test_zero_lambda_ratio_has_exact_bootstrap_tail_without_draws(monkeypatch):
+    class NoDraws:
+        def standard_normal(self, size):
+            raise AssertionError("zero likelihood ratio needs no bootstrap draw")
+
+    c = covariance()
+    monkeypatch.setattr(
+        "nwkit.signal_stats.lambda_fit",
+        lambda *args, **kwargs: pytest.fail("zero ratio must not refit simulations"),
+    )
+    assert lambda_parametric_bootstrap(c, VALUES, ERRORS, 0.0, 999, NoDraws()) == 1.0
+
+
 def test_lambda_bootstrap_cli_metadata_and_order(tmp_path, capsys):
     frame = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES, "se": ERRORS})
     options = [

@@ -1,0 +1,65 @@
+[
+  {
+    "bootstrap_failure_reasons": {},
+    "bootstrap_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "bootstrap_rejection_all": {
+      "count": 9,
+      "mc95": [
+        0.023852543001492997,
+        0.0832967040018196
+      ],
+      "rate": 0.045,
+      "total": 200
+    },
+    "bootstrap_rejection_available": {
+      "count": 9,
+      "mc95": [
+        0.023852543001492997,
+        0.0832967040018196
+      ],
+      "rate": 0.045,
+      "total": 200
+    },
+    "chi2_p_available": {
+      "count": 200,
+      "mc95": [
+        0.9811546736227335,
+        1.0
+      ],
+      "rate": 1.0,
+      "total": 200
+    },
+    "chi2_rejection_all": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "chi2_rejection_available": {
+      "count": 0,
+      "mc95": [
+        1.734723475976807e-18,
+        0.018845326377266575
+      ],
+      "rate": 0.0,
+      "total": 200
+    },
+    "generated": 200,
+    "scenario": "balanced-8-known-se-null",
+    "status_counts": {
+      "boundary": 191,
+      "ok": 9
+    }
+  }
+]
