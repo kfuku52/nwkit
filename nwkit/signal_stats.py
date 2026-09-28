@@ -108,6 +108,8 @@ def _error_rate_profile(covariance, values, errors):
         raise ValueError(
             "Sampling-error dynamic range exceeds floating-point resolution; rescale units."
         )
+    whitened_y = np.empty(len(values), dtype=float)
+    whitened_one = np.empty(len(values), dtype=float)
 
     def evaluate(rate):
         if rate == 0 and k:
@@ -115,10 +117,13 @@ def _error_rate_profile(covariance, values, errors):
         log_rate = np.log(rate) if rate > 0 else -np.inf
         log_diagonal = np.logaddexp(0, log_rate + log_eigen)
         weights = np.exp(-log_diagonal / 2)
-        y = np.r_[exact_y / np.sqrt(rate) if k else [], noise_y * weights]
-        ones = np.r_[exact_one / np.sqrt(rate) if k else [], noise_one * weights]
-        mean = float(ones @ y / (ones @ ones))
-        q = float(np.sum((y - mean * ones) ** 2))
+        if k:
+            whitened_y[:k] = exact_y / np.sqrt(rate)
+            whitened_one[:k] = exact_one / np.sqrt(rate)
+        whitened_y[k:] = noise_y * weights
+        whitened_one[k:] = noise_one * weights
+        mean = float(whitened_one @ whitened_y / (whitened_one @ whitened_one))
+        q = float(np.sum((whitened_y - mean * whitened_one) ** 2))
         determinant = logdet + (k * log_rate if k else 0) + log_diagonal.sum()
         likelihood = -0.5 * (len(values) * np.log(2 * np.pi) + determinant + q)
         return float(likelihood), float(rate), float(mean + values[0])

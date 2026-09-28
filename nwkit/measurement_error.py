@@ -1574,7 +1574,8 @@ def fit_conditional_eiv_gaussian(
     minimum_eigenvalue = float(np.linalg.eigvalsh(beta_covariance).min())
     if minimum_eigenvalue < -covariance_tolerance:
         raise ValueError(
-            "Errors-in-variables coefficient information is not positive definite."
+            "Errors-in-variables coefficient information is not positive definite; "
+            "check whether the fitted latent-predictor variance is near zero."
         )
     if minimum_eigenvalue < 0.0:
         eigenvalues, eigenvectors = np.linalg.eigh(beta_covariance)

@@ -884,7 +884,9 @@ attempts. This method addresses scale uncertainty missed by the centered
 coefficient bootstrap in simple small-event Gaussian models. It remains a
 plug-in approximation conditional on the design and fitted covariance, and
 does not establish calibration under mean heterogeneity, misspecified covariance,
-or uncertain reconciliation. It is not the auxiliary common-coefficient
+uncertain reconciliation, or estimated latent-predictor evolutionary variance.
+When that predictor variance approaches zero, its slope can become unidentified
+and coefficient inference is withheld. It is not the auxiliary common-coefficient
 likelihood null bootstrap.
 
 ### Delayed trait acquisition and paralog-specific responses

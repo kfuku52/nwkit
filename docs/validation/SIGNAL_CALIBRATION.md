@@ -17,7 +17,9 @@ or the existing profile interval.
 The [separate 5,000-dataset interior profile study](../../examples/signal/profile-ci-confirm-20260928/README.md)
 returned 5,000/5,000 intervals covering true lambda 0.6, well outside the
 prespecified 93–97% criterion. The profile interval is conservative under
-that weak-signal eight-tip condition.
+that weak-signal eight-tip condition. Every one of those intervals was the
+entire feasible range `[0, 1]`; the coverage result represents a lack of
+resolution, not evidence of a precise interval procedure.
 
 The generator constructs balanced and pectinate positive-definite tree
 covariances from clade contributions, without calling NWKIT's covariance

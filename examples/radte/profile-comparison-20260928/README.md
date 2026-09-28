@@ -27,6 +27,16 @@ cell. The exact joint-MAP fit did not reproduce the marginal model's known
 estimated-zero variance failures; those remain unresolved. No production
 method or default was changed based on these comparisons.
 
+A follow-up stratification of these same families points to rate-SD estimation
+as a contributor. In the base cell, profile covered 97/129 families whose
+fitted SD was below the generating 0.3, versus 70/71 at or above it. In the
+high-SD cell the corresponding counts were 96/133 and 66/67; in the low-SD
+cell they were 90/103 and 97/97. Profile misses occurred on both sides of the
+true age (base: 15 below and 18 above; high-SD: 17 below and 21 above).
+This stratification uses the generating SD, which is unavailable in real data,
+and was chosen after viewing results. It diagnoses these cases; it does not
+calibrate a new interval or justify an SD-based selection rule.
+
 Each case directory retains per-family rows, source and input hashes, summary,
 and compressed original inputs. An independent check of all 1,800 rows verified
 the 200 complete families per cell, identical point fits across methods, all

@@ -28,6 +28,21 @@ intervals are broad; inspect [summary.json](summary.json) for all methods,
 availability, failures, widths, and Monte Carlo intervals. No default or
 acceptance criterion was changed from these results.
 
+A replay of the four failed inputs (replicates 60, 131, 144, and 180) found
+latent-predictor evolutionary rates near the numerical lower bound
+(approximately `5e-13`). Their posterior predictor means were approximately
+zero, and the conditional coefficient objective was essentially flat for
+moderate slopes; unconstrained optimization could drift to slopes above
+`1e10`. The non-positive-definite information check correctly withheld those
+coefficients. This is a predictor-identifiability failure, not evidence that
+relaxing the information check would recover valid intervals. Among the 196
+returned studentized intervals, an exploratory split by fitted predictor rate
+found coverage of 7/11 below 0.1, 26/33 from 0.1 to 0.25, and 141/152 at or
+above 0.25. The split is post hoc and the small cells are imprecise. In this
+precomputed-contrast case, coefficient bootstrap refits hold the observed
+predictor posterior fixed, so these results do not validate unconditional
+inference when predictor evolutionary variance must itself be estimated.
+
 Regenerate into a fresh directory with the archived source and the cases,
 methods, seed, replicate counts, and environment in [protocol.json](protocol.json).
 The retained `records.jsonl.gz` includes the generated data and per-dataset
