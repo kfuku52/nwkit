@@ -18,14 +18,21 @@ from nwkit.util import (
     is_rooted,
     normalize_phylogenetic_tree_text,
     normalized_missing_path_key,
+    paths_identify_same_file,
     read_tree,
     split_newick_stream,
     validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
 )
 
 OUTPUT_ARGUMENTS = frozenset(
     (
         "branch_models_out",
+        "bootstrap_intervals_out",
+        "bootstrap_out",
+        "candidates_out",
+        "covariance_out",
+        "cross_validation_out",
         "process_out",
         "outfile",
         "loadings_out",
@@ -44,9 +51,14 @@ OUTPUT_ARGUMENTS = frozenset(
         "tree_out",
         "model_out",
         "fit_out",
+        "latent_history_out",
+        "layout_report",
+        "liability_diagnostics_out",
+        "liability_out",
         "effects_out",
         "regime_parameters_out",
         "model_comparison_out",
+        "model_average_out",
         "gene_contrasts_out",
         "random_effects_out",
         "reconciliation_out",
@@ -59,15 +71,20 @@ OUTPUT_ARGUMENTS = frozenset(
         "stochastic_map_out",
         "tip_summary_out",
         "output_table",
+        "posterior_predictive_out",
+        "posterior_samples_out",
         "seqout",
         "out_dir",
         "manifest_out",
         "attribution_out",
         "group_table_prefix",
         "figure_out",
+        "sensitivity_out",
         "audit",
         "truth_out",
         "latent_out",
+        "trait_origins_out",
+        "tree_ensemble_out",
     )
 )
 
@@ -95,17 +112,22 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "species_tree_ensemble",
         "alignment",
         "likelihood_summary",
+        "latent_regime_config",
         "gene_tree_ensemble",
         "length_source",
         "manifest",
         "mcmctree_posterior",
         "name_source",
         "name_tsv",
+        "measurement_covariance",
+        "misclassification_matrix",
+        "posterior",
         "property_source",
         "predictor_contrasts",
         "predictor_sampling_covariance",
         "rate_design",
         "rate_matrix",
+        "replicate_observations",
         "reconciliation",
         "reconciliation_tree",
         "reference",
@@ -124,9 +146,11 @@ INPUT_PATH_ARGUMENTS = frozenset(
         "table",
         "taxid_tsv",
         "tip_image_manifest",
+        "tip_likelihoods",
         "trait",
         "transition_graph",
         "tree",
+        "tree_ensemble",
         "weight_tsv",
         "densitree_trees",
     )
@@ -885,6 +909,67 @@ def _audit_collision_candidates(args, audit_path):
     candidates.extend(_prefix_output_collision_candidates(args))
     candidates.extend(_image_output_collision_candidates(args))
     return candidates
+
+
+_IN_PLACE_TREE_COMMANDS = frozenset(
+    (
+        "annotate",
+        "collapse",
+        "compose",
+        "constrain",
+        "convert",
+        "drop",
+        "intersection",
+        "label",
+        "mark",
+        "nhx2nwk",
+        "prune",
+        "rename",
+        "rescale",
+        "root",
+        "sample",
+        "sanitize",
+        "shuffle",
+        "skim",
+        "subtree",
+        "transfer",
+    )
+)
+
+
+def validate_command_path_roles(args):
+    """Protect declared input files from outputs before a CLI handler runs.
+
+    A tree editor may intentionally replace its primary tree. Its other inputs
+    (and every companion output) still need independent paths.
+    """
+    if args.command == "regress":
+        # Regression already validates its raw, precomputed and bundle paths.
+        # Keep its established input-overwrite diagnostics at the CLI boundary.
+        return
+    inputs = _input_path_candidates(args)
+    outputs = _audit_collision_candidates(args, None)
+    allows_in_place_tree = args.command in _IN_PLACE_TREE_COMMANDS and not (
+        args.command == "root" and getattr(args, "method", None) == "reconciliation"
+    )
+    for input_name, input_path in inputs:
+        if input_path in (None, "", "-"):
+            continue
+        protected_outputs = outputs
+        if allows_in_place_tree and input_name == "infile":
+            protected_outputs = [
+                (name, path)
+                for name, path in outputs
+                if not (
+                    name == "--outfile"
+                    and path not in (None, "", "-")
+                    and paths_identify_same_file(input_path, path)
+                )
+            ]
+        validate_outputs_do_not_replace_inputs(
+            [("--" + input_name.replace("_", "-"), input_path)],
+            protected_outputs,
+        )
 
 
 def _validate_audit_input_collision(audit_path, input_candidates):

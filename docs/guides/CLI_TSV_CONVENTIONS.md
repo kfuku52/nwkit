@@ -82,8 +82,11 @@ produce their diagnostic report without writing the result tree.
 Standalone Newick file outputs are also staged before replacement. `annotate`
 rejects tree/report outputs that replace its input trait table and report outputs
 that replace its input tree; intentional in-place primary tree updates remain
-supported. Audit logs must be distinct from all declared inputs and outputs,
-including `shift-simulate` generating JSON, truth JSON, and latent tables.
+supported. CLI outputs cannot replace a declared input of another role, including
+secondary trees, trait tables, sequence files and mapping tables. `image` stages
+its manifest, unmatched table and attribution file as one output set. Audit logs
+must be distinct from all declared inputs and outputs, including
+`shift-simulate` generating JSON, truth JSON, and latent tables.
 
 `label` skips names already retained anywhere in the tree, including nodes
 outside `--target`. `--force yes` releases the old names of nodes being renamed,

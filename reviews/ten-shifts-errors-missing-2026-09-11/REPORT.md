@@ -28,9 +28,9 @@
 
 AICはBICより多くの枝を検出し、誤検出も増えました。どの完了データセットでも、真の10枝を過不足なく完全回復することはありませんでした。これはAIC/BICによる探索で、bootstrapで較正した有意判定や5%の誤検出率制御の評価ではありません。
 
-![データセットごとのF1](/Users/kf/repos/nwkit/reviews/ten-shifts-errors-missing-2026-09-11/accuracy.png)
+![データセットごとのF1](accuracy.png)
 
-線は同一データで両モデルが完了した組、白抜きは片方のみ完了した例です。[SVG版](/Users/kf/repos/nwkit/reviews/ten-shifts-errors-missing-2026-09-11/accuracy.svg)
+線は同一データで両モデルが完了した組、白抜きは片方のみ完了した例です。[SVG版](accuracy.svg)
 
 ## 完了率と探索上の制約
 

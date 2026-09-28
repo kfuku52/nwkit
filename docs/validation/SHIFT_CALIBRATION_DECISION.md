@@ -90,12 +90,15 @@ python tools/verify_shift_null_contract.py examples/shift/null-contract-validati
 
 Use a new output directory. The prototype is research tooling and has no CLI
 selection mode. The archived null-contract audits explicitly load their
-hash-verified historical engine; they do not claim to validate the current CLI.
+historical engine only when its hash matches a trusted, checked-in snapshot;
+the evidence bundle's own hash declaration alone is insufficient. They do not
+claim to validate the current CLI.
 The final confidence experiment uses the current main-checkout fitting engine.
 Existing mixed-zero-error guards and separately developed ASR work are preserved.
 
 The integration suite passed **3752 tests**, with 27 tests skipped,
-and **85% branch coverage** (required minimum 80%). Ruff, mypy, dependency
+and **85% combined line and branch coverage** (required minimum 80% for the
+combined metric). Ruff, mypy, dependency
 consistency, Bandit, dependency vulnerability scanning and complexity limits
 passed. A subsequent change preventing archive-loader bytecode writes passed
 all 49 focused tests, including original/corrected R backends and an input-file

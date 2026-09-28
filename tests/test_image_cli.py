@@ -21,6 +21,43 @@ from tests.image_test_support import (
 
 
 class TestImageMain:
+    def test_metadata_write_failure_restores_all_previous_outputs(
+        self, monkeypatch, tmp_path
+    ):
+        tree = tmp_path / "tree.nwk"
+        tree.write_text("(Homo_sapiens_A,Mus_musculus_B);")
+        out_dir = tmp_path / "images"
+        out_dir.mkdir()
+        previous = {}
+        for name in ("manifest.tsv", "unmatched.tsv", "ATTRIBUTION.md"):
+            path = out_dir / name
+            path.write_text("previous " + name)
+            previous[name] = path.read_bytes()
+
+        monkeypatch.setattr(
+            image_module,
+            "build_providers",
+            lambda args, sources, session=None: (
+                DummySession(),
+                None,
+                {"wikimedia": DummyProvider({})},
+            ),
+        )
+
+        def fail_attribution(path, assets):
+            raise OSError("attribution write failed")
+
+        monkeypatch.setattr(
+            image_module, "write_attribution_markdown", fail_attribution
+        )
+        args = make_image_args(
+            infile=str(tree), out_dir=str(out_dir), source="wikimedia"
+        )
+        with pytest.raises(OSError, match="attribution write failed"):
+            image_main(args)
+        assert {name: (out_dir / name).read_bytes() for name in previous} == previous
+        assert not list(out_dir.glob("*.stage.*"))
+
     def test_resolve_image_cache_dir_uses_download_dir(self, tmp_path):
         args = make_image_args(download_dir=str(tmp_path / "cache"))
         assert resolve_image_cache_dir(args) == str(

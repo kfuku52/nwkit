@@ -46,9 +46,9 @@
 
 **Gaussian回帰128葉:** 新旧とも138回のパラメータ評価で、探索回数は同じだった。`gaussian.solve_factor` がNumPyの一般行列ソルバからSciPyの `cho_solve` に変わっている。実測では遅延が最初の1回に集中した。実際の128×128行列を独立プロセスで再実行すると、初回約1.84 CPU秒、以後約0.0001〜0.0003 CPU秒で、結果は完全一致した。使用中のMKL経由の初回呼び出しコストによる増加と判断する。512葉では高速な行列計算の効果が上回り、CLI全体でも短縮した。これはこのx86_64/BLAS環境の観測であり、ARMネイティブPythonや別のBLASで同じ初期化時間とは限らない。
 
-根拠: [profile-before.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/profile-before.json)、[profile-after.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/profile-after.json)、[solve-diagnostics.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/solve-diagnostics.json)、[first-solve.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/first-solve.json)。[該当コード](/Users/kf/repos/nwkit/nwkit/gaussian.py:690)。プロファイルの時間は原因調査用で、上表の無計装の測定とは区別した。
+根拠: [profile-before.json](performance/profile-before.json)、[profile-after.json](performance/profile-after.json)、[solve-diagnostics.json](performance/solve-diagnostics.json)、[first-solve.json](performance/first-solve.json)。[該当コード](../../nwkit/gaussian.py#L690)。プロファイルの時間は原因調査用で、上表の無計装の測定とは区別した。
 
-**GLMM:** 9月10日の `9e2dd93` が、無罰則モデルでも複数の初期値を調べるようにした。最初の収束解が不十分な場合への正しさの修正であり、通常二項で約14%、稀な二値応答で約21%、負の二項境界例で約37%の時間増加を観測した。[スカラーGLMMの探索](/Users/kf/repos/nwkit/nwkit/phylogenetic_glmm.py:2835)、[カテゴリGLMMの探索](/Users/kf/repos/nwkit/nwkit/phylogenetic_glmm.py:3688)。今回、この探索を減らす変更は加えていない。
+**GLMM:** 9月10日の `9e2dd93` が、無罰則モデルでも複数の初期値を調べるようにした。最初の収束解が不十分な場合への正しさの修正であり、通常二項で約14%、稀な二値応答で約21%、負の二項境界例で約37%の時間増加を観測した。[スカラーGLMMの探索](../../nwkit/phylogenetic_glmm.py#L2835)、[カテゴリGLMMの探索](../../nwkit/phylogenetic_glmm.py#L3688)。今回、この探索を減らす変更は加えていない。
 
 **その他:** 最初の樹木表・BMの測定には大きな実時間差があったが、CPU時間差は小さく、追加5回ではほぼ同程度〜約9%の範囲だった。初回の1.5〜1.8倍を再現性のある性能低下とは扱わない。CLI起動自体は約13 ms増加した。ensembleの追加測定にも待ち時間差があり、実時間の短縮を今回の修正の高速化効果とは解釈しない。
 
@@ -60,11 +60,11 @@
 - 稀な二値応答例は、係数・尤度はほぼ同じだが、p値の約7.1e-7、区間上端の約1.25e-5の差が設定した許容差を超えた。後から許容差を緩めず、不一致として保持した。
 - 負の二項境界例では、対数尤度が -53.90478774 → -53.90476085、診断が `nuisance-information-singular` → `ok` になり、以前は欠けていた標準誤差・p値が得られた。係数・分散等も変わるため、これは同じ入力の実行コスト比較であり、等価な推定結果を得る速度の比較とは扱わない。
 
-詳細: [output-checks.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/output-checks.json)、[glmm-output-checks.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/glmm-output-checks.json)、[repeat-output-checks.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/repeat-output-checks.json)、[additional-output-checks.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/additional-output-checks.json)。入力・修正ソースのhashは [metadata.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/metadata.json)、各出力のhashは測定JSONに記録した。
+詳細: [output-checks.json](performance/output-checks.json)、[glmm-output-checks.json](performance/glmm-output-checks.json)、[repeat-output-checks.json](performance/repeat-output-checks.json)、[additional-output-checks.json](performance/additional-output-checks.json)。入力・修正ソースのhashは [metadata.json](performance/metadata.json)、各出力のhashは測定JSONに記録した。
 
 ## 再現と限界
 
-[prepare.py](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/prepare.py) で一時コピーと合成入力を作り、表示されたルートの `manifest.json` を [benchmark.py](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/benchmark.py) の `--manifest` に指定する。`--output` は新しいJSONパスを使う。[prepare_glmm.py](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/prepare_glmm.py) と [prepare_additional.py](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/prepare_additional.py) はそのルートを引数に取り、追加のmanifestを作る。全コマンド・入力パス・環境・各回の時間とRAMは [results.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/results.json)、[glmm-results.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/glmm-results.json)、[repeat-results.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/repeat-results.json)、[additional-results.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/performance/additional-results.json) にある。標準出力復元の最終調整後にはensembleを再測定した。他の測定処理は未変更で、初期・最終のソースhashをmetadataに残した。最初のGLMMハーネスの `--response-family` 指定ミスによる8回の失敗は、生ログに残して測定値から除き、正しい `NAME=VALUE` 指定で再測定した。
+[prepare.py](performance/prepare.py) で一時コピーと合成入力を作り、表示されたルートの `manifest.json` を [benchmark.py](performance/benchmark.py) の `--manifest` に指定する。`--output` は新しいJSONパスを使う。[prepare_glmm.py](performance/prepare_glmm.py) と [prepare_additional.py](performance/prepare_additional.py) はそのルートを引数に取り、追加のmanifestを作る。全コマンド・入力パス・環境・各回の時間とRAMは [results.json](performance/results.json)、[glmm-results.json](performance/glmm-results.json)、[repeat-results.json](performance/repeat-results.json)、[additional-results.json](performance/additional-results.json) にある。標準出力復元の最終調整後にはensembleを再測定した。他の測定処理は未変更で、初期・最終のソースhashをmetadataに残した。最初のGLMMハーネスの `--response-family` 指定ミスによる8回の失敗は、生ログに残して測定値から除き、正しい `NAME=VALUE` 指定で再測定した。
 
 数値例:
 

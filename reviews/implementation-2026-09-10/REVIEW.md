@@ -1,6 +1,6 @@
 # NWKIT 実装レビュー — 2026-09-10
 
-> 追記: 下記3件は修正済み。[修正・検証記録](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/FIXES.md)と[性能調査](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/PERFORMANCE.md)を参照。以下は修正前のレビュー記録。
+> 追記: 下記3件は修正済み。[修正・検証記録](FIXES.md)と[性能調査](PERFORMANCE.md)を参照。以下は修正前のレビュー記録。
 
 現行コードで、入力ファイルの上書き、失敗した実行の部分的な出力更新、PCAの有効な入力に対する停止を再現した。3件とも修正対象と判断する。ソースコードの修正は行っていない。
 
@@ -16,7 +16,7 @@
 
 ### 1. [P1] `--regime-parameters` の入力ファイルが出力によって消える
 
-対象: [nwkit/asr.py:2971](/Users/kf/repos/nwkit/nwkit/asr.py:2971)、`_validate_asr_output_paths`。
+対象: [nwkit/asr.py:2971](../../nwkit/asr.py#L2971)、`_validate_asr_output_paths`。
 
 入力と出力の衝突検査の対象に `regime_parameters` が入っていない。そのため、BMSなどで `--regime-parameters parameters.tsv -o parameters.tsv` を指定すると、パラメータ表を読み込んだ後、警告・例外なしで同じファイルをASR結果表に置き換える。元の推定条件が失われる。他の入力ファイルはこの関数で保護しており、`asrcompare` は同じ `--regime-parameters` を保護している。
 
@@ -26,7 +26,7 @@
 
 ### 2. [P2] 樹木アンサンブルの失敗後に新旧の結果が混在する
 
-対象: [nwkit/asr.py:3131](/Users/kf/repos/nwkit/nwkit/asr.py:3131)、[nwkit/asr_tree_ensemble.py:92](/Users/kf/repos/nwkit/nwkit/asr_tree_ensemble.py:92)。
+対象: [nwkit/asr.py:3131](../../nwkit/asr.py#L3131)、[nwkit/asr_tree_ensemble.py:92](../../nwkit/asr_tree_ensemble.py#L92)。
 
 通常のASR結果を直接書き出してから、アンサンブルの実際の樹木・tip集合・重み・各fitを検証する。BMなどの通常経路には出力一式のトランザクションがない。後半が失敗すると、主出力は今回の結果に更新済みなのに、既存の `--tree-ensemble-out` は前回のまま残る。
 
@@ -36,7 +36,7 @@
 
 ### 3. [P2] PCAが200葉の偏った樹形で `RecursionError` になる
 
-対象: [nwkit/pca.py:67](/Users/kf/repos/nwkit/nwkit/pca.py:67)、`_retained_tree`。
+対象: [nwkit/pca.py:67](../../nwkit/pca.py#L67)、`_retained_tree`。
 
 保持する樹木を `copy(method="deepcopy")` で再帰的にコピーしている。この処理は欠測を落とす場合に限らず毎回行うため、欠測のない200葉のcomb treeでもPythonの標準再帰上限に到達して停止する。
 
@@ -84,13 +84,13 @@ python reviews/implementation-2026-09-10/reproduce.py
 
 79件のスキップがあり、全外部連携を実行したわけではない。特にRの `kfl1ou` は未インストール、`NWKIT_TEST_RSCRIPT` は未設定、IQ-TREE 3は利用できず、これらを必要とする実機統合は未検証。6件のwarningはrequestsの依存バージョン警告、テスト内pandas concatの将来変更、数値最適化時の差分・境界警告だった。監査時にはキャッシュ読み取り警告もあったが、監査は完了した。
 
-完全なログ: [full-check.log](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/full-check.log)、[dist-check.log](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/dist-check.log)。
+完全なログ: [full-check.log](full-check.log)、[dist-check.log](dist-check.log)。
 
 新しい大規模な型I誤差・被覆率実験、代表的条件での新旧性能比較、Windows/Linux、Python 3.11〜3.14での実行、図の全ページの目視検査は行っていない。テストの成功を科学的な校正や全入力での正しさの証明とは扱わない。
 
 ## 再現資料
 
-- [reproduce.py](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/reproduce.py): 全て一時ディレクトリ内のダミーファイルで再現する。リポジトリの入力データを上書きしない。現在の3不具合が再現することをassertする診断スクリプトであり、修正後に通る回帰テストではない。
-- [results.json](/Users/kf/repos/nwkit/reviews/implementation-2026-09-10/results.json): 実行結果、HEAD、対象ソースのSHA-256。
+- [reproduce.py](reproduce.py): 全て一時ディレクトリ内のダミーファイルで再現する。リポジトリの入力データを上書きしない。現在の3不具合が再現することをassertする診断スクリプトであり、修正後に通る回帰テストではない。
+- [results.json](results.json): 実行結果、HEAD、対象ソースのSHA-256。
 
 優先順は、入力データの保護、出力一式の整合性、PCAの樹形制約の解消。

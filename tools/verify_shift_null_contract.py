@@ -20,6 +20,13 @@ from nwkit.shift_calibration import ALPHA_HEIGHT_GRID, CalibratedSearch  # noqa:
 from nwkit.shift_candidates import enumerate_candidates, tip_groups  # noqa: E402
 from nwkit.util import read_tree  # noqa: E402
 
+TRUSTED_ARCHIVED_ENGINE_SHA256 = frozenset(
+    {
+        # The checked-in null-contract timing, validation, and B=999 bundles.
+        "5a26bf6eea4bb1db490479e4e9fd52282575ef533e687e568b6fd35b10dbc3ca",
+    }
+)
+
 
 def check_winner(tree, y, variances, fit, models):
     winner = fit["winner"]
@@ -144,10 +151,16 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
         and "nwkit/shift_calibration.py" not in specification["source_sha256"]
     ):
         raise ValueError("Archived engine lacks a declared source hash")
+    frozen_source = None
     for name, sha in specification["source_sha256"].items():
         archived = directory / "source-snapshot" / Path(name).name
-        if hashlib.sha256(archived.read_bytes()).hexdigest() != sha:
+        source = archived.read_bytes()
+        if hashlib.sha256(source).hexdigest() != sha:
             raise ValueError(f"Snapshot hash mismatch: {name}")
+        if frozen_engine and name == "nwkit/shift_calibration.py":
+            if sha not in TRUSTED_ARCHIVED_ENGINE_SHA256:
+                raise ValueError("Archived engine is not a trusted checked-in snapshot")
+            frozen_source = source
         if hashlib.sha256(Path(name).read_bytes()).hexdigest() != sha:
             if not frozen_engine or name != "nwkit/shift_calibration.py":
                 raise ValueError(f"Active generator/fitting hash mismatch: {name}")
@@ -156,9 +169,11 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
         frozen = directory / "source-snapshot" / "shift_calibration.py"
         module = ModuleType("nwkit._archived_shift_calibration")
         module.__file__ = str(frozen)
-        # Compile the verified source directly: import loaders would create a
-        # __pycache__ inside the input evidence, violating read-only auditing.
-        exec(compile(frozen.read_bytes(), str(frozen), "exec"), module.__dict__)
+        # Compile exactly the source checked against the independent digest;
+        # import loaders would create __pycache__ inside the input evidence.
+        if frozen_source is None:
+            raise ValueError("Archived engine source was not verified")
+        exec(compile(frozen_source, str(frozen), "exec"), module.__dict__)  # nosec B102
         if not np.array_equal(module.ALPHA_HEIGHT_GRID, ALPHA_HEIGHT_GRID):
             raise ValueError("Archived alpha grid differs from the audit grid")
         engine_class = module.CalibratedSearch

@@ -90,6 +90,9 @@ affected platform; do not patch installed binaries or suppress import errors.
 | `python tools/check.py dist` | Independent wheel/sdist builds, archive contents, metadata and byte reproducibility |
 | `python tools/check.py release` | `full` followed by `dist` |
 
+Coverage collects both line and branch opportunities; the configured 80% gate
+applies to coverage.py's combined percentage, not to branch-only coverage.
+
 Pass pytest paths and options after `--` for `quick` and `test`. `full`, `dist`,
 and `release` reject test-selection arguments to avoid accidentally reporting a
 partial run as complete. `dist` clears the derived `build/`, `dist/`, and

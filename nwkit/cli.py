@@ -6571,6 +6571,9 @@ def main(argv=None):
         try:
             if getattr(args, "audit", None) == "-":
                 raise ValueError("'--audit' requires a file path, not '-'.")
+            from nwkit.provenance import validate_command_path_roles
+
+            validate_command_path_roles(args)
 
             def invoke_handler(parsed_args):
                 _warn_deprecated_option_aliases(raw_argv, parsed_args.command)

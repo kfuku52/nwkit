@@ -11,7 +11,7 @@
 - 最適化後は独立した数値微分で収束を確認します。小さい分散で差分の打切り誤差が判定値を超える問題にはRichardson外挿を使い、判定閾値を緩める処理は加えていません。
 - `--covariance-engine pruning` は木上GLSと数値微分を使う比較用経路です。候補数、再推定予算、初期値数は減らしていません。
 
-主なコードは [shift_joint_dense.py](/Users/kf/repos/nwkit/nwkit/shift_joint_dense.py)、[shift_joint_fit.py](/Users/kf/repos/nwkit/nwkit/shift_joint_fit.py)、[vector_whitening.py](/Users/kf/repos/nwkit/nwkit/vector_whitening.py) です。利用条件は [SHIFT_COVARIANCE.md](/Users/kf/repos/nwkit/SHIFT_COVARIANCE.md) に追記しました。
+主なコードは [shift_joint_dense.py](../../nwkit/shift_joint_dense.py)、[shift_joint_fit.py](../../nwkit/shift_joint_fit.py)、[vector_whitening.py](../../nwkit/vector_whitening.py) です。利用条件は [SHIFT_COVARIANCE.md](../../docs/guides/SHIFT_COVARIANCE.md) に追記しました。
 
 ## 探索全体の単独測定
 
@@ -89,4 +89,4 @@
 
 実行環境はGeneGalleon Docker、Apple M2 Max、Python 3.12、NumPy 1.26.4、SciPy 1.17.1、BLAS/OpenMP各1スレッドです。Dockerでの検証であり、SIFや他OS・Pythonバージョンの検証ではありません。
 
-入力生成条件・ソース・実行条件・生の結果は同じディレクトリに保存しています。元の観測値は [入力ファイル](/Users/kf/repos/nwkit/reviews/ten-shifts-errors-missing-2026-09-11/inputs) に保存されています。[再現コマンド](COMMANDS.md)・[独立集計と検証](validation.json)
+入力生成条件・ソース・実行条件・生の結果は同じディレクトリに保存しています。元の観測値は [入力ファイル](../ten-shifts-errors-missing-2026-09-11/inputs) に保存されています。[再現コマンド](COMMANDS.md)・[独立集計と検証](validation.json)

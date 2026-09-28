@@ -205,10 +205,13 @@ must name a separate output directory outside the evidence bundle; source hash
 mismatches are rejected by default. An explicit `--allow-source-revision`
 requires full bootstrap replay and records changed hashes. Archived null-contract
 bundles use `verify_shift_null_contract.py --frozen-engine` to audit their
-hash-verified historical engine, rather than assert current-CLI validation. The input bundle is not rewritten to fit a new verifier.
+historical engine only when its hash matches a trusted, checked-in snapshot.
+The input bundle is not rewritten to fit a new verifier; the archived audit
+does not assert current-CLI validation.
 
 The initial response-worktree repository check passed locally on macOS/Python 3.10:
-3,326 tests passed, 27 skipped, branch coverage 85% (required minimum 80%).
+3,326 tests passed, 27 skipped, combined line and branch coverage 85%
+(required minimum 80% for the combined metric).
 Ruff, nonincremental mypy (173 modules), dependency consistency, Bandit,
 `pip-audit` and complexity checks passed. The original and corrected R libraries
 were both enabled for the real backend tests. The subsequent static check also

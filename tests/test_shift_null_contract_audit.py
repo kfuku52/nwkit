@@ -196,3 +196,19 @@ def test_archived_mode_still_rejects_revised_generator(tmp_path):
     (bundle / "protocol.json").write_text(json.dumps(spec))
     with pytest.raises(ValueError, match="Active generator/fitting hash mismatch"):
         audit(bundle, frozen_engine=True)
+
+
+def test_archived_mode_never_executes_bundle_supplied_engine(tmp_path):
+    bundle = tmp_path / "archived"
+    shutil.copytree(Path("examples/shift/null-contract-timing-pilot"), bundle)
+    marker = tmp_path / "executed"
+    snapshot = bundle / "source-snapshot" / "shift_calibration.py"
+    snapshot.write_text(f"from pathlib import Path\nPath({str(marker)!r}).touch()\n")
+    specification = json.loads((bundle / "protocol.json").read_text())
+    specification["source_sha256"]["nwkit/shift_calibration.py"] = hashlib.sha256(
+        snapshot.read_bytes()
+    ).hexdigest()
+    (bundle / "protocol.json").write_text(json.dumps(specification))
+    with pytest.raises(ValueError, match="not a trusted checked-in snapshot"):
+        audit(bundle, frozen_engine=True)
+    assert not marker.exists()

@@ -84,6 +84,17 @@ def test_full_checks_keep_the_complete_suite_and_uncached_type_checks(monkeypatc
     assert (
         check.PYTHON,
         "-m",
+        "bandit",
+        "-r",
+        "nwkit",
+        "tools",
+        "-ll",
+        "-ii",
+        "-q",
+    ) in commands
+    assert (
+        check.PYTHON,
+        "-m",
         "coverage",
         "run",
         "-m",

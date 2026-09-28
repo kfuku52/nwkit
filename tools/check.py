@@ -57,7 +57,7 @@ def run_tests(pytest_args: tuple[str, ...] = (), *, quick: bool = False) -> None
 def run_full_checks() -> None:
     lint_and_typecheck()
     run(PYTHON, "-m", "pip", "check")
-    run(PYTHON, "-m", "bandit", "-r", "nwkit", "-ll", "-ii", "-q")
+    run(PYTHON, "-m", "bandit", "-r", "nwkit", "tools", "-ll", "-ii", "-q")
     run(PYTHON, "-m", "pip_audit", ".")
     run(PYTHON, "-m", "coverage", "erase")
     run(PYTHON, "-m", "coverage", "run", "-m", "pytest", "tests/", "-q")

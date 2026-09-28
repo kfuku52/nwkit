@@ -26,7 +26,7 @@ P1 は主要な結論に使う前に対処すべき事項、P2 は該当機能�
 
 ## 1. イベント重み付き reconciled 回帰は、通常の ML/REML 推論として正当化できていない
 
-対象：[疑似 determinant と目的関数](/Users/kf/repos/nwkit/nwkit/regress.py:1687)、[係数共分散](/Users/kf/repos/nwkit/nwkit/regress.py:1717)、[境界混合 χ² 検定](/Users/kf/repos/nwkit/nwkit/regress.py:2050)、[bootstrap 生成](/Users/kf/repos/nwkit/nwkit/regress.py:1878)。
+対象：[疑似 determinant と目的関数](../../nwkit/regress.py#L1687)、[係数共分散](../../nwkit/regress.py#L1717)、[境界混合 χ² 検定](../../nwkit/regress.py#L2050)、[bootstrap 生成](../../nwkit/regress.py#L1878)。
 
 同じ種分化に属するパラログの行数を `k` とすると、行固有の共分散を `k` 倍する一方、尤度の標本数を種イベント数に置き換える。さらに determinant は完全な `log|V|` ではなく、イベント平均の分散、または行の周辺分散の平均から作る。二次形式は `r' V^-1 r` のままである。
 
@@ -44,15 +44,15 @@ f(s,t) = 1/2 * [log((2s+t)/2) + 1/(2s) + 3/(2s+2t)]
 
 この目的関数から通常の `(X'V^-1X)^-1` を使い、lineage heterogeneity に `0.5 χ²₁` の P 値を付けることにも一般的な保証はない。正しい composite likelihood でも、通常の尤度比とは異なる参照分布・情報行列が必要になる。[Varin, Reid & Firth (2011)](https://utstat.utoronto.ca/reid/research/varin_reid_firth.pdf)。今回の目的関数では、その前提となる score の不偏性から確認が必要であり、サンドイッチ標準誤差だけで直るとはいえない。
 
-`test_lineage_joint_parametric_bootstrap_reports_calibrated_p_values` は、実際には bootstrap 2回で P 値が0〜1に入ることなどを検査している。[該当テスト](/Users/kf/repos/nwkit/tests/test_regress.py:1278)。このテスト名と文書の “calibrated” は、型I誤差の検証を意味しない。
+`test_lineage_joint_parametric_bootstrap_reports_calibrated_p_values` は、実際には bootstrap 2回で P 値が0〜1に入ることなどを検査している。[該当テスト](../../tests/test_regress.py#L1278)。このテスト名と文書の “calibrated” は、型I誤差の検証を意味しない。
 
 **対処**：生物学的生成モデルとイベントへの重み付けを分離し、正規化された階層尤度、または導出の明確な推定方程式を定める。変更後に、イベント数・パラログ数の偏り・lineage 効果・測定誤差を変えた独立シミュレーションで被覆率と帰無分布を確認する。`--event-weighting contrast` はこの独自 determinant 経路を避けるが、イベントの影響度と推定対象も変わるため、万能な置換としては推奨しない。
 
 ## 2. `shift` の既定 pBIC は、既知の計算不整合を持つ版でも実行できる
 
-対象：[既定 criterion](/Users/kf/repos/nwkit/nwkit/shift_cli.py:41)、[バックエンドの受け入れ条件](/Users/kf/repos/nwkit/nwkit/shift_backend.py:15)。
+対象：[既定 criterion](../../nwkit/shift_cli.py#L41)、[バックエンドの受け入れ条件](../../nwkit/shift_backend.py#L15)。
 
-既定値は pBIC、条件は `kfl1ou >= 3.0.9` だけである。一方、リポジトリ自身の [SHIFT_PBIC.md](/Users/kf/repos/nwkit/SHIFT_PBIC.md) は、元の3.0.9に係数座標と determinant penalty の不整合があり、同じモデルの自由表現と singleton-group 表現でスコアが違うことを示している。
+既定値は pBIC、条件は `kfl1ou >= 3.0.9` だけである。一方、リポジトリ自身の [SHIFT_PBIC.md](../../docs/validation/SHIFT_PBIC.md) は、元の3.0.9に係数座標と determinant penalty の不整合があり、同じモデルの自由表現と singleton-group 表現でスコアが違うことを示している。
 
 保存済みの estimated-alpha 例では、同じ尤度に対して **32.77624199 と −36.09058668**。修正版は両方約 −36.0905867 にそろう。修正版も同じ3.0.9を名乗るため、バージョン文字列だけでは判別できない。研究用 validation には挙動検査があるが、通常コマンドの入口にはそれがない。
 
@@ -62,7 +62,7 @@ f(s,t) = 1/2 * [log((2s+t)/2) + 1/(2s) + 3/(2s+2t)]
 
 ## 3. OU shift/convergence は修正版でも、現状では探索的な結果として扱うべき
 
-対象：[独立実験の条件](/Users/kf/repos/nwkit/SHIFT_ALPHA.md)、[保存済み集計](/Users/kf/repos/nwkit/examples/shift/alpha-validation/report-data.json)。
+対象：[独立実験の条件](../../docs/validation/SHIFT_ALPHA.md)、[保存済み集計](../../examples/shift/alpha-validation/report-data.json)。
 
 8 tips、balanced tree、真のシフトなし、alpha 下限 `alpha*H=1e-7`、two-stage 選択という保存済みの独立 primary 実験で、少なくとも1つの有効シフトを選んだ割合は以下である。
 
@@ -83,7 +83,7 @@ f(s,t) = 1/2 * [log((2s+t)/2) + 1/(2s) + 3/(2s+2t)]
 
 ## 4. 打ち切り Gaussian の bootstrap は観測過程と一致しない
 
-対象：[生成器](/Users/kf/repos/nwkit/nwkit/phylogenetic_glmm.py:2070)、[打ち切り尤度](/Users/kf/repos/nwkit/nwkit/phylogenetic_glmm.py:1054)。
+対象：[生成器](../../nwkit/phylogenetic_glmm.py#L2070)、[打ち切り尤度](../../nwkit/phylogenetic_glmm.py#L1054)。
 
 生成器は全観測を正規乱数で発生させ、元データで上下限が指定されていた行を再び欠損にする。打ち切りラベルと限界値は固定され、再生成された値がその限界を超えたかどうかは使わない。元の exact 行は無制約な正規乱数のままである。
 
@@ -97,7 +97,7 @@ f(s,t) = 1/2 * [log((2s+t)/2) + 1/(2s) + 3/(2s+2t)]
 
 ## 5. THRESHOLD の収束診断は、出力された祖先状態全体を保証しない
 
-対象：[R-hat/ESS](/Users/kf/repos/nwkit/nwkit/threshold_asr.py:262)、[監視対象](/Users/kf/repos/nwkit/nwkit/threshold_asr.py:397)、[判定閾値](/Users/kf/repos/nwkit/nwkit/threshold_asr.py:417)。
+対象：[R-hat/ESS](../../nwkit/threshold_asr.py#L262)、[監視対象](../../nwkit/threshold_asr.py#L397)、[判定閾値](../../nwkit/threshold_asr.py#L417)。
 
 R-hat は分割前の通常の chain 平均・分散のみを用いる。ESS は lag-1 相関を AR(1) の式に入れただけで、一般の MCMC に必要な複数 lag の寄与を見ない。監視する量も root liability と可変 threshold に限られ、各内部ノードの category probability/liability を診断していない。
 
@@ -107,7 +107,7 @@ R-hat は分割前の通常の chain 平均・分散のみを用いる。ESS は
 
 ## 6. 正則化 GLMM の罰則付き差分に通常の χ² 検定を適用している
 
-対象：[既定正則化](/Users/kf/repos/nwkit/nwkit/cli.py:3933)、[尤度比と profile 閾値](/Users/kf/repos/nwkit/nwkit/phylogenetic_glmm.py:1881)。
+対象：[既定正則化](../../nwkit/cli.py#L3933)、[尤度比と profile 閾値](../../nwkit/phylogenetic_glmm.py#L1881)。
 
 非Gaussian回帰の既定は Student-t 正則化、scale 2.5 である。`likelihood-ratio` / `profile-likelihood` は罰則を含む目的関数を再最適化し、その差を通常の `χ²₁` と比較する。文書にも仕様は書かれているが、通常の likelihood-ratio の帰無分布がそのまま成立するとは限らない。
 
@@ -119,7 +119,7 @@ R-hat は分割前の通常の chain 平均・分散のみを用いる。ESS は
 
 ## 7. RADTE の nominal 95% Laplace 区間には、実測の過小被覆がある
 
-対象：[既存の被覆率報告](/Users/kf/repos/nwkit/RADTE_VALIDATION.md:192)、[今回再集計した CSV](/Users/kf/repos/nwkit/examples/radte/interval-coverage.csv)、[studentized 実装](/Users/kf/repos/nwkit/nwkit/radte_studentized.py:85)。
+対象：[既存の被覆率報告](../../docs/validation/RADTE_VALIDATION.md)、[今回再集計した CSV](../../examples/radte/interval-coverage.csv)、[studentized 実装](../../nwkit/radte_studentized.py)。
 
 保存済みの独立 family-level データを再集計すると、Laplace の95%区間は次の結果だった。
 
@@ -176,7 +176,7 @@ PYTHONPATH=.:tools python tools/verify_shift_alpha_evidence.py examples/shift/al
 
 既存 RADTE CSV の family別再集計も行い、本文の分子・分母を確認した。新たな RADTE 配列解析や MCMCTree 推論、kfl1ou の R fit、全 repository の `full`/配布検証、新しい大規模な型I誤差・被覆率実験は実施していない。
 
-再現用 [スクリプト](/Users/kf/repos/nwkit/reviews/scientific-2026-09-10/reproduce.py) と [結果・対象ソースの SHA-256](/Users/kf/repos/nwkit/reviews/scientific-2026-09-10/results.json) を残した。診断用人工配列・解析的期待値を、実データや end-to-end の校正実験と取り違えないよう、それぞれの scope を JSON に記録した。
+再現用 [スクリプト](reproduce.py) と [結果・対象ソースの SHA-256](results.json) を残した。診断用人工配列・解析的期待値を、実データや end-to-end の校正実験と取り違えないよう、それぞれの scope を JSON に記録した。
 
 ## 対応の順序
 
