@@ -598,6 +598,8 @@ Reconciled Gaussian results distinguish `estimand` (`event-average` by default,
 `nuisance_estimator`, and `log_likelihood_basis`. Event-average coefficient rows
 have `reml=not-applicable`; the covariance fit can separately use REML. New
 `--regression-estimand` and legacy `--event-weighting` options must agree.
+`studentized-bootstrap` is an opt-in Gaussian coefficient inference method;
+`p_value_method` and `interval_method` identify its studentized reference.
 
 GLMM tables report `objective_value`, `penalty_value`, `p_value_method`,
 `interval_method`, and `observation_model`. Penalized point estimates do not

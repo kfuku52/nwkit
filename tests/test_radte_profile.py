@@ -4,6 +4,7 @@ from dataclasses import replace
 
 import numpy as np
 import pytest
+from scipy.optimize import minimize_scalar
 from scipy.stats import chi2
 
 from nwkit import radte_uncertainty as uncertainty
@@ -183,6 +184,117 @@ def test_sequence_profile_rejects_inaccurate_quadratic_region(tmp_path):
     with pytest.raises(ValueError, match="validated quadratic likelihood region"):
         uncertainty.profile_intervals(fit, problem, starts=4)
     assert fit.interval_lower is None
+
+
+def test_known_strict_clock_sequence_profile_matches_independent_jc69(tmp_path):
+    c = small_chronology(
+        gene_text="((A_1:0.1,B_1:0.1)S1:0.1,(A_2:0.1,B_2:0.1)S2:0.1)D;"
+    )
+    sequences = simulated_alignment(c, sites=1200)
+    alignment = write_alignment(tmp_path, sequences)
+    exact = SequenceLikelihood(c, alignment, model="jc69", gamma_categories=1)
+    fit, problem = fit_dates(c, likelihood=exact, rate_sd=0, starts=4)
+    uncertainty.profile_intervals(fit, problem, starts=4)
+    assert fit.interval_status == "conditional-profile"
+    group = problem.free[0]
+    assert fit.interval_lower[group] < fit.ages[group] < fit.interval_upper[group]
+
+    # Enumerate the two internal JC69 states at every site independently of
+    # the production pruning and gradient implementations.
+    alphabet = {letter: index for index, letter in enumerate("ACGT")}
+    states = np.array(
+        [[alphabet[letter] for letter in sequences[name]] for name in sequences]
+    )
+
+    def transition(length):
+        decay = np.exp(-4 * length / 3)
+        return (1 - decay) / 4 + decay * np.eye(4)
+
+    def direct_nll(age, rate):
+        tip = transition(10 * rate)
+        root = transition((age - 10) * rate)
+        left = root @ (tip[:, states[0]] * tip[:, states[1]])
+        right = root @ (tip[:, states[2]] * tip[:, states[3]])
+        return -float(np.log(np.mean(left * right, axis=0)).sum())
+
+    def independent_profile(age):
+        nuisance = minimize_scalar(
+            lambda log_rate: direct_nll(age, np.exp(log_rate)),
+            bounds=(np.log(1e-4), np.log(1)),
+            method="bounded",
+            options={"xatol": 1e-11},
+        )
+        assert nuisance.success
+        return nuisance.fun
+
+    best = minimize_scalar(
+        independent_profile,
+        bounds=(10.000001, 30),
+        method="bounded",
+        options={"xatol": 1e-8},
+    )
+    assert best.success
+    assert fit.ages[group] * c.scale == pytest.approx(best.x, abs=1e-4)
+    for endpoint in (fit.interval_lower[group], fit.interval_upper[group]):
+        ratio = 2 * (independent_profile(endpoint * c.scale) - best.fun)
+        assert ratio == pytest.approx(chi2.ppf(0.95, 1), abs=1e-4)
+
+
+def test_estimated_zero_variance_still_has_no_regular_profile(tmp_path):
+    c = small_chronology(
+        gene_text="((A_1:0.1,B_1:0.1)S1:0.1,(A_2:0.1,B_2:0.1)S2:0.1)D;"
+    )
+    alignment = write_alignment(tmp_path, simulated_alignment(c, sites=1200))
+    exact = SequenceLikelihood(c, alignment, model="jc69", gamma_categories=1)
+    fit, problem = fit_dates(c, likelihood=exact, starts=4)
+    assert fit.log_rate_sd == 0
+    uncertainty.profile_intervals(fit, problem)
+    assert fit.interval_status == "unavailable-strict-clock-limit"
+    assert fit.interval_lower is None and fit.interval_upper is None
+    tree_fit, tree_problem = fit_dates(c, rate_sd=0)
+    uncertainty.profile_intervals(tree_fit, tree_problem)
+    assert tree_fit.interval_status == "unavailable-strict-clock-limit"
+    assert tree_fit.interval_lower is None and tree_fit.interval_upper is None
+
+
+def test_known_strict_clock_profile_is_returned_by_auto_cli(tmp_path):
+    import json
+
+    from nwkit.cli import main
+    from tests.test_radte import cli_inputs
+
+    c = small_chronology(
+        gene_text="((A_1:0.1,B_1:0.1)S1:0.1,(A_2:0.1,B_2:0.1)S2:0.1)D;"
+    )
+    alignment = write_alignment(tmp_path, simulated_alignment(c, sites=500))
+    inputs = cli_inputs(tmp_path)
+    (tmp_path / "gene.nwk").write_text(
+        "((A_1:0.1,B_1:0.1)S1:0.1,(A_2:0.1,B_2:0.1)S2:0.1)D;"
+    )
+    prefix = tmp_path / "known-clock"
+    main(
+        [
+            "radte",
+            *inputs,
+            "--reconcile",
+            "lca",
+            "--alignment",
+            str(alignment),
+            "--substitution-model",
+            "jc69",
+            "--gamma-categories",
+            "1",
+            "--rate-sd",
+            "0",
+            "--uncertainty",
+            "profile",
+            "--out-prefix",
+            str(prefix),
+        ]
+    )
+    manifest = json.loads(prefix.with_suffix(".manifest.json").read_text())
+    assert manifest["uncertainty"] == "conditional-profile"
+    assert manifest["log_rate_sd"] == 0
 
 
 def test_profile_rejects_inferior_fit_even_at_small_rate_variance():

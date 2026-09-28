@@ -10,7 +10,14 @@ from scipy.stats import multivariate_normal
 
 from nwkit.cli import main
 from nwkit.evolution import build_evolutionary_covariance
-from nwkit.signal_stats import bh_adjust, k_fit, k_statistic, lambda_fit, rate_fit
+from nwkit.signal_stats import (
+    bh_adjust,
+    k_fit,
+    k_statistic,
+    lambda_fit,
+    lambda_parametric_bootstrap,
+    rate_fit,
+)
 from nwkit.util import read_tree
 
 TREE = "(((A:0.7,B:0.7):0.8,(C:0.9,D:0.9):0.6):0.5,((E:0.8,F:0.8):0.7,(G:1.1,H:1.1):0.4):0.5);"
@@ -62,6 +69,79 @@ def test_lambda_boundary_and_profile():
     assert fit["ci_lower"] == pytest.approx(0.395258805358)
     assert fit["ci_upper"] == 1
     assert fit["p_value"] == pytest.approx(0.00985613398069)
+
+
+def test_lambda_bootstrap_matches_independent_null_draws():
+    c = covariance()
+    diagonal = np.diag(c)
+    weights = 1 / diagonal
+    mean = np.sum(weights * VALUES) / np.sum(weights)
+    rate = np.sum(weights * (VALUES - mean) ** 2) / len(VALUES)
+    observed = lambda_fit(c, VALUES, np.zeros(8))["likelihood_ratio"]
+    rng = np.random.default_rng(37)
+    exceed = 0
+    for _ in range(12):
+        draw = mean + np.sqrt(rate * diagonal) * rng.standard_normal(8)
+        fit = lambda_fit(c, draw, np.zeros(8), ci_level=None)
+        exceed += fit.get("likelihood_ratio", 0) >= observed - 1e-12 * max(1, observed)
+    actual = lambda_parametric_bootstrap(
+        c, VALUES, np.zeros(8), observed, 12, np.random.default_rng(37)
+    )
+    assert actual == (1 + exceed) / 13
+
+
+def test_lambda_bootstrap_cli_metadata_and_order(tmp_path, capsys):
+    frame = pd.DataFrame({"leaf_name": list("ABCDEFGH"), "x": VALUES, "se": ERRORS})
+    options = [
+        "--method",
+        "lambda",
+        "--standard-error-column",
+        "se",
+        "--lambda-test",
+        "bootstrap",
+        "--seed",
+        "37",
+    ]
+    first = run_cli(tmp_path, capsys, options, frame)
+    second = run_cli(tmp_path, capsys, options, frame.iloc[::-1])
+    pd.testing.assert_frame_equal(first, second)
+    both = run_cli(tmp_path, capsys, options[:1] + ["both"] + options[2:], frame)
+    assert first.iloc[0].p_value == both.iloc[1].p_value
+    assert first.iloc[0].test_method == "parametric_bootstrap"
+    assert first.iloc[0].num_simulations == 9
+    assert first.iloc[0].seed == 37
+    assert first.iloc[0].p_value * 10 == pytest.approx(
+        round(first.iloc[0].p_value * 10)
+    )
+    default = run_cli(tmp_path, capsys, ["--method", "lambda"], frame)
+    assert default.iloc[0].test_method == "likelihood_ratio_chi2_1"
+    assert np.isnan(default.iloc[0].num_simulations)
+
+
+def test_lambda_bootstrap_missing_and_zero_rate(tmp_path, capsys):
+    frame = pd.DataFrame(
+        {
+            "leaf_name": list("ABCDEFGH"),
+            "x": [*VALUES[:7], np.nan],
+            "se": [*ERRORS[:7], np.nan],
+        }
+    )
+    options = [
+        "--method",
+        "lambda",
+        "--standard-error-column",
+        "se",
+        "--lambda-test",
+        "bootstrap",
+    ]
+    result = run_cli(tmp_path, capsys, options, frame)
+    assert result.iloc[0].num_taxa == 7
+    assert result.iloc[0].num_missing_taxa == 1
+    assert result.iloc[0].test_method == "parametric_bootstrap"
+    frame.loc[:6, "se"] = 100.0
+    zero_rate = run_cli(tmp_path, capsys, options, frame)
+    assert zero_rate.iloc[0].status == "unidentifiable_lambda"
+    assert np.isnan(zero_rate.iloc[0].p_value)
 
 
 def test_star_has_no_identifiable_lambda():

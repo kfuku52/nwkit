@@ -19,11 +19,18 @@ def register_signal(subparsers, tree_input, table_output, table_policy):
     parser.add_argument("--method", choices=["K", "lambda", "both"], default="both")
     parser.add_argument("--test", choices=["yes", "no"], default="yes")
     parser.add_argument(
+        "--lambda-test",
+        "--lambda_test",
+        choices=["chi2", "bootstrap"],
+        default="chi2",
+        help="Lambda test calibration: chi2 (default) or parametric bootstrap.",
+    )
+    parser.add_argument(
         "--n-sim",
         "--n_sim",
         type=int,
         default=999,
-        help="K permutations (default: 999).",
+        help="K permutations or lambda bootstrap replicates (default: 999).",
     )
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument(

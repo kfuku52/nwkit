@@ -146,6 +146,7 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
 
 
 def lambda_fit(covariance, values, errors, ci_level=0.95):
+    """Fit lambda; a None interval level skips profile limits for resampling."""
     diagonal = np.diag(np.diag(covariance))
     shared = covariance - diagonal
     if not np.any(shared):
@@ -171,8 +172,7 @@ def lambda_fit(covariance, values, errors, ci_level=0.95):
             "log_likelihood": likelihood,
         }
     lr = max(0.0, 2 * (likelihood - null))
-    lower, upper = profile_interval(profile, estimate, likelihood, ci_level)
-    return {
+    result = {
         "status": "boundary" if estimate in (0.0, 1.0) else "ok",
         "estimate": estimate,
         "sigma2": rate,
@@ -181,9 +181,32 @@ def lambda_fit(covariance, values, errors, ci_level=0.95):
         "null_log_likelihood": null,
         "likelihood_ratio": lr,
         "p_value": float(chi2.sf(lr, 1)),
-        "ci_lower": lower,
-        "ci_upper": upper,
     }
+    if ci_level is not None:
+        result["ci_lower"], result["ci_upper"] = profile_interval(
+            profile, estimate, likelihood, ci_level
+        )
+    return result
+
+
+def lambda_parametric_bootstrap(
+    covariance, values, errors, observed_lr, simulations, rng
+):
+    """Simulate at the fitted lambda=0 null and refit both models each time."""
+    diagonal = np.diag(covariance)
+    _, null_rate, null_mean = rate_fit(np.diag(diagonal), values, errors)
+    standard_deviation = np.sqrt(null_rate * diagonal + errors**2)
+    if not np.all(np.isfinite(standard_deviation)):
+        raise ValueError("Non-finite lambda null simulation variance.")
+    exceed = 0
+    tolerance = 1e-12 * max(1.0, abs(observed_lr))
+    for _ in range(simulations):
+        simulated = null_mean + standard_deviation * rng.standard_normal(len(values))
+        fit = lambda_fit(covariance, simulated, errors, ci_level=None)
+        # A zero-rate or flat replicate has no detectable lambda effect (LR=0).
+        lr = fit.get("likelihood_ratio", 0.0)
+        exceed += lr >= observed_lr - tolerance
+    return (1 + exceed) / (1 + simulations)
 
 
 def profile_interval(profile, estimate, likelihood, level):

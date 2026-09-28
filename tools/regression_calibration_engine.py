@@ -399,11 +399,14 @@ def glmm_null_bootstrap(case, data, replicates, seed):
 
 def is_applicable(case, method):
     if case.engine == "rsc-tips":
-        return method in {"wald", "parametric-bootstrap"}
+        return method in {"wald", "parametric-bootstrap", "studentized-bootstrap"}
     if case.engine == "rsc":
-        return method in {"wald", "parametric-bootstrap", "oracle"} or (
-            method == "null-bootstrap" and case.predictor_variance == 0
-        )
+        return method in {
+            "wald",
+            "parametric-bootstrap",
+            "studentized-bootstrap",
+            "oracle",
+        } or (method == "null-bootstrap" and case.predictor_variance == 0)
     return method in {
         "wald",
         "parametric-bootstrap",
@@ -480,7 +483,8 @@ def _evaluate(case, data, method, replicates, seed, timeout, use_signal=True):
             warnings.simplefilter("always")
             with record_refits(
                 case.engine,
-                method == "parametric-bootstrap" and case.engine != "rsc-tips",
+                method in {"parametric-bootstrap", "studentized-bootstrap"}
+                and case.engine != "rsc-tips",
                 result,
             ):
                 if case.engine == "rsc-tips":
@@ -609,7 +613,7 @@ def fit_raw_rsc(case, data, method, replicates, seed):
         }
         row["bootstrap_attempt_accounting"] = (
             "not-instrumented-in-raw-pipeline"
-            if method == "parametric-bootstrap"
+            if method in {"parametric-bootstrap", "studentized-bootstrap"}
             else "not-applicable"
         )
         return row

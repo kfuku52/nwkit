@@ -192,6 +192,15 @@ This finite set of checks cannot bound error everywhere in the integral.
 Conditional Laplace intervals require interior ages and nuisance parameters,
 positive information, and intervals within the hard calibration domain.
 Profiles recheck approximation validity along the constrained solutions.
+When the rate SD is supplied as zero, the Gaussian rate distribution collapses
+to a single shared rate. For sequence input, the profiled objective is then the
+ordinary sequence negative log likelihood with age and mean rate as parameters;
+the known zero variance introduces no variance-boundary nuisance parameter.
+The age likelihood-ratio interval can therefore use the usual asymptotic
+one-degree-of-freedom threshold where its regularity conditions hold. A zero
+variance estimated from the same data is different: its nuisance parameter is
+on a boundary, so the ordinary threshold is not used. Branch-only strict-clock
+input has no sequence sampling likelihood and also remains unavailable.
 Bootstrap replicates preserve shared events and refit the specified estimator;
 they report failures instead of silently changing marginal replicates into
 conditional MAP estimates.

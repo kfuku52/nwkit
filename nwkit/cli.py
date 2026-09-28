@@ -4557,7 +4557,7 @@ pregress_precomputed.add_argument(
 )
 pregress_inference.add_argument(
     "--inference",
-    metavar="wald|parametric-bootstrap|null-bootstrap|likelihood-ratio|profile-likelihood",
+    metavar="wald|parametric-bootstrap|studentized-bootstrap|null-bootstrap|likelihood-ratio|profile-likelihood",
     default="wald",
     type=str,
     required=False,
@@ -4566,10 +4566,11 @@ pregress_inference.add_argument(
         "wald",
         "null-bootstrap",
         "parametric-bootstrap",
+        "studentized-bootstrap",
         "likelihood-ratio",
         "profile-likelihood",
     ],
-    help="default=%(default)s: Wald, parametric bootstrap, null-calibrated penalized GLMM tests, or unpenalized likelihood inference. Penalized Wald fits report point estimates without frequentist intervals. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
+    help="default=%(default)s: Wald, coefficient or studentized Gaussian bootstrap, null-calibrated penalized GLMM tests, or unpenalized likelihood inference. Penalized Wald fits report point estimates without frequentist intervals. Tree-structured bootstrap draws use the sparse backend at large tip counts.",
 )
 pregress_inference.add_argument(
     "--allow-large-dense",
@@ -4595,7 +4596,7 @@ pregress_inference.add_argument(
     type=int,
     required=False,
     action="store",
-    help="default=%(default)s: Number of simulations for parametric-bootstrap inference.",
+    help="default=%(default)s: Number of simulations for bootstrap inference.",
 )
 pregress_inference.add_argument(
     "--seed",

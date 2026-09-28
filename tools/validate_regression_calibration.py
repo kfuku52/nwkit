@@ -39,6 +39,7 @@ import nwkit  # noqa: E402
 METHODS = {
     "wald",
     "parametric-bootstrap",
+    "studentized-bootstrap",
     "oracle",
     "null-bootstrap",
     "profile-likelihood",

@@ -1747,7 +1747,7 @@ def _bootstrap_shape_refitted_coefficients(
     diagnostics: dict[str, Any],
     fit_state: dict[str, Any],
     seed: int,
-) -> np.ndarray:
+) -> tuple[np.ndarray, np.ndarray]:
     parameter = float(diagnostics["parameter"])
     simulator = _prepare_response_tip_simulator(
         args,
@@ -1763,6 +1763,7 @@ def _bootstrap_shape_refitted_coefficients(
     }
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
+    standard_errors: list[np.ndarray] = []
     maximum_attempts = args.bootstrap_replicates
     attempts = 0
     while len(coefficients) < args.bootstrap_replicates and attempts < maximum_attempts:
@@ -1811,6 +1812,9 @@ def _bootstrap_shape_refitted_coefficients(
         coefficients.append(
             bootstrap_result.loc[predictors, "coefficient"].to_numpy(dtype=float)
         )
+        standard_errors.append(
+            bootstrap_result.loc[predictors, "standard_error"].to_numpy(dtype=float)
+        )
     if len(coefficients) < args.bootstrap_replicates:
         raise ValueError(
             "Shape-parameter-refitted bootstrap produced only {} successful fits "
@@ -1818,7 +1822,9 @@ def _bootstrap_shape_refitted_coefficients(
                 len(coefficients), attempts, response
             )
         )
-    return np.asarray(coefficients, dtype=float)
+    return np.asarray(coefficients, dtype=float), np.asarray(
+        standard_errors, dtype=float
+    )
 
 
 def _apply_shape_refitted_bootstrap(
@@ -1842,7 +1848,7 @@ def _apply_shape_refitted_bootstrap(
         if diagnostics["parameter_status"] != "estimated":
             continue
         fit_state = fit_states[(str(args.tree_id), response)]
-        bootstrap = _bootstrap_shape_refitted_coefficients(
+        bootstrap, bootstrap_standard_errors = _bootstrap_shape_refitted_coefficients(
             args,
             gene_tree,
             reconciliation,
@@ -1863,14 +1869,43 @@ def _apply_shape_refitted_bootstrap(
             row_index = updated.index[selected].item()
             coefficient = float(updated.loc[row_index, "coefficient"])
             samples = bootstrap[:, predictor_index]
-            standard_error = float(np.std(samples, ddof=1))
-            lower, upper = np.quantile(samples, [alpha, 1.0 - alpha])
-            updated.loc[row_index, "standard_error"] = standard_error
+            studentized = args.inference == "studentized-bootstrap"
+            standard_error = (
+                float(updated.loc[row_index, "standard_error"])
+                if studentized
+                else float(np.std(samples, ddof=1))
+            )
+            if studentized:
+                sample_errors = bootstrap_standard_errors[:, predictor_index]
+                if (
+                    not np.isfinite(standard_error)
+                    or standard_error <= 0.0
+                    or not np.isfinite(sample_errors).all()
+                    or np.any(sample_errors <= 0.0)
+                ):
+                    raise ValueError(
+                        "Studentized shape bootstrap has a non-positive standard error."
+                    )
+                pivot = (samples - coefficient) / sample_errors
+                lower_pivot, upper_pivot = np.quantile(pivot, [alpha, 1.0 - alpha])
+                lower = coefficient - upper_pivot * standard_error
+                upper = coefficient - lower_pivot * standard_error
+            else:
+                lower, upper = np.quantile(samples, [alpha, 1.0 - alpha])
+                updated.loc[row_index, "standard_error"] = standard_error
             updated.loc[row_index, "confidence_interval_lower"] = float(lower)
             updated.loc[row_index, "confidence_interval_upper"] = float(upper)
-            updated.loc[row_index, "inference_method"] = "parametric-bootstrap"
-            updated.loc[row_index, "p_value_method"] = "centered-parametric-bootstrap"
-            updated.loc[row_index, "interval_method"] = "parametric-percentile"
+            updated.loc[row_index, "inference_method"] = args.inference
+            updated.loc[row_index, "p_value_method"] = (
+                "studentized-parametric-bootstrap"
+                if studentized
+                else "centered-parametric-bootstrap"
+            )
+            updated.loc[row_index, "interval_method"] = (
+                "studentized-parametric-bootstrap"
+                if studentized
+                else "parametric-percentile"
+            )
             updated.loc[row_index, "bootstrap_attempted"] = args.bootstrap_replicates
             updated.loc[row_index, "bootstrap_succeeded"] = args.bootstrap_replicates
             updated.loc[row_index, "bootstrap_failed"] = 0
@@ -1883,9 +1918,10 @@ def _apply_shape_refitted_bootstrap(
                 updated.loc[row_index, "inference_status"] = "zero-model-variance"
             else:
                 updated.loc[row_index, "statistic"] = coefficient / standard_error
-                centered = samples - coefficient
+                centered = pivot if studentized else samples - coefficient
+                observed = coefficient / standard_error if studentized else coefficient
                 updated.loc[row_index, "p_value"] = float(
-                    (1 + np.sum(np.abs(centered) >= abs(coefficient)))
+                    (1 + np.sum(np.abs(centered) >= abs(observed)))
                     / (len(centered) + 1)
                 )
                 probability = float(updated.loc[row_index, "p_value"])
@@ -2900,7 +2936,7 @@ def _validate_reconciled_response_modes(raw_args, responses, response_specs):
         "null-bootstrap",
     }:
         raise ValueError(
-            "Gaussian reconciled PGLS supports Wald or parametric-bootstrap inference."
+            "Gaussian reconciled PGLS supports Wald, parametric-bootstrap, or studentized-bootstrap inference."
         )
     return continuous, non_gaussian
 
@@ -3010,7 +3046,10 @@ def _fit_reconciled_gaussian_responses(
         encoded_predictor_names,
         predictor_group_uncertainties,
     )
-    refit_shape = raw_args.inference == "parametric-bootstrap" and any(
+    refit_shape = raw_args.inference in {
+        "parametric-bootstrap",
+        "studentized-bootstrap",
+    } and any(
         diagnostics["parameter_status"] == "estimated"
         for diagnostics in response_diagnostics.values()
     )

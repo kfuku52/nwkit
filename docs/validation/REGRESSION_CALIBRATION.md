@@ -78,6 +78,12 @@ to biological expression observations; complete loss at a leaf is ineligible.
 * `wald` and `parametric-bootstrap` call the existing production estimators.
   RSC event-average Wald uses an asymptotic normal reference. The coefficient
   bootstrap uses centered coefficient samples and percentile intervals.
+* `studentized-bootstrap` calls the opt-in production Gaussian coefficient
+  method. Each refit contributes its event-average coefficient and model SE;
+  the test uses a studentized empirical reference and the interval inverts its
+  quantiles. It does not use the auxiliary common-coefficient likelihood-ratio
+  statistic. Raw-tip cases also refit the evolutionary shape parameter when
+  that parameter was estimated.
 * `oracle` is an independently calculated Gaussian GLS result with the true
   covariance known. It is a generator/linear-algebra control, not an available
   practical estimator. Under outcome-dependent missingness its unconditional

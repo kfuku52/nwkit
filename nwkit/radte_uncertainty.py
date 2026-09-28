@@ -121,7 +121,14 @@ def profile_intervals(fit, problem, *, level=0.95, starts=3, maxiter=2000, seed=
     if starts < 1:
         raise ValueError("Profile optimizer starts must be positive.")
     c = problem.chronology
-    if fit.log_rate_sd == 0:
+    # An estimated zero variance is a nuisance boundary: the ordinary
+    # chi-square profile reference is not justified there. With a *supplied*
+    # strict clock and sequence observations, however, the rate variance is
+    # fixed by the model and sequence sampling still identifies free ages.
+    # Branch-only strict clocks have no sampling likelihood to profile.
+    if fit.log_rate_sd == 0 and (
+        problem.likelihood is None or problem.rate_variance_estimated
+    ):
         fit.interval_status = "unavailable-strict-clock-limit"
         return
     lower, upper = fit.ages.copy(), fit.ages.copy()

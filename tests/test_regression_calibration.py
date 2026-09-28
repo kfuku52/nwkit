@@ -100,11 +100,12 @@ def test_conditional_predictor_error_covariance_shared_by_event():
     assert data["true_covariance"][0, 2] == 0
 
 
-def test_production_rsc_bootstrap_observer_counts_reestimation():
+@pytest.mark.parametrize("method", ["parametric-bootstrap", "studentized-bootstrap"])
+def test_production_rsc_bootstrap_observer_counts_reestimation(method):
     case = Case("small", size=6)
     data = generate(case, 35)
-    first = evaluate(case, data, "parametric-bootstrap", 4, 29, 30)
-    second = evaluate(case, data, "parametric-bootstrap", 4, 29, 30)
+    first = evaluate(case, data, method, 4, 29, 30)
+    second = evaluate(case, data, method, 4, 29, 30)
     assert first["status"] == "completed"
     assert first["bootstrap_successes"] == 4
     assert first["bootstrap_attempts"] >= 4

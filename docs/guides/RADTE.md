@@ -184,6 +184,9 @@ Rate-bootstrap intervals are unavailable at the strict-clock limit.
   still make intervals unavailable.
 * `profile`: conditional likelihood-ratio intervals; endpoints limited by
   calibrations are explicitly marked. These use asymptotic reference thresholds.
+  With sequence input and a supplied `--rate-sd 0`, the likelihood is profiled
+  under a known strict clock. An estimated zero rate variance remains an
+  unavailable nuisance-boundary case.
 * `exact-log-duration`: a finite-sample Gaussian contrast interval for branch-only
   input with one free age, where every affected duration is a positive multiple
   of `age - offset`. A root duplication above fixed species ages is a common

@@ -12,7 +12,13 @@ from nwkit.evolution import build_evolutionary_process
 from nwkit.file_paths import validate_outputs_do_not_replace_inputs
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import require_rooted
-from nwkit.signal_stats import bh_adjust, k_fit, lambda_fit, permutation_test
+from nwkit.signal_stats import (
+    bh_adjust,
+    k_fit,
+    lambda_fit,
+    lambda_parametric_bootstrap,
+    permutation_test,
+)
 from nwkit.trait_input import numeric_trait_value as _number
 from nwkit.trait_input import parse_trait_columns as _columns
 from nwkit.util import (
@@ -139,9 +145,11 @@ def _trait_rows(covariance, column, values, errors, args):
     errors = errors / scale
     covariance /= time_scale
     digest = int.from_bytes(hashlib.sha256(column.encode()).digest()[:8], "little")
-    rng = np.random.default_rng(np.random.SeedSequence([args.seed, digest]))
     rows = []
     for method in methods:
+        # Preserve K's historical stream while isolating lambda from K draws.
+        entropy = [args.seed, digest] if method == "K" else [args.seed, digest, 1]
+        rng = np.random.default_rng(np.random.SeedSequence(entropy))
         try:
             result = _method_result(method, covariance, values, errors, args, rng)
             result = _restore_units(result, scale, time_scale, offset, n)
@@ -192,7 +200,22 @@ def _method_result(method, covariance, values, errors, args, rng):
         if args.test == "no":
             result.pop("p_value", None)
         elif "p_value" in result:
-            result["test_method"] = "likelihood_ratio_chi2_1"
+            if args.lambda_test == "bootstrap":
+                result["p_value"] = lambda_parametric_bootstrap(
+                    covariance,
+                    values,
+                    errors,
+                    result["likelihood_ratio"],
+                    args.n_sim,
+                    rng,
+                )
+                result.update(
+                    test_method="parametric_bootstrap",
+                    num_simulations=args.n_sim,
+                    seed=args.seed,
+                )
+            else:
+                result["test_method"] = "likelihood_ratio_chi2_1"
         return result
     estimate, rate = k_fit(covariance, values, errors)
     result = {"estimate": estimate, "sigma2": rate, "status": "ok"}

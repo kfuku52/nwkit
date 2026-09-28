@@ -872,6 +872,21 @@ with fewer than 20 unique species events and fits at a variance boundary are
 flagged. Conditional event deviations and lineage slopes can be written with
 `--random-effects-out`.
 
+`--inference studentized-bootstrap` is an opt-in Gaussian coefficient method.
+Each draw refits the covariance and computes the selected coefficient and its
+model-based standard error. It compares `(beta* - beta_hat)/SE*` with
+`beta_hat/SE_hat` and inverts bootstrap quantiles for the interval. For the
+event-average estimand, both estimates and standard errors use the event-average
+operator; the auxiliary common-coefficient fit supplies covariance only. Raw
+input with an estimated gene evolutionary parameter also refits that parameter
+for each draw. A failed refit aborts inference after the specified number of
+attempts. This method addresses scale uncertainty missed by the centered
+coefficient bootstrap in simple small-event Gaussian models. It remains a
+plug-in approximation conditional on the design and fitted covariance, and
+does not establish calibration under mean heterogeneity, misspecified covariance,
+or uncertain reconciliation. It is not the auxiliary common-coefficient
+likelihood null bootstrap.
+
 ### Delayed trait acquisition and paralog-specific responses
 
 The ordinary reconciled contrast associates the expression contrast and trait

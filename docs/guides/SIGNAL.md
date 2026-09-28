@@ -14,10 +14,18 @@ nwkit signal -i examples/signal/tree.nwk \
 nwkit signal -i examples/signal/tree.nwk \
   --trait examples/signal/traits.tsv --columns clustered,mixed \
   --standard-error-column clustered_se,mixed_se -o signal_se.tsv
+
+# Finite-simulation calibration of the lambda=0 test:
+nwkit signal -i examples/signal/tree.nwk \
+  --trait examples/signal/traits.tsv --columns clustered \
+  --method lambda --lambda-test bootstrap --n-sim 999 --seed 1 -o signal_boot.tsv
 ```
 
 Use `--method K|lambda|both` (default `both`) and `--test yes|no` (default
 `yes`). Lambda profile intervals remain available with `--test no`.
+`--lambda-test chi2|bootstrap` selects the lambda P-value calculation (default
+`chi2`); it has no effect with `--test no`. `--n-sim` sets K permutations and,
+when selected, lambda bootstrap replicates.
 `--ci-level` defaults to 0.95. Tree or trait input may use stdin, but not both;
 `-o -` writes only the result TSV to stdout. File output is staged before
 replacement and cannot overwrite either input (including file aliases).
@@ -82,12 +90,25 @@ search intervals are evaluated. The reported `sigma2` is the uncorrected ML
 rate for lambda. Fits and likelihoods are returned in original trait and
 branch-length units.
 
-The lambda test compares the ML fit to lambda=0 and reports the conventional
-`chi-square(1)` likelihood-ratio tail probability. This is the convention
-used by phytools, not a finite-sample exact calibration: lambda=0 is a boundary,
-and small samples or weakly identifiable variance components can invalidate
-ordinary asymptotic approximations. No parametric-bootstrap calibration is
-implemented by this command. A zero LR gives p=1.
+The default lambda test compares the ML fit to lambda=0 and reports the
+conventional `chi-square(1)` likelihood-ratio tail probability. This is the
+convention used by phytools, not a finite-sample calibration: lambda=0 is a
+boundary, and small samples or weakly identifiable variance components can
+invalidate ordinary asymptotic approximations. A zero LR gives p=1.
+
+With `--lambda-test bootstrap`, the command fits the lambda=0 null, then draws
+each observed tip independently from a normal distribution with the fitted
+root mean and variance `sigma2*C[ii] + SE[i]^2`. It retains the original
+missing-tip pattern and known SEs. Each simulated data set reestimates the
+root mean and diffusion rate under both the null and free-lambda models, and
+reestimates lambda within `[0,1]`. The upper-tail P-value is
+`(1 + number(LR_sim >= LR_observed))/(B+1)`, including numerical ties; its
+minimum is `1/(B+1)`. A simulated zero-rate or flat lambda fit has LR zero.
+The fitted null is held fixed while simulating, so this is a plug-in parametric
+bootstrap, not an exact finite-sample test. A zero-rate or otherwise
+unidentifiable **observed** lambda fit still has no P-value. A numerical failure
+in any bootstrap fit fails that trait's lambda result instead of silently
+discarding the replicate.
 
 The confidence limits are the connected profile-likelihood interval containing
 the selected maximum, with cutoff `logL_max - chi2_quantile(ci_level,1)/2`.
@@ -116,7 +137,7 @@ Unavailable fields are empty, never substituted zeros.
 | `sigma2`, `root_mean` | Error-aware K corrected rate, or lambda ML rate and mean |
 | `log_likelihood`, `null_log_likelihood`, `likelihood_ratio` | Lambda ML fit and null comparison |
 | `test_method`, `p_value`, `p_adjusted`, `p_adjust`, `num_tests` | Inference and multiple-testing family |
-| `num_simulations`, `seed` | K randomization controls |
+| `num_simulations`, `seed` | K randomization or lambda bootstrap controls; empty for chi-square lambda |
 | `ci_level`, `ci_lower`, `ci_upper` | Lambda connected profile interval |
 | `lambda_lower`, `lambda_upper` | Search limits, currently 0 and 1 |
 
@@ -139,7 +160,10 @@ as failed fits instead of receiving p-values.
 
 The implementation uses dense tip covariances: storage is quadratic in tip
 count, and matrix factorizations are cubic. Error-aware permutations refit
-sampling-error-adjusted rates and can be costly. There is no performance
+sampling-error-adjusted rates and can be costly. Lambda bootstrap refits both
+models `B` times and can also be costly. Seeded lambda results are stable under
+trait selection/order and input row/tree child order, and do not depend on K
+permutation draws. There is no performance
 claim of equivalence to linear-time signal algorithms such as `fast.SSC`.
 
 ## References and validation

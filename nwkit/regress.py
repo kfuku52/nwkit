@@ -1978,6 +1978,73 @@ def _parametric_bootstrap_eiv_coefficients(
     return np.asarray(coefficients, dtype=float)
 
 
+def _studentized_bootstrap_coefficients(
+    fit,
+    design,
+    fixed_covariance,
+    components,
+    predictor_uncertainties,
+    predictor_columns,
+    *,
+    reml,
+    replicates,
+    seed,
+    component_factors,
+    allow_large_dense,
+    likelihood_observations,
+    likelihood_logdet_offset,
+    likelihood_groups,
+    event_groups,
+):
+    """Refit the covariance and estimator for each studentized Gaussian draw."""
+    rng = np.random.default_rng(seed)
+    coefficients = []
+    standard_errors = []
+    mean = design @ fit["beta"]
+    for _ in range(replicates):
+        response = mean + draw_from_factor(
+            fit["cholesky"], rng.standard_normal(len(mean)), rng=rng
+        )
+        try:
+            bootstrap_fit = _fit_profile_or_eiv(
+                response,
+                design,
+                fixed_covariance,
+                components,
+                predictor_uncertainties,
+                predictor_columns,
+                reml=reml,
+                component_factors=component_factors,
+                allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
+                starting_fit=fit,
+            )
+            if not bootstrap_fit["optimizer_converged"]:
+                continue
+            if event_groups is not None:
+                bootstrap_fit = event_average_fit(
+                    response, design, event_groups, bootstrap_fit
+                )
+        except ValueError:
+            continue
+        standard_error = np.sqrt(
+            np.maximum(np.diag(bootstrap_fit["beta_covariance"]), 0.0)
+        )
+        if not np.isfinite(standard_error).all() or np.any(standard_error <= 0.0):
+            continue
+        coefficients.append(bootstrap_fit["beta"])
+        standard_errors.append(standard_error)
+    if len(coefficients) != replicates:
+        raise ValueError(
+            "Studentized bootstrap produced only {} successful fits in {} attempts.".format(
+                len(coefficients), replicates
+            )
+        )
+    return np.asarray(coefficients), np.asarray(standard_errors)
+
+
 def _fit_profile_or_eiv(
     response,
     design,
@@ -2885,11 +2952,21 @@ def _coefficient_bootstrap_mcse(p_value, bootstrap_coefficients, replicates):
 
 
 def _gaussian_inference_metadata(
-    event_weighting, reml, eiv, bootstrap_coefficients, replicates, exact_scale_model
+    event_weighting, reml, eiv, inference, replicates, exact_scale_model
 ):
     event = event_weighting == "event"
-    bootstrap = bootstrap_coefficients is not None
+    bootstrap = inference != "wald"
     reference = "exact-t" if exact_scale_model else "asymptotic-normal"
+    p_value_method = {
+        "wald": reference,
+        "parametric-bootstrap": "centered-parametric-bootstrap",
+        "studentized-bootstrap": "studentized-parametric-bootstrap",
+    }[inference]
+    interval_method = {
+        "wald": reference,
+        "parametric-bootstrap": "parametric-percentile",
+        "studentized-bootstrap": "studentized-parametric-bootstrap",
+    }[inference]
     return {
         "estimand": "event-average" if event else "common",
         "objective_kind": "estimating-equation" if event else "gaussian-likelihood",
@@ -2897,8 +2974,8 @@ def _gaussian_inference_metadata(
         if event
         else "model-based-gls",
         "nuisance_estimator": "gaussian-REML" if reml else "gaussian-ML",
-        "p_value_method": "centered-parametric-bootstrap" if bootstrap else reference,
-        "interval_method": "parametric-percentile" if bootstrap else reference,
+        "p_value_method": p_value_method,
+        "interval_method": interval_method,
         "bootstrap_attempted": replicates if bootstrap else 0,
         "bootstrap_succeeded": replicates if bootstrap else 0,
         "bootstrap_failed": 0,
@@ -3049,6 +3126,7 @@ def _fit_covariance_model(
     beta = fit["beta"]
     beta_covariance = fit["beta_covariance"]
     bootstrap_coefficients = None
+    bootstrap_standard_errors = None
     if inference == "parametric-bootstrap":
         if balanced_predictor_uncertainties:
             bootstrap_coefficients = _parametric_bootstrap_eiv_coefficients(
@@ -3085,6 +3163,27 @@ def _fit_covariance_model(
                 event_groups=event_inverse if event_weighting == "event" else None,
             )
         standard_errors = np.std(bootstrap_coefficients, axis=0, ddof=1)
+    elif inference == "studentized-bootstrap":
+        bootstrap_coefficients, bootstrap_standard_errors = (
+            _studentized_bootstrap_coefficients(
+                fit,
+                design,
+                fixed_covariance,
+                components,
+                balanced_predictor_uncertainties,
+                predictor_uncertainty_columns,
+                reml=effective_reml,
+                replicates=bootstrap_replicates,
+                seed=seed,
+                component_factors=component_factors,
+                allow_large_dense=allow_large_dense,
+                likelihood_observations=likelihood_observations,
+                likelihood_logdet_offset=likelihood_logdet_offset,
+                likelihood_groups=likelihood_groups,
+                event_groups=event_inverse if event_weighting == "event" else None,
+            )
+        )
+        standard_errors = np.sqrt(np.maximum(np.diag(beta_covariance), 0.0))
     elif inference == "wald":
         standard_errors = np.sqrt(np.maximum(np.diag(beta_covariance), 0.0))
     else:
@@ -3146,7 +3245,7 @@ def _fit_covariance_model(
         event_weighting,
         effective_reml,
         bool(balanced_predictor_uncertainties),
-        bootstrap_coefficients,
+        inference,
         bootstrap_replicates,
         exact_scale_model,
     )
@@ -3155,7 +3254,19 @@ def _fit_covariance_model(
     for index, predictor in enumerate(predictors):
         coefficient = float(beta[index])
         standard_error = float(standard_errors[index])
-        if bootstrap_coefficients is None:
+        if (
+            bootstrap_coefficients is not None
+            and bootstrap_standard_errors is not None
+            and standard_error > 0.0
+        ):
+            pivot = (
+                bootstrap_coefficients[:, index] - coefficient
+            ) / bootstrap_standard_errors[:, index]
+            alpha = (1.0 - confidence_level) / 2.0
+            lower_pivot, upper_pivot = np.quantile(pivot, [alpha, 1.0 - alpha])
+            lower = float(coefficient - upper_pivot * standard_error)
+            upper = float(coefficient - lower_pivot * standard_error)
+        elif bootstrap_coefficients is None:
             lower = coefficient - critical * standard_error
             upper = coefficient + critical * standard_error
         else:
@@ -3172,7 +3283,18 @@ def _fit_covariance_model(
         else:
             statistic_value = coefficient / standard_error
             statistic = statistic_value
-            if bootstrap_coefficients is None:
+            if (
+                bootstrap_coefficients is not None
+                and bootstrap_standard_errors is not None
+            ):
+                pivot = (
+                    bootstrap_coefficients[:, index] - coefficient
+                ) / bootstrap_standard_errors[:, index]
+                p_value = float(
+                    (1 + np.sum(np.abs(pivot) >= abs(statistic_value)))
+                    / (len(pivot) + 1)
+                )
+            elif bootstrap_coefficients is None:
                 p_value = float(
                     2.0 * student_t.sf(abs(statistic_value), degrees_of_freedom)
                 )
@@ -3365,7 +3487,7 @@ def _validate_reconciled_pgls_options(
         raise ValueError("Unsupported coverage policy: {}.".format(coverage_policy))
     if model not in {"hierarchical", "cluster-hc1", "replicate-reml"}:
         raise ValueError("Unsupported PGLS model: {}.".format(model))
-    if inference not in {"parametric-bootstrap", "wald"}:
+    if inference not in {"parametric-bootstrap", "studentized-bootstrap", "wald"}:
         raise ValueError("Unsupported inference method: {}.".format(inference))
     if (
         not isinstance(bootstrap_replicates, int)

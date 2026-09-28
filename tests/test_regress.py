@@ -1346,7 +1346,10 @@ def test_hierarchical_model_estimates_shared_species_event_effects():
     assert set(random_effects["n_observations"]) == {2}
 
 
-def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
+@pytest.mark.parametrize("inference", ["parametric-bootstrap", "studentized-bootstrap"])
+def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference(
+    inference,
+):
     response = pd.DataFrame(
         [
             _response_row(1, 1.8),
@@ -1368,7 +1371,7 @@ def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
         predictors=["body_size"],
         predictor_sampling_covariance=predictor_sampling,
         model="replicate-reml",
-        inference="parametric-bootstrap",
+        inference=inference,
         bootstrap_replicates=12,
         seed=19,
     )
@@ -1383,9 +1386,59 @@ def test_parametric_bootstrap_is_reproducible_and_reports_empirical_inference():
         "confidence_interval_upper",
     ]:
         assert first[column] == pytest.approx(second[column])
-    assert first["inference_method"] == "parametric-bootstrap"
+    assert first["inference_method"] == inference
     assert first["measurement_error_model"] == "latent-predictor"
     assert 0.0 < first["p_value"] <= 1.0
+
+
+def test_studentized_bootstrap_uses_fitted_event_average_standard_errors():
+    response = pd.DataFrame([_response_row(1, 0.7), _response_row(2, -1.2)])
+    predictor = _predictor_table(values=(1.0, 1.0))
+    predictor = predictor.iloc[:2].copy()
+    result = fit_reconciled_pgls(
+        response,
+        predictor,
+        ["expression"],
+        ["body_size"],
+        model="replicate-reml",
+        inference="studentized-bootstrap",
+        bootstrap_replicates=1999,
+        seed=41,
+    ).iloc[0]
+    exact_p = 2.0 * regression_mod.student_t.sf(abs(result["statistic"]), df=1)
+    assert result["estimand"] == "event-average"
+    assert result["p_value_method"] == "studentized-parametric-bootstrap"
+    assert result["interval_method"] == "studentized-parametric-bootstrap"
+    assert result["p_value"] == pytest.approx(exact_p, abs=0.04)
+    assert result["bootstrap_succeeded"] == 1999
+
+
+def test_studentized_bootstrap_aborts_after_a_failed_fixed_attempt(monkeypatch):
+    response = pd.DataFrame([_response_row(1, 0.7), _response_row(2, -1.2)])
+    predictor = _predictor_table(values=(1.0, 1.0)).iloc[:2].copy()
+    original = regression_mod._fit_profile_or_eiv
+    calls = 0
+
+    def fail_first(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise ValueError("simulated refit failure")
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(regression_mod, "_fit_profile_or_eiv", fail_first)
+    with pytest.raises(ValueError, match="only 1 successful fits in 2 attempts"):
+        fit_reconciled_pgls(
+            response,
+            predictor,
+            ["expression"],
+            ["body_size"],
+            model="replicate-reml",
+            inference="studentized-bootstrap",
+            bootstrap_replicates=2,
+            seed=41,
+        )
+    assert calls == 2
 
 
 def test_model_specific_options_are_validated_instead_of_ignored():
@@ -3136,7 +3189,8 @@ def test_pgls_raw_auto_gene_parameter_rejects_cluster_hc1_before_io():
 
 @pytest.mark.integration
 @pytest.mark.slow
-def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
+@pytest.mark.parametrize("inference", ["parametric-bootstrap", "studentized-bootstrap"])
+def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path, inference):
     gene_tree, species_tree, expression, species_traits = _write_raw_regression_inputs(
         tmp_path, biological_replicates=True
     )
@@ -3164,7 +3218,7 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
             "--gene-evolution-model",
             "lambda",
             "--inference",
-            "parametric-bootstrap",
+            inference,
             "--bootstrap-replicates",
             "2",
             "--seed",
@@ -3177,7 +3231,7 @@ def test_pgls_raw_bootstrap_refits_automatic_gene_parameter(tmp_path):
     result = pd.read_csv(outfile, sep="\t")
     assert result.iloc[0]["response_evolution_parameter_status"] == "estimated"
     assert result.iloc[0]["response_evolution_parameter_bootstrap_refit"] == "yes"
-    assert result.iloc[0]["inference_method"] == "parametric-bootstrap"
+    assert result.iloc[0]["inference_method"] == inference
     assert np.isfinite(result.iloc[0]["standard_error"])
 
 
