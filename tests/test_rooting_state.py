@@ -109,16 +109,105 @@ def test_nexus_stream_retains_each_rooting_declaration(
 
 
 @pytest.mark.parametrize("text", ["[&R](A:1,B:1,C:1);", "[&U](A:1,B:1);"])
-def test_copy_and_newick_roundtrip_preserve_rooting_without_custom_properties(text):
+@pytest.mark.parametrize("rooting_nhx", [False, True])
+def test_copy_and_newick_roundtrip_preserve_rooting_without_custom_properties(
+    text, rooting_nhx
+):
     tree = copy_tree_iteratively(read(text))
     target = io.StringIO()
-    write_tree(tree, make_args(outfile=target), "auto", quiet=True, props=["unrelated"])
+    write_tree(
+        tree,
+        make_args(outfile=target, rooting_nhx=rooting_nhx),
+        "auto",
+        quiet=True,
+        props=["unrelated"],
+    )
     output = target.getvalue()
-    assert "nwkit_rooted=" in output
+    if rooting_nhx:
+        assert "nwkit_rooted=" in output
+        # The opt-in representation remains readable by ETE directly.
+        Tree(output, parser=0)
+    else:
+        assert output.startswith(text[:4])
+        assert "nwkit_rooted=" not in output
     assert "_nwkit_rooting" not in output
-    # Still readable with the existing ETE Newick parser.
-    Tree(output, parser=0)
     assert is_rooted(read(output)) is is_rooted(tree)
+
+
+@pytest.mark.parametrize("marker", ["R", "U"])
+@pytest.mark.parametrize("rooting_nhx", [False, True])
+def test_rooting_representation_preserves_tree_and_selected_properties(
+    marker, rooting_nhx
+):
+    tree = read(
+        f'[&{marker}](("A[&U]":1.25,B:2.5)inner:0.5,C:3)root:0[&&NHX:tag=kept];'
+    )
+    original_props = [dict(node.props) for node in tree.traverse()]
+    target = io.StringIO()
+    write_tree(
+        tree,
+        make_args(outfile=target, rooting_nhx=rooting_nhx),
+        1,
+        quiet=True,
+        props=["tag"],
+    )
+    restored = read(target.getvalue())
+    assert get_rooting_info(restored).rooted is get_rooting_info(tree).rooted
+    assert [
+        (set(node.leaf_names()), node.name, node.dist, node.props.get("tag"))
+        for node in restored.traverse()
+    ] == [
+        (set(node.leaf_names()), node.name, node.dist, node.props.get("tag"))
+        for node in tree.traverse()
+    ]
+    assert [dict(node.props) for node in tree.traverse()] == original_props
+
+
+@pytest.mark.parametrize("state", ["yes", "no", "unknown"])
+@pytest.mark.parametrize("rooting_nhx", [False, True])
+def test_existing_root_nhx_is_retained(state, rooting_nhx):
+    tree = read(f"(A:1,B:1)[&&NHX:nwkit_rooted={state}];")
+    target = io.StringIO()
+    write_tree(tree, make_args(outfile=target, rooting_nhx=rooting_nhx), 1, quiet=True)
+    output = target.getvalue()
+    assert not output.startswith("[&")
+    assert f"[&&NHX:nwkit_rooted={state}]" in output
+    assert get_rooting_info(read(output)).state == get_rooting_info(tree).state
+
+
+@pytest.mark.parametrize("marker", ["R", "U"])
+@pytest.mark.parametrize(
+    "option", [[], ["--rooting-nhx", "no"], ["--rooting-nhx", "yes"]]
+)
+def test_label_preserves_markers_unless_nhx_conversion_is_requested(
+    tmp_path, marker, option
+):
+    output = tmp_path / "tree.nwk"
+    main(["label", "-i", f"[&{marker}](A:1,B:2);", "-o", str(output), *option])
+    text = output.read_text()
+    if option == ["--rooting-nhx", "yes"]:
+        assert not text.startswith("[&")
+        assert "nwkit_rooted=" in text
+    else:
+        assert text.startswith(f"[&{marker}]")
+        assert "nwkit_rooted=" not in text
+    assert is_rooted(read(text)) is (marker == "R")
+    assert read(text).name == "n0"
+
+
+@pytest.mark.parametrize("state,marker", [("yes", "R"), ("no", "U")])
+def test_forced_state_uses_marker_by_default(tmp_path, state, marker):
+    output = tmp_path / "tree.nwk"
+    main(["label", "-i", "(A:1,B:1,C:1);", "--input-rooted", state, "-o", str(output)])
+    assert output.read_text().startswith(f"[&{marker}]")
+    assert is_rooted(read(str(output))) is (state == "yes")
+
+
+def test_unknown_state_survives_pruning_to_a_binary_root(tmp_path):
+    output = tmp_path / "tree.nwk"
+    main(["prune", "-i", "(A:1,B:1,C:1);", "--pattern", "C", "-o", str(output)])
+    assert "[&&NHX:nwkit_rooted=unknown]" in output.read_text()
+    assert get_rooting_info(read(str(output))).state == "unknown"
 
 
 def test_subtree_write_does_not_attach_tree_metadata_to_original_descendant():

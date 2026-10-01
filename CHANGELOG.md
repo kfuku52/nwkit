@@ -2,6 +2,14 @@
 
 All notable changes made after the `v0.21.1` tagged release are tracked here.
 
+## [Unreleased]
+
+### Changed
+
+- Keep `[&R]`/`[&U]` declarations in shared Newick output by default instead
+  of converting them to root NHX. Add `--rooting-nhx yes` for the previous
+  representation, retaining existing NHX and otherwise-lost unknown states.
+
 ## [0.43.35] - 2026-09-28
 
 ### Fixed

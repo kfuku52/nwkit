@@ -1360,7 +1360,12 @@ def _tree_output_properties(tree, args, props):
         - ROOTING_PROPERTIES
         - {TREE_FORMAT_PROP}
     )
-    if rooting_needs_serialization(tree):
+    info = get_rooting_info(tree)
+    if rooting_needs_serialization(tree) and (
+        getattr(args, "rooting_nhx", False)
+        or info.source == "nhx"
+        or info.rooted is None
+    ):
         properties.add(ROOTED_PROP)
     return sorted(properties)
 
@@ -1436,6 +1441,9 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
             lambda match: str(node_name_dict[match.group(0)]),
             tree_str,
         )
+    if ROOTED_PROP not in props and rooting_needs_serialization(tree):
+        info = get_rooting_info(tree)
+        tree_str = ("[&R]" if info.rooted else "[&U]") + tree_str
     if args.outfile == "-":
         print(tree_str)
     elif hasattr(args.outfile, "write"):

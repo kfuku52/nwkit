@@ -6463,6 +6463,23 @@ def _add_input_rooting_options():
             )
 
 
+def _add_output_rooting_options():
+    for command_parser in subparsers.choices.values():
+        outputs = {action.dest for action in command_parser._actions}
+        if not outputs.intersection({"outformat", "tree_outformat"}):
+            continue
+        command_parser.add_argument(
+            "--rooting-nhx",
+            "--rooting_nhx",
+            metavar="yes|no",
+            type=strtobool,
+            default=False,
+            help="default=no: Convert rooting declarations to root NHX "
+            "nwkit_rooted=yes/no. By default preserve [&R]/[&U]; existing "
+            "root NHX and unknown rooting states remain NHX.",
+        )
+
+
 from nwkit.radte_cli import register_radte, register_radte_compare  # noqa: E402
 
 register_radte(subparsers, p_audit, p_species, finite_float)
@@ -6491,6 +6508,7 @@ from nwkit.branch_gaussian_options import register_branch_gaussian_options  # no
 
 register_branch_gaussian_options(pasr)
 _add_input_rooting_options()
+_add_output_rooting_options()
 
 
 def _validate_stdin_ownership(args):

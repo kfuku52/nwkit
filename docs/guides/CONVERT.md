@@ -24,6 +24,12 @@ accepts `newick`, `nhx`, `figtree`, and `mcmctree-output`. `--to` defaults to `n
 and accepts `newick`, `nhx`, and `figtree`. FigTree output is a NEXUS document.
 `--format` still selects the ETE parser for names versus support; it is not the
 container format. `--input-rooted` follows the common NWKIT rooting contract.
+FigTree conversion writes `[&R]` for a tree interpreted as rooted (including
+an unmarked binary-root tree), or `[&U]` for an explicitly unrooted tree.
+Newick conversion retains that declaration, and subsequent commands such as
+`label` now keep it by default. `label --rooting-nhx yes` selects the older
+root-NHX representation; the switch changes serialization, not root placement
+or input rootedness.
 
 `--time-factor` must be finite and positive (default `1`). It multiplies supplied
 branch lengths and explicit `age`, `age_mean`, `age_median`, `age_ci_low`, and

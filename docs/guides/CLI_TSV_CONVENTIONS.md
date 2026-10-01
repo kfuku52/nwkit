@@ -161,8 +161,14 @@ comparison unless the corresponding input override is used.
 
 Shared Newick writers preserve explicit or forced states, and any state that
 would otherwise be lost through an operation such as collapsing or pruning,
-using `[&&NHX:nwkit_rooted=yes]` (or `no`/`unknown`) on the root. This is readable
-by ETE's Newick parser and independent of the selected annotation properties.
+using `[&R]` (rooted) or `[&U]` (unrooted) by default. Conversion of these
+declarations to root NHX is off by default; use `--rooting-nhx yes` to emit
+`[&&NHX:nwkit_rooted=yes]` (or `no`), as in earlier versions. Existing root
+NHX remains NHX. Unknown states that would otherwise be lost still use
+`[&&NHX:nwkit_rooted=unknown]`, because neither `[&R]` nor `[&U]` represents
+unknown rootedness. These declarations are independent of the selected
+annotation properties. NWKIT reads both forms; ETE's direct Newick reader
+requires the NHX form.
 Legacy unmarked binary output is unchanged. Rooting operations replace the
 input interpretation with rooted status; label and support changes do not.
 The `nwkit_rooted` property and private `_nwkit_rooting_*` bookkeeping properties
