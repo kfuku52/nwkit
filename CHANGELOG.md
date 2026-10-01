@@ -4,6 +4,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.36] - 2026-10-01
+
 ### Changed
 
 - Keep `[&R]`/`[&U]` declarations in shared Newick output by default instead
