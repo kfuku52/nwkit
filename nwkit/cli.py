@@ -6501,6 +6501,18 @@ register_pca(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
 from nwkit.dtt_cli import register_dtt  # noqa: E402
 
 register_dtt(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.wgd_count_cli import register_wgd_count  # noqa: E402
+
+register_wgd_count(subparsers, p_tree_input, p_table_output, p_tip_table_policy)
+from nwkit.ksrate_cli import register_ksrate  # noqa: E402
+
+register_ksrate(subparsers, p_tree_input, p_table_output)
+from nwkit.wgd_tree_cli import register_wgd_tree  # noqa: E402
+
+register_wgd_tree(subparsers, p_tree_input, p_table_output, p_species)
+from nwkit.mul_reconcile_cli import register_mul_reconcile  # noqa: E402
+
+register_mul_reconcile(subparsers, p_tree_input, p_table_output, p_species)
 from nwkit.regression_selection_cli import register_regression_selection  # noqa: E402
 
 register_regression_selection(subparsers, p_audit)

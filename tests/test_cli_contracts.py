@@ -11,6 +11,30 @@ from nwkit.util import read_tree
 pytestmark = pytest.mark.integration
 
 CASES = {
+    "mul-reconcile": ["--species-tree", "{tree}", "--species-parser", "taxonomic"],
+    "ksrate": ["--ks-tsv", "{ks}", "--bootstrap", "9"],
+    "wgd-tree": [
+        "--species-tree",
+        "{tree}",
+        "--count-model",
+        "{count_model}",
+        "--species-parser",
+        "taxonomic",
+    ],
+    "wgd-count": [
+        "--counts",
+        "{counts}",
+        "--candidate-branches",
+        "1",
+        "--event-fractions",
+        "0.5",
+        "--family-gamma-shape",
+        "none",
+        "--rate-model",
+        "homogeneous",
+        "--max-states",
+        "64",
+    ],
     "regress-select": [
         "--input-rooted",
         "yes",
@@ -136,6 +160,10 @@ CASES = {
 }
 
 TABLE_COLUMNS = {
+    "mul-reconcile": "score",
+    "ksrate": "corrected_ks",
+    "wgd-count": "count_support",
+    "wgd-tree": "conditional_wgd_probability",
     "dtt": "relative_disparity",
     "pca": "PC1",
     "signal": "estimate",
@@ -175,6 +203,23 @@ def test_command_parser_reaches_its_real_handler(
         }
     ).to_csv(data, sep="\t", index=False)
     folds = tmp_path / "folds.tsv"
+    counts = tmp_path / "counts.tsv"
+    count_model = tmp_path / "count_model.json"
+    if command == "wgd-tree":
+        from tests.test_wgd_tree import model
+
+        count_model.write_text(json.dumps(model(tree)))
+    ks = tmp_path / "ks.tsv"
+    pd.DataFrame(
+        [
+            {"species_a": a, "species_b": b, "family_id": "f1", "ks": 0.5}
+            for i, a in enumerate(names)
+            for b in names[i + 1 :]
+        ]
+    ).to_csv(ks, sep="\t", index=False)
+    pd.DataFrame(
+        {"family_id": ["f1", "f2", "f3"], **{name: [1, 2, 1] for name in names}}
+    ).to_csv(counts, sep="\t", index=False)
     if command == "regress-select":
         names = [f"Genus_{i}" for i in range(12)]
         tree.write_text("(" + ",".join(f"{name}:1" for name in names) + ");")
@@ -203,6 +248,9 @@ def test_command_parser_reaches_its_real_handler(
     )
     paths = {
         "tree": tree,
+        "counts": counts,
+        "count_model": count_model,
+        "ks": ks,
         "folds": folds,
         "other": other,
         "data": data,

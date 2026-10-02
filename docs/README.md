@@ -20,6 +20,10 @@ in [`guides/`](guides/):
 - [Discrete stochastic maps](guides/STOCHASTIC_MAPS.md)
 - [Tree format conversion](guides/CONVERT.md)
 - [All optimal reconciliation roots and loss exports](guides/RECONCILIATION_EXPORTS.md)
+- [Native gene-count DL/WGM candidates](guides/WGD_COUNT.md)
+- [Fixed gene-topology DL/WGD likelihood](guides/WGD_TREE.md)
+- [Native MUL-tree reconciliation](guides/MUL_RECONCILE.md)
+- [Focal-lineage Ks correction](guides/KSRATE.md)
 
 The complete guide list is available in the directory; filenames retain the
 historical names used by the CLI and examples.
@@ -30,6 +34,9 @@ Reproducibility studies, calibration experiments, performance measurements, and
 adoption decisions live in [`validation/`](validation/). These documents record
 the evidence and limits for experimental features; they are not a replacement
 for the corresponding user guide.
+
+- [Native WGD and Ks scientific audit](validation/WGD_SCIENTIFIC_VALIDATION.md)
+- [MUL-tree exact and original-GRAMPA validation](validation/MUL_RECONCILE_VALIDATION.md)
 
 ## Project operations
 

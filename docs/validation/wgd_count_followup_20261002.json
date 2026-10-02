@@ -1,0 +1,1697 @@
+{
+  "working_directory": "/Users/kf/repos/nwkit",
+  "changed_paths_this_followup": [
+    "nwkit/wgd_count.py",
+    "nwkit/wgd_count_fit.py",
+    "tests/test_wgd_count.py",
+    "tests/test_wgd_count_fit.py",
+    "docs/guides/WGD_COUNT.md"
+  ],
+  "source_hashes": {
+    "nwkit/wgd_count.py": "cae1ce4656c61092398caf6a26820ed494b61e86b67c6b2439e2ee7d26fe30d1",
+    "nwkit/wgd_count_fit.py": "ab5fb19e689ad4ef397c904f32f0de6381801d152d8e7ccbcc7e14176bc615ad",
+    "tests/test_wgd_count.py": "25a8f19bc6fc81eeda420390d91398fa925d3db59991c4071b6d6946d284654c",
+    "tests/test_wgd_count_fit.py": "1294ed95a19bdd797273dce8fccb222bdb092cd1514defeec1a159faca45ffa7",
+    "docs/guides/WGD_COUNT.md": "5cd2641090306250e46c34951923512490509485f37293a7f21451516352ee01",
+    "nwkit/wgd_count_model.py": "f29271372a2e38f4916d75581b42af3b989d6fe6e3d00f402adc42956fd38480"
+  },
+  "diagnosis": {
+    "failing_stage": "branch-burst comparator for node 1, after all three event-fraction fits passed",
+    "state_bound": 86,
+    "original_projected_gradients": [
+      4.78744e-05,
+      0.000547346,
+      9.45098e-05
+    ],
+    "cause": "three-point derivative h-squared truncation bias in the stiff log-root-mean coordinate; not a verified SciPy defect or a statistical impossibility",
+    "paired_family_differencing_alone": "agreed with scalar differencing to approximately 1e-8; did not fix the bias",
+    "last_failed_point_three_point_root_gradient": -9.450975902633057e-05,
+    "last_failed_point_complex_step_root_gradient": 0.00024412085732665123,
+    "fix": "Richardson-extrapolated paired-family gradients; independent check at twice the polishing step; polishing only when no initial result passes, within remaining per-start iterations",
+    "unchanged": [
+      "projected-gradient threshold 1e-5",
+      "state tolerance 1e-7",
+      "parameter bounds",
+      "alpha",
+      "p-value formula",
+      "AIC model",
+      "all high-copy families"
+    ]
+  },
+  "preserved_first_failure": "/tmp/nwkit-count-stationarity-first-failure-20261002.json",
+  "verified_fit": {
+    "source_hashes": {
+      "wgd_count.py": "cae1ce4656c61092398caf6a26820ed494b61e86b67c6b2439e2ee7d26fe30d1",
+      "wgd_count_fit.py": "ab5fb19e689ad4ef397c904f32f0de6381801d152d8e7ccbcc7e14176bc615ad",
+      "wgd_count_model.py": "f29271372a2e38f4916d75581b42af3b989d6fe6e3d00f402adc42956fd38480"
+    },
+    "input_hashes": {
+      "/tmp/nwkit-wgd-empirical.wCoTtu/fungi.nwk": "f40484af23f9eda39fc7907bb6da07d37df2aae74838514c1c0a180e519b9560",
+      "/tmp/nwkit-wgd-empirical.wCoTtu/prepared/counts.tsv": "206599269d0cc38d0ee1a15b711d34ffafc837c534f69f5bb46ee709817319f3"
+    },
+    "scope": "Isolated node-1 branch-burst comparator only; not a whole-grid scan",
+    "families": 500,
+    "max_observed": 84,
+    "outcomes": [
+      {
+        "polish": false,
+        "x": [
+          -1.721224023933231,
+          -2.3092149811080076,
+          -2.1488664397004476,
+          -1.8250145508178324,
+          -2.2971983072158455,
+          0.30843785082950675,
+          0.0014608439448930612
+        ],
+        "fun": 3632.4422771034306,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "success": true,
+        "iterations": 48,
+        "evaluations": 1125,
+        "iteration_budget": 400,
+        "elapsed_seconds": 65.78054729197174
+      },
+      {
+        "polish": false,
+        "x": [
+          -1.7212239402483753,
+          -2.309215215668391,
+          -2.1488669200903887,
+          -1.825014541126426,
+          -2.2971989373814257,
+          0.3084376029938914,
+          0.001460839773658651
+        ],
+        "fun": 3632.442277103457,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "success": true,
+        "iterations": 47,
+        "evaluations": 1035,
+        "iteration_budget": 400,
+        "elapsed_seconds": 201.2738464998547
+      },
+      {
+        "polish": false,
+        "x": [
+          -1.7212240305713882,
+          -2.3092149659540944,
+          -2.1488664406190168,
+          -1.8250145551463686,
+          -2.2971984579925,
+          0.30843771083515653,
+          0.0014608436929245355
+        ],
+        "fun": 3632.44227710343,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "success": true,
+        "iterations": 46,
+        "evaluations": 855,
+        "iteration_budget": 400,
+        "elapsed_seconds": 286.7281637080014
+      },
+      {
+        "polish": true,
+        "x": [
+          -1.721224023931559,
+          -2.3092149811056255,
+          -2.148866439695248,
+          -1.8250145508076245,
+          -2.297198307216207,
+          0.30843785081317393,
+          0.0014608436853994705
+        ],
+        "fun": 3632.4422771034306,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "success": true,
+        "iterations": 1,
+        "evaluations": 8,
+        "iteration_budget": 352,
+        "elapsed_seconds": 302.91594312503
+      },
+      {
+        "polish": true,
+        "x": [
+          -1.7212239404999863,
+          -2.3092152155189694,
+          -2.1488669189461644,
+          -1.825014541434182,
+          -2.297198937286881,
+          0.30843760280970794,
+          0.0014608421981256938
+        ],
+        "fun": 3632.442277103457,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "success": true,
+        "iterations": 1,
+        "evaluations": 3,
+        "iteration_budget": 353,
+        "elapsed_seconds": 308.9063029580284
+      },
+      {
+        "polish": true,
+        "x": [
+          -1.7212240305849715,
+          -2.309214965946462,
+          -2.1488664406329696,
+          -1.8250145551174317,
+          -2.2971984579939644,
+          0.3084377108378787,
+          0.001460841489168304
+        ],
+        "fun": 3632.4422771034297,
+        "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+        "success": true,
+        "iterations": 1,
+        "evaluations": 3,
+        "iteration_budget": 354,
+        "elapsed_seconds": 314.8773190828506
+      }
+    ],
+    "fit": {
+      "rates": [
+        [
+          0.004938811306954869,
+          0.002743223642629385
+        ],
+        [
+          0.003220324935381442,
+          0.004451914158149223
+        ],
+        [
+          0.0027763864629450075,
+          0.03759181789519059
+        ]
+      ],
+      "root_mean": 1.0014619090378731,
+      "log_likelihood": -3632.4422771034297,
+      "num_parameters": 7,
+      "max_count": 86,
+      "state_error": 2.842170943040401e-14,
+      "converged": true,
+      "boundary": false,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "event": null
+    },
+    "fit_elapsed_seconds": 316.55521941697225,
+    "gradient_checks": [
+      {
+        "step_factor": 0.5,
+        "gradient": [
+          4.7409368073001406e-07,
+          -5.650196398425049e-07,
+          1.6558914527219857e-06,
+          -1.9616870104286744e-06,
+          -5.263296312026851e-07,
+          2.683036239492005e-07,
+          4.743550868517207e-06
+        ],
+        "projected": 4.7435508685172295e-06
+      },
+      {
+        "step_factor": 1.0,
+        "gradient": [
+          2.9545462509291164e-07,
+          -5.619020199762113e-07,
+          1.5380409075514815e-06,
+          -2.0448519095659248e-06,
+          -4.929631419459923e-07,
+          2.3880379267037966e-07,
+          4.736651073714269e-06
+        ],
+        "projected": 4.736651073714232e-06
+      },
+      {
+        "step_factor": 2.0,
+        "gradient": [
+          3.6412194136922225e-07,
+          -5.775271708171256e-07,
+          1.6074264896385704e-06,
+          -1.9843710864003166e-06,
+          -4.939022561787793e-07,
+          1.5048153005560483e-07,
+          4.7782026280678855e-06
+        ],
+        "projected": 4.7782026280679575e-06
+      },
+      {
+        "step_factor": 4.0,
+        "gradient": [
+          3.4785830258830036e-07,
+          -5.52321558247873e-07,
+          1.5923396688582905e-06,
+          -1.9853329997193087e-06,
+          -4.959021970413783e-07,
+          1.675018387590471e-07,
+          4.776466984379435e-06
+        ],
+        "projected": 4.776466984379507e-06
+      }
+    ],
+    "complex_step_root_gradient": 4.744961328530855e-06,
+    "first_failed_point_complex_root_gradient": 0.00024412085732665123,
+    "preserved_first_failure": "/tmp/nwkit-count-stationarity-first-failure-20261002.json"
+  },
+  "commands": [
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 /tmp/nwkit-wgd-dev-20261001/bin/python /tmp/nwkit-count-stationarity-spy-20261002.py",
+      "scope": "logged prefix, stopped at the first failed comparator (fit call 4)",
+      "status": "reproduced original failure",
+      "failure_preserved_after_seconds": 765.8907468339894,
+      "prefix_log": "/tmp/nwkit-count-stationarity-prefix-20261002.jsonl"
+    },
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 /tmp/nwkit-wgd-dev-20261001/bin/python /tmp/nwkit-count-stationarity-polish-experiment-20261002.py",
+      "status": "scalar and centered objectives both passed after one higher-order step",
+      "evidence": "/tmp/nwkit-count-stationarity-polish-experiment-20261002.json"
+    },
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 /tmp/nwkit-wgd-dev-20261001/bin/python /tmp/nwkit-count-stationarity-verified-20261002.py",
+      "status": "passed isolated 500-family node-1 branch-burst fit",
+      "elapsed_seconds": 316.55521941697225
+    },
+    {
+      "command": "/tmp/nwkit-wgd-dev-20261001/bin/python tools/check.py quick -- tests/test_wgd_count_fit.py tests/test_wgd_count.py tests/test_wgd_count_model.py tests/test_cli_contracts.py -m 'not slow' -x -rs --durations=5",
+      "passed": 157,
+      "pytest_elapsed_seconds": 18.02,
+      "static_checks": "Ruff lint/format and mypy passed"
+    },
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 /tmp/nwkit-wgd-dev-20261001/bin/python tools/check.py test -- tests/test_wgd_count_scenarios.py tests/test_wgd_count_scientific_validation.py -m 'not slow' -rs --durations=5",
+      "passed": 14,
+      "deselected": 7,
+      "pytest_elapsed_seconds": 69.57
+    },
+    {
+      "command": "docker run --rm --entrypoint python -e OPENBLAS_NUM_THREADS=1 -e OMP_NUM_THREADS=1 -v /Users/kf/repos/nwkit:/src -w /src local/genegalleon:subgenome-20261001 tools/check.py test -- tests/test_wgd_count.py tests/test_wgd_count_model.py tests/test_wgd_count_fit.py tests/test_wgd_count_scenarios.py tests/test_wgd_count_scientific_validation.py -m 'not slow' -rs --durations=5",
+      "passed": 116,
+      "deselected": 7,
+      "pytest_elapsed_seconds": 103.19
+    },
+    {
+      "command": "OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 /tmp/nwkit-wgd-dev-20261001/bin/python tools/check.py test -- tests/test_wgd_count_scenarios.py -m slow -s --basetemp=/tmp/nwkit-wgd-count-stationarity-followup-20261002-null --durations=5",
+      "passed": 1,
+      "deselected": 6,
+      "pytest_elapsed_seconds": 100.85,
+      "bootstrap_draws": 59,
+      "data_seed": 2901,
+      "bootstrap_seed": 8101
+    },
+    {
+      "command": "NWKIT_WGD_COUNT_STUDY_REPLICATES=3 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 /tmp/nwkit-wgd-dev-20261001/bin/python tools/check.py test -- tests/test_wgd_count_scientific_validation.py -m slow -k 'study and local-ssd' -s --basetemp=/tmp/nwkit-wgd-count-stationarity-followup-20261002-ssd --durations=5",
+      "passed": 1,
+      "deselected": 13,
+      "pytest_elapsed_seconds": 122.5,
+      "bootstrap_draws_per_dataset": 19,
+      "reused_datasets": 3,
+      "new_independent_replicates": 0
+    },
+    {
+      "command": "/tmp/nwkit-wgd-dev-20261001/bin/python tools/check_maintainability.py",
+      "status": "all hard limits passed"
+    },
+    {
+      "command": "git diff --check",
+      "status": "passed"
+    }
+  ],
+  "additive_tsv_fields": [
+    "background_nuisance_bound_reached",
+    "branch_burst_nuisance_bound_reached"
+  ],
+  "native_event_flag_and_support_status_unchanged": true,
+  "targeted_followup": {
+    "path": "/tmp/nwkit-wgd-count-stationarity-followup-20261002-ssd/test_replicated_independent_bo0/local-ssd.json",
+    "comparisons": [
+      {
+        "data_seed": 173000,
+        "bootstrap_seed": 913000,
+        "counts_identical": true,
+        "support_identical": true,
+        "p_values_identical": true,
+        "bootstrap_statistics_identical": true
+      },
+      {
+        "data_seed": 173001,
+        "bootstrap_seed": 913001,
+        "counts_identical": true,
+        "support_identical": true,
+        "p_values_identical": true,
+        "bootstrap_statistics_identical": true
+      },
+      {
+        "data_seed": 173002,
+        "bootstrap_seed": 913002,
+        "counts_identical": true,
+        "support_identical": true,
+        "p_values_identical": true,
+        "bootstrap_statistics_identical": true
+      }
+    ],
+    "failures": [],
+    "scope_note": "Post-hoc regression using existing seeds, not three additional independent FPR replicates."
+  },
+  "ssd_seed_173002_observed_diagnostic": {
+    "event_boundary": false,
+    "background_boundary": false,
+    "branch_burst_boundary": false,
+    "burst_minus_event_aic": 5.466366856543345,
+    "event_likelihood": -205.31182615760946,
+    "burst_likelihood": -207.04500958588113
+  },
+  "limitations": [
+    "The full 500-family 90-fit grid was not rerun by the count worker.",
+    "The original 36-dataset manifest is preserved with its original source hashes; follow-up tests are documented separately.",
+    "Nuisance-bound flags are numerical diagnostics, not SSD-null calibration or full-GG validation.",
+    "Static/host/Docker evidence does not establish SIF compatibility or a full/release gate.",
+    "Elapsed times include concurrent jobs and are not comparative performance claims."
+  ],
+  "preserved_first_failure_details": {
+    "call": 4,
+    "bound": 86,
+    "node": null,
+    "fraction": 0.5,
+    "groups": [
+      0,
+      2,
+      0,
+      0,
+      0,
+      0,
+      0,
+      1,
+      1,
+      1,
+      1,
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+      1,
+      0,
+      0,
+      0,
+      1,
+      1,
+      0,
+      1,
+      1,
+      0,
+      0,
+      1,
+      1,
+      1
+    ],
+    "source_hashes": {
+      "wgd_count.py": "9db354d83eea4ffd8eed5cb952aa45646856dd165bef47f711b45118b2772e44",
+      "wgd_count_fit.py": "3e536676769d93e64cff905c9877c5cb412d2f0013a726a2142414b42d0f6911",
+      "wgd_count_model.py": "f29271372a2e38f4916d75581b42af3b989d6fe6e3d00f402adc42956fd38480"
+    },
+    "traceback": "Traceback (most recent call last):\n  File \"/tmp/nwkit-count-stationarity-spy-20261002.py\", line 87, in spy_bound\n    return real_bound(current_model, bound, **options)\n           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/kf/repos/nwkit/nwkit/wgd_count_fit.py\", line 159, in _fit_at_bound\n    raise ValueError(f\"Count optimizer did not converge: {'; '.join(messages)}\")\nValueError: Count optimizer did not converge: CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH; projected gradient=4.78744e-05; CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH; projected gradient=0.000547346; CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH; projected gradient=9.45098e-05\n",
+    "parent_reported_projected_gradients": [
+      4.78744e-05,
+      0.000547346,
+      9.45098e-05
+    ],
+    "outcomes": [
+      {
+        "x": [
+          -1.721224023933231,
+          -2.3092149811080076,
+          -2.1488664397004476,
+          -1.8250145508178324,
+          -2.2971983072158455,
+          0.30843785082950675,
+          0.0014608439448930612
+        ],
+        "fun": 3632.4422771034306,
+        "success": true,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "bounds": [
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            0.0,
+            5.123963979403259
+          ]
+        ],
+        "scalar_gradient": [
+          -1.8979086003459362e-06,
+          -2.6016511148039756e-06,
+          -5.871151598697901e-06,
+          -1.1439364553078432e-05,
+          3.922890577872864e-07,
+          1.824860662963713e-05,
+          -4.787443097281346e-05
+        ],
+        "scalar_projected": 4.7874430972813476e-05,
+        "paired_checks": [
+          {
+            "step_factor": 0.25,
+            "gradient": [
+              -1.9261147671344825e-06,
+              -2.6485583254554097e-06,
+              -5.884632258583769e-06,
+              -1.1338823263061142e-05,
+              4.129761760690379e-07,
+              1.8292022167529145e-05,
+              0.00026960616342301804
+            ],
+            "projected": 0.0002696061634230181
+          },
+          {
+            "step_factor": 0.5,
+            "gradient": [
+              -1.8842741994813822e-06,
+              -2.6547829790015714e-06,
+              -5.832774378339271e-06,
+              -1.1441594785530855e-05,
+              4.0614431910561993e-07,
+              1.829924586766827e-05,
+              0.00020611731957993095
+            ],
+            "projected": 0.0002061173195799309
+          },
+          {
+            "step_factor": 1.0,
+            "gradient": [
+              -1.916677205286049e-06,
+              -2.6117661768164888e-06,
+              -5.852611425323223e-06,
+              -1.145113857305248e-05,
+              4.0997526693557394e-07,
+              1.8292058836057768e-05,
+              -4.785241152137414e-05
+            ],
+            "projected": 4.785241152137419e-05
+          },
+          {
+            "step_factor": 2.0,
+            "gradient": [
+              -1.91128735619428e-06,
+              -2.630035217390109e-06,
+              -5.84282088277953e-06,
+              -1.1434622797594005e-05,
+              4.14775923434985e-07,
+              1.8291572978053487e-05,
+              -0.0010636771856769476
+            ],
+            "projected": 0.0010636771856769476
+          },
+          {
+            "step_factor": 4.0,
+            "gradient": [
+              -1.8763731706991298e-06,
+              -2.596246225898938e-06,
+              -5.7477225061416275e-06,
+              -1.1366902090558978e-05,
+              4.247583359314744e-07,
+              1.8309659729797773e-05,
+              -0.005127038325449675
+            ],
+            "projected": 0.005127038325449675
+          },
+          {
+            "step_factor": 8.0,
+            "gradient": [
+              -1.7197093777182406e-06,
+              -2.4734700954468198e-06,
+              -5.434838949809593e-06,
+              -1.1101198022910863e-05,
+              4.483835118588546e-07,
+              1.8341146536971464e-05,
+              -0.021382277648591966
+            ],
+            "projected": 0.021382277648591963
+          }
+        ]
+      },
+      {
+        "x": [
+          -1.7212239402483753,
+          -2.309215215668391,
+          -2.1488669200903887,
+          -1.825014541126426,
+          -2.2971989373814257,
+          0.3084376029938914,
+          0.001460839773658651
+        ],
+        "fun": 3632.442277103457,
+        "success": true,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "bounds": [
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            0.0,
+            5.123963979403259
+          ]
+        ],
+        "scalar_gradient": [
+          2.179322740147668e-05,
+          -1.2845651074537208e-05,
+          -9.855145123218315e-05,
+          2.6520397459029746e-05,
+          -8.156341089053113e-06,
+          1.5883046510980465e-05,
+          -0.000547345553169178
+        ],
+        "scalar_projected": 0.0005473455531691781,
+        "paired_checks": [
+          {
+            "step_factor": 0.25,
+            "gradient": [
+              2.1800811537326324e-05,
+              -1.2839585213789492e-05,
+              -9.850974651649245e-05,
+              2.6430183551241002e-05,
+              -8.169142836206444e-06,
+              1.589463376602597e-05,
+              -0.00022988791327226564
+            ],
+            "projected": 0.00022988791327226555
+          },
+          {
+            "step_factor": 0.5,
+            "gradient": [
+              2.16853878068955e-05,
+              -1.2858322689397622e-05,
+              -9.851879050148265e-05,
+              2.650209347907528e-05,
+              -8.144002247968916e-06,
+              1.5859541984131835e-05,
+              -0.0002933892977521425
+            ],
+            "projected": 0.0002933892977521424
+          },
+          {
+            "step_factor": 1.0,
+            "gradient": [
+              2.1753336125132695e-05,
+              -1.2839331146323618e-05,
+              -9.853531710424307e-05,
+              2.651852888588401e-05,
+              -8.156133579435913e-06,
+              1.586572063120515e-05,
+              -0.0005473454064950634
+            ],
+            "projected": 0.0005473454064950634
+          },
+          {
+            "step_factor": 2.0,
+            "gradient": [
+              2.1751823558713242e-05,
+              -1.2836333944187148e-05,
+              -9.852225878440579e-05,
+              2.656120468547049e-05,
+              -8.164785134245272e-06,
+              1.586796657858343e-05,
+              -0.001563156054099984
+            ],
+            "projected": 0.0015631560540999838
+          },
+          {
+            "step_factor": 4.0,
+            "gradient": [
+              2.179654279794185e-05,
+              -1.2806552473421851e-05,
+              -9.844621892098221e-05,
+              2.6615350610805056e-05,
+              -8.153505789379658e-06,
+              1.586605981509493e-05,
+              -0.005626545680735887
+            ],
+            "projected": 0.005626545680735887
+          },
+          {
+            "step_factor": 8.0,
+            "gradient": [
+              2.193832326452852e-05,
+              -1.2690085366692983e-05,
+              -9.812619623229444e-05,
+              2.688002369965403e-05,
+              -8.126868737556564e-06,
+              1.5904777197756865e-05,
+              -0.02188184876586589
+            ],
+            "projected": 0.02188184876586589
+          }
+        ]
+      },
+      {
+        "x": [
+          -1.7212240305713882,
+          -2.3092149659540944,
+          -2.1488664406190168,
+          -1.8250145551463686,
+          -2.2971984579925,
+          0.30843771083515653,
+          0.0014608436929245355
+        ],
+        "fun": 3632.44227710343,
+        "success": true,
+        "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+        "bounds": [
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            -16.0,
+            2.995732273553991
+          ],
+          [
+            0.0,
+            5.123963979403259
+          ]
+        ],
+        "scalar_gradient": [
+          1.5270528909407565e-06,
+          -8.455366178600126e-07,
+          1.502735229976736e-06,
+          -3.230180270815901e-06,
+          1.4710838701477064e-07,
+          -2.628400131840739e-07,
+          -9.450975902633057e-05
+        ],
+        "scalar_projected": 9.45097590263305e-05,
+        "paired_checks": [
+          {
+            "step_factor": 0.25,
+            "gradient": [
+              1.4699588375406277e-06,
+              -8.461400281567126e-07,
+              1.4746135496192499e-06,
+              -3.208078868186662e-06,
+              1.5802658761352314e-07,
+              -2.2279797992556265e-07,
+              0.00022294648746649394
+            ],
+            "projected": 0.00022294648746649394
+          },
+          {
+            "step_factor": 0.5,
+            "gradient": [
+              1.5096903336567621e-06,
+              -8.442980388299443e-07,
+              1.5328192848737312e-06,
+              -3.2168591526857326e-06,
+              1.6653448369412998e-07,
+              -3.0134196824033476e-07,
+              0.00015949735563990772
+            ],
+            "projected": 0.0001594973556399077
+          },
+          {
+            "step_factor": 1.0,
+            "gradient": [
+              1.5238892838773539e-06,
+              -8.402885362005562e-07,
+              1.4935547299571197e-06,
+              -3.2492979840901928e-06,
+              1.7946393177160007e-07,
+              -3.005719291392095e-07,
+              -9.450207696958363e-05
+            ],
+            "projected": 9.45020769695837e-05
+          },
+          {
+            "step_factor": 2.0,
+            "gradient": [
+              1.540761854882168e-06,
+              -8.270095398685731e-07,
+              1.5101410608475789e-06,
+              -3.2230123840995547e-06,
+              1.897276788256905e-07,
+              -3.10426596207181e-07,
+              -0.0011102897425741885
+            ],
+            "projected": 0.0011102897425741885
+          },
+          {
+            "step_factor": 4.0,
+            "gradient": [
+              1.5911212599124773e-06,
+              -8.037445001066637e-07,
+              1.5980810364072298e-06,
+              -3.1413376552924125e-06,
+              1.908470338212863e-07,
+              -2.9436578066942655e-07,
+              -0.005173673763508778
+            ],
+            "projected": 0.005173673763508778
+          },
+          {
+            "step_factor": 8.0,
+            "gradient": [
+              1.7375326219911052e-06,
+              -6.913593323462926e-07,
+              1.917389236206605e-06,
+              -2.878456540155771e-06,
+              2.18610429696897e-07,
+              -2.616414106546439e-07,
+              -0.021428916567869504
+            ],
+            "projected": 0.021428916567869504
+          }
+        ]
+      }
+    ]
+  },
+  "logged_fit_prefix": [
+    {
+      "stage": "fit_start",
+      "call": 1,
+      "node": 1,
+      "fraction": 0.25,
+      "groups": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 1.9208993762731552e-05
+    },
+    {
+      "stage": "bound",
+      "call": 1,
+      "bound": 86,
+      "node": 1,
+      "fraction": 0.25,
+      "groups": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 0.00010458403266966343
+    },
+    {
+      "stage": "minimize",
+      "call": 1,
+      "start": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        0.0,
+        0.0
+      ],
+      "x": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        2.439050196166476e-07,
+        3.606142873625898e-08,
+        -2.536320133204363e-07,
+        -3.2778392253430296e-08,
+        143.28486244547605,
+        261.97520916259225
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 13,
+      "nit": 0,
+      "elapsed_seconds": 0.677675792016089
+    },
+    {
+      "stage": "minimize",
+      "call": 1,
+      "start": [
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        0.09531017980432493,
+        0.5
+      ],
+      "x": [
+        -2.309212881290131,
+        -2.082478421772815,
+        -2.6647831454644173,
+        -2.2910564726124725,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        -7.739919104566508e-06,
+        2.632484277536955e-06,
+        6.087168368104894e-06,
+        -5.047872332376853e-06,
+        143.28483683734905,
+        261.9752009770033
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 312,
+      "nit": 21,
+      "elapsed_seconds": 105.18262529186904
+    },
+    {
+      "stage": "minimize",
+      "call": 1,
+      "start": [
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        0.09531017980432493,
+        0.5
+      ],
+      "x": [
+        -2.309212798296199,
+        -2.0824784056522807,
+        -2.6647831935374873,
+        -2.2910564486551026,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        6.552914939657377e-06,
+        -4.868292879566406e-07,
+        -4.635829529978751e-06,
+        -2.6222713689426183e-06,
+        143.2848910574889,
+        261.9752154707526
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 286,
+      "nit": 18,
+      "elapsed_seconds": 155.96299599995837
+    },
+    {
+      "stage": "fit_pass",
+      "call": 1,
+      "log_likelihood": -3747.7995181105543,
+      "bound": 86,
+      "state_error": 0.0,
+      "elapsed_seconds": 158.4317934170831
+    },
+    {
+      "stage": "fit_start",
+      "call": 2,
+      "node": 1,
+      "fraction": 0.5,
+      "groups": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 158.4318792920094
+    },
+    {
+      "stage": "bound",
+      "call": 2,
+      "bound": 86,
+      "node": 1,
+      "fraction": 0.5,
+      "groups": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 158.43193316692486
+    },
+    {
+      "stage": "minimize",
+      "call": 2,
+      "start": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        0.0,
+        0.0
+      ],
+      "x": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        2.439050196166476e-07,
+        3.606142873625898e-08,
+        -2.536320133204363e-07,
+        -3.2778392253430296e-08,
+        143.28486244547605,
+        260.24690371718606
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 13,
+      "nit": 0,
+      "elapsed_seconds": 159.10325654200278
+    },
+    {
+      "stage": "minimize",
+      "call": 2,
+      "start": [
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        0.09531017980432493,
+        0.5
+      ],
+      "x": [
+        -2.309212832016784,
+        -2.0824784041134246,
+        -2.664783168523766,
+        -2.2910564418390904,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        -9.268390722178969e-07,
+        7.933514328123525e-07,
+        -5.495360284677294e-07,
+        -3.1139472598894053e-07,
+        143.2848586906187,
+        260.24690247808314
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 273,
+      "nit": 17,
+      "elapsed_seconds": 259.8259389589075
+    },
+    {
+      "stage": "minimize",
+      "call": 2,
+      "start": [
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        0.09531017980432493,
+        0.5
+      ],
+      "x": [
+        -2.309212827699107,
+        -2.082478405147542,
+        -2.6647831629672614,
+        -2.291056438007267,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        -1.6260334630781776e-07,
+        3.606142874641857e-08,
+        3.663573530780866e-07,
+        1.6389196131961352e-08,
+        143.28486056804738,
+        260.24690326660317
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 299,
+      "nit": 18,
+      "elapsed_seconds": 310.0147020840086
+    },
+    {
+      "stage": "fit_pass",
+      "call": 2,
+      "log_likelihood": -3747.7995181105543,
+      "bound": 86,
+      "state_error": 0.0,
+      "elapsed_seconds": 312.41094791702926
+    },
+    {
+      "stage": "fit_start",
+      "call": 3,
+      "node": 1,
+      "fraction": 0.75,
+      "groups": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 312.4110225420445
+    },
+    {
+      "stage": "bound",
+      "call": 3,
+      "bound": 86,
+      "node": 1,
+      "fraction": 0.75,
+      "groups": [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 312.41106495889835
+    },
+    {
+      "stage": "minimize",
+      "call": 3,
+      "start": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        0.0,
+        0.0
+      ],
+      "x": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        2.439050196166476e-07,
+        3.606142873625898e-08,
+        -2.536320133204363e-07,
+        -3.2778392253430296e-08,
+        143.28486244547605,
+        258.38898251168405
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 13,
+      "nit": 0,
+      "elapsed_seconds": 313.06384862493724
+    },
+    {
+      "stage": "minimize",
+      "call": 3,
+      "start": [
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        0.09531017980432493,
+        0.5
+      ],
+      "x": [
+        -2.309212788776474,
+        -2.0824783686546438,
+        -2.6647831140927836,
+        -2.2910564140231546,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        4.0650837262479815e-06,
+        -2.1636857627311575e-06,
+        6.932608500698405e-06,
+        -8.686274040861514e-07,
+        143.2848712318422,
+        258.3889870550614
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 286,
+      "nit": 17,
+      "elapsed_seconds": 417.62852233392186
+    },
+    {
+      "stage": "minimize",
+      "call": 3,
+      "start": [
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        0.09531017980432493,
+        0.5
+      ],
+      "x": [
+        -2.309212835999069,
+        -2.082478454117449,
+        -2.664783175965101,
+        -2.29105644379256,
+        0.0,
+        0.0
+      ],
+      "fun": 3747.7995181105543,
+      "jac": [
+        1.918719479546528e-06,
+        -3.281589938842064e-06,
+        2.536320124339554e-07,
+        1.5241952364180182e-06,
+        143.28486777737345,
+        258.3889844266613
+      ],
+      "success": true,
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "nfev": 299,
+      "nit": 18,
+      "elapsed_seconds": 470.5291834590025
+    },
+    {
+      "stage": "fit_pass",
+      "call": 3,
+      "log_likelihood": -3747.7995181105543,
+      "bound": 86,
+      "state_error": 0.0,
+      "elapsed_seconds": 472.98568370891735
+    },
+    {
+      "stage": "fit_start",
+      "call": 4,
+      "node": null,
+      "fraction": null,
+      "groups": [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 472.98673866689205
+    },
+    {
+      "stage": "bound",
+      "call": 4,
+      "bound": 86,
+      "node": null,
+      "fraction": 0.5,
+      "groups": [
+        0,
+        2,
+        0,
+        0,
+        0,
+        0,
+        0,
+        1,
+        1,
+        1,
+        1,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1,
+        0,
+        0,
+        0,
+        1,
+        1,
+        0,
+        1,
+        1,
+        0,
+        0,
+        1,
+        1,
+        1
+      ],
+      "elapsed_seconds": 472.98680095910095
+    },
+    {
+      "stage": "minimize",
+      "call": 4,
+      "start": [
+        -2.309212826234781,
+        -2.0824784057632733,
+        -2.6647831666313415,
+        -2.291056438762778,
+        -2.309212826234781,
+        -2.0824784057632733,
+        0.0
+      ],
+      "x": [
+        -1.721224023933231,
+        -2.3092149811080076,
+        -2.1488664397004476,
+        -1.8250145508178324,
+        -2.2971983072158455,
+        0.30843785082950675,
+        0.0014608439448930612
+      ],
+      "fun": 3632.4422771034306,
+      "jac": [
+        -1.8979086003549487e-06,
+        -2.6016511148233977e-06,
+        -5.87115159869203e-06,
+        -1.1439364553161923e-05,
+        3.9228905778768277e-07,
+        1.824860662970917e-05,
+        -4.787443097281387e-05
+      ],
+      "success": true,
+      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+      "nfev": 1125,
+      "nit": 48,
+      "elapsed_seconds": 538.9443607919384
+    },
+    {
+      "stage": "minimize",
+      "call": 4,
+      "start": [
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        -2.995732273553991,
+        0.09531017980432493
+      ],
+      "x": [
+        -1.7212239402483753,
+        -2.309215215668391,
+        -2.1488669200903887,
+        -1.825014541126426,
+        -2.2971989373814257,
+        0.3084376029938914,
+        0.001460839773658651
+      ],
+      "fun": 3632.442277103457,
+      "jac": [
+        2.1793227401488075e-05,
+        -1.2845651074383546e-05,
+        -9.855145123356211e-05,
+        2.6520397459064698e-05,
+        -8.156341088991218e-06,
+        1.5883046511043166e-05,
+        -0.0005473455531691826
+      ],
+      "success": true,
+      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+      "nfev": 1035,
+      "nit": 47,
+      "elapsed_seconds": 669.7788870420773
+    },
+    {
+      "stage": "minimize",
+      "call": 4,
+      "start": [
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        -0.6931471805599453,
+        0.09531017980432493
+      ],
+      "x": [
+        -1.7212240305713882,
+        -2.3092149659540944,
+        -2.1488664406190168,
+        -1.8250145551463686,
+        -2.2971984579925,
+        0.30843771083515653,
+        0.0014608436929245355
+      ],
+      "fun": 3632.44227710343,
+      "jac": [
+        1.5270528909490311e-06,
+        -8.45536617849306e-07,
+        1.5027352300021743e-06,
+        -3.2301802708423965e-06,
+        1.4710838701464165e-07,
+        -2.6284001318511146e-07,
+        -9.450975902633138e-05
+      ],
+      "success": true,
+      "message": "CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH",
+      "nfev": 855,
+      "nit": 46,
+      "elapsed_seconds": 748.2385232090019
+    },
+    {
+      "stage": "failure_preserved",
+      "path": "/tmp/nwkit-count-stationarity-first-failure-20261002.json",
+      "elapsed_seconds": 765.8907468339894
+    }
+  ],
+  "centered_objective_experiment": [
+    {
+      "centered": false,
+      "x": [
+        -1.7212240305849715,
+        -2.309214965946462,
+        -2.1488664406329696,
+        -1.8250145551174317,
+        -2.2971984579939644,
+        0.3084377108378787,
+        0.001460841489168304
+      ],
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "success": true,
+      "iterations": 1,
+      "evaluations": 3,
+      "initial_richardson_projected": 0.00024416383317640475,
+      "final_independent_richardson_projected": 4.777768717145791e-06,
+      "final_independent_gradient": [
+        3.6412194136922225e-07,
+        -5.775271708171256e-07,
+        1.6074264896385704e-06,
+        -1.9843710864003166e-06,
+        -4.939022561787793e-07,
+        1.5659295149310654e-07,
+        4.777768717145791e-06
+      ],
+      "legacy_three_point_projected": 0.00033384436531708585,
+      "log_likelihood": -3632.4422771034297,
+      "elapsed_seconds": 8.880760041996837
+    },
+    {
+      "centered": true,
+      "x": [
+        -1.7212240305849715,
+        -2.309214965946462,
+        -2.1488664406329696,
+        -1.8250145551174317,
+        -2.2971984579939644,
+        0.3084377108378787,
+        0.0014608414891683044
+      ],
+      "message": "CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL",
+      "success": true,
+      "iterations": 1,
+      "evaluations": 3,
+      "initial_richardson_projected": 0.00024416383317640475,
+      "final_independent_richardson_projected": 4.777768717145791e-06,
+      "final_independent_gradient": [
+        3.6412194136922225e-07,
+        -5.775271708171256e-07,
+        1.6074264896385704e-06,
+        -1.9843710864003166e-06,
+        -4.939022561787793e-07,
+        1.5659295149310654e-07,
+        4.777768717145791e-06
+      ],
+      "legacy_three_point_projected": 0.00033384436531708585,
+      "log_likelihood": -3632.4422771034297,
+      "elapsed_seconds": 8.722817000001669
+    }
+  ],
+  "parent_prepared_data_provenance": {
+    "schema_version": 1,
+    "source_counts": "/private/tmp/nwkit-wgd-empirical.wCoTtu/raw_counts.tsv",
+    "source_tree": "/private/tmp/nwkit-wgd-empirical.wCoTtu/fungi.nwk",
+    "source_counts_sha256": "e771f3f67cb0c156a505529c91d01727bc60ba3af95d5328f237a7daff084ac2",
+    "source_tree_sha256": "f40484af23f9eda39fc7907bb6da07d37df2aae74838514c1c0a180e519b9560",
+    "source_family_ids": "one-based source data row; original family labels are unavailable",
+    "raw_families": 9209,
+    "root_spanning_families": 3923,
+    "selected_families": 500,
+    "max_families": 500,
+    "seed": 620,
+    "sampling": "uniform without replacement after root-clade selection; no copy-number cap/filter",
+    "selected_max_copy_number": 84,
+    "root_child_clades": [
+      [
+        "agos",
+        "cgla",
+        "klac",
+        "kwal",
+        "sbay",
+        "scas",
+        "scer",
+        "smik",
+        "spar"
+      ],
+      [
+        "calb",
+        "cgui",
+        "clus",
+        "cpar",
+        "ctro",
+        "dhan",
+        "lelo"
+      ]
+    ],
+    "known_event_locations_used": false
+  },
+  "full_500_family_grid_status": "Uncompleted: only the reproduced node-1 branch-burst stage was repaired and verified by this worker.",
+  "production_frozen": true
+}

@@ -4,6 +4,28 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.37] - 2026-10-02
+
+### Added
+
+- Add `ksrate` for focal-lineage Ks correction, shared-family bootstrap
+  diagnostics, and conservative simultaneous pair-median intervals.
+- Add `mul-reconcile` for exact minimum duplication-plus-loss reconciliation
+  of auto-/allopolyploid MUL-tree hypotheses, including all optimal mappings,
+  explicit resource limits, and GRAMPA-compatible score/detail columns.
+- Add experimental `wgd-count` gene-count DL/WGM scans with missing-data and
+  detection handling, branch-burst diagnostics, numerical convergence checks,
+  and search-wide parametric bootstrap.
+- Add `wgd-tree` fixed-topology DL/WGD likelihoods and conditional node-origin
+  assignments from supplied count fits, with analytic branch transport.
+- Document command contracts, independent reference checks, scientific audits,
+  and the limits of parsimony, model-conditional support, and Ks uncertainty.
+
+### Changed
+
+- Alphabetize the complete README and Wiki Home subcommand lists and add
+  dedicated Wiki pages for the four new commands.
+
 ## [0.43.36] - 2026-10-01
 
 ### Changed

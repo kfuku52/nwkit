@@ -90,52 +90,57 @@ minimal worked example, in
 [the mathematical guide](docs/guides/RECONCILED_SPECIATION_CONTRAST_MATH.md).
 
 - [`annotate`](https://github.com/kfuku52/nwkit/wiki/nwkit-annotate): Attaching tip-table values and aggregating them as Newick properties
-- [`shift`](docs/guides/SHIFT.md): Experimental OU shift selection, [native multivariate inference](docs/guides/NATIVE_SHIFT.md), [evolutionary covariance and simulation](docs/guides/SHIFT_COVARIANCE.md), and an optional legacy kfl1ou backend
-- [`shift-simulate`](docs/guides/SHIFT_COVARIANCE.md#simulation): Generating correlated OU shift datasets and known truth from explicit parameters or native model fits
 - [`asr`](docs/guides/ASR.md): Inferring Mk/covarion/mixture/threshold or scalar/multivariate Gaussian ancestral traits, with regimes, joint evolutionary/individual covariance, model comparison, simulation diagnostics, and automatic trait-type detection; supports [branch-specific BM/OU and fixed Gaussian jumps](docs/guides/BRANCH_GAUSSIAN.md)
 - [`asrcompare`](docs/guides/ASR.md#model-comparison-and-simulation-diagnostics): Batch-fitting applicable ASR models and comparing compatible likelihood/root groups with AIC, AICc, BIC, and an optional PDF
-- [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
+- [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`collapse`](https://github.com/kfuku52/nwkit/wiki/nwkit-collapse): Collapsing internal branches by support and/or branch length
 - [`compose`](https://github.com/kfuku52/nwkit/wiki/nwkit-compose): Assembling compatible roots, values, and annotations from multiple trees
-- [`cladefreq`](https://github.com/kfuku52/nwkit/wiki/nwkit-cladefreq): Summarizing clade frequencies across a tree collection
 - [`consensus`](https://github.com/kfuku52/nwkit/wiki/nwkit-consensus): Generating a consensus tree or transferring consensus support to a reference tree
+- [`constrain`](https://github.com/kfuku52/nwkit/wiki/nwkit-constrain): Generating a species-tree-like Newick file for topological constraint
 - [`contrast`](https://github.com/kfuku52/nwkit/wiki/nwkit-contrast): Calculating continuous-trait phylogenetic independent contrasts, with biological/technical replicates, batch adjustment, propagated sampling covariance, and reconciled gene-tree event mappings
 - [`convert`](https://github.com/kfuku52/nwkit/wiki/nwkit-convert): Converting Newick, NHX, FigTree and MCMCtree output with explicit time scaling and interval retention
 - [`diff`](https://github.com/kfuku52/nwkit/wiki/nwkit-diff): Reporting interpretable clade, root, value, and annotation differences between trees
 - [`dist`](https://github.com/kfuku52/nwkit/wiki/nwkit-dist): Comparing tree topology and branch lengths with multiple distance metrics
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, unrooted, spiral, or fractal geometry, annotation-aware spacing, and auditable layout reports
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
+- [`dtt`](docs/guides/DTT.md): Continuous-trait disparity through time with a Brownian null envelope, MDI and figures
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment
+- [`ksrate`](https://github.com/kfuku52/nwkit/wiki/nwkit-ksrate): Focal-lineage Ks correction with multiple outgroups, shared-family bootstrap and inconsistency diagnostics
 - [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
 - [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML MCMCtree calibrations and converting posterior node ages into pipeable dated NHX trees
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
+- [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style auto-/allopolyploid MUL-tree D+L parsimony
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
-- [`regress`](https://github.com/kfuku52/nwkit/wiki/nwkit-regress): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
-- [`regress-select`](docs/guides/REGRESSION_SELECTION.md): Exploratory phylogenetic lasso/elastic net with nested group cross-validation and selection frequencies, without post-selection P-values
-- [`dtt`](docs/guides/DTT.md): Continuous-trait disparity through time with a Brownian null envelope, MDI and figures
 - [`pca`](docs/guides/PCA.md): Phylogenetic PCA with BM or shared lambda, evolutionary loadings, ancestral PC intervals and phylomorphospace figures
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels
 - [`prune`](https://github.com/kfuku52/nwkit/wiki/nwkit-prune): Pruning leaves
-- [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
-- [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree, with [LCA loss counts](docs/guides/RECONCILIATION_EXPORTS.md)
 - [`radte`](https://github.com/kfuku52/nwkit/wiki/nwkit-radte): Experimental reconciled gene-tree dating with shared speciation ages, native relaxed clocks, and an optional MCMCTree reference backend
 - [`radte-compare`](docs/guides/RADTE_SPECIES_UNCERTAINTY.md): Comparing fixed, bounded, and sampled species-age analyses for one gene family
-See [reconciliation and dating figures](docs/guides/RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
+- [`reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-reconcile): Mapping rooted gene-tree nodes and events onto a rooted species tree, with [LCA loss counts](docs/guides/RECONCILIATION_EXPORTS.md)
+- [`regress`](https://github.com/kfuku52/nwkit/wiki/nwkit-regress): Fitting conventional or reconciled Gaussian/multivariate PGLS and categorical, count, zero-inflated, positive, proportion, or censored phylogenetic GLMMs, with partial responses, biological replicates, gene-tree ensembles, latent-predictor measurement error, and automatic shape-parameter estimation
+- [`regress-select`](docs/guides/REGRESSION_SELECTION.md): Exploratory phylogenetic lasso/elastic net with nested group cross-validation and selection frequencies, without post-selection P-values
+- [`rename`](https://github.com/kfuku52/nwkit/wiki/nwkit-rename): Renaming nodes using a TSV mapping or regular expression
 - [`rescale`](https://github.com/kfuku52/nwkit/wiki/nwkit-rescale): Rescale branch length with a given factor
 - [`root`](https://github.com/kfuku52/nwkit/wiki/nwkit-root): Placing, transferring, or reconciliation-rooting the tree root, with [all optimal roots export](docs/guides/RECONCILIATION_EXPORTS.md)
 - [`rootcompare`](https://github.com/kfuku52/nwkit/wiki/nwkit-rootcompare): Comparing rooting methods in a TSV summary and a branch-marked PDF
-- [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
 - [`sample`](https://github.com/kfuku52/nwkit/wiki/nwkit-sample): Selecting a representative leaf subset by filters, ranks, and sampling method
-- [`signal`](docs/guides/SIGNAL.md): Estimating and testing continuous-trait phylogenetic signal with K, lambda, known sampling errors, profile intervals, and per-method BH correction
+- [`sanitize`](https://github.com/kfuku52/nwkit/wiki/nwkit-sanitize): Eliminating non-standard Newick flavors
+- [`shift`](docs/guides/SHIFT.md): Experimental OU shift selection, [native multivariate inference](docs/guides/NATIVE_SHIFT.md), [evolutionary covariance and simulation](docs/guides/SHIFT_COVARIANCE.md), and an optional legacy kfl1ou backend
+- [`shift-simulate`](docs/guides/SHIFT_COVARIANCE.md#simulation): Generating correlated OU shift datasets and known truth from explicit parameters or native model fits
 - [`shuffle`](https://github.com/kfuku52/nwkit/wiki/nwkit-shuffle): Shuffling branches and/or labels
+- [`signal`](docs/guides/SIGNAL.md): Estimating and testing continuous-trait phylogenetic signal with K, lambda, known sampling errors, profile intervals, and per-method BH correction
 - [`skim`](https://github.com/kfuku52/nwkit/wiki/nwkit-skim): Sampling leaves from clades with shared traits
 - [`subtree`](https://github.com/kfuku52/nwkit/wiki/nwkit-subtree): Generating a subtree Newick file
 - [`table2nwk`](https://github.com/kfuku52/nwkit/wiki/nwkit-table2nwk): Converting a parent-child table into a Newick tree
 - [`transfer`](https://github.com/kfuku52/nwkit/wiki/nwkit-transfer): Transferring information between trees
 - [`validate`](https://github.com/kfuku52/nwkit/wiki/nwkit-validate): Validating one or more Newick trees and reporting structural issues
+- [`wgd-count`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-count): Experimental native DL/WGM gene-count candidates, branch-burst diagnostics and search-wide bootstrap
+- [`wgd-tree`](https://github.com/kfuku52/nwkit/wiki/nwkit-wgd-tree): Fixed-topology DL/WGD likelihood and conditional node assignments from supplied count fits
+
+See [reconciliation and dating figures](docs/guides/RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
 
 
 ## Citation
