@@ -112,7 +112,7 @@ minimal worked example, in
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
 - [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML MCMCtree calibrations and converting posterior node ages into pipeable dated NHX trees
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
-- [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style auto-/allopolyploid MUL-tree D+L parsimony
+- [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style MUL-tree D+L parsimony with auditable tied-best node mappings, [conditional MSC fitting](docs/guides/MUL_MSC.md) and [experimental locus DL + ILS comparison with conditional integration](docs/guides/MUL_LOCUS_MC.md)
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table
 - [`pca`](docs/guides/PCA.md): Phylogenetic PCA with BM or shared lambda, evolutionary loadings, ancestral PC intervals and phylomorphospace figures
 - [`printlabel`](https://github.com/kfuku52/nwkit/wiki/nwkit-printlabel): Searching and printing node labels

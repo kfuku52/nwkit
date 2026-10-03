@@ -737,3 +737,37 @@ For LCA events these count missing lineages on species-tree edges below the
 event; leaves have zero losses. Losses above the gene root are excluded.
 Non-LCA and unmapped events have missing values, never fabricated zeros.
 See [reconciliation exports](RECONCILIATION_EXPORTS.md).
+
+### MUL/MSC prototype
+
+`mul-reconcile --score-model dl` preserves the GRAMPA-compatible D+L tables.
+The experimental `--score-model msc` has a distinct likelihood schema:
+`mul.tree, h1.node, h2.node, log_likelihood, delta_log_likelihood, dated.tree,
+status, reason`. Excluded candidates have blank likelihoods and dated trees,
+not fabricated zeros or ranked infinite penalties. `--report` and `--check-out`
+contain gene-level likelihood, assignment count and work diagnostics for every
+evaluated candidate; they contain no inferred duplication/loss counts.
+The JSON method/schema distinguishes this conditional model from D+L.
+See [MUL/MSC](MUL_MSC.md) for units, exclusions, and interpretation.
+
+Bounded `--msc-fit age|ne|joint` uses `nwkit-mul-msc-fit-v1`, adding fitted
+age/Ne columns and local/flat/boundary status; withheld point estimates and
+dated trees are blank. Its JSON method is separate from fixed MSC. Profiles
+refit nuisance parameters but are not confidence intervals. Fitted tree output
+requires a unique numerical best parent and locally distinguishable interior
+parameters; otherwise the entire output bundle is preserved on failure.
+See [bounded MUL/MSC estimation](MUL_MSC_FIT.md).
+
+`--score-model locus-mc` uses the separate `nwkit-mul-locus-mc-v1` schema,
+with candidate/grid scores and Monte Carlo bounds, including a normalized
+no-polyploidy candidate. It never puts likelihood estimates into D+L integer
+scores. Zero MC hits do not become pseudocounts or proof of zero biological
+probability; nonfinite values are missing and explicitly interpreted in JSON.
+Bootstrap event calibration and gene-tree stability are distinct outputs.
+`--locus-null-calibration grid-supremum` maximizes P-values over every supplied
+null grid point; default `plug-in` retains fitted-null calibration. The
+grid-mode calibration TSV adds `generating_null_grid`, separately from the
+refitted `null_grid`; JSON records per-point results, total work and the
+finite-grid restriction. Neither method calibrates an omitted inference-error
+process or arbitrary off-grid nuisance parameters.
+See [locus DL + ILS](MUL_LOCUS_MC.md) for the complete observation contract.

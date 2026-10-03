@@ -1,4 +1,4 @@
-"""MUL-tree hypothesis search with staged, GRAMPA-readable score outputs."""
+"""MUL-tree search with separate D+L, conditional MSC and locus MC contracts."""
 
 import csv
 import json
@@ -101,13 +101,62 @@ def run_search(
 
 
 def mul_reconcile_main(args):
+    if (
+        getattr(args, "node_out", None) is not None
+        and getattr(args, "score_model", "dl") != "dl"
+    ):
+        raise ValueError("--node-out requires --score-model dl.")
+    if getattr(args, "score_model", "dl") == "locus-mc":
+        from nwkit.mul_locus_cli import mul_locus_main
+
+        return mul_locus_main(args)
+    if any(
+        getattr(args, name, None) is not None
+        for name in (
+            "locus_model",
+            "locus_bootstrap",
+            "locus_calibration_out",
+            "locus_null_calibration",
+        )
+    ):
+        raise ValueError("Locus options require --score-model locus-mc.")
+    if getattr(args, "score_model", "dl") == "msc":
+        from nwkit.mul_msc import mul_msc_main
+
+        return mul_msc_main(args)
+    if any(
+        getattr(args, name, None) is not None
+        for name in (
+            "species_time_unit",
+            "effective_population_size",
+            "hybridization_age",
+            "max_coalescent_states",
+            "max_coalescent_assignments",
+            "msc_fit",
+            "hybridization_age_bounds",
+            "population_size_bounds",
+            "msc_grid_points",
+            "msc_fit_starts",
+            "msc_maxiter",
+            "msc_max_evaluations",
+            "msc_profile_out",
+        )
+    ):
+        raise ValueError("MSC time/population options require --score-model msc.")
     for name in ("cpus", "max_candidates", "max_state_pairs", "max_maps"):
         if getattr(args, name) < 1:
             raise ValueError(f"--{name.replace('_', '-')} must be positive.")
     outputs = {
         name: getattr(args, name)
-        for name in ("outfile", "report", "check_out", "tree_out", "model_out")
-        if getattr(args, name) is not None
+        for name in (
+            "outfile",
+            "report",
+            "check_out",
+            "tree_out",
+            "model_out",
+            "node_out",
+        )
+        if getattr(args, name, None) is not None
     }
     if any(
         not value or (value == "-" and name != "outfile")
@@ -234,6 +283,13 @@ def mul_reconcile_main(args):
         ],
         "scores": rows,
     }
+    if getattr(args, "node_out", None) is not None:
+        metadata["node_diagnostics"] = {
+            "schema": "nwkit-mul-node-assignments-v1",
+            "scope": "all optimal mappings for every tied best global D+L hypothesis",
+            "identity": "rooted topology and descendant-tip clades; lengths/support ignored",
+            "meaning": "enumerated assignments, not probabilities or WGD/SSD origin labels",
+        }
     tables = {
         "outfile": pd.DataFrame(rows),
     }
@@ -274,6 +330,21 @@ def mul_reconcile_main(args):
             elif name == "tree_out":
                 staged.write_text(
                     path, lambda handle: handle.write(topology_text(best.tree) + "\n")
+                )
+            elif name == "node_out":
+                from nwkit.mul_reconcile_nodes import write_node_diagnostics
+
+                staged.write_text(
+                    path,
+                    lambda handle: write_node_diagnostics(
+                        handle,
+                        [c for c in ordered if scores[c.id] == scores[best.id]],
+                        genes,
+                        parser,
+                        species,
+                        max_state_pairs=args.max_state_pairs,
+                        max_maps=args.max_maps,
+                    ),
                 )
             else:
                 staged.write_text(

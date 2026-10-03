@@ -4,6 +4,35 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.38] - 2026-10-03
+
+### Added
+
+- Add opt-in conditional MUL/MSC likelihoods and bounded age/Ne estimation,
+  with explicit parameter-identifiability and optimization diagnostics.
+- Add experimental locus DL + ILS null/allopolyploid comparison, finite-grid
+  search-wide calibration, detection/hybrid conditional integration, and
+  conservative Chernoff-KL score-bank uncertainty bounds.
+- Add D+L `--node-out` for complete node assignments across every globally
+  tied best hypothesis, with rooted topology/clade identities and explicit
+  resource-limit failures. Preserve the legacy first-best detailed report.
+- Add independent reference checks, frozen research protocols and validation
+  reports, including fixed-data MC budget diagnostics. These experimental
+  models do not establish production WGD detection or node-origin posteriors.
+
+### Fixed
+
+- Restore saved histogram strata when replaying research banks, preserving
+  exact probabilities and scores instead of using pooled-count approximations.
+- Reject incompatible model-specific options and protect all related outputs
+  and inputs through shared staged publication and provenance contracts.
+
+### Changed
+
+- Extend command documentation and retain alphabetical feature listings;
+  D+L remains the default model and existing output contracts are preserved.
+- Include MUL research scripts and protocols in reproducible source archives.
+
 ## [0.43.37] - 2026-10-02
 
 ### Added

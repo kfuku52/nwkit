@@ -31,6 +31,8 @@ graft examples/pca
 graft examples/individual_asr
 
 graft examples/stochastic_maps
+graft examples/mul-locus
+graft examples/mul-msc
 
 include reviews/shift-calibration-final-protocol.md
 include reviews/shift-implementation-base.json

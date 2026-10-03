@@ -102,6 +102,12 @@ def main() -> int:
     }
     required_sdist = {"/" + member for member in required_wheel} | required_docs
     required_sdist.update(
+        "/" + path.relative_to(PROJECT_ROOT).as_posix()
+        for name in ("mul-locus", "mul-msc")
+        for path in (PROJECT_ROOT / "examples" / name).rglob("*")
+        if path.is_file() and path.suffix in {".py", ".md"}
+    )
+    required_sdist.update(
         {
             "/docs/guides/BRANCH_GAUSSIAN.md",
             "/examples/branch_gaussian/mixed_process.py",
