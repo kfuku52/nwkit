@@ -251,6 +251,12 @@ def _finite_number(value, label: str, *, nonnegative: bool = False) -> float:
     return result
 
 
+def _coordinate_roundoff(value: float, exponent: int) -> float:
+    # Centering can turn a nonzero exact observation into zero. Retain the
+    # existing eight-ulp allowance in its original coordinates, then scale it.
+    return 8 * math.ldexp(math.ulp(value), -exponent)
+
+
 def _scaled_process_and_observations(
     process: GaussianTreeProcess,
     compiled: CompiledTree,
@@ -385,7 +391,13 @@ def _message_pass(
         variance = error * error
         if error > 0.0 and variance == 0.0:
             raise ValueError("A positive observation variance underflowed.")
-        local[index] = _combine(local[index], _Factor(value, variance))
+        original_value = float(values_by_leaf[str(compiled.nodes[index].name)])
+        roundoff = (
+            _coordinate_roundoff(original_value, exponent) if variance == 0.0 else 0.0
+        )
+        local[index] = _combine(
+            local[index], _Factor(value, variance, roundoff=roundoff)
+        )
         observed_positions.add(latent_positions[index])
     inside = list(local)
     upward = [_Factor() for _ in compiled.nodes]
@@ -412,7 +424,14 @@ def _message_pass(
         root_posterior = inside[0]
     else:
         assert root.variance is not None
-        root_posterior = _combine(_Factor(root.mean, root.variance), inside[0])
+        root_roundoff = (
+            _coordinate_roundoff(process.root.mean, exponent)
+            if root.variance == 0.0
+            else 0.0
+        )
+        root_posterior = _combine(
+            _Factor(root.mean, root.variance, roundoff=root_roundoff), inside[0]
+        )
     if not math.isfinite(root_posterior.log_weight):
         raise ValueError(
             "Observed values have zero likelihood under the Gaussian process."
@@ -452,8 +471,15 @@ def condition_gaussian_tree(
     root = scaled_process.root
 
     outside = [_Factor() for _ in compiled.nodes]
+    root_roundoff = (
+        _coordinate_roundoff(process.root.mean, exponent)
+        if root.variance == 0.0
+        else 0.0
+    )
     outside[0] = (
-        _Factor() if root.mode == "flat" else _Factor(root.mean, root.variance or 0.0)
+        _Factor()
+        if root.mode == "flat"
+        else _Factor(root.mean, root.variance or 0.0, roundoff=root_roundoff)
     )
     posterior: list[_Factor | None] = [None] * len(compiled.nodes)
     for index in range(len(compiled.nodes)):

@@ -359,6 +359,60 @@ def test_deterministic_mixed_process_and_posterior_sampling():
     np.testing.assert_allclose(samples.values, np.array([[2, 2.4, 2.4]] * 3))
 
 
+@pytest.mark.parametrize("direction", [-math.inf, math.inf])
+def test_centered_deterministic_process_retains_original_coordinate_roundoff(direction):
+    from dataclasses import replace
+
+    from nwkit.gaussian_inference import (
+        gaussian_tree_likelihood,
+        sample_gaussian_posterior,
+    )
+
+    tree = tree_from("(A:1,B:1)R;")
+    process = build_branch_gaussian_process(
+        tree,
+        assign(tree, BranchGaussianModel(OUBranch(0.5, 0, 2), GaussianJump(0.4, 0))),
+        root=GaussianRootPrior("fixed", 2),
+    )
+    # Platform libm implementations can differ by one ulp in OU coefficients.
+    process = replace(
+        process,
+        transitions={
+            node: replace(
+                transition, intercept=math.nextafter(transition.intercept, direction)
+            )
+            for node, transition in process.transitions.items()
+        },
+    )
+    result = condition_gaussian_tree(process, {"A": 2.4, "B": 2.4})
+    assert result.marginals[tree].mean == pytest.approx(2)
+    assert all(marginal.variance == 0 for marginal in result.marginals.values())
+    assert (
+        gaussian_tree_likelihood(process, {"A": 2.4, "B": 2.4}).log_likelihood
+        == result.log_likelihood
+    )
+    samples = sample_gaussian_posterior(
+        process, {"A": 2.4, "B": 2.4}, num_samples=3, seed=42
+    )
+    np.testing.assert_allclose(samples.values, np.array([[2, 2.4, 2.4]] * 3))
+    with pytest.raises(ValueError, match="likelihood|Conflicting"):
+        condition_gaussian_tree(process, {"A": 2.4, "B": 2.4 + 1e-12})
+
+
+@pytest.mark.parametrize(
+    ("origin", "difference"), [(0.0, 1e-20), (1e6, 1e-8), (-1e6, 1e-8)]
+)
+def test_centered_exact_observations_still_reject_real_conflicts(origin, difference):
+    tree = tree_from("(A:1,B:1)R;")
+    process = build_branch_gaussian_process(
+        tree,
+        assign(tree, BranchGaussianModel(BrownianBranch(0))),
+        root=GaussianRootPrior("fixed", origin),
+    )
+    with pytest.raises(ValueError, match="likelihood|Conflicting"):
+        condition_gaussian_tree(process, {"A": origin, "B": origin + difference})
+
+
 def test_exact_gaussian_messages_allow_only_affine_roundoff():
     from nwkit.gaussian_inference import _combine, _Factor
 

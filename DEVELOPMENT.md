@@ -101,6 +101,9 @@ artifacts you need to keep.
 
 The `slow` marker identifies expensive numerical/bootstrap or concurrency
 checks, not unreliable tests. Every full source CI run still executes them.
+The complete test and quality jobs have a two-hour execution budget; the
+scientific/bootstrap suite exceeds the former 30-minute limit. This budget
+does not exclude slow tests or reduce their scientific replicate counts.
 Keep small invariance tests and `tests/test_cli_contracts.py` in the quick
 suite. The latter invokes the real parser and handler for every subcommand;
 only external service boundaries are replaced with offline fixtures.

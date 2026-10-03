@@ -4,6 +4,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.39] - 2026-10-03
+
+### Fixed
+
+- Preserve original-coordinate floating-point roundoff when centering exact
+  Gaussian observations and fixed roots, avoiding false deterministic
+  conflicts on platforms with slightly different OU coefficients. Keep real
+  conflicting observations rejected in likelihood, smoothing and sampling.
+- Allow the complete scientific test and quality jobs to finish on hosted CI
+  runners by increasing their execution budget from 30 to 120 minutes, without
+  removing checks or reducing scientific replicate counts.
+
 ## [0.43.38] - 2026-10-03
 
 ### Added
