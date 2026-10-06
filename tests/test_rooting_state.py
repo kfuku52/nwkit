@@ -117,7 +117,7 @@ def test_copy_and_newick_roundtrip_preserve_rooting_without_custom_properties(
     target = io.StringIO()
     write_tree(
         tree,
-        make_args(outfile=target, rooting_nhx=rooting_nhx),
+        make_args(outfile=target, rooting_nhx=rooting_nhx, rooting_token=True),
         "auto",
         quiet=True,
         props=["unrelated"],
@@ -177,7 +177,8 @@ def test_existing_root_nhx_is_retained(state, rooting_nhx):
 
 @pytest.mark.parametrize("marker", ["R", "U"])
 @pytest.mark.parametrize(
-    "option", [[], ["--rooting-nhx", "no"], ["--rooting-nhx", "yes"]]
+    "option",
+    [[], ["--rooting-nhx", "no"], ["--rooting-nhx", "yes"], ["--rooting-token", "yes"]],
 )
 def test_label_preserves_markers_unless_nhx_conversion_is_requested(
     tmp_path, marker, option
@@ -185,20 +186,35 @@ def test_label_preserves_markers_unless_nhx_conversion_is_requested(
     output = tmp_path / "tree.nwk"
     main(["label", "-i", f"[&{marker}](A:1,B:2);", "-o", str(output), *option])
     text = output.read_text()
-    if option == ["--rooting-nhx", "yes"]:
+    if option == ["--rooting-token", "yes"]:
+        assert text.startswith(f"[&{marker}]")
+        assert "nwkit_rooted=" not in text
+    elif option == ["--rooting-nhx", "yes"] or marker == "U":
         assert not text.startswith("[&")
         assert "nwkit_rooted=" in text
     else:
-        assert text.startswith(f"[&{marker}]")
+        assert not text.startswith("[&")
         assert "nwkit_rooted=" not in text
     assert is_rooted(read(text)) is (marker == "R")
     assert read(text).name == "n0"
 
 
 @pytest.mark.parametrize("state,marker", [("yes", "R"), ("no", "U")])
-def test_forced_state_uses_marker_by_default(tmp_path, state, marker):
+def test_forced_state_uses_marker_when_requested(tmp_path, state, marker):
     output = tmp_path / "tree.nwk"
-    main(["label", "-i", "(A:1,B:1,C:1);", "--input-rooted", state, "-o", str(output)])
+    main(
+        [
+            "label",
+            "-i",
+            "(A:1,B:1,C:1);",
+            "--input-rooted",
+            state,
+            "--rooting-token",
+            "yes",
+            "-o",
+            str(output),
+        ]
+    )
     assert output.read_text().startswith(f"[&{marker}]")
     assert is_rooted(read(str(output))) is (state == "yes")
 

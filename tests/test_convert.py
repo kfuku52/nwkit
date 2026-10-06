@@ -35,10 +35,11 @@ def test_label_copy_retains_properties_and_missing_labels():
     assert tree["unchanged"].name == "unchanged"
 
 
-def test_drop_properties_preserves_rooting_comments_and_precision():
+def test_drop_properties_preserves_root_state_comments_and_precision():
     source = "[&R](A:0.123456789012345,B:2)[note][&&NHX:D=Y:age=2];"
     result = convert_tree_text(source, target="newick", properties="drop")
-    assert "[&R]" in result and "[note]" in result
+    assert result.startswith("(") and "[note]" in result
+    assert parsed(result).children and "[&R]" not in result
     assert "0.123456789012345" in result and "NHX" not in result
 
 
@@ -90,6 +91,7 @@ def test_rooting_property_is_copied_before_canonicalization(target, rooted):
         rooted=rooted,
         node_label="nwkit_rooted",
         properties="drop",
+        rooting_token=True,
     )
     assert read_tree(result, 1, True, quiet=True).name == "yes"
     assert ("[&U]" if rooted == "no" else "[&R]") in result
@@ -286,7 +288,11 @@ def test_explicit_rooting_and_override_survive_conversion():
     )
     assert (
         get_rooting_info(
-            parsed(convert_tree_text(source, target="newick", rooted="yes"))
+            parsed(
+                convert_tree_text(
+                    source, target="newick", rooted="yes", rooting_token=True
+                )
+            )
         ).state
         == "rooted"
     )

@@ -473,8 +473,14 @@ def run_dating(c, args):
     return fit, problem, _likelihood_data(likelihood, c, metadata), metadata
 
 
-def dated_newick(c, fit):
+def dated_newick(c, fit, args=None):
+    from io import StringIO
+    from types import SimpleNamespace
+
     from ete4.parser.newick import PARSERS
+
+    from nwkit.rooting_state import rooting_output_options
+    from nwkit.util import write_tree
 
     output = copy_tree_iteratively(c.gene)
     by_id = dict(
@@ -501,13 +507,16 @@ def dated_newick(c, fit):
     parser["internal"][0]["write"] = lambda value: _serialize_newick_node_name(
         value, is_internal=True
     )
-    return (
-        "[&R]"
-        + output.write(
-            parser=parser, format_root_node=True, props=["support", "D", "S", "H"]
-        )
-        + "\n"
+    handle = StringIO()
+    write_tree(
+        output,
+        SimpleNamespace(outfile=handle, **rooting_output_options(args)),
+        1,
+        quiet=True,
+        props=["support", "D", "S", "H"],
+        parser=parser,
     )
+    return handle.getvalue() + "\n"
 
 
 def result_tables(c, fit, *, bound_policy="hard"):
@@ -686,7 +695,7 @@ def radte_main(args):
     tables["paml_trace"] = paml_trace
     if args.backend == "native" and not tables["nodes"].within_original_bounds.all():
         raise ValueError("Dated output failed calibration validation.")
-    text = dated_newick(c, fit)
+    text = dated_newick(c, fit, args)
     model = "marginal-lognormal"
     if args.backend == "mcmctree":
         model = "mcmctree-posterior-mean"

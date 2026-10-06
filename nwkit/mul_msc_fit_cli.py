@@ -125,7 +125,9 @@ def write_fit_results(args, candidates, polyploid, genes, settings, results, pat
                 "effective_population_size": result["estimates"].get(
                     "effective_population_size", args.effective_population_size
                 ),
-                "dated.tree": dated_text(result["candidate"].tree) if point else None,
+                "dated.tree": dated_text(result["candidate"].tree, args)
+                if point
+                else None,
                 "status": result["diagnostics"]["status"],
                 "reason": result["diagnostics"]["meaning"],
             }
@@ -218,7 +220,7 @@ def write_fit_results(args, candidates, polyploid, genes, settings, results, pat
                 staged.write_text(
                     path,
                     lambda handle: handle.write(
-                        dated_text(best["candidate"].tree) + "\n"
+                        dated_text(best["candidate"].tree, args) + "\n"
                     ),
                 )
             else:

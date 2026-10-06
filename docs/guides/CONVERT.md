@@ -24,12 +24,21 @@ accepts `newick`, `nhx`, `figtree`, and `mcmctree-output`. `--to` defaults to `n
 and accepts `newick`, `nhx`, and `figtree`. FigTree output is a NEXUS document.
 `--format` still selects the ETE parser for names versus support; it is not the
 container format. `--input-rooted` follows the common NWKIT rooting contract.
-FigTree conversion writes `[&R]` for a tree interpreted as rooted (including
-an unmarked binary-root tree), or `[&U]` for an explicitly unrooted tree.
-Newick conversion retains that declaration, and subsequent commands such as
-`label` now keep it by default. `label --rooting-nhx yes` selects the older
-root-NHX representation; the switch changes serialization, not root placement
-or input rootedness.
+FigTree conversion retains the NEXUS declaration: `TREE … = [&R]` for a rooted
+tree (including an unmarked binary root), or `UTREE … = [&U]` for an explicitly
+unrooted tree. Standalone Newick/NHX defaults to `--rooting-token no`, so a rooted
+binary tree has no added prefix or root annotation. `--rooting-token yes` emits
+`[&R]`/`[&U]` for known states. `--rooting-nhx yes` explicitly selects root NHX
+and takes priority over that standalone prefix; existing root NHX is retained
+by NHX output. Other commands, including `label` and `sample`, share this policy.
+
+An unrooted binary tree, rooted polytomy, or unknown binary-root state needs
+metadata to preserve its interpretation. NHX output retains it with a root-only
+`nwkit_rooted` property when the prefix is off. Strict `--to newick` rejects such
+loss before replacing any output, even with `--properties drop`; select
+`--rooting-token yes` for a known state or keep NHX/NEXUS. It also rejects an
+explicit `--rooting-nhx yes`. These choices change serialization, never root
+placement or input rootedness. Unknown states have no R/U token.
 
 `--time-factor` must be finite and positive (default `1`). It multiplies supplied
 branch lengths and explicit `age`, `age_mean`, `age_median`, `age_ci_low`, and

@@ -47,7 +47,8 @@ from nwkit.rooting_state import (
     extract_rooting_token,
     get_rooting_info,
     inherit_subtree_rooting,
-    rooting_needs_serialization,
+    rooting_output_options,
+    rooting_output_policy,
     set_rooting_info,
 )
 from nwkit.rooting_state import is_rooted as is_rooted
@@ -1360,17 +1361,15 @@ def _tree_output_properties(tree, args, props):
         - ROOTING_PROPERTIES
         - {TREE_FORMAT_PROP}
     )
-    info = get_rooting_info(tree)
-    if rooting_needs_serialization(tree) and (
-        getattr(args, "rooting_nhx", False)
-        or info.source == "nhx"
-        or info.rooted is None
-    ):
+    _, nhx = rooting_output_policy(tree, **rooting_output_options(args))
+    if nhx:
         properties.add(ROOTED_PROP)
     return sorted(properties)
 
 
-def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
+def write_tree(
+    tree, args, format, quiet=False, props=None, name_quote=None, parser=None
+):
     # Writing a descendant subtree must retain the input tree's interpretation.
     if ROOTED_PROP not in tree.props and tree.up is not None:
         tree = copy_tree_iteratively(tree)
@@ -1379,6 +1378,11 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
         format = int(format)
     else:
         format = int(format)
+    prefix, nhx = rooting_output_policy(tree, **rooting_output_options(args))
+    if nhx and ROOTED_PROP not in tree.props:
+        info = get_rooting_info(tree)
+        tree = copy_tree_iteratively(tree)
+        set_rooting_info(tree, info.rooted, info.source, info.declared)
     _validate_finite_tree_values(tree)
     if not quiet:
         num_leaves = len(list(tree.leaves()))
@@ -1422,7 +1426,7 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
                 node.support = None
         props = _tree_output_properties(tree, args, props)
         write_kwargs = {
-            "parser": format,
+            "parser": format if parser is None else parser,
             "format_root_node": True,
         }
         if props:
@@ -1441,9 +1445,7 @@ def write_tree(tree, args, format, quiet=False, props=None, name_quote=None):
             lambda match: str(node_name_dict[match.group(0)]),
             tree_str,
         )
-    if ROOTED_PROP not in props and rooting_needs_serialization(tree):
-        info = get_rooting_info(tree)
-        tree_str = ("[&R]" if info.rooted else "[&U]") + tree_str
+    tree_str = prefix + tree_str
     if args.outfile == "-":
         print(tree_str)
     elif hasattr(args.outfile, "write"):

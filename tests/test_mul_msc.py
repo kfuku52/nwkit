@@ -465,12 +465,12 @@ def test_late_writer_failure_preserves_the_entire_existing_bundle(
     original = mul_msc.dated_text
     calls = 0
 
-    def failing_tree_writer(value):
+    def failing_tree_writer(value, args=None):
         nonlocal calls
         calls += 1
         if calls == 4:
             raise OSError("injected late MSC tree write failure")
-        return original(value)
+        return original(value, args)
 
     monkeypatch.setattr(mul_msc, "dated_text", failing_tree_writer)
     with pytest.raises(OSError, match="injected late"):

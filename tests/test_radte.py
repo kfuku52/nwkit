@@ -260,11 +260,23 @@ def test_infeasible_species_bounds_fail_before_optimization(tmp_path):
         small_chronology(bounds)
 
 
-def test_cli_internal_and_precomputed_events_are_identical(tmp_path):
+@pytest.mark.parametrize("token", [False, True])
+def test_cli_internal_and_precomputed_events_are_identical(tmp_path, token):
     inputs = cli_inputs(tmp_path)
     direct = str(tmp_path / "direct")
     cached = str(tmp_path / "cached")
-    main(["radte", *inputs, "--reconcile", "lca", "--out-prefix", direct])
+    main(
+        [
+            "radte",
+            *inputs,
+            "--reconcile",
+            "lca",
+            "--out-prefix",
+            direct,
+            "--rooting-token",
+            "yes" if token else "no",
+        ]
+    )
     main(
         [
             "radte",
@@ -273,9 +285,12 @@ def test_cli_internal_and_precomputed_events_are_identical(tmp_path):
             direct + ".events.tsv",
             "--out-prefix",
             cached,
+            "--rooting-token",
+            "yes" if token else "no",
         ]
     )
     assert open(direct + ".dated.nwk").read() == open(cached + ".dated.nwk").read()
+    assert open(direct + ".dated.nwk").read().startswith("[&R]") is token
     manifest = json.loads(open(direct + ".manifest.json").read())
     assert manifest["method"] == "marginal-lognormal"
     for key, digest in manifest["output_sha256"].items():

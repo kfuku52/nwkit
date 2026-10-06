@@ -15,6 +15,7 @@ from types import SimpleNamespace
 
 from nwkit.gene_tree_search_model import topology_key
 from nwkit.reconcile import _validate_rooted_binary_tree
+from nwkit.rooting_state import rooting_output_options
 from nwkit.util import copy_tree_iteratively, read_tree, write_tree
 
 # RAxML-NG inline nucleotide matrices; an amino-acid N is asparagine.
@@ -24,16 +25,19 @@ DNA_MODELS = frozenset(
 )
 
 
-def tree_text(tree, *, declaration=True):
+def tree_text(tree, *, declaration=True, args=None):
     handle = StringIO()
     tree = copy_tree_iteratively(tree)
     for node in tree.traverse():
         if not node.is_leaf:
             node.name = None
-    write_tree(tree, SimpleNamespace(outfile=handle), 1, quiet=True, props=[])
+    options = rooting_output_options(args)
+    if not declaration:
+        options["rooting_token"] = False
+    write_tree(
+        tree, SimpleNamespace(outfile=handle, **options), 1, quiet=True, props=[]
+    )
     text = handle.getvalue()
-    if not declaration and text.startswith("[&R]"):
-        text = text[4:]
     return text
 
 

@@ -14,6 +14,7 @@ import pandas as pd
 from nwkit import __version__
 from nwkit.mul_reconcile_model import Reconciliation, hypotheses, validate_binary
 from nwkit.output_transaction import output_transaction, validate_output_targets
+from nwkit.rooting_state import rooting_output_options
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
     _serialize_newick_node_name,
@@ -25,11 +26,11 @@ from nwkit.util import (
 )
 
 
-def topology_text(tree, *, internal_names=True):
+def topology_text(tree, *, internal_names=True, args=None):
     output = StringIO()
     write_tree(
         tree,
-        SimpleNamespace(outfile=output),
+        SimpleNamespace(outfile=output, **rooting_output_options(args)),
         8 if internal_names else 9,
         quiet=True,
         props=[],
@@ -37,7 +38,7 @@ def topology_text(tree, *, internal_names=True):
     return output.getvalue()
 
 
-def annotated_mapping_text(gene, mapping):
+def annotated_mapping_text(gene, mapping, args=None):
     """Retain GRAMPA's node[species-map-duplication] map serialization."""
     labeled = copy_tree_iteratively(gene)
     replacements = {}
@@ -61,7 +62,7 @@ def annotated_mapping_text(gene, mapping):
     return re.sub(
         r"NWKITMULMAP(\d+)",
         lambda match: replacements[match[1]],
-        topology_text(labeled),
+        topology_text(labeled, args=args),
     ).rstrip(";")
 
 
@@ -220,7 +221,7 @@ def mul_reconcile_main(args):
             "h1.node": candidate.h1,
             "h2.node": candidate.h2,
             "score": scores[candidate.id],
-            "labeled.tree": topology_text(candidate.tree),
+            "labeled.tree": topology_text(candidate.tree, args=args),
             "hypothesis.kind": candidate.kind,
         }
         for candidate in ordered
@@ -254,7 +255,7 @@ def mul_reconcile_main(args):
                         "dups": duplications,
                         "losses": losses,
                         "total.score": duplications + losses,
-                        "maps": annotated_mapping_text(gene, mapping),
+                        "maps": annotated_mapping_text(gene, mapping, args),
                         "node.maps": json.dumps(mapping, separators=(",", ":")),
                         "maps.format": "grampa-annotated-newick",
                         "node.maps.format": "nwkit-node-map-json-v1",
@@ -330,7 +331,10 @@ def mul_reconcile_main(args):
                 staged.write_text(path, write_checks)
             elif name == "tree_out":
                 staged.write_text(
-                    path, lambda handle: handle.write(topology_text(best.tree) + "\n")
+                    path,
+                    lambda handle: handle.write(
+                        topology_text(best.tree, args=args) + "\n"
+                    ),
                 )
             elif name == "node_out":
                 from nwkit.mul_reconcile_nodes import write_node_diagnostics

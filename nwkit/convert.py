@@ -5,7 +5,14 @@ from decimal import Decimal
 from pathlib import Path
 
 from nwkit.output_transaction import output_transaction
-from nwkit.rooting_state import extract_rooting_token, get_rooting_info
+from nwkit.rooting_state import (
+    ROOTED_PROP,
+    extract_rooting_token,
+    get_rooting_info,
+    rooting_output_options,
+    rooting_output_policy,
+    topology_rooting,
+)
 from nwkit.tree_formats import (
     _dated_tree,
     annotation_attributes,
@@ -37,14 +44,14 @@ def _select_statement(source, statements, tree_index):
     return statements[0]
 
 
-def _rewrite_rooting(statement, state):
-    """Canonicalize explicit/overridden root declarations without NHX loss."""
+def _strip_rooting(statement):
+    """Remove only root declarations before applying the shared output policy."""
     statement, _ = extract_rooting_token(statement)
     result = []
     for token in tokens(statement):
         if token.kind == "comment" and token.text.startswith("[&&NHX:"):
             attributes, _ = annotation_attributes(token.text)
-            attributes.pop("nwkit_rooted", None)
+            attributes.pop(ROOTED_PROP, None)
             if attributes:
                 result.append(
                     "[&&NHX:"
@@ -53,8 +60,7 @@ def _rewrite_rooting(statement, state):
                 )
         else:
             result.append(token.text)
-    marker = "[&R]" if state == "rooted" else "[&U]"
-    return marker + "".join(result)
+    return "".join(result)
 
 
 def _validate_reserved_properties(statement):
@@ -86,6 +92,8 @@ def convert_tree_text(
     rooted="auto",
     node_label="",
     properties="keep",
+    rooting_token=False,
+    rooting_nhx=False,
 ):
     """Serialize a validated result fully before the caller publishes any bytes."""
     if target not in {"newick", "nhx", "figtree"}:
@@ -102,14 +110,28 @@ def convert_tree_text(
         if node.dist is not None and node.dist < 0:
             raise ValueError("Tree branch lengths must be non-negative.")
     info = get_rooting_info(tree)
+    prefix, nhx = rooting_output_policy(
+        tree, rooting_token=rooting_token, rooting_nhx=rooting_nhx
+    )
+    if target == "newick":
+        if rooting_nhx or (not prefix and info.rooted is not topology_rooting(tree)):
+            raise ValueError(
+                "Plain Newick without a rooting token cannot preserve this rooting "
+                "state. Use --rooting-token yes (without --rooting-nhx yes), "
+                "or --to nhx/figtree."
+            )
+        # Root NHX is a semantic declaration, not an ordinary property to drop.
+        # Plain Newick uses the requested token or the unchanged binary root.
+        nhx = False
+    elif target == "figtree" and info.rooted is not None:
+        # A NEXUS tree statement retains its format-specific declaration even
+        # with standalone-Newick tokens disabled or root NHX requested.
+        prefix = "[&R]" if info.rooted else "[&U]"
     if node_label:
         # Copy from the original attributes, including nwkit_rooted, before
         # canonicalizing rooting declarations or dropping/scaling properties.
         statement = transform_annotations(statement, node_label=node_label)
-    if info.state != "unknown" and (
-        info.source != "topology" or rooted != "auto" or target == "figtree"
-    ):
-        statement = _rewrite_rooting(statement, info.state)
+    statement = _strip_rooting(statement)
     converted = transform_annotations(
         statement,
         output=target,
@@ -117,12 +139,19 @@ def convert_tree_text(
         age_ci=age_ci,
         properties=properties,
     )
+    if nhx:
+        state = "unknown" if info.rooted is None else ("yes" if info.rooted else "no")
+        converted = converted[:-1] + f"[&&NHX:{ROOTED_PROP}={state}];"
+    converted = prefix + converted
     # Verify the emitted numeric values and the exact downstream reader boundary.
     # The input quoting policy was checked above. Generated labels are always
     # safely quoted, independent of whether input quotes were permitted.
-    read_tree(converted, 1 if node_label else tree_format, True, quiet=True)
+    restored = read_tree(converted, 1 if node_label else tree_format, True, quiet=True)
+    if get_rooting_info(restored).rooted is not info.rooted:
+        raise ValueError("Converted tree lost its rooting interpretation.")
     if target == "figtree":
-        return "#NEXUS\nBEGIN TREES;\n  UTREE 1 = " + converted + "\nEND;\n"
+        kind = "UTREE" if info.rooted is False else "TREE"
+        return f"#NEXUS\nBEGIN TREES;\n  {kind} 1 = " + converted + "\nEND;\n"
     return converted + "\n"
 
 
@@ -139,6 +168,7 @@ def convert_main(args):
         rooted=getattr(args, "input_rooted", "auto"),
         node_label=getattr(args, "node_label", ""),
         properties=getattr(args, "properties", "keep"),
+        **rooting_output_options(args),
     )
     if args.outfile == "-":
         sys.stdout.write(converted)

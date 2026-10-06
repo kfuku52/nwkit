@@ -4,6 +4,8 @@ import json
 import math
 import sys
 from concurrent.futures import ProcessPoolExecutor
+from io import StringIO
+from types import SimpleNamespace
 
 import pandas as pd
 from ete4.parser.newick import PARSERS
@@ -11,16 +13,18 @@ from ete4.parser.newick import PARSERS
 from nwkit import __version__
 from nwkit.mul_msc_model import dated_candidates, score_gene, validate_sampling
 from nwkit.output_transaction import output_transaction, validate_output_targets
+from nwkit.rooting_state import rooting_output_options
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
     _serialize_newick_node_name,
     read_tree,
     read_trees,
     validate_outputs_do_not_replace_inputs,
+    write_tree,
 )
 
 
-def dated_text(tree):
+def dated_text(tree, args=None):
     # Match RADTE's dated writer: ETE's default six digits lose shared ages.
     parser = {
         key: [dict(item) for item in fields] for key, fields in PARSERS[1].items()
@@ -33,7 +37,16 @@ def dated_text(tree):
     parser["internal"][0]["write"] = lambda value: _serialize_newick_node_name(
         value, is_internal=True
     )
-    return "[&R]" + tree.write(parser=parser, format_root_node=True, props=[])
+    handle = StringIO()
+    write_tree(
+        tree,
+        SimpleNamespace(outfile=handle, **rooting_output_options(args)),
+        1,
+        quiet=True,
+        props=[],
+        parser=parser,
+    )
+    return handle.getvalue()
 
 
 def _time_scale(args, *, require_age=True):
@@ -244,7 +257,9 @@ def write_fixed_results(
                 "delta_log_likelihood": None
                 if value is None
                 else likelihoods[best.id] - value,
-                "dated.tree": dated_text(candidate.tree) if value is not None else None,
+                "dated.tree": dated_text(candidate.tree, args)
+                if value is not None
+                else None,
                 "status": candidate.status,
                 "reason": candidate.reason,
             }
@@ -302,7 +317,8 @@ def write_fixed_results(
                 )
             elif name == "tree_out":
                 staged.write_text(
-                    path, lambda handle: handle.write(dated_text(best.tree) + "\n")
+                    path,
+                    lambda handle: handle.write(dated_text(best.tree, args) + "\n"),
                 )
             else:
                 staged.write_text(

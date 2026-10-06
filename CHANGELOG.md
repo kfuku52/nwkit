@@ -4,6 +4,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.41] - 2026-10-06
+
+### Changed
+
+- Default leading rooted/unrooted output tokens to off across tree-writing CLI
+  commands; add `--rooting-token yes` for explicit output, using one shared
+  policy for common writers, RADTE, MUL trees and gene-tree-search outputs.
+- Preserve existing annotations and root interpretation without adding NHX to
+  ordinary rooted binary trees. Retain metadata when topology cannot express
+  the state; strict plain-Newick conversion rejects information loss before
+  replacing files. NEXUS retains its format-specific declaration.
+- Keep dated branch precision, companion-output transactions, saved-model
+  compatibility and native external-worker/calibration syntax unchanged.
+
 ## [0.43.40] - 2026-10-06
 
 ### Added

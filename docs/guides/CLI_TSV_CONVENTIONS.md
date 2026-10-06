@@ -159,18 +159,41 @@ does not waive any of these structural requirements.
 unmarked inputs; an explicit unrooted declaration is incompatible with rooted
 comparison unless the corresponding input override is used.
 
-Shared Newick writers preserve explicit or forced states, and any state that
-would otherwise be lost through an operation such as collapsing or pruning,
-using `[&R]` (rooted) or `[&U]` (unrooted) by default. Conversion of these
-declarations to root NHX is off by default; use `--rooting-nhx yes` to emit
-`[&&NHX:nwkit_rooted=yes]` (or `no`), as in earlier versions. Existing root
-NHX remains NHX. Unknown states that would otherwise be lost still use
-`[&&NHX:nwkit_rooted=unknown]`, because neither `[&R]` nor `[&U]` represents
-unknown rootedness. These declarations are independent of the selected
-annotation properties. NWKIT reads both forms; ETE's direct Newick reader
-requires the NHX form.
-Legacy unmarked binary output is unchanged. Rooting operations replace the
-input interpretation with rooted status; label and support changes do not.
+Tree writers default to `--rooting-token no`: no leading `[&R]` or `[&U]` is
+emitted for standalone Newick/NHX. Use `--rooting-token yes` to emit the token
+for a known rooted or unrooted state, including an inferred binary-root state.
+The switch does not move the root or change topology, lengths, support or names.
+An ordinary rooted binary tree needs no new annotation with the default. An
+explicitly unrooted tree, rooted polytomy, or unknown state pruned to a binary
+root cannot retain its interpretation through bare Newick: shared writers add
+root-only `nwkit_rooted=yes|no|unknown` NHX only when needed. Existing root NHX
+remains NHX, including alongside an explicitly requested compatible token.
+`--rooting-nhx yes` explicitly selects NHX and suppresses the leading token;
+it takes priority when both switches are enabled. Unknown cannot be represented
+by either R/U token. Root declarations remain independent of selected annotation
+properties. NWKIT reads both forms; ETE's direct Newick reader requires NHX.
+Rooting operations replace the input interpretation with rooted status; label
+and support changes do not.
+
+The same options apply to the shared writer's primary, companion, stdout and
+multiple-tree outputs, and to direct RADTE dated trees, MUL D+L topology/mapping
+trees, fixed/fitted MSC dated trees, locus-model JSON population trees and
+gene-tree-search result/candidate trees. Dating writers retain their full branch
+precision. Internal IQ-TREE/GeneRax worker syntax and SHIFT's saved analysis-token
+contract are not presentation outputs and retain their native requirements.
+`convert --to figtree` retains its format-specific NEXUS rooting declaration
+regardless of the standalone token option. Strict `convert --to newick` rejects
+states that cannot be preserved without a token; choose `--rooting-token yes` or
+`--to nhx/figtree`. `mcmctree --posterior` uses the common output policy; its
+calibration/PAML treefile syntax remains unchanged.
+
+| Tree output path | Commands / artifacts |
+| --- | --- |
+| Shared writer, including companion/stdout/candidate bundles | `annotate`, `asr`, `constrain`, `collapse`, `compose`, `consensus`, `drop`, `intersection`, `label`, `rename`, `mark`, `nhx2nwk`, `prune`, `rescale`, `root`, `sanitize`, `shuffle`, `skim`, `sample`, `subtree`, `transfer`, `table2nwk` |
+| Container-preserving conversion | `convert`: Newick, NHX, FigTree/NEXUS |
+| Full-precision dated trees | `radte`: `.dated.nwk`; `mul-reconcile` MSC fixed/fitted `--tree-out`, TSV tree columns and JSON scores |
+| Other direct result serializers | `mul-reconcile`: D+L topology/mapping columns and `--tree-out`, locus JSON population trees; `gene-tree-search`: selected and candidate trees |
+| Native format boundary | `mcmctree`: posterior trees use the policy; PAML calibration syntax is unchanged. Native external-worker inputs and SHIFT analysis tokens retain their private format contracts. |
 The `nwkit_rooted` property and private `_nwkit_rooting_*` bookkeeping properties
 are reserved and cannot be reassigned through annotation/property transfer.
 The Python `read_tree` and `read_trees` helpers expose the same policy through

@@ -6464,10 +6464,23 @@ def _add_input_rooting_options():
 
 
 def _add_output_rooting_options():
-    for command_parser in subparsers.choices.values():
+    for command, command_parser in subparsers.choices.items():
         outputs = {action.dest for action in command_parser._actions}
-        if not outputs.intersection({"outformat", "tree_outformat"}):
+        if not outputs.intersection(
+            {"outformat", "tree_outformat", "tree_out"}
+        ) and command not in {"convert", "radte", "mcmctree"}:
             continue
+        command_parser.add_argument(
+            "--rooting-token",
+            "--rooting_token",
+            metavar="yes|no",
+            type=strtobool,
+            default=False,
+            help="default=no: Emit a leading [&R]/[&U] for known rooting states. "
+            "Without a token, preserve existing root NHX and use NHX only when "
+            "the state cannot be inferred from the root topology. FigTree/NEXUS "
+            "retains its format-specific rooting declaration.",
+        )
         command_parser.add_argument(
             "--rooting-nhx",
             "--rooting_nhx",
@@ -6475,8 +6488,8 @@ def _add_output_rooting_options():
             type=strtobool,
             default=False,
             help="default=no: Convert rooting declarations to root NHX "
-            "nwkit_rooted=yes/no. By default preserve [&R]/[&U]; existing "
-            "root NHX and unknown rooting states remain NHX.",
+            "nwkit_rooted=yes/no/unknown. Takes priority over --rooting-token; "
+            "existing root NHX is retained without this option.",
         )
 
 

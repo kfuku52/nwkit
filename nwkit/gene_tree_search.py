@@ -149,7 +149,7 @@ def _evaluation_subset(candidates, budget):
     return selected[:budget]
 
 
-def _tables(candidates, proposals, evaluations, best_id, context):
+def _tables(candidates, proposals, evaluations, best_id, context, args=None):
     baseline = evaluations.get("baseline")
     rows = []
     for candidate in candidates:
@@ -213,7 +213,10 @@ def _tables(candidates, proposals, evaluations, best_id, context):
         ],
     )
     trees = pd.DataFrame(
-        [{"candidate_id": c.id, "newick": tree_text(c.tree)} for c in candidates]
+        [
+            {"candidate_id": c.id, "newick": tree_text(c.tree, args=args)}
+            for c in candidates
+        ]
     )
     return {"outfile": pd.DataFrame(rows), "sets_out": sets, "candidates_out": trees}
 
@@ -279,8 +282,14 @@ def gene_tree_search_main(args):
         )
         best_id = _best_evaluation(evaluations)
     best = next(c for c in candidates if c.id == best_id)
+    from nwkit.convert import convert_tree_text
+    from nwkit.rooting_state import rooting_output_options
+
     tree = evaluations[best_id].optimized_tree if evaluations else tree_text(gene)
-    tables = _tables(candidates, proposals, evaluations, best_id, context)
+    tree = convert_tree_text(
+        tree, target="nhx", tree_format=1, **rooting_output_options(args)
+    ).rstrip("\n")
+    tables = _tables(candidates, proposals, evaluations, best_id, context, args)
     metadata = {
         "schema_version": 1,
         "nwkit_version": __version__,

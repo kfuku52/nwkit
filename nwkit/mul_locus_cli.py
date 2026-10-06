@@ -45,17 +45,17 @@ def finite_json(value):
     return value
 
 
-def bank_record(bank):
+def bank_record(bank, args=None):
     from nwkit.mul_locus_integral import IntegratedBank
 
     if isinstance(bank, IntegratedBank):
-        return integrated_record(bank)
+        return integrated_record(bank, args)
     return {
         "candidate": bank.candidate,
         "h2": bank.h2,
         "grid": bank.grid,
         "parameters": parameter_record(bank),
-        "population_tree": dated_text(bank.population),
+        "population_tree": dated_text(bank.population, args),
         "population_leaf_species": {
             leaf.name: leaf.props.get("mul_species", leaf.name)
             for leaf in bank.population.leaves()
@@ -80,7 +80,7 @@ def bank_record(bank):
     }
 
 
-def integrated_record(bank):
+def integrated_record(bank, args=None):
     from dataclasses import asdict
 
     return {
@@ -88,7 +88,7 @@ def integrated_record(bank):
         "h2": bank.h2,
         "grid": bank.grid,
         "parameters": parameter_record(bank),
-        "population_tree": dated_text(bank.population),
+        "population_tree": dated_text(bank.population, args),
         "population_leaf_species": {
             leaf.name: leaf.props.get("mul_species", leaf.name)
             for leaf in bank.population.leaves()
@@ -277,7 +277,7 @@ def write_results(
             "h1": args.h1,
             "h2": args.h2,
             "species_tree": dated_text(
-                next(b.population for b in banks if b.candidate == 0)
+                next(b.population for b in banks if b.candidate == 0), args
             ),
         },
         "observations": observations,
@@ -292,7 +292,7 @@ def write_results(
         "scores": fit,
         "excluded": excluded,
         "calibration": calibration,
-        "banks": [bank_record(bank) for bank in banks],
+        "banks": [bank_record(bank, args) for bank in banks],
         "limitations": [
             "Experimental small-family generative model; finite-grid maximization is not continuous MLE.",
             "One ancestral origin locus, explicit finite ancestral DL stem, fixed species ages and shared diploid Ne/rates.",

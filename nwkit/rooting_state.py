@@ -186,6 +186,33 @@ def rooting_needs_serialization(tree):
     } or info.rooted is not topology_rooting(tree)
 
 
+def rooting_output_options(args):
+    """One output policy for CLI writers, including optional tree columns."""
+    return {
+        "rooting_token": getattr(args, "rooting_token", False),
+        "rooting_nhx": getattr(args, "rooting_nhx", False),
+    }
+
+
+def rooting_output_policy(tree, *, rooting_token=False, rooting_nhx=False):
+    """Return a leading token and whether a root NHX property is required.
+
+    Bare binary-root Newick retains the legacy rooted interpretation. Other
+    states need metadata when a token is not requested. Preserve existing root
+    NHX independently of the token switch; an explicit NHX request takes priority.
+    """
+    info = get_rooting_info(tree)
+    prefix = ""
+    if rooting_token and not rooting_nhx and info.rooted is not None:
+        prefix = "[&R]" if info.rooted else "[&U]"
+    nhx = (
+        rooting_nhx
+        or info.source == "nhx"
+        or (not prefix and info.rooted is not topology_rooting(tree))
+    )
+    return prefix, nhx
+
+
 def require_rooted(tree, message, option="--input-rooted"):
     if not is_rooted(tree):
         raise ValueError(

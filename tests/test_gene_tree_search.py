@@ -271,11 +271,24 @@ def _cli_args(tmp_path, coupled):
     ]
 
 
-def test_proposal_only_never_repairs_input_on_event_count(coupled, tmp_path):
+@pytest.mark.parametrize("token", [False, True])
+def test_proposal_only_never_repairs_input_on_event_count(coupled, tmp_path, token):
     args = _cli_args(tmp_path, coupled)
+    args += [
+        "--rooting-token",
+        "yes" if token else "no",
+        "--candidates-out",
+        str(tmp_path / "candidates.tsv"),
+    ]
     main(args)
     best = Tree((tmp_path / "best.nwk").read_text().removeprefix("[&R]"), parser=1)
     assert topology_key(best) == topology_key(coupled[1])
+    assert (tmp_path / "best.nwk").read_text().startswith("[&R]") is token
+    import csv
+
+    with (tmp_path / "candidates.tsv").open() as stream:
+        rows = list(csv.DictReader(stream, delimiter="\t"))
+    assert rows and all(row["newick"].startswith("[&R]") is token for row in rows)
     assert (
         json.loads((tmp_path / "report.json").read_text())["evaluated_topologies"] == 0
     )

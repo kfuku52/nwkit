@@ -377,15 +377,18 @@ def test_fitted_late_writer_failure_preserves_six_outputs(tmp_path, monkeypatch)
     assert_old_bundle(paths)
 
 
-def test_saved_fitted_score_reconstructs_from_gene_contributions(tmp_path):
+@pytest.mark.parametrize("token", [False, True])
+def test_saved_fitted_score_reconstructs_from_gene_contributions(tmp_path, token):
     arguments, paths = fit_arguments(tmp_path)
+    arguments += ["--rooting-token", "yes" if token else "no"]
     main(arguments)
     score = pd.read_csv(paths["scores"], sep="\t").iloc[0]
     details = pd.read_csv(paths["report"], sep="\t")
     assert math.fsum(details.log_likelihood * details.family_weight) == pytest.approx(
         score.log_likelihood, abs=3e-13
     )
-    assert paths["tree"].read_text().startswith("[&R]")
+    assert paths["tree"].read_text().startswith("[&R]") is token
+    assert score["dated.tree"].startswith("[&R]") is token
     metadata = json.loads(paths["model"].read_text())
     assert metadata["estimated_parameters"] == ["hybridization_age"]
     assert metadata["fits"][0]["diagnostics"]["status"] == "locally-distinguishable"
