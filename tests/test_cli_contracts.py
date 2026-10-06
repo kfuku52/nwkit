@@ -11,6 +11,7 @@ from nwkit.util import read_tree
 pytestmark = pytest.mark.integration
 
 CASES = {
+    "gene-tree-search": ["--species-tree", "{tree}", "--species-parser", "taxonomic"],
     "mul-reconcile": ["--species-tree", "{tree}", "--species-parser", "taxonomic"],
     "ksrate": ["--ks-tsv", "{ks}", "--bootstrap", "9"],
     "wgd-tree": [
@@ -160,6 +161,7 @@ CASES = {
 }
 
 TABLE_COLUMNS = {
+    "gene-tree-search": "candidate_id",
     "mul-reconcile": "score",
     "ksrate": "corrected_ks",
     "wgd-count": "count_support",

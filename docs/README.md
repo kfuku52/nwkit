@@ -26,6 +26,7 @@ in [`guides/`](guides/):
 - [Phylogenetic signal](guides/SIGNAL.md)
 - [RADTE dating](guides/RADTE.md)
 - [SHIFT inference](guides/SHIFT.md)
+- [Targeted gene-tree search and GeneRax evaluation](guides/GENE_TREE_SEARCH.md)
 - [Tree format conversion](guides/CONVERT.md)
 
 The complete guide list is available in the directory; filenames retain the
@@ -49,6 +50,7 @@ for the corresponding user guide.
 - [Conditional locus integration support and precision probe](validation/MUL_LOCUS_INTEGRATION_PROBE.md)
 - [Conditional reference, KL intervals and GeneGalleon integration](validation/MUL_LOCUS_CONDITIONAL_INTEGRATION.md)
 - [Node diagnostics and fixed-data MC budget follow-up](validation/MUL_NODE_DIAGNOSTICS_AND_MC_BUDGET.md)
+- [Targeted gene-tree search using the supplied BMI1 dataset](validation/GENE_TREE_SEARCH_BMI1.md)
 
 ## Project operations
 

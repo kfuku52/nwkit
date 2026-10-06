@@ -52,6 +52,8 @@ OUTPUT_ARGUMENTS = frozenset(
         "map_probabilities_out",
         "map_figure_out",
         "report",
+        "report_out",
+        "sets_out",
         "tree_out",
         "model_out",
         "fit_out",

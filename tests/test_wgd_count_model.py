@@ -99,6 +99,21 @@ def test_high_copy_rare_pulse_likelihood_matches_independent_yule_sum():
     )
 
 
+@pytest.mark.parametrize("duplication", [1e-8, 2.5652894719336476, 6.155496485662881])
+@pytest.mark.parametrize("mean", [1.0, 2.5])
+@pytest.mark.parametrize("multiplicity", [2, 3])
+def test_loss_free_fully_detected_pulse_has_certain_selection(
+    duplication, mean, multiplicity
+):
+    # Births and a pulse retain original copies. With no loss or detection error,
+    # every positive root state observes both root clades with probability one.
+    model = CountLikelihood(tree(), np.array([[1, 1]]), ascertainment="root-clades")
+    event = MultiplicationEvent(1, 1.0, multiplicity=multiplicity)
+    with np.errstate(invalid="raise"):
+        actual = model._selection_logs([[duplication, 0.0]], 1.0, mean, event)
+    np.testing.assert_array_equal(actual, [0.0])
+
+
 @pytest.mark.parametrize("retention", [0.0, 0.3, 1.0])
 def test_log_pruning_matches_scaled_pruning_with_pulse_and_missingness(retention):
     model = CountLikelihood(

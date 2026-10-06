@@ -17,6 +17,7 @@ from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
     _serialize_newick_node_name,
+    copy_tree_iteratively,
     read_tree,
     read_trees,
     validate_outputs_do_not_replace_inputs,
@@ -38,7 +39,7 @@ def topology_text(tree, *, internal_names=True):
 
 def annotated_mapping_text(gene, mapping):
     """Retain GRAMPA's node[species-map-duplication] map serialization."""
-    labeled = gene.copy()
+    labeled = copy_tree_iteratively(gene)
     replacements = {}
     internal_number = 0
     for index, node in enumerate(labeled.traverse("postorder")):

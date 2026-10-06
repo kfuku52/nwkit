@@ -573,12 +573,16 @@ class CountLikelihood:
         }
 
         def propagate(survival, duplication, loss, time):
-            _, b, survives, success = _birth_death_probabilities(
+            _, _, survives, success = _birth_death_probabilities(
                 duplication, loss, time
             )
+            # 1-b and b are computed separately to retain small complements;
+            # their rounded sum can fall below one. Rewrite 1-b+b*s as
+            # (1-b)*(1-s)+s, so s=1 stays exact and propagation cannot turn a
+            # valid survival into a probability above one before a pulse.
             return np.divide(
                 survives * survival,
-                success + b * survival,
+                success * (1.0 - survival) + survival,
                 out=np.zeros_like(survival),
                 where=survival > 0,
             )

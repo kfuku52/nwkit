@@ -6513,6 +6513,9 @@ register_wgd_tree(subparsers, p_tree_input, p_table_output, p_species)
 from nwkit.mul_reconcile_cli import register_mul_reconcile  # noqa: E402
 
 register_mul_reconcile(subparsers, p_tree_input, p_table_output, p_species)
+from nwkit.gene_tree_search_cli import register_gene_tree_search  # noqa: E402
+
+register_gene_tree_search(subparsers, p_tree_input, p_table_output, p_species)
 from nwkit.regression_selection_cli import register_regression_selection  # noqa: E402
 
 register_regression_selection(subparsers, p_audit)

@@ -46,6 +46,34 @@ identify the failing binary/package before repairing only the isolated environme
 For an ETE wheel import failure, a same-version source rebuild is an option when
 a compiler is available; do not change dependency versions to hide the problem.
 
+### SciPy 1.18.0 / 1.18.1 matrix-exponential nontermination
+
+These two versions are excluded from runtime metadata because a finite matrix
+encountered by the full OU optimizer causes `scipy.linalg.expm` to stop making
+progress inside `matrix_exponential_d` / `scipy_cblas_idamax`. This reproduces
+outside NWKIT on Linux ARM64, Python 3.12.14, NumPy 2.5.3:
+
+```python
+import numpy as np
+from scipy.linalg import expm
+
+matrix = np.array([
+    [-6.08572431674702e16, -1.1080979213680645e17],
+    [-1.1080979240863336e17, -2.0176415639168192e17],
+])
+expm(matrix)
+```
+
+Run this reproducer in a disposable process with an external timeout: both
+versions exceeded an eight-second timeout for this 2-by-2 input, and the full
+suite remained in the same native call for over 35 minutes. SciPy 1.17.1
+returns in under one millisecond on the same input and platform (its NaN
+result is rejected by the existing OU objective). The incompatibility is in
+the dependency; NWKIT does not replace its exponential or narrow the scientific
+search. Remove an exclusion when that version's corrected upstream distribution
+completes this reproducer and passes the full OU optimizer and release checks.
+Future versions remain eligible; this is not a blanket upper bound.
+
 ### SciPy 1.15.3 wheel on macOS 27 ARM64 / Python 3.10
 
 On macOS 27.0 (26A428), the PyPI `macosx_14_0_arm64` wheel for SciPy 1.15.3

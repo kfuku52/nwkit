@@ -34,7 +34,8 @@ dependencies = [
   "requests>=2.32.2",
   "urllib3>=2",
   "numpy",
-  "scipy",
+  # Finite-input expm nontermination; reproducer and removal condition in DEVELOPMENT.md.
+  "scipy!=1.18.0,!=1.18.1",
   "matplotlib",
   "Pillow",
 ]

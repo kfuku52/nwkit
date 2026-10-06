@@ -104,6 +104,7 @@ minimal worked example, in
 - [`draw`](https://github.com/kfuku52/nwkit/wiki/nwkit-draw): Drawing phylogenetic trees with Cartesian, polar, unrooted, spiral, or fractal geometry, annotation-aware spacing, and auditable layout reports
 - [`drop`](https://github.com/kfuku52/nwkit/wiki/nwkit-drop): Removing node and branch information
 - [`dtt`](docs/guides/DTT.md): Continuous-trait disparity through time with a Brownian null envelope, MDI and figures
+- [`gene-tree-search`](https://github.com/kfuku52/nwkit/wiki/nwkit-gene-tree-search): Automatically proposing coupled gene-tip moves and comparing complete-tip topologies with independent GeneRax joint fits; see the [guide](docs/guides/GENE_TREE_SEARCH.md) and [BMI1 validation](docs/validation/GENE_TREE_SEARCH_BMI1.md)
 - [`image`](https://github.com/kfuku52/nwkit/wiki/nwkit-image): Retrieving representative species images with license-aware filtering
 - [`info`](https://github.com/kfuku52/nwkit/wiki/nwkit-info): Printing tree information
 - [`intersection`](https://github.com/kfuku52/nwkit/wiki/nwkit-intersection): Dropping non-overlapping leaves/sequences between two trees or between a tree and an alignment

@@ -4,6 +4,41 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.40] - 2026-10-06
+
+### Added
+
+- Add `gene-tree-search` to detect species-overlap covers and LCA cuts, propose
+  joint tip/clade regrafts, and compare complete-tip topologies with independent
+  GeneRax EVAL fits under DL or DTL models. Report finite-search coverage,
+  per-round likelihoods, score-rounding bounds and input provenance.
+- Include the supplied BMI1 regression fixture, exhaustive small-tree reference
+  checks and real GeneRax checks for both reconciliation models and root policies.
+
+### Fixed
+
+- Retain and warm-start the best fit across equal refit rounds for every topology,
+  including the baseline; select only candidates with resolved joint improvement.
+- Preserve canonical move metadata when duplicate candidates are reserved;
+  distinguish protein asparagine from unknown DNA and validate fitted trees.
+- Support inline/stdin tree provenance, reject absent output directories before
+  search, and protect all companion outputs from audit collisions.
+- Write round-relative GeneRax paths so spaces, quotes and comment characters
+  in work-directory names do not corrupt family-file paths or native workers.
+- Stop local POSIX workers when a launcher exits unsuccessfully, as well as on
+  timeout or cancellation.
+- Use iterative tree copies for gene-tree proposals, GeneRax serialization and
+  MUL mapping annotations, preserving support for deep trees on Python 3.10/3.11.
+- Exclude SciPy 1.18.0 and 1.18.1 after reproducing a finite-input matrix
+  exponential hang outside NWKIT; document the input and removal condition.
+- Preserve probability-one survival in count-WGM ascertainment algebra, avoiding
+  a rounded probability above one and invalid pulse logarithm without clipping.
+
+### Changed
+
+- Document the command, reproducible BMI1 evidence, component-preserving and
+  pairwise-coupling restrictions, and the limits of biological interpretation.
+
 ## [0.43.39] - 2026-10-03
 
 ### Fixed
