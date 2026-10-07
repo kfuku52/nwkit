@@ -156,7 +156,9 @@ def test_real_bootstrap_cli_respects_seed_and_search(tmp_path):
 
 def test_tip_and_family_labels_remain_literal_and_missing_is_explicit(tmp_path):
     path = tmp_path / "counts.tsv"
-    path.write_text("\ufefffamily_id\tNA\t001\nf001\t1\tNA\nNA\t2\t0\n")
+    path.write_text(
+        "\ufefffamily_id\tNA\t001\nf001\t1\tNA\nNA\t2\t0\n", encoding="utf-8"
+    )
     families, counts = read_counts(str(path), ("001", "NA"), ",NA")
     assert families == ["f001", "NA"]
     assert pd.isna(counts[0, 0])

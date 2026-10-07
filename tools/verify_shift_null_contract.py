@@ -263,10 +263,23 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
                         tree, convergence=lane["convergence"], variances=variances
                     )
                 replay = replay_engines[engine_key].fit(y, seed=boot, replicates=B)
-                if not same_replayed_model(
-                    tree, replay["model"], fit["model"]
-                ) or not same_replayed_tests(replay["tests"], fit["tests"]):
-                    raise ValueError("Seeded complete-search replay disagrees")
+                model_matches = same_replayed_model(tree, replay["model"], fit["model"])
+                tests_match = same_replayed_tests(replay["tests"], fit["tests"])
+                if not model_matches or not tests_match:
+                    raise ValueError(
+                        "Seeded complete-search replay disagrees: "
+                        + json.dumps(
+                            {
+                                "cell_id": row["cell_id"],
+                                "replicate": row["replicate"],
+                                "convergence": lane["convergence"],
+                                "bootstrap_seed": boot,
+                                "model_matches": model_matches,
+                                "tests_match": tests_match,
+                            },
+                            sort_keys=True,
+                        )
+                    )
                 replays += 1
     summary = summarize(rows, specification)
     if not same_replayed_summary(

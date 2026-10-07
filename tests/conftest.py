@@ -1,5 +1,15 @@
+import json
+import os
+
 import pytest
 from ete4 import Tree
+
+
+def pytest_runtest_logstart(nodeid, location):
+    if os.environ.get("NWKIT_CI_DIAGNOSTICS") == "1":
+        # A completed line reaches CI before the test can stall. Keep identifiers
+        # bounded and escaped; never dump fixtures, environment or local values.
+        print("\nNWKIT_CI_TEST_START " + json.dumps(nodeid[:400]), flush=True)
 
 
 @pytest.fixture

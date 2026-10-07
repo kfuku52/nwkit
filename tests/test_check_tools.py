@@ -7,10 +7,10 @@ from pathlib import Path
 import pytest
 
 
-def load_tool(name):
+def load_tool(name, directory="tools"):
     spec = importlib.util.spec_from_file_location(
         f"nwkit_check_{name}",
-        Path(__file__).resolve().parents[1] / "tools" / f"{name}.py",
+        Path(__file__).resolve().parents[1] / directory / f"{name}.py",
     )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -21,6 +21,63 @@ check = load_tool("check")
 maintainability = load_tool("check_maintainability")
 ci_matrix = load_tool("ci_matrix")
 ete_build = load_tool("build_ete_windows")
+ci_diagnostics = load_tool("ci_diagnostics")
+ci_test_configuration = load_tool("conftest", "tests")
+
+
+@pytest.fixture(autouse=True)
+def default_check_environment(monkeypatch):
+    monkeypatch.delenv("NWKIT_CI_DIAGNOSTICS", raising=False)
+
+
+def test_ci_diagnostics_are_opt_in_and_preserve_complete_coverage(monkeypatch):
+    assert check.pytest_diagnostics_args() == ()
+    monkeypatch.setenv("NWKIT_CI_DIAGNOSTICS", "1")
+    commands = []
+    monkeypatch.setattr(check, "run", lambda *args, **kwargs: commands.append(args))
+    check.main(["full"])
+    pytest_command = next(
+        command for command in commands if "coverage" in command and "run" in command
+    )
+    assert pytest_command[3:7] == ("run", "-m", "pytest", "tests/")
+    assert pytest_command[-3:] == ("-vv", "-o", "faulthandler_timeout=600")
+    assert "--timeout" not in pytest_command and "-m slow" not in pytest_command
+    commands.clear()
+    check.main(["test", "--", "tests/test_wgd_count.py"])
+    assert commands[-1][-1] == "tests/test_wgd_count.py"
+    assert "-vv" in commands[-1]
+
+
+def test_ci_runtime_metadata_does_not_dump_environment_or_host_identity(monkeypatch):
+    monkeypatch.setenv("NWKIT_SECRET_TEST", "DO_NOT_PRINT")
+    monkeypatch.setenv("OPENBLAS_NUM_THREADS", "4")
+    monkeypatch.setenv("OMP_NUM_THREADS", "DO_NOT_PRINT")
+    result = ci_diagnostics.runtime_metadata()
+    assert result["thread_settings"]["OPENBLAS_NUM_THREADS"] == "4"
+    assert "OMP_NUM_THREADS" not in result["thread_settings"]
+    serialized = json.dumps(result)
+    assert "DO_NOT_PRINT" not in serialized and "filepath" not in serialized
+    assert "node" not in result and "hostname" not in result
+
+
+def test_ci_start_marker_is_opt_in(monkeypatch, capsys):
+    hook = getattr(ci_test_configuration, "pytest_runtest_logstart", None)
+    assert callable(hook)
+    hook("tests/test_probe.py::test_probe", ("tests/test_probe.py", 1, "test_probe"))
+    assert capsys.readouterr().out == ""
+
+
+def test_ci_start_marker_is_line_terminated_bounded_and_escaped(monkeypatch, capsys):
+    hook = getattr(ci_test_configuration, "pytest_runtest_logstart", None)
+    assert callable(hook)
+    monkeypatch.setenv("NWKIT_CI_DIAGNOSTICS", "1")
+    nodeid = "tests/test_probe.py::test_probe[\n\x1b\u2028]" + "x" * 1000
+    hook(nodeid, ("tests/test_probe.py", 1, "test_probe"))
+    out = capsys.readouterr().out
+    assert out.endswith("\n") and len(out.splitlines()) == 2
+    assert "\x1b" not in out and "\u2028" not in out
+    assert len(out) < 2500
+    assert json.loads(out.split("NWKIT_CI_TEST_START ", 1)[1]) == nodeid[:400]
 
 
 def test_check_runner_bootstraps_from_source_without_installed_dependencies(tmp_path):

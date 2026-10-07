@@ -136,6 +136,15 @@ Keep small invariance tests and `tests/test_cli_contracts.py` in the quick
 suite. The latter invokes the real parser and handler for every subcommand;
 only external service boundaries are replaced with offline fixtures.
 
+CI sets `NWKIT_CI_DIAGNOSTICS=1` for the existing test and quality jobs. The
+same check entrypoint then prints bounded, escaped, line-terminated test-start
+markers and individual test progress, and requests a
+diagnostic stack after 600 seconds in a test; it does not terminate or retry
+that test. Job deadlines, complete suite selection and scientific settings
+remain unchanged. `tools/ci_diagnostics.py` prints an allowlist of runtime,
+package and BLAS metadata without a hostname or environment dump. An archived
+replay mismatch reports its exact cell, replicate, lane and bootstrap seed.
+
 ### Select checks by change
 
 Use the rows as starting points, then follow callers of changed shared helpers.

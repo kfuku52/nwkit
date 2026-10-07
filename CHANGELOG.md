@@ -4,6 +4,21 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.42] - 2026-10-07
+
+### Fixed
+
+- Write BOM-bearing test fixtures as UTF-8 and assert native relative GeneRax
+  paths on Windows, retaining the same inputs and worker protocol.
+
+### Changed
+
+- Add opt-in, bounded test-start markers, CI test progress, a diagnostic stack
+  dump for long tests, and
+  allowlisted Python/package/BLAS metadata. Identify the cell, replicate, lane
+  and seed on an archived replay mismatch without changing scientific checks,
+  test selection, job deadlines or retry behavior.
+
 ## [0.43.41] - 2026-10-06
 
 ### Changed

@@ -51,6 +51,8 @@ jobs:
     timeout-minutes: 120
     env:
       MPLBACKEND: Agg
+      NWKIT_CI_DIAGNOSTICS: '1'
+      PYTHONUNBUFFERED: '1'
     strategy:
       fail-fast: false
       matrix: ${{ fromJSON(needs.scope.outputs.matrix) }}
@@ -90,7 +92,9 @@ jobs:
           python -m pip install -c constraints-dev.txt -e ".[${{ matrix.extras }}]"
 
       - name: Run tests
-        run: python tools/check.py test
+        run: |
+          python tools/ci_diagnostics.py
+          python tools/check.py test
 
   macos-clean-install:
     needs: scope
@@ -122,6 +126,9 @@ jobs:
     if: needs.scope.outputs.source_checks == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 120
+    env:
+      NWKIT_CI_DIAGNOSTICS: '1'
+      PYTHONUNBUFFERED: '1'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -140,7 +147,9 @@ jobs:
           python -m pip install -c constraints-dev.txt -e '.[dev,image]'
 
       - name: Run full source checks
-        run: python tools/check.py full
+        run: |
+          python tools/ci_diagnostics.py
+          python tools/check.py full
 
       - name: Require coverage for changed lines
         if: github.event_name == 'pull_request'

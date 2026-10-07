@@ -184,6 +184,32 @@ def test_archived_engine_requires_explicit_scope_and_intact_snapshot(tmp_path):
         audit(bundle, frozen_engine=True)
 
 
+def test_replay_mismatch_reports_identity_without_changing_rejection(monkeypatch):
+    import verify_shift_null_contract as verifier
+
+    monkeypatch.setattr(verifier, "same_replayed_model", lambda *_: False)
+    with pytest.raises(
+        ValueError, match="Seeded complete-search replay disagrees"
+    ) as exc:
+        audit(
+            Path("examples/shift/null-contract-timing-pilot"),
+            replay_stride=1,
+            frozen_engine=True,
+        )
+    detail = json.loads(str(exc.value).split(": ", 1)[1])
+    assert set(detail) == {
+        "cell_id",
+        "replicate",
+        "convergence",
+        "bootstrap_seed",
+        "model_matches",
+        "tests_match",
+    }
+    assert detail["cell_id"] == 0 and detail["replicate"] == 0
+    assert detail["model_matches"] is False
+    assert type(detail["bootstrap_seed"]) is int
+
+
 def test_archived_mode_still_rejects_revised_generator(tmp_path):
     bundle = tmp_path / "archived"
     shutil.copytree(Path("examples/shift/null-contract-timing-pilot"), bundle)

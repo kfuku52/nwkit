@@ -49,9 +49,17 @@ def run_tests(pytest_args: tuple[str, ...] = (), *, quick: bool = False) -> None
         "-q",
         "--durations=20",
         "--durations-min=0.05",
+        *pytest_diagnostics_args(),
         *markers,
         *pytest_args,
     )
+
+
+def pytest_diagnostics_args() -> tuple[str, ...]:
+    """Opt-in CI observability; no test timeout, selection or retry changes."""
+    if os.environ.get("NWKIT_CI_DIAGNOSTICS") == "1":
+        return ("-vv", "-o", "faulthandler_timeout=600")
+    return ()
 
 
 def run_full_checks() -> None:
@@ -60,7 +68,17 @@ def run_full_checks() -> None:
     run(PYTHON, "-m", "bandit", "-r", "nwkit", "tools", "-ll", "-ii", "-q")
     run(PYTHON, "-m", "pip_audit", ".")
     run(PYTHON, "-m", "coverage", "erase")
-    run(PYTHON, "-m", "coverage", "run", "-m", "pytest", "tests/", "-q")
+    run(
+        PYTHON,
+        "-m",
+        "coverage",
+        "run",
+        "-m",
+        "pytest",
+        "tests/",
+        "-q",
+        *pytest_diagnostics_args(),
+    )
     run(PYTHON, "-m", "coverage", "report")
     run(PYTHON, "tools/check_maintainability.py")
 

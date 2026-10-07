@@ -359,8 +359,8 @@ def test_round_protocol_keeps_alignment_and_fits_rates_independently(
             Path(kwargs["cwd"]) / argv[argv.index("--families") + 1]
         ).read_text()
         assert "subst_model = GTR+G4" in families
-        assert "alignment = ../alignment.fasta" in families
-        assert "mapping = ../mapping.tsv" in families
+        assert f"alignment = {Path('..') / 'alignment.fasta'}" in families
+        assert f"mapping = {Path('..') / 'mapping.tsv'}" in families
         for candidate in candidates:
             directory = prefix / "results" / candidate.id
             directory.mkdir(parents=True)
@@ -524,14 +524,14 @@ def test_missing_output_directory_fails_before_search(coupled, tmp_path, monkeyp
 @pytest.mark.parametrize("model", ("GTR+G4", "HKY{1/2}+G4", "DNA010010+G"))
 def test_alignment_unknown_dna_n_is_rejected(coupled, tmp_path, model):
     alignment = tmp_path / "dna.fa"
-    alignment.write_text("\ufeff>A\nNNNN\n>B\nACGT\n")
+    alignment.write_text("\ufeff>A\nNNNN\n>B\nACGT\n", encoding="utf-8")
     with pytest.raises(ValueError, match="no observed"):
         read_alignment(alignment, ("A", "B"), subst_model=model)
 
 
 def test_protein_asparagine_is_observed(tmp_path):
     alignment = tmp_path / "protein.fa"
-    alignment.write_text("\ufeff>A\nNNNN\n>B\nACGT\n")
+    alignment.write_text("\ufeff>A\nNNNN\n>B\nACGT\n", encoding="utf-8")
     assert read_alignment(alignment, ("A", "B"), subst_model="LG+G4")["A"] == "NNNN"
 
 
