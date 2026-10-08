@@ -4,6 +4,17 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.44] - 2026-10-09
+
+### Changed
+
+- Remove `xlrd` from mandatory runtime dependencies. Verify the official
+  AngioCal v1.0 workbook and use its bundled, independently verified normalized
+  records without changing source hashes, metadata or original worksheet rows.
+  Custom XLS input retains an optional `xls` extra; TSV input needs no extra.
+  Preserve the bundled TSV's checksum during Windows Git checkout by fixing
+  its line endings to LF.
+
 ## [0.43.43] - 2026-10-08
 
 ### Added

@@ -3,7 +3,12 @@
 `nwkit mcmctree --angiocal v1.0` imports the 238-record
 [AngioCal v1.0 dataset](https://github.com/eflowerproject/angiocal/tree/v1.0)
 and produces a PAML calibration tree. It downloads the original XLS from a
-fixed commit and verifies its SHA-256. AngioCal v1.1, published with the 2024
+fixed commit and verifies its SHA-256, then reads the matching normalized
+records bundled with NWKIT. The bundled TSV is separately checksum-verified
+and preserves all imported fields and original worksheet row numbers; reports
+and audits still identify the original XLS. Official v1.0 and normalized TSV
+inputs need no Excel-reading dependency.
+AngioCal v1.1, published with the 2024
 angiosperm phylogeny, has a different distribution and is not yet supported.
 
 ```sh
@@ -145,6 +150,17 @@ with these required columns:
 fossil_id	fossil_taxon	minimum_age_ma	placement	clade
 1	Synthetic example	12.5	crown	Testaceae
 ```
+
+The exact pinned official workbook also works locally without `xlrd`. To read
+a modified workbook or another custom XLS, install the optional reader:
+
+```sh
+pip install 'nwkit[xls]'
+```
+
+TSV input requires no extra installation. For a source checkout, use
+`pip install -e '.[xls]'`. The test and development extras include this reader
+to exercise custom XLS parsing.
 
 Additional TSV columns can retain `node_calibrated`, `safe_minimum_age`,
 `age_quality_score`, `node_assignment_score`, `reconciliation_score`,

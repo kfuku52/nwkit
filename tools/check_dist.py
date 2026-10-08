@@ -56,6 +56,8 @@ def main() -> int:
         "nwkit/data_tree/apgv.nwk",
         "nwkit/data_model/lg.txt",
         "nwkit/data_iqtree/worker.cpp",
+        "nwkit/data_angiocal/v1.0.tsv",
+        "nwkit/data_angiocal/README.md",
     }
     required_wheel.update(
         path.relative_to(PROJECT_ROOT).as_posix()

@@ -6,10 +6,10 @@ import math
 import os
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
+from importlib.resources import files
 from pathlib import Path
 
 import requests
-import xlrd
 
 from nwkit.output_transaction import output_transaction
 from nwkit.util import COMMON_ETE_CACHE_DIRS, resolve_download_dir, resolve_ete_data_dir
@@ -20,6 +20,12 @@ ANGIOCAL_URL = (
     "263e31ce22cbd9df6c7e8644406e859f43f59d70/Data2b_CalibrationList.xls"
 )
 ANGIOCAL_SHA256 = "7e6e0b8ba8dfc8b58812a9c38cd2741cb3ca9f534bea096cf4b041279c3f1ee0"
+# The normalized records belong to these exact source bytes, independently of
+# the selected download's verification policy.
+ANGIOCAL_NORMALIZED_SOURCE_SHA256 = ANGIOCAL_SHA256
+ANGIOCAL_NORMALIZED_SHA256 = (
+    "4f121728b4959c41f9c2fda6117f5ab311177c0b176e6380ad7b853ed86cb5ba"
+)
 ANGIOCAL_MAX_BYTES = 5 * 1024 * 1024
 SUMMARY_COLUMNS = {
     "NFos": "fossil_id",
@@ -127,6 +133,16 @@ def _validate_headers(headers, required):
 
 def _read_xls(data):
     try:
+        import xlrd
+    except ModuleNotFoundError as exc:
+        if exc.name != "xlrd":
+            raise
+        raise ValueError(
+            "Custom AngioCal XLS files require the optional XLS reader: "
+            "pip install 'nwkit[xls]'. Alternatively, use a normalized TSV. "
+            "The pinned official v1.0 workbook does not require xlrd."
+        ) from exc
+    try:
         workbook = xlrd.open_workbook(file_contents=data, on_demand=True)
     except xlrd.XLRDError as exc:
         raise ValueError("Invalid AngioCal XLS workbook.") from exc
@@ -178,6 +194,20 @@ def _read_tsv(data):
         yield _record(row, reader.line_num)
 
 
+def _read_official_records():
+    from io import StringIO
+
+    data = files("nwkit").joinpath("data_angiocal").joinpath("v1.0.tsv").read_bytes()
+    if hashlib.sha256(data).hexdigest() != ANGIOCAL_NORMALIZED_SHA256:
+        raise ValueError("Bundled AngioCal v1.0 checksum verification failed.")
+    reader = csv.DictReader(StringIO(data.decode("utf-8")), delimiter="\t")
+    _validate_headers(
+        reader.fieldnames or [], set(FossilCalibration.__dataclass_fields__)
+    )
+    for row in reader:
+        yield _record(row, int(row["source_row"]))
+
+
 def read_angiocal(path, *, official=False):
     declared_path = os.fspath(path)
     path = os.path.realpath(path)
@@ -193,7 +223,10 @@ def read_angiocal(path, *, official=False):
     is_xls = data.startswith(
         b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
     ) or declared_path.lower().endswith(".xls")
-    records = tuple(_read_xls(data) if is_xls else _read_tsv(data))
+    if is_xls and digest == ANGIOCAL_NORMALIZED_SOURCE_SHA256:
+        records = tuple(_read_official_records())
+    else:
+        records = tuple(_read_xls(data) if is_xls else _read_tsv(data))
     if not records:
         raise ValueError("AngioCal input has no calibration records.")
     ids = [record.fossil_id for record in records]
