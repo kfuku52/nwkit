@@ -96,6 +96,8 @@ OUTPUT_ARGUMENTS = frozenset(
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
+        "angiocal_file",
+        "calibration_map_tsv",
         "branch_fit",
         "parameters",
         "model_in",
@@ -382,6 +384,14 @@ def _declared_input_path_candidates(args):
 
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
+    if (
+        getattr(args, "command", None) == "mcmctree"
+        and getattr(args, "angiocal", "no") == "v1.0"
+        and not getattr(args, "angiocal_file", None)
+    ):
+        from nwkit.angiocal import angiocal_input_path
+
+        candidates.append(("angiocal_cache", str(angiocal_input_path(args))))
     if getattr(args, "radte_prefix", None):
         from nwkit.result_plot_data import radte_plot_protected_paths
 
@@ -954,6 +964,13 @@ def validate_command_path_roles(args):
         # Regression already validates its raw, precomputed and bundle paths.
         # Keep its established input-overwrite diagnostics at the CLI boundary.
         return
+    if args.command == "mcmctree" and getattr(args, "angiocal", "no") == "v1.0":
+        from nwkit.angiocal import angiocal_protected_paths
+
+        validate_outputs_do_not_replace_inputs(
+            angiocal_protected_paths(args),
+            _audit_collision_candidates(args, getattr(args, "audit", None)),
+        )
     inputs = _input_path_candidates(args)
     outputs = _audit_collision_candidates(args, None)
     allows_in_place_tree = args.command in _IN_PLACE_TREE_COMMANDS and not (
@@ -1062,6 +1079,11 @@ def _spool_stdin(stream):
 
 
 def _runtime_input_file_records(args):
+    angiocal_source = getattr(args, "_nwkit_angiocal_source", None)
+    if angiocal_source:
+        return _input_file_records(
+            args, input_candidates=[("angiocal_cache", angiocal_source)]
+        )
     if getattr(args, "command", None) != "draw":
         return []
     records = []

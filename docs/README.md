@@ -10,6 +10,7 @@ in [`guides/`](guides/):
 
 - [All optimal reconciliation roots and loss exports](guides/RECONCILIATION_EXPORTS.md)
 - [ASR and ancestral-trait models](guides/ASR.md)
+- [AngioCal fossil minimum-age constraints](guides/ANGIOCAL.md)
 - [Bounded conditional MUL/MSC estimation](guides/MUL_MSC_FIT.md)
 - [CLI and TSV conventions](guides/CLI_TSV_CONVENTIONS.md)
 - [Conditional allopolyploid MUL/MSC prototype](guides/MUL_MSC.md)

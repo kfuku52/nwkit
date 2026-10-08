@@ -5027,6 +5027,54 @@ pmcmctree.add_argument(
     "If the clade proportion is smaller than this value, time constraints are removed.",
 )
 pmcmctree.add_argument(
+    "--angiocal",
+    choices=["no", "v1.0"],
+    default="no",
+    help="default=%(default)s: Import AngioCal fossil minimum ages. "
+    "Requires a fully bifurcating tree with unique, unquoted ASCII tip identifiers. "
+    "Exclusive with --timetree, --posterior, and manual calibration selection.",
+)
+pmcmctree.add_argument(
+    "--angiocal-file",
+    "--angiocal_file",
+    metavar="PATH",
+    default=None,
+    help="default=None: Local AngioCal v1.0 XLS or normalized TSV; otherwise download the pinned release.",
+)
+pmcmctree.add_argument(
+    "--angiocal-taxonomy",
+    "--angiocal_taxonomy",
+    metavar="yes|no",
+    type=strtobool,
+    default=True,
+    help="default=yes: Resolve unlabeled stem clades with NCBI taxonomy. "
+    "Use no for offline placement from node labels or an explicit map. "
+    "Crown fossils require a biological node label or explicit anchors.",
+)
+pmcmctree.add_argument(
+    "--calibration-map-tsv",
+    "--calibration_map_tsv",
+    metavar="PATH",
+    default=None,
+    help="default=None: Explicit fossil_id/left_species/right_species anchors identifying "
+    "the final calibrated MRCA (also for stem fossils). Supports STDIN.",
+)
+pmcmctree.add_argument(
+    "--time-unit-ma",
+    "--time_unit_ma",
+    metavar="FLOAT",
+    type=finite_float,
+    default=1.0,
+    help="default=%(default)s: Ma per output time unit for AngioCal ages; use 100 for units of 100 Ma. "
+    "Existing tree calibrations must already use the output unit.",
+)
+pmcmctree.add_argument(
+    "--report",
+    metavar="PATH",
+    default=None,
+    help="default=None: AngioCal TSV with each fossil's placement, bounds, references and exclusion reason.",
+)
+pmcmctree.add_argument(
     "--higher-rank-search",
     "--higher_rank_search",
     dest="higher_rank_search",

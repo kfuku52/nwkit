@@ -138,6 +138,18 @@ class _StagedOutputs(dict):
         with stream:
             writer(stream)
 
+    def write_bytes(self, target, data):
+        """Write binary content through the same verified staging descriptor."""
+        descriptor = _open_stage(self._stages[target])
+        try:
+            os.ftruncate(descriptor, 0)
+            stream = os.fdopen(descriptor, "wb")
+        except BaseException:
+            os.close(descriptor)
+            raise
+        with stream:
+            stream.write(data)
+
 
 def write_text_output(path, writer):
     """Publish text atomically, or write through its enclosing verified stage.

@@ -4,6 +4,36 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.43] - 2026-10-08
+
+### Added
+
+- Import pinned AngioCal v1.0 fossil minima through `mcmctree`, with local
+  XLS/TSV inputs, conservative crown/stem placement, explicit fossil anchors,
+  Ma-unit conversion, source/reference reports, nominal-bound validation and
+  staged tree/report output. Reject combining AngioCal with TimeTree.
+
+### Fixed
+
+- Preserve MCMCtree tip labels containing `NoName` or colon-number text while
+  omitting branch lengths from calibration-tree output.
+- Preserve prior-parameter precision and exact fossil IDs; protect automatic
+  AngioCal caches from audit/output collisions and include first downloads in
+  audit input hashes. Reject incompatible PAML topologies/names, ineffective
+  `@age` fossil annotations, invalid bounded priors and inconsistent crown/stem
+  metadata in AngioCal mode.
+- Normalize existing AngioCal prior constructors for PAML and reject unsupported
+  annotations instead of discarding them. Exclude digit-only PAML tip identifiers,
+  distinguish internal clade assertions from tip names, and detect original XLS
+  inputs without relying on filename extensions.
+- Reject Excel Boolean/date cells and error codes rather than importing them as
+  fossil ages or identifiers.
+
+### Changed
+
+- Document standard local release validation for the affected CPython 3.12.14
+  timed-traceback hang, preserving complete test coverage and scientific settings.
+
 ## [0.43.42] - 2026-10-07
 
 ### Fixed

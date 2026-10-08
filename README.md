@@ -111,7 +111,7 @@ minimal worked example, in
 - [`ksrate`](https://github.com/kfuku52/nwkit/wiki/nwkit-ksrate): Focal-lineage Ks correction with multiple outgroups, shared-family bootstrap and inconsistency diagnostics
 - [`label`](https://github.com/kfuku52/nwkit/wiki/nwkit-label): Adding unique node labels
 - [`mark`](https://github.com/kfuku52/nwkit/wiki/nwkit-mark): Adding texts to node labels by identifying the targets with a leaf name regex
-- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML MCMCtree calibrations and converting posterior node ages into pipeable dated NHX trees
+- [`mcmctree`](https://github.com/kfuku52/nwkit/wiki/nwkit-mcmctree): Preparing PAML calibrations, importing [AngioCal fossil minima](docs/guides/ANGIOCAL.md), and converting posterior node ages into pipeable dated NHX trees
 - [`monophyly`](https://github.com/kfuku52/nwkit/wiki/nwkit-monophyly): Assessing whether species or trait-defined groups are monophyletic
 - [`mul-reconcile`](https://github.com/kfuku52/nwkit/wiki/nwkit-mul-reconcile): Exact GRAMPA-style MUL-tree D+L parsimony with auditable tied-best node mappings, [conditional MSC fitting](docs/guides/MUL_MSC.md) and [experimental locus DL + ILS comparison with conditional integration](docs/guides/MUL_LOCUS_MC.md)
 - [`nwk2table`](https://github.com/kfuku52/nwkit/wiki/nwkit-nwk2table): Converting a Newick tree into a parent-child table

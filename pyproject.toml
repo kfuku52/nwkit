@@ -28,6 +28,7 @@ classifiers = [
   "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 dependencies = [
+  "xlrd>=2",
   "defusedxml>=0.7",
   "ete4>=4.4.0",
   "pandas",

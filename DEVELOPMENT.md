@@ -106,6 +106,28 @@ claim that all macOS/Python 3.10 builds are broken. Retire it when the normally
 selected upstream wheel passes the compiled imports and command tests on the
 affected platform; do not patch installed binaries or suppress import errors.
 
+### CPython 3.12.14 timed traceback hang on macOS ARM64
+
+With the bundled CPython 3.12.14 runtime on Darwin 27 ARM64, an opt-in timed
+traceback stalled inside CPython's `dump_frame` during the long heterogeneous
+WGD bootstrap test under coverage. All four scientific replicates completed
+and pytest reported the test as passed, but teardown then waited indefinitely
+in `faulthandler.cancel_dump_traceback_later()`. Native process samples showed
+the diagnostic thread spinning while the main thread waited for it.
+
+For this observed runtime failure, use the standard local diagnostics setting:
+
+```sh
+NWKIT_CI_DIAGNOSTICS=0 python tools/check.py release
+```
+
+The release command still runs all tests, including slow cases, branch coverage,
+security checks and distribution checks with their original scientific settings.
+Re-enable optional timed traceback dumps when the Python runtime completes the
+same long coverage test with `NWKIT_CI_DIAGNOSTICS=1`. Preserve the failed log
+and native samples when diagnosing this condition; it is separate from a failed
+scientific assertion.
+
 ## Choose the smallest useful check
 
 | Command | Checks |

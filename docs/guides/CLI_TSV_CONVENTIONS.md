@@ -69,6 +69,13 @@ NCBI taxonomy uses separate `--taxonomy-cache-max-age-days` and
 from analysis result files; ordinary tree/trait analyses do not resume a saved
 fit automatically on rerun.
 
+`mcmctree --angiocal v1.0` imports a checksum-verified fossil dataset and is
+exclusive with TimeTree, posterior conversion and manual calibration selection.
+Its original Ma ages, crown/stem placement rules, source/report schemas, cache
+paths and nominal-bound checks are documented in [ANGIOCAL.md](ANGIOCAL.md).
+Its tree/report pair is staged together; an all-excluded import intentionally
+writes the diagnostic report while leaving the result tree untouched.
+
 ## Related outputs and node editing
 
 `sample`, `skim`, `annotate`, `transfer`, and `compose` stage a successful tree
