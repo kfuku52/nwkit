@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.48] - 2026-10-09
+
+### Fixed
+
+- Replay archived SHIFT bootstrap fits from their exact stored observations
+  after independently verifying regenerated data. Keep input-roundoff allowances
+  separate from exact probability/decision checks, and report both test records
+  when a seeded replay still disagrees.
+
 ## [0.43.47] - 2026-10-09
 
 ### Changed

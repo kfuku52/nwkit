@@ -1,6 +1,7 @@
 """Independent evidence checks reject numerically plausible corruptions."""
 
 import copy
+import gzip
 import hashlib
 import json
 import os
@@ -8,7 +9,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
+from types import ModuleType, SimpleNamespace
 
 import numpy as np
 import pytest
@@ -228,10 +229,68 @@ def test_replay_mismatch_reports_identity_without_changing_rejection(monkeypatch
         "bootstrap_seed",
         "model_matches",
         "tests_match",
+        "replayed_tests",
+        "saved_tests",
     }
     assert detail["cell_id"] == 0 and detail["replicate"] == 0
     assert detail["model_matches"] is False
     assert type(detail["bootstrap_seed"]) is int
+
+
+def test_replay_uses_exact_saved_inputs_after_tolerant_regeneration(
+    monkeypatch, tmp_path
+):
+    import verify_shift_null_contract as verifier
+
+    bundle = tmp_path / "one-dataset"
+    shutil.copytree(Path("examples/shift/null-contract-timing-pilot"), bundle)
+    with gzip.open(bundle / "records.jsonl.gz", "rt") as stream:
+        record = json.loads(next(stream))
+    # A single four-tip dataset is enough to check replay input fidelity. The
+    # separate archived-engine test retains the full 480 real replays.
+    specification = json.loads((bundle / "protocol.json").read_text())
+    specification["cells"] = specification["cells"][:1]
+    specification["replicates"] = 1
+    (bundle / "protocol.json").write_text(json.dumps(specification))
+    with gzip.open(bundle / "records.jsonl.gz", "wt") as stream:
+        stream.write(json.dumps(record) + "\n")
+    (bundle / "summary.json").write_text(
+        json.dumps(verifier.summarize([record], specification))
+    )
+    compare = verifier.same_generated_array
+
+    def regenerated_with_roundoff(actual, expected):
+        if np.ndim(actual) == 1:
+            # Simulate another BLAS's valid, near-machine-precision input.
+            actual[:] = np.nextafter(np.asarray(expected), np.inf)
+        return compare(actual, expected)
+
+    class Replay:
+        def __init__(self, tree, convergence, variances):
+            self.convergence = convergence
+
+        def fit(self, values, seed, replicates):
+            assert seed == record["bootstrap_seed"]
+            np.testing.assert_array_equal(values, record["observations"])
+            lane = next(
+                lane
+                for lane in record["lanes"]
+                if lane["convergence"] == self.convergence
+            )
+            assert replicates == lane["fit"]["calibration_replicates"]
+            return lane["fit"]
+
+    class ReplayModule(ModuleType):
+        @property
+        def CalibratedSearch(self):
+            # The trusted snapshot is still compiled and verified; replace
+            # only bootstrap fitting with an oracle for the supplied inputs.
+            return Replay
+
+    monkeypatch.setattr(verifier, "same_generated_array", regenerated_with_roundoff)
+    monkeypatch.setattr(verifier, "ModuleType", ReplayModule)
+    result = verifier.audit(bundle, replay_stride=1, frozen_engine=True)
+    assert result["complete_search_replays"] == 2
 
 
 def test_archived_mode_still_rejects_revised_generator(tmp_path):

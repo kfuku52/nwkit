@@ -262,7 +262,15 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
                     replay_engines[engine_key] = engine_class(
                         tree, convergence=lane["convergence"], variances=variances
                     )
-                replay = replay_engines[engine_key].fit(y, seed=boot, replicates=B)
+                # Regeneration verifies the evidence, allowing only roundoff in
+                # computed inputs. Replay the stored observations themselves:
+                # a nearby regenerated value is not the exact original input
+                # and can amplify into a different near-singular fit statistic.
+                replay = replay_engines[engine_key].fit(
+                    np.asarray(row["observations"], dtype=float),
+                    seed=boot,
+                    replicates=B,
+                )
                 model_matches = same_replayed_model(tree, replay["model"], fit["model"])
                 tests_match = same_replayed_tests(replay["tests"], fit["tests"])
                 if not model_matches or not tests_match:
@@ -276,6 +284,8 @@ def audit(directory, replay_stride=0, *, frozen_engine=False):
                                 "bootstrap_seed": boot,
                                 "model_matches": model_matches,
                                 "tests_match": tests_match,
+                                "replayed_tests": replay["tests"],
+                                "saved_tests": fit["tests"],
                             },
                             sort_keys=True,
                         )
