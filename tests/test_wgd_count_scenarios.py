@@ -1,6 +1,6 @@
 """Seeded scenario regressions, not an empirical false-positive/power study.
 
-The negative calibration requests 59 real refitted bootstrap datasets: its
+The opt-in negative calibration requests 59 real refitted bootstrap datasets: its
 minimum plus-one p-value is 1/60, so rejection at alpha=.05 is possible. One
 fixed dataset cannot establish composite-null error control; Monte Carlo SE is
 at most about .065. Failed simulated refits must abort rather than be discarded.
@@ -74,6 +74,7 @@ def _assert_verified(scan):
 
 
 @pytest.mark.slow
+@pytest.mark.study
 def test_no_wgd_search_bootstrap_does_not_support_genome_event():
     model = _simulate(80, [[0.12, 0.22]], 1.25, 2901)
     observed = _scan(model)
@@ -83,16 +84,34 @@ def test_no_wgd_search_bootstrap_does_not_support_genome_event():
         model, observed, 59, 8101, fractions=(0.5,), max_states=128
     )
     statistics = np.asarray(calibrated.bootstrap_statistics)
-    assert len(statistics) == 59
-    assert np.all(np.isfinite(statistics))
     assert np.ptp(statistics) > 0.5
     assert all(candidate.p_value > 0.05 for candidate in calibrated.candidates)
+    _assert_calibration_metadata(calibrated, 59)
+
+
+def _assert_calibration_metadata(calibrated, draws):
+    statistics = np.asarray(calibrated.bootstrap_statistics)
+    assert len(statistics) == draws
+    assert np.all(np.isfinite(statistics))
+    assert calibrated.calibration == "plugin-parametric-bootstrap-search-maximum"
     for candidate in calibrated.candidates:
         exceedances = np.count_nonzero(statistics >= candidate.improvement - 1e-9)
-        assert candidate.p_value == pytest.approx((1 + exceedances) / 60)
+        assert candidate.p_value == pytest.approx((1 + exceedances) / (draws + 1))
         assert candidate.p_value_mc_se == pytest.approx(
-            np.sqrt(candidate.p_value * (1 - candidate.p_value) / 60)
+            np.sqrt(candidate.p_value * (1 - candidate.p_value) / (draws + 1))
         )
+
+
+def test_search_bootstrap_refits_all_branches_and_reports_calibration():
+    # Three draws exercise real null/candidate refits; the CLI test checks seed
+    # replay. This verifies the calculation, not rejection at .05 or error rates.
+    model = _simulate(80, [[0.12, 0.22]], 1.25, 2901)
+    observed = _scan(model)
+    _assert_verified(observed)
+    assert {candidate.node for candidate in observed.candidates} == {1, 2, 3, 4}
+    calibrated = calibrate_scan(model, observed, 3, 8101, max_states=128)
+    _assert_calibration_metadata(calibrated, 3)
+    assert np.ptp(calibrated.bootstrap_statistics) > 0
 
 
 def test_no_wgd_null_fit_is_not_worse_than_known_feasible_parameters():

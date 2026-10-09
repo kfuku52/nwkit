@@ -147,7 +147,7 @@ def main(argv=None) -> int:
         pytest_args = pytest_args[1:]
     if pytest_args and args.mode not in {"test", "quick"}:
         parser.error(
-            "pytest selection is only supported by test and quick; full/release always run the entire suite"
+            "pytest selection is only supported by test and quick; full/release always run the entire regression suite"
         )
     if args.mode == "test":
         run_tests(pytest_args)

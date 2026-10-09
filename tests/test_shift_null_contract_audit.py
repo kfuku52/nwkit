@@ -3,7 +3,9 @@
 import copy
 import hashlib
 import json
+import os
 import shutil
+import subprocess
 import sys
 from pathlib import Path
 from types import SimpleNamespace
@@ -170,13 +172,35 @@ def test_archived_engine_requires_explicit_scope_and_intact_snapshot(tmp_path):
         for p in bundle.rglob("*")
         if p.is_file()
     }
-    result = audit(bundle, replay_stride=1, frozen_engine=True)
+    # The saved experiment declares one BLAS/OpenMP thread. Apply that protocol
+    # before importing NumPy in a child; changing os.environ after import would
+    # leave the parent's already initialized BLAS pools unchanged.
+    threads = json.loads((bundle / "protocol.json").read_text())["thread_environment"]
+    replay = subprocess.run(
+        [
+            sys.executable,
+            str(
+                Path(__file__).resolve().parents[1]
+                / "tools/verify_shift_null_contract.py"
+            ),
+            str(bundle),
+            "--replay-stride",
+            "1",
+            "--frozen-engine",
+        ],
+        env={**os.environ, **threads},
+        capture_output=True,
+        text=True,
+    )
+    assert replay.returncode == 0, replay.stdout + replay.stderr
+    result = json.loads(replay.stdout)
     assert {
         str(p.relative_to(bundle)): p.read_bytes()
         for p in bundle.rglob("*")
         if p.is_file()
     } == before
     assert result["status"] == "passed"
+    assert result["complete_search_replays"] == 480
     assert result["engine_scope"] == "archived engine; not current CLI validation"
     snapshot = bundle / "source-snapshot" / "shift_calibration.py"
     snapshot.write_text(snapshot.read_text() + "\n# altered snapshot\n")

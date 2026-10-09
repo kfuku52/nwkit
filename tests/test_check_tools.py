@@ -48,6 +48,38 @@ def test_ci_diagnostics_are_opt_in_and_preserve_complete_coverage(monkeypatch):
     assert "-vv" in commands[-1]
 
 
+@pytest.mark.parametrize("options", [[], ["-m", "study"], ["--run-studies"]])
+def test_scientific_studies_require_explicit_opt_in(tmp_path, options):
+    # Use a real pytest subprocess: the collection hook must also apply when
+    # users select a study directly rather than going through tools/check.py.
+    (tmp_path / "conftest.py").write_text(
+        Path(ci_test_configuration.__file__).read_text(), encoding="utf-8"
+    )
+    (tmp_path / "pytest.ini").write_text(
+        "[pytest]\nmarkers =\n    study: scientific experiment\n", encoding="utf-8"
+    )
+    (tmp_path / "test_probe.py").write_text(
+        "from pathlib import Path\nimport pytest\n"
+        "def test_regression():\n    assert True\n"
+        "@pytest.mark.study\n"
+        "def test_study():\n    Path('study-ran').write_text('ran')\n",
+        encoding="utf-8",
+    )
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q", "-rs", *options],
+        cwd=tmp_path,
+        capture_output=True,
+        text=True,
+    )
+    assert result.returncode == 0, result.stdout + result.stderr
+    enabled = "--run-studies" in options
+    assert (tmp_path / "study-ran").exists() == enabled
+    if enabled:
+        assert "2 passed" in result.stdout
+    else:
+        assert "1 skipped" in result.stdout and "--run-studies" in result.stdout
+
+
 def test_ci_runtime_metadata_does_not_dump_environment_or_host_identity(monkeypatch):
     monkeypatch.setenv("NWKIT_SECRET_TEST", "DO_NOT_PRINT")
     monkeypatch.setenv("OPENBLAS_NUM_THREADS", "4")

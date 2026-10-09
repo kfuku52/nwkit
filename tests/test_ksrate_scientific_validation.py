@@ -59,7 +59,35 @@ def test_all_trios_recover_focal_path_on_asymmetric_twenty_species_trees(seed):
     )
 
 
+def _bootstrap_reference(scales, trios, draws, seed):
+    key = (trios[0].focal, trios[0].species_event_id)
+    observations = [
+        KsObservation(a, b, f"f{i:03d}", distance * scale)
+        for a, b, distance in (("A", "B", 0.4), ("A", "C", 1.2), ("B", "C", 1.4))
+        for i, scale in enumerate(scales)
+    ]
+    pairs = PairKs(observations, "ABC")
+    result = bootstrap_corrections(pairs, trios, draws, seed=seed)[key]
+    # Direct iid family-index resampling is an independent bootstrap reference.
+    direct_rng = np.random.default_rng(seed)
+    selected = direct_rng.integers(0, len(scales), size=(draws, len(scales)))
+    direct = 0.2 * np.median(scales[selected], axis=1)
+    np.testing.assert_allclose(result, direct, rtol=2e-14, atol=2e-14)
+    point = grouped_corrections(trios, trio_values(trios, pairs.estimates()))[key]
+    assert point == pytest.approx(0.2 * np.median(scales), rel=2e-14)
+    return pairs, result
+
+
+@pytest.mark.parametrize("seed", [616, 617, 618])
+def test_family_bootstrap_matches_independent_resampling(seed):
+    tree = Tree("((A:0.1,B:0.3):0.4,C:0.7);", parser=1)
+    trios, _ = make_trios(tree, ["A"])
+    scales = np.random.default_rng(seed).lognormal(mean=0, sigma=0.6, size=80)
+    _bootstrap_reference(scales, trios, 199, seed=10000 + seed)
+
+
 @pytest.mark.slow
+@pytest.mark.study
 def test_repeated_dataset_coverage_and_independent_bootstrap_reference():
     tree = Tree("((A:0.1,B:0.3):0.4,C:0.7);", parser=1)
     trios, _ = make_trios(tree, ["A"])
@@ -71,22 +99,7 @@ def test_repeated_dataset_coverage_and_independent_bootstrap_reference():
     widths, conservative_widths = [], []
     for experiment in range(experiments):
         scales = rng.lognormal(mean=0, sigma=0.6, size=families)
-        observations = [
-            KsObservation(a, b, f"f{i:03d}", distance * scale)
-            for a, b, distance in (("A", "B", 0.4), ("A", "C", 1.2), ("B", "C", 1.4))
-            for i, scale in enumerate(scales)
-        ]
-        pairs = PairKs(observations, "ABC")
-        result = bootstrap_corrections(pairs, trios, draws, seed=10000 + experiment)[
-            key
-        ]
-        # Direct iid family-index resampling is an independent bootstrap reference.
-        direct_rng = np.random.default_rng(10000 + experiment)
-        selected = direct_rng.integers(0, families, size=(draws, families))
-        direct = true_focal_ks * np.median(scales[selected], axis=1)
-        np.testing.assert_allclose(result, direct, rtol=2e-14, atol=2e-14)
-        point = grouped_corrections(trios, trio_values(trios, pairs.estimates()))[key]
-        assert point == pytest.approx(true_focal_ks * np.median(scales), rel=2e-14)
+        pairs, result = _bootstrap_reference(scales, trios, draws, 10000 + experiment)
         low, high = np.quantile(result, [0.025, 0.975])
         covered += int(low <= true_focal_ks <= high)
         widths.append(float(high - low))

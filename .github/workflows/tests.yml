@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: tests-${{ github.event.pull_request.number || github.ref }}
+  group: tests-${{ (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch') && 'studies' || 'regressions' }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -47,7 +47,7 @@ jobs:
     needs: scope
     if: needs.scope.outputs.source_checks == 'true'
     runs-on: ${{ matrix.os }}
-    # The complete scientific/bootstrap suite exceeds 30 minutes on hosted runners.
+    # Replicated studies run separately; retain the regression job's existing budget.
     timeout-minutes: 120
     env:
       MPLBACKEND: Agg
@@ -95,6 +95,47 @@ jobs:
         run: |
           python tools/ci_diagnostics.py
           python tools/check.py test
+
+  scientific-studies:
+    needs: scope
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      MPLBACKEND: Agg
+      PYTHONUNBUFFERED: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.14'
+          cache: pip
+
+      - name: Install study dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -c constraints-dev.txt -e '.[test]'
+
+      - name: Run replicated scientific studies once without coverage
+        run: |
+          python tools/ci_diagnostics.py
+          python tools/check.py test -- --run-studies -m study -s -rs \
+            --basetemp="${{ runner.temp }}/nwkit-scientific-studies"
+
+      - name: Retain study protocols, bootstrap statistics and failures
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: scientific-study-results-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/nwkit-scientific-studies/**/*.json
+          retention-days: 14
 
   macos-clean-install:
     needs: scope

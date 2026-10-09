@@ -114,6 +114,8 @@ def test_lambda_bootstrap_cli_metadata_and_order(tmp_path, capsys):
         "bootstrap",
         "--seed",
         "37",
+        "--n-sim",
+        "3",
     ]
     first = run_cli(tmp_path, capsys, options, frame)
     second = run_cli(tmp_path, capsys, options, frame.iloc[::-1])
@@ -121,11 +123,9 @@ def test_lambda_bootstrap_cli_metadata_and_order(tmp_path, capsys):
     both = run_cli(tmp_path, capsys, options[:1] + ["both"] + options[2:], frame)
     assert first.iloc[0].p_value == both.iloc[1].p_value
     assert first.iloc[0].test_method == "parametric_bootstrap"
-    assert first.iloc[0].num_simulations == 9
+    assert first.iloc[0].num_simulations == 3
     assert first.iloc[0].seed == 37
-    assert first.iloc[0].p_value * 10 == pytest.approx(
-        round(first.iloc[0].p_value * 10)
-    )
+    assert first.iloc[0].p_value * 4 == pytest.approx(round(first.iloc[0].p_value * 4))
     default = run_cli(tmp_path, capsys, ["--method", "lambda"], frame)
     assert default.iloc[0].test_method == "likelihood_ratio_chi2_1"
     assert np.isnan(default.iloc[0].num_simulations)
@@ -146,6 +146,8 @@ def test_lambda_bootstrap_missing_and_zero_rate(tmp_path, capsys):
         "se",
         "--lambda-test",
         "bootstrap",
+        "--n-sim",
+        "3",
     ]
     result = run_cli(tmp_path, capsys, options, frame)
     assert result.iloc[0].num_taxa == 7

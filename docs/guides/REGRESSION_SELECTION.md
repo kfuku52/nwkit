@@ -96,8 +96,9 @@ mode and determinant. Only the one/two variance parameters use numerical
 finite differences. Output requires a finite, converged solution and a checked
 projected gradient. These non-Gaussian fits are local optima, not a guarantee
 of the global minimum. Outer-CV stability and boundary diagnostics matter.
-If relative objective change stops L-BFGS before stationarity, up to two
-curvature resets are attempted within the original iteration budget. The
+If relative objective change stops L-BFGS before stationarity, or its line search
+fails at a finite valid state, up to two curvature resets are attempted within
+the original iteration budget. A restart must finish successfully. The
 objective, bounds and projected-gradient acceptance threshold are unchanged.
 
 ## Nested group validation

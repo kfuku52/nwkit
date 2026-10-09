@@ -60,6 +60,63 @@ def test_binomial_variance_boundary_requires_stationarity_after_relative_stop():
     assert fit.objective < 0.6802
 
 
+def test_non_gaussian_optimizer_restarts_after_finite_line_search_failure(monkeypatch):
+    from types import SimpleNamespace
+
+    import nwkit.penalized_phylogenetic as penalized
+
+    minimize = penalized.minimize
+    budgets = []
+
+    def fail_first(function, parameters, **kwargs):
+        budgets.append(kwargs["options"]["maxiter"])
+        if len(budgets) == 1:
+            return SimpleNamespace(
+                x=np.array([2.0]), nit=3, success=False, message="ABNORMAL:"
+            )
+        return minimize(function, parameters, **kwargs)
+
+    monkeypatch.setattr(penalized, "minimize", fail_first)
+
+    def objective(parameters):
+        return float(parameters @ parameters / 2), parameters.copy()
+
+    result, value, gradient, iterations = penalized._minimize_checked(
+        objective, objective, np.array([2.0]), [(-3.0, 3.0)], 10
+    )
+    assert budgets == [10, 7]
+    assert result.success and iterations <= 10
+    assert value < 1e-12 and gradient <= 1e-6
+
+
+@pytest.mark.parametrize("iterations", [0, 10])
+def test_optimizer_failure_is_not_waived_by_stationarity_or_restarts(
+    monkeypatch, iterations
+):
+    from types import SimpleNamespace
+
+    import nwkit.penalized_phylogenetic as penalized
+
+    calls = []
+
+    def fail(function, parameters, **kwargs):
+        calls.append(kwargs["options"]["maxiter"])
+        return SimpleNamespace(
+            x=np.array([0.0]), nit=iterations, success=False, message="ABNORMAL:"
+        )
+
+    monkeypatch.setattr(penalized, "minimize", fail)
+
+    def objective(parameters):
+        return float(parameters @ parameters / 2), parameters.copy()
+
+    with pytest.raises(RuntimeError, match="did not converge"):
+        penalized._minimize_checked(
+            objective, objective, np.array([0.0]), [(-3.0, 3.0)], 10
+        )
+    assert len(calls) == (3 if iterations == 0 else 1)
+
+
 @pytest.mark.parametrize(
     "text", ["leaf_name\tx\na\t1\t2\n", "leaf_name\tx\na\n", "leaf_name\t\na\t1\n"]
 )

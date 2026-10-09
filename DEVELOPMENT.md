@@ -121,8 +121,9 @@ For this observed runtime failure, use the standard local diagnostics setting:
 NWKIT_CI_DIAGNOSTICS=0 python tools/check.py release
 ```
 
-The release command still runs all tests, including slow cases, branch coverage,
-security checks and distribution checks with their original scientific settings.
+The release command still runs all regression tests, including slow cases,
+branch coverage, security checks and distribution checks. Replicated studies
+require `--run-studies` as described below; their scientific settings are preserved.
 Re-enable optional timed traceback dumps when the Python runtime completes the
 same long coverage test with `NWKIT_CI_DIAGNOSTICS=1`. Preserve the failed log
 and native samples when diagnosing this condition; it is separate from a failed
@@ -132,11 +133,12 @@ scientific assertion.
 
 | Command | Checks |
 | --- | --- |
-| `python tools/check.py quick` | Ruff lint/format, incremental mypy, all tests except `slow` |
+| `python tools/check.py quick` | Ruff lint/format, incremental mypy, regression tests except `slow` |
 | `python tools/check.py quick -- tests/test_asr.py -k time_units` | The same static checks, with a focused pytest selection |
-| `python tools/check.py test -- tests/test_numerical_invariance.py` | Only the requested tests, with no default marker exclusion |
+| `python tools/check.py test -- tests/test_numerical_invariance.py` | Only the requested regression tests, including `slow` |
 | `python tools/check.py quick -- -m slow tests/test_regress.py` | Explicitly selected slow tests, plus static checks |
-| `python tools/check.py full` | Uncached mypy, lint/format, dependency/security checks, **all** tests with branch coverage, complexity checks |
+| `python tools/check.py full` | Uncached mypy, lint/format, dependency/security checks, **all regression tests** with branch coverage, complexity checks |
+| `python tools/check.py test -- --run-studies -m study -s -rs` | Replicated scientific studies with their original protocols, without coverage |
 | `python tools/check.py dist` | Independent wheel/sdist builds, archive contents, metadata and byte reproducibility |
 | `python tools/check.py release` | `full` followed by `dist` |
 
@@ -145,15 +147,27 @@ applies to coverage.py's combined percentage, not to branch-only coverage.
 
 Pass pytest paths and options after `--` for `quick` and `test`. `full`, `dist`,
 and `release` reject test-selection arguments to avoid accidentally reporting a
-partial run as complete. `dist` clears the derived `build/`, `dist/`, and
+partial regression run as complete. `dist` clears the derived `build/`, `dist/`, and
 `direct-dist/` directories; use a separate source copy if those contain
 artifacts you need to keep.
 
 The `slow` marker identifies expensive numerical/bootstrap or concurrency
-checks, not unreliable tests. Every full source CI run still executes them.
-The complete test and quality jobs have a two-hour execution budget; the
-scientific/bootstrap suite exceeds the former 30-minute limit. This budget
-does not exclude slow tests or reduce their scientific replicate counts.
+regressions, not unreliable tests. Full source CI runs execute all of them,
+except tests also marked `study`. The latter are repeated WGD count inference,
+the 59-draw WGD null experiment and the 5,000-dataset Ks coverage experiment.
+They are skipped by default, including direct pytest runs; `--run-studies`
+enables them, and `-m study` selects only those experiments. Their datasets,
+seeds, draws, thresholds and failure checks are unchanged. Small real bootstrap
+and independent-reference regressions remain in routine tests; these do not
+claim population error-rate or coverage validation.
+
+The existing weekly/manual `Tests` workflow runs studies once on Linux/Python
+3.14 without coverage. Push/PR matrices and quality checks run regressions.
+Both lanes retain a two-hour execution budget. Rerun the affected study when
+changing its scientific model or uncertainty method, following its local guide.
+Weekly/manual runs have a separate concurrency group so ordinary pushes do not
+cancel their studies. Their count-study JSON protocols, bootstrap statistics and
+failure records remain available as CI artifacts for 14 days.
 Keep small invariance tests and `tests/test_cli_contracts.py` in the quick
 suite. The latter invokes the real parser and handler for every subcommand;
 only external service boundaries are replaced with offline fixtures.
@@ -162,8 +176,7 @@ CI sets `NWKIT_CI_DIAGNOSTICS=1` for the existing test and quality jobs. The
 same check entrypoint then prints bounded, escaped, line-terminated test-start
 markers and individual test progress, and requests a
 diagnostic stack after 600 seconds in a test; it does not terminate or retry
-that test. Job deadlines, complete suite selection and scientific settings
-remain unchanged. `tools/ci_diagnostics.py` prints an allowlist of runtime,
+that test. `tools/ci_diagnostics.py` prints an allowlist of runtime,
 package and BLAS metadata without a hostname or environment dump. An archived
 replay mismatch reports its exact cell, replicate, lane and bootstrap seed.
 
@@ -232,7 +245,7 @@ competing CPU workloads when making release performance claims.
 
 `tools/ci_matrix.py` classifies both sides of renamed paths. All source changes
 run full quality/security/coverage checks on Linux with the newest supported
-Python, plus the complete test suite on the minimum supported Python.
+Python, plus the complete regression suite on the minimum supported Python.
 
 - Documentation-only changes build and inspect reproducible distributions
   without installing the numerical runtime dependencies. A plain patch-version

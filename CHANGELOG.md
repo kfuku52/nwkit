@@ -4,6 +4,27 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.47] - 2026-10-09
+
+### Changed
+
+- Keep replicated WGD count and Ks coverage studies behind pytest's explicit
+  `--run-studies` option; run their original protocols once in weekly/manual
+  CI instead of every platform and coverage job. Retain small real-bootstrap
+  and independent-reference regressions, and reduce signal CLI bootstrap draws
+  where tests check metadata, ordering and missing data rather than significance.
+
+### Fixed
+
+- Keep weekly/manual scientific studies in a separate concurrency group so
+  ordinary pushes do not cancel the only scheduled study run.
+- Allow the existing bounded non-Gaussian elastic-net curvature resets after a
+  finite line-search failure, retaining successful termination, stationarity,
+  objective and iteration-budget checks.
+- Replay the archived SHIFT experiment with its declared single-thread BLAS
+  protocol, initialized before numerical imports; keep all 480 replays and
+  exact discrete-decision comparisons.
+
 ## [0.43.46] - 2026-10-09
 
 ### Fixed
