@@ -89,6 +89,9 @@ and, for negative binomial, NB2 dispersion are fitted jointly with coefficients
 by ML. Negative-binomial variance conditional on `u` is `mu + dispersion*mu^2`.
 The existing NWKIT GLMM mode solvers are reused. Log variance and dispersion
 are bounded to [-12,6]; a solution at a bound is explicitly flagged.
+Near zero dispersion, stable log-gamma ratios and `log1p` expressions retain
+the NB2 likelihood without cancellation from subtracting large intermediate
+values. The model is not replaced by a Poisson approximation at that boundary.
 
 Nonnegative positive/negative coefficient parts represent the L1 penalty without
 smoothing it. Fixed-linear Laplace gradients include the derivative of the

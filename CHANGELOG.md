@@ -4,6 +4,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.50] - 2026-10-09
+
+### Fixed
+
+- Stabilize negative-binomial log probabilities near the Poisson limit instead
+  of subtracting large log-gamma values. Preserve the NB2 model, optimizer
+  convergence checks and bounds; include zero-inflated and hurdle likelihoods
+  and independent high-precision probability/dispersion-score regressions.
+
 ## [0.43.49] - 2026-10-09
 
 ### Fixed
