@@ -12,6 +12,15 @@ from nwkit.shift_candidates import tip_groups
 from nwkit.util import read_tree
 
 
+def same_alpha_height(actual, expected):
+    """Compare a computed grid coordinate under the existing roundoff contract."""
+    return actual == expected or (
+        actual is not None
+        and expected is not None
+        and math.isclose(actual, expected, rel_tol=8 * np.finfo(float).eps, abs_tol=0.0)
+    )
+
+
 def check_probability_metadata(test, index, search, B, level):
     p = test["p_value"]
     if index or search.known_error:
@@ -24,14 +33,7 @@ def check_probability_metadata(test, index, search, B, level):
         not evaluated
         or len(evaluated) > len(grid)
         or any(
-            actual != expected
-            and (
-                actual is None
-                or expected is None
-                or not math.isclose(
-                    actual, expected, rel_tol=8 * np.finfo(float).eps, abs_tol=0.0
-                )
-            )
+            not same_alpha_height(actual, expected)
             for actual, expected in zip(
                 [r["alpha_height"] for r in evaluated], grid, strict=False
             )

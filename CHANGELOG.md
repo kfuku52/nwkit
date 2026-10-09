@@ -4,6 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.49] - 2026-10-09
+
+### Fixed
+
+- Apply the existing near-machine-precision alpha-grid coordinate contract to
+  archived SHIFT replay comparisons as well as probability metadata validation.
+  Platform-dependent `geomspace` rounding no longer rejects identical statistics,
+  probabilities and decisions; changed probabilities, grid entries and ordering
+  are still rejected.
+
 ## [0.43.48] - 2026-10-09
 
 ### Fixed

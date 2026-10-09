@@ -211,6 +211,9 @@ does not assert current-CLI validation.
 After verifying regenerated data at near-machine precision, bootstrap replay
 uses the exact stored observations. Regenerated roundoff must not replace the
 original fitting inputs; probabilities and decisions still require exact matches.
+Computed alpha-grid coordinates use the same near-machine-precision comparison
+already required by probability metadata validation. Grid order and size, every
+probability and the decision fields remain exact.
 
 The initial response-worktree repository check passed locally on macOS/Python 3.10:
 3,326 tests passed, 27 skipped, combined line and branch coverage 85%

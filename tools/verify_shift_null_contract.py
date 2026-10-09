@@ -12,7 +12,10 @@ import numpy as np
 from scipy.stats import binom
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shift_calibration_audit import check_probability_metadata  # noqa: E402
+from shift_calibration_audit import (  # noqa: E402
+    check_probability_metadata,
+    same_alpha_height,
+)
 from shift_continuous_reference import DenseOUReference  # noqa: E402
 from validate_shift_null_contract import cells, summarize  # noqa: E402
 
@@ -35,7 +38,7 @@ def check_winner(tree, y, variances, fit, models):
     if fit["candidate_count"] != len(models):
         raise ValueError("Incorrect candidate count")
     alpha = np.inf if fit["alpha_height"] is None else fit["alpha_height"]
-    if alpha not in ALPHA_HEIGHT_GRID:
+    if not any(same_alpha_height(alpha, point) for point in ALPHA_HEIGHT_GRID):
         raise ValueError("Selected alpha is outside the declared grid")
     reference = DenseOUReference(tree, fit["model"], variances)
     point = reference.at(
@@ -105,7 +108,29 @@ def _same_numeric_records(replayed, saved, field):
 
 
 def same_replayed_tests(replayed, saved):
-    return _same_numeric_records(replayed, saved, "statistic")
+    if len(replayed) != len(saved):
+        return False
+    for actual, expected in zip(replayed, saved, strict=True):
+        actual, expected = actual.copy(), expected.copy()
+        key = "null_alpha_evaluations"
+        if key in actual or key in expected:
+            if key not in actual or key not in expected:
+                return False
+            actual_grid, expected_grid = actual.pop(key), expected.pop(key)
+            if len(actual_grid) != len(expected_grid):
+                return False
+            for a, e in zip(actual_grid, expected_grid, strict=True):
+                a, e = a.copy(), e.copy()
+                # Grid coordinates are computed real inputs, already checked
+                # under this roundoff contract by check_probability_metadata.
+                # Probabilities, ordering and every other field remain exact.
+                if not same_alpha_height(a.pop("alpha_height"), e.pop("alpha_height")):
+                    return False
+                if a != e:
+                    return False
+        if not _same_numeric_records([actual], [expected], "statistic"):
+            return False
+    return True
 
 
 def same_replayed_model(tree, replayed, saved):

@@ -66,6 +66,47 @@ def test_nuisance_grid_accepts_only_machine_roundoff():
             check_probability_metadata(changed, 0, search, 19, 0.05)
 
 
+def test_winner_grid_membership_uses_the_metadata_roundoff_contract():
+    with gzip.open(
+        "examples/shift/null-contract-timing-pilot/records.jsonl.gz", "rt"
+    ) as stream:
+        row = next(
+            row
+            for row in map(json.loads, stream)
+            if row["lanes"][0]["fit"]["alpha_height"] not in (None, 0)
+        )
+    specification = json.loads(
+        Path("examples/shift/null-contract-timing-pilot/protocol.json").read_text()
+    )
+    cell = next(
+        cell for cell in specification["cells"] if cell["cell_id"] == row["cell_id"]
+    )
+    tree = read_tree(cell["tree"], "auto", True, quiet=True)
+    lane = row["lanes"][0]
+    models, _ = enumerate_candidates(tree, convergence=lane["convergence"])
+    fit = copy.deepcopy(lane["fit"])
+    fit["alpha_height"] = np.nextafter(fit["alpha_height"], np.inf)
+    assert (
+        check_winner(
+            tree,
+            np.asarray(row["observations"]),
+            np.asarray(row["known_variances"]),
+            fit,
+            models,
+        )
+        < 1e-10
+    )
+    fit["alpha_height"] += 1e-6
+    with pytest.raises(ValueError, match="outside the declared grid"):
+        check_winner(
+            tree,
+            np.asarray(row["observations"]),
+            np.asarray(row["known_variances"]),
+            fit,
+            models,
+        )
+
+
 @pytest.mark.parametrize(
     "field", ["predicted", "contrast_log_likelihood", "candidate_count"]
 )
@@ -112,6 +153,46 @@ def test_replay_roundoff_does_not_relax_discrete_decisions(evidence):
     changed = copy.deepcopy(replayed)
     changed[0]["null_alpha_evaluations"][0]["p_value"] += 1e-6
     assert not same_replayed_tests(changed, saved)
+
+
+def test_replay_grid_roundoff_keeps_probabilities_and_grid_identity_exact():
+    # This archived dataset exposed a one-ulp geomspace difference in
+    # Linux CI. All its statistics and probabilities otherwise matched exactly.
+    with gzip.open(
+        "examples/shift/null-contract-timing-pilot/records.jsonl.gz", "rt"
+    ) as stream:
+        row = next(
+            row
+            for row in map(json.loads, stream)
+            if row["cell_id"] == 0 and row["replicate"] == 4
+        )
+    saved = row["lanes"][0]["fit"]["tests"]
+    replayed = copy.deepcopy(saved)
+    grid = replayed[0]["null_alpha_evaluations"]
+    for entry in grid:
+        alpha = entry["alpha_height"]
+        if alpha is not None and alpha > 0:
+            entry["alpha_height"] = np.nextafter(alpha, np.inf)
+    assert same_replayed_tests(replayed, saved)
+    assert replayed != saved
+
+    for field in ("p_value", "p_value_lower_bound"):
+        changed = copy.deepcopy(replayed)
+        changed[0][field] = np.nextafter(changed[0][field], np.inf)
+        assert not same_replayed_tests(changed, saved)
+    changed = copy.deepcopy(replayed)
+    changed[0]["null_alpha_evaluations"][0]["p_value"] = np.nextafter(
+        grid[0]["p_value"], np.inf
+    )
+    assert not same_replayed_tests(changed, saved)
+    for value in (0.100001, None, np.nan):
+        changed = copy.deepcopy(replayed)
+        changed[0]["null_alpha_evaluations"][10]["alpha_height"] = value
+        assert not same_replayed_tests(changed, saved)
+    for alter in (lambda entries: entries.pop(), lambda entries: entries.reverse()):
+        changed = copy.deepcopy(replayed)
+        alter(changed[0]["null_alpha_evaluations"])
+        assert not same_replayed_tests(changed, saved)
 
 
 def test_replay_accepts_only_same_tip_partition_representation(evidence):
