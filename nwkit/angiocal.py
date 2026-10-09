@@ -13,6 +13,7 @@ import requests
 
 from nwkit.output_transaction import output_transaction
 from nwkit.util import COMMON_ETE_CACHE_DIRS, resolve_download_dir, resolve_ete_data_dir
+from nwkit.xls_reader import read_xls
 
 ANGIOCAL_VERSION = "v1.0"
 ANGIOCAL_URL = (
@@ -132,55 +133,35 @@ def _validate_headers(headers, required):
 
 
 def _read_xls(data):
-    try:
-        import xlrd
-    except ModuleNotFoundError as exc:
-        if exc.name != "xlrd":
-            raise
-        raise ValueError(
-            "Custom AngioCal XLS files require the optional XLS reader: "
-            "pip install 'nwkit[xls]'. Alternatively, use a normalized TSV. "
-            "The pinned official v1.0 workbook does not require xlrd."
-        ) from exc
-    try:
-        workbook = xlrd.open_workbook(file_contents=data, on_demand=True)
-    except xlrd.XLRDError as exc:
-        raise ValueError("Invalid AngioCal XLS workbook.") from exc
-    try:
-        if workbook.nsheets != 1:
-            raise ValueError("AngioCal v1.0 requires exactly one worksheet.")
-        sheet = workbook.sheet_by_index(0)
-        if sheet.nrows < 3:
-            raise ValueError("AngioCal worksheet has no calibration records.")
-        headers = [str(value).strip() for value in sheet.row_values(1)]
-        _validate_headers(headers, set(SUMMARY_COLUMNS))
-        mapped_columns = [headers.index(name) for name in SUMMARY_COLUMNS]
-        numeric_columns = [headers.index(name) for name in ("NFos", "Minimum age")]
-        for index in range(2, sheet.nrows):
-            values = sheet.row_values(index)
-            if not any(value != "" for value in values):
-                continue
-            if any(
-                sheet.cell_type(index, column) == xlrd.XL_CELL_ERROR
-                for column in mapped_columns
-            ):
-                raise ValueError(f"Excel error in AngioCal worksheet row {index + 1}.")
-            if any(
-                sheet.cell_type(index, column)
-                not in {xlrd.XL_CELL_NUMBER, xlrd.XL_CELL_TEXT}
-                for column in numeric_columns
-            ):
-                raise ValueError(
-                    f"AngioCal IDs and ages require numeric or decimal-text Excel cells at row {index + 1}; "
-                    "dates and booleans are not fossil values."
-                )
-            row = dict(zip(headers, values, strict=True))
-            yield _record(
-                {dest: row[source] for source, dest in SUMMARY_COLUMNS.items()},
-                index + 1,
+    sheets = read_xls(data)
+    if len(sheets) != 1:
+        raise ValueError("AngioCal v1.0 requires exactly one worksheet.")
+    sheet = sheets[0]
+    if sheet.nrows < 3:
+        raise ValueError("AngioCal worksheet has no calibration records.")
+    headers = [str(value).strip() for value in sheet.row_values(1)]
+    _validate_headers(headers, set(SUMMARY_COLUMNS))
+    mapped_columns = [headers.index(name) for name in SUMMARY_COLUMNS]
+    numeric_columns = [headers.index(name) for name in ("NFos", "Minimum age")]
+    for index in range(2, sheet.nrows):
+        values = sheet.row_values(index)
+        if not any(value != "" for value in values):
+            continue
+        if any(sheet.cell(index, column).kind == "error" for column in mapped_columns):
+            raise ValueError(f"Excel error in AngioCal worksheet row {index + 1}.")
+        if any(
+            sheet.cell(index, column).kind not in {"number", "text"}
+            for column in numeric_columns
+        ):
+            raise ValueError(
+                f"AngioCal IDs and ages require numeric or decimal-text Excel cells at row {index + 1}; "
+                "dates and booleans are not fossil values."
             )
-    finally:
-        workbook.release_resources()
+        row = dict(zip(headers, values, strict=True))
+        yield _record(
+            {dest: row[source] for source, dest in SUMMARY_COLUMNS.items()},
+            index + 1,
+        )
 
 
 def _read_tsv(data):

@@ -7,7 +7,8 @@ fixed commit and verifies its SHA-256, then reads the matching normalized
 records bundled with NWKIT. The bundled TSV is separately checksum-verified
 and preserves all imported fields and original worksheet row numbers; reports
 and audits still identify the original XLS. Official v1.0 and normalized TSV
-inputs need no Excel-reading dependency.
+inputs need no Excel-reading dependency. Custom XLS input also uses NWKIT's
+built-in reader without additional dependencies.
 AngioCal v1.1, published with the 2024
 angiosperm phylogeny, has a different distribution and is not yet supported.
 
@@ -151,16 +152,14 @@ fossil_id	fossil_taxon	minimum_age_ma	placement	clade
 1	Synthetic example	12.5	crown	Testaceae
 ```
 
-The exact pinned official workbook also works locally without `xlrd`. To read
-a modified workbook or another custom XLS, install the optional reader:
-
-```sh
-pip install 'nwkit[xls]'
-```
-
-TSV input requires no extra installation. For a source checkout, use
-`pip install -e '.[xls]'`. The test and development extras include this reader
-to exercise custom XLS parsing.
+The exact pinned official workbook, modified XLS workbooks and TSV input all
+work without `xlrd` or an extra installation. The built-in reader supports
+OLE-contained BIFF5/8 workbooks, BIFF4 workbooks and standalone BIFF2/3/4
+worksheets. It reads stored cell values, including cached formula results;
+it does not recalculate formulas. Encrypted workbooks and XLSX files are
+rejected. Date, boolean and error cells retain their types and are rejected
+in fossil IDs or ages. The former `xls` installation extra remains an empty
+compatibility alias.
 
 Additional TSV columns can retain `node_calibrated`, `safe_minimum_age`,
 `age_quality_score`, `node_assignment_score`, `reconciliation_score`,

@@ -44,10 +44,10 @@ dependencies = [
 test = [
   "hypothesis>=6.165",
   "pytest>=7",
-  "xlrd>=2",
 ]
 image = ["CairoSVG"]
-xls = ["xlrd>=2"]
+# Compatibility alias: XLS parsing is now built in.
+xls = []
 dev = [
   "bandit>=1.9",
   "build>=1.3",
@@ -61,7 +61,6 @@ dev = [
   "radon>=6",
   "ruff>=0.15",
   "twine>=6",
-  "xlrd>=2",
 ]
 
 [project.scripts]

@@ -4,6 +4,25 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.45] - 2026-10-09
+
+### Changed
+
+- Replace the optional `xlrd` reader with a dependency-free XLS parser for
+  AngioCal. Preserve bundled official records, original source metadata and
+  date/boolean/error-cell validation; read custom XLS files and reproduce the
+  normalized TSV without an Excel-reading package. Remove `xlrd` from test and
+  development dependencies; retain `xls` as an empty compatibility extra.
+
+### Fixed
+
+- Reject overlapping XLS sheet and OLE stream allocations before repeated
+  parsing or calibration import, invalid nested worksheet substreams and rows
+  beyond the BIFF version's limit. Preserve physical/directory sheet ordering
+  differences and support legacy Macintosh Icelandic and Turkish text.
+- Avoid quadratic scans of malformed number-format brackets and repeated
+  date-format classification across cells sharing one format.
+
 ## [0.43.44] - 2026-10-09
 
 ### Changed

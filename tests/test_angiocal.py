@@ -14,9 +14,7 @@ from pathlib import Path
 
 import pytest
 import requests
-import xlrd
 from ete4 import Tree
-from xlrd.compdoc import CompDoc
 
 import nwkit.angiocal as source
 import nwkit.angiocal_constraints as placement
@@ -24,6 +22,8 @@ from nwkit.cli import main, parser
 from nwkit.mcmctree import mcmctree_main
 from nwkit.time_tree import annotate_mcmctree_calibrations, parse_mcmctree_calibration
 from nwkit.util import read_tree
+from nwkit.xls_compound import workbook_stream
+from nwkit.xls_reader import read_xls
 
 HEADERS = "fossil_id\tfossil_taxon\tminimum_age_ma\tplacement\tclade\n"
 
@@ -99,8 +99,9 @@ def test_xls_symlink_does_not_change_source_format(tmp_path):
 def xls_with_invalid_cell(tmp_path, column, kind):
     fixture = Path(__file__).parent / "data" / "angiocal-v1.0-synthetic.xls"
     data = fixture.read_bytes()
-    memory, base, size = CompDoc(data).locate_named_stream("Workbook")
-    assert memory == data  # The small fixture has a contiguous workbook stream.
+    stream = workbook_stream(data)
+    base, size = data.index(stream), len(stream)
+    assert data.count(stream) == 1  # The fixture has one contiguous workbook stream.
     changed = bytearray(data)
     position = base
     while position < base + size:
@@ -112,7 +113,7 @@ def xls_with_invalid_cell(tmp_path, column, kind):
         if code == 0x027E and struct.unpack_from("<HH", data, payload) == (2, column):
             if kind == "date_style_written":
                 struct.pack_into("<H", changed, payload + 4, 0)
-            else:  # BOOLERR has the same cell prefix; xlrd ignores the spare bytes.
+            else:  # BOOLERR has the same cell prefix; preserve the spare bytes.
                 struct.pack_into("<H", changed, position, 0x0205)
                 changed[payload + 6 : payload + 8] = (
                     b"\x07\x01" if kind == "error" else b"\x01\x00"
@@ -128,12 +129,12 @@ def xls_with_invalid_cell(tmp_path, column, kind):
 def test_xls_numeric_cells_do_not_accept_boolean_date_or_error(tmp_path, column, kind):
     path = xls_with_invalid_cell(tmp_path, column, kind)
     expected_type = {
-        "bool": xlrd.XL_CELL_BOOLEAN,
-        "error": xlrd.XL_CELL_ERROR,
-        "date": xlrd.XL_CELL_DATE,
+        "bool": "boolean",
+        "error": "error",
+        "date": "date",
     }
-    sheet = xlrd.open_workbook(path).sheet_by_index(0)
-    assert sheet.cell_type(2, column) == expected_type[kind]
+    sheet = read_xls(path.read_bytes())[0]
+    assert sheet.cell(2, column).kind == expected_type[kind]
     with pytest.raises(
         ValueError, match="Excel error|numeric or decimal-text Excel cells"
     ):

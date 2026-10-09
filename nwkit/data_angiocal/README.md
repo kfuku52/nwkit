@@ -24,10 +24,10 @@ Evolution* 4, 1232–1238. <https://doi.org/10.1038/s41559-020-1241-3>.
 At runtime NWKIT first verifies the original XLS checksum, then reads this
 independently verified TSV. Reports and audits still identify the original XLS
 path/URL, checksum and worksheet row. An XLS with different bytes uses the
-optional `xlrd` reader rather than this version-specific copy.
+built-in XLS reader rather than this version-specific copy.
 
-To reproduce or verify this normalization, install the development or XLS extra
-and run from the checkout root:
+To reproduce or verify this normalization, run from the checkout root; no
+Excel-reading dependency is needed:
 
 ```sh
 python tools/normalize_angiocal.py /path/to/Data2b_CalibrationList.xls --check
