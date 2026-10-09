@@ -186,7 +186,34 @@ def _taxonomy_context(tree, ncbi, args):
     return leaf_to_species, lineages, ""
 
 
-def _taxonomy_stem_target(tree, record, ncbi, context, leaf_sets):
+def _taxonomy_tip_clades(lineages):
+    """Project represented NCBI clades onto the input tip set."""
+    taxon_tips = defaultdict(set)
+    for tip, lineage in lineages.items():
+        for taxid in lineage:
+            taxon_tips[taxid].add(tip)
+    total = len(lineages)
+    return {frozenset(tips) for tips in taxon_tips.values() if 1 < len(tips) < total}
+
+
+def _stem_conflicts_with_taxonomy(target, leaf_sets, taxon_clades, cache):
+    # A projected taxon cannot partly overlap either stem branch or their
+    # parent. A conflict here can move a stem fossil onto a false ancestor.
+    for node in (target, *target.children):
+        if node not in cache:
+            tips = leaf_sets[node]
+            cache[node] = any(
+                bool(tips & clade) and not (tips <= clade or clade <= tips)
+                for clade in taxon_clades
+            )
+        if cache[node]:
+            return True
+    return False
+
+
+def _taxonomy_stem_target(
+    tree, record, ncbi, context, leaf_sets, taxon_clades, conflict_cache
+):
     _, lineages, error = context
     if error:
         return None, error, "taxonomy_stem"
@@ -203,6 +230,8 @@ def _taxonomy_stem_target(tree, record, ncbi, context, leaf_sets):
         return None, "nonmonophyletic_clade", "taxonomy_stem"
     if crown.is_root:
         return None, "stem_outgroup_missing", "taxonomy_stem"
+    if _stem_conflicts_with_taxonomy(crown.up, leaf_sets, taxon_clades, conflict_cache):
+        return None, "conflicting_tree_taxonomy", "taxonomy_stem"
     # The nearest sampled outside lineage may diverge earlier than the true
     # stem when its sister is missing. A minimum remains valid on that ancestor.
     return crown.up, "sampled_stem_ancestor", "taxonomy_stem"
@@ -240,9 +269,17 @@ def place_fossils(tree, dataset, args):
         ncbi = get_ete_ncbitaxa(args=args)
         try:
             context = _taxonomy_context(tree, ncbi, args)
+            taxon_clades = _taxonomy_tip_clades(context[1])
+            conflict_cache: dict[object, bool] = {}
             for record in pending:
                 placements[record.fossil_id] = _taxonomy_stem_target(
-                    tree, record, ncbi, context, leaf_sets
+                    tree,
+                    record,
+                    ncbi,
+                    context,
+                    leaf_sets,
+                    taxon_clades,
+                    conflict_cache,
                 )
         finally:
             db = getattr(ncbi, "db", None)

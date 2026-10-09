@@ -4,6 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.46] - 2026-10-09
+
+### Fixed
+
+- Exclude automatic AngioCal stem calibrations when the candidate divergence or
+  either child branch conflicts with sampled NCBI clades. Report
+  `conflicting_tree_taxonomy` instead of placing fossil minima on nodes created
+  by an incompatible rooting; retain projections where the local rooted split is
+  taxonomically compatible.
+
 ## [0.43.45] - 2026-10-09
 
 ### Changed
