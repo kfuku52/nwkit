@@ -978,24 +978,56 @@ def _reported_log_likelihood(
     return -float(fitted_objective - penalty_value)
 
 
+def _negative_binomial_log_pmf(values, log_means, dispersion):
+    """NB2 probabilities with a smooth, accurate Poisson limit."""
+    if dispersion is None or dispersion <= 0.0:
+        raise ValueError("Negative-binomial dispersion must be positive.")
+    size = 1.0 / dispersion
+    if size < 128.0:
+        log_ratio = gammaln(values + size) - gammaln(size) - values * math.log(size)
+    else:
+        # log(Gamma(size+y)/Gamma(size)) - y*log(size). Direct subtraction
+        # loses precision near the Poisson limit and corrupts numerical scores.
+        scaled = values / size
+        increment = np.log1p(scaled)
+        log1pmx = increment - scaled
+        small = scaled < 0.01
+        x = scaled[small]
+        log1pmx[small] = (
+            x
+            * x
+            * (
+                -0.5
+                + x
+                * (
+                    1 / 3
+                    + x * (-1 / 4 + x * (1 / 5 + x * (-1 / 6 + x * (1 / 7 - x / 8))))
+                )
+            )
+        )
+        # The first omitted Stirling term is at most 1/(1680*128**7) < 1.1e-18.
+        correction = sum(
+            coefficient * dispersion**power * np.expm1(-power * increment)
+            for power, coefficient in ((1, 1 / 12), (3, -1 / 360), (5, 1 / 1260))
+        )
+        log_ratio = size * log1pmx + (values - 0.5) * increment + correction
+    log_zero = -size * np.logaddexp(0.0, log_means - math.log(size))
+    log_pmf = (
+        log_ratio
+        - gammaln(values + 1.0)
+        + values * log_means
+        + (1.0 + values / size) * log_zero
+    )
+    return log_pmf, log_zero
+
+
 def _count_log_pmf(
     values: np.ndarray, means: np.ndarray, family: str, dispersion: float | None
 ) -> tuple[np.ndarray, np.ndarray]:
     if "negative-binomial" not in family:
         log_pmf = values * np.log(means) - means - gammaln(values + 1.0)
         return log_pmf, -means
-    if dispersion is None or dispersion <= 0.0:
-        raise ValueError("Negative-binomial dispersion must be positive.")
-    size = 1.0 / dispersion
-    log_pmf = (
-        gammaln(values + size)
-        - gammaln(size)
-        - gammaln(values + 1.0)
-        + size * (np.log(size) - np.log(size + means))
-        + values * (np.log(means) - np.log(size + means))
-    )
-    log_zero = size * (np.log(size) - np.log(size + means))
-    return log_pmf, log_zero
+    return _negative_binomial_log_pmf(values, np.log(means), dispersion)
 
 
 def _count_log_likelihood(values, linear, family, dispersion, zero_probability, offset):
@@ -1006,19 +1038,7 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
         log_pmf = values * log_means - means - gammaln(values + 1.0)
         log_zero = -means
     else:
-        if dispersion is None or dispersion <= 0.0:
-            raise ValueError("Negative-binomial dispersion must be positive.")
-        size = 1.0 / dispersion
-        log_size = math.log(size)
-        log_denominator = np.logaddexp(log_size, log_means)
-        log_pmf = (
-            gammaln(values + size)
-            - gammaln(size)
-            - gammaln(values + 1.0)
-            + size * (log_size - log_denominator)
-            + values * (log_means - log_denominator)
-        )
-        log_zero = size * (log_size - log_denominator)
+        log_pmf, log_zero = _negative_binomial_log_pmf(values, log_means, dispersion)
     if family in {"poisson", "negative-binomial"}:
         return log_pmf
     if zero_probability is None or not 0.0 < zero_probability < 1.0:

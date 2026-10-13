@@ -120,4 +120,5 @@ xfail_strict = true
 markers = [
   "integration: exercises a command or component boundary rather than one isolated unit",
   "slow: intentionally performs comparatively expensive concurrency or numerical work",
+  "study: replicated scientific experiment; opt in with --run-studies",
 ]

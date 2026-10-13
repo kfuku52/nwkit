@@ -5,6 +5,23 @@ import pytest
 from ete4 import Tree
 
 
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-studies",
+        action="store_true",
+        help="Run replicated scientific studies in addition to regression tests.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-studies"):
+        return
+    skip = pytest.mark.skip(reason="scientific study; enable with --run-studies")
+    for item in items:
+        if item.get_closest_marker("study") is not None:
+            item.add_marker(skip)
+
+
 def pytest_runtest_logstart(nodeid, location):
     if os.environ.get("NWKIT_CI_DIAGNOSTICS") == "1":
         # A completed line reaches CI before the test can stall. Keep identifiers

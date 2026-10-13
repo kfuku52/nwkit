@@ -67,6 +67,12 @@ The fossil minimum remains a conservative lower bound there; the report marks
 this as `taxonomy_stem` / `sampled_stem_ancestor`. Use explicit anchors when
 the exact stem divergence is required. A clade covering the entire input tree
 has no represented stem and is excluded, rather than placed at its crown root.
+Automatic stem placement also checks that the candidate node and both of its
+branches are compatible with the NCBI clades represented by the sampled tips.
+If the rooted tree conflicts with one of those clades, the fossil is excluded
+with reason `conflicting_tree_taxonomy`; correct the rooting or topology before
+using the tree for dating. Explicit anchors and biological node labels remain
+user assertions and are not checked against NCBI taxonomy.
 
 Example mapping (IDs refer to `NFos` in the original table):
 

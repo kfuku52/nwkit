@@ -25,6 +25,7 @@ tests:
 
 ```bash
 python tools/check.py test -- \
+  --run-studies \
   tests/test_wgd_tree_history_validation.py \
   tests/test_ksrate_scientific_validation.py \
   tests/test_wgd_count_scientific_validation.py -s
@@ -338,6 +339,8 @@ Study JSON retains the full protocol, all candidates, failures, and bootstrap
 statistics. The archived run manifest is
 `/tmp/nwkit-count-validation-manifest-20261001.json`; its six result files and
 full hashes identify the executed artifacts, rather than dependency defaults.
+To replay these protocols on the current checkout, also pass `--run-studies`;
+the original invocations above describe the archived runs.
 
 ## Evidence interpretation and remaining limits
 

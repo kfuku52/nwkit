@@ -13,6 +13,10 @@
    The release runner derives `SOURCE_DATE_EPOCH` from the current commit when
    it is not already set, runs all quality and security gates, builds both
    wheel paths, and compares their bytes and contents.
+   Replicated scientific studies are separate from this regression gate. For
+   changes to their models or uncertainty methods, run the affected studies
+   with `python tools/check.py test -- --run-studies -m study -s -rs`, following
+   the relevant validation guide. The existing weekly/manual CI also runs them.
 
 3. Commit the version and changelog changes and merge them into `master`. The
    `Tests` workflow validates the push, after which the release-tag workflow

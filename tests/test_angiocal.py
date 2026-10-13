@@ -851,6 +851,70 @@ class DummyTaxonomy:
         return {11: [1, 100, 11], 12: [1, 100, 12], 13: [1, 200, 13]}[taxid]
 
 
+class RosidTaxonomy:
+    db = None
+
+    def get_name_translator(self, names):
+        known = {
+            "A a": [11],
+            "B b": [12],
+            "C c": [13],
+            "D d": [14],
+            "E e": [15],
+            "Fagales": [100],
+            "Brassicales": [300],
+        }
+        return {name: known[name] for name in names if name in known}
+
+    def get_lineage(self, taxid):
+        return {
+            11: [1, 10, 20, 100, 11],
+            12: [1, 10, 20, 100, 12],
+            13: [1, 10, 30, 200, 13],
+            14: [1, 10, 30, 200, 14],
+            15: [1, 10, 30, 300, 15],
+        }[taxid]
+
+
+@pytest.mark.parametrize(
+    "tree_text,expected",
+    [
+        (
+            "(((A_a,B_b),(C_c,D_d)),E_e);",
+            {
+                "1": ("conflicting_tree_taxonomy", 0),
+                "2": ("conflicting_tree_taxonomy", 0),
+            },
+        ),
+        (
+            "((A_a,B_b),((C_c,D_d),E_e));",
+            {"1": ("sampled_stem_ancestor", 5), "2": ("sampled_stem_ancestor", 3)},
+        ),
+        (
+            "((A_a,B_b),((C_c,E_e),D_d));",
+            {"1": ("sampled_stem_ancestor", 5), "2": ("conflicting_tree_taxonomy", 0)},
+        ),
+    ],
+)
+def test_taxonomy_stem_rejects_wrong_root_without_losing_valid_projection(
+    tmp_path, monkeypatch, tree_text, expected
+):
+    path = dataset_file(
+        tmp_path,
+        "1\tF\t86.3\tstem\tFagales\n2\tG\t86.3\tstem\tBrassicales\n",
+    )
+    args = args_for(tmp_path, path, angiocal_taxonomy=True)
+    monkeypatch.setattr(placement, "get_ete_ncbitaxa", lambda args: RosidTaxonomy())
+    placements, leaf_sets = placement.place_fossils(
+        Tree(tree_text, parser=1), source.read_angiocal(path), args
+    )
+    for fossil_id, (reason, target_size) in expected.items():
+        target, actual_reason, method = placements[fossil_id]
+        assert method == "taxonomy_stem"
+        assert actual_reason == reason
+        assert (len(leaf_sets[target]) if target is not None else 0) == target_size
+
+
 @pytest.mark.parametrize(
     "tree_text,clade,reason,target_size",
     [

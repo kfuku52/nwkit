@@ -1,7 +1,7 @@
 """Independent count-model validation, including a bounded replicated study.
 
 Use the existing checker, for example:
-  python tools/check.py test -- tests/test_wgd_count_scientific_validation.py -s
+  python tools/check.py test -- tests/test_wgd_count_scientific_validation.py --run-studies -s
 
 The simulator below draws individual birth/death waiting times and Bernoulli
 retentions/detections; it does not use production transitions or simulation.
@@ -10,7 +10,7 @@ independent of latent counts. Family rate categories are an explicit discrete
 mixture, not continuous gamma. Local SSD deliberately misspecifies the fitted
 homogeneous null. All four branches are searched on a fixed midpoint grid.
 
-The slow study defaults to eight datasets each for null/local SSD and four for
+The opt-in study defaults to eight datasets each for null/local SSD and four for
 the other regimes, with 19 refitted null draws per dataset (minimum p=.05).
 NWKIT_WGD_COUNT_STUDY_REPLICATES changes the null/SSD replication count;
 NWKIT_WGD_COUNT_STUDY_BOOTSTRAP changes draws for all regimes. Settings, seeds,
@@ -294,6 +294,7 @@ def _binomial_interval(successes, total):
 
 
 @pytest.mark.slow
+@pytest.mark.study
 @pytest.mark.parametrize(
     "index,scenario", list(enumerate(_SCENARIOS)), ids=[s.name for s in _SCENARIOS]
 )

@@ -190,15 +190,15 @@ def _minimize_checked(trial_objective, objective, parameters, bounds, maxiter):
     value, gradient = objective(result.x)
     kkt = _projected_gradient(result.x, gradient, bounds)
     iterations = int(result.nit)
-    # L-BFGS can stop on negligible objective change while its stored curvature
-    # still gives a poor step (especially near a variance boundary). Restart
-    # from that state with fresh curvature; keep the same objective, bounds,
-    # total iteration budget, and independent stationarity requirement.
+    # L-BFGS can stop on negligible objective change or fail its line search
+    # while stored curvature still gives a poor step near a variance boundary.
+    # Restart a finite state with fresh curvature; keep the same objective,
+    # bounds, total iteration budget, and independent stationarity requirement.
     for _ in range(2):
         if (
-            not result.success
+            not np.isfinite(value)
             or not np.isfinite(kkt)
-            or kkt <= 2e-4
+            or (result.success and kkt <= 2e-4)
             or iterations >= maxiter
         ):
             break

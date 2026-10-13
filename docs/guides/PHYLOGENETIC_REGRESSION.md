@@ -202,6 +202,10 @@ precision, or censored-Gaussian SD as appropriate. Structural-zero probability
 is estimated unless fixed strictly inside `(0,1)` with
 `--response-zero-probability`.
 
+Negative-binomial log probabilities use stable log-gamma ratios and `log1p`
+expressions near zero dispersion, retaining the NB2 likelihood and its smooth
+Poisson limit. This also applies to its zero-inflated and hurdle variants.
+
 Sparse categorical and count data can produce separation or effectively
 infinite coefficients. Non-Gaussian coefficients therefore use a weak
 Student-t penalty with scale 2.5 by default. Select `--coefficient-penalty

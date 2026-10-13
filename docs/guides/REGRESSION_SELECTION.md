@@ -89,6 +89,9 @@ and, for negative binomial, NB2 dispersion are fitted jointly with coefficients
 by ML. Negative-binomial variance conditional on `u` is `mu + dispersion*mu^2`.
 The existing NWKIT GLMM mode solvers are reused. Log variance and dispersion
 are bounded to [-12,6]; a solution at a bound is explicitly flagged.
+Near zero dispersion, stable log-gamma ratios and `log1p` expressions retain
+the NB2 likelihood without cancellation from subtracting large intermediate
+values. The model is not replaced by a Poisson approximation at that boundary.
 
 Nonnegative positive/negative coefficient parts represent the L1 penalty without
 smoothing it. Fixed-linear Laplace gradients include the derivative of the
@@ -96,8 +99,9 @@ mode and determinant. Only the one/two variance parameters use numerical
 finite differences. Output requires a finite, converged solution and a checked
 projected gradient. These non-Gaussian fits are local optima, not a guarantee
 of the global minimum. Outer-CV stability and boundary diagnostics matter.
-If relative objective change stops L-BFGS before stationarity, up to two
-curvature resets are attempted within the original iteration budget. The
+If relative objective change stops L-BFGS before stationarity, or its line search
+fails at a finite valid state, up to two curvature resets are attempted within
+the original iteration budget. A restart must finish successfully. The
 objective, bounds and projected-gradient acceptance threshold are unchanged.
 
 ## Nested group validation
