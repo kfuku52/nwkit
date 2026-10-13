@@ -129,6 +129,16 @@ same long coverage test with `NWKIT_CI_DIAGNOSTICS=1`. Preserve the failed log
 and native samples when diagnosing this condition; it is separate from a failed
 scientific assertion.
 
+### Official PAML for calibration integration checks
+
+The real PAML prior tests reproduce samples below the specified fossil minimum
+with the `4.10.8.iq2mc` executable supplied by IQ2MC. The same three fixtures pass
+with a build of the default branch of [official PAML](https://github.com/abacus-gene/paml).
+Use that executable first on `PATH` for the release checks. Keep the ages, priors,
+tail probabilities and seed unchanged. Validate an IQ2MC executable against
+`test_real_paml_consumes_angiocal_minimum_prior` before substituting it for these
+calibration checks.
+
 ## Choose the smallest useful check
 
 | Command | Checks |

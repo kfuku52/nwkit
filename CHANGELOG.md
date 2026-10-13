@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.51] - 2026-10-13
+
+### Changed
+
+- Update development-tool constraints after validating the current regression and release checks.
+
 ## [0.43.50] - 2026-10-09
 
 ### Fixed
