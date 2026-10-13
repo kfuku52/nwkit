@@ -4,6 +4,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## 0.43.52 (2026-10-13)
+
+- Notify the central Dependabot controller after prepared updates finish CI.
+
 ## [0.43.51] - 2026-10-13
 
 ### Changed
