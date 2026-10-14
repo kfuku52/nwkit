@@ -58,6 +58,9 @@ def main() -> int:
         "nwkit/data_iqtree/worker.cpp",
         "nwkit/data_angiocal/v1.0.tsv",
         "nwkit/data_angiocal/README.md",
+        "nwkit/data_schema/reconciliation_document.schema.json",
+        "nwkit/data_schema/reconciliation_view.schema.json",
+        "nwkit/data_schema/reconciliation_comparison.schema.json",
     }
     required_wheel.update(
         path.relative_to(PROJECT_ROOT).as_posix()
@@ -112,6 +115,8 @@ def main() -> int:
     required_sdist.update(
         {
             "/docs/guides/BRANCH_GAUSSIAN.md",
+            "/examples/reconciliation/toy.json",
+            "/examples/reconciliation/toy.recphyloxml",
             "/examples/branch_gaussian/mixed_process.py",
             "/examples/branch_gaussian/README.md",
             "/examples/branch_gaussian/tree.nwk",

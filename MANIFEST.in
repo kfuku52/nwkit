@@ -9,6 +9,7 @@ graft examples/threshold
 graft examples/regression_calibration
 graft examples/asr_figure
 graft examples/radte
+graft examples/reconciliation
 graft tests
 graft tools
 

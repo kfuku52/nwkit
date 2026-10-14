@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1.0",
+  "date": "2026-10-14",
+  "authority": "nwkit/data_schema; aioi copies are file-only producer contracts",
+  "bases": {
+    "nwkit": "d1e7f97a84fc069dd336b6e2661ecdb5cc9b80e9",
+    "aioi": "4a68cd8bd04d2a33f19b6a44759b44a2c19ce1a9"
+  },
+  "schemas": {
+    "reconciliation_comparison.schema.json": "7d56edd77bfb7ff9c7860d3bf964c353d3d8aec0a5fa0a16f30bc3e8fd5492f6",
+    "reconciliation_document.schema.json": "b518b2264c1eef39d72e70cf190a85882a232fb7479a455248def59aa1142ba7",
+    "reconciliation_view.schema.json": "6e686b0f590e029e7c31dec091cdb2b9b7354d9105b5c595e3b3e115fcf97ca2"
+  },
+  "configuration_status": "view/comparison reserved for N3/N4; document implemented by N1"
+}

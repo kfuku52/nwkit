@@ -27,6 +27,7 @@ from nwkit.util import (
 
 OUTPUT_ARGUMENTS = frozenset(
     (
+        "document_out",
         "branch_models_out",
         "bootstrap_intervals_out",
         "bootstrap_out",
@@ -96,6 +97,7 @@ OUTPUT_ARGUMENTS = frozenset(
 
 INPUT_PATH_ARGUMENTS = frozenset(
     (
+        "document",
         "angiocal_file",
         "calibration_map_tsv",
         "branch_fit",
@@ -353,7 +355,9 @@ def _path_candidates_from_value(value):
 
 
 def _skip_declared_input_argument(args, argument):
-    if argument == "infile" and getattr(args, "radte_prefix", None):
+    if argument == "infile" and (
+        getattr(args, "radte_prefix", None) or getattr(args, "document", None)
+    ):
         return True
     return (
         argument in ("manifest", "attribution")

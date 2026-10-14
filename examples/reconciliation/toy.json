@@ -1,0 +1,355 @@
+{
+  "kind": "reconciliation_document",
+  "provenance": {
+    "description": "Synthetic display fixture, not an inference result.",
+    "format": "recPhylo",
+    "sha256": "80b568bbca18c272f4b16469e3b7f0a08b5fcbafd9cdec645cd6c8eb1d1f8733"
+  },
+  "reconciliations": [
+    {
+      "events": [
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "speciesLocation": "ABC"
+              },
+              "tag": "speciation"
+            }
+          },
+          "id": "n:069ebf58ebd613c6650b84eb99dbff5f1f41829d71da52eb7a18022cc2a99967:e0",
+          "lower_node": "n:069ebf58ebd613c6650b84eb99dbff5f1f41829d71da52eb7a18022cc2a99967",
+          "type": "speciation",
+          "upper_node": "n:792844b9533b49ba86cb6c7fb86e4a095fff84a6035d27d868c957e8550ed0b0"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "speciesLocation": "AB"
+              },
+              "tag": "duplication"
+            }
+          },
+          "id": "n:5d705da1c02ea4fee52e05340b6ac70c0f2163785fe76e8189bccc9f21f688f0:e0",
+          "lower_node": "n:5d705da1c02ea4fee52e05340b6ac70c0f2163785fe76e8189bccc9f21f688f0",
+          "type": "duplication",
+          "upper_node": "n:299c6cb4fd0ea26e6e1ab673349a66684c015cf93ce704bc1f246db12d9927b7"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "speciesLocation": "AB"
+              },
+              "tag": "speciation"
+            }
+          },
+          "id": "n:8851e6f3a6edd2338b5193fabddf2ab2c893c1a8dee64161151da1a8a748e16d:e0",
+          "lower_node": "n:8851e6f3a6edd2338b5193fabddf2ab2c893c1a8dee64161151da1a8a748e16d",
+          "type": "speciation",
+          "upper_node": "n:299c6cb4fd0ea26e6e1ab673349a66684c015cf93ce704bc1f246db12d9927b7"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "geneName": "gA1",
+                "speciesLocation": "A"
+              },
+              "tag": "leaf"
+            }
+          },
+          "id": "n:be280db562d34779aae54dfd3ded8dfd295789746c154a2d1245ecbbd2a856e6:e0",
+          "lower_node": "n:be280db562d34779aae54dfd3ded8dfd295789746c154a2d1245ecbbd2a856e6",
+          "type": "leaf",
+          "upper_node": "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "geneName": "gB1",
+                "speciesLocation": "B"
+              },
+              "tag": "leaf"
+            }
+          },
+          "id": "n:d977c2c1f997c00fb0fda1ef3a766035ec000a6ccd7827d4bc708b5dfcdf08e1:e0",
+          "lower_node": "n:d977c2c1f997c00fb0fda1ef3a766035ec000a6ccd7827d4bc708b5dfcdf08e1",
+          "type": "leaf",
+          "upper_node": "n:5e65fe89c7f34f27742e606509dfe4819e0549eb45e02e0eef8246ee683c3703"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "speciesLocation": "AB"
+              },
+              "tag": "speciation"
+            }
+          },
+          "id": "n:8a453f696f94552b6492942abff0429776a9dc87c04ccd0efc2e0a32eb9a7fe1:e0",
+          "lower_node": "n:8a453f696f94552b6492942abff0429776a9dc87c04ccd0efc2e0a32eb9a7fe1",
+          "type": "speciation",
+          "upper_node": "n:299c6cb4fd0ea26e6e1ab673349a66684c015cf93ce704bc1f246db12d9927b7"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "speciesLocation": "B"
+              },
+              "tag": "loss"
+            }
+          },
+          "id": "n:b867a1552c95148a7d0e40e872f21089358accf672262d6653b0f6300a82c45c:e0",
+          "lower_node": "n:b867a1552c95148a7d0e40e872f21089358accf672262d6653b0f6300a82c45c",
+          "type": "loss",
+          "upper_node": "n:5e65fe89c7f34f27742e606509dfe4819e0549eb45e02e0eef8246ee683c3703"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "geneName": "gA2",
+                "speciesLocation": "A"
+              },
+              "tag": "leaf"
+            }
+          },
+          "id": "n:e2315069cd93fac837ad9c84a89975e5c7b6240e590631d0aeefc407cf8ad87c:e0",
+          "lower_node": "n:e2315069cd93fac837ad9c84a89975e5c7b6240e590631d0aeefc407cf8ad87c",
+          "type": "leaf",
+          "upper_node": "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "speciesLocation": "C"
+              },
+              "tag": "branchingOut"
+            }
+          },
+          "donor_node": "n:a6216430ffa88030bf89d355f253d77c4a9ac21b2dbd970201757536b322892e",
+          "id": "n:bf7bd53021ac3c89688434918bfd414e49a65b457f7959db180620ff75ca81d3:e0",
+          "lower_node": "n:bf7bd53021ac3c89688434918bfd414e49a65b457f7959db180620ff75ca81d3",
+          "recipient_lower_node": "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666",
+          "recipient_node": "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d",
+          "type": "transfer_out",
+          "upper_node": "n:a6216430ffa88030bf89d355f253d77c4a9ac21b2dbd970201757536b322892e"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "geneName": "gC",
+                "speciesLocation": "C"
+              },
+              "tag": "leaf"
+            }
+          },
+          "id": "n:af94c58f91df262c707c8714f92c5720e811d845c1405b1da69390231046a57d:e0",
+          "lower_node": "n:af94c58f91df262c707c8714f92c5720e811d845c1405b1da69390231046a57d",
+          "type": "leaf",
+          "upper_node": "n:a6216430ffa88030bf89d355f253d77c4a9ac21b2dbd970201757536b322892e"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "destinationSpecies": "A"
+              },
+              "tag": "transferBack"
+            }
+          },
+          "id": "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666:e0",
+          "lower_node": "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666",
+          "type": "transfer_in",
+          "upper_node": "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d"
+        },
+        {
+          "annotations": {
+            "recphyloxml": {
+              "attributes": {
+                "geneName": "gA3",
+                "speciesLocation": "A"
+              },
+              "tag": "leaf"
+            }
+          },
+          "id": "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666:e1",
+          "lower_node": "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666",
+          "type": "leaf",
+          "upper_node": "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d"
+        }
+      ],
+      "history_kind": "unspecified",
+      "id": "history:0",
+      "lower_tree": "lower:0",
+      "model": {
+        "conditions": {},
+        "source_format": "recPhyloXML"
+      },
+      "selection": {},
+      "upper_tree": "upper"
+    }
+  ],
+  "schema_version": "0.1.0",
+  "title": "Reconciliation",
+  "transformations": [],
+  "trees": [
+    {
+      "branch_length_unit": "unspecified",
+      "id": "upper",
+      "nodes": [
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:299c6cb4fd0ea26e6e1ab673349a66684c015cf93ce704bc1f246db12d9927b7",
+            "n:a6216430ffa88030bf89d355f253d77c4a9ac21b2dbd970201757536b322892e"
+          ],
+          "id": "n:792844b9533b49ba86cb6c7fb86e4a095fff84a6035d27d868c957e8550ed0b0",
+          "label": "ABC"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:5e65fe89c7f34f27742e606509dfe4819e0549eb45e02e0eef8246ee683c3703",
+            "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d"
+          ],
+          "id": "n:299c6cb4fd0ea26e6e1ab673349a66684c015cf93ce704bc1f246db12d9927b7",
+          "label": "AB"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:5e65fe89c7f34f27742e606509dfe4819e0549eb45e02e0eef8246ee683c3703",
+          "label": "B"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:c146deafb8df1da8ef47853470102968f4820a52c02bf2867e62e276f4c93f5d",
+          "label": "A"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:a6216430ffa88030bf89d355f253d77c4a9ac21b2dbd970201757536b322892e",
+          "label": "C"
+        }
+      ],
+      "role": "upper",
+      "root": "n:792844b9533b49ba86cb6c7fb86e4a095fff84a6035d27d868c957e8550ed0b0"
+    },
+    {
+      "branch_length_unit": "unspecified",
+      "id": "lower:0",
+      "nodes": [
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:5d705da1c02ea4fee52e05340b6ac70c0f2163785fe76e8189bccc9f21f688f0",
+            "n:bf7bd53021ac3c89688434918bfd414e49a65b457f7959db180620ff75ca81d3"
+          ],
+          "id": "n:069ebf58ebd613c6650b84eb99dbff5f1f41829d71da52eb7a18022cc2a99967",
+          "label": "root"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:8851e6f3a6edd2338b5193fabddf2ab2c893c1a8dee64161151da1a8a748e16d",
+            "n:8a453f696f94552b6492942abff0429776a9dc87c04ccd0efc2e0a32eb9a7fe1"
+          ],
+          "id": "n:5d705da1c02ea4fee52e05340b6ac70c0f2163785fe76e8189bccc9f21f688f0",
+          "label": "dup"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:be280db562d34779aae54dfd3ded8dfd295789746c154a2d1245ecbbd2a856e6",
+            "n:d977c2c1f997c00fb0fda1ef3a766035ec000a6ccd7827d4bc708b5dfcdf08e1"
+          ],
+          "id": "n:8851e6f3a6edd2338b5193fabddf2ab2c893c1a8dee64161151da1a8a748e16d",
+          "label": "s1"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:be280db562d34779aae54dfd3ded8dfd295789746c154a2d1245ecbbd2a856e6",
+          "label": "gA1"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:d977c2c1f997c00fb0fda1ef3a766035ec000a6ccd7827d4bc708b5dfcdf08e1",
+          "label": "gB1"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:b867a1552c95148a7d0e40e872f21089358accf672262d6653b0f6300a82c45c",
+            "n:e2315069cd93fac837ad9c84a89975e5c7b6240e590631d0aeefc407cf8ad87c"
+          ],
+          "id": "n:8a453f696f94552b6492942abff0429776a9dc87c04ccd0efc2e0a32eb9a7fe1",
+          "label": "s2"
+        },
+        {
+          "annotations": {
+            "observed": false
+          },
+          "branch_length": null,
+          "children": [],
+          "id": "n:b867a1552c95148a7d0e40e872f21089358accf672262d6653b0f6300a82c45c",
+          "label": "lostB"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:e2315069cd93fac837ad9c84a89975e5c7b6240e590631d0aeefc407cf8ad87c",
+          "label": "gA2"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [
+            "n:af94c58f91df262c707c8714f92c5720e811d845c1405b1da69390231046a57d",
+            "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666"
+          ],
+          "id": "n:bf7bd53021ac3c89688434918bfd414e49a65b457f7959db180620ff75ca81d3",
+          "label": "transfer"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:af94c58f91df262c707c8714f92c5720e811d845c1405b1da69390231046a57d",
+          "label": "gC"
+        },
+        {
+          "annotations": {},
+          "branch_length": null,
+          "children": [],
+          "id": "n:cda78ce0b2f9cc61f2ff690192fc877b1d77a0ca43e87228b28b10da8f7bd666",
+          "label": "gA3"
+        }
+      ],
+      "role": "lower",
+      "root": "n:069ebf58ebd613c6650b84eb99dbff5f1f41829d71da52eb7a18022cc2a99967"
+    }
+  ]
+}
