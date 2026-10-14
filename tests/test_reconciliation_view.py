@@ -570,3 +570,121 @@ def test_nested_comparison_retains_expanded_label_corridor_width(tmp_path):
     path, record = comparison(tmp_path, ("available",))
     composed = comparison_scene(record, {"0": validated}, width=720, font_size=8)
     assert composed.width >= nested.width
+
+
+def test_x1_highlight_preserves_biological_event_colors():
+    from nwkit.reconciliation_import import import_tree_document
+    from nwkit.reconciliation_scene import EVENT_STYLE
+
+    source = import_tree_document("((A,B),C);")["trees"][0]
+    target = import_tree_document("((A,C),B);")["trees"][0]
+    upper = import_tree_document("species;")["trees"][0]
+    source["id"], target["id"], upper["id"] = "H", "G", "S"
+    a = {n["label"]: n["id"] for n in source["nodes"] if not n["children"]}
+    b = {n["label"]: n["id"] for n in target["nodes"] if not n["children"]}
+    hi = next(
+        n["id"] for n in source["nodes"] if set(n["children"]) == {a["A"], a["B"]}
+    )
+    gi = next(
+        n["id"] for n in target["nodes"] if set(n["children"]) == {b["A"], b["C"]}
+    )
+    record = {
+        "schema_version": "0.1.0",
+        "kind": "reconciliation_document",
+        "provenance": {"description": "Synthetic color fixture; no inference"},
+        "trees": [source, target, upper],
+        "reconciliations": [
+            {
+                "id": "rec",
+                "lower_tree": "H",
+                "upper_tree": "S",
+                "history_kind": "unspecified",
+                "model": {},
+                "selection": {},
+                "events": [
+                    {
+                        "id": n["id"],
+                        "type": "duplication" if n["children"] else "leaf",
+                        "lower_node": n["id"],
+                        "upper_node": upper["root"],
+                    }
+                    for n in source["nodes"]
+                ],
+            }
+        ],
+        "transformations": [
+            {
+                "id": "X",
+                "source_tree": "H",
+                "target_tree": "G",
+                "model_id": "X1",
+                "blocks": [
+                    {
+                        "id": "x",
+                        "source_nodes": [source["root"], hi],
+                        "target_nodes": [target["root"], gi],
+                        "resolution": 1,
+                        "boundaries": [
+                            {"source_node": a[x], "target_node": b[x]} for x in "ABC"
+                        ],
+                    }
+                ],
+            }
+        ],
+    }
+    scene = build_scene(validate_document(record))
+    assert any(p.kind == "line" and p.color == "#a03faa" for p in scene.primitives)
+    assert all(
+        p.color == EVENT_STYLE[p.text][0] for p in scene.primitives if p.kind == "event"
+    )
+
+
+def test_collapse_event_positions_match_only_displayed_events():
+    doc = read_document(TOY)
+    tree = doc.trees["lower:0"]
+    scene = apply_view(
+        build_scene(doc),
+        doc,
+        {"collapsed_clades": [{"tree": tree.id, "node": tree.root}]},
+    )
+    rec = doc.record["reconciliations"][0]
+    assert set(scene.event_points) == {
+        (rec["id"], e["id"]) for e in rec["events"] if e["lower_node"] == tree.root
+    }
+
+
+def test_lower_clade_selection_keeps_middle_context_event_coordinates():
+    from nwkit.reconciliation_document import select_document_clade
+
+    record = read_document(TOY).record
+    bottom = copy.deepcopy(record["trees"][1])
+    bottom["id"] = "bottom"
+    record["trees"].append(bottom)
+    record["reconciliations"].append(
+        {
+            "id": "bottom_to_middle",
+            "lower_tree": "bottom",
+            "upper_tree": "lower:0",
+            "history_kind": "unspecified",
+            "model": {},
+            "selection": {},
+            "events": [
+                {
+                    "id": n["id"],
+                    "type": "speciation" if n["children"] else "leaf",
+                    "lower_node": n["id"],
+                    "upper_node": n["id"],
+                }
+                for n in bottom["nodes"]
+            ],
+        }
+    )
+    doc = validate_document(record)
+    leaf = next(n["id"] for n in bottom["nodes"] if n["label"] == "gA1")
+    selected = select_document_clade(doc, f"bottom/{leaf}")
+    scene = build_scene(selected)
+    assert all(
+        ("history:0", e["id"]) in scene.event_points
+        for e in record["reconciliations"][0]["events"]
+    )
+    assert ("bottom_to_middle", leaf) in scene.event_points

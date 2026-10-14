@@ -434,3 +434,52 @@ def test_transformations_reconstruct_whole_target_not_only_local_block():
     identity["transformations"][0].update(model_id="identity", blocks=[])
     with pytest.raises(ValueError, match="whole target"):
         validate_document(identity)
+
+
+def test_deep_recphyloxml_roundtrip_does_not_require_global_recursion_changes():
+    import sys
+
+    depth = sys.getrecursionlimit() + 50
+
+    def leaf(n):
+        return f'<clade><name>g{n}</name><eventsRec><leaf speciesLocation="S"/></eventsRec></clade>'
+
+    clade = leaf(0)
+    for n in range(1, depth):
+        clade = (
+            '<clade><eventsRec><duplication speciesLocation="S"/></eventsRec>'
+            + clade
+            + leaf(n)
+            + "</clade>"
+        )
+    text = (
+        "<recPhylo><spTree><phylogeny><clade><name>S</name></clade></phylogeny></spTree><recGeneTree><phylogeny>"
+        + clade
+        + "</phylogeny></recGeneTree></recPhylo>"
+    )
+    before = validate_document(import_xml_document(text))
+    after = validate_document(import_xml_document(recphyloxml_text(before)))
+    assert before.record["trees"] == after.record["trees"]
+    assert before.record["reconciliations"] == after.record["reconciliations"]
+    assert sys.getrecursionlimit() == depth - 50
+
+
+def test_deep_opaque_xml_metadata_preserves_expanded_names_and_text():
+    import sys
+    from xml.etree import ElementTree as ET
+
+    from nwkit.reconciliation_xml import serialize_xml
+
+    depth = sys.getrecursionlimit() + 50
+    text = (
+        '<n xmlns="urn:example" value="a&amp;b">text&amp;tail' * depth
+        + "end"
+        + "</n>tail&amp;" * (depth - 1)
+        + "</n>"
+    )
+    root = ET.fromstring(text)
+    result = ET.fromstring(serialize_xml(root))
+    first, second = list(root.iter()), list(result.iter())
+    assert [(e.tag, e.attrib, e.text, e.tail) for e in first] == [
+        (e.tag, e.attrib, e.text, e.tail) for e in second
+    ]

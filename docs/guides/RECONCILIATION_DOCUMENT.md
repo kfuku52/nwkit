@@ -224,3 +224,10 @@ Tree-only panels with missing histories honor the same display state.
 
 See [the audit evidence](../validation/RECONCILIATION_AUDIT_20261015.md) for executed
 checks, scope and limitations. No inference is performed by these corrections.
+
+
+The [second audit](../validation/RECONCILIATION_AUDIT2_20261015.md) preserves event
+colors when highlighting X1 branches, keeps display event coordinates consistent
+with clade selection/collapse, and supports deep recPhyloXML output without a
+process-wide recursion setting. Imported opaque XML retains expanded namespace,
+attribute, text and tail semantics on the deep path; normal formatting is unchanged.

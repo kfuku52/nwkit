@@ -5,6 +5,7 @@ from xml.etree import ElementTree as ET
 from defusedxml.ElementTree import fromstring
 
 from nwkit.reconciliation_document import document_json
+from nwkit.reconciliation_xml import serialize_xml
 
 
 def _xml_clades(tree, events=None):
@@ -115,7 +116,7 @@ def recphyloxml_text(document):
         if lower.record["branch_length_unit"] != "unspecified":
             phy.set("branch_length_unit", lower.record["branch_length_unit"])
         phy.append(_xml_clades(lower, events))
-    return ET.tostring(root, encoding="unicode", xml_declaration=True) + "\n"
+    return serialize_xml(root, declaration=True) + "\n"
 
 
 def document_text(document, path):

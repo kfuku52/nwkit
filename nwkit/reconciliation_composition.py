@@ -98,7 +98,12 @@ def compose_document(document, *, width, font_size, view=None):
             ):
                 tid = transform[side]
                 for p in scene.primitives:
-                    if p.owner and p.tree == tid and p.owner[1] in block[field]:
+                    if (
+                        p.kind == "line"
+                        and p.owner
+                        and p.tree == tid
+                        and p.owner[1] in block[field]
+                    ):
                         p.color = "#a03faa"
                         p.width = max(p.width, 2.4)
     if len({r["upper_tree"] for r in recs} & {r["lower_tree"] for r in recs}):
@@ -129,6 +134,18 @@ def apply_view(scene, document, view):
             if p.owner and p.tree == tree.id and p.owner[1] in descendants
         ]
         scene.primitives = [p for p in scene.primitives if p not in removed]
+        hidden_events = {
+            (r["id"], e["id"])
+            for r in document.record["reconciliations"]
+            if r["lower_tree"] == tree.id
+            for e in r["events"]
+            if e["lower_node"] in descendants
+        }
+        scene.event_points = {
+            key: point
+            for key, point in scene.event_points.items()
+            if key not in hidden_events
+        }
         anchors = [
             p.points[-1]
             for p in scene.primitives

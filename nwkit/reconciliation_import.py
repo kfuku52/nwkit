@@ -8,9 +8,10 @@ import math
 from collections import Counter
 from dataclasses import dataclass, field
 from typing import Any
-from xml.etree import ElementTree as ET
 
 from defusedxml.ElementTree import fromstring
+
+from nwkit.reconciliation_xml import serialize_xml
 
 
 @dataclass(eq=False)
@@ -192,7 +193,7 @@ def _xml_tree(phylogeny):
                 raise ValueError("XML name and geneName disagree.")
             label = gene_name
         opaque = [
-            ET.tostring(c, encoding="unicode")
+            serialize_xml(c)
             for c in element
             if _tag(c) not in {"name", "branch_length", "clade", "eventsRec"}
         ]

@@ -329,7 +329,9 @@ def _display_selection(scene, document):
         if e["lower_node"] in selected
     }
     scene.event_points = {
-        key: xy for key, xy in scene.event_points.items() if key in event_keys
+        key: xy
+        for key, xy in scene.event_points.items()
+        if key[0] not in rec_ids or key in event_keys
     }
     scene.notices.append(
         "Display-only clade selection; scientific trees/events are unchanged. Incoming transfer arrows retain their recorded external donor context."
