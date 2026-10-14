@@ -50,6 +50,7 @@ class TreeRecord:
 class ReconciliationDocument:
     record: dict[str, Any]
     trees: dict[str, TreeRecord]
+    source_bytes: bytes | None = None
 
 
 def _fields(value, required, optional, label):
@@ -79,11 +80,15 @@ def _string(value, label):
 def _number(value, label, *, probability=False):
     if value is None:
         return
-    if (
-        isinstance(value, bool)
-        or not isinstance(value, (float, int))
-        or not math.isfinite(value)
-    ):
+    try:
+        finite = (
+            not isinstance(value, bool)
+            and isinstance(value, (float, int))
+            and math.isfinite(value)
+        )
+    except OverflowError:
+        finite = False
+    if not finite:
         raise ValueError(f"{label} must be a finite number or null.")
     if value < 0 or (probability and value > 1):
         raise ValueError(f"{label} is out of range.")
@@ -164,6 +169,11 @@ def _event(event, lower, upper):
         },
         "event",
     )
+    _string(event["type"], "event type")
+    _string(event["lower_node"], "event lower node")
+    for field in ("upper_node", "donor_node", "recipient_node", "recipient_lower_node"):
+        if event.get(field) is not None:
+            _string(event[field], f"event {field}")
     if event["type"] not in EVENT_TYPES or event["lower_node"] not in lower.nodes:
         raise ValueError("Unknown event type or lower node.")
     for field in ("upper_node", "donor_node", "recipient_node"):
@@ -238,6 +248,8 @@ def _reconciliation(rec, trees):
         {"summary", "annotations"},
         "reconciliation",
     )
+    for field in ("lower_tree", "upper_tree", "history_kind"):
+        _string(rec[field], f"reconciliation {field}")
     if rec["lower_tree"] == rec["upper_tree"] or any(
         rec[k] not in trees for k in ("lower_tree", "upper_tree")
     ):
@@ -314,6 +326,7 @@ def _x1_blocks(transform, trees):
     if leaves(source, source.root) != leaves(target, target.root):
         raise ValueError("X1 source/target leaf identities differ.")
     consumed: set[str] = set()
+    target_consumed: set[str] = set()
     for block in _unique(transform["blocks"], "X1 block").values():
         _fields(
             block,
@@ -321,13 +334,14 @@ def _x1_blocks(transform, trees):
             {"annotations"},
             "X1 block",
         )
-        if block["resolution"] not in {1, 2} or isinstance(block["resolution"], bool):
+        if type(block["resolution"]) is not int or block["resolution"] not in {1, 2}:
             raise ValueError("X1 resolution must be 1 or 2.")
         for field, tree in (("source_nodes", source), ("target_nodes", target)):
             pair = block[field]
             if (
                 not isinstance(pair, list)
                 or len(pair) != 2
+                or any(not isinstance(n, str) for n in pair)
                 or len(set(pair)) != 2
                 or any(n not in tree.nodes for n in pair)
             ):
@@ -346,10 +360,15 @@ def _x1_blocks(transform, trees):
         if consumed.intersection(block["source_nodes"]):
             raise ValueError("X1 latent blocks overlap.")
         consumed.update(block["source_nodes"])
+        if target_consumed.intersection(block["target_nodes"]):
+            raise ValueError("X1 target blocks overlap.")
+        target_consumed.update(block["target_nodes"])
         if not isinstance(block["boundaries"], list) or len(block["boundaries"]) != 3:
             raise ValueError("X1 requires three boundary clades.")
         for boundary in block["boundaries"]:
             _fields(boundary, {"source_node", "target_node"}, set(), "X1 boundary")
+            _string(boundary["source_node"], "X1 source boundary")
+            _string(boundary["target_node"], "X1 target boundary")
             if (
                 boundary["source_node"] not in source.nodes
                 or boundary["target_node"] not in target.nodes
@@ -360,6 +379,42 @@ def _x1_blocks(transform, trees):
             ):
                 raise ValueError("X1 boundary leaf identities differ.")
         _validate_x1_resolution(block, source, target, leaves)
+    _verify_transformation(transform, source, target)
+
+
+def _tree_shape(tree, blocks=()):
+    """Whole rooted topology with quoted labels; IDs and branch units may differ."""
+    by_root = {b["source_nodes"][0]: b for b in blocks}
+    shapes: dict[str, str] = {}
+
+    def join(children):
+        return "(" + ",".join(sorted(children)) + ")"
+
+    for nid in reversed(tree.order):
+        node = tree.nodes[nid]
+        if nid in by_root:
+            block = by_root[nid]
+            a, b, c = [shapes[x["source_node"]] for x in block["boundaries"]]
+            shapes[nid] = (
+                join([join([a, c]), b])
+                if block["resolution"] == 1
+                else join([join([b, c]), a])
+            )
+        else:
+            shapes[nid] = (
+                join([shapes[c] for c in node["children"]])
+                if node["children"]
+                else json.dumps(node["label"], ensure_ascii=True)
+            )
+    return shapes[tree.root]
+
+
+def _verify_transformation(transform, source, target):
+    blocks = transform["blocks"] if transform["model_id"] == "X1" else ()
+    if _tree_shape(source, blocks) != _tree_shape(target):
+        raise ValueError(
+            "Recorded transformation does not reconstruct the whole target tree."
+        )
 
 
 def _validate_x1_resolution(block, source, target, leaves):
@@ -445,6 +500,8 @@ def validate_document(record) -> ReconciliationDocument:
             {"annotations"},
             "transformation",
         )
+        for field in ("source_tree", "target_tree"):
+            _string(transform[field], f"transformation {field}")
         if transform["source_tree"] == transform["target_tree"] or any(
             transform[k] not in trees for k in ("source_tree", "target_tree")
         ):
@@ -456,6 +513,14 @@ def validate_document(record) -> ReconciliationDocument:
             raise ValueError("Transformation blocks must be an array.")
         if transform["model_id"] == "X1":
             _x1_blocks(transform, trees)
+        elif transform["model_id"] == "identity":
+            if transform["blocks"]:
+                raise ValueError("Identity transformation cannot consume blocks.")
+            _verify_transformation(
+                transform,
+                trees[transform["source_tree"]],
+                trees[transform["target_tree"]],
+            )
     return ReconciliationDocument(record, trees)
 
 
@@ -518,10 +583,9 @@ def select_document_clade(document, selection):
     return validate_document(record)
 
 
-def read_document(path) -> ReconciliationDocument:
+def _document_from_text(text) -> ReconciliationDocument:
     from nwkit.reconciliation_import import import_tree_document, import_xml_document
 
-    text = Path(path).read_text(encoding="utf-8-sig")
     if text.lstrip().startswith("{"):
         record = load_json(text)
     elif text.lstrip().startswith("<"):
@@ -529,6 +593,13 @@ def read_document(path) -> ReconciliationDocument:
     else:
         record = import_tree_document(text)
     return validate_document(record)
+
+
+def read_document(path) -> ReconciliationDocument:
+    raw = Path(path).read_bytes()
+    document = _document_from_text(raw.decode("utf-8-sig"))
+    document.source_bytes = raw
+    return document
 
 
 def load_json(text):
@@ -551,9 +622,12 @@ def load_json(text):
             raise ValueError("Nonfinite JSON number.")
         return number
 
-    return json.loads(
-        text,
-        object_pairs_hook=pairs,
-        parse_constant=nonfinite,
-        parse_float=finite_float,
-    )
+    try:
+        return json.loads(
+            text,
+            object_pairs_hook=pairs,
+            parse_constant=nonfinite,
+            parse_float=finite_float,
+        )
+    except RecursionError as error:
+        raise ValueError("JSON nesting exceeds the decoder resource limit.") from error

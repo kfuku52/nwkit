@@ -21,6 +21,8 @@ class Primitive:
     width: float = 1.2
     marker: str = "o"
     owner: tuple[str, str] | None = None
+    panel: str | None = None
+    tree: str | None = None
 
 
 @dataclass
@@ -28,7 +30,7 @@ class Scene:
     width: float
     height: float
     primitives: list[Primitive] = field(default_factory=list)
-    event_points: dict[tuple[str, str], tuple[float, float]] = field(
+    event_points: dict[tuple[str, ...], tuple[float, float]] = field(
         default_factory=dict
     )
     caption: str = "Topology layout; event positions do not represent times."
@@ -217,6 +219,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                         [start, end],
                         color="#9c4caa",
                         owner=(rec["id"], nid),
+                        tree=lower.id,
                     )
                 )
             else:
@@ -230,6 +233,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                         points,
                         color=color,
                         owner=(rec["id"], nid),
+                        tree=lower.id,
                     )
                 )
         for event in events:
@@ -245,6 +249,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                     color=event_color,
                     marker=marker,
                     owner=(rec["id"], nid),
+                    tree=lower.id,
                 )
             )
         if not lower.nodes[nid]["children"] and lower.nodes[nid]["label"]:
@@ -257,6 +262,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                     text=lower.nodes[nid]["label"],
                     color=color,
                     owner=(rec["id"], nid),
+                    tree=lower.id,
                 )
             )
 
@@ -273,7 +279,13 @@ def _standalone_scene(document, width, spacing, view=None):
         shifted = {nid: (x, y + scene.height) for nid, (x, y) in xy.items()}
         for nid, points in _upper_paths(tree, shifted, unit).items():
             scene.primitives.append(
-                Primitive("line", f"tree:{tree.id}:{nid}", points, owner=(tree.id, nid))
+                Primitive(
+                    "line",
+                    f"tree:{tree.id}:{nid}",
+                    points,
+                    owner=(tree.id, nid),
+                    tree=tree.id,
+                )
             )
         for nid, node in tree.nodes.items():
             if node["label"]:
@@ -285,6 +297,7 @@ def _standalone_scene(document, width, spacing, view=None):
                         [(x + 5, y)],
                         text=node["label"],
                         owner=(tree.id, nid),
+                        tree=tree.id,
                     )
                 )
         scene.height += height + 35
@@ -306,9 +319,7 @@ def _display_selection(scene, document):
     scene.primitives = [
         p
         for p in scene.primitives
-        if p.owner is None
-        or (p.owner[0] in owners and p.owner[1] in selected)
-        or (document.record["transformations"] and p.owner[0] not in owners)
+        if p.owner is None or p.tree != tree.id or p.owner[1] in selected
     ]
     event_keys = {
         (r["id"], e["id"])
@@ -390,6 +401,8 @@ def build_scene(
                 points,
                 color="#e1e8ee",
                 width=max(12, widths.get(nid, 12)),
+                owner=(upper.id, nid),
+                tree=upper.id,
             )
         )
         node = upper.nodes[nid]
@@ -402,6 +415,8 @@ def build_scene(
                     [(x, y - max(9, widths.get(nid, 12) / 2 + 5))],
                     text=node["label"],
                     color="#596b80",
+                    owner=(upper.id, nid),
+                    tree=upper.id,
                 )
             )
     for index, rec in enumerate(sorted(recs, key=lambda r: r["id"])):

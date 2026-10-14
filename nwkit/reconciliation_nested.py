@@ -198,6 +198,7 @@ def _bottom_primitives(
                         [start, end],
                         color="#9c4caa",
                         owner=(rid, nid),
+                        tree=lower.id,
                     )
                 )
                 continue
@@ -221,6 +222,7 @@ def _bottom_primitives(
                     color="#176b73",
                     width=1.4,
                     owner=(rid, nid),
+                    tree=lower.id,
                 )
             )
         for event in events:
@@ -235,6 +237,7 @@ def _bottom_primitives(
                     color=color,
                     marker=marker,
                     owner=(rid, nid),
+                    tree=lower.id,
                 )
             )
             scene.event_points[rid, event["id"]] = point
@@ -247,6 +250,7 @@ def _bottom_primitives(
                     [(point[0] + 5, point[1])],
                     text=lower.nodes[nid]["label"],
                     owner=(rid, nid),
+                    tree=lower.id,
                 )
             )
 
@@ -320,6 +324,7 @@ def build_nested_scene(document, *, width, font_size, view=None):
                 color="#efd9b1",
                 width=max_width,
                 owner=(rec["id"], middle.root),
+                tree=middle.id,
             )
         )
     _separate_layer_labels(
@@ -379,7 +384,11 @@ def _separate_layer_labels(
     outer_column = middle_column + middle_label_width + 18
     leaders = []
     for primitive in scene.primitives:
-        if primitive.owner and primitive.owner[0] == rec["id"]:
+        if (
+            primitive.owner
+            and primitive.tree == middle.id
+            and primitive.owner[0] == rec["id"]
+        ):
             if primitive.kind == "text":
                 primitive.points = [(x + middle_column, y) for x, y in primitive.points]
             elif primitive.kind == "event":
@@ -396,6 +405,7 @@ def _separate_layer_labels(
                         color="#a16207",
                         width=0.6,
                         owner=primitive.owner,
+                        tree=primitive.tree,
                     )
                 )
                 event_id = primitive.id.removeprefix("event:" + rec["id"] + ":")

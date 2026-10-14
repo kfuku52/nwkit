@@ -25,6 +25,7 @@ from nwkit.reconciliation_view import (
     read_comparison,
     read_view,
     validate_comparison_view,
+    validate_view,
 )
 from nwkit.result_plot import figure_format
 
@@ -146,6 +147,8 @@ def draw_document_main(args):
         view = dict(
             view, layout={"embedded": "topology_embedded"}.get(args.view, args.view)
         )
+    if document:
+        validate_view(view, document)
     if documents:
         validate_comparison_view(view, documents)
     if record:
@@ -181,21 +184,36 @@ def draw_document_main(args):
     )
     if record:
         scene = comparison_scene(record, documents, width=width, font_size=font_size)
+        pdf_scene = scene
+        if fmt == "html":
+            scene = comparison_scene(
+                record,
+                documents,
+                width=width,
+                font_size=font_size,
+                apply_display_view=False,
+            )
         title = "Reconciliation comparison"
+        captured = []
+        for doc in documents.values():
+            if doc.source_bytes is None:
+                raise ValueError("Comparison document snapshot is missing.")
+            captured.append(base64.b64encode(doc.source_bytes).decode())
         source = dict(
             record,
             documents=[d.record for d in documents.values()],
-            document_bytes=[
-                base64.b64encode(Path(path).read_bytes()).decode()
-                for path in panel_paths
-            ],
+            document_bytes=captured,
         )
     else:
         assert document is not None
-        scene = apply_view(
-            build_scene(document, width=width, font_size=font_size, view=view),
-            document,
-            view,
+        import copy
+
+        full_scene = build_scene(document, width=width, font_size=font_size, view=view)
+        pdf_scene = apply_view(copy.deepcopy(full_scene), document, view)
+        scene = (
+            apply_view(full_scene, document, dict(view, collapsed_clades=[]))
+            if fmt == "html"
+            else pdf_scene
         )
         title = document.record.get("title", "")
         source = document.record
@@ -231,7 +249,14 @@ def draw_document_main(args):
             legend=args.legend,
         )
         if fmt == "html":
-            write_html(scene, staged[args.outfile], source=source, view=view, **options)
+            write_html(
+                scene,
+                staged[args.outfile],
+                source=source,
+                view=view,
+                pdf_scene=pdf_scene,
+                **options,
+            )
         else:
             write_scene(scene, staged[args.outfile], image_format=fmt, **options)
         if args.view_out:

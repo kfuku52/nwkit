@@ -358,3 +358,215 @@ def test_clade_selection_preserves_transformation_context():
         or selected.trees["lower:0"].ancestral(node, p.owner[1])
         for p in scene.primitives
     )
+
+
+@pytest.mark.parametrize("replacement", [[], {}])
+def test_view_scalar_containers_reject_cleanly(replacement):
+    base = {
+        "schema_version": "0.1.0",
+        "kind": "reconciliation_view",
+        "layout": "paired",
+    }
+    for extra in (
+        {"layout": replacement},
+        {"collapsed_clades": [{"tree": replacement, "node": "x"}]},
+        {"output": {"format": replacement}},
+    ):
+        with pytest.raises(ValueError):
+            validate_view(dict(base, **extra))
+
+
+def test_shared_collapse_rejects_opaque_id_collision_between_different_clades(tmp_path):
+    from nwkit.reconciliation_view import validate_comparison_view
+
+    path, record = comparison(tmp_path)
+    doc = read_document(TOY)
+    other = copy.deepcopy(doc.record)
+    for node in other["trees"][1]["nodes"]:
+        if not node["children"]:
+            node["label"] += "_other"
+    view = dict(
+        record["view"],
+        layout="paired",
+        collapsed_clades=[{"tree": "lower:0", "node": doc.trees["lower:0"].root}],
+    )
+    with pytest.raises(ValueError, match="different clades"):
+        validate_comparison_view(view, {"a": doc, "b": validate_document(other)})
+
+
+def test_html_initial_collapse_keeps_expandable_geometry_and_pdf_view(tmp_path):
+    doc = read_document(TOY)
+    tree = doc.trees["lower:0"]
+    view = {
+        "schema_version": "0.1.0",
+        "kind": "reconciliation_view",
+        "layout": "paired",
+        "collapsed_clades": [{"tree": tree.id, "node": tree.root}],
+        "event_colors": {"duplication": "#123456"},
+    }
+    config = tmp_path / "view.json"
+    config.write_text(json.dumps(view))
+    output = tmp_path / "collapsed.html"
+    main(
+        [
+            "draw",
+            "--document",
+            str(TOY),
+            "--view-config",
+            str(config),
+            "--outfile",
+            str(output),
+        ]
+    )
+    text = output.read_text()
+    svg = ET.fromstring(text[text.index('<svg id="scene"') : text.index("</svg>") + 6])
+    owners = [
+        json.loads(e.attrib["data-detail"])["owner"]
+        for e in svg.iter()
+        if "data-detail" in e.attrib
+    ]
+    assert [
+        tree.id,
+        next(nid for nid, n in tree.nodes.items() if n["label"] == "gA1"),
+    ] in owners
+    encoded = text.split('id="pdfbytes">', 1)[1].split("</script>", 1)[0]
+    pdf_text = "".join(
+        page.extract_text()
+        for page in PdfReader(io.BytesIO(base64.b64decode(encoded))).pages
+    )
+    assert "collapsed" in pdf_text and "gA1" not in pdf_text
+    assert "#123456" in text
+    # A layout override is revalidated before producing an invalid saved view.
+    bad = dict(
+        view, collapsed_clades=[{"tree": "upper", "node": doc.trees["upper"].root}]
+    )
+    config.write_text(json.dumps(bad))
+    with pytest.raises(ValueError, match="Upper context"):
+        main(
+            [
+                "draw",
+                "--document",
+                str(TOY),
+                "--view-config",
+                str(config),
+                "--view",
+                "embedded",
+                "--outfile",
+                str(tmp_path / "bad.pdf"),
+            ]
+        )
+
+
+def test_comparison_missing_history_still_honors_tree_display_state(tmp_path):
+    from nwkit.reconciliation_import import import_tree_document
+
+    path, record = comparison(tmp_path, ("missing",))
+    doc = validate_document(import_tree_document("(one,two);"))
+    tree = next(iter(doc.trees.values()))
+    record["view"] = dict(
+        record["view"],
+        layout="paired",
+        collapsed_clades=[{"tree": tree.id, "node": tree.root}],
+    )
+    scene = comparison_scene(record, {"0": doc}, width=720, font_size=8)
+    assert not any(p.text in {"one", "two"} for p in scene.primitives)
+    assert any("collapsed" in p.text for p in scene.primitives)
+
+
+def test_recorded_event_difference_preserves_hidden_side_and_arity(tmp_path):
+    path, record = comparison(tmp_path, ("available", "available"))
+    first = read_document(TOY).record
+    rec = first["reconciliations"][0]
+    upper = {n["label"]: n["id"] for n in first["trees"][0]["nodes"]}
+    rec["events"][0]["annotations"].update(
+        observed_arity=1, marginalized_species=upper["A"]
+    )
+    other = copy.deepcopy(first)
+    other["reconciliations"][0]["events"][0]["annotations"]["marginalized_species"] = (
+        upper["B"]
+    )
+    for i, doc in enumerate((first, other)):
+        source = tmp_path / f"side-{i}.json"
+        source.write_text(json.dumps(doc))
+        record["panels"][i].update(
+            document=source.name,
+            document_sha256=hashlib.sha256(source.read_bytes()).hexdigest(),
+        )
+    path.write_text(json.dumps(record))
+    loaded, docs, _ = read_comparison(path)
+    scene = comparison_scene(loaded, docs, width=720, font_size=8)
+    assert any("difference" in text and "+1/-1" in text for text in scene.notices)
+
+
+def test_comparison_hash_validates_exact_snapshot_used_for_render_and_zip(
+    tmp_path, monkeypatch
+):
+    path, record = comparison(tmp_path)
+    source = (tmp_path / "source.json").resolve()
+    original = source.read_bytes()
+    read = Path.read_bytes
+    reads = []
+
+    def capture_once(self):
+        raw = read(self)
+        if self == source:
+            reads.append(self)
+            # Simulate an external file edit after the verified snapshot is read.
+            self.write_bytes(b"invalid external edit")
+        return raw
+
+    monkeypatch.setattr(Path, "read_bytes", capture_once)
+    loaded, docs, _ = read_comparison(path)
+    assert len(reads) == 1
+    assert docs["0"].source_bytes == original
+    assert docs["0"].record == read_document(TOY).record
+    assert loaded == record
+
+
+def test_comparison_event_positions_retain_each_panel_even_with_reused_ids(tmp_path):
+    path, record = comparison(tmp_path, ("available", "available"))
+    loaded, docs, _ = read_comparison(path)
+    scene = comparison_scene(loaded, docs, width=720, font_size=8)
+    expected = {
+        (panel, rec["id"], e["id"])
+        for panel, doc in docs.items()
+        for rec in doc.record["reconciliations"]
+        for e in rec["events"]
+    }
+    assert set(scene.event_points) == expected
+
+
+def test_nested_comparison_retains_expanded_label_corridor_width(tmp_path):
+    doc = read_document(TOY).record
+    middle = doc["trees"][1]
+    bottom = copy.deepcopy(middle)
+    bottom["id"] = "bottom"
+    for n in bottom["nodes"]:
+        if not n["children"]:
+            n["label"] = "nested_" + n["label"]
+    doc["trees"].append(bottom)
+    doc["reconciliations"].append(
+        {
+            "id": "bottom_to_middle",
+            "lower_tree": "bottom",
+            "upper_tree": middle["id"],
+            "history_kind": "unspecified",
+            "selection": {},
+            "model": {},
+            "events": [
+                {
+                    "id": n["id"],
+                    "type": "speciation" if n["children"] else "leaf",
+                    "lower_node": n["id"],
+                    "upper_node": n["id"],
+                }
+                for n in bottom["nodes"]
+            ],
+        }
+    )
+    validated = validate_document(doc)
+    nested = build_scene(validated, width=720, font_size=8)
+    assert nested.width > 720
+    path, record = comparison(tmp_path, ("available",))
+    composed = comparison_scene(record, {"0": validated}, width=720, font_size=8)
+    assert composed.width >= nested.width

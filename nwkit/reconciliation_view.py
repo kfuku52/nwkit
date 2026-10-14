@@ -3,10 +3,15 @@
 from __future__ import annotations
 
 import hashlib
-import math
 from pathlib import Path
 
-from nwkit.reconciliation_document import _fields, _string, load_json, read_document
+from nwkit.reconciliation_document import (
+    _document_from_text,
+    _fields,
+    _number,
+    _string,
+    load_json,
+)
 
 
 def validate_view(view, document=None):
@@ -16,6 +21,7 @@ def validate_view(view, document=None):
         {"leaf_order", "collapsed_clades", "event_colors", "font", "output"},
         "view",
     )
+    _string(view["layout"], "view layout")
     if (
         view["schema_version"] != "0.1.0"
         or view["kind"] != "reconciliation_view"
@@ -28,6 +34,7 @@ def validate_view(view, document=None):
     if not isinstance(view.get("collapsed_clades", []), list):
         raise ValueError("Collapsed clades must be an array.")
     for tid, order in view.get("leaf_order", {}).items():
+        _string(tid, "leaf order tree")
         if (
             not isinstance(order, list)
             or any(not isinstance(x, str) or not x for x in order)
@@ -43,6 +50,8 @@ def validate_view(view, document=None):
                 )
     for item in view.get("collapsed_clades", []):
         _fields(item, {"tree", "node"}, set(), "collapsed clade")
+        _string(item["tree"], "collapsed tree")
+        _string(item["node"], "collapsed node")
         if document and (
             item["tree"] not in document.trees
             or item["node"] not in document.trees[item["tree"]].nodes
@@ -64,17 +73,15 @@ def validate_view(view, document=None):
         _fields(view["font"], {"family", "size"}, set(), "view font")
         _string(view["font"]["family"], "font family")
         size = view["font"]["size"]
-        if (
-            isinstance(size, bool)
-            or not isinstance(size, (int, float))
-            or not math.isfinite(size)
-            or not 0 < size <= 72
-        ):
+        _number(size, "view font size")
+        if size is None or not 0 < size <= 72:
             raise ValueError("Invalid view font size.")
     if "output" in view:
         _fields(
             view["output"], {"format"}, {"pdf_pages", "pdf_page_size"}, "view output"
         )
+        for key, value in view["output"].items():
+            _string(value, f"view output {key}")
         if (
             view["output"]["format"] not in {"pdf", "svg", "png", "html"}
             or view["output"].get("pdf_pages", "auto")
@@ -98,6 +105,7 @@ def read_comparison(path):
         set(),
         "comparison",
     )
+    _string(record["mode"], "comparison mode")
     if (
         record["schema_version"] != "0.1.0"
         or record["kind"] != "reconciliation_comparison"
@@ -142,6 +150,8 @@ def read_comparison(path):
         if panel["id"] in seen:
             raise ValueError("Duplicate comparison panel ID.")
         seen.add(panel["id"])
+        _string(panel["inference_status"], "inference status")
+        _string(panel["history_status"], "history status")
         if panel["inference_status"] not in {
             "success",
             "partial",
@@ -162,27 +172,30 @@ def read_comparison(path):
             runtime = panel[kind]
             _fields(runtime, {"seconds", "measured_at", "conditions"}, set(), "runtime")
             value = runtime["seconds"]
-            if value is not None and (
-                isinstance(value, bool)
-                or not isinstance(value, (int, float))
-                or not math.isfinite(value)
-                or value < 0
-            ):
-                raise ValueError("Runtime must be nonnegative or null.")
+            _number(value, "runtime seconds")
             if runtime["measured_at"] is not None:
                 _string(runtime["measured_at"], "runtime date")
             if not isinstance(runtime["conditions"], dict):
                 raise ValueError("Runtime conditions require an object.")
+        if panel["document_sha256"] is not None and (
+            not isinstance(panel["document_sha256"], str)
+            or not re.fullmatch("[a-f0-9]{64}", panel["document_sha256"])
+        ):
+            raise ValueError("Panel document hash must be SHA-256 or null.")
+        if (panel["document"] is None) != (panel["document_sha256"] is None):
+            raise ValueError("Panel document and hash must both be present or null.")
         available = panel["history_status"] in {"available", "partial"}
         if available and (not panel["document"] or not panel["document_sha256"]):
             raise ValueError("Available history requires a document and hash.")
         if panel["document"] is not None:
             _string(panel["document"], "panel document")
             source = (path.parent / panel["document"]).resolve()
-            digest = hashlib.sha256(source.read_bytes()).hexdigest()
+            raw = source.read_bytes()
+            digest = hashlib.sha256(raw).hexdigest()
             if digest != panel["document_sha256"]:
                 raise ValueError(f"Comparison document hash mismatch: {panel['id']}.")
-            document = read_document(source)
+            document = _document_from_text(raw.decode("utf-8-sig"))
+            document.source_bytes = raw
             for key, expected in record["shared_context"].items():
                 if (
                     expected is not None
@@ -239,6 +252,24 @@ def validate_comparison_view(view, documents):
             for doc in documents.values()
         ):
             raise ValueError("Comparison collapsed clade is absent from every source.")
+    for item in view.get("collapsed_clades", []):
+        signatures = set()
+        for doc in documents.values():
+            tree = doc.trees.get(item["tree"])
+            if tree and item["node"] in tree.nodes:
+                signatures.add(
+                    tuple(
+                        sorted(
+                            n["label"]
+                            for nid, n in tree.nodes.items()
+                            if not n["children"] and tree.ancestral(item["node"], nid)
+                        )
+                    )
+                )
+        if len(signatures) > 1:
+            raise ValueError(
+                "Collapsed tree/node ID names different clades across panels."
+            )
     for document in documents.values():
         validate_view(view_for_document(view, document), document)
     return view

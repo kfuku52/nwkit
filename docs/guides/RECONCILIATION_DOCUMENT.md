@@ -96,9 +96,9 @@ inference, new event classification or numerical-score calculation is run.
 
 The neutral scene contains paths, directed transfers, event symbols and labels
 with stable semantic IDs. All recorded events must be displayed. It currently
-supports standalone trees or one upper tree with one reconciliation level and
-multiple lower histories. Unmapped/incomplete placements, multi-level embedding
-and expectation maps fail explicitly instead of becoming fabricated histories.
+supports standalone trees, a shared upper tree with multiple lower histories,
+and the three-layer chains described below. Broader hierarchies use adjacent-level
+panels. Unmapped/incomplete placements and expectation maps fail explicitly.
 Upper and lower branch lengths are retained but not mixed as a time scale.
 
 Display-only subtree selection uses `--document-clade TREE_ID/NODE_ID`; IDs are
@@ -150,13 +150,15 @@ relative to the manifest and must match its SHA-256. Inference and history
 statuses/timing dates/conditions remain distinct; missing, failed, timeout and
 unsupported panels stay visible. An inferred standalone tree can be present
 while its history is missing. Event differences are reported only for matching
-history kind, selection and model conditions, and include recipient placement.
+history kind, selection and model conditions, and include recipient placement,
+recorded observed arity and the marginalized side when supplied.
 A fixed-gene-tree comparison also verifies actual G topology, lengths and units,
 in addition to the recorded shared context hashes.
 
 Display state holds layout, explicit leaf-ID order, collapsed clades, event
 colors, font and output profile. A comparison applies a stable clade selection
-where that clade exists; absent panels retain their context. Explicit CLI font
+where that clade exists; absent panels retain their context. If an opaque tree/node
+ID names different clades in different panels, a shared collapse is rejected. Explicit CLI font
 and PDF page settings override saved values. The output path determines export
 format. Scientific trees, events, parameters and original summaries remain
 unchanged; `--document-out` retains the full source rather than a pruned history.
@@ -200,3 +202,25 @@ Vector PDF export is native Matplotlib, with selectable text, A4/A3 pagination
 and continuation markers. Browser printing is a browser-controlled secondary
 export. Scientific fitting/restoration belongs to aioi or an external producer;
 nwkit performs no likelihood, root or parameter optimization during drawing.
+
+
+## Audit corrections (2026-10-15)
+
+Comparison primitives and event coordinates retain their panel and tree identity,
+so reused source IDs cannot mix recorded details or overwrite another panel's
+positions. The canvas also retains the expanded width required by nested layers.
+Every referenced file is read once: its hash, parsed science and downloadable ZIP
+use the same byte snapshot. Shared-context hashes remain producer-recorded input
+claims; the viewer verifies their equality and the document-byte hashes. It cannot
+rehash absent original inference inputs. Fixed-gene mode additionally checks the
+actual serialized observed trees.
+
+Identity and X1 transformations must reconstruct the complete target topology,
+including parts outside each local block. Malformed structural references and
+excessive JSON decoder nesting produce input errors. HTML keeps all geometry when
+loading a collapsed view, allowing expand/reset; its embedded PDF retains that
+initial collapsed view. Upper context collapse remains disabled in embedded mode.
+Tree-only panels with missing histories honor the same display state.
+
+See [the audit evidence](../validation/RECONCILIATION_AUDIT_20261015.md) for executed
+checks, scope and limitations. No inference is performed by these corrections.

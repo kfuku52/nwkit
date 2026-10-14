@@ -11,7 +11,7 @@ from nwkit.reconciliation_scene import Primitive, Scene, _standalone_scene, buil
 from nwkit.reconciliation_view import view_for_document
 
 
-def append_scene(target, source, label):
+def append_scene(target, source, label, panel=None):
     offset = target.height + 32
     target.primitives.append(
         Primitive(
@@ -26,8 +26,12 @@ def append_scene(target, source, label):
         p.points = [(x, y + offset) for x, y in p.points]
         target.primitives.append(p)
     target.event_points.update(
-        {key: (x, y + offset) for key, (x, y) in source.event_points.items()}
+        {
+            (panel, *key) if panel is not None else key: (x, y + offset)
+            for key, (x, y) in source.event_points.items()
+        }
     )
+    target.width = max(target.width, source.width)
     target.height += source.height + 60
     target.notices.extend(source.notices)
 
@@ -93,9 +97,8 @@ def compose_document(document, *, width, font_size, view=None):
                 ("target_tree", "target_nodes"),
             ):
                 tid = transform[side]
-                owners = {tid} | {r["id"] for r in recs if r["lower_tree"] == tid}
                 for p in scene.primitives:
-                    if p.owner and p.owner[0] in owners and p.owner[1] in block[field]:
+                    if p.owner and p.tree == tid and p.owner[1] in block[field]:
                         p.color = "#a03faa"
                         p.width = max(p.width, 2.4)
     if len({r["upper_tree"] for r in recs} & {r["lower_tree"] for r in recs}):
@@ -120,21 +123,16 @@ def apply_view(scene, document, view):
             for nid in tree.nodes
             if nid != item["node"] and tree.ancestral(item["node"], nid)
         }
-        owners = {tree.id} | {
-            r["id"]
-            for r in document.record["reconciliations"]
-            if r["lower_tree"] == tree.id
-        }
         removed = [
             p
             for p in scene.primitives
-            if p.owner and p.owner[0] in owners and p.owner[1] in descendants
+            if p.owner and p.tree == tree.id and p.owner[1] in descendants
         ]
         scene.primitives = [p for p in scene.primitives if p not in removed]
         anchors = [
             p.points[-1]
             for p in scene.primitives
-            if p.owner and p.owner[0] in owners and p.owner[1] == item["node"]
+            if p.owner and p.tree == tree.id and p.owner[1] == item["node"]
         ]
         if anchors:
             scene.primitives.append(
@@ -173,10 +171,18 @@ def _event_key(document, rec, event):
         leaves(rec["lower_tree"], event["recipient_lower_node"])
         if event.get("recipient_lower_node")
         else None,
+        event.get("annotations", {}).get("observed_arity")
+        if isinstance(event.get("annotations", {}).get("observed_arity"), int)
+        else None,
+        leaves(rec["upper_tree"], event["annotations"]["marginalized_species"])
+        if isinstance(event.get("annotations", {}).get("marginalized_species"), str)
+        and event["annotations"]["marginalized_species"]
+        in document.trees[rec["upper_tree"]].nodes
+        else None,
     )
 
 
-def comparison_scene(record, documents, *, width, font_size):
+def comparison_scene(record, documents, *, width, font_size, apply_display_view=True):
     scene = Scene(width, 0)
     reference = None
     for panel in record["panels"]:
@@ -186,7 +192,14 @@ def comparison_scene(record, documents, *, width, font_size):
             part = build_scene(
                 document, width=width, font_size=font_size, view=record["view"]
             )
-            apply_view(part, document, view_for_document(record["view"], document))
+            panel_view = view_for_document(record["view"], document)
+            apply_view(
+                part,
+                document,
+                panel_view
+                if apply_display_view
+                else dict(panel_view, collapsed_clades=[]),
+            )
             recs = document.record["reconciliations"]
             conditions = [(r["history_kind"], r["selection"], r["model"]) for r in recs]
             events = Counter(
@@ -207,7 +220,17 @@ def comparison_scene(record, documents, *, width, font_size):
                 document,
                 width=width,
                 font_size=font_size,
-                view={"layout": "standalone"},
+                view=dict(
+                    view_for_document(record["view"], document), layout="standalone"
+                ),
+            )
+            panel_view = view_for_document(record["view"], document)
+            apply_view(
+                part,
+                document,
+                panel_view
+                if apply_display_view
+                else dict(panel_view, collapsed_clades=[]),
             )
             part.notices.append(
                 f"{panel['label']}: inferred tree retained; history {panel['history_status']}, so no event placement is displayed."
@@ -225,7 +248,9 @@ def comparison_scene(record, documents, *, width, font_size):
                     )
                 ],
             )
-        append_scene(scene, part, label)
+        for primitive in part.primitives:
+            primitive.panel = panel["id"]
+        append_scene(scene, part, label, panel=panel["id"])
         scene.notices.append(runtime_label(panel))
     scene.notices.append(
         f"Comparison mode={record['mode']}; {len(record['panels'])} panels, {len(documents)} source documents. Missing/failed/timeout panels are retained."

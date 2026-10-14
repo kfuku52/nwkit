@@ -343,3 +343,94 @@ def test_x1_contract_validates_boundaries_resolution_and_overlap():
     bad["transformations"][0]["blocks"].append(second)
     with pytest.raises(ValueError, match="overlap"):
         validate_document(bad)
+
+
+@pytest.mark.parametrize("replacement", [[], {}])
+def test_malformed_structural_scalar_types_are_input_errors(replacement):
+    """Systematically corrupt required scalar references, not opaque metadata."""
+    record = read_document(ROOT / "examples/reconciliation/toy.json").record
+
+    def scalar_paths(value, path=()):
+        if isinstance(value, dict):
+            for key, item in value.items():
+                yield from scalar_paths(item, (*path, key))
+        elif isinstance(value, list):
+            for key, item in enumerate(value):
+                yield from scalar_paths(item, (*path, key))
+        else:
+            yield path
+
+    for path in scalar_paths(record):
+        if path[0] in {"provenance", "title"} or any(
+            field in path for field in ("annotations", "model", "selection")
+        ):
+            continue
+        bad = copy.deepcopy(record)
+        target = bad
+        for key in path[:-1]:
+            target = target[key]
+        target[path[-1]] = replacement
+        with pytest.raises(ValueError):
+            validate_document(bad)
+
+
+def test_transformations_reconstruct_whole_target_not_only_local_block():
+    from nwkit.reconciliation_import import empty_document, import_tree_document
+
+    def tree(text, name):
+        result = import_tree_document(text)["trees"][0]
+        result["id"] = name
+        return result
+
+    source = tree("(((A,B),C),(D,(E,F)));", "H")
+    target = tree("(((A,C),B),(D,(E,F)));", "G")
+    record = empty_document("Whole transform proof")
+    record["trees"] = [source, target]
+
+    def leaf_nodes(t):
+        return {n["label"]: n["id"] for n in t["nodes"] if not n["children"]}
+
+    def pair(t, labels):
+        from nwkit.reconciliation_document import _tree
+
+        parsed = _tree(t)
+        leaves = leaf_nodes(t)
+        child = next(
+            nid
+            for nid, n in parsed.nodes.items()
+            if set(n["children"]) == {leaves[x] for x in labels}
+        )
+        return [parsed.parents[child], child]
+
+    a, b = leaf_nodes(source), leaf_nodes(target)
+    record["transformations"] = [
+        {
+            "id": "X",
+            "source_tree": "H",
+            "target_tree": "G",
+            "model_id": "X1",
+            "blocks": [
+                {
+                    "id": "x",
+                    "source_nodes": pair(source, "AB"),
+                    "target_nodes": pair(target, "AC"),
+                    "resolution": 1,
+                    "boundaries": [
+                        {"source_node": a[x], "target_node": b[x]} for x in "ABC"
+                    ],
+                }
+            ],
+        }
+    ]
+    validate_document(record)
+    # Local ABC block still fits; an unrelated boundary leaf changed outside it.
+    bad = copy.deepcopy(record)
+    outside = tree("(((A,C),B),((D,E),F));", "G")
+    # IDs for ABC are content-stable; only topology outside that boundary changed.
+    bad["trees"][1] = outside
+    with pytest.raises(ValueError, match="whole target"):
+        validate_document(bad)
+    identity = copy.deepcopy(record)
+    identity["transformations"][0].update(model_id="identity", blocks=[])
+    with pytest.raises(ValueError, match="whole target"):
+        validate_document(identity)
