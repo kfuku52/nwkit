@@ -8,6 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from nwkit.reconciliation_document import ReconciliationDocument
+from nwkit.reconciliation_labels import model_label, source_label, summary_label
 
 
 @dataclass
@@ -60,7 +61,7 @@ def _signatures(tree):
     return result
 
 
-def _coordinates(tree, width, weights=None, spacing=12):
+def _coordinates(tree, width, weights=None, spacing=12, leaf_order=None):
     signatures = _signatures(tree)
     depth, leaves, stack = {}, [], [(tree.root, 1)]
     while stack:
@@ -70,6 +71,8 @@ def _coordinates(tree, width, weights=None, spacing=12):
         if not children:
             leaves.append(nid)
         stack.extend((c, d + 1) for c in reversed(children))
+    if leaf_order is not None:
+        leaves = list(leaf_order)
     y, current = {}, 0.0
     for nid in leaves:
         lines = max(1, len(textwrap.wrap(tree.nodes[nid]["label"], 24)))
@@ -176,7 +179,10 @@ def _event_geometry(rec, lower, upper, xy, unit, lanes):
         for index, event in enumerate(events):
             x, y = xy[branch]
             fraction = (index + 1) / (len(events) + 1)
-            if event["type"] in {"leaf", "speciation"}:
+            if event["type"] == "leaf" or (
+                event["type"] == "speciation"
+                and event.get("annotations", {}).get("observed_arity", 2) == 2
+            ):
                 fraction = 1
             y += lanes[rec["id"], branch, event["lower_node"]]
             positions[event["id"]] = (x - unit + unit * fraction, y)
@@ -255,10 +261,15 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
             )
 
 
-def _standalone_scene(document, width, spacing):
+def _standalone_scene(document, width, spacing, view=None):
     scene = Scene(width, 0)
     for tree in document.trees.values():
-        xy, unit, height = _coordinates(tree, width, spacing=spacing)
+        xy, unit, height = _coordinates(
+            tree,
+            width,
+            spacing=spacing,
+            leaf_order=(view or {}).get("leaf_order", {}).get(tree.id),
+        )
         shifted = {nid: (x, y + scene.height) for nid, (x, y) in xy.items()}
         for nid, points in _upper_paths(tree, shifted, unit).items():
             scene.primitives.append(
@@ -295,7 +306,9 @@ def _display_selection(scene, document):
     scene.primitives = [
         p
         for p in scene.primitives
-        if p.owner is None or (p.owner[0] in owners and p.owner[1] in selected)
+        if p.owner is None
+        or (p.owner[0] in owners and p.owner[1] in selected)
+        or (document.record["transformations"] and p.owner[0] not in owners)
     ]
     event_keys = {
         (r["id"], e["id"])
@@ -313,30 +326,27 @@ def _display_selection(scene, document):
     return scene
 
 
-def build_scene(document: ReconciliationDocument, *, width=720.0, font_size=8) -> Scene:
+def build_scene(
+    document: ReconciliationDocument, *, width=720.0, font_size=8, view=None
+) -> Scene:
     if not math.isfinite(width) or width < 360:
         raise ValueError("Document width must be at least 5 inches.")
     if not math.isfinite(font_size) or not 0 < font_size <= 72:
         raise ValueError("Font size must be positive and at most 72 points.")
     spacing = max(12, font_size * 1.5)
-    if document.record["transformations"]:
-        raise ValueError(
-            "Topology transformations are preserved by N1 but their rendering is pending; no X1 view is fabricated."
-        )
     recs = document.record["reconciliations"]
-    if not recs:
-        scene = _standalone_scene(document, width, spacing)
-        scene.notices.append(f"Source: {document.record['provenance']}")
-        return _display_selection(scene, document)
     upper_ids = {r["upper_tree"] for r in recs}
     lower_ids = {r["lower_tree"] for r in recs}
-    if len(upper_ids) != 1 or upper_ids & lower_ids:
-        raise ValueError(
-            "N2 supports one upper tree and one reconciliation level; multi-level views are pending."
-        )
-    if set(document.trees) != upper_ids | lower_ids:
-        raise ValueError(
-            "Document has trees without a displayed reconciliation; refusing to omit them."
+    if (view or {}).get("layout") == "standalone" or not recs:
+        scene = _standalone_scene(document, width, spacing, view)
+        scene.notices.append(source_label(document.record))
+        return _display_selection(scene, document)
+    if _needs_composition(document, upper_ids, lower_ids, view):
+        from nwkit.reconciliation_composition import compose_document
+
+        return _display_selection(
+            compose_document(document, width=width, font_size=font_size, view=view),
+            document,
         )
     if any(r["history_kind"] == "expectation" for r in recs):
         raise ValueError(
@@ -351,7 +361,11 @@ def build_scene(document: ReconciliationDocument, *, width=720.0, font_size=8) -
                 label = lower.nodes[event["lower_node"]]["label"]
                 occupancy[event["upper_node"]] += max(1, len(textwrap.wrap(label, 24)))
     xy, unit, height = _coordinates(
-        upper, width, {nid: max(1, count) for nid, count in occupancy.items()}, spacing
+        upper,
+        width,
+        {nid: max(1, count) for nid, count in occupancy.items()},
+        spacing,
+        leaf_order=(view or {}).get("leaf_order", {}).get(upper.id),
     )
     scene = Scene(width, height)
     by_branch = defaultdict(set)
@@ -394,13 +408,16 @@ def build_scene(document: ReconciliationDocument, *, width=720.0, font_size=8) -
         _lower_primitives(
             scene, rec, document.trees[rec["lower_tree"]], upper, xy, unit, index, lanes
         )
-        scene.notices.append(
-            f"{rec['id']}: {rec['history_kind']}; selection={rec['selection'].get('method', 'unreported')}; model={rec['model']}"
-        )
-        if rec.get("summary"):
+        scene.notices.append(model_label(rec))
+        if (
+            rec["selection"].get("measurement")
+            == "partially_marginalized_ordered_derivation_v1"
+        ):
             scene.notices.append(
-                f"{rec['id']} summary (not placed events): {rec['summary']}"
+                "Nonobserved side histories are integrated in E; this representative is not full R MAP or marginal H MAP, and its events are not posterior support."
             )
+        if rec.get("summary"):
+            scene.notices.append(summary_label(rec))
     ys = [y for p in scene.primitives for _, y in p.points]
     low = min(ys) if ys else 0
     for primitive in scene.primitives:
@@ -409,7 +426,7 @@ def build_scene(document: ReconciliationDocument, *, width=720.0, font_size=8) -
         key: (x, y - low + 15) for key, (x, y) in scene.event_points.items()
     }
     scene.height = (max(ys) - low + 35) if ys else height
-    scene.notices.append(f"Source: {document.record['provenance']}")
+    scene.notices.append(source_label(document.record))
     scene.notices.append(
         "Retained branch units (not used as layout time): "
         + ", ".join(
@@ -417,3 +434,13 @@ def build_scene(document: ReconciliationDocument, *, width=720.0, font_size=8) -
         )
     )
     return _display_selection(scene, document)
+
+
+def _needs_composition(document, upper_ids, lower_ids, view):
+    return bool(
+        document.record["transformations"]
+        or len(upper_ids) != 1
+        or upper_ids & lower_ids
+        or set(document.trees) != upper_ids | lower_ids
+        or (view or {}).get("layout") == "paired"
+    )

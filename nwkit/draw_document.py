@@ -2,19 +2,30 @@
 
 from __future__ import annotations
 
+import base64
+import json
 import sys
+from pathlib import Path
+from typing import Any
 
 from nwkit.file_paths import validate_outputs_do_not_replace_inputs
 from nwkit.output_transaction import output_transaction
+from nwkit.reconciliation_composition import apply_view, comparison_scene
 from nwkit.reconciliation_document import (
     read_document,
     select_document_clade,
     validate_document,
 )
 from nwkit.reconciliation_export import document_text
+from nwkit.reconciliation_html import write_html
 from nwkit.reconciliation_import import import_saved_tsv
 from nwkit.reconciliation_render import write_scene
 from nwkit.reconciliation_scene import build_scene
+from nwkit.reconciliation_view import (
+    read_comparison,
+    read_view,
+    validate_comparison_view,
+)
 from nwkit.result_plot import figure_format
 
 
@@ -24,6 +35,9 @@ def _validate_options(args):
     defaults = vars(parser.parse_args(["draw"]))
     allowed = {
         "document",
+        "comparison",
+        "view_config",
+        "view_out",
         "document_out",
         "document_clade",
         "view",
@@ -39,7 +53,7 @@ def _validate_options(args):
         "debug",
         "audit",
     }
-    if not args.document:
+    if not args.document and not args.comparison:
         allowed.update(
             {
                 "reconciliation",
@@ -64,9 +78,13 @@ def _validate_options(args):
             )
     if args.document == "-" or args.document_out == "-":
         raise ValueError("--document and --document-out require filesystem paths.")
-    if args.document and args.infile != "-":
+    if (args.document or args.comparison) and args.infile != "-":
         raise ValueError("--document cannot be combined with --infile.")
-    if not args.document and (not args.reconciliation or not args.species_tree):
+    if (
+        not args.document
+        and not args.comparison
+        and (not args.reconciliation or not args.species_tree)
+    ):
         raise ValueError(
             "Embedded saved TSV drawing requires --reconciliation and --species-tree."
         )
@@ -83,38 +101,146 @@ def draw_document_main(args):
             ("reconciliation", args.reconciliation),
         ]
     )
-    outputs = [("outfile", args.outfile), ("document-out", args.document_out)]
+    if args.comparison:
+        record, documents, panel_paths = read_comparison(args.comparison)
+        inputs = [("comparison", args.comparison)] + [
+            ("panel", path) for path in panel_paths
+        ]
+    else:
+        record = documents = None
+    if args.view_config:
+        inputs.append(("view-config", args.view_config))
+    outputs = [
+        ("outfile", args.outfile),
+        ("document-out", args.document_out),
+        ("view-out", args.view_out),
+    ]
     validate_outputs_do_not_replace_inputs(inputs, outputs)
     document = (
-        read_document(args.document)
-        if args.document
-        else validate_document(import_saved_tsv(args))
+        None
+        if args.comparison
+        else (
+            read_document(args.document)
+            if args.document
+            else validate_document(import_saved_tsv(args))
+        )
     )
     if args.document_clade:
+        if document is None:
+            raise ValueError("Comparison clade selection belongs in --view-config.")
         document = select_document_clade(document, args.document_clade)
-    fmt = figure_format(args.outfile, args.image_format)
+    view: dict[str, Any] = (
+        read_view(args.view_config, document)
+        if args.view_config
+        else (
+            record["view"]
+            if record
+            else {
+                "schema_version": "0.1.0",
+                "kind": "reconciliation_view",
+                "layout": "topology_embedded",
+            }
+        )
+    )
+    if args.view:
+        view = dict(
+            view, layout={"embedded": "topology_embedded"}.get(args.view, args.view)
+        )
+    if documents:
+        validate_comparison_view(view, documents)
+    if record:
+        record = dict(record, view=view)
+    fmt = (
+        "html"
+        if Path(args.outfile).suffix.lower() == ".html" and args.image_format == "auto"
+        else figure_format(args.outfile, args.image_format)
+    )
     width = 72 * (args.figure_width if args.figure_width is not None else 10)
-    scene = build_scene(document, width=width, font_size=args.font_size)
+    font_size = view.get("font", {}).get("size", args.font_size)
+    font_family = view.get("font", {}).get(
+        "family",
+        "DejaVu Sans"
+        if args.font_family == "Helvetica"
+        and not getattr(args, "_nwkit_draw_font_explicit", False)
+        else args.font_family,
+    )
+    explicit: set[str] = getattr(args, "_nwkit_draw_explicit_options", set())
+    if "--font-size" in explicit:
+        font_size = args.font_size
+    if "--font-family" in explicit:
+        font_family = args.font_family
+    pdf_pages = (
+        args.pdf_pages
+        if "--pdf-pages" in explicit
+        else view.get("output", {}).get("pdf_pages", args.pdf_pages)
+    )
+    pdf_page_size = (
+        args.pdf_page_size
+        if "--pdf-page-size" in explicit
+        else view.get("output", {}).get("pdf_page_size", args.pdf_page_size)
+    )
+    if record:
+        scene = comparison_scene(record, documents, width=width, font_size=font_size)
+        title = "Reconciliation comparison"
+        source = dict(
+            record,
+            documents=[d.record for d in documents.values()],
+            document_bytes=[
+                base64.b64encode(Path(path).read_bytes()).decode()
+                for path in panel_paths
+            ],
+        )
+    else:
+        assert document is not None
+        scene = apply_view(
+            build_scene(document, width=width, font_size=font_size, view=view),
+            document,
+            view,
+        )
+        title = document.record.get("title", "")
+        source = document.record
+    if args.document_out and not document:
+        raise ValueError(
+            "Comparison sources stay separate; --document-out requires a single document."
+        )
     normalized = (
         document_text(document, args.document_out) if args.document_out else None
     )
-    paths = [args.outfile] + ([args.document_out] if args.document_out else [])
+    paths = (
+        [args.outfile]
+        + ([args.document_out] if args.document_out else [])
+        + ([args.view_out] if args.view_out else [])
+    )
+    view = dict(
+        view,
+        font={"family": font_family, "size": font_size},
+        output={
+            "format": fmt,
+            "pdf_pages": pdf_pages,
+            "pdf_page_size": pdf_page_size,
+        },
+    )
     with output_transaction(paths, create_parents=True) as staged:
-        write_scene(
-            scene,
-            staged[args.outfile],
-            title=document.record.get("title", ""),
-            image_format=fmt,
-            font_size=args.font_size,
-            font_family="DejaVu Sans"
-            if args.font_family == "Helvetica"
-            and not getattr(args, "_nwkit_draw_font_explicit", False)
-            else args.font_family,
+        options = dict(
+            title=title,
+            font_size=font_size,
+            font_family=font_family,
             transparent=args.transparent,
-            pdf_pages=args.pdf_pages,
-            pdf_page_size=args.pdf_page_size,
+            pdf_pages=pdf_pages,
+            pdf_page_size=pdf_page_size,
             legend=args.legend,
         )
+        if fmt == "html":
+            write_html(scene, staged[args.outfile], source=source, view=view, **options)
+        else:
+            write_scene(scene, staged[args.outfile], image_format=fmt, **options)
+        if args.view_out:
+            staged.write_text(
+                args.view_out,
+                lambda stream: stream.write(
+                    json.dumps(view, indent=2, allow_nan=False) + "\n"
+                ),
+            )
         if args.document_out:
             staged.write_text(
                 args.document_out, lambda stream: stream.write(normalized)

@@ -28,6 +28,7 @@ from nwkit.util import (
 OUTPUT_ARGUMENTS = frozenset(
     (
         "document_out",
+        "view_out",
         "branch_models_out",
         "bootstrap_intervals_out",
         "bootstrap_out",
@@ -98,6 +99,8 @@ OUTPUT_ARGUMENTS = frozenset(
 INPUT_PATH_ARGUMENTS = frozenset(
     (
         "document",
+        "comparison",
+        "view_config",
         "angiocal_file",
         "calibration_map_tsv",
         "branch_fit",
@@ -355,8 +358,15 @@ def _path_candidates_from_value(value):
 
 
 def _skip_declared_input_argument(args, argument):
+    if argument == "comparison" and getattr(args, "command", None) != "draw":
+        return True
     if argument == "infile" and (
-        getattr(args, "radte_prefix", None) or getattr(args, "document", None)
+        getattr(args, "radte_prefix", None)
+        or getattr(args, "document", None)
+        or (
+            getattr(args, "command", None) == "draw"
+            and getattr(args, "comparison", None)
+        )
     ):
         return True
     return (
@@ -388,6 +398,14 @@ def _declared_input_path_candidates(args):
 
 def _input_path_candidates(args):
     candidates = _declared_input_path_candidates(args)
+    if getattr(args, "command", None) == "draw" and getattr(args, "comparison", None):
+        from nwkit.reconciliation_view import read_comparison
+
+        _, _, panel_paths = read_comparison(args.comparison)
+        candidates.extend(
+            (f"comparison_panel_{i}", path) for i, path in enumerate(panel_paths)
+        )
+
     if (
         getattr(args, "command", None) == "mcmctree"
         and getattr(args, "angiocal", "no") == "v1.0"

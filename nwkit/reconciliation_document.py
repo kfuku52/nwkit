@@ -478,12 +478,8 @@ def _validate_display_selection(record, trees, recs):
         or selection["inference_recomputed"] is not False
     ):
         raise ValueError("Invalid display_selection reference or recomputation flag.")
-    if record["transformations"] or any(
-        r["upper_tree"] == selection["tree"] for r in recs.values()
-    ):
-        raise ValueError(
-            "display_selection must identify a standalone or lower clade without transformations."
-        )
+    if any(r["upper_tree"] == selection["tree"] for r in recs.values()):
+        raise ValueError("display_selection must identify a standalone or lower clade.")
 
 
 def document_json(document: ReconciliationDocument) -> str:
@@ -500,10 +496,6 @@ def document_json(document: ReconciliationDocument) -> str:
 
 
 def select_document_clade(document, selection):
-    if document.record["transformations"]:
-        raise ValueError(
-            "Clade selection with topology transformations is not implemented."
-        )
     try:
         tid, nid = selection.split("/", 1)
         document.trees[tid].nodes[nid]
@@ -531,18 +523,37 @@ def read_document(path) -> ReconciliationDocument:
 
     text = Path(path).read_text(encoding="utf-8-sig")
     if text.lstrip().startswith("{"):
-
-        def pairs(items):
-            result = {}
-            for key, value in items:
-                if key in result:
-                    raise ValueError(f"Duplicate JSON key: {key}.")
-                result[key] = value
-            return result
-
-        record = json.loads(text, object_pairs_hook=pairs)
+        record = load_json(text)
     elif text.lstrip().startswith("<"):
         record = import_xml_document(text)
     else:
         record = import_tree_document(text)
     return validate_document(record)
+
+
+def load_json(text):
+    """Strict JSON transport shared by scientific documents and display state."""
+
+    def pairs(items):
+        result = {}
+        for key, value in items:
+            if key in result:
+                raise ValueError(f"Duplicate JSON key: {key}.")
+            result[key] = value
+        return result
+
+    def nonfinite(value):
+        raise ValueError(f"Nonfinite JSON value: {value}.")
+
+    def finite_float(value):
+        number = float(value)
+        if not math.isfinite(number):
+            raise ValueError("Nonfinite JSON number.")
+        return number
+
+    return json.loads(
+        text,
+        object_pairs_hook=pairs,
+        parse_constant=nonfinite,
+        parse_float=finite_float,
+    )

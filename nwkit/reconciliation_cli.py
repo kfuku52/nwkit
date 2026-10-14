@@ -13,6 +13,25 @@ def register_document_options(draw):
         metavar="PATH",
         help="Versioned reconciliation JSON, recPhyloXML, phyloXML or Newick document; no inference is run.",
     )
+    group.add_argument(
+        "--comparison",
+        metavar="PATH",
+        help="Verified arbitrary-panel reconciliation comparison manifest.",
+    )
+    draw.add_argument(
+        "--view-config",
+        "--view_config",
+        default=None,
+        metavar="PATH",
+        help="Saved reconciliation_view JSON; display only.",
+    )
+    draw.add_argument(
+        "--view-out",
+        "--view_out",
+        default=None,
+        metavar="PATH",
+        help="Save the effective display configuration separately from scientific data.",
+    )
     draw.add_argument(
         "--document-out",
         "--document_out",
@@ -30,7 +49,7 @@ def register_document_options(draw):
     draw.add_argument(
         "--view",
         default=None,
-        choices=["embedded"],
+        choices=["embedded", "standalone", "paired"],
         help="Embed recorded lower-tree histories in the upper tree. Requires --document or --reconciliation.",
     )
     draw.add_argument(

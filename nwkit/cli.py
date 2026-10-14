@@ -2304,7 +2304,11 @@ pdist.set_defaults(handler=command_dist)
 
 
 def command_draw(args):
-    if getattr(args, "document", None) or getattr(args, "view", None):
+    if (
+        getattr(args, "document", None)
+        or getattr(args, "comparison", None)
+        or getattr(args, "view", None)
+    ):
         from nwkit.draw_document import draw_document_main
 
         return draw_document_main(args)
@@ -2312,6 +2316,8 @@ def command_draw(args):
         getattr(args, key, default) != default
         for key, default in (
             ("document_out", None),
+            ("view_config", None),
+            ("view_out", None),
             ("document_clade", None),
             ("pdf_pages", "auto"),
             ("pdf_page_size", "A4"),
@@ -6690,6 +6696,11 @@ def main(argv=None):
 
             def invoke_handler(parsed_args):
                 if parsed_args.command == "draw":
+                    parsed_args._nwkit_draw_explicit_options = {
+                        option.split("=", 1)[0].replace("_", "-")
+                        for option in raw_argv
+                        if option.startswith("--")
+                    }
                     parsed_args._nwkit_draw_font_explicit = any(
                         option.split("=", 1)[0] in {"--font-family", "--font_family"}
                         for option in raw_argv

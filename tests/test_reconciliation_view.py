@@ -1,0 +1,360 @@
+"""Generic comparison, display state, multi-layer layout and offline export."""
+
+import base64
+import copy
+import hashlib
+import io
+import json
+from pathlib import Path
+from xml.etree import ElementTree as ET
+
+import pytest
+from pypdf import PdfReader
+
+from nwkit.cli import main
+from nwkit.reconciliation_composition import apply_view, comparison_scene
+from nwkit.reconciliation_document import read_document, validate_document
+from nwkit.reconciliation_html import _svg
+from nwkit.reconciliation_scene import build_scene
+from nwkit.reconciliation_view import read_comparison, validate_view
+
+TOY = Path(__file__).parents[1] / "examples/reconciliation/toy.json"
+
+
+def comparison(
+    tmp_path, statuses=("available", "missing", "failed", "timeout", "unsupported")
+):
+    source = tmp_path / "source.json"
+    source.write_bytes(TOY.read_bytes())
+    runtime = {"seconds": None, "measured_at": None, "conditions": {}}
+    panels = [
+        {
+            "id": str(i),
+            "label": f"method {i}",
+            "document": "source.json" if state == "available" else None,
+            "document_sha256": hashlib.sha256(source.read_bytes()).hexdigest()
+            if state == "available"
+            else None,
+            "inference_status": "success",
+            "history_status": state,
+            "inference_runtime": runtime,
+            "history_runtime": runtime,
+        }
+        for i, state in enumerate(statuses)
+    ]
+    record = {
+        "schema_version": "0.1.0",
+        "kind": "reconciliation_comparison",
+        "mode": "general",
+        "panels": panels,
+        "shared_context": {
+            "upper_tree_sha256": None,
+            "gene_tree_sha256": None,
+            "mapping_sha256": None,
+        },
+        "view": {
+            "schema_version": "0.1.0",
+            "kind": "reconciliation_view",
+            "layout": "topology_embedded",
+        },
+    }
+    path = tmp_path / "comparison.json"
+    path.write_text(json.dumps(record))
+    return path, record
+
+
+def test_comparison_retains_missing_and_separate_timing(tmp_path):
+    path, record = comparison(tmp_path)
+    loaded, docs, inputs = read_comparison(path)
+    assert len(loaded["panels"]) == 5 and len(inputs) == 1
+    scene = comparison_scene(loaded, docs, width=720, font_size=8)
+    assert sum(p.id.startswith("status:") for p in scene.primitives) == 4
+    assert (
+        sum(
+            "inference runtime=" in n and "history runtime=" in n for n in scene.notices
+        )
+        == 5
+    )
+    main(
+        [
+            "draw",
+            "--comparison",
+            str(path),
+            "--outfile",
+            str(tmp_path / "comparison.pdf"),
+        ]
+    )
+    assert PdfReader(tmp_path / "comparison.pdf").pages
+    import zipfile
+
+    outfile = tmp_path / "comparison.html"
+    main(["draw", "--comparison", str(path), "--outfile", str(outfile)])
+    encoded = (
+        outfile.read_text().split('id="sourcebundle">', 1)[1].split("</script>", 1)[0]
+    )
+    with zipfile.ZipFile(io.BytesIO(base64.b64decode(encoded))) as archive:
+        manifest = json.loads(archive.read("comparison.json"))
+        for panel in manifest["panels"]:
+            if panel["document"] is not None:
+                assert (
+                    hashlib.sha256(archive.read(panel["document"])).hexdigest()
+                    == panel["document_sha256"]
+                )
+
+    source = tmp_path / "source.json"
+    source.write_text(source.read_text() + " ")
+    with pytest.raises(ValueError, match="hash mismatch"):
+        read_comparison(path)
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    ["duplicate", "missing_hash", "fixed_context", "runtime", "unknown_view"],
+)
+def test_comparison_rejects_invalid_semantics(tmp_path, mutation):
+    path, record = comparison(tmp_path)
+    if mutation == "duplicate":
+        record["panels"][1]["id"] = "0"
+    elif mutation == "missing_hash":
+        record["panels"][0]["document_sha256"] = None
+    elif mutation == "fixed_context":
+        record["mode"] = "fixed_gene_tree"
+    elif mutation == "runtime":
+        record["panels"][0]["inference_runtime"]["seconds"] = -1
+    else:
+        record["view"]["inference"] = True
+    path.write_text(json.dumps(record))
+    with pytest.raises(ValueError):
+        read_comparison(path)
+
+
+def test_no_model_aware_diff_across_different_conditions(tmp_path):
+    path, record = comparison(tmp_path, ("available", "available"))
+    doc = read_document(TOY).record
+    doc["reconciliations"][0]["model"]["conditions"]["eta"] = 0.3
+    other = tmp_path / "other.json"
+    other.write_text(json.dumps(doc))
+    record["panels"][1].update(
+        document="other.json",
+        document_sha256=hashlib.sha256(other.read_bytes()).hexdigest(),
+    )
+    path.write_text(json.dumps(record))
+    loaded, docs, _ = read_comparison(path)
+    scene = comparison_scene(loaded, docs, width=720, font_size=8)
+    assert any("conditions/history selection differ" in n for n in scene.notices)
+
+
+def test_display_state_does_not_rewrite_science(tmp_path):
+    doc = read_document(TOY)
+    before = copy.deepcopy(doc.record)
+    tree = doc.trees["lower:0"]
+    leaves = [nid for nid, n in tree.nodes.items() if not n["children"]]
+    view = {
+        "schema_version": "0.1.0",
+        "kind": "reconciliation_view",
+        "layout": "paired",
+        "leaf_order": {tree.id: list(reversed(leaves))},
+        "collapsed_clades": [{"tree": tree.id, "node": tree.root}],
+        "event_colors": {"duplication": "#123456"},
+    }
+    validate_view(view, doc)
+    full = build_scene(doc, view=view)
+    partial = apply_view(copy.deepcopy(full), doc, view)
+    assert len(partial.primitives) < len(full.primitives)
+    assert doc.record == before
+    bad = copy.deepcopy(view)
+    bad["leaf_order"][tree.id] = leaves[:-1]
+    with pytest.raises(ValueError, match="every leaf"):
+        validate_view(bad, doc)
+
+
+def test_three_levels_preserve_middle_ids():
+    doc = read_document(TOY).record
+    middle = copy.deepcopy(doc["trees"][0])
+    middle["id"] = "middle"
+    doc["trees"].append(middle)
+    doc["reconciliations"][0]["upper_tree"] = "middle"
+    doc["reconciliations"].append(
+        {
+            "id": "middle_to_upper",
+            "lower_tree": "middle",
+            "upper_tree": "upper",
+            "history_kind": "unspecified",
+            "model": {},
+            "selection": {},
+            "events": [
+                {
+                    "id": n["id"],
+                    "type": "speciation" if n["children"] else "leaf",
+                    "lower_node": n["id"],
+                    "upper_node": n["id"],
+                }
+                for n in middle["nodes"]
+            ],
+        }
+    )
+    validated = validate_document(doc)
+    scene = build_scene(validated)
+    assert any("Three-layer nested topology" in n for n in scene.notices)
+    assert len(scene.event_points) == sum(
+        len(r["events"]) for r in doc["reconciliations"]
+    )
+    assert validated.record == doc
+
+
+def test_offline_html_and_vector_pdf_are_self_contained(tmp_path):
+    doc = read_document(TOY).record
+    doc["title"] = '</script><img src="https://invalid.test" onerror="alert(1)">'
+    source = tmp_path / "source.json"
+    source.write_text(json.dumps(doc))
+    outfile, view = tmp_path / "offline.html", tmp_path / "view.json"
+    main(
+        [
+            "draw",
+            "--document",
+            str(source),
+            "--outfile",
+            str(outfile),
+            "--view-out",
+            str(view),
+        ]
+    )
+    text = outfile.read_text()
+    assert "<script src=" not in text and "<img src=" not in text
+    assert "fetch(" not in text and "XMLHttpRequest" not in text
+    encoded = text.split('id="pdfbytes">', 1)[1].split("</script>", 1)[0]
+    reader = PdfReader(io.BytesIO(base64.b64decode(encoded)))
+    assert reader.pages and not reader.pages[0].images
+    assert "Download vector PDF" in text and "Save view JSON" in text
+    validate_view(json.loads(view.read_text()), read_document(source))
+    ET.fromstring(_svg(build_scene(read_document(source)), 8))
+
+
+def test_comparison_output_cannot_alias_referenced_document(tmp_path):
+    path, _ = comparison(tmp_path)
+    old = (tmp_path / "source.json").read_bytes()
+    with pytest.raises(ValueError):
+        main(
+            [
+                "draw",
+                "--comparison",
+                str(path),
+                "--outfile",
+                str(tmp_path / "source.json"),
+            ]
+        )
+    assert (tmp_path / "source.json").read_bytes() == old
+
+
+def test_three_layers_follow_recorded_middle_transfer_curves(tmp_path):
+    import math
+
+    doc = read_document(TOY).record
+    middle = doc["trees"][1]
+    bottom = copy.deepcopy(middle)
+    bottom["id"] = "bottom"
+    for n in bottom["nodes"]:
+        if not n["children"]:
+            n["label"] = "nested_" + n["label"]
+    doc["trees"].append(bottom)
+    doc["reconciliations"].append(
+        {
+            "id": "bottom_to_middle",
+            "lower_tree": "bottom",
+            "upper_tree": middle["id"],
+            "history_kind": "unspecified",
+            "selection": {},
+            "model": {"source": "synthetic geometry only"},
+            "events": [
+                {
+                    "id": n["id"],
+                    "type": "speciation" if n["children"] else "leaf",
+                    "lower_node": n["id"],
+                    "upper_node": n["id"],
+                }
+                for n in bottom["nodes"]
+            ],
+        }
+    )
+    validated = validate_document(doc)
+    scene = build_scene(validated)
+    assert any(
+        p.kind == "upper" and len(p.points) >= 33 and p.owner for p in scene.primitives
+    )
+    assert all(
+        math.isfinite(v) for p in scene.primitives for xy in p.points for v in xy
+    )
+    assert len(scene.event_points) == sum(
+        len(r["events"]) for r in doc["reconciliations"]
+    )
+    assert min(y for p in scene.primitives for _, y in p.points) >= 0
+    source = tmp_path / "three.json"
+    source.write_text(json.dumps(doc))
+    main(["draw", "--document", str(source), "--outfile", str(tmp_path / "three.pdf")])
+    assert PdfReader(tmp_path / "three.pdf").pages
+
+
+def test_comparison_view_targets_only_existing_panel_clades(tmp_path):
+    from nwkit.reconciliation_view import validate_comparison_view
+
+    path, record = comparison(tmp_path)
+    doc = read_document(TOY)
+    rec = copy.deepcopy(doc.record)
+    rec["trees"] = [t for t in rec["trees"] if t["id"] == "upper"]
+    rec["reconciliations"] = []
+    other = validate_document(rec)
+    view = dict(
+        record["view"],
+        layout="paired",
+        collapsed_clades=[{"tree": "lower:0", "node": doc.trees["lower:0"].root}],
+    )
+    validate_comparison_view(view, {"a": doc, "b": other})
+    scene = comparison_scene(
+        dict(record, view=view), {"0": doc}, width=720, font_size=8
+    )
+    assert any("Display-only collapse" in n for n in scene.notices)
+
+
+@pytest.mark.parametrize(
+    "field,value", [("leaf_order", []), ("event_colors", []), ("collapsed_clades", {})]
+)
+def test_display_state_rejects_bad_container_types(field, value):
+    view = {
+        "schema_version": "0.1.0",
+        "kind": "reconciliation_view",
+        "layout": "paired",
+        field: value,
+    }
+    with pytest.raises(ValueError):
+        validate_view(view)
+
+
+def test_clade_selection_preserves_transformation_context():
+    from nwkit.reconciliation_document import select_document_clade
+
+    record = read_document(TOY).record
+    counterpart = copy.deepcopy(record["trees"][1])
+    counterpart["id"] = "G"
+    record["trees"].append(counterpart)
+    record["transformations"] = [
+        {
+            "id": "identity",
+            "model_id": "identity",
+            "source_tree": "lower:0",
+            "target_tree": "G",
+            "blocks": [],
+        }
+    ]
+    document = validate_document(record)
+    node = next(n["id"] for n in record["trees"][1]["nodes"] if n["label"] == "dup")
+    selected = select_document_clade(document, f"lower:0/{node}")
+    scene = build_scene(selected)
+    assert selected.record["trees"] == document.record["trees"]
+    assert selected.record["transformations"] == document.record["transformations"]
+    assert any(p.owner and p.owner[0] == "G" for p in scene.primitives)
+    assert all(
+        not p.owner
+        or p.owner[0] != "history:0"
+        or selected.trees["lower:0"].ancestral(node, p.owner[1])
+        for p in scene.primitives
+    )

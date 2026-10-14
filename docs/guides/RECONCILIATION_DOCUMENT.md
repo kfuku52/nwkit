@@ -39,12 +39,11 @@ records adjacent consumed source/target node pairs and three ordered boundary
 clade mappings A,B,C for `((A,B),C)`. Resolution 1 is `((A,C),B)` and resolution 2
 is `((B,C),A)`. Latent consumed blocks must not overlap; boundary leaf identities
 and the target local split are validated. X1 has no fabricated species-branch
-placement. N2 does **not** render transformation documents yet and refuses to
-omit them. Arbitrary other transformation models are preserved as extension
+placement. N3 renders source/target trees and highlights the recorded consumed clades. Arbitrary other transformation models are preserved as extension
 blocks but do not acquire X1 semantics.
 
-View and comparison schemas are reserved contracts for N3/N4. Their files are
-not yet accepted as executable draw configurations. Comparison documents have
+View and comparison schemas are executable N3/N4 contracts. Use `--view-config`,
+`--view-out` and `--comparison` with `nwkit draw`. Comparison documents have
 an arbitrary number of panels, separate inference/history statuses, source
 hashes and distinct inference/traceback timings; they do not fix five methods.
 
@@ -129,8 +128,75 @@ does not consume the default implicit stdin; actual inputs appear in `--audit`.
 
 ## Remaining stages
 
-N3 arbitrary comparison layouts and model-aware diffs, N4 interactive/offline
-HTML and browser PDF export, and three-level drawing are not implemented.
+N3 arbitrary comparison manifests, compatible-model event differences, H/G/X1
+views, N4 offline HTML and PDF downloads, and recorded three-layer nesting are
+implemented. Larger branching hierarchies use adjacent-level overview panels.
 Global crossing minimization and dense-event layout quality are not certified.
 1000-tip geometry is a separate check from readable 1000-tip vector output or
 interactive performance. See [the stage readout](../validation/RECONCILIATION_N1_N2.md) for actual checks and limits.
+
+
+## Executable comparison and display state (N3)
+
+```sh
+nwkit draw --comparison comparison.json --outfile comparison.pdf
+nwkit draw --document history.json --view paired --outfile paired.svg
+nwkit draw --document history.json --view-config saved.view.json \
+  --view-out effective.view.json --outfile revised.pdf
+```
+
+A comparison contains any number of panels. Each document reference resolves
+relative to the manifest and must match its SHA-256. Inference and history
+statuses/timing dates/conditions remain distinct; missing, failed, timeout and
+unsupported panels stay visible. An inferred standalone tree can be present
+while its history is missing. Event differences are reported only for matching
+history kind, selection and model conditions, and include recipient placement.
+A fixed-gene-tree comparison also verifies actual G topology, lengths and units,
+in addition to the recorded shared context hashes.
+
+Display state holds layout, explicit leaf-ID order, collapsed clades, event
+colors, font and output profile. A comparison applies a stable clade selection
+where that clade exists; absent panels retain their context. Explicit CLI font
+and PDF page settings override saved values. The output path determines export
+format. Scientific trees, events, parameters and original summaries remain
+unchanged; `--document-out` retains the full source rather than a pruned history.
+Zoom/pan are browser viewport controls; their position is not part of this view
+schema. Collapsing an upper context in an embedded view is not supported.
+
+H and G are separate recorded trees, with X1 consumed clades highlighted and
+source/target correspondence retained. No gene substitution length becomes an
+H duration. A three-layer chain nests lower histories in the recorded middle
+incoming corridors and those corridors in the outer tree. Middle transfer
+curves are retained; lower transfers use their explicit donor/recipient. Arc
+length and lane positions are display coordinates, not inferred time. Other
+hierarchies use linked adjacent-level panels with unchanged middle-tree IDs.
+Expectation maps require a separate quantitative representation: the renderer
+does not fabricate events from expected counts.
+
+## Self-contained interactive export (N4)
+
+```sh
+nwkit draw --document history.json --outfile history.html
+nwkit draw --comparison comparison.json --outfile comparison.html
+```
+
+HTML contains SVG geometry, complete source records, controls and a selectable
+vector PDF. It loads no external scripts, fonts, images or services. Search
+labels/IDs/event types, select branches/events for recorded model details,
+toggle clades, zoom, pan, fit the overview, and save display state. Downloading
+the embedded PDF preserves the initial scientific display/pagination; printing
+uses the current browser viewport and display selection. Saved view JSON can be
+rendered by the CLI for vector output with the same font/collapse choices.
+Single-source export downloads canonical JSON. Comparison source export
+downloads a single ZIP containing its manifest and original document bytes, with
+adjusted relative filenames and unchanged document hashes.
+
+Unreported support remains unreported. Imported raw support values do not
+become posterior probabilities. In native aioi representative documents,
+nonobserved sides are integrated in E; they are not placed biological losses.
+The maximum partially marginalized derivation is not full R MAP or H MAP.
+
+Vector PDF export is native Matplotlib, with selectable text, A4/A3 pagination
+and continuation markers. Browser printing is a browser-controlled secondary
+export. Scientific fitting/restoration belongs to aioi or an external producer;
+nwkit performs no likelihood, root or parameter optimization during drawing.

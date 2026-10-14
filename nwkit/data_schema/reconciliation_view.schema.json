@@ -111,5 +111,5 @@
   "additionalProperties": false,
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:reconciliation-view:0.1.0",
-  "description": "Reserved N3/N4 contract. This configuration is not yet executable by nwkit draw."
+  "description": "Executable file-only drawing contract for nwkit draw. Scientific data and display state remain separate."
 }
