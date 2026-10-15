@@ -376,14 +376,13 @@ def _read_species_tree(args, cache):
 
 
 def _evaluate_method(tree, method, args, cache):
-    if method == "midpoint":
-        _, evaluation = midpoint_rooting(tree, _return_evaluation=True)
-        return evaluation
-    if method == "mad":
-        _, evaluation = mad_rooting(tree, _return_evaluation=True)
-        return evaluation
-    if method == "mv":
-        _, evaluation = mv_rooting(tree, _return_evaluation=True)
+    if method in {"midpoint", "mad", "mv"}:
+        rooter = {"midpoint": midpoint_rooting, "mad": mad_rooting, "mv": mv_rooting}[
+            method
+        ]
+        rooted, evaluation = rooter(tree, _return_evaluation=True)
+        if "rooted_trees" in cache:
+            cache["rooted_trees"][method] = rooted
         return evaluation
     if method == "outgroup":
         rooted = outgroup_rooting(tree, getattr(args, "outgroup", None))
@@ -600,9 +599,11 @@ def _normalize_physical_root_positions(tree, evaluation, endpoints_by_split=None
     return replace(evaluation, candidates=tuple(retained))
 
 
-def evaluate_root_compare_methods(tree, methods, args, automatic):
+def evaluate_root_compare_methods(tree, methods, args, automatic, *, rooted_trees=None):
     evaluations = []
     cache: dict[str, Any] = {}
+    if rooted_trees is not None:
+        cache["rooted_trees"] = {}
     endpoints_by_split = None
     for method in methods:
         try:
@@ -636,6 +637,8 @@ def evaluate_root_compare_methods(tree, methods, args, automatic):
                 endpoints_by_split=endpoints_by_split,
             )
         evaluations.append(evaluation)
+    if rooted_trees is not None:
+        rooted_trees.update(cache.get("rooted_trees", {}))
     return evaluations
 
 
@@ -956,7 +959,12 @@ def _write_successful_outputs(tree, evaluations, args, rows):
             _write_root_compare_rows(staged[args.outfile], rows)
 
 
-def root_compare_main(args):
+def root_compare_main(args, *, rooted_trees=None):
+    """Compare roots; optionally retain exact midpoint/MAD/MV trees for reuse.
+
+    The caller-owned mapping is updated only after successful output publication.
+    Trees retain the rooter's branch placement, without a TSV round trip.
+    """
     _validate_root_compare_paths(args)
     tree = read_tree(
         args.infile,
@@ -973,7 +981,13 @@ def root_compare_main(args):
         raise ValueError("Root comparison requires at least two tree tips.")
     tree = remove_singleton(tree, verbose=False, preserve_branch_length=True)
     methods, automatic = resolve_root_compare_methods(tree, args)
-    evaluations = evaluate_root_compare_methods(tree, methods, args, automatic)
+    captured: dict[str, Any] = {}
+    if rooted_trees is None:
+        evaluations = evaluate_root_compare_methods(tree, methods, args, automatic)
+    else:
+        evaluations = evaluate_root_compare_methods(
+            tree, methods, args, automatic, rooted_trees=captured
+        )
     rows = root_compare_rows(evaluations)
     successful = any(
         evaluation.status == "ok" and evaluation.candidates
@@ -986,4 +1000,6 @@ def root_compare_main(args):
             "and the PDF was left unchanged."
         )
     _write_successful_outputs(tree, evaluations, args, rows)
+    if rooted_trees is not None:
+        rooted_trees.update(captured)
     return evaluations

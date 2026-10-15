@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.53] - 2026-10-15
+
+### Changed
+
+- Allow Python callers of `root_compare_main` to retain exact midpoint, MAD and MV rooted trees from the comparison pass, avoiding repeated rooting and lossy table round trips.
+
 ## 0.43.52 (2026-10-13)
 
 - Notify the central Dependabot controller after prepared updates finish CI.

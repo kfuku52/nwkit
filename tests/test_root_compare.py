@@ -620,3 +620,69 @@ def test_invalid_tsv_parent_is_detected_before_drawing(monkeypatch, tmp_path):
 
     assert called is False
     assert figure_out.read_bytes() == b"existing-pdf"
+
+
+@pytest.mark.parametrize("method", ["midpoint", "mad", "mv"])
+def test_comparison_reuses_exact_root_tree_without_repeating_rooter(
+    tmp_path, monkeypatch, method
+):
+    from nwkit import root
+
+    source = tmp_path / "tree.nwk"
+    source.write_text("((A:7.8,B:0.949):0.244,(C:7.8,D:1.439):2.87);")
+    args = parser.parse_args(
+        [
+            "rootcompare",
+            "--methods",
+            method,
+            "--infile",
+            str(source),
+            "--outfile",
+            str(tmp_path / "roots.tsv"),
+            "--figure-out",
+            str(tmp_path / "roots.pdf"),
+        ]
+    )
+    rooter = getattr(root, method + "_rooting")
+    calls = []
+
+    def capture(*args, **kwargs):
+        result = rooter(*args, **kwargs)
+        calls.append(result)
+        return result
+
+    monkeypatch.setattr(root_compare_mod, method + "_rooting", capture)
+    trees = {}
+    root_compare_main(args, rooted_trees=trees)
+    assert len(calls) == 1
+    assert trees[method] is calls[0][0]
+    expected = rooter(Tree(source.read_text(), parser=1))
+    assert trees[method].write(parser=1) == expected.write(parser=1)
+
+
+def test_failed_comparison_does_not_publish_captured_trees(tmp_path, monkeypatch):
+    source = tmp_path / "tree.nwk"
+    source.write_text("(A:1,B:2,C:3);")
+    args = parser.parse_args(
+        [
+            "rootcompare",
+            "--methods",
+            "midpoint",
+            "--infile",
+            str(source),
+            "--outfile",
+            str(tmp_path / "roots.tsv"),
+            "--figure-out",
+            str(tmp_path / "roots.pdf"),
+        ]
+    )
+    trees = {"previous": object()}
+    previous = dict(trees)
+
+    def fail(*args):
+        raise OSError("drawing failed")
+
+    monkeypatch.setattr(root_compare_mod, "_draw_root_comparison", fail)
+    with pytest.raises(OSError, match="drawing failed"):
+        root_compare_main(args, rooted_trees=trees)
+    assert trees == previous
