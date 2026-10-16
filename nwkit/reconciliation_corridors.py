@@ -116,6 +116,25 @@ def corridor_centers(tree, leaves, widths, spacing):
     return y, heights[tree.root]
 
 
+def speciation_forks(recs, xy, unit, lanes, widths):
+    """Separate concurrent copy forks inside the species junction envelope."""
+    groups = defaultdict(list)
+    for rec in recs:
+        for event in rec["events"]:
+            if event["type"] == "speciation" and event["upper_node"] is not None:
+                branch = event["upper_node"]
+                lane = lanes[rec["id"], branch, event["lower_node"]]
+                groups[branch].append((lane, rec["id"], event["id"]))
+    forks = {}
+    for branch, events in groups.items():
+        events.sort()
+        span = min(12 * (len(events) - 1), widths[branch] / 2 - 3, unit * 0.15)
+        for index, (_, rid, eid) in enumerate(events):
+            shift = span * (1 - index / max(1, len(events) - 1))
+            forks[rid, eid] = xy[branch][0] - shift
+    return forks
+
+
 def required_terminal_losses(rec, upper):
     """Only interpret the documented aioi pure-loss terminal boundary case.
 
@@ -227,7 +246,15 @@ def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color,
             Primitive(
                 "line",
                 f"{name}:stub",
-                _route(upper, xy, event["upper_node"], branch, start, end),
+                _route(
+                    upper,
+                    xy,
+                    event["upper_node"],
+                    branch,
+                    start,
+                    end,
+                    start_fork_x=start[0],
+                ),
                 color=lineage_color if is_loss else "#6b7280",
                 owner=owner,
                 tree=tree,

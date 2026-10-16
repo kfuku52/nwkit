@@ -11,6 +11,7 @@ from nwkit.reconciliation_corridors import (
     add_marginalized_side_stubs,
     corridor_centers,
     corridor_lanes,
+    speciation_forks,
 )
 from nwkit.reconciliation_document import ReconciliationDocument
 from nwkit.reconciliation_labels import model_label, source_label, summary_label
@@ -127,7 +128,7 @@ def _descendant_path(tree, start, end):
     return list(reversed(path))
 
 
-def _route(upper, xy, start_branch, end_branch, start, end):
+def _route(upper, xy, start_branch, end_branch, start, end, *, start_fork_x=None):
     if start_branch == end_branch:
         if end[0] < start[0] - 1e-9:
             raise ValueError(
@@ -137,14 +138,15 @@ def _route(upper, xy, start_branch, end_branch, start, end):
     branches = _descendant_path(upper, start_branch, end_branch)
     start_offset = start[1] - xy[start_branch][1]
     end_offset = end[1] - xy[end_branch][1]
-    points = [start, (xy[start_branch][0], start[1])]
+    first_fork = xy[start_branch][0] if start_fork_x is None else start_fork_x
+    points = [start, (first_fork, start[1])]
     previous_offset = start_offset
     for index, branch in enumerate(branches[1:], 1):
         parent = xy[upper.parents[branch]]
         offset = start_offset + (end_offset - start_offset) * index / (
             len(branches) - 1
         )
-        elbow = parent[0]
+        elbow = first_fork if index == 1 else parent[0]
         points.extend(
             [(elbow, parent[1] + previous_offset), (elbow, xy[branch][1] + offset)]
         )
@@ -169,7 +171,7 @@ def _canonical_order(tree):
     return result
 
 
-def _event_geometry(rec, lower, upper, xy, unit, lanes):
+def _event_geometry(rec, lower, upper, xy, unit, lanes, forks):
     by_node, by_branch = defaultdict(list), defaultdict(list)
     rank = {nid: index for index, nid in enumerate(_canonical_order(lower))}
     event_rank = {e["id"]: index for index, e in enumerate(rec["events"])}
@@ -187,6 +189,10 @@ def _event_geometry(rec, lower, upper, xy, unit, lanes):
     positions, branches = {}, {}
     for branch, events in by_branch.items():
         events.sort(key=lambda e: (rank[e["lower_node"]], event_rank[e["id"]]))
+        interior_end = min(
+            (forks[rec["id"], e["id"]] for e in events if e["type"] == "speciation"),
+            default=xy[branch][0],
+        )
         for index, event in enumerate(events):
             x, y = xy[branch]
             fraction = (index + 1) / (len(events) + 1)
@@ -196,13 +202,20 @@ def _event_geometry(rec, lower, upper, xy, unit, lanes):
             parent_x = (
                 xy[upper.parents[branch]][0] if branch in upper.parents else x - unit
             )
-            positions[event["id"]] = (parent_x + (x - parent_x) * fraction, y)
+            if event["type"] == "speciation":
+                event_x = forks[rec["id"], event["id"]]
+            else:
+                right = x if event["type"] == "leaf" else interior_end
+                event_x = parent_x + (right - parent_x) * fraction
+            positions[event["id"]] = (event_x, y)
             branches[event["id"]] = branch
     return by_node, positions, branches
 
 
-def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
-    by_node, positions, branches = _event_geometry(rec, lower, upper, xy, unit, lanes)
+def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes, forks):
+    by_node, positions, branches = _event_geometry(
+        rec, lower, upper, xy, unit, lanes, forks
+    )
     color = ("#287d8e", "#bb7432", "#5e5fa8", "#478443")[offset % 4]
     for nid in lower.order:
         events = by_node[nid]
@@ -233,7 +246,13 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                 )
             else:
                 points = _route(
-                    upper, xy, branches[before["id"]], branches[after["id"]], start, end
+                    upper,
+                    xy,
+                    branches[before["id"]],
+                    branches[after["id"]],
+                    start,
+                    end,
+                    start_fork_x=start[0] if before["type"] == "speciation" else None,
                 )
                 scene.primitives.append(
                     Primitive(
@@ -396,6 +415,7 @@ def build_scene(
         branch_widths=widths,
     )
     scene = Scene(width, height)
+    forks = speciation_forks(recs, xy, unit, lanes, widths)
     for nid, points in _upper_paths(upper, xy, unit).items():
         scene.primitives.append(
             Primitive(
@@ -425,7 +445,15 @@ def build_scene(
             )
     for index, rec in enumerate(sorted(recs, key=lambda r: r["id"])):
         _lower_primitives(
-            scene, rec, document.trees[rec["lower_tree"]], upper, xy, unit, index, lanes
+            scene,
+            rec,
+            document.trees[rec["lower_tree"]],
+            upper,
+            xy,
+            unit,
+            index,
+            lanes,
+            forks,
         )
         scene.notices.append(model_label(rec))
         if (

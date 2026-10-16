@@ -259,6 +259,9 @@ def test_offset_gene_daughters_fork_at_the_same_parent_x():
     second["id"] = "second"
     record["reconciliations"].append(second)
     scene = build_scene(validate_document(record))
+    assert (
+        scene.event_points["rec", "root"][0] != scene.event_points["second", "root"][0]
+    )
     for rid in ("rec", "second"):
         parent_x, _ = scene.event_points[rid, "root"]
         daughters = [
@@ -272,6 +275,80 @@ def test_offset_gene_daughters_fork_at_the_same_parent_x():
                 if a[0] == b[0] and a[1] != b[1]
             )
             assert fork_x == parent_x
+
+
+@pytest.mark.parametrize(
+    "gene_tree,copies", [("((a1,b1),(a2,b2));", 2), ("(((a1,b1),(a2,b2)),(a3,b3));", 3)]
+)
+def test_duplicated_lineages_keep_separate_rectangular_speciation_forks(
+    gene_tree, copies
+):
+    source = import_tree_document("(A,B);")
+    upper = source["trees"][0]
+    lower = import_tree_document(gene_tree)["trees"][0]
+    upper["id"], lower["id"] = "S", "H"
+    species = {n["label"]: n["id"] for n in upper["nodes"]}
+    nodes = {n["id"]: n for n in lower["nodes"]}
+    events = []
+    for node in lower["nodes"]:
+        children = node["children"]
+        kind = (
+            "speciation"
+            if children and all(not nodes[c]["children"] for c in children)
+            else "duplication"
+        )
+        events.append(
+            {
+                "id": node["id"],
+                "lower_node": node["id"],
+                "type": kind if children else "leaf",
+                "upper_node": upper["root"]
+                if children
+                else species[node["label"][0].upper()],
+            }
+        )
+    source.update(
+        trees=[upper, lower],
+        reconciliations=[
+            {
+                "id": "copies",
+                "upper_tree": "S",
+                "lower_tree": "H",
+                "history_kind": "unspecified",
+                "selection": {},
+                "model": {},
+                "events": events,
+            }
+        ],
+    )
+    doc = validate_document(source)
+    original = copy.deepcopy(doc.record)
+    scene = build_scene(doc)
+    speciation = [e for e in events if e["type"] == "speciation"]
+    assert len(speciation) == copies
+    fork_xs = {scene.event_points["copies", e["id"]][0] for e in speciation}
+    assert len(fork_xs) == copies
+    junction = next(
+        p for p in scene.primitives if p.kind == "upper" and p.owner[1] == upper["root"]
+    )
+    assert all(abs(x - junction.points[-1][0]) < junction.width / 2 for x in fork_xs)
+    for event in speciation:
+        point = scene.event_points["copies", event["id"]]
+        daughters = [
+            p
+            for p in scene.primitives
+            if p.id.startswith(f"line:copies:{event['id']}:")
+        ]
+        assert len(daughters) == 2
+        for daughter in daughters:
+            assert daughter.points[0] == point
+            turns = [
+                (a, b)
+                for a, b in zip(daughter.points[:-1], daughter.points[1:], strict=True)
+                if a[1] != b[1]
+            ]
+            assert turns and all(a[0] == b[0] == point[0] for a, b in turns)
+    assert doc.record == original
 
 
 def test_species_width_is_uniform_even_with_parallel_copies():

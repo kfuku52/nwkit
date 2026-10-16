@@ -104,7 +104,11 @@ Upper and lower branch lengths are retained but not mixed as a time scale.
 Species corridors have visible outlines, aligned tips and one uniform width
 throughout each upper tree, sufficient for its widest occupied lane envelope.
 Both daughters turn at the same parental x coordinate, including offset gene
-lanes and duplications within a species branch. An ancestor and its descendant copies share lanes;
+lanes and duplications within a species branch. Concurrent copy lineages use
+slightly staggered x coordinates at a shared species junction, keeping their
+vertical fork segments separate inside its corridor. These offsets are display
+spacing, not differences in speciation time. An ancestor and its descendant
+copies share lanes;
 serializing a duplication node does not count it as a third simultaneous copy.
 This remains a topology layout, including when species lengths are available.
 
