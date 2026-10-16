@@ -2,6 +2,7 @@
 
 import copy
 import json
+from itertools import combinations
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -130,6 +131,7 @@ def test_loss_stub_ends_inside_B_and_preserves_every_source_record():
         "missing_detection",
         "zero_loss",
         "observed_B",
+        "recorded_leaf_in_B",
         "boolean_detection",
         "malformed_reference",
     ],
@@ -152,6 +154,10 @@ def test_empty_observation_is_not_automatically_labeled_loss(change):
         conditions["loss"] = 0
     elif change == "observed_B":
         conditions["mapping"]["a"] = "B"
+    elif change == "recorded_leaf_in_B":
+        rec["events"][3]["upper_node"] = rec["events"][1]["annotations"][
+            "marginalized_species"
+        ]
     elif change == "boolean_detection":
         conditions["detection"]["B"] = True
     else:
@@ -277,12 +283,7 @@ def test_offset_gene_daughters_fork_at_the_same_parent_x():
             assert fork_x == parent_x
 
 
-@pytest.mark.parametrize(
-    "gene_tree,copies", [("((a1,b1),(a2,b2));", 2), ("(((a1,b1),(a2,b2)),(a3,b3));", 3)]
-)
-def test_duplicated_lineages_keep_separate_rectangular_speciation_forks(
-    gene_tree, copies
-):
+def duplicated_document(gene_tree):
     source = import_tree_document("(A,B);")
     upper = source["trees"][0]
     lower = import_tree_document(gene_tree)["trees"][0]
@@ -321,7 +322,19 @@ def test_duplicated_lineages_keep_separate_rectangular_speciation_forks(
             }
         ],
     )
-    doc = validate_document(source)
+    return validate_document(source)
+
+
+@pytest.mark.parametrize(
+    "gene_tree,copies", [("((a1,b1),(a2,b2));", 2), ("(((a1,b1),(a2,b2)),(a3,b3));", 3)]
+)
+def test_duplicated_lineages_keep_separate_rectangular_speciation_forks(
+    gene_tree, copies
+):
+    doc = duplicated_document(gene_tree)
+    rec = doc.record["reconciliations"][0]
+    events = rec["events"]
+    upper = doc.trees["S"].record
     original = copy.deepcopy(doc.record)
     scene = build_scene(doc)
     speciation = [e for e in events if e["type"] == "speciation"]
@@ -349,6 +362,144 @@ def test_duplicated_lineages_keep_separate_rectangular_speciation_forks(
             ]
             assert turns and all(a[0] == b[0] == point[0] for a, b in turns)
     assert doc.record == original
+
+
+def with_outer_layer(doc):
+    record = copy.deepcopy(doc.record)
+    middle = record["trees"][0]
+    outer = copy.deepcopy(middle)
+    outer["id"] = "outer"
+    record["trees"].append(outer)
+    record["reconciliations"].append(
+        {
+            "id": "outer",
+            "lower_tree": middle["id"],
+            "upper_tree": "outer",
+            "history_kind": "unspecified",
+            "selection": {},
+            "model": {},
+            "events": [
+                {
+                    "id": n["id"],
+                    "lower_node": n["id"],
+                    "upper_node": n["id"],
+                    "type": "speciation" if n["children"] else "leaf",
+                }
+                for n in middle["nodes"]
+            ],
+        }
+    )
+    return validate_document(record)
+
+
+@pytest.mark.parametrize("copies", [2, 3, 8])
+def test_nested_copies_share_lanes_and_keep_distinct_rectangular_forks(copies):
+    nodes = [f"(a{i},b{i})" for i in range(copies)]
+    while len(nodes) > 1:
+        nodes = [
+            f"({nodes[i]},{nodes[i + 1]})" if i + 1 < len(nodes) else nodes[i]
+            for i in range(0, len(nodes), 2)
+        ]
+    doc = with_outer_layer(duplicated_document(nodes[0] + ";"))
+    original = copy.deepcopy(doc.record)
+    scene = build_scene(doc)
+    rec = doc.record["reconciliations"][0]
+    fork_events = [e for e in rec["events"] if e["type"] == "speciation"]
+    assert (
+        len({scene.event_points["copies", e["id"]][0] for e in fork_events}) == copies
+    )
+    root = doc.trees["S"].root
+    corridor = next(
+        p
+        for p in scene.primitives
+        if p.kind == "upper" and p.tree == "S" and p.owner == ("outer", root)
+    )
+    assert corridor.width == copies * 12 + 12
+    for event in fork_events:
+        start = scene.event_points["copies", event["id"]]
+        daughters = [
+            p
+            for p in scene.primitives
+            if p.id.startswith(f"nested-line:copies:{event['id']}:")
+        ]
+        assert len(daughters) == 2
+        for daughter in daughters:
+            assert daughter.points[0] == start
+            assert all(
+                a[0] == b[0] or a[1] == b[1]
+                for a, b in zip(daughter.points[:-1], daughter.points[1:], strict=True)
+            )
+            turns = [
+                a[0]
+                for a, b in zip(daughter.points[:-1], daughter.points[1:], strict=True)
+                if a[1] != b[1]
+            ]
+            assert turns and turns[0] == start[0]
+    assert doc.record == original
+
+
+@pytest.mark.parametrize(
+    "change,kind",
+    [
+        ("none", "loss"),
+        ("sampling", "empty_observation"),
+        ("duplication", "empty_observation"),
+    ],
+)
+def test_nested_terminal_side_interpretation_matches_two_layers(change, kind):
+    record = copy.deepcopy(loss_document().record)
+    if change == "sampling":
+        record["reconciliations"][0]["model"]["conditions"]["detection"]["B"] = 0.8
+    elif change == "duplication":
+        record["reconciliations"][0]["model"]["conditions"]["duplication"] = 0.1
+    doc = with_outer_layer(validate_document(record))
+    original = copy.deepcopy(doc.record)
+    scene = build_scene(doc)
+    marks = [p for p in scene.primitives if p.kind == "event" and p.annotation]
+    assert len(marks) == 1 and marks[0].text == kind
+    mark = marks[0]
+    stub = next(p for p in scene.primitives if p.id == mark.id + ":stub")
+    assert (
+        stub.points[0] == scene.event_points["rec", "unary"]
+        and stub.points[-1] == mark.points[0]
+    )
+    assert "not an inferred" in mark.annotation
+    assert len(scene.event_points) == sum(
+        len(r["events"]) for r in doc.record["reconciliations"]
+    )
+    assert doc.record == original
+
+
+def test_nested_wide_labels_keep_layer_columns_separate(tmp_path, monkeypatch):
+    import nwkit.reconciliation_render as render
+
+    record = duplicated_document("((a1,b1),(a2,b2));").record
+    for tree in record["trees"]:
+        for node in tree["nodes"]:
+            if not node["children"]:
+                node["label"] += "W" * 70
+    doc = with_outer_layer(validate_document(record))
+    before = copy.deepcopy(doc.record)
+    scene = build_scene(doc, font_size=8)
+    original = render._figure
+    checked = []
+
+    def inspect(*args, **kwargs):
+        fig = original(*args, **kwargs)
+        fig.canvas.draw()
+        ax = fig.axes[0]
+        renderer = fig.canvas.get_renderer()
+        labels = [t for t in ax.texts if "WW" in t.get_text()]
+        assert len(labels) == 8
+        boxes = [t.get_window_extent(renderer) for t in labels]
+        assert all(not a.overlaps(b) for a, b in combinations(boxes, 2))
+        assert all(b.x0 >= ax.bbox.x0 - 1 and b.x1 <= ax.bbox.x1 + 1 for b in boxes)
+        checked.append(True)
+        return fig
+
+    monkeypatch.setattr(render, "_figure", inspect)
+    render.write_scene(scene, tmp_path / "nested-wide.svg", font_size=8)
+    assert checked and doc.record == before
 
 
 def test_species_width_is_uniform_even_with_parallel_copies():

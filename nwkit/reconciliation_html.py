@@ -13,6 +13,7 @@ import textwrap
 import zipfile
 from pathlib import Path
 
+from nwkit.reconciliation_bounds import fitted_scene
 from nwkit.reconciliation_render import write_scene
 
 
@@ -26,6 +27,7 @@ def _json(value):
 
 
 def _svg(scene, font_size, font_family="DejaVu Sans"):
+    scene = fitted_scene(scene, font_size)
     font_family = html.escape(font_family, quote=True)
     elements, outlines = [], []
     # Match vector renderer layers: corridor outlines/fills behind all histories.

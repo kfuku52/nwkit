@@ -115,8 +115,9 @@ This remains a topology layout, including when species lengths are available.
 An aioi representative's unary speciation can record a marginalized terminal
 side without a placed loss event. When its recorded undated model has D=T=0,
 positive loss propensity, detection=1 for that terminal species, and no observed
-copy mapped there, draw shows a short copy branch ending in a loss cross. This
-marks required terminal extinction under those conditions. Its midpoint is a
+copy in either mapping or recorded leaf placements there, draw shows a short
+copy branch ending in a loss cross. This marks required terminal extinction
+under those conditions. Its midpoint is a
 display convention, with no inferred event time or posterior support. The source
 event list and integrated E history are unchanged; the HTML primitive's details
 identify this display interpretation. Unknown/incomplete conditions, incomplete
@@ -152,6 +153,10 @@ SVG uses text and semantic artist IDs. `--font-family`, `--font-size`,
 ordinary-tree/report options are rejected rather than ignored.
 The new document mode defaults to DejaVu Sans; an explicit font-family option is
 honored. Ordinary draw defaults are unchanged.
+Export bounds include corridor strokes, transfer curves and wrapped labels;
+the renderer expands and translates a display copy when necessary. The source
+scene and its recorded events remain unchanged. Generated level/transformation
+headings use ASCII text so fonts such as Helvetica do not need an arrow glyph.
 
 Figure and normalized-document writes are staged as a recoverable bundle.
 Validation/write failures preserve previous files. Input/output aliases,
@@ -204,6 +209,11 @@ incoming corridors and those corridors in the outer tree. Middle transfer
 curves are retained; lower transfers use their explicit donor/recipient. Arc
 length and lane positions are display coordinates, not inferred time. Other
 hierarchies use linked adjacent-level panels with unchanged middle-tree IDs.
+Nested histories share the two-layer frontier-lane calculation, including
+multiline label clearance, staggered copy forks and marginalized terminal-side
+stubs. Rectilinear host corridors preserve right angles through lane offsets;
+recorded curved hosts retain their curves. Separate label columns reserve room
+for wide wrapped text across all three layers.
 Expectation maps require a separate quantitative representation: the renderer
 does not fabricate events from expected counts.
 
@@ -263,3 +273,7 @@ colors when highlighting X1 branches, keeps display event coordinates consistent
 with clade selection/collapse, and supports deep recPhyloXML output without a
 process-wide recursion setting. Imported opaque XML retains expanded namespace,
 attribute, text and tail semantics on the deep path; normal formatting is unchanged.
+
+The [drawing polish audit](../validation/RECONCILIATION_POLISH_AUDIT_20261016.md)
+covers clipping, wide nested labels, orthogonal copy forks and nested terminal
+side annotations, with affected regression and CLI export evidence.

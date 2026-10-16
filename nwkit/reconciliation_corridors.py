@@ -160,6 +160,7 @@ def required_terminal_losses(rec, upper):
     mapping = conditions.get("mapping", {})
     if not isinstance(detection, dict) or not isinstance(mapping, dict) or not mapping:
         return []
+    observed = {e["upper_node"] for e in rec["events"] if e["type"] == "leaf"}
     result = []
     for event in rec["events"]:
         annotations = event.get("annotations", {})
@@ -179,6 +180,7 @@ def required_terminal_losses(rec, upper):
             and detection.get(node["label"]) == 1
             and not isinstance(detection.get(node["label"]), bool)
             and node["label"] not in mapping.values()
+            and branch not in observed
             and isinstance(conditions.get("loss"), (int, float))
             and not isinstance(conditions.get("loss"), bool)
             and conditions["loss"] > 0
@@ -211,19 +213,11 @@ def marginalized_terminal_sides(rec, upper):
     return result
 
 
-def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color, lanes):
-    from nwkit.reconciliation_scene import EVENT_STYLE, Primitive, _route
-
+def terminal_side_annotations(rec, upper):
+    """Share the same conservative interpretation across all displayed layers."""
     losses = required_terminal_losses(rec, upper)
     loss_ids = {event["id"] for event, _ in losses}
     for event, branch in marginalized_terminal_sides(rec, upper):
-        start = positions[event["id"]]
-        x, y = xy[branch]
-        y += lanes[rec["id"], branch, event["id"], "empty"]
-        parent_x = xy[upper.parents[branch]][0]
-        end = ((parent_x + x) / 2, y)
-        owner = (rec["id"], event["lower_node"])
-        tree = rec["lower_tree"]
         is_loss = event["id"] in loss_ids
         prefix = "integrated-loss" if is_loss else "empty-side"
         name = f"{prefix}:{rec['id']}:{event['id']}:{branch}"
@@ -242,6 +236,20 @@ def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color,
                 "or an additional recorded event."
             )
         )
+        yield event, branch, "loss" if is_loss else "empty_observation", name, note
+
+
+def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color, lanes):
+    from nwkit.reconciliation_scene import EVENT_STYLE, Primitive, _route
+
+    for event, branch, kind, name, note in terminal_side_annotations(rec, upper):
+        start = positions[event["id"]]
+        x, y = xy[branch]
+        y += lanes[rec["id"], branch, event["id"], "empty"]
+        parent_x = xy[upper.parents[branch]][0]
+        end = ((parent_x + x) / 2, y)
+        owner = (rec["id"], event["lower_node"])
+        tree = rec["lower_tree"]
         scene.primitives.append(
             Primitive(
                 "line",
@@ -255,13 +263,12 @@ def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color,
                     end,
                     start_fork_x=start[0],
                 ),
-                color=lineage_color if is_loss else "#6b7280",
+                color=lineage_color if kind == "loss" else "#6b7280",
                 owner=owner,
                 tree=tree,
                 annotation=note,
             )
         )
-        kind = "loss" if is_loss else "empty_observation"
         color, marker = EVENT_STYLE[kind]
         scene.primitives.append(
             Primitive(
@@ -276,7 +283,11 @@ def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color,
                 annotation=note,
             )
         )
-    if losses:
+    add_terminal_side_notice(scene, rec, upper)
+
+
+def add_terminal_side_notice(scene, rec, upper):
+    if required_terminal_losses(rec, upper):
         scene.notices.append(
             "Loss stubs show required terminal extinction only for recorded "
             "aioi D=T=0, detection=1 boundaries. Their midpoint is a display "

@@ -14,6 +14,7 @@ from matplotlib.lines import Line2D
 from matplotlib.patches import FancyArrowPatch
 
 from nwkit import __version__
+from nwkit.reconciliation_bounds import fitted_scene
 from nwkit.reconciliation_scene import Primitive
 
 PAGE_SIZES = {"A4": (841.89, 595.28), "A3": (1190.55, 841.89)}
@@ -281,6 +282,7 @@ def write_scene(
         raise ValueError("Font size must be positive and at most 72 points.")
     if image_format != "pdf" and (pdf_pages != "auto" or pdf_page_size != "A4"):
         raise ValueError("PDF page options require PDF output.")
+    scene = fitted_scene(scene, font_size)
     primitives, natural_height = _append_notes(scene, font_size)
     page_width, page_height = PAGE_SIZES[pdf_page_size]
     scale = min(1.0, page_width / scene.width)

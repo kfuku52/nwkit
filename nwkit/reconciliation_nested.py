@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import copy
 import math
-import textwrap
 from collections import defaultdict
 
 from nwkit.reconciliation_composition import subset
+from nwkit.reconciliation_corridors import (
+    add_terminal_side_notice,
+    corridor_lanes,
+    terminal_side_annotations,
+)
 from nwkit.reconciliation_labels import model_label, source_label
 from nwkit.reconciliation_scene import (
     EVENT_STYLE,
@@ -67,14 +71,28 @@ def _point(path, fraction):
 
 
 def _offset(path, amount):
-    out = []
-    for i, p in enumerate(path):
-        a, b = path[max(0, i - 1)], path[min(len(path) - 1, i + 1)]
+    path = [p for i, p in enumerate(path) if i == 0 or p != path[i - 1]]
+    if len(path) < 2:
+        return [(path[0][0], path[0][1] - amount)] * 2
+    normals = []
+    for a, b in zip(path[:-1], path[1:], strict=True):
         length = math.dist(a, b)
-        normal = (
-            ((b[1] - a[1]) / length, -(b[0] - a[0]) / length) if length else (0, -1)
-        )
-        out.append((p[0] + amount * normal[0], p[1] + amount * normal[1]))
+        normals.append(((b[1] - a[1]) / length, -(b[0] - a[0]) / length))
+    out: list[tuple[float, float]] = []
+    for i, p in enumerate(path):
+        left, right = normals[max(0, i - 1)], normals[min(i, len(normals) - 1)]
+        denominator = 1 + left[0] * right[0] + left[1] * right[1]
+        if denominator < 1e-8:
+            out.extend(
+                (p[0] + amount * n[0], p[1] + amount * n[1]) for n in (left, right)
+            )
+        else:
+            out.append(
+                (
+                    p[0] + amount * (left[0] + right[0]) / denominator,
+                    p[1] + amount * (left[1] + right[1]) / denominator,
+                )
+            )
     return out
 
 
@@ -123,12 +141,10 @@ def _middle_paths(scene, rec, tree):
     return paths
 
 
-def _bottom_geometry(recs, document, paths, spacing):
-    members = defaultdict(set)
+def _bottom_geometry(recs, document, paths, lanes, widths):
     by_node = {}
     positions = {}
     fractions = {}
-    lane = {}
     for rec in recs:
         grouped = defaultdict(list)
         tree = document.trees[rec["lower_tree"]]
@@ -138,15 +154,12 @@ def _bottom_geometry(recs, document, paths, spacing):
                     "Nested events require explicit middle-tree placement."
                 )
             grouped[event["lower_node"]].append(event)
-            members[event["upper_node"]].add((rec["id"], event["lower_node"]))
         if set(grouped) != set(tree.nodes):
             raise ValueError(
                 "Nested history requires recorded events for every lower node."
             )
         by_node[rec["id"]] = grouped
-    for branch, values in members.items():
-        for i, key in enumerate(sorted(values)):
-            lane[key[0], branch, key[1]] = spacing * (i - (len(values) - 1) / 2)
+    forks = _nested_forks(recs, paths, lanes, widths)
     for rec in recs:
         tree = document.trees[rec["lower_tree"]]
         rank = {nid: i for i, nid in enumerate(_canonical_order(tree))}
@@ -155,21 +168,90 @@ def _bottom_geometry(recs, document, paths, spacing):
             by_branch[event["upper_node"]].append(event)
         for branch, events in by_branch.items():
             events.sort(key=lambda e: (rank[e["lower_node"]], rec["events"].index(e)))
+            interior_end = min(
+                (
+                    forks[rec["id"], e["id"]]
+                    for e in events
+                    if e["type"] == "speciation"
+                ),
+                default=1,
+            )
             for i, event in enumerate(events):
-                fraction = (i + 1) / (len(events) + 1)
-                if event["type"] == "leaf" or (
-                    event["type"] == "speciation"
-                    and event.get("annotations", {}).get("observed_arity", 2) == 2
-                ):
+                fraction = interior_end * (i + 1) / (len(events) + 1)
+                if event["type"] == "leaf":
                     fraction = 1
+                elif event["type"] == "speciation":
+                    fraction = forks[rec["id"], event["id"]]
                 point, normal = _point(paths[branch], fraction)
-                amount = lane[rec["id"], branch, event["lower_node"]]
+                amount = lanes[rec["id"], branch, event["lower_node"]]
                 positions[rec["id"], event["id"]] = (
                     point[0] + amount * normal[0],
                     point[1] + amount * normal[1],
                 )
                 fractions[rec["id"], event["id"]] = fraction
-    return members, by_node, positions, fractions, lane
+    return by_node, positions, fractions
+
+
+def _nested_forks(recs, paths, lanes, widths):
+    groups = defaultdict(list)
+    for rec in recs:
+        for event in rec["events"]:
+            if event["type"] == "speciation":
+                branch = event["upper_node"]
+                groups[branch].append(
+                    (
+                        lanes[rec["id"], branch, event["lower_node"]],
+                        rec["id"],
+                        event["id"],
+                    )
+                )
+    result = {}
+    for branch, events in groups.items():
+        path = paths[branch]
+        total = sum(math.dist(a, b) for a, b in zip(path[:-1], path[1:], strict=True))
+        tail = next(
+            (
+                (a, b)
+                for a, b in reversed(list(zip(path[:-1], path[1:], strict=True)))
+                if a != b
+            ),
+            None,
+        )
+        span = min(
+            12 * (len(events) - 1),
+            widths[branch] / 2 - 3,
+            math.dist(*tail) * 0.15 if tail and tail[0][1] == tail[1][1] else 0,
+        )
+        for i, (_, rid, eid) in enumerate(sorted(events)):
+            result[rid, eid] = (
+                1 - span * (1 - i / max(1, len(events) - 1)) / total if total else 1
+            )
+    return result
+
+
+def _joined_parts(parts, start, end, speciation):
+    if speciation and len(parts) > 1 and all(p[1] == parts[0][0][1] for p in parts[0]):
+        parts = parts[1:]
+        first = parts[0]
+        if len(first) > 1 and first[0][0] == first[1][0]:
+            first = list(first)
+            first[0], first[1] = start, (start[0], first[1][1])
+            parts[0] = first
+    points = [p for part in parts for p in part]
+    points[0], points[-1] = start, end
+    # Mitered rectilinear hosts retain right angles at lane changes as well.
+    if all(
+        a[0] == b[0] or a[1] == b[1]
+        for part in parts
+        for a, b in zip(part[:-1], part[1:], strict=True)
+    ):
+        out = [points[0]]
+        for point in points[1:]:
+            if out[-1][0] != point[0] and out[-1][1] != point[1]:
+                out.append((out[-1][0], point[1]))
+            out.append(point)
+        points = out
+    return points
 
 
 def _bottom_primitives(
@@ -205,7 +287,7 @@ def _bottom_primitives(
                 continue
             a, b = before["upper_node"], after["upper_node"]
             branches = _descendant_path(middle, a, b)
-            points = []
+            parts = []
             for j, branch in enumerate(branches):
                 first = fractions[rid, before["id"]] if j == 0 else 0
                 last = fractions[rid, after["id"]] if j == len(branches) - 1 else 1
@@ -213,8 +295,8 @@ def _bottom_primitives(
                 left = lane[rid, a, before["lower_node"]]
                 right = lane[rid, b, nid]
                 offset = left + (right - left) * j / max(1, len(branches) - 1)
-                points.extend(_offset(part, offset))
-            points[0], points[-1] = start, end
+                parts.append(_offset(part, offset))
+            points = _joined_parts(parts, start, end, before["type"] == "speciation")
             scene.primitives.append(
                 Primitive(
                     "line",
@@ -266,24 +348,10 @@ def build_nested_scene(document, *, width, font_size, view=None):
     middle = document.trees[rec["lower_tree"]]
     part = subset(document, {rec["lower_tree"], rec["upper_tree"]}, [rec])
     scene = build_scene(part, width=width, font_size=font_size, view=view)
-    occupancy: defaultdict[str, int] = defaultdict(int)
-    for r in bottom:
-        for event in r["events"]:
-            if event["type"] == "leaf":
-                occupancy[event["upper_node"]] += 1
-    rows = max(
-        (
-            len(textwrap.wrap(node["label"], 24))
-            for r in bottom
-            for node in document.trees[r["lower_tree"]].nodes.values()
-            if not node["children"]
-        ),
-        default=1,
-    )
-    spacing = max(6, font_size * 1.5) * max(1, rows)
-    scale = max(
-        1, max(occupancy.values(), default=1) * spacing / max(12, font_size * 1.5)
-    )
+    spacing = max(6, font_size * 1.5)
+    lanes, widths = corridor_lanes(bottom, document.trees, spacing)
+    max_width = max(18, max(widths.values(), default=8) + 4)
+    scale = max(1, max_width / max(12, font_size * 1.5))
     for primitive in scene.primitives:
         primitive.points = [(x, y * scale) for x, y in primitive.points]
     scene.event_points = {
@@ -291,13 +359,10 @@ def build_nested_scene(document, *, width, font_size, view=None):
     }
     scene.height *= scale
     paths = _middle_paths(scene, rec, middle)
-    members, by_node, positions, fractions, lanes = _bottom_geometry(
-        bottom, document, paths, spacing
+    by_node, positions, fractions = _bottom_geometry(
+        bottom, document, paths, lanes, widths
     )
     corridors = []
-    max_width = max(
-        18, max((len(v) * spacing + 12 for v in members.values()), default=18)
-    )
     for primitive in scene.primitives:
         if primitive.kind == "upper":
             primitive.width += max_width + 12
@@ -311,7 +376,7 @@ def build_nested_scene(document, *, width, font_size, view=None):
             corridor.points = _curve(primitive)
             corridor.kind = "upper"
             corridor.color = "#efd9b1"
-            corridor.width = max(18, len(members[primitive.owner[1]]) * spacing + 12)
+            corridor.width = max(18, widths.get(primitive.owner[1], 8) + 4)
             corridors.append(corridor)
     scene.primitives.extend(corridors)
     # Root incoming middle corridor can have no serialized edge primitive.
@@ -329,9 +394,7 @@ def build_nested_scene(document, *, width, font_size, view=None):
                 tree=middle.id,
             )
         )
-    _separate_layer_labels(
-        scene, document, rec, middle, bottom, members, spacing, max_width, font_size
-    )
+    _separate_layer_labels(scene, document, rec, middle, bottom, widths, font_size)
     for r in bottom:
         _bottom_primitives(
             scene,
@@ -344,6 +407,7 @@ def build_nested_scene(document, *, width, font_size, view=None):
             fractions,
             lanes,
         )
+        _nested_side_stubs(scene, r, middle, paths, positions, lanes)
         scene.notices.append(model_label(r))
     low = min(y - p.width / 2 for p in scene.primitives for _, y in p.points)
     shift = max(0, 15 - low)
@@ -362,12 +426,10 @@ def build_nested_scene(document, *, width, font_size, view=None):
     return scene
 
 
-def _separate_layer_labels(
-    scene, document, rec, middle, bottom, members, spacing, max_width, font_size
-):
+def _separate_layer_labels(scene, document, rec, middle, bottom, widths, font_size):
     lower_label_width = max(
         (
-            min(24, len(node["label"])) * font_size * 0.6
+            min(24, len(node["label"])) * font_size + 4
             for r in bottom
             for node in document.trees[r["lower_tree"]].nodes.values()
             if not node["children"]
@@ -376,7 +438,7 @@ def _separate_layer_labels(
     )
     middle_label_width = max(
         (
-            min(24, len(node["label"])) * font_size * 0.6
+            min(24, len(node["label"])) * font_size + 4
             for node in middle.nodes.values()
             if not node["children"]
         ),
@@ -396,9 +458,7 @@ def _separate_layer_labels(
                 primitive.points = [(x + middle_column, y) for x, y in primitive.points]
             elif primitive.kind == "event":
                 x, y = primitive.points[0]
-                offset = (
-                    max(18, len(members[primitive.owner[1]]) * spacing + 12) / 2 + 6
-                )
+                offset = max(18, widths.get(primitive.owner[1], 8) + 4) / 2 + 6
                 primitive.points = [(x, y - offset)]
                 leaders.append(
                     Primitive(
@@ -419,3 +479,40 @@ def _separate_layer_labels(
     scene.width = max(
         scene.width, max(x for p in scene.primitives for x, _ in p.points) + 120
     )
+
+
+def _nested_side_stubs(scene, rec, middle, paths, positions, lanes):
+    for event, branch, kind, name, note in terminal_side_annotations(rec, middle):
+        start = positions[rec["id"], event["id"]]
+        part = _offset(
+            _segment(paths[branch], 0, 0.5),
+            lanes[rec["id"], branch, event["id"], "empty"],
+        )
+        points = _joined_parts([[start, start], part], start, part[-1], True)
+        color, marker = EVENT_STYLE[kind]
+        owner = (rec["id"], event["lower_node"])
+        scene.primitives.extend(
+            [
+                Primitive(
+                    "line",
+                    f"{name}:stub",
+                    points,
+                    color="#176b73" if kind == "loss" else "#6b7280",
+                    owner=owner,
+                    tree=rec["lower_tree"],
+                    annotation=note,
+                ),
+                Primitive(
+                    "event",
+                    name,
+                    [points[-1]],
+                    text=kind,
+                    color=color,
+                    marker=marker,
+                    owner=owner,
+                    tree=rec["lower_tree"],
+                    annotation=note,
+                ),
+            ]
+        )
+    add_terminal_side_notice(scene, rec, middle)

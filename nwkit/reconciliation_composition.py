@@ -74,7 +74,7 @@ def compose_document(document, *, width, font_size, view=None):
             append_scene(
                 scene,
                 build_scene(part, width=width, font_size=font_size, view=view),
-                f"Level: {', '.join(sorted(tree_ids - {upper}))} → {upper}",
+                f"Level: {', '.join(sorted(tree_ids - {upper}))} to {upper}",
             )
             displayed.update(tree_ids)
     for tid in sorted(set(document.trees) - displayed):
@@ -86,7 +86,7 @@ def compose_document(document, *, width, font_size, view=None):
         )
     for transform in document.record["transformations"]:
         scene.notices.append(
-            f"Transformation {transform['id']}: {transform['source_tree']} → {transform['target_tree']}; model={transform['model_id']}"
+            f"Transformation {transform['id']}: {transform['source_tree']} to {transform['target_tree']}; model={transform['model_id']}"
         )
         for block in transform["blocks"]:
             scene.notices.append(
