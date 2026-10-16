@@ -101,8 +101,10 @@ and the three-layer chains described below. Broader hierarchies use adjacent-lev
 panels. Unmapped/incomplete placements and expectation maps fail explicitly.
 Upper and lower branch lengths are retained but not mixed as a time scale.
 
-Species corridors have visible outlines, aligned tips and spacing based on their
-occupied lane envelopes. An ancestor and its descendant copies share lanes;
+Species corridors have visible outlines, aligned tips and one uniform width
+throughout each upper tree, sufficient for its widest occupied lane envelope.
+Both daughters turn at the same parental x coordinate, including offset gene
+lanes. An ancestor and its descendant copies share lanes;
 serializing a duplication node does not count it as a third simultaneous copy.
 This remains a topology layout, including when species lengths are available.
 
@@ -115,6 +117,12 @@ display convention, with no inferred event time or posterior support. The source
 event list and integrated E history are unchanged; the HTML primitive's details
 identify this display interpretation. Unknown/incomplete conditions, incomplete
 detection, internal empty sides and positive D/T do not acquire a loss cross.
+Other recorded marginalized terminal sides use a separate empty-side stub ending
+in a gray diamond (E), preserving the distinction from a placed loss. These sides
+have independent lanes even when a transferred observed copy reaches the same
+species. The source event list and support fields remain unchanged. Figure
+titles, legends, footers and continuation labels honor the requested base font
+size along with ordinary labels.
 
 Display-only subtree selection uses `--document-clade TREE_ID/NODE_ID`; IDs are
 available in normalized JSON. It retains the complete upper context, records

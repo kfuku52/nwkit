@@ -8,7 +8,7 @@ from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
 from nwkit.reconciliation_corridors import (
-    add_required_loss_stubs,
+    add_marginalized_side_stubs,
     corridor_centers,
     corridor_lanes,
 )
@@ -144,12 +144,7 @@ def _route(upper, xy, start_branch, end_branch, start, end):
         offset = start_offset + (end_offset - start_offset) * index / (
             len(branches) - 1
         )
-        advance = xy[branch][0] - parent[0]
-        shift = min(
-            advance / 3,
-            max(0, (previous_offset + max(abs(previous_offset), abs(offset))) / 2),
-        )
-        elbow = parent[0] + shift
+        elbow = parent[0]
         points.extend(
             [(elbow, parent[1] + previous_offset), (elbow, xy[branch][1] + offset)]
         )
@@ -279,7 +274,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                     tree=lower.id,
                 )
             )
-    add_required_loss_stubs(scene, rec, upper, xy, positions, color, lanes)
+    add_marginalized_side_stubs(scene, rec, upper, xy, positions, color, lanes)
 
 
 def _standalone_scene(document, width, spacing, view=None):
@@ -389,8 +384,9 @@ def build_scene(
                 label = lower.nodes[event["lower_node"]]["label"]
                 occupancy[event["upper_node"]] += max(1, len(textwrap.wrap(label, 24)))
     lanes, widths = corridor_lanes(recs, document.trees, spacing)
+    corridor_width = max(spacing + 8, max(widths.values(), default=0))
     for nid in upper.nodes:
-        widths.setdefault(nid, spacing + 8)
+        widths[nid] = corridor_width
     xy, unit, height = _coordinates(
         upper,
         width,

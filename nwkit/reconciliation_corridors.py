@@ -16,6 +16,9 @@ def corridor_lanes(recs, trees, spacing):
     grouped: defaultdict[str, defaultdict[str, set[str]]] = defaultdict(
         lambda: defaultdict(set)
     )
+    empty: defaultdict[str, defaultdict[str, list[dict]]] = defaultdict(
+        lambda: defaultdict(list)
+    )
     for rec in recs:
         rid, tree = rec["id"], trees[rec["lower_tree"]]
         order = _canonical_order(tree)
@@ -27,9 +30,11 @@ def corridor_lanes(recs, trees, spacing):
             )
         for event in rec["events"]:
             grouped[event["upper_node"]][rid].add(event["lower_node"])
-        for event, branch in required_terminal_losses(rec, trees[rec["upper_tree"]]):
-            grouped[branch][rid].add(event["lower_node"])
-    lanes, widths = {}, {}
+        for event, branch in marginalized_terminal_sides(rec, trees[rec["upper_tree"]]):
+            grouped[branch][rid]  # Keep empty-side lanes separate from H ancestry.
+            empty[branch][rid].append(event)
+    lanes: dict[tuple[str, ...], float] = {}
+    widths = {}
     lower = {r["id"]: trees[r["lower_tree"]] for r in recs}
     for branch, histories in grouped.items():
         frontiers = {}
@@ -40,11 +45,13 @@ def corridor_lanes(recs, trees, spacing):
                 for i, nid in enumerate(ordered)
                 if i == len(ordered) - 1 or ranks[rid][ordered[i + 1]] > ends[rid][nid]
             ]
-        count = sum(len(nodes) for nodes in frontiers.values())
+        count = sum(
+            len(nodes) + len(empty[branch][rid]) for rid, nodes in frontiers.items()
+        )
         rows = max(
             max(1, len(textwrap.wrap(lower[rid].nodes[nid]["label"], 24)))
             for rid, members in histories.items()
-            for nid in members
+            for nid in members | {e["lower_node"] for e in empty[branch][rid]}
         )
         widths[branch] = spacing * rows * count + 8
         base = 0
@@ -55,7 +62,10 @@ def corridor_lanes(recs, trees, spacing):
                 last = bisect_right(indices, ends[rid][nid]) - 1
                 center = base + (first + last) / 2 - (count - 1) / 2
                 lanes[rid, branch, nid] = spacing * rows * center
-            base += len(indices)
+            for index, event in enumerate(empty[branch][rid]):
+                center = base + len(indices) + index - (count - 1) / 2
+                lanes[rid, branch, event["id"], "empty"] = spacing * rows * center
+            base += len(indices) + len(empty[branch][rid])
     return lanes, widths
 
 
@@ -158,43 +168,80 @@ def required_terminal_losses(rec, upper):
     return result
 
 
-def add_required_loss_stubs(scene, rec, upper, xy, positions, lineage_color, lanes):
+def marginalized_terminal_sides(rec, upper):
+    if (
+        rec["history_kind"] != "representative"
+        or rec["selection"].get("measurement")
+        != "partially_marginalized_ordered_derivation_v1"
+    ):
+        return []
+    result = []
+    for event in rec["events"]:
+        annotations = event.get("annotations", {})
+        branch = annotations.get("marginalized_species")
+        if (
+            event["type"] == "speciation"
+            and type(annotations.get("observed_arity")) is int
+            and annotations["observed_arity"] == 1
+            and isinstance(branch, str)
+            and branch in upper.nodes
+            and not upper.nodes[branch]["children"]
+            and upper.parents.get(branch) == event["upper_node"]
+        ):
+            result.append((event, branch))
+    return result
+
+
+def add_marginalized_side_stubs(scene, rec, upper, xy, positions, lineage_color, lanes):
     from nwkit.reconciliation_scene import EVENT_STYLE, Primitive, _route
 
     losses = required_terminal_losses(rec, upper)
-    for event, branch in losses:
+    loss_ids = {event["id"] for event, _ in losses}
+    for event, branch in marginalized_terminal_sides(rec, upper):
         start = positions[event["id"]]
         x, y = xy[branch]
-        y += lanes[rec["id"], branch, event["lower_node"]]
+        y += lanes[rec["id"], branch, event["id"], "empty"]
         parent_x = xy[upper.parents[branch]][0]
         end = ((parent_x + x) / 2, y)
         owner = (rec["id"], event["lower_node"])
         tree = rec["lower_tree"]
-        name = f"integrated-loss:{rec['id']}:{event['id']}:{branch}"
+        is_loss = event["id"] in loss_ids
+        prefix = "integrated-loss" if is_loss else "empty-side"
+        name = f"{prefix}:{rec['id']}:{event['id']}:{branch}"
         note = (
-            "Display interpretation: required terminal extinction with recorded "
-            "D=T=0 and detection=1. The nonobserved side is integrated in E. "
-            "The midpoint is a layout convention, not an inferred loss time "
-            "or an additional recorded event."
+            (
+                "Display interpretation: required terminal extinction with recorded "
+                "D=T=0 and detection=1. The nonobserved side is integrated in E. "
+                "The midpoint is a layout convention, not an inferred loss time "
+                "or an additional recorded event."
+            )
+            if is_loss
+            else (
+                "Display of the source-recorded marginalized terminal side E. "
+                "Biological loss and incomplete detection histories remain integrated. "
+                "The midpoint is a layout convention, not an inferred event time "
+                "or an additional recorded event."
+            )
         )
         scene.primitives.append(
             Primitive(
                 "line",
                 f"{name}:stub",
                 _route(upper, xy, event["upper_node"], branch, start, end),
-                color=lineage_color,
+                color=lineage_color if is_loss else "#6b7280",
                 owner=owner,
                 tree=tree,
                 annotation=note,
             )
         )
-        color, marker = EVENT_STYLE["loss"]
+        kind = "loss" if is_loss else "empty_observation"
+        color, marker = EVENT_STYLE[kind]
         scene.primitives.append(
             Primitive(
                 "event",
                 name,
                 [end],
-                text="loss",
+                text=kind,
                 color=color,
                 marker=marker,
                 owner=owner,

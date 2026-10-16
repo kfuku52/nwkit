@@ -161,7 +161,7 @@ def _continuations(ax, primitives, bottom, top, page_index, page_count, font_siz
                     x,
                     boundary + (3 if boundary == bottom else -3),
                     label,
-                    fontsize=max(5, font_size - 2),
+                    fontsize=font_size,
                     color=primitive.color,
                     va="top" if boundary == bottom else "bottom",
                     ha="right" if x > ax.get_xlim()[1] / 2 else "left",
@@ -217,7 +217,7 @@ def _figure(
         0.04,
         1 - 20 / height,
         title or "Reconciliation",
-        fontsize=13,
+        fontsize=font_size,
         weight="bold",
         va="top",
     )
@@ -250,13 +250,13 @@ def _figure(
                 bbox_to_anchor=(0.035, 1 - 52 / height),
                 ncol=max(1, min(4, int(width / 150))),
                 frameon=False,
-                fontsize=max(5, font_size - 1),
+                fontsize=font_size,
             )
     fig.text(
         0.04,
         15 / height,
         f"NWKIT {__version__}  |  {page_index + 1}/{page_count}",
-        fontsize=7,
+        fontsize=font_size,
         color="#596b80",
     )
     return fig

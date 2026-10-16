@@ -2,6 +2,7 @@
 
 import copy
 import json
+from pathlib import Path
 from xml.etree import ElementTree as ET
 
 import pytest
@@ -9,7 +10,7 @@ import pytest
 from nwkit.cli import main
 from nwkit.reconciliation_composition import apply_view
 from nwkit.reconciliation_corridors import corridor_centers, corridor_lanes
-from nwkit.reconciliation_document import validate_document
+from nwkit.reconciliation_document import read_document, validate_document
 from nwkit.reconciliation_html import _svg
 from nwkit.reconciliation_import import import_tree_document
 from nwkit.reconciliation_scene import build_scene
@@ -250,6 +251,69 @@ def test_interleaved_leaf_order_stays_explicit():
     leaves = [ids[s] for s in ["B", "C", "A"]]
     y, _ = corridor_centers(tree, leaves, {nid: 30 for nid in tree.nodes}, 12)
     assert [nid for nid in sorted(leaves, key=y.__getitem__)] == leaves
+
+
+def test_offset_gene_daughters_fork_at_the_same_parent_x():
+    record = loss_document().record
+    second = copy.deepcopy(record["reconciliations"][0])
+    second["id"] = "second"
+    record["reconciliations"].append(second)
+    scene = build_scene(validate_document(record))
+    for rid in ("rec", "second"):
+        parent_x, _ = scene.event_points[rid, "root"]
+        daughters = [
+            p for p in scene.primitives if p.id.startswith(f"line:{rid}:root:")
+        ]
+        assert len(daughters) == 2
+        for p in daughters:
+            fork_x = next(
+                a[0]
+                for a, b in zip(p.points[:-1], p.points[1:], strict=True)
+                if a[0] == b[0] and a[1] != b[1]
+            )
+            assert fork_x == parent_x
+
+
+def test_species_width_is_uniform_even_with_parallel_copies():
+    doc = read_document(
+        Path(__file__).parents[1] / "examples/reconciliation/toy.recphyloxml"
+    )
+    scene = build_scene(doc)
+    assert len({p.width for p in scene.primitives if p.kind == "upper"}) == 1
+
+
+def test_marginalized_side_is_separate_from_a_transferred_observed_copy():
+    record = loss_document().record
+    rec = record["reconciliations"][0]
+    rec["model"]["conditions"]["transfer"] = 0.08
+    branch = rec["events"][1]["annotations"]["marginalized_species"]
+    rec["events"][3]["upper_node"] = branch
+    scene = build_scene(validate_document(record))
+    empty = next(
+        p
+        for p in scene.primitives
+        if p.kind == "event" and p.id.startswith("empty-side:")
+    )
+    assert empty.marker == "D" and empty.text == "empty_observation"
+    assert empty.points[0][1] != scene.event_points["rec", "c"][1]
+    assert len(scene.event_points) == 4
+
+
+def test_renderer_uses_requested_size_for_all_figure_text():
+    import matplotlib.pyplot as plt
+
+    from nwkit.reconciliation_render import _append_notes, _figure
+
+    scene = build_scene(loss_document())
+    primitives, height = _append_notes(scene, 8)
+    fig = _figure(
+        scene, primitives, "Title", 8, 720, height + 140, 0, height, 0, 1, height, True
+    )
+    try:
+        assert fig.texts and all(t.get_fontsize() == 8 for t in fig.texts)
+        assert all(t.get_fontsize() == 8 for t in fig.legends[0].get_texts())
+    finally:
+        plt.close(fig)
 
 
 def test_html_and_vector_exports_retain_display_interpretation(tmp_path):
