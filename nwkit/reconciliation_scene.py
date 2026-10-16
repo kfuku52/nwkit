@@ -7,6 +7,11 @@ import textwrap
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+from nwkit.reconciliation_corridors import (
+    add_required_loss_stubs,
+    corridor_centers,
+    corridor_lanes,
+)
 from nwkit.reconciliation_document import ReconciliationDocument
 from nwkit.reconciliation_labels import model_label, source_label, summary_label
 
@@ -23,6 +28,8 @@ class Primitive:
     owner: tuple[str, str] | None = None
     panel: str | None = None
     tree: str | None = None
+    outline_color: str | None = None
+    annotation: str = ""
 
 
 @dataclass
@@ -63,7 +70,9 @@ def _signatures(tree):
     return result
 
 
-def _coordinates(tree, width, weights=None, spacing=12, leaf_order=None):
+def _coordinates(
+    tree, width, weights=None, spacing=12, leaf_order=None, branch_widths=None
+):
     signatures = _signatures(tree)
     depth, leaves, stack = {}, [], [(tree.root, 1)]
     while stack:
@@ -85,8 +94,13 @@ def _coordinates(tree, width, weights=None, spacing=12, leaf_order=None):
         children = tree.nodes[nid]["children"]
         if children:
             y[nid] = sum(y[c] for c in children) / len(children)
+    if branch_widths is not None:
+        y, current = corridor_centers(tree, leaves, branch_widths, spacing)
     unit = (width - 160) / max(depth.values())
     xy = {nid: (30 + d * unit, y[nid]) for nid, d in depth.items()}
+    if branch_widths is not None:
+        tip_x = 30 + max(depth.values()) * unit
+        xy.update({nid: (tip_x, y[nid]) for nid in leaves})
     return xy, unit, current
 
 
@@ -181,13 +195,13 @@ def _event_geometry(rec, lower, upper, xy, unit, lanes):
         for index, event in enumerate(events):
             x, y = xy[branch]
             fraction = (index + 1) / (len(events) + 1)
-            if event["type"] == "leaf" or (
-                event["type"] == "speciation"
-                and event.get("annotations", {}).get("observed_arity", 2) == 2
-            ):
+            if event["type"] in {"leaf", "speciation"}:
                 fraction = 1
             y += lanes[rec["id"], branch, event["lower_node"]]
-            positions[event["id"]] = (x - unit + unit * fraction, y)
+            parent_x = (
+                xy[upper.parents[branch]][0] if branch in upper.parents else x - unit
+            )
+            positions[event["id"]] = (parent_x + (x - parent_x) * fraction, y)
             branches[event["id"]] = branch
     return by_node, positions, branches
 
@@ -265,6 +279,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                     tree=lower.id,
                 )
             )
+    add_required_loss_stubs(scene, rec, upper, xy, positions, color, lanes)
 
 
 def _standalone_scene(document, width, spacing, view=None):
@@ -373,28 +388,18 @@ def build_scene(
             if event["type"] == "leaf":
                 label = lower.nodes[event["lower_node"]]["label"]
                 occupancy[event["upper_node"]] += max(1, len(textwrap.wrap(label, 24)))
+    lanes, widths = corridor_lanes(recs, document.trees, spacing)
+    for nid in upper.nodes:
+        widths.setdefault(nid, spacing + 8)
     xy, unit, height = _coordinates(
         upper,
         width,
         {nid: max(1, count) for nid, count in occupancy.items()},
         spacing,
         leaf_order=(view or {}).get("leaf_order", {}).get(upper.id),
+        branch_widths=widths,
     )
     scene = Scene(width, height)
-    by_branch = defaultdict(set)
-    lower_by_rec = {r["id"]: document.trees[r["lower_tree"]] for r in recs}
-    for rec in recs:
-        for event in rec["events"]:
-            by_branch[event["upper_node"]].add((rec["id"], event["lower_node"]))
-    lanes, widths = {}, {}
-    for branch, members in by_branch.items():
-        rows = max(
-            max(1, len(textwrap.wrap(lower_by_rec[rid].nodes[nid]["label"], 24)))
-            for rid, nid in members
-        )
-        widths[branch] = spacing * rows * len(members) + 8
-        for index, (rid, nid) in enumerate(sorted(members)):
-            lanes[rid, branch, nid] = spacing * rows * (index - (len(members) - 1) / 2)
     for nid, points in _upper_paths(upper, xy, unit).items():
         scene.primitives.append(
             Primitive(
@@ -405,6 +410,7 @@ def build_scene(
                 width=max(12, widths.get(nid, 12)),
                 owner=(upper.id, nid),
                 tree=upper.id,
+                outline_color="#a6b6c4",
             )
         )
         node = upper.nodes[nid]

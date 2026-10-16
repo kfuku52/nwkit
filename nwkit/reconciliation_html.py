@@ -27,8 +27,10 @@ def _json(value):
 
 def _svg(scene, font_size, font_family="DejaVu Sans"):
     font_family = html.escape(font_family, quote=True)
-    elements = []
-    for p in scene.primitives:
+    elements, outlines = [], []
+    # Match vector renderer layers: corridor outlines/fills behind all histories.
+    primitives = sorted(scene.primitives, key=lambda p: p.kind != "upper")
+    for p in primitives:
         data = html.escape(
             _json(
                 {
@@ -38,6 +40,7 @@ def _svg(scene, font_size, font_family="DejaVu Sans"):
                     "tree": p.tree,
                     "kind": p.kind,
                     "text": p.text,
+                    "annotation": p.annotation,
                 }
             ),
             quote=True,
@@ -45,9 +48,16 @@ def _svg(scene, font_size, font_family="DejaVu Sans"):
         attrs = f'data-detail="{data}" stroke-width="{p.width}"'
         color = html.escape(p.color)
         coords = " ".join(f"{x:.5f},{y:.5f}" for x, y in p.points)
+        if p.kind == "upper" and p.outline_color:
+            outlines.append(
+                f'<polyline aria-hidden="true" points="{coords}" '
+                f'stroke="{html.escape(p.outline_color)}" stroke-width="{p.width + 1.8}" '
+                'stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+            )
         if p.kind in {"line", "upper"}:
             element = (
-                f'<polyline points="{coords}" {attrs} stroke="{color}" fill="none"/>'
+                f'<polyline points="{coords}" {attrs} stroke="{color}" '
+                'stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
             )
         elif p.kind == "transfer":
             (x, y), (xx, yy) = p.points[0], p.points[-1]
@@ -77,7 +87,7 @@ def _svg(scene, font_size, font_family="DejaVu Sans"):
         elements.append(
             f'<g class="item" tabindex="0" role="button">{hit}{element}</g>'
         )
-    return f'<svg id="scene" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {scene.width} {min(scene.height + 20, 640)}" data-full="0 0 {scene.width} {scene.height + 20}" role="img" aria-label="Recorded reconciliation trees"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>{"".join(elements)}</svg>'
+    return f'<svg id="scene" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {scene.width} {min(scene.height + 20, 640)}" data-full="0 0 {scene.width} {scene.height + 20}" role="img" aria-label="Recorded reconciliation trees"><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"/></marker></defs>{"".join(outlines)}{"".join(elements)}</svg>'
 
 
 def _event_symbol(marker, x, y, attrs, color):
@@ -85,7 +95,8 @@ def _event_symbol(marker, x, y, attrs, color):
     if marker == "s":
         return f'<rect x="{x - 3}" y="{y - 3}" width="6" height="6" {style}/>'
     if marker in {"x", "X"}:
-        return f'<path d="M{x - 3},{y - 3} L{x + 3},{y + 3} M{x - 3},{y + 3} L{x + 3},{y - 3}" {attrs} stroke="{color}" fill="none"/>'
+        radius = 4 if marker == "x" else 3
+        return f'<path d="M{x - radius},{y - radius} L{x + radius},{y + radius} M{x - radius},{y + radius} L{x + radius},{y - radius}" {attrs} stroke="{color}" fill="none"/>'
     if marker in {">", "<"}:
         direction = 1 if marker == ">" else -1
         points = f"{x + 3 * direction},{y} {x - 3 * direction},{y - 3} {x - 3 * direction},{y + 3}"

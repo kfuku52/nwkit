@@ -52,6 +52,17 @@ def _append_notes(scene, font_size):
 def _primitive(ax, primitive, font_size, scale=1):
     points = primitive.points
     if primitive.kind in {"line", "upper"}:
+        if primitive.kind == "upper" and primitive.outline_color:
+            outline = ax.plot(
+                [x for x, _ in points],
+                [y for _, y in points],
+                color=primitive.outline_color,
+                linewidth=(primitive.width + 1.8) * scale,
+                solid_capstyle="round",
+                solid_joinstyle="round",
+                zorder=0.5,
+            )[0]
+            outline.set_gid(f"outline:{primitive.id}")
         artist = ax.plot(
             [x for x, _ in points],
             [y for _, y in points],
@@ -77,7 +88,7 @@ def _primitive(ax, primitive, font_size, scale=1):
         artist = ax.plot(
             *points[0],
             marker=primitive.marker,
-            markersize=4 * scale,
+            markersize=(5.5 if primitive.marker == "x" else 4) * scale,
             color=primitive.color,
             linestyle="none",
             zorder=5,

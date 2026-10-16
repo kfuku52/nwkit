@@ -102,6 +102,7 @@ def _middle_paths(scene, rec, tree):
             primitive.owner
             and primitive.owner[0] == rec["id"]
             and primitive.kind in {"line", "transfer"}
+            and not primitive.annotation
         ):
             points = _curve(primitive)
             if paths[primitive.owner[1]]:
@@ -304,6 +305,7 @@ def build_nested_scene(document, *, width, font_size, view=None):
             primitive.owner
             and primitive.owner[0] == rec["id"]
             and primitive.kind in {"line", "transfer"}
+            and not primitive.annotation
         ):
             corridor = copy.deepcopy(primitive)
             corridor.points = _curve(primitive)
@@ -388,6 +390,7 @@ def _separate_layer_labels(
             primitive.owner
             and primitive.tree == middle.id
             and primitive.owner[0] == rec["id"]
+            and not primitive.annotation
         ):
             if primitive.kind == "text":
                 primitive.points = [(x + middle_column, y) for x, y in primitive.points]

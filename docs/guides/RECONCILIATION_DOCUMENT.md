@@ -101,6 +101,21 @@ and the three-layer chains described below. Broader hierarchies use adjacent-lev
 panels. Unmapped/incomplete placements and expectation maps fail explicitly.
 Upper and lower branch lengths are retained but not mixed as a time scale.
 
+Species corridors have visible outlines, aligned tips and spacing based on their
+occupied lane envelopes. An ancestor and its descendant copies share lanes;
+serializing a duplication node does not count it as a third simultaneous copy.
+This remains a topology layout, including when species lengths are available.
+
+An aioi representative's unary speciation can record a marginalized terminal
+side without a placed loss event. When its recorded undated model has D=T=0,
+positive loss propensity, detection=1 for that terminal species, and no observed
+copy mapped there, draw shows a short copy branch ending in a loss cross. This
+marks required terminal extinction under those conditions. Its midpoint is a
+display convention, with no inferred event time or posterior support. The source
+event list and integrated E history are unchanged; the HTML primitive's details
+identify this display interpretation. Unknown/incomplete conditions, incomplete
+detection, internal empty sides and positive D/T do not acquire a loss cross.
+
 Display-only subtree selection uses `--document-clade TREE_ID/NODE_ID`; IDs are
 available in normalized JSON. It retains the complete upper context, records
 selection in provenance, retains all original scientific trees/events and
