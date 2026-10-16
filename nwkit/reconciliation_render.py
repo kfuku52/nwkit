@@ -87,9 +87,10 @@ def _primitive(ax, primitive, font_size, scale=1):
     elif primitive.kind == "event":
         artist = ax.plot(
             *points[0],
-            marker=primitive.marker,
-            markersize=(5.5 if primitive.marker == "x" else 4) * scale,
+            marker="o" if primitive.marker == "O" else primitive.marker,
+            markersize=(5.5 if primitive.marker in {"x", "O"} else 4) * scale,
             color=primitive.color,
+            markerfacecolor="white" if primitive.marker == "O" else primitive.color,
             linestyle="none",
             zorder=5,
         )[0]
@@ -236,7 +237,8 @@ def _figure(
                 [],
                 [],
                 color=p.color,
-                marker=p.marker,
+                marker="o" if p.marker == "O" else p.marker,
+                markerfacecolor="white" if p.marker == "O" else p.color,
                 linestyle="none",
                 markersize=4,
                 label=kind.replace("_", " ").capitalize(),

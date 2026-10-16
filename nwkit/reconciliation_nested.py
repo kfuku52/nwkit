@@ -197,7 +197,7 @@ def _bottom_primitives(
                         "transfer",
                         f"nested-transfer:{rid}:{before['id']}",
                         [start, end],
-                        color="#9c4caa",
+                        color=EVENT_STYLE["transfer"][0],
                         owner=(rid, nid),
                         tree=lower.id,
                     )

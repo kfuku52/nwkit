@@ -104,7 +104,7 @@ Upper and lower branch lengths are retained but not mixed as a time scale.
 Species corridors have visible outlines, aligned tips and one uniform width
 throughout each upper tree, sufficient for its widest occupied lane envelope.
 Both daughters turn at the same parental x coordinate, including offset gene
-lanes. An ancestor and its descendant copies share lanes;
+lanes and duplications within a species branch. An ancestor and its descendant copies share lanes;
 serializing a duplication node does not count it as a third simultaneous copy.
 This remains a topology layout, including when species lengths are available.
 
@@ -123,6 +123,11 @@ have independent lanes even when a transferred observed copy reaches the same
 species. The source event list and support fields remain unchanged. Figure
 titles, legends, footers and continuation labels honor the requested base font
 size along with ordinary labels.
+
+Duplication nodes are red squares, speciation nodes blue circles, and losses red
+crosses. Transfers use an orange hollow circle at the donor and an orange
+directed arc with an arrowhead at the recipient. Imported explicit transfer-entry
+markers remain orange; X1 consumed branches stay purple, separate from transfer.
 
 Display-only subtree selection uses `--document-clade TREE_ID/NODE_ID`; IDs are
 available in normalized JSON. It retains the complete upper context, records

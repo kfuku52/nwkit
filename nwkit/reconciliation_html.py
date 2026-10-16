@@ -92,6 +92,10 @@ def _svg(scene, font_size, font_family="DejaVu Sans"):
 
 def _event_symbol(marker, x, y, attrs, color):
     style = f'{attrs} stroke="{color}" fill="{color}"'
+    if marker == "O":
+        return (
+            f'<circle cx="{x}" cy="{y}" r="4" {attrs} stroke="{color}" fill="white"/>'
+        )
     if marker == "s":
         return f'<rect x="{x - 3}" y="{y - 3}" width="6" height="6" {style}/>'
     if marker in {"x", "X"}:

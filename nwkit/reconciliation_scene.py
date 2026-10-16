@@ -47,11 +47,11 @@ class Scene:
 EVENT_STYLE = {
     "leaf": ("#27364b", "o"),
     "speciation": ("#0072b2", "o"),
-    "duplication": ("#d55e00", "s"),
-    "loss": ("#b91c1c", "x"),
-    "transfer": ("#9c4caa", ">"),
-    "transfer_out": ("#9c4caa", ">"),
-    "transfer_in": ("#9c4caa", "<"),
+    "duplication": ("#d62728", "s"),
+    "loss": ("#d62728", "x"),
+    "transfer": ("#e67e00", "O"),
+    "transfer_out": ("#e67e00", "O"),
+    "transfer_in": ("#e67e00", "<"),
     "origin": ("#15803d", "*"),
     "unresolved": ("#6b7280", "X"),
     "empty_observation": ("#6b7280", "D"),
@@ -133,7 +133,7 @@ def _route(upper, xy, start_branch, end_branch, start, end):
             raise ValueError(
                 "Recorded event order runs backwards within an upper branch."
             )
-        return [start, end]
+        return [start, (start[0], end[1]), end] if start[1] != end[1] else [start, end]
     branches = _descendant_path(upper, start_branch, end_branch)
     start_offset = start[1] - xy[start_branch][1]
     end_offset = end[1] - xy[end_branch][1]
@@ -226,7 +226,7 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes):
                         "transfer",
                         f"transfer:{rec['id']}:{before['id']}",
                         [start, end],
-                        color="#9c4caa",
+                        color=EVENT_STYLE["transfer"][0],
                         owner=(rec["id"], nid),
                         tree=lower.id,
                     )

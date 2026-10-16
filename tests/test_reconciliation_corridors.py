@@ -13,7 +13,7 @@ from nwkit.reconciliation_corridors import corridor_centers, corridor_lanes
 from nwkit.reconciliation_document import read_document, validate_document
 from nwkit.reconciliation_html import _svg
 from nwkit.reconciliation_import import import_tree_document
-from nwkit.reconciliation_scene import build_scene
+from nwkit.reconciliation_scene import EVENT_STYLE, _route, build_scene
 
 
 def loss_document():
@@ -314,6 +314,39 @@ def test_renderer_uses_requested_size_for_all_figure_text():
         assert all(t.get_fontsize() == 8 for t in fig.legends[0].get_texts())
     finally:
         plt.close(fig)
+
+
+def test_duplication_daughters_are_rectangular_with_one_fork_x():
+    start = (50, 30)
+    for end in [(100, 20), (100, 40)]:
+        points = _route(None, {}, "A", "A", start, end)
+        assert points[0] == start and points[-1] == end
+        assert points[1] == (start[0], end[1])
+        assert all(
+            a[0] == b[0] or a[1] == b[1]
+            for a, b in zip(points[:-1], points[1:], strict=True)
+        )
+
+
+def test_transfer_has_a_distinct_hollow_source_and_semantic_palette():
+    doc = read_document(
+        Path(__file__).parents[1] / "examples/reconciliation/toy.recphyloxml"
+    )
+    scene = build_scene(doc)
+    donor = next(
+        p for p in scene.primitives if p.kind == "event" and p.text == "transfer_out"
+    )
+    arrow = next(p for p in scene.primitives if p.kind == "transfer")
+    assert donor.marker == "O" and donor.points[0] == arrow.points[0]
+    assert donor.color == arrow.color == "#e67e00"
+    assert EVENT_STYLE["duplication"] == ("#d62728", "s")
+    assert EVENT_STYLE["speciation"] == ("#0072b2", "o")
+    assert EVENT_STYLE["loss"] == ("#d62728", "x")
+    svg = ET.fromstring(_svg(scene, 8))
+    circles = [
+        e for e in svg.iter() if e.tag.endswith("circle") and e.get("fill") == "white"
+    ]
+    assert circles and any(e.get("stroke") == donor.color for e in circles)
 
 
 def test_html_and_vector_exports_retain_display_interpretation(tmp_path):
