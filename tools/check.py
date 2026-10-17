@@ -36,6 +36,14 @@ def lint_and_typecheck(*, incremental: bool = False) -> None:
     run(PYTHON, "-m", "mypy", *([] if incremental else ["--no-incremental"]))
 
 
+def pytest_parallel_args() -> tuple[str, ...]:
+    """Opt-in bounded processes; serial local validation remains the default."""
+    workers = os.environ.get("NWKIT_TEST_WORKERS", "1")
+    if not workers.isdecimal() or not 1 <= int(workers) <= 32:
+        raise ValueError("NWKIT_TEST_WORKERS must be an integer from 1 to 32")
+    return ("-n", workers, "--dist", "worksteal") if int(workers) > 1 else ()
+
+
 def run_tests(pytest_args: tuple[str, ...] = (), *, quick: bool = False) -> None:
     marker_selected = any(
         arg == "--markexpr" or arg.startswith("--markexpr=") or arg.startswith("-m")
@@ -50,6 +58,7 @@ def run_tests(pytest_args: tuple[str, ...] = (), *, quick: bool = False) -> None
         "--durations=20",
         "--durations-min=0.05",
         *pytest_diagnostics_args(),
+        *pytest_parallel_args(),
         *markers,
         *pytest_args,
     )
@@ -68,17 +77,15 @@ def run_full_checks() -> None:
     run(PYTHON, "-m", "bandit", "-r", "nwkit", "tools", "-ll", "-ii", "-q")
     run(PYTHON, "-m", "pip_audit", ".")
     run(PYTHON, "-m", "coverage", "erase")
-    run(
-        PYTHON,
-        "-m",
-        "coverage",
-        "run",
-        "-m",
-        "pytest",
-        "tests/",
-        "-q",
-        *pytest_diagnostics_args(),
+    parallel = pytest_parallel_args()
+    # coverage run observes only the controller. pytest-cov combines coverage
+    # from every xdist worker and enforces the same pyproject.toml branch floor.
+    command = (
+        (PYTHON, "-m", "pytest", "--cov=nwkit", "--cov-branch")
+        if parallel
+        else (PYTHON, "-m", "coverage", "run", "-m", "pytest")
     )
+    run(*command, "tests/", "-q", *pytest_diagnostics_args(), *parallel)
     run(PYTHON, "-m", "coverage", "report")
     run(PYTHON, "tools/check_maintainability.py")
 

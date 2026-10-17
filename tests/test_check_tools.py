@@ -28,6 +28,72 @@ ci_test_configuration = load_tool("conftest", "tests")
 @pytest.fixture(autouse=True)
 def default_check_environment(monkeypatch):
     monkeypatch.delenv("NWKIT_CI_DIAGNOSTICS", raising=False)
+    monkeypatch.delenv("NWKIT_TEST_WORKERS", raising=False)
+
+
+@pytest.mark.parametrize("workers", ["0", "-1", "auto", "1.5", "33", ""])
+def test_parallel_validation_rejects_invalid_worker_counts(monkeypatch, workers):
+    monkeypatch.setenv("NWKIT_TEST_WORKERS", workers)
+    with pytest.raises(ValueError, match="NWKIT_TEST_WORKERS"):
+        check.pytest_parallel_args()
+
+
+def test_parallel_full_validation_combines_worker_branch_coverage(monkeypatch):
+    monkeypatch.setenv("NWKIT_TEST_WORKERS", "4")
+    commands = []
+    monkeypatch.setattr(check, "run", lambda *args, **kwargs: commands.append(args))
+    check.main(["full"])
+    command = next(c for c in commands if "--cov=nwkit" in c)
+    assert command[:5] == (check.PYTHON, "-m", "pytest", "--cov=nwkit", "--cov-branch")
+    assert command[5:] == ("tests/", "-q", "-n", "4", "--dist", "worksteal")
+    assert (check.PYTHON, "-m", "coverage", "report") in commands
+    commands.clear()
+    check.main(["test", "--", "tests/test_cli.py"])
+    assert commands[-1][-5:] == ("-n", "4", "--dist", "worksteal", "tests/test_cli.py")
+
+
+@pytest.mark.parametrize("failure", [None, "assertion", "coverage"])
+def test_parallel_coverage_collects_all_workers_and_propagates_failure(
+    tmp_path, monkeypatch, failure
+):
+    monkeypatch.setenv("NWKIT_TEST_WORKERS", "2")
+    commands = []
+    monkeypatch.setattr(check, "run", lambda *args, **kwargs: commands.append(args))
+    check.main(["full"])
+    command = list(next(c for c in commands if "--cov=nwkit" in c))
+    command[command.index("--cov=nwkit")] = "--cov=probe"
+    (tmp_path / "pyproject.toml").write_text(
+        "[tool.coverage.run]\nbranch = true\n[tool.coverage.report]\nfail_under = 100\n",
+        encoding="utf-8",
+    )
+    source = "def sign(x):\n    if x > 0:\n        return 1\n    return -1\n"
+    if failure == "coverage":
+        source += "def unused():\n    return 0\n"
+    (tmp_path / "probe.py").write_text(source, encoding="utf-8")
+    tests = tmp_path / "tests"
+    tests.mkdir()
+    tests.joinpath("test_probe.py").write_text(
+        "import pytest\nfrom pathlib import Path\nfrom probe import sign\n"
+        "@pytest.mark.parametrize('x', [-1, 1] * 8)\n"
+        "def test_sign(x, worker_id):\n    Path(worker_id).touch()\n    assert sign(x) == "
+        + ("0\n" if failure == "assertion" else "(1 if x > 0 else -1)\n"),
+        encoding="utf-8",
+    )
+    result = subprocess.run(command, cwd=tmp_path, capture_output=True, text=True)
+    assert (result.returncode == 0) == (failure is None), result.stdout + result.stderr
+    assert {p.name for p in tmp_path.glob("gw*")} == {"gw0", "gw1"}
+    if failure is None:
+        assert "16 passed" in result.stdout
+        report = subprocess.run(
+            [sys.executable, "-m", "coverage", "json", "-o", "coverage.json"],
+            cwd=tmp_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        assert report.returncode == 0
+        totals = json.loads((tmp_path / "coverage.json").read_text())["totals"]
+        assert totals["missing_lines"] == 0 and totals["missing_branches"] == 0
 
 
 def test_ci_diagnostics_are_opt_in_and_preserve_complete_coverage(monkeypatch):

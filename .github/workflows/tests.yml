@@ -9,6 +9,13 @@ on:
   schedule:
     - cron: '17 2 * * 1'
 
+# One numerical thread per pytest process prevents nested BLAS oversubscription.
+env:
+  OPENBLAS_NUM_THREADS: '1'
+  OMP_NUM_THREADS: '1'
+  MKL_NUM_THREADS: '1'
+  VECLIB_MAXIMUM_THREADS: '1'
+
 permissions:
   contents: read
 
@@ -51,6 +58,7 @@ jobs:
     timeout-minutes: 120
     env:
       MPLBACKEND: Agg
+      NWKIT_TEST_WORKERS: ${{ matrix.os == 'macos-latest' && '3' || '4' }}
       NWKIT_CI_DIAGNOSTICS: '1'
       PYTHONUNBUFFERED: '1'
     strategy:
@@ -168,6 +176,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     env:
+      NWKIT_TEST_WORKERS: '4'
       NWKIT_CI_DIAGNOSTICS: '1'
       PYTHONUNBUFFERED: '1'
 

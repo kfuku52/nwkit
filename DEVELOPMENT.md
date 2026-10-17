@@ -139,6 +139,13 @@ tail probabilities and seed unchanged. Validate an IQ2MC executable against
 `test_real_paml_consumes_angiocal_minimum_prior` before substituting it for these
 calibration checks.
 
+CI regression jobs use four pytest processes on Linux/Windows and three on
+macOS, with one BLAS/OpenMP thread per process. Every platform still runs its
+complete selected regression suite; weekly/manual scientific studies retain
+their serial execution. Quality CI combines branch coverage from all workers
+through pytest-cov and retains the 80% floor. Local checks default to serial;
+set `NWKIT_TEST_WORKERS=4` to reproduce parallel CI through `tools/check.py`.
+
 ## Choose the smallest useful check
 
 | Command | Checks |

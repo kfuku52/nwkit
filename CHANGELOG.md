@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.54] - 2026-10-17
+
+### Changed
+
+- Run complete CI regression suites in parallel on each platform and combine worker branch coverage without lowering the coverage floor or changing scientific studies.
+
 ## [0.43.53] - 2026-10-15
 
 ### Changed
