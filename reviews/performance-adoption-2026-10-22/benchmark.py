@@ -16,7 +16,16 @@ import tracemalloc
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
-CASES = ("signal", "cluster", "glmm", "projection", "diagonal", "wgd", "dtt")
+CASES = (
+    "signal",
+    "cluster",
+    "glmm",
+    "projection",
+    "diagonal",
+    "wgd",
+    "dtt",
+    "multivariate",
+)
 
 
 def fixture_module(directory):
@@ -77,6 +86,12 @@ def operation(case):
         )
         event = wgd.MultiplicationEvent(2, 0.3)
         return lambda: model.family_log_likelihoods(np.array([[1e-8, 0]]), 1, 86, event)
+    if case == "multivariate":
+        from nwkit.multivariate_pgls import fit_multivariate_pgls
+
+        fixture = fixture_module("10-observed-covariance")
+        responses, design, components, options = fixture.fixture(128, 4, 0.9)
+        return lambda: fit_multivariate_pgls(responses, design, components, **options)
     fixture = fixture_module("09-dtt-batched-simulation")
     design, factor = fixture.fixture("balanced", 256, 3)
     return lambda: disparity.simulate_curves(design, factor, 128, seed=42, threads=1)

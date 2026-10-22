@@ -1,0 +1,30 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_multivariate_numerics.py tests/test_numerical_invariance.py tests/test_ordinary_regression.py -k multivariate or invariance -rs
+..................................................................       [100%]
+============================= slowest 20 durations =============================
+0.21s call     tests/test_ordinary_regression.py::test_sparse_multivariate_pgls_matches_dense_fit
+0.20s call     tests/test_multivariate_numerics.py::test_multivariate_time_units_preserve_fits_and_posteriors[1e+16-fit_dense_mvbm]
+0.19s call     tests/test_multivariate_numerics.py::test_multivariate_time_units_preserve_fits_and_posteriors[1e-16-fit_dense_mvou]
+0.19s call     tests/test_multivariate_numerics.py::test_multivariate_time_units_preserve_fits_and_posteriors[1e+16-fit_dense_mvou]
+0.19s call     tests/test_multivariate_numerics.py::test_multivariate_time_units_preserve_fits_and_posteriors[1e-16-fit_dense_mvbm]
+0.17s call     tests/test_ordinary_regression.py::test_sparse_multivariate_pgls_matches_dense_fixed_factor
+0.17s call     tests/test_ordinary_regression.py::test_sparse_multivariate_pgls_matches_dense_with_missing_response
+0.17s call     tests/test_multivariate_numerics.py::test_multivariate_time_units_preserve_fits_and_posteriors[1e-16-fit_dense_mvou_diag]
+0.16s call     tests/test_multivariate_numerics.py::test_multivariate_time_units_preserve_fits_and_posteriors[1e+16-fit_dense_mvou_diag]
+0.16s call     tests/test_multivariate_numerics.py::test_comparison_skips_posterior_and_shares_geometry
+0.15s call     tests/test_multivariate_numerics.py::test_stationary_ou_preserves_distance_below_long_common_stem[fit_dense_mvou_diag]
+0.14s call     tests/test_ordinary_regression.py::test_multivariate_gaussian_pgls_retains_partially_observed_tips
+0.11s call     tests/test_multivariate_numerics.py::test_stationary_ou_preserves_distance_below_long_common_stem[fit_dense_mvou]
+0.10s call     tests/test_multivariate_numerics.py::test_high_missing_multivariate_fit_retains_full_covariance_and_likelihood[False-True]
+0.10s call     tests/test_multivariate_numerics.py::test_high_missing_multivariate_fit_retains_full_covariance_and_likelihood[True-False]
+0.09s call     tests/test_multivariate_numerics.py::test_high_missing_multivariate_fit_retains_full_covariance_and_likelihood[False-False]
+0.09s call     tests/test_multivariate_numerics.py::test_high_missing_multivariate_fit_retains_full_covariance_and_likelihood[True-True]
+0.06s call     tests/test_numerical_invariance.py::test_explicit_dense_opt_in_keeps_the_full_lambda_search
+0.06s call     tests/test_multivariate_numerics.py::test_posterior_storage_limit_does_not_block_likelihood_only
+0.05s call     tests/test_multivariate_numerics.py::test_pgls_cached_components_preserve_covariance_scale
+66 passed, 85 deselected in 3.52s

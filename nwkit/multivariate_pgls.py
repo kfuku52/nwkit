@@ -510,7 +510,19 @@ def fit_multivariate_pgls(
         )
         return component_covariances, decoded
 
-    def state(parameters: np.ndarray):
+    # Restrict direct indexing to the measured high-missing dense regime.
+    # The final fit still publishes the complete trait-by-tip covariance.
+    observed_pairs = None
+    if (
+        not use_sparse
+        and n_tips * n_traits >= 512
+        and 3 * len(observed_indices) <= n_tips * n_traits
+    ):
+        traits = observed_indices // n_tips
+        tips = observed_indices % n_tips
+        observed_pairs = (np.ix_(traits, traits), np.ix_(tips, tips))
+
+    def state(parameters: np.ndarray, *, full_output=False):
         trait_covariances, decoded = unpack(parameters)
         if use_sparse:
             return _sparse_multivariate_state(
@@ -524,17 +536,33 @@ def fit_multivariate_pgls(
                 observed_response,
                 reml,
             )
-        full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
-        for name, component in covariance_components.items():
-            tip_covariance = dense_component(
-                name, decoded if callable(component) else None
-            )
-            full_covariance += np.kron(trait_covariances[name], tip_covariance)
-        if fixed_dense is not None:
-            full_covariance += fixed_dense
-        observed_covariance = full_covariance[
-            np.ix_(observed_indices, observed_indices)
-        ]
+        if observed_pairs is None or full_output:
+            full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
+            for name, component in covariance_components.items():
+                tip_covariance = dense_component(
+                    name, decoded if callable(component) else None
+                )
+                full_covariance += np.kron(trait_covariances[name], tip_covariance)
+            if fixed_dense is not None:
+                full_covariance += fixed_dense
+            observed_covariance = full_covariance[
+                np.ix_(observed_indices, observed_indices)
+            ]
+        else:
+            full_covariance = None
+            trait_pairs, tip_pairs = observed_pairs
+            observed_covariance = np.zeros((len(observed_indices),) * 2, dtype=float)
+            for name, component in covariance_components.items():
+                tip_covariance = dense_component(
+                    name, decoded if callable(component) else None
+                )
+                observed_covariance += (
+                    trait_covariances[name][trait_pairs] * tip_covariance[tip_pairs]
+                )
+            if fixed_dense is not None:
+                observed_covariance += fixed_dense[
+                    np.ix_(observed_indices, observed_indices)
+                ]
         cholesky = _positive_cholesky(observed_covariance)
         inverse = cho_solve(
             (cholesky, True),
@@ -600,7 +628,7 @@ def fit_multivariate_pgls(
             "Multivariate PGLS optimization failed: {}".format(result.message)
         )
     fitted_objective, coefficients, coefficient_covariance, fitted_covariance = state(
-        result.x
+        result.x, full_output=True
     )
     component_trait_covariances, decoded = unpack(result.x)
     shape_boundary = False

@@ -123,6 +123,55 @@ def test_pgls_likelihood_matches_reported_covariance():
     assert fit.log_likelihood == pytest.approx(expected, abs=1e-9)
 
 
+@pytest.mark.parametrize("reml", [False, True])
+@pytest.mark.parametrize("known_noise", [False, True])
+def test_high_missing_multivariate_fit_retains_full_covariance_and_likelihood(
+    reml, known_noise
+):
+    n, traits = 128, 4
+    rng = np.random.default_rng(1142)
+    x = rng.normal(size=n)
+    design = np.column_stack([np.ones(n), x])
+    covariance = 0.65 ** np.abs(np.arange(n)[:, None] - np.arange(n))
+    trait_factor = np.eye(traits) + 0.15 * np.tril(np.ones((traits, traits)), -1)
+    responses = (
+        0.3
+        + x[:, None] * np.linspace(0.5, 1.2, traits)
+        + np.linalg.cholesky(covariance) @ rng.normal(size=(n, traits)) @ trait_factor.T
+    )
+    missing = rng.uniform(size=(n, traits)) < 0.9
+    missing[np.arange(n), np.arange(n) % traits] = False
+    responses[missing] = np.nan
+    observed = np.flatnonzero(~missing.ravel(order="F"))
+    assert 3 * len(observed) <= responses.size
+    fixed = np.full(responses.size, 0.05) if known_noise else None
+    fit = pgls.fit_multivariate_pgls(
+        responses, design, {"tree": covariance}, fixed_covariance=fixed, reml=reml
+    )
+    assert fit.fitted_covariance.shape == (responses.size, responses.size)
+    expected_covariance = np.kron(fit.component_trait_covariances["tree"], covariance)
+    if known_noise:
+        expected_covariance += np.diag(fixed)
+    np.testing.assert_array_equal(fit.fitted_covariance, expected_covariance)
+    selected = fit.fitted_covariance[np.ix_(observed, observed)]
+    selected_design = np.kron(np.eye(traits), design)[observed]
+    residual = (
+        responses.ravel(order="F")[observed]
+        - selected_design @ fit.coefficients.ravel()
+    )
+    _, logdet = np.linalg.slogdet(selected)
+    quadratic = residual @ np.linalg.solve(selected, residual)
+    count = len(observed)
+    if reml:
+        count -= selected_design.shape[1]
+        _, information = np.linalg.slogdet(
+            selected_design.T @ np.linalg.solve(selected, selected_design)
+        )
+        logdet += information
+    expected = -0.5 * (count * np.log(2 * np.pi) + logdet + quadratic)
+    assert fit.log_likelihood == pytest.approx(expected, abs=1e-8)
+
+
 def test_pgls_cached_components_preserve_covariance_scale(monkeypatch):
     responses = np.array(list(VALUES.values()))
     design = np.ones((6, 1))
