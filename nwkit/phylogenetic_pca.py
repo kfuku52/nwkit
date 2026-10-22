@@ -46,6 +46,11 @@ def _profile_likelihood(covariance, values):
     n, p = values.shape
     factor, _, residual = _centered(covariance, values)
     whitened = solve_triangular(factor, residual, lower=True)
+    return _likelihood_from_white(factor, whitened, n, p)
+
+
+def _likelihood_from_white(factor, whitened, n, p):
+    """Profile the ML trait covariance without repeating tree whitening."""
     units = np.max(np.abs(whitened), axis=0)
     if np.any(units == 0):
         raise ValueError("Constant traits have no full-rank Gaussian likelihood.")
@@ -118,6 +123,7 @@ def fit_pca(covariance, values, *, model="BM", mode="cov", lambda_value=None):
     scale = sd if mode == "corr" else np.ones(p)
     if np.any(sd <= 0) or not np.all(np.isfinite(sd)):
         raise ValueError("Trait variances cannot be represented; rescale units.")
+    unscaled_white = white
     white = white / scale
     _, singular, right = np.linalg.svd(white, full_matrices=False)
     rank = int(np.sum(singular > np.finfo(float).eps * max(n, p) * singular[0]))
@@ -136,7 +142,7 @@ def fit_pca(covariance, values, *, model="BM", mode="cov", lambda_value=None):
         rotation * np.sqrt(eigenvalues) / (sd / scale)[:, None], "PC loadings"
     )
     try:
-        likelihood = float(_profile_likelihood(covariance, values))
+        likelihood = float(_likelihood_from_white(factor, unscaled_white, n, p))
     except ValueError:
         likelihood = None
     return PhylogeneticPCA(

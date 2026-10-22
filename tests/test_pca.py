@@ -8,6 +8,7 @@ import pandas as pd
 import pytest
 from scipy.optimize import minimize
 
+from nwkit import phylogenetic_pca
 from nwkit.cli import main
 from nwkit.evolution import build_evolutionary_covariance
 from nwkit.phylogenetic_pca import fit_pca
@@ -20,6 +21,23 @@ DATA = np.column_stack([VALUES, MIXED])
 
 def covariance():
     return build_evolutionary_covariance(read_tree(TREE, 0, False), list("ABCDEFGH"))
+
+
+@pytest.mark.parametrize("mode", ["cov", "corr"])
+def test_final_likelihood_reuses_tree_factor_without_changing_ml(mode, monkeypatch):
+    matrix = covariance()
+    expected = phylogenetic_pca._profile_likelihood(matrix, DATA)
+    original = np.linalg.cholesky
+    factors = []
+
+    def factor(value):
+        factors.append(value)
+        return original(value)
+
+    monkeypatch.setattr(np.linalg, "cholesky", factor)
+    fit = fit_pca(matrix, DATA, mode=mode)
+    assert len(factors) == 1
+    assert fit.log_likelihood == expected
 
 
 @pytest.mark.parametrize(
