@@ -1,0 +1,21 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_signal.py tests/test_signal_calibration.py -rs
+....................................................                     [100%]
+============================= slowest 20 durations =============================
+21.33s call     tests/test_signal.py::test_lambda_bootstrap_cli_metadata_and_order
+8.71s call     tests/test_signal.py::test_lambda_bootstrap_missing_and_zero_rate
+4.00s call     tests/test_signal.py::test_cli_se_and_reproducible_permutations
+2.38s call     tests/test_signal.py::test_interior_lambda_with_errors_independent_optimization
+1.68s call     tests/test_signal.py::test_zero_rate_and_singular_zero_rate
+0.41s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors1]
+0.26s call     tests/test_signal.py::test_exact_lambda_bootstrap_preserves_draws_against_cholesky
+0.08s call     tests/test_signal.py::test_lambda_bootstrap_matches_independent_null_draws
+0.07s call     tests/test_signal.py::test_k_permutations_preserve_refits_rng_and_covariance_lifetime[errors2]
+
+(11 durations < 0.05s hidden.)
+52 passed in 39.55s

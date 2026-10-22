@@ -1,0 +1,14 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_full_ou.py -m  -rs
+..........                                                               [100%]
+============================= slowest 20 durations =============================
+6.78s call     tests/test_full_ou.py::test_free_full_ou_real_optimizer_returns_stable_finite_process
+0.17s call     tests/test_full_ou.py::test_full_ou_cli_comparison_and_diagnostics
+
+(18 durations < 0.05s hidden.)
+10 passed in 7.45s

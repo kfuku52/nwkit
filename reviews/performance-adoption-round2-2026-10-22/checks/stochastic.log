@@ -1,0 +1,25 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_asr.py tests/test_stochastic_history.py tests/test_stochastic_history_audit.py -rs
+........................................................................ [ 84%]
+.............                                                            [100%]
+============================= slowest 20 durations =============================
+3.28s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[HRM]
+2.20s call     tests/test_asr.py::TestAsrMain::test_sym_and_ard_models_estimate_rates
+0.91s call     tests/test_stochastic_history.py::test_thread_workers_are_reproducible
+0.72s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[MK-REGIME]
+0.66s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[PAGEL-INDEPENDENT]
+0.65s call     tests/test_stochastic_history.py::test_extended_models_preserve_legacy_counts[COVARION]
+0.31s call     tests/test_stochastic_history.py::test_cli_all_outputs_and_figure[png]
+0.19s call     tests/test_stochastic_history_audit.py::test_asymmetric_three_state_bridge_matches_independent_integrals
+0.14s call     tests/test_stochastic_history.py::test_cli_all_outputs_and_figure[pdf]
+0.11s call     tests/test_stochastic_history.py::test_conditional_bridge_against_matrix_exponential
+0.08s call     tests/test_stochastic_history_audit.py::test_figure_uses_literal_state_and_tip_labels
+0.08s call     tests/test_stochastic_history.py::test_cli_all_outputs_and_figure[svg]
+
+(8 durations < 0.05s hidden.)
+85 passed in 10.20s
