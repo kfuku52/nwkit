@@ -85,5 +85,12 @@
     "R, IQ-TREE and GeneRax executables were unavailable locally; no new external-tool installation was performed.",
     "Opt-in population studies were not rerun: models and uncertainty methods are unchanged; real small bootstrap and independent-reference regressions did run.",
     "Performance timings are host-local with unrelated user CPU work preserved; tracemalloc peaks are not total RSS."
-  ]
+  ],
+  "final_distribution_recheck": {
+    "command": "SOURCE_DATE_EPOCH=1792676668 python tools/check.py dist",
+    "exit_code": 0,
+    "artifact_hashes_match_tested_wheel_and_sdist": true,
+    "evidence_only_changes_excluded_from_package_manifest": true,
+    "log": "checks/dist-final.log"
+  }
 }

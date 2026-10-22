@@ -39,5 +39,3 @@
       312    0.001    0.000    0.025    0.000 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/mcmc_diagnostics.py:23(_rank)
       312    0.001    0.000    0.024    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_stats_py.py:9903(rankdata)
      9216    0.011    0.000    0.024    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/lib/_stride_tricks_impl.py:588(broadcast_arrays)
-
-
