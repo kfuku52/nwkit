@@ -7,6 +7,28 @@ from scipy import sparse
 from nwkit import gaussian
 
 
+@pytest.mark.parametrize("diagonal", [0.0, np.nan, np.inf, -0.0, 1 + 2j])
+def test_diagonal_detection_preserves_exact_nonzero_and_diagonal_values(diagonal):
+    matrix = np.diag(np.full(5, diagonal))
+    assert gaussian.is_diagonal(matrix)
+    matrix[-1, 0] = np.nextafter(0.0, 1.0)
+    assert not gaussian.is_diagonal(matrix)
+    assert not gaussian.is_diagonal(matrix.T)
+
+
+def test_diagonal_detection_does_not_evaluate_diagonal_objects():
+    class Untestable:
+        def __bool__(self):
+            raise AssertionError("Diagonal entries are outside this predicate")
+
+    matrix = np.zeros((4, 4), dtype=object)
+    for index in range(4):
+        matrix[index, index] = Untestable()
+    assert gaussian.is_diagonal(matrix)
+    matrix[-1, 0] = 1
+    assert not gaussian.is_diagonal(matrix)
+
+
 @pytest.mark.parametrize("kind", ["dense", "low-rank", "grouped", "nested"])
 @pytest.mark.parametrize("vector", [True, False])
 def test_cholesky_solves_match_dense_oracle_without_refactorization(

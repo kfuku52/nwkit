@@ -260,6 +260,17 @@ def is_diagonal(matrix: np.ndarray) -> bool:
     matrix = np.asarray(matrix)
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
         return False
+    if matrix.dtype.kind in "biufc":
+        if len(matrix) == 0:
+            return True
+        # Dense covariances usually fail immediately; retain that cheap exit.
+        if np.any(matrix[0, 1:]):
+            return False
+        return bool(
+            np.count_nonzero(matrix[1:]) == np.count_nonzero(np.diag(matrix)[1:])
+        )
+    # Do not inspect diagonal object truth values: the original contract only
+    # evaluates off-diagonal entries, even for custom objects.
     for index, row in enumerate(matrix):
         if np.any(row[:index]) or np.any(row[index + 1 :]):
             return False
