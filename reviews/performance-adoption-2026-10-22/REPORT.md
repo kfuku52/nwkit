@@ -39,6 +39,10 @@ gave dot=4 and bincount=0. Stable grouped row indices eliminate the O(N*G)
 repeated scans while retaining the same per-event BLAS products and event
 accumulation order. The final large-case traced peak is effectively unchanged.
 Unbalanced-event and cancelling-score regressions cover this decision.
+Additional [cluster controls](cluster-controls.json) retained exact outputs at
+200/50, 6,000/12 and 6,000/1,500 observations/events. Ratios were 1.21x, 0.92x
+and 3.97x. The few-event control's raw ranges overlap substantially, so it
+establishes neither a speedup nor a regression; no universal gain is claimed.
 
 Candidate 04's traced peak at the measured size was 2.43→3.15 MB. Candidate 09
 was 0.134→1.844 MB; the workspace budget limits batch growth and retains the
@@ -97,5 +101,5 @@ The release gate covers uncached mypy, lint/format, dependencies, Bandit,
 pip-audit, the complete regression suite including slow tests, branch coverage,
 complexity ceilings, independent wheel/sdist builds and byte reproducibility.
 Replicated scientific studies remain separate: the statistical models and
-uncertainty methods were not changed. A subsequent validation record records
-the completed release outcome and actual optional skips.
+uncertainty methods were not changed. A [validation record](VALIDATION.md)
+records the completed release outcome and optional-integration limits.
