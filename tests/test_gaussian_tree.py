@@ -5,6 +5,7 @@ import math
 import numpy as np
 import pytest
 
+from nwkit import gaussian_tree
 from nwkit.continuous_asr import compute_bm_marginals
 from nwkit.evolution import (
     build_evolutionary_covariance,
@@ -217,3 +218,32 @@ def test_flat_root_process_refuses_finite_covariance_views():
         process.tip_covariance(["A", "B", "C"])
     with pytest.raises(ValueError, match="flat-root"):
         process.sparse_tip_model(["A", "B", "C"])
+
+
+@pytest.mark.parametrize("slopes", ["unit", "signed", "zero"])
+@pytest.mark.parametrize("workspace", [24, 4 * 1024**2])
+def test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order(
+    slopes, workspace, monkeypatch
+):
+    tree = tree_from("((A:1,B:2)I:0.5,(C:3,D:0.25)J:0.4)R;")
+    nodes = list(tree.traverse("preorder"))
+    rng = np.random.default_rng(7128)
+    transitions = {}
+    for index, node in enumerate(nodes[1:]):
+        slope = float(rng.uniform(0.7, 1.2)) * (-1 if index % 2 else 1)
+        if slopes == "unit":
+            slope = 1.0
+        elif slopes == "zero" and index % 3 == 0:
+            slope = 0.0
+        transitions[node] = GaussianTransition(slope, 0, float(rng.uniform(0.1, 2)))
+    process = GaussianTreeProcess(
+        tree, transitions, GaussianRootPrior("gaussian", 0, 0.6), "custom"
+    )
+    requested = [nodes[i] for i in rng.integers(0, len(nodes), 64)]
+    expected = np.empty((64, 64))
+    expected[:63, :63] = process.covariance(requested[:63])
+    for i, node in enumerate(requested):
+        pair = process.covariance([node, requested[-1]])
+        expected[i, -1] = expected[-1, i] = pair[0, 1] if i < 63 else pair[1, 1]
+    monkeypatch.setattr(gaussian_tree, "_COVARIANCE_WORKSPACE_BYTES", workspace)
+    np.testing.assert_array_equal(process.covariance(requested), expected)

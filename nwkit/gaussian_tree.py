@@ -17,6 +17,80 @@ from scipy import sparse
 from nwkit.clade_index import LcaIndex
 from nwkit.sparse_laplace import SparseCovarianceModel
 
+_COVARIANCE_WORKSPACE_BYTES = 4 * 1024**2
+
+
+def _fill_covariance_blocks(
+    covariance, lca, requested, variances, loading, factors, stable
+):
+    """Every requested pair is written at its LCA, with bounded product tiles."""
+    local: list[list[int]] = [[] for _ in lca.nodes]
+    for output, index in enumerate(requested):
+        local[index].append(output)
+    descendants: dict[int, np.ndarray] = {}
+    output_loading = loading[np.asarray(requested, dtype=int)]
+    for ancestor in range(len(lca.nodes) - 1, -1, -1):
+        own = np.asarray(local[ancestor], dtype=int)
+        groups = [own] if len(own) else []
+        for child in lca.nodes[ancestor].children:
+            group = descendants.pop(lca.index_by_node[child])
+            if len(group):
+                groups.append(group)
+        merged = np.empty(sum(map(len, groups)), dtype=int)
+        if len(own):
+            own_value = variances[ancestor]
+            if factors is not None:
+                # Repeated requests for one node are off-diagonal pairs in
+                # the original API: retain its loading-product arithmetic.
+                with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+                    own_value = (
+                        loading[ancestor] * loading[ancestor] * factors[ancestor]
+                    )
+                if not np.isfinite(own_value) or (
+                    own_value == 0 and variances[ancestor] > 0
+                ):
+                    own_value = stable(ancestor, ancestor, ancestor)
+            covariance[np.ix_(own, own)] = own_value
+            covariance[own, own] = variances[ancestor]
+        start = 0
+        for group in groups:
+            if start:
+                # Two product temporaries may coexist; tile both axes.
+                # Include the finite/zero masks as well as the two products.
+                max_entries = max(1, _COVARIANCE_WORKSPACE_BYTES // 24)
+                columns = min(len(group), max_entries)
+                rows = max(1, min(start, max_entries // columns))
+                for second in range(0, len(group), columns):
+                    right = group[second : second + columns]
+                    for first in range(0, start, rows):
+                        left = merged[first : min(start, first + rows)]
+                        if factors is None:
+                            covariance[np.ix_(left, right)] = variances[ancestor]
+                            covariance[np.ix_(right, left)] = variances[ancestor]
+                            continue
+                        with np.errstate(
+                            over="ignore", under="ignore", invalid="ignore"
+                        ):
+                            block = (
+                                output_loading[left, None]
+                                * output_loading[right][None, :]
+                                * factors[ancestor]
+                            )
+                        bad = ~np.isfinite(block) | (
+                            (block == 0) & (variances[ancestor] > 0)
+                        )
+                        for row, column in zip(*np.nonzero(bad), strict=True):
+                            one, two = sorted((int(left[row]), int(right[column])))
+                            block[row, column] = stable(
+                                requested[one], requested[two], ancestor
+                            )
+                        covariance[np.ix_(left, right)] = block
+                        covariance[np.ix_(right, left)] = block.T
+                        del block, bad
+            merged[start : start + len(group)] = group
+            start += len(group)
+        descendants[ancestor] = merged
+
 
 @dataclass(frozen=True, slots=True)
 class GaussianTransition:
@@ -452,47 +526,61 @@ class GaussianTreeProcess:
 
         covariance = np.empty((len(nodes), len(nodes)), dtype=float)
         common_ancestor = lca.common_ancestor_indices
-        if unit_loadings:
-            for first, first_index in enumerate(requested):
-                covariance[first, first] = variances[first_index]
-                for second in range(first + 1, len(nodes)):
-                    ancestor = common_ancestor(first_index, requested[second])
-                    value = variances[ancestor]
-                    covariance[first, second] = value
-                    covariance[second, first] = value
-        elif direct_loadings:
+        ancestor_factor = None
+        if not unit_loadings and direct_loadings:
             with np.errstate(over="ignore", under="ignore", divide="ignore"):
                 ancestor_factor = variances / (cumulative_loading * cumulative_loading)
             direct_loadings = bool(np.isfinite(ancestor_factor).all())
-            if direct_loadings:
+        if len(nodes) >= 64 and (unit_loadings or direct_loadings):
+            _fill_covariance_blocks(
+                covariance,
+                lca,
+                requested,
+                variances,
+                cumulative_loading,
+                None if unit_loadings else ancestor_factor,
+                stable_covariance,
+            )
+        else:
+            if unit_loadings:
                 for first, first_index in enumerate(requested):
                     covariance[first, first] = variances[first_index]
-                    first_loading = cumulative_loading[first_index]
+                    for second in range(first + 1, len(nodes)):
+                        ancestor = common_ancestor(first_index, requested[second])
+                        value = variances[ancestor]
+                        covariance[first, second] = value
+                        covariance[second, first] = value
+            elif direct_loadings:
+                assert ancestor_factor is not None
+                if direct_loadings:
+                    for first, first_index in enumerate(requested):
+                        covariance[first, first] = variances[first_index]
+                        first_loading = cumulative_loading[first_index]
+                        for second in range(first + 1, len(nodes)):
+                            second_index = requested[second]
+                            ancestor = common_ancestor(first_index, second_index)
+                            value = (
+                                first_loading
+                                * cumulative_loading[second_index]
+                                * ancestor_factor[ancestor]
+                            )
+                            if not math.isfinite(float(value)) or (
+                                value == 0.0 and variances[ancestor] > 0.0
+                            ):
+                                value = stable_covariance(
+                                    first_index, second_index, ancestor
+                                )
+                            covariance[first, second] = value
+                            covariance[second, first] = value
+            if not unit_loadings and not direct_loadings:
+                for first, first_index in enumerate(requested):
+                    covariance[first, first] = variances[first_index]
                     for second in range(first + 1, len(nodes)):
                         second_index = requested[second]
                         ancestor = common_ancestor(first_index, second_index)
-                        value = (
-                            first_loading
-                            * cumulative_loading[second_index]
-                            * ancestor_factor[ancestor]
-                        )
-                        if not math.isfinite(float(value)) or (
-                            value == 0.0 and variances[ancestor] > 0.0
-                        ):
-                            value = stable_covariance(
-                                first_index, second_index, ancestor
-                            )
+                        value = stable_covariance(first_index, second_index, ancestor)
                         covariance[first, second] = value
                         covariance[second, first] = value
-        if not unit_loadings and not direct_loadings:
-            for first, first_index in enumerate(requested):
-                covariance[first, first] = variances[first_index]
-                for second in range(first + 1, len(nodes)):
-                    second_index = requested[second]
-                    ancestor = common_ancestor(first_index, second_index)
-                    value = stable_covariance(first_index, second_index, ancestor)
-                    covariance[first, second] = value
-                    covariance[second, first] = value
         if not np.isfinite(covariance).all():
             raise ValueError("Gaussian tree covariance exceeds floating-point range.")
         return covariance
