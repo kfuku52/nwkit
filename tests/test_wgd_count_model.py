@@ -64,6 +64,18 @@ def test_log_branching_kernel_matches_probability_kernel(duplication, loss):
     assert not np.any(np.isnan(actual))
 
 
+@pytest.mark.parametrize(
+    "duplication,loss", [(0.2, 0.3), (0.2, 0.2), (0.2, 0), (0, 0.3), (1e-8, 0)]
+)
+def test_log_branching_prefix_does_not_depend_on_global_state_bound(duplication, loss):
+    larger = _birth_death_log_transition(duplication, loss, 0.9, 90)
+    for bound in (1, 4, 9):
+        smaller = _birth_death_log_transition(duplication, loss, 0.9, bound)
+        np.testing.assert_allclose(
+            smaller, larger[: bound + 1, : bound + 1], rtol=1e-13, atol=1e-12
+        )
+
+
 def test_high_copy_low_birth_likelihood_remains_finite_against_yule_law():
     duplication = 1e-8
     model = CountLikelihood(tree(), np.array([[84, 1]]), ascertainment="root-clades")

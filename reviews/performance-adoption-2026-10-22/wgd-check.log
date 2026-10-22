@@ -1,0 +1,30 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_wgd_count_model.py tests/test_wgd_count.py tests/test_wgd_count_scientific_validation.py -rs
+........................................................................ [ 65%]
+......................................                                   [100%]
+============================= slowest 20 durations =============================
+20.96s call     tests/test_wgd_count_scientific_validation.py::test_independent_scenarios_do_not_lose_known_feasible_likelihood[heterogeneous]
+7.94s call     tests/test_wgd_count_scientific_validation.py::test_independent_scenarios_do_not_lose_known_feasible_likelihood[missing-annotation]
+5.32s call     tests/test_wgd_count_scientific_validation.py::test_independent_scenarios_do_not_lose_known_feasible_likelihood[strong-wgd]
+5.09s call     tests/test_wgd_count.py::test_real_bootstrap_cli_respects_seed_and_search
+5.01s call     tests/test_wgd_count_scientific_validation.py::test_independent_scenarios_do_not_lose_known_feasible_likelihood[local-ssd]
+4.12s call     tests/test_wgd_count_scientific_validation.py::test_independent_scenarios_do_not_lose_known_feasible_likelihood[null]
+3.97s call     tests/test_wgd_count_scientific_validation.py::test_independent_scenarios_do_not_lose_known_feasible_likelihood[pure-wgd]
+1.68s call     tests/test_wgd_count.py::test_real_cli_and_metadata_no_uncalibrated_probability
+1.03s call     tests/test_wgd_count.py::test_single_stdin_owner_and_stdout_primary
+0.95s call     tests/test_wgd_count_scientific_validation.py::test_independent_history_pattern_probabilities_match_pruning[root-clades]
+0.83s call     tests/test_wgd_count_model.py::test_simulated_frequency_matches_conditional_probability
+0.74s call     tests/test_wgd_count_scientific_validation.py::test_independent_history_pattern_probabilities_match_pruning[observed]
+0.26s call     tests/test_wgd_count_model.py::test_pruning_matches_brute_force_and_ascertainment
+0.19s call     tests/test_wgd_count_model.py::test_high_copy_low_birth_likelihood_remains_finite_against_yule_law
+0.17s call     tests/test_wgd_count_model.py::test_root_clade_simulation_observation_and_missingness_selection
+0.09s call     tests/test_wgd_count_model.py::test_high_copy_rare_pulse_likelihood_matches_independent_yule_sum
+0.09s call     tests/test_wgd_count_model.py::test_zero_retention_state_check_cannot_hide_split_edge_truncation
+
+(3 durations < 0.05s hidden.)
+110 passed, 6 deselected in 63.68s (0:01:03)

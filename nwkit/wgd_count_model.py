@@ -108,6 +108,15 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
                 else (attenuated, complement)
             )
     descendants = np.arange(1, max_count + 1)[None, :]
+    gamma_table = gammaln(np.arange(max_count + 2))
+    # All nonpositive integer gamma arguments are poles. A read-only shifted
+    # view reuses the descendant/survivor differences without an M-by-M table.
+    gamma_offsets = np.r_[
+        np.full(max_count - 1, np.inf), gamma_table[1 : max_count + 1]
+    ]
+    gamma_difference = np.lib.stride_tricks.sliding_window_view(
+        gamma_offsets, max_count
+    )[::-1]
     for count in range(1, max_count + 1):
         surviving = np.arange(1, count + 1)[:, None]
         # Sum over the number of surviving ancestral lineages. Conditional
@@ -118,14 +127,14 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
                 descendants == surviving, 0.0, (descendants - surviving) * log_b
             )
             terms = (
-                gammaln(count + 1)
-                - gammaln(surviving + 1)
-                - gammaln(count - surviving + 1)
+                gamma_table[count + 1]
+                - gamma_table[2 : count + 2, None]
+                - gamma_table[1 : count + 1, None][::-1]
                 + extinct
                 + surviving * (log_survival + log_success)
-                + gammaln(descendants)
-                - gammaln(surviving)
-                - gammaln(descendants - surviving + 1)
+                + gamma_table[None, 1 : max_count + 1]
+                - gamma_table[1 : count + 1, None]
+                - gamma_difference[:count]
                 + extra
             )
         terms[descendants < surviving] = -np.inf
