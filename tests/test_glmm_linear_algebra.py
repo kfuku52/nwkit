@@ -43,3 +43,30 @@ def test_glmm_marginal_information_uses_existing_cholesky(categorical, monkeypat
             design, np.arange(n), weights, precision
         )
     np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("local", [False, True])
+@pytest.mark.parametrize("budget", [64, 4 * 1024**2])
+def test_grouped_projection_matches_independent_operator_across_tiles(
+    local, budget, monkeypatch
+):
+    n, k, dimension = 67, 2, 3
+    rng = np.random.default_rng(429)
+    coefficients = rng.normal(size=(k + 1, dimension))
+    if local:
+        loading = rng.normal(size=(n, k, k))
+        covariance = loading @ loading.transpose(0, 2, 1)
+        full = np.zeros((n * k, n * k))
+        for row in range(n):
+            full[row * k : (row + 1) * k, row * k : (row + 1) * k] = covariance[row]
+    else:
+        loading = rng.normal(size=(n * k, 5))
+        full = loading @ loading.T
+        covariance = full.reshape(n, k, n, k).transpose(1, 3, 0, 2)
+    operator = np.kron(np.eye(n), coefficients[1:].T)
+    expected = operator @ full @ operator.T
+    monkeypatch.setattr(glmm, "_PROJECTION_WORKSPACE_BYTES", budget)
+    actual = glmm._project_predictor_uncertainty(
+        coefficients, [covariance], [tuple(range(1, k + 1))], n
+    )
+    np.testing.assert_allclose(actual, expected, rtol=1e-12, atol=1e-12)

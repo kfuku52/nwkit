@@ -840,6 +840,34 @@ def _initial_threshold_parameters(counts: np.ndarray) -> np.ndarray:
     return parameters
 
 
+_PROJECTION_WORKSPACE_BYTES = 4 * 1024**2
+
+
+def _add_grouped_predictor_covariance(projected, covariance, slopes, n):
+    """Batch identical block products with bounded intermediate storage."""
+    dimension = slopes.shape[1]
+    view = projected.reshape(n, dimension, n, dimension)
+    # Both matrix products may coexist. Tile both observation axes rather than
+    # letting one row's temporary grow with every observation/predictor.
+    block_bytes = max(1, 8 * dimension * (len(slopes) + dimension))
+    blocks = max(1, _PROJECTION_WORKSPACE_BYTES // block_bytes)
+    rows = max(1, min(64, n, blocks))
+    columns = max(1, min(n, blocks // rows))
+    for start in range(0, n, rows):
+        end = min(start + rows, n)
+        if covariance.ndim == 3:
+            diagonal = np.arange(start, end)
+            view[diagonal, :, diagonal, :] += slopes.T @ covariance[start:end] @ slopes
+            continue
+        for second in range(0, n, columns):
+            second_end = min(second + columns, n)
+            matrices = covariance[:, :, start:end, second:second_end].transpose(
+                2, 3, 0, 1
+            )
+            products = slopes.T @ matrices @ slopes
+            view[start:end, :, second:second_end, :] += products.transpose(0, 2, 1, 3)
+
+
 def _project_predictor_uncertainty(
     coefficients: np.ndarray,
     uncertainties: Sequence[np.ndarray],
@@ -884,10 +912,9 @@ def _project_predictor_uncertainty(
         selected = tuple(selected_columns)
         slopes = coefficients[np.asarray(selected, dtype=int), :]
         if covariance.shape == (n_observations, len(selected), len(selected)):
-            for observation in range(n_observations):
-                block = slopes.T @ covariance[observation] @ slopes
-                start = observation * dimension
-                projected[start : start + dimension, start : start + dimension] += block
+            _add_grouped_predictor_covariance(
+                projected, covariance, slopes, n_observations
+            )
             continue
         expected = (
             len(selected),
@@ -897,15 +924,7 @@ def _project_predictor_uncertainty(
         )
         if covariance.shape != expected:
             raise ValueError("Grouped predictor uncertainty has wrong dimensions.")
-        for first in range(n_observations):
-            first_start = first * dimension
-            for second in range(n_observations):
-                second_start = second * dimension
-                block = slopes.T @ covariance[:, :, first, second] @ slopes
-                projected[
-                    first_start : first_start + dimension,
-                    second_start : second_start + dimension,
-                ] += block
+        _add_grouped_predictor_covariance(projected, covariance, slopes, n_observations)
     return (projected + projected.T) / 2.0
 
 
