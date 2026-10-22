@@ -122,6 +122,29 @@ def test_parallel_seed_and_empirical_curve_reference():
     assert (serial[:, -2:] == 0).all()
 
 
+@pytest.mark.parametrize(
+    "traits,scale", [(1, 1.0), (5, 1e-140), (16, 1e140), (64, 1.0)]
+)
+@pytest.mark.parametrize("budget", [1, 8000, 4 * 1024**2])
+def test_batched_simulation_retains_individual_draws_across_workspaces(
+    traits, scale, budget, monkeypatch
+):
+    from nwkit import disparity
+
+    _, design = design_for()
+    factor = np.tril(np.random.default_rng(51).normal(size=(traits, traits))) * scale
+    seeds = np.random.SeedSequence(81).spawn(35)
+    expected = np.asarray(
+        [disparity._simulate_one(design, factor, seed) for seed in seeds]
+    )
+    monkeypatch.setattr(disparity, "_SIMULATION_WORKSPACE_BYTES", budget)
+    actual = simulate_curves(design, factor, 35, seed=81)
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(
+        actual[:7], simulate_curves(design, factor, 7, seed=81)
+    )
+
+
 @pytest.mark.parametrize("scale", ["raw", "standardize"])
 def test_units_and_translation_invariance(scale):
     _, design = design_for()

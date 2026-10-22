@@ -173,9 +173,99 @@ def _simulate_one(design, factor, seed):
     return dtt_curve(design, tips)
 
 
+_SIMULATION_WORKSPACE_BYTES = 4 * 1024**2
+
+
+def _row_squared_norms(delta):
+    # Fresh vectors retain the original dot reduction, including on backends
+    # whose reduction differs for offset rows of a batched buffer.
+    output = []
+    for row in delta:
+        copied = row.copy()
+        output.append(np.dot(copied, copied))
+    return np.asarray(output)
+
+
+def _batched_disparities(design, values, counts):
+    replicas = values.shape[1]
+    means = np.zeros_like(values)
+    sums = np.zeros(values.shape[:2])
+    for node in range(len(counts) - 1, -1, -1):
+        if design.tip_rows[node] >= 0:
+            means[node] = values[node]
+            continue
+        merged = 0
+        for child in design.children[node]:
+            total = merged + counts[child]
+            delta = means[child] - means[node]
+            squared = _row_squared_norms(delta)
+            sums[node] += sums[child] + squared * merged * counts[child] / np.full(
+                replicas, total
+            )
+            means[node] += delta * (counts[child] / total)
+            merged = total
+    disparities = np.divide(
+        2 * sums,
+        np.repeat((counts - 1)[:, None], replicas, axis=1),
+        out=np.zeros_like(sums),
+        where=counts[:, None] > 1,
+    )
+    if not np.isfinite(disparities).all() or np.any(disparities[0] <= 0):
+        raise ValueError(
+            "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        )
+    return disparities
+
+
 def _simulate_chunk(payload):
     design, factor, seeds = payload
-    return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
+    nodes, traits = len(design.parents), factor.shape[0]
+    # Include products, moment/denominator arrays and temporary curve storage.
+    # Large trees/trait dimensions retain the single-replica workspace.
+    replica_bytes = 8 * (nodes * (3 * traits + 6) + 2 * len(design.times))
+    batch = max(1, min(32, _SIMULATION_WORKSPACE_BYTES // max(1, replica_bytes)))
+    if len(seeds) <= 1 or batch == 1:
+        return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
+    counts = np.zeros(nodes, dtype=int)
+    for node in range(nodes - 1, -1, -1):
+        counts[node] = (
+            1
+            if design.tip_rows[node] >= 0
+            else sum(counts[child] for child in design.children[node])
+        )
+    square_roots = np.sqrt(design.lengths)
+    indexed: list[tuple[int, np.ndarray]] = []
+    for start in range(0, len(seeds), batch):
+        selected = seeds[start : start + batch]
+        replicas = len(selected)
+        innovations = np.empty((nodes - 1, replicas, traits))
+        for column, (_, seed) in enumerate(selected):
+            rng = np.random.default_rng(seed)
+            innovations[:, column, :] = (
+                rng.standard_normal((nodes - 1, traits)) @ factor.T
+            )
+        values = np.zeros((nodes, replicas, traits))
+        for node in range(1, nodes):
+            values[node] = (
+                values[design.parents[node]]
+                + square_roots[node] * innovations[node - 1]
+            )
+        disparities = _batched_disparities(design, values, counts)
+        curves = np.asarray(
+            [
+                np.asarray(
+                    design.weights @ (disparities[:, column] / disparities[0, column])
+                )
+                for column in range(replicas)
+            ]
+        )
+        del innovations, values, disparities
+        indexed.extend(
+            (index, curve.copy())
+            for (index, _), curve in zip(selected, curves, strict=True)
+        )
+        del curves
+    return indexed
 
 
 def validate_work(design, traits, count, export_simulations=False):

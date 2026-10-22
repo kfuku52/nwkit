@@ -1,0 +1,31 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_dtt.py tests/test_dtt_audit.py -rs
+...............................................................          [100%]
+============================= slowest 20 durations =============================
+0.47s call     tests/test_dtt.py::test_parallel_seed_and_empirical_curve_reference
+0.34s call     tests/test_dtt.py::test_cli_artifacts_and_mdi_reconstruction[pdf-%PDF]
+0.29s call     tests/test_dtt.py::test_cli_artifacts_and_mdi_reconstruction[png-\x89PNG]
+0.28s call     tests/test_dtt.py::test_cli_artifacts_and_mdi_reconstruction[svg-<?xml]
+0.26s call     tests/test_dtt_audit.py::test_plot_user_text_is_literal_even_with_tex_enabled
+0.23s call     tests/test_dtt.py::test_trait_tree_panels_use_retained_original_values
+0.23s call     tests/test_dtt.py::test_default_heatmap_for_any_displayed_count[None-True]
+0.23s call     tests/test_dtt_audit.py::test_raw_colors_are_invariant_to_extreme_unit_changes[trees]
+0.19s call     tests/test_dtt.py::test_default_heatmap_for_any_displayed_count[size,shape-True]
+0.19s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[pdf-standardize]
+0.17s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[png-standardize]
+0.17s call     tests/test_dtt.py::test_observed_only_rank_deficiency_and_json
+0.16s call     tests/test_dtt.py::test_default_heatmap_for_any_displayed_count[size-True]
+0.16s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[png-raw]
+0.15s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[svg-raw]
+0.14s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[pdf-raw]
+0.12s call     tests/test_dtt.py::test_heatmap_order_scaling_alignment_and_unchanged_analysis[svg-standardize]
+0.11s call     tests/test_dtt_audit.py::test_raw_colors_are_invariant_to_extreme_unit_changes[heatmap]
+0.08s call     tests/test_dtt.py::test_bm_simulations_match_independent_dense_tip_distribution
+
+(1 durations < 0.05s hidden.)
+63 passed in 5.06s
