@@ -1,0 +1,30 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff check nwkit tests setup.py tools
+All checks passed!
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m ruff format --check nwkit tests setup.py tools
+589 files already formatted
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m mypy
+Success: no issues found in 260 source files
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -m not slow tests/test_glmm_linear_algebra.py tests/test_numerical_invariance.py tests/test_ordinary_regression.py tests/test_regression_inference_contract.py -k glmm or categorical or poisson or multinomial or ordinal or invariance -rs
+..........................................................               [100%]
+============================= slowest 20 durations =============================
+0.85s call     tests/test_ordinary_regression.py::test_sparse_zero_modified_and_beta_binomial_match_dense[zero-inflated-poisson-values0-options0-0.0005]
+0.76s call     tests/test_ordinary_regression.py::test_categorical_separation_is_regularized_and_null_bootstrap_tested
+0.73s call     tests/test_ordinary_regression.py::test_sparse_zero_modified_and_beta_binomial_match_dense[hurdle-poisson-values2-options2-0.0005]
+0.59s call     tests/test_ordinary_regression.py::test_sparse_multilevel_glmm_matches_dense_fit[multinomial]
+0.42s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[hurdle-poisson-values4-extra4]
+0.41s call     tests/test_ordinary_regression.py::test_sparse_glmm_with_grouped_predictor_uncertainty_matches_dense
+0.40s call     tests/test_ordinary_regression.py::test_sparse_glmm_with_group_effect_matches_dense_fit
+0.38s call     tests/test_ordinary_regression.py::test_sparse_multilevel_glmm_matches_dense_fit[ordinal]
+0.33s call     tests/test_ordinary_regression.py::test_sparse_glmm_with_predictor_posterior_matches_dense_fit
+0.33s call     tests/test_ordinary_regression.py::test_sparse_glmm_estimates_evolutionary_shape
+0.31s call     tests/test_ordinary_regression.py::test_sparse_binomial_glmm_matches_dense_fit
+0.30s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[zero-inflated-poisson-values2-extra2]
+0.24s call     tests/test_ordinary_regression.py::test_sparse_poisson_glmm_matches_dense_fit
+0.23s call     tests/test_regression_inference_contract.py::test_penalized_poisson_null_bootstrap_refits_both_models
+0.22s call     tests/test_ordinary_regression.py::test_sparse_multinomial_glmm_warns_above_validated_linear_predictors
+0.18s call     tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families[response_values1-options1-multinomial]
+0.17s call     tests/test_ordinary_regression.py::test_sparse_phylogenetic_glmm_warns_above_validated_tip_limit
+0.12s call     tests/test_ordinary_regression.py::test_conventional_categorical_response_and_predictor_replicates
+0.11s call     tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families[response_values2-options2-ordinal]
+0.10s call     tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families[response_values0-options0-binomial]
+58 passed, 94 deselected in 7.95s
