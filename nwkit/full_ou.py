@@ -97,12 +97,18 @@ def _moment_vector(parameters, dimension, time_scale, design):
     attraction, _, covariance = decode_full_ou(parameters, dimension, time_scale)
     distances = {distance for row in design for distance in row[:2]}
     slopes = {distance: expm(-attraction * distance) for distance in distances}
-    return np.array(
-        [
-            (slopes[left] @ covariance @ slopes[right].T)[first, second]
-            for left, right, first, second in design
-        ]
-    )
+    moments = []
+    last_pair = None
+    product = covariance
+    for left, right, first, second in design:
+        pair = (left, right)
+        if pair != last_pair:
+            # Native designs group trait entries by distance pair. Keep only
+            # the current matrix, preserving both matmul order and input order.
+            product = slopes[left] @ covariance @ slopes[right].T
+            last_pair = pair
+        moments.append(product[first, second])
+    return np.array(moments)
 
 
 def full_ou_identifiability(parameters, dimension, time_scale, design, complete):

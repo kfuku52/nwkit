@@ -4,6 +4,7 @@ from scipy.linalg import expm, solve_continuous_lyapunov
 from scipy.stats import multivariate_normal
 
 from nwkit.full_ou import (
+    _moment_vector,
     decode_full_ou,
     full_ou_identifiability,
     full_ou_initial,
@@ -16,6 +17,22 @@ from nwkit.util import read_tree
 
 def _tree(newick="(A:1,B:2,C:3,D:4)R;"):
     return read_tree(newick, "1", True, quiet=True, rooted="yes")
+
+
+def test_moments_preserve_unsorted_distance_pairs_and_trait_entries():
+    parameters, _ = full_ou_initial(3)
+    parameters = parameters + np.random.default_rng(41).normal(0, 0.1, len(parameters))
+    attraction, _, covariance = decode_full_ou(parameters, 3, 2.0)
+    design = [(1.0, 2.0, i, j) for i in range(3) for j in range(3)]
+    design += [(2.0, 0.0, 2, 1), (1.0, 2.0, 0, 2), (0.0, 0.0, 1, 1)]
+    expected = np.array(
+        [
+            (expm(-attraction * left) @ covariance @ expm(-attraction * right).T)[i, j]
+            for left, right, i, j in design
+        ]
+    )
+    np.testing.assert_array_equal(_moment_vector(parameters, 3, 2.0, design), expected)
+    assert _moment_vector(parameters, 3, 2.0, []).shape == (0,)
 
 
 def test_stable_parameterization_allows_negative_diagonal_and_complex_eigenvalues():
