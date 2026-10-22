@@ -4,6 +4,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.55] - 2026-10-22
+
+### Changed
+
+- Reuse covariance factors in exact-observation K permutations and existing Cholesky factors throughout dense GLMM fits.
+- Group cluster scores without repeated observation scans while retaining their original reduction order; batch grouped predictor covariance products within a workspace budget.
+- Accelerate exact numeric diagonal checks and log-domain count transitions without changing object-array behavior or branching-process probabilities.
+- Batch Brownian DTT simulations within a bounded workspace while preserving indexed random streams and exact serial/parallel results.
+- Construct only observed covariance during large, highly missing dense multivariate PGLS optimization, retaining the full final covariance for callers.
+
+### Fixed
+
+- Preserve consumed random draws on failed K permutations and lazy input handling for empty simulation requests.
+
 ## [0.43.54] - 2026-10-17
 
 ### Changed
