@@ -9,7 +9,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 ### Changed
 
 - Reuse a resolved correlation spectrum across exact-observation signal lambda
-  profiles, preserving sampling-error and unresolved-spectrum calculations.
+  profiles, preserving sampling-error and ill-conditioned-spectrum calculations.
 - Fill large Gaussian covariances by descendant blocks with bounded temporary
   storage, retaining arbitrary node order, repeated nodes and stable fallbacks.
 - Reuse final PCA whitening and adjacent full-OU moment products without

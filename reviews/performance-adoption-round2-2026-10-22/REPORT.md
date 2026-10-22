@@ -13,7 +13,7 @@ WGD log product、threshold diagonal、Brownian factorの3案は保留のまま�
 
 | 操作・条件 | 基準 ms | 本体 ms | 中央値倍率 | 出力 |
 |---|---:|---:|---:|---|
-| [λ fit、256 tip、profile CIあり](lambda.json) | 216.584 | 8.579 | 25.25× | 最大尺度付き差8.61e-9 |
+| [λ fit、256 tip、profile CIあり](lambda.json) | 209.214 | 8.478 | 24.68× | 最大尺度付き差8.61e-9 |
 | [相関PCA、512 tip・16 trait](pca.json) | 6.597 | 4.219 | 1.56× | 完全一致 |
 | [Brownian REML PGLS、256 tip](pgls.json) | 22.107 | 6.611 | 3.34× | 完全一致 |
 | [OU共分散作成、512 tip](covariance.json) | 96.455 | 12.720 | 7.58× | 完全一致 |
@@ -54,7 +54,8 @@ ERは32状態以上・固定rate・厳密な対角定数＋非対角定数のP�
 ## 検証と再現
 
 環境、warmup、測定順序、メモリ・同等性の定義は[PROTOCOL.md](PROTOCOL.md)、
-固定archiveと本体のhashは[source-integrity.json](source-integrity.json)に記録しました。
+固定archiveと初回統合本体のhashは[source-integrity.json](source-integrity.json)、
+最終ソースhashは `VALIDATION.json` に記録します。
 初回historyベンチはfixture結果の枝IDをノードとして索引するharnessの誤りで停止し、
 枝IDによる索引に修正して当該操作を最初から7ペア測定しました。本体の問題ではありません。
 
@@ -74,6 +75,19 @@ ERは32状態以上・固定rate・厳密な対角定数＋非対角定数のP�
 型検査を含みます。対象ファイル名の指定誤りでpytestが起動しなかった試行は成功に
 含めず、実在する `tests/test_discrete_asr_models.py` を指定して改めて通過しました。
 数値許容差・モデル・単位・SE・missing・tail・seed・work guardは変更していません。
+
+追加の悪条件監査で、32 tip・2 block・対角gap 1e-8の例に尤度比差
+2.164e-7を確認しました ([修正前12対照](conditioning-before.json))。初回releaseは
+5254 pass・127 skipで通過しましたが、この境界を十分に検査していなかったため、
+その結果を最終版の検証には使いません。
+
+スペクトルを使う条件を `min_eigenvalue > n * sqrt(eps) * max_abs_eigenvalue`
+に強め、悪条件では元のCholesky profileを維持しました。科学的rank、探索範囲や
+許容差を変える変更ではありません。追加回帰は[5 pass](checks/conditioning-guard.log)、
+[実装を使った36対照](conditioning-after.json)は最大差1.56e-9で基準内でした。
+[再現スクリプト](conditioning_audit.py)は完全fit・CI・検定を比較します。
+修正後のλベンチを最初から7ペア再測定し、24.68倍と確認しました。
+[以前の25.25倍の生測定](lambda-before-conditioning-guard.json)も保存しています。
 
 全リリース検査・配布物検査・pushの検証記録は完了後に `VALIDATION.json` に記録します。
 母集団校正のopt-in研究や新規の外部R等による再実験は、この計算再利用変更の範囲では

@@ -86,6 +86,22 @@ def test_exact_lambda_bootstrap_preserves_draws_against_cholesky(monkeypatch):
     assert first.bit_generator.state == second.bit_generator.state
 
 
+@pytest.mark.parametrize("gap", [1e-8, 1e-10])
+def test_lambda_spectrum_preserves_near_boundary_ill_conditioned_profiles(
+    gap, monkeypatch
+):
+    matrix = np.zeros((32, 32))
+    matrix[:16, :16] = matrix[16:, 16:] = 1.0
+    matrix += gap * np.eye(32)
+    values = np.r_[np.zeros(16), np.ones(16)]
+    values += np.random.default_rng(314).normal(size=32) * np.sqrt(gap)
+    errors = np.zeros(32)
+    assert signal_stats._zero_error_lambda_profile(matrix, values, errors) is None
+    actual = lambda_fit(matrix, values, errors)
+    monkeypatch.setattr(signal_stats, "_zero_error_lambda_profile", lambda *args: None)
+    assert actual == lambda_fit(matrix, values, errors)
+
+
 def test_phytools_reference_k():
     # R phytools 2.3.0, using examples/signal; no R dependency at runtime.
     # Error-aware rate reoptimized with optimize(..., tol=1e-12).

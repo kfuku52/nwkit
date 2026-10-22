@@ -1,0 +1,206 @@
+[
+  {
+    "n": 8,
+    "epsilon": 0.0001,
+    "status": "ok",
+    "baseline_status": "ok",
+    "differences": {
+      "estimate": 3.3306690738754696e-16,
+      "sigma2": 5.206945985491984e-13,
+      "root_mean": 6.994405055138486e-15,
+      "log_likelihood": 2.1245227799226996e-12,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 4.249045559845399e-12,
+      "p_value": 1.4509991946273203e-24,
+      "ci_lower": 8.881784197001252e-16,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 8,
+    "epsilon": 1e-06,
+    "status": "ok",
+    "baseline_status": "ok",
+    "differences": {
+      "estimate": 2.220446049250313e-16,
+      "sigma2": 3.1319724591583054e-11,
+      "root_mean": 1.8762769116165146e-14,
+      "log_likelihood": 1.3145040611561853e-12,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 2.6290081223123707e-12,
+      "p_value": 7.30890413894956e-31,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 8,
+    "epsilon": 1e-08,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 3.3306690738754696e-16,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 8,
+    "epsilon": 1e-10,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 2.220446049250313e-16,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 8,
+    "epsilon": 1e-12,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 1.1102230246251565e-16,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 8,
+    "epsilon": 1e-13,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 32,
+    "epsilon": 0.0001,
+    "status": "ok",
+    "baseline_status": "ok",
+    "differences": {
+      "estimate": 8.359979375427429e-14,
+      "sigma2": 6.259992524348945e-11,
+      "root_mean": 1.6764367671839864e-14,
+      "log_likelihood": 9.109157872444484e-12,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 1.8189894035458565e-11,
+      "p_value": 2.0423816367222614e-64,
+      "ci_lower": 3.6637359812630166e-15,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 32,
+    "epsilon": 1e-06,
+    "status": "ok",
+    "baseline_status": "ok",
+    "differences": {
+      "estimate": 1.6653345369377348e-15,
+      "sigma2": 1.3360118567007362e-10,
+      "root_mean": 4.04121180963557e-14,
+      "log_likelihood": 1.9919070837204345e-09,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 3.983814167440869e-09,
+      "p_value": 3.6633949227722455e-92,
+      "ci_lower": 8.215650382226158e-15,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 32,
+    "epsilon": 1e-08,
+    "status": "ok",
+    "baseline_status": "ok",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 4.969487044093057e-10,
+      "root_mean": 1.712296970879379e-12,
+      "log_likelihood": 1.0821042906172806e-07,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 2.1642085812345613e-07,
+      "p_value": 1.7153646718485604e-120,
+      "ci_lower": 4.551914400963142e-15,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 32,
+    "epsilon": 1e-10,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 2.220446049250313e-16,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 32,
+    "epsilon": 1e-12,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    }
+  },
+  {
+    "n": 32,
+    "epsilon": 1e-13,
+    "status": "boundary",
+    "baseline_status": "boundary",
+    "differences": {
+      "estimate": 0.0,
+      "sigma2": 0.0,
+      "root_mean": 0.0,
+      "log_likelihood": 0.0,
+      "null_log_likelihood": 0.0,
+      "likelihood_ratio": 0.0,
+      "p_value": 0.0,
+      "ci_lower": 0.0,
+      "ci_upper": 0.0
+    }
+  }
+]

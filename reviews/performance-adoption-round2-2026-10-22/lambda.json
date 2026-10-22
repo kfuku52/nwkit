@@ -5,22 +5,22 @@
   "environment": "macOS-27.0.1-arm64-arm-64bit",
   "summary": {
     "baseline": {
-      "median_seconds": 0.21658354194369167,
-      "min_seconds": 0.20984279096592218,
-      "max_seconds": 0.22003404202405363
+      "median_seconds": 0.20921391702722758,
+      "min_seconds": 0.20236962498165667,
+      "max_seconds": 0.2239520000293851
     },
     "current": {
-      "median_seconds": 0.008578624995425343,
-      "min_seconds": 0.008422791585326194,
-      "max_seconds": 0.008841958199627697
+      "median_seconds": 0.008478425000794232,
+      "min_seconds": 0.007858395828710249,
+      "max_seconds": 0.008724883198738098
     }
   },
   "records": {
     "baseline": [
       {
-        "seconds": 0.21752800000831485,
+        "seconds": 0.20921391702722758,
         "loops": 1,
-        "peak_python_bytes": 2704444,
+        "peak_python_bytes": 2705314,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -28,9 +28,9 @@
         "source": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/baseline/nwkit/__init__.py"
       },
       {
-        "seconds": 0.20984279096592218,
+        "seconds": 0.208257665974088,
         "loops": 1,
-        "peak_python_bytes": 2704942,
+        "peak_python_bytes": 2705040,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -38,9 +38,9 @@
         "source": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/baseline/nwkit/__init__.py"
       },
       {
-        "seconds": 0.21658354194369167,
+        "seconds": 0.2037064169999212,
         "loops": 1,
-        "peak_python_bytes": 2705730,
+        "peak_python_bytes": 2706916,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -48,9 +48,9 @@
         "source": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/baseline/nwkit/__init__.py"
       },
       {
-        "seconds": 0.2145589579595253,
+        "seconds": 0.210891249938868,
         "loops": 1,
-        "peak_python_bytes": 2704310,
+        "peak_python_bytes": 2705088,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -58,9 +58,9 @@
         "source": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/baseline/nwkit/__init__.py"
       },
       {
-        "seconds": 0.21745504101272672,
+        "seconds": 0.20236962498165667,
         "loops": 1,
-        "peak_python_bytes": 2705458,
+        "peak_python_bytes": 2704996,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -68,9 +68,9 @@
         "source": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/baseline/nwkit/__init__.py"
       },
       {
-        "seconds": 0.21653733297716826,
+        "seconds": 0.2239520000293851,
         "loops": 1,
-        "peak_python_bytes": 2705224,
+        "peak_python_bytes": 2711942,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -78,9 +78,9 @@
         "source": "/private/var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/baseline/nwkit/__init__.py"
       },
       {
-        "seconds": 0.22003404202405363,
+        "seconds": 0.21537662507034838,
         "loops": 1,
-        "peak_python_bytes": 2704998,
+        "peak_python_bytes": 2704752,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
@@ -90,73 +90,73 @@
     ],
     "current": [
       {
-        "seconds": 0.008817799994722009,
+        "seconds": 0.008588716597296297,
         "loops": 5,
         "peak_python_bytes": 3170674,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
-        "nwkit": "0.43.56",
+        "nwkit": "0.43.57",
         "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
       },
       {
-        "seconds": 0.008510983199812472,
+        "seconds": 0.007898116600699723,
         "loops": 5,
         "peak_python_bytes": 3170674,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
-        "nwkit": "0.43.56",
+        "nwkit": "0.43.57",
         "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
       },
       {
-        "seconds": 0.008422791585326194,
+        "seconds": 0.007858395828710249,
+        "loops": 6,
+        "peak_python_bytes": 3170890,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.57",
+        "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
+      },
+      {
+        "seconds": 0.007921950006857515,
         "loops": 5,
         "peak_python_bytes": 3170674,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
-        "nwkit": "0.43.56",
+        "nwkit": "0.43.57",
         "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
       },
       {
-        "seconds": 0.008490933408029377,
-        "loops": 5,
-        "peak_python_bytes": 3170794,
-        "python": "3.12.14",
-        "numpy": "2.5.4",
-        "scipy": "1.17.1",
-        "nwkit": "0.43.56",
-        "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
-      },
-      {
-        "seconds": 0.008841958199627697,
-        "loops": 5,
-        "peak_python_bytes": 3170352,
-        "python": "3.12.14",
-        "numpy": "2.5.4",
-        "scipy": "1.17.1",
-        "nwkit": "0.43.56",
-        "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
-      },
-      {
-        "seconds": 0.00884153340011835,
+        "seconds": 0.008478425000794232,
         "loops": 5,
         "peak_python_bytes": 3170674,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
-        "nwkit": "0.43.56",
+        "nwkit": "0.43.57",
         "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
       },
       {
-        "seconds": 0.008578624995425343,
+        "seconds": 0.008709225011989475,
+        "loops": 5,
+        "peak_python_bytes": 3170628,
+        "python": "3.12.14",
+        "numpy": "2.5.4",
+        "scipy": "1.17.1",
+        "nwkit": "0.43.57",
+        "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
+      },
+      {
+        "seconds": 0.008724883198738098,
         "loops": 5,
         "peak_python_bytes": 3170674,
         "python": "3.12.14",
         "numpy": "2.5.4",
         "scipy": "1.17.1",
-        "nwkit": "0.43.56",
+        "nwkit": "0.43.57",
         "source": "/Users/kf/repos/nwkit/nwkit/__init__.py"
       }
     ]
@@ -191,6 +191,6 @@
       "maximum_scaled_numeric_difference": 8.606664825272503e-09
     }
   ],
-  "median_speedup": 25.246883044682278,
+  "median_speedup": 24.67603558533915,
   "contention": "Other user-owned CPU jobs may remain outside the measurement lock"
 }

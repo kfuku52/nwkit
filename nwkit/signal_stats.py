@@ -180,7 +180,7 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
 
 
 def _zero_error_lambda_profile(covariance, values, errors):
-    """Prepare one resolved correlation spectrum for an exact-observation fit."""
+    """Prepare one well-conditioned spectrum for an exact-observation fit."""
     if np.any(errors) or np.ptp(values) == 0:
         return None
     # Retain the original endpoint calculations, including rejection of a
@@ -192,8 +192,13 @@ def _zero_error_lambda_profile(covariance, values, errors):
     sd = np.sqrt(np.diag(covariance))
     correlation = covariance / sd[:, None] / sd[None, :]
     eigenvalues, eigenvectors = eigh(correlation, driver="evd")
-    resolution = 64 * np.finfo(float).eps * len(values) * np.max(np.abs(eigenvalues))
-    if eigenvalues[0] <= resolution:
+    # A resolved eigenvalue alone does not ensure accurate log likelihoods:
+    # near lambda=1, spectral errors grow with conditioning and sample size.
+    # Keep Cholesky profiles in that regime without changing scientific rank.
+    accuracy_floor = (
+        np.sqrt(np.finfo(float).eps) * len(values) * np.max(np.abs(eigenvalues))
+    )
+    if eigenvalues[0] <= accuracy_floor:
         return None
     reference = values[0]
     projected_one = eigenvectors.T @ (np.ones(len(values)) / sd)
