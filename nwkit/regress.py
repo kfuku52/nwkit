@@ -1265,9 +1265,15 @@ def _fit_model(
         float("nan") if weighted_total == 0.0 else 1.0 - weighted_rss / weighted_total
     )
     bread = np.linalg.inv(gram)
+    # Stable grouping removes a full observation scan per event, retaining the
+    # original row order and BLAS products for nearly cancelling cluster scores.
+    event_order = np.argsort(inverse, kind="stable")
+    event_starts = np.r_[0, np.cumsum(counts)]
     meat = np.zeros((num_parameters, num_parameters), dtype=float)
     for event_index in range(n_events):
-        selected = inverse == event_index
+        selected = event_order[
+            event_starts[event_index] : event_starts[event_index + 1]
+        ]
         score = design[selected].T @ (weights[selected] * residual[selected])
         meat += np.outer(score, score)
     degrees_of_freedom = n_events - num_parameters

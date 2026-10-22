@@ -683,6 +683,61 @@ def test_species_event_cluster_hc1_standard_error_matches_reference_formula():
     assert result["degrees_of_freedom"] == degrees_of_freedom
 
 
+@pytest.mark.parametrize("weighting", ["event", "contrast"])
+def test_cluster_hc1_unbalanced_events_preserve_score_products(weighting):
+    from nwkit.model_matrix import PredictorTerm
+    from nwkit.regress import _fit_model
+
+    rng = np.random.default_rng(713)
+    event = np.repeat(np.arange(7), [31, 2, 5, 1, 9, 3, 8])
+    rng.shuffle(event)
+    design = rng.normal(size=(len(event), 2))
+    y = design @ np.array([0.5, -1.2]) + rng.normal(size=len(event))
+    frame = pd.DataFrame(
+        {
+            "tree_id": "family",
+            "trait": "y",
+            "raw_contrast": y,
+            "contrast_variance": 1.0,
+            "_predictor_values": list(design),
+            "species_event_id": event.astype(str),
+            "lineage_clade_id": "lineage",
+        }
+    )
+    weights = (
+        1 / np.bincount(event)[event] if weighting == "event" else np.ones(len(event))
+    )
+    gram = design.T @ (weights[:, None] * design)
+    beta = np.linalg.solve(gram, design.T @ (weights * y))
+    residual = y - design @ beta
+    meat = np.zeros((2, 2))
+    for identifier in range(7):
+        selected = event == identifier
+        score = design[selected].T @ (weights[selected] * residual[selected])
+        meat += np.outer(score, score)
+    bread = np.linalg.inv(gram)
+    expected = 7 / 5 * bread @ meat @ bread
+    result = _fit_model(
+        frame,
+        ["x", "z"],
+        confidence_level=0.95,
+        event_weighting=weighting,
+        coverage_policy="complete",
+        excluded_ineligible=0,
+        excluded_coverage=0,
+        predictor_metadata={
+            name: PredictorTerm(name, name, "continuous") for name in ("x", "z")
+        },
+        predictor_groups={name: (name,) for name in ("x", "z")},
+    )
+    np.testing.assert_allclose([row["coefficient"] for row in result], beta, rtol=1e-13)
+    np.testing.assert_allclose(
+        [row["standard_error"] for row in result],
+        np.sqrt(np.diag(expected)),
+        rtol=1e-13,
+    )
+
+
 def test_pgls_fits_each_tree_and_response_separately():
     rows = []
     for tree_id, multiplier in [("OG1", 2.0), ("OG2", -1.0)]:
