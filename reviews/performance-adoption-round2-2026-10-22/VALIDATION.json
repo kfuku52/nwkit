@@ -1,0 +1,89 @@
+{
+  "version": "0.43.57",
+  "pre_push_base": "8664baa7e88afae7e384c0e4d8d16437846493a2",
+  "implementation_commit": "bc09eed85ccb943e051584e41aaa125357e0c1d2",
+  "source_date_epoch": 1792676668,
+  "destination": "origin/master",
+  "publication": "Validated for a normal push; final remote SHA and CI outcome are reported in the task.",
+  "environment": {
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "ete4": "4.4.0 (same-version source build)",
+    "platform": "macOS ARM64",
+    "python_executable": "/tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python",
+    "numerical_threads": 1,
+    "pytest_workers": 3,
+    "NWKIT_CI_DIAGNOSTICS": "0 (documented CPython traceback workaround)"
+  },
+  "release": {
+    "command": "python tools/check.py release",
+    "exit_code": 0,
+    "passed": 5256,
+    "skipped": 127,
+    "pytest_seconds": 366.34,
+    "coverage": {
+      "covered_lines": 49064,
+      "num_statements": 55169,
+      "percent_covered": 85.95882849535684,
+      "percent_covered_display": "86",
+      "missing_lines": 6105,
+      "excluded_lines": 7,
+      "percent_statements_covered": 88.93400279142271,
+      "percent_statements_covered_display": "89",
+      "num_branches": 21826,
+      "num_partial_branches": 3804,
+      "covered_branches": 17120,
+      "missing_branches": 4706,
+      "percent_branches_covered": 78.43855951617337,
+      "percent_branches_covered_display": "78"
+    },
+    "static_type_security_dependency_checks": "passed",
+    "maintainability": "passed without new exceptions or threshold changes",
+    "sdist_wheel_contents_metadata_and_byte_reproducibility": "passed",
+    "log": "checks/release-final.log"
+  },
+  "package_consumer": {
+    "passed": 154,
+    "skipped": 0,
+    "imported_installed_wheel_from_isolated_target": true,
+    "module_bytes_equal_to_checkout_and_sdist": [
+      "full_ou",
+      "phylogenetic_pca",
+      "wgd_count_model",
+      "gaussian_tree",
+      "signal_stats",
+      "asr",
+      "stochastic_history"
+    ],
+    "log": "checks/package-consumer.log",
+    "details": "package-consumer.json"
+  },
+  "conditioning_fix": {
+    "finding": "32 tips, 2 blocks, diagonal gap 1e-8 produced LR difference 2.164e-7 before stronger guard",
+    "computational_guard": "min_eigenvalue > n * sqrt(machine_epsilon) * max_abs_eigenvalue",
+    "additional_complete_fit_controls": 36,
+    "maximum_absolute_difference": 1.5538184072738659e-09,
+    "scientific_tolerances_unchanged": true
+  },
+  "runtime_sha256": {
+    "nwkit/full_ou.py": "cd3950b402ddd754f32703859f7cffffe3db59210e6a9d78ce043a03aff31b51",
+    "nwkit/phylogenetic_pca.py": "2300bef469b0e77ac787a35db671cdf1d1dd612b3a4dbdf3a0a7b292052a636a",
+    "nwkit/wgd_count_model.py": "8386d1460d02fa6f80cfdd108bfa63ee96edc3017f7264c4c49f77c2fb81c48a",
+    "nwkit/gaussian_tree.py": "088ddabe2f889abc844d1851462c7781cea20a6e334c8149ce509063135f3097",
+    "nwkit/signal_stats.py": "df4cfb50b69035d30980d966255d81dee97a0a41f63c98c683bab997fa13b2ad",
+    "nwkit/asr.py": "26548d4de07b40aab13f2524fb64e8e2e6e32a92604e2fe03bc1ca0c9a88ee08",
+    "nwkit/stochastic_history.py": "d89ac33dcb1921764aba5dd958614416501ab19b36f696922cb3c9c8b2b7667e"
+  },
+  "artifacts": {
+    "nwkit-0.43.57.tar.gz": "b674bb115cfe8036f3b3015c550a97e775b66d725b1d74641a33b2b1bc4a2f7e",
+    "nwkit-0.43.57-py3-none-any.whl": "434ed4052bb1105642edc882e990d7ad9b3dba92c5420d4395a09cc2a8976f9e"
+  },
+  "limits": [
+    "127 full-regression skips include unavailable optional external backends, opt-in scientific studies and platform conditions; skips are not counted as passes.",
+    "R, IQ-TREE and GeneRax executables were unavailable locally; no new external-tool installation was performed.",
+    "Opt-in population studies were not rerun: models and uncertainty methods are unchanged; real small bootstrap and independent-reference regressions did run.",
+    "Performance timings are host-local with unrelated user CPU work preserved; tracemalloc peaks are not total RSS."
+  ]
+}

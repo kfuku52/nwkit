@@ -1,0 +1,11 @@
+Processing ./dist/nwkit-0.43.57-py3-none-any.whl
+Installing collected packages: nwkit
+Successfully installed nwkit-0.43.57
+
+[notice] A new release of pip is available: 25.0.1 -> 26.2.2
+[notice] To update, run: /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pip install --upgrade pip
+Verified installed wheel: /var/folders/xc/pydw8plj6vvf7mddh20v09sw0000gn/T/nwkit-adoption2-20261022-9472742d/package-consumer/wheel-site/nwkit/__init__.py 0.43.57
+........................................................................ [ 46%]
+........................................................................ [ 93%]
+..........                                                               [100%]
+154 passed in 6.01s

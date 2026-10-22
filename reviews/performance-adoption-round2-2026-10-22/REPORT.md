@@ -55,7 +55,7 @@ ERは32状態以上・固定rate・厳密な対角定数＋非対角定数のP�
 
 環境、warmup、測定順序、メモリ・同等性の定義は[PROTOCOL.md](PROTOCOL.md)、
 固定archiveと初回統合本体のhashは[source-integrity.json](source-integrity.json)、
-最終ソースhashは `VALIDATION.json` に記録します。
+最終ソースhashは [VALIDATION.json](VALIDATION.json) に記録しました。
 初回historyベンチはfixture結果の枝IDをノードとして索引するharnessの誤りで停止し、
 枝IDによる索引に修正して当該操作を最初から7ペア測定しました。本体の問題ではありません。
 
@@ -89,6 +89,16 @@ ERは32状態以上・固定rate・厳密な対角定数＋非対角定数のP�
 修正後のλベンチを最初から7ペア再測定し、24.68倍と確認しました。
 [以前の25.25倍の生測定](lambda-before-conditioning-guard.json)も保存しています。
 
-全リリース検査・配布物検査・pushの検証記録は完了後に `VALIDATION.json` に記録します。
+最終 `python tools/check.py release` は **5256成功・127 skip**、combined branch
+coverage **85.96%**で通過しました。型・依存関係・Bandit・脆弱性・複雑性・
+sdist/wheel内容・メタデータ・バイト再現性を含みます ([最終ログ](checks/release-final.log))。
+生成wheelを別targetへ入れ、import先をassertした上で、sdist中のCLI/interfaceテストと
+全26件の新規回帰を実行し、**154成功**を確認しました ([配布物consumer](package-consumer.json)、
+[ログ](checks/package-consumer.log))。7対象moduleはcheckout・sdist・wheelでバイト一致しました。
+
+検証SHA・元のremote SHA・最終ソースhash・artifact hash・実行環境・skip/unrunの
+境界を [VALIDATION.json](VALIDATION.json) に記録しました。127件のskipは外部backend、
+opt-in研究、platform条件等を含み、成功に読み替えていません。pushの最終SHAと
+remote CIの結果はタスクの完了報告で示します。
 母集団校正のopt-in研究や新規の外部R等による再実験は、この計算再利用変更の範囲では
 実行していません。既存の独立参照とsmall real bootstrap回帰を維持しています。
