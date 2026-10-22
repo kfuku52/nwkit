@@ -5,7 +5,7 @@ are relative to the retained tips' MRCA; the root mean is profiled by GLS.
 """
 
 import numpy as np
-from scipy.linalg import cho_solve, solve_triangular
+from scipy.linalg import cho_solve, eigh, solve_triangular
 from scipy.optimize import brentq, minimize_scalar
 from scipy.stats import chi2
 
@@ -179,6 +179,45 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
     return (1 + exceed) / (1 + simulations)
 
 
+def _zero_error_lambda_profile(covariance, values, errors):
+    """Prepare one resolved correlation spectrum for an exact-observation fit."""
+    if np.any(errors) or np.ptp(values) == 0:
+        return None
+    # Retain the original endpoint calculations, including rejection of a
+    # singular supplied covariance. No rank or scientific tolerance is changed.
+    boundary = {
+        0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
+        1.0: rate_fit(covariance, values, errors),
+    }
+    sd = np.sqrt(np.diag(covariance))
+    correlation = covariance / sd[:, None] / sd[None, :]
+    eigenvalues, eigenvectors = eigh(correlation, driver="evd")
+    resolution = 64 * np.finfo(float).eps * len(values) * np.max(np.abs(eigenvalues))
+    if eigenvalues[0] <= resolution:
+        return None
+    reference = values[0]
+    projected_one = eigenvectors.T @ (np.ones(len(values)) / sd)
+    projected_y = eigenvectors.T @ ((values - reference) / sd)
+    diagonal_logdet = float(2 * np.log(sd).sum())
+
+    def profile(value):
+        if value in boundary:
+            return boundary[value]
+        variance = (1 - value) + value * eigenvalues
+        weight = projected_one / np.sqrt(variance)
+        response = projected_y / np.sqrt(variance)
+        mean = float(weight @ response / (weight @ weight))
+        residual = response - mean * weight
+        rate = float(residual @ residual / len(values))
+        if rate <= 0:
+            raise ValueError("Zero residual variance has no finite Gaussian density.")
+        logdet = diagonal_logdet + float(np.log(variance).sum())
+        likelihood = -0.5 * (len(values) * (1 + np.log(2 * np.pi * rate)) + logdet)
+        return float(likelihood), rate, float(mean + reference)
+
+    return profile
+
+
 def lambda_fit(covariance, values, errors, ci_level=0.95):
     """Fit lambda; a None interval level skips profile limits for resampling."""
     diagonal = np.diag(np.diag(covariance))
@@ -186,11 +225,16 @@ def lambda_fit(covariance, values, errors, ci_level=0.95):
     if not np.any(shared):
         return {"status": "unidentifiable_lambda"}
     cache = {}
+    spectral_profile = _zero_error_lambda_profile(covariance, values, errors)
 
     def profile(value):
         value = float(value)
         if value not in cache:
-            cache[value] = rate_fit(diagonal + value * shared, values, errors)
+            cache[value] = (
+                rate_fit(diagonal + value * shared, values, errors)
+                if spectral_profile is None
+                else spectral_profile(value)
+            )
         return cache[value]
 
     estimate, fit = _best_scalar(profile, np.linspace(0, 1, 11))

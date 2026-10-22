@@ -8,6 +8,7 @@ import pytest
 from scipy.optimize import minimize
 from scipy.stats import multivariate_normal
 
+from nwkit import signal_stats
 from nwkit.cli import main
 from nwkit.evolution import build_evolutionary_covariance
 from nwkit.signal_stats import (
@@ -27,6 +28,62 @@ ERRORS = np.array([0.1, 0.2] * 4)
 
 def covariance():
     return build_evolutionary_covariance(read_tree(TREE, 0, False), list("ABCDEFGH"))
+
+
+def test_exact_lambda_spectrum_matches_independent_gaussian_profiles(monkeypatch):
+    c = covariance()
+    calls = []
+    original = signal_stats.eigh
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(signal_stats, "eigh", counted)
+    profile = signal_stats._zero_error_lambda_profile(c, VALUES, np.zeros(8))
+    for value in np.linspace(0, 1, 11):
+        matrix = value * c + (1 - value) * np.diag(np.diag(c))
+        likelihood, rate, mean = profile(value)
+        reference = rate_fit(matrix, VALUES, np.zeros(8))
+        assert (likelihood, rate, mean) == pytest.approx(reference, abs=1e-7)
+        assert likelihood == pytest.approx(
+            multivariate_normal.logpdf(
+                VALUES, mean=np.full(8, mean), cov=rate * matrix
+            ),
+            abs=1e-7,
+        )
+    assert len(calls) == 1
+
+
+def test_lambda_spectrum_retains_error_constant_and_resolution_guards(monkeypatch):
+    c = covariance()
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("Sampling-error and constant profiles must not diagonalize C")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(signal_stats, "eigh", forbidden)
+        assert signal_stats._zero_error_lambda_profile(c, VALUES, ERRORS) is None
+        assert (
+            signal_stats._zero_error_lambda_profile(c, np.ones(8), np.zeros(8)) is None
+        )
+    unresolved = (1 - 1e-14) * np.ones((8, 8)) + 1e-14 * np.eye(8)
+    assert (
+        signal_stats._zero_error_lambda_profile(unresolved, VALUES, np.zeros(8)) is None
+    )
+    with pytest.raises(np.linalg.LinAlgError):
+        lambda_fit(np.ones((8, 8)), VALUES, np.zeros(8))
+
+
+def test_exact_lambda_bootstrap_preserves_draws_against_cholesky(monkeypatch):
+    c = covariance()
+    first = np.random.default_rng(443)
+    second = np.random.default_rng(443)
+    actual = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, first)
+    monkeypatch.setattr(signal_stats, "_zero_error_lambda_profile", lambda *args: None)
+    expected = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, second)
+    assert actual == expected
+    assert first.bit_generator.state == second.bit_generator.state
 
 
 def test_phytools_reference_k():
