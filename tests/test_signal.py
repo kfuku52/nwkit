@@ -41,6 +41,50 @@ def test_phytools_reference_k():
     )
 
 
+@pytest.mark.parametrize("errors", [np.zeros(8), ERRORS, np.array([0.0, 0.2] * 4)])
+def test_k_permutations_preserve_refits_rng_and_covariance_lifetime(
+    errors, monkeypatch
+):
+    from nwkit import signal_stats
+
+    c = covariance()
+    for scale in (1.0, 2.0):
+        current = c * scale
+        observed, _ = k_fit(current, VALUES, errors)
+        reference_rng = np.random.default_rng(391)
+        exceed = 0
+        for _ in range(19):
+            order = reference_rng.permutation(len(VALUES))
+            value, _ = k_fit(current, VALUES[order], errors[order])
+            exceed += value >= observed - 1e-12 * max(1.0, abs(observed))
+        calls = []
+        original = np.linalg.cholesky
+
+        def counted(matrix, calls=calls, original=original):
+            calls.append(matrix.shape)
+            return original(matrix)
+
+        rng = np.random.default_rng(391)
+        with monkeypatch.context() as patch:
+            patch.setattr(np.linalg, "cholesky", counted)
+            actual = signal_stats.permutation_test(
+                current, VALUES, errors, observed, 19, rng
+            )
+        assert actual == (1 + exceed) / 20
+        assert rng.bit_generator.state == reference_rng.bit_generator.state
+        assert len(calls) == (1 if not np.any(errors) else 2 * 19)
+
+
+def test_zero_k_permutations_do_not_factor_invalid_covariance():
+    from nwkit.signal_stats import permutation_test
+
+    rng = np.random.default_rng(391)
+    state = rng.bit_generator.state
+    assert permutation_test(np.zeros((8, 8)), VALUES, ERRORS, 1, 0, rng) == 1
+    assert permutation_test(np.zeros((8, 8)), VALUES, np.zeros(8), 1, 0, rng) == 1
+    assert rng.bit_generator.state == state
+
+
 @pytest.mark.parametrize("errors", [ERRORS, np.zeros(8), np.array([0.0, 0.2] * 4)])
 def test_likelihood_against_independent_direct_optimization(errors):
     c = covariance()

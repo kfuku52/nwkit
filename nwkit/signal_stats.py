@@ -141,12 +141,42 @@ def k_fit(covariance, values, errors):
     return k_statistic(effective, values), corrected
 
 
+def _prepared_k_statistic(covariance, count):
+    """Reuse one covariance factor while only the tip labels change."""
+    factor = np.linalg.cholesky(covariance)
+    weights = cho_solve((factor, True), np.ones(count))
+    precision = float(weights.sum())
+    expected = (np.trace(covariance) - count / precision) / (count - 1)
+
+    def statistic(values):
+        mean = float(weights @ values / precision)
+        residual = values - mean
+        quadratic = float(residual @ cho_solve((factor, True), residual))
+        if quadratic <= 0 or expected <= 0:
+            raise ValueError(
+                "K is undefined for constant traits or degenerate covariance."
+            )
+        return float(np.sum((values - mean) ** 2) / quadratic / expected)
+
+    return statistic
+
+
 def permutation_test(covariance, values, errors, observed, simulations, rng):
+    # Sampling errors move with the labels and require a rate refit per draw.
+    # Keep zero-draw calls lazy, including their existing invalid-input behavior.
+    statistic = (
+        _prepared_k_statistic(covariance, len(values))
+        if simulations > 0 and not np.any(errors)
+        else None
+    )
     exceed = 0
     for _ in range(simulations):
         order = rng.permutation(len(values))
-        statistic, _ = k_fit(covariance, values[order], errors[order])
-        exceed += statistic >= observed - 1e-12 * max(1.0, abs(observed))
+        if statistic is None:
+            value, _ = k_fit(covariance, values[order], errors[order])
+        else:
+            value = statistic(values[order])
+        exceed += value >= observed - 1e-12 * max(1.0, abs(observed))
     return (1 + exceed) / (1 + simulations)
 
 
