@@ -738,6 +738,48 @@ def test_cluster_hc1_unbalanced_events_preserve_score_products(weighting):
     )
 
 
+def test_cluster_hc1_keeps_cancelling_score_reduction_order():
+    from nwkit.model_matrix import PredictorTerm
+    from nwkit.regress import _fit_model
+
+    rng = np.random.default_rng(18)
+    event = np.repeat(np.arange(3), 8)
+    y = np.concatenate(
+        [rng.permutation(np.tile([1e16, 1.0, -1e16, 1.0], 2)) for _ in range(3)]
+    )
+    design = np.ones((len(y), 1))
+    frame = pd.DataFrame(
+        {
+            "tree_id": "family",
+            "trait": "y",
+            "raw_contrast": y,
+            "contrast_variance": 1.0,
+            "_predictor_values": list(design),
+            "species_event_id": event.astype(str),
+            "lineage_clade_id": "lineage",
+        }
+    )
+    result = _fit_model(
+        frame,
+        ["x"],
+        confidence_level=0.95,
+        event_weighting="contrast",
+        coverage_policy="complete",
+        excluded_ineligible=0,
+        excluded_coverage=0,
+        predictor_metadata={"x": PredictorTerm("x", "x", "continuous")},
+        predictor_groups={"x": ("x",)},
+    )[0]
+    residual = y - result["coefficient"]
+    meat = np.zeros((1, 1))
+    for identifier in range(3):
+        selected = event == identifier
+        score = design[selected].T @ residual[selected]
+        meat += np.outer(score, score)
+    expected = float(np.sqrt(1.5 * meat[0, 0] / len(y) ** 2))
+    assert result["standard_error"] == pytest.approx(expected, rel=1e-14, abs=1e-14)
+
+
 def test_pgls_fits_each_tree_and_response_separately():
     rows = []
     for tree_id, multiplier in [("OG1", 2.0), ("OG2", -1.0)]:

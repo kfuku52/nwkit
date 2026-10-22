@@ -122,6 +122,10 @@ def test_parallel_seed_and_empirical_curve_reference():
     assert (serial[:, -2:] == 0).all()
 
 
+def test_zero_simulations_do_not_inspect_unused_model_inputs():
+    np.testing.assert_array_equal(simulate_curves(None, None, 0), np.empty(0))
+
+
 @pytest.mark.parametrize(
     "traits,scale", [(1, 1.0), (5, 1e-140), (16, 1e140), (64, 1.0)]
 )

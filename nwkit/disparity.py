@@ -219,12 +219,14 @@ def _batched_disparities(design, values, counts):
 
 def _simulate_chunk(payload):
     design, factor, seeds = payload
+    if len(seeds) <= 1:
+        return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
     nodes, traits = len(design.parents), factor.shape[0]
     # Include products, moment/denominator arrays and temporary curve storage.
     # Large trees/trait dimensions retain the single-replica workspace.
     replica_bytes = 8 * (nodes * (3 * traits + 6) + 2 * len(design.times))
     batch = max(1, min(32, _SIMULATION_WORKSPACE_BYTES // max(1, replica_bytes)))
-    if len(seeds) <= 1 or batch == 1:
+    if batch == 1:
         return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
     counts = np.zeros(nodes, dtype=int)
     for node in range(nodes - 1, -1, -1):

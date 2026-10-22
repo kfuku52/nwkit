@@ -166,16 +166,15 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
     # Prepare only after the first permutation, preserving the random stream
     # even when an invalid covariance/constant trait fails on that draw.
     statistic = None
-    exact = not np.any(errors)
     exceed = 0
     for _ in range(simulations):
         order = rng.permutation(len(values))
-        if exact:
-            if statistic is None:
-                statistic = _prepared_k_statistic(covariance, len(values))
-            value = statistic(values[order])
-        else:
+        if statistic is None and not np.any(errors):
+            statistic = _prepared_k_statistic(covariance, len(values))
+        if statistic is None:
             value, _ = k_fit(covariance, values[order], errors[order])
+        else:
+            value = statistic(values[order])
         exceed += value >= observed - 1e-12 * max(1.0, abs(observed))
     return (1 + exceed) / (1 + simulations)
 

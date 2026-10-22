@@ -83,6 +83,7 @@ def test_zero_k_permutations_do_not_factor_invalid_covariance():
     assert permutation_test(np.zeros((8, 8)), VALUES, ERRORS, 1, 0, rng) == 1
     assert permutation_test(np.zeros((8, 8)), VALUES, np.zeros(8), 1, 0, rng) == 1
     assert rng.bit_generator.state == state
+    assert permutation_test(None, None, None, None, 0, None) == 1
 
 
 @pytest.mark.parametrize("singular", [False, True])
