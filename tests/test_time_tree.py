@@ -6,12 +6,68 @@ from nwkit.time_tree import (
     _credible_interval,
     _hpd_interval,
     annotate_mcmctree_calibrations,
+    infer_node_ages_from_branch_lengths,
     paml_node_mapping,
     parse_mcmctree_calibration,
     posterior_sample_tree,
+    prepare_time_tree_annotations,
     read_mcmctree_posterior,
     summarize_mcmctree_posterior,
 )
+
+
+def test_rounded_short_branches_use_whole_tree_height_without_losing_intervals():
+    tree = Tree("((A:0.1000,B:0.1003):252.2315,C:252.3318);", parser=1)
+    clade = tree.common_ancestor(["A", "B"])
+    clade.props.update(
+        age_ci_low=0.08, age_ci_high=0.12, age_ci_kind="HPD", age_ci_level=0.95
+    )
+    before = {node: (node.dist, dict(node.props)) for node in tree.traverse()}
+
+    assert prepare_time_tree_annotations(tree)["credible_interval_count"] == 1
+
+    assert clade.props["age"] == pytest.approx(0.10015)
+    for node, (distance, properties) in before.items():
+        assert node.dist == distance
+        assert all(node.props[key] == value for key, value in properties.items())
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "((A:0.1,B:0.2):252.2315,C:252.3315);",
+        # Every old local comparison passes, but the full path spread is too large.
+        "((A:100,B:100.0009):0.0009,C:100);",
+    ],
+)
+def test_non_ultrametric_tree_is_rejected_before_any_age_is_attached(text):
+    tree = Tree(text, parser=1)
+    before = {node: dict(node.props) for node in tree.traverse()}
+    with pytest.raises(ValueError, match="not ultrametric"):
+        infer_node_ages_from_branch_lengths(tree)
+    assert all(node.props == properties for node, properties in before.items())
+
+
+@pytest.mark.parametrize("distance", [-1.0, float("nan"), float("inf")])
+def test_dated_ages_reject_invalid_branch_lengths(distance):
+    tree = Tree("(A:1,B:1);", parser=1)
+    tree["A"].dist = distance
+    with pytest.raises(ValueError, match="finite and nonnegative"):
+        infer_node_ages_from_branch_lengths(tree)
+
+
+@pytest.mark.parametrize("tolerance", [-1.0, float("nan"), float("inf")])
+def test_dated_ages_reject_invalid_tolerance(tolerance):
+    with pytest.raises(ValueError, match="tolerance"):
+        infer_node_ages_from_branch_lengths(Tree("(A:1,B:1);", parser=1), tolerance)
+
+
+def test_explicit_ages_and_zero_length_branches_are_preserved():
+    tree = Tree("((A:1,B:1):0,C:1);", parser=1)
+    tree.props["age"] = 1.000001
+    infer_node_ages_from_branch_lengths(tree)
+    assert tree.props["age"] == 1.000001
+    assert tree.common_ancestor(["A", "B"]).dist == 0.0
 
 
 def test_mcmctree_interval_indices_match_paml_order_statistics():

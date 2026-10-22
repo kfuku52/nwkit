@@ -4,6 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.56] - 2026-10-22
+
+### Fixed
+
+- Accept rounded dated-tree branches using the existing tolerance against the
+  whole tree height, preserving supplied ages, intervals and branch lengths.
+  Reject excessive root-to-tip spread, including accumulated differences that
+  local child-mean comparisons could miss, before attaching inferred ages.
+- Reject nonfinite or negative dated-tree branches and invalid tolerances.
+
 ## [0.43.55] - 2026-10-22
 
 ### Changed

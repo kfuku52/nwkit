@@ -439,28 +439,54 @@ def posterior_sample_tree(tree, posterior, sample_index):
 
 
 def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
-    """Annotate an ultrametric dated tree with ages measured back from tips."""
+    """Annotate ages, allowing rounding within one whole-tree error budget.
 
+    The root-to-tip spread must not exceed ``max(tolerance, tolerance *
+    height)``. Scaling by the tree height keeps rounded short terminal branches
+    from failing a much tighter local test. Tracking the extreme paths, rather
+    than just child means, prevents errors accumulating unnoticed in deep trees.
+    Existing point estimates, intervals and branch lengths are preserved.
+    """
+
+    tolerance = float(tolerance)
+    if not math.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("Dated-tree tolerance must be finite and nonnegative.")
     age_by_node = {}
+    ranges = {}
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             age_by_node[node] = 0.0
-            node.props.setdefault("age", 0.0)
+            ranges[node] = (0.0, 0.0)
             continue
-        child_ages = [
-            age_by_node[child] + (0.0 if child.dist is None else float(child.dist))
-            for child in node.get_children()
-        ]
-        if max(child_ages) - min(child_ages) > max(
-            tolerance, tolerance * max(child_ages)
-        ):
-            raise ValueError(
-                "Dated-tree branch lengths are not ultrametric at an internal node."
-            )
+        child_ages, minima, maxima = [], [], []
+        for child in node.children:
+            distance = 0.0 if child.dist is None else float(child.dist)
+            if not math.isfinite(distance) or distance < 0.0:
+                raise ValueError(
+                    "Dated-tree branch lengths must be finite and nonnegative."
+                )
+            child_ages.append(age_by_node[child] + distance)
+            low, high = ranges[child]
+            minima.append(low + distance)
+            maxima.append(high + distance)
         age = float(sum(child_ages) / len(child_ages))
+        if not math.isfinite(age) or not math.isfinite(max(maxima)):
+            raise ValueError("Dated-tree path lengths must be finite.")
         age_by_node[node] = age
+        ranges[node] = (min(minima), max(maxima))
+    low, high = ranges[tree]
+    if high - low > max(tolerance, tolerance * high):
+        raise ValueError(
+            "Dated-tree branch lengths are not ultrametric at an internal node."
+        )
+    # Publish only after the complete tree passes validation.
+    for node, age in age_by_node.items():
         node.props.setdefault("age", age)
-        if "age_ci_low" in node.props and "age_mean" not in node.props:
+        if (
+            not node.is_leaf
+            and "age_ci_low" in node.props
+            and "age_mean" not in node.props
+        ):
             node.props["age_mean"] = age
     return tree
 
