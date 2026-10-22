@@ -4,7 +4,9 @@ import math
 import numpy as np
 import pytest
 from scipy.linalg import expm
+from scipy.special import logsumexp
 
+from nwkit import wgd_count_model
 from nwkit.wgd_count_model import (
     CountLikelihood,
     CountTree,
@@ -21,6 +23,23 @@ from nwkit.wgd_count_model import (
 def tree():
     return CountTree(
         (-1, 0, 0), (0.0, 0.4, 0.7), (1, 2), ("A", "B"), (0, 1, 2), ("AB", "A", "B")
+    )
+
+
+@pytest.mark.parametrize("budget", [1, 1024**2])
+@pytest.mark.parametrize("families", [1, 67])
+def test_log_pruning_tiles_preserve_impossible_states_and_reduction_order(
+    budget, families, monkeypatch
+):
+    rng = np.random.default_rng(303)
+    matrix = rng.normal(-100, 20, (23, 23))
+    values = rng.normal(-500, 200, (families, 23))
+    matrix[0] = -np.inf
+    values[0] = -np.inf
+    expected = np.array([logsumexp(matrix + row[None, :], axis=1) for row in values])
+    monkeypatch.setattr(wgd_count_model, "_LOG_PRUNING_WORKSPACE_BYTES", budget)
+    np.testing.assert_array_equal(
+        wgd_count_model._log_pruning_contribution(matrix, values), expected
     )
 
 

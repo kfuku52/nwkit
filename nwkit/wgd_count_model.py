@@ -10,6 +10,23 @@ import numpy as np
 from scipy.special import gammaln, logsumexp
 from scipy.stats import binom, gamma
 
+_LOG_PRUNING_WORKSPACE_BYTES = 1024**2
+
+
+def _log_pruning_contribution(matrix, values):
+    # Estimate four float-sized broadcast/logsumexp temporaries. Retain the
+    # row loop when even a two-family tile would exceed this workspace.
+    batch = max(1, min(64, _LOG_PRUNING_WORKSPACE_BYTES // (32 * matrix.size)))
+    if len(values) <= 1 or batch == 1:
+        return np.array([logsumexp(matrix + row[None, :], axis=1) for row in values])
+    contribution = np.empty((len(values), matrix.shape[0]))
+    for start in range(0, len(values), batch):
+        end = min(start + batch, len(values))
+        contribution[start:end] = logsumexp(
+            matrix[None, :, :] + values[start:end, None, :], axis=2
+        )
+    return contribution
+
 
 def _nonnegative(value: float, name: str) -> float:
     value = float(value)
@@ -564,11 +581,8 @@ class CountLikelihood:
                 continue
             value = np.zeros((len(rows), max_count + 1))
             for child in self.children[node]:
-                contribution = np.array(
-                    [
-                        logsumexp(matrices[child] + row[None, :], axis=1)
-                        for row in likelihoods.pop(child)
-                    ]
+                contribution = _log_pruning_contribution(
+                    matrices[child], likelihoods.pop(child)
                 )
                 contribution[self.subtree_missing[child][rows]] = 0.0
                 value += contribution
