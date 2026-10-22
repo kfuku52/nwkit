@@ -2445,9 +2445,13 @@ def _poisson_log_tail_bound(lam, max_n):
     return -lam + first_omitted * (1.0 + math.log(lam) - math.log(first_omitted))
 
 
-def _build_uniformization_context(rate_matrix, branch_length):
+def _build_uniformization_context(rate_matrix, branch_length, *, _parameters=None):
     num_states = rate_matrix.shape[0]
-    omega, lam, max_n = _uniformization_parameters(rate_matrix, branch_length)
+    omega, lam, max_n = (
+        _uniformization_parameters(rate_matrix, branch_length)
+        if _parameters is None
+        else _parameters
+    )
     if max_n == 0:
         return {"no_events": True}
     backward_bytes = (max_n + 1) * num_states * np.dtype(float).itemsize
@@ -2475,11 +2479,15 @@ def _build_uniformization_context(rate_matrix, branch_length):
     }
 
 
-def _build_uniformization_contexts(rate_matrix, branch_lengths):
+def _build_uniformization_contexts(rate_matrix, branch_lengths, *, _parameters=None):
     contexts = dict()
     for branch_length in sorted(set(float(length) for length in branch_lengths)):
         contexts[branch_length] = _build_uniformization_context(
-            rate_matrix, branch_length
+            rate_matrix,
+            branch_length,
+            _parameters=None
+            if _parameters is None
+            else _parameters[(id(rate_matrix), branch_length)],
         )
     return contexts
 
@@ -2795,7 +2803,7 @@ def _validated_simulation_threads(num_simulations, threads):
     return num_simulations, threads
 
 
-def _stochastic_uniformization_contexts(fit, branches):
+def _stochastic_uniformization_contexts(fit, branches, *, _parameters=None):
     if "rate_matrix_by_node" in fit:
         uniformization_contexts = {}
         cache = {}
@@ -2803,26 +2811,36 @@ def _stochastic_uniformization_contexts(fit, branches):
             matrix = fit["rate_matrix_by_node"][node]
             key = (id(matrix), float(node.dist))
             if key not in cache:
-                cache[key] = _build_uniformization_context(matrix, node.dist)
+                cache[key] = _build_uniformization_context(
+                    matrix,
+                    node.dist,
+                    _parameters=None if _parameters is None else _parameters[key],
+                )
             uniformization_contexts[node] = cache[key]
         return uniformization_contexts
     return _build_uniformization_contexts(
-        fit["rate_matrix"], [float(node.dist) for node in branches]
+        fit["rate_matrix"],
+        [float(node.dist) for node in branches],
+        _parameters=_parameters,
     )
 
 
-def _validate_stochastic_map_work(fit, branches, num_simulations):
+def _validate_stochastic_map_work(
+    fit, branches, num_simulations, *, _return_parameters=False
+):
     """Reject uniformization jobs whose bounded loop count is impractical."""
 
     by_node = fit.get("rate_matrix_by_node", {})
     cached_terms = {}
+    parameters = {}
     per_simulation = 0
     preparation = 0
     for node in branches:
         matrix = by_node.get(node, fit["rate_matrix"])
         key = (id(matrix), float(node.dist))
         if key not in cached_terms:
-            max_n = _uniformization_parameters(matrix, node.dist)[2]
+            parameters[key] = _uniformization_parameters(matrix, node.dist)
+            max_n = parameters[key][2]
             cached_terms[key] = max_n
             preparation += max_n * min(matrix.shape[0], num_simulations)
         per_simulation += cached_terms[key]
@@ -2833,6 +2851,8 @@ def _validate_stochastic_map_work(fit, branches, num_simulations):
             f"{_MAX_STOCHASTIC_MAP_WORK:,} bounded uniformization steps; reduce "
             "--n-sim, the rate/time scale, or fitted rate bounds."
         )
+    if _return_parameters:
+        return parameters
 
 
 def _run_stochastic_simulations(spec, seed_sequences, threads):
@@ -2895,8 +2915,13 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
     num_simulations, threads = _validated_simulation_threads(num_simulations, threads)
     node_to_branch_id = assign_branch_ids(tree)
     branches = [node for node in tree.traverse() if not node.is_root]
-    _validate_stochastic_map_work(fit, branches, num_simulations)
-    contexts = _stochastic_uniformization_contexts(fit, branches)
+    parameters = _validate_stochastic_map_work(
+        fit, branches, num_simulations, _return_parameters=True
+    )
+    contexts = _stochastic_uniformization_contexts(
+        fit, branches, _parameters=parameters
+    )
+    del parameters
     spec = _build_stochastic_map_spec(tree, fit, node_to_branch_id, contexts)
     seed_sequences = _simulation_seed_sequence(seed, num_simulations)
     total_counts, any_counts = _run_stochastic_simulations(

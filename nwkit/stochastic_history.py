@@ -94,8 +94,8 @@ def _draw_chunk(payload):
     return [_draw_history(spec, index + 1, seed) for index, seed in indexed_seeds]
 
 
-def _history_work(fit, branches, count):
-    from nwkit.asr import _uniformization_parameters, _validate_stochastic_map_work
+def _history_work(fit, branches, count, *, _return_parameters=False):
+    from nwkit.asr import _validate_stochastic_map_work
 
     if count * (len(branches) + 1) > 100_000:
         raise ValueError(
@@ -108,7 +108,9 @@ def _history_work(fit, branches, count):
         raise ValueError(
             "Map simulation arrays exceed 256 MiB before histories; reduce tree or expanded-state size."
         )
-    _validate_stochastic_map_work(fit, branches, count)
+    parameters = _validate_stochastic_map_work(
+        fit, branches, count, _return_parameters=True
+    )
     matrices = fit.get("rate_matrix_by_node", {})
     terms = {}
     per_draw = 0
@@ -116,13 +118,15 @@ def _history_work(fit, branches, count):
         matrix = matrices.get(node, fit["rate_matrix"])
         key = (id(matrix), float(node.dist))
         if key not in terms:
-            terms[key] = _uniformization_parameters(matrix, node.dist)[2]
+            terms[key] = parameters[key][2]
         per_draw += 1 + terms[key]
     bound = per_draw * count
     if bound > _MAX_HISTORY_SEGMENTS:
         raise ValueError(
             "Stochastic-map histories exceed the 1,000,000-segment storage budget; reduce --n-sim or the rate/time scale."
         )
+    if _return_parameters:
+        return parameters
 
 
 def sample_histories(tree, states, fit, count, *, seed=None, threads=1):
@@ -151,8 +155,11 @@ def sample_histories(tree, states, fit, count, *, seed=None, threads=1):
             raise ValueError(
                 "Stochastic-map time depths overflow; rescale branch lengths."
             )
-    _history_work(fit, branches, count)
-    contexts = _stochastic_uniformization_contexts(fit, branches)
+    parameters = _history_work(fit, branches, count, _return_parameters=True)
+    contexts = _stochastic_uniformization_contexts(
+        fit, branches, _parameters=parameters
+    )
+    del parameters
     spec = _build_stochastic_map_spec(tree, fit, identifiers, contexts)
     indexed = list(enumerate(_simulation_seed_sequence(seed, count)))
     if threads == 1 or count == 1:

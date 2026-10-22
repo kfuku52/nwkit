@@ -42,6 +42,45 @@ def sample(problem):
     return sample_histories(tree, states, fit, 80, seed=192)
 
 
+@pytest.mark.parametrize("histories", [False, True])
+def test_uniformization_preparation_is_reused_only_within_one_request(
+    problem, histories, monkeypatch
+):
+    tree, states, fit = problem
+    branches = [node for node in tree.traverse() if not node.is_root]
+    assert asr._validate_stochastic_map_work(fit, branches, 1) is None
+    calls = []
+    original = asr._uniformization_parameters
+
+    def counted(matrix, length):
+        calls.append((id(matrix), float(length)))
+        return original(matrix, length)
+
+    monkeypatch.setattr(asr, "_uniformization_parameters", counted)
+    operation = sample_histories if histories else asr._simulate_stochastic_maps
+    for _ in range(2):
+        calls.clear()
+        operation(tree, states, fit, 1, seed=8081)
+        assert len(calls) == len({float(node.dist) for node in branches})
+        assert len(set(calls)) == len(calls)
+
+
+@pytest.mark.parametrize("histories", [False, True])
+def test_uniformization_work_guard_still_precedes_context_allocation(
+    problem, histories, monkeypatch
+):
+    tree, states, fit = problem
+    monkeypatch.setattr(asr, "_MAX_STOCHASTIC_MAP_WORK", 0)
+
+    def forbidden(*args, **kwargs):
+        pytest.fail("An excessive job must fail before context allocation")
+
+    monkeypatch.setattr(asr, "_build_uniformization_context", forbidden)
+    operation = sample_histories if histories else asr._simulate_stochastic_maps
+    with pytest.raises(ValueError, match="bounded uniformization steps"):
+        operation(tree, states, fit, 1, seed=8081)
+
+
 def test_segment_coverage_endpoints_and_shared_node_states(problem, sample):
     nodes = list(problem[0].traverse("preorder"))
     index = {node: i for i, node in enumerate(nodes)}
