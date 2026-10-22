@@ -85,6 +85,20 @@ def test_zero_k_permutations_do_not_factor_invalid_covariance():
     assert rng.bit_generator.state == state
 
 
+@pytest.mark.parametrize("singular", [False, True])
+def test_failed_k_permutation_retains_the_consumed_random_draw(singular):
+    from nwkit.signal_stats import permutation_test
+
+    rng = np.random.default_rng(391)
+    reference = np.random.default_rng(391)
+    reference.permutation(8)
+    c = np.zeros((8, 8)) if singular else np.eye(8)
+    values = VALUES if singular else np.ones(8)
+    with pytest.raises(np.linalg.LinAlgError if singular else ValueError):
+        permutation_test(c, values, np.zeros(8), 1.0, 19, rng)
+    assert rng.bit_generator.state == reference.bit_generator.state
+
+
 @pytest.mark.parametrize("errors", [ERRORS, np.zeros(8), np.array([0.0, 0.2] * 4)])
 def test_likelihood_against_independent_direct_optimization(errors):
     c = covariance()

@@ -163,19 +163,19 @@ def _prepared_k_statistic(covariance, count):
 
 def permutation_test(covariance, values, errors, observed, simulations, rng):
     # Sampling errors move with the labels and require a rate refit per draw.
-    # Keep zero-draw calls lazy, including their existing invalid-input behavior.
-    statistic = (
-        _prepared_k_statistic(covariance, len(values))
-        if simulations > 0 and not np.any(errors)
-        else None
-    )
+    # Prepare only after the first permutation, preserving the random stream
+    # even when an invalid covariance/constant trait fails on that draw.
+    statistic = None
+    exact = not np.any(errors)
     exceed = 0
     for _ in range(simulations):
         order = rng.permutation(len(values))
-        if statistic is None:
-            value, _ = k_fit(covariance, values[order], errors[order])
-        else:
+        if exact:
+            if statistic is None:
+                statistic = _prepared_k_statistic(covariance, len(values))
             value = statistic(values[order])
+        else:
+            value, _ = k_fit(covariance, values[order], errors[order])
         exceed += value >= observed - 1e-12 * max(1.0, abs(observed))
     return (1 + exceed) / (1 + simulations)
 
