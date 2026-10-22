@@ -1,0 +1,90 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "source_path": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/full_ou.py",
+  "threshold_controls": [
+    {
+      "base_branch_length": 1e-06,
+      "gap": 1e-20,
+      "design_entries": 115,
+      "existing_relative_singular_threshold": 1e-06,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_rank_deficient",
+      "rank": 6,
+      "singular_ratio": 1.8371804248373808e-07
+    },
+    {
+      "base_branch_length": 1e-06,
+      "gap": 5e-20,
+      "design_entries": 115,
+      "existing_relative_singular_threshold": 1e-06,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_rank_deficient",
+      "rank": 6,
+      "singular_ratio": 9.186983069259738e-07
+    },
+    {
+      "base_branch_length": 1e-06,
+      "gap": 6e-20,
+      "design_entries": 115,
+      "existing_relative_singular_threshold": 1e-06,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 1.102188933396658e-06
+    },
+    {
+      "base_branch_length": 1e-06,
+      "gap": 1e-19,
+      "design_entries": 115,
+      "existing_relative_singular_threshold": 1e-06,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 1.8369720868938323e-06
+    }
+  ],
+  "failures": [
+    {
+      "case": "trait_index",
+      "exact": true,
+      "exception": "IndexError",
+      "message": "index 2 is out of bounds for axis 0 with size 2"
+    },
+    {
+      "case": "short_parameters",
+      "exact": true,
+      "exception": "IndexError",
+      "message": "index 1 is out of bounds for axis 0 with size 1"
+    },
+    {
+      "case": "empty_identifiability",
+      "exact": true,
+      "exception": "IndexError",
+      "message": "index 0 is out of bounds for axis 0 with size 0"
+    }
+  ]
+}

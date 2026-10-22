@@ -1,0 +1,605 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "source_sha256": "2178c8116fcf2b539dd345094fc48b5450e7672dbf0e538e5355bff8600e6554",
+  "source_path": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/full_ou.py",
+  "strategy": "Reuse only the immediately preceding identical distance pair's complete two-matmul product; no reassociation or long-lived cache",
+  "cases": [
+    {
+      "case": "native_star_d2_n12",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 2,
+      "parameters": 7,
+      "design_entries": 219,
+      "design_complete": true,
+      "consecutive_distance_pairs": 55,
+      "unique_distances": 9,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "local_full_rank",
+        "rank": 7,
+        "singular_ratio": 0.09991976861846173
+      },
+      "timing": {
+        "loops_per_sample": 6,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.022368395836868633,
+            0.010754437496264776,
+            0.0073798403415518505,
+            0.0066320140031166375,
+            0.00703391667533045,
+            0.00582543748896569,
+            0.0056762916695637005
+          ],
+          "median_seconds": 0.00703391667533045,
+          "min_seconds": 0.0056762916695637005,
+          "max_seconds": 0.022368395836868633
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00465111816689993,
+            0.007672166665239881,
+            0.0031808819815826914,
+            0.002926229169437041,
+            0.004228833325517674,
+            0.004198006994556636,
+            0.0027563750045374036
+          ],
+          "median_seconds": 0.004198006994556636,
+          "min_seconds": 0.0027563750045374036,
+          "max_seconds": 0.007672166665239881
+        },
+        "speedup": 1.6755371499978464
+      },
+      "traced_peak_bytes": {
+        "baseline": 49892,
+        "candidate": 49758
+      }
+    },
+    {
+      "case": "native_star_d4_n16",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 4,
+      "parameters": 26,
+      "design_entries": 1034,
+      "design_complete": true,
+      "consecutive_distance_pairs": 65,
+      "unique_distances": 9,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "local_full_rank",
+        "rank": 26,
+        "singular_ratio": 0.055623936638133684
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.08821525005623698,
+            0.08671966602560133,
+            0.08621316694188863,
+            0.08606066601350904,
+            0.08578008296899498,
+            0.08544937497936189,
+            0.08552175003569573
+          ],
+          "median_seconds": 0.08606066601350904,
+          "min_seconds": 0.08544937497936189,
+          "max_seconds": 0.08821525005623698
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.02027366601396352,
+            0.02026541589293629,
+            0.020144624984823167,
+            0.020411667064763606,
+            0.01972004200797528,
+            0.01944883307442069,
+            0.020161958993412554
+          ],
+          "median_seconds": 0.020161958993412554,
+          "min_seconds": 0.01944883307442069,
+          "max_seconds": 0.020411667064763606
+        },
+        "speedup": 4.268467465965353
+      },
+      "traced_peak_bytes": {
+        "baseline": 672492,
+        "candidate": 672446
+      }
+    },
+    {
+      "case": "native_star_d8_n32",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 8,
+      "parameters": 100,
+      "design_entries": 4096,
+      "design_complete": false,
+      "consecutive_distance_pairs": 65,
+      "unique_distances": 9,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "local_full_rank",
+        "rank": 100,
+        "singular_ratio": 0.03760943910503394
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            1.8472250000340864,
+            1.7991856249282137,
+            1.7946931249462068,
+            1.8057293329620734,
+            1.7747481249971315,
+            1.7821561249438673,
+            1.799370416905731
+          ],
+          "median_seconds": 1.7991856249282137,
+          "min_seconds": 1.7747481249971315,
+          "max_seconds": 1.8472250000340864
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.23598045797552913,
+            0.23661679110955447,
+            0.2365237500052899,
+            0.2366110000293702,
+            0.23553204105701298,
+            0.231867374968715,
+            0.2768492499599233
+          ],
+          "median_seconds": 0.2365237500052899,
+          "min_seconds": 0.231867374968715,
+          "max_seconds": 0.2768492499599233
+        },
+        "speedup": 7.6067863159110845
+      },
+      "traced_peak_bytes": {
+        "baseline": 9913662,
+        "candidate": 9913294
+      }
+    },
+    {
+      "case": "ultrametric_deficient_d2",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 2,
+      "parameters": 7,
+      "design_entries": 7,
+      "design_complete": true,
+      "consecutive_distance_pairs": 2,
+      "unique_distances": 2,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "local_rank_deficient",
+        "rank": 6,
+        "singular_ratio": 1.6214253956966077e-20
+      },
+      "timing": {
+        "loops_per_sample": 60,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0005263298672313492,
+            0.0005149472330231219,
+            0.0005131555488333106,
+            0.0005141784825051824,
+            0.0005297159834299237,
+            0.0005173722320857148,
+            0.0005145569331943989
+          ],
+          "median_seconds": 0.0005149472330231219,
+          "min_seconds": 0.0005131555488333106,
+          "max_seconds": 0.0005297159834299237
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00044351111670645575,
+            0.00042500556640637417,
+            0.0004199770822500189,
+            0.0004195618016334871,
+            0.00042386804901373886,
+            0.00041890208376571536,
+            0.0004280659835785627
+          ],
+          "median_seconds": 0.00042386804901373886,
+          "min_seconds": 0.00041890208376571536,
+          "max_seconds": 0.00044351111670645575
+        },
+        "speedup": 1.2148762668507502
+      },
+      "traced_peak_bytes": {
+        "baseline": 12374,
+        "candidate": 12328
+      }
+    },
+    {
+      "case": "shuffled_external_d4",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 4,
+      "parameters": 26,
+      "design_entries": 1034,
+      "design_complete": true,
+      "consecutive_distance_pairs": 1017,
+      "unique_distances": 9,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "local_full_rank",
+        "rank": 26,
+        "singular_ratio": 0.05562393663813372
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.08771883393637836,
+            0.09035408298950642,
+            0.11755254107993096,
+            0.0930103330174461,
+            0.0915132500231266,
+            0.08782804198563099,
+            0.08776266605127603
+          ],
+          "median_seconds": 0.09035408298950642,
+          "min_seconds": 0.08771883393637836,
+          "max_seconds": 0.11755254107993096
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.08970104204490781,
+            0.08953262504655868,
+            0.1011168749537319,
+            0.0940440830308944,
+            0.09095199999865144,
+            0.09069600002840161,
+            0.08811662497464567
+          ],
+          "median_seconds": 0.09069600002840161,
+          "min_seconds": 0.08811662497464567,
+          "max_seconds": 0.1011168749537319
+        },
+        "speedup": 0.9962300758711727
+      },
+      "traced_peak_bytes": {
+        "baseline": 672768,
+        "candidate": 672400
+      }
+    },
+    {
+      "case": "unique_distance_pairs_d4",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 4,
+      "parameters": 26,
+      "design_entries": 64,
+      "design_complete": false,
+      "consecutive_distance_pairs": 64,
+      "unique_distances": 65,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "local_full_rank",
+        "rank": 26,
+        "singular_ratio": 0.02029789060421714
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0273015204584226,
+            0.02742372895590961,
+            0.02723125001648441,
+            0.02746614598436281,
+            0.027976458019111305,
+            0.027805833495222032,
+            0.027594478975515813
+          ],
+          "median_seconds": 0.02746614598436281,
+          "min_seconds": 0.02723125001648441,
+          "max_seconds": 0.027976458019111305
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.028480187465902418,
+            0.027692125004250556,
+            0.028094874985981733,
+            0.028008458495605737,
+            0.02800783351995051,
+            0.02753462496912107,
+            0.028143395960796624
+          ],
+          "median_seconds": 0.028008458495605737,
+          "min_seconds": 0.02753462496912107,
+          "max_seconds": 0.028480187465902418
+        },
+        "speedup": 0.9806375452141356
+      },
+      "traced_peak_bytes": {
+        "baseline": 67086,
+        "candidate": 67118
+      }
+    },
+    {
+      "case": "incomplete_subset_d2",
+      "scope": "complete full_ou_identifiability including all finite differences, factors, expm and SVD",
+      "dimension": 2,
+      "parameters": 7,
+      "design_entries": 2,
+      "design_complete": false,
+      "consecutive_distance_pairs": 1,
+      "unique_distances": 1,
+      "time_scale": 1.0,
+      "comparison": {
+        "all_moments_exact": true,
+        "all_jacobian_entries_exact": true,
+        "all_diagnostic_fields_exact": true,
+        "maximum_moment_difference": 0.0,
+        "status": "inconclusive_design_subset",
+        "rank": 2,
+        "singular_ratio": 0.9612044127733378
+      },
+      "timing": {
+        "loops_per_sample": 93,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.00031796684964329646,
+            0.00031461783870053226,
+            0.00032272355966470257,
+            0.00031531093546980493,
+            0.00032053584913893413,
+            0.00031975268821923,
+            0.0003144533976772299
+          ],
+          "median_seconds": 0.00031796684964329646,
+          "min_seconds": 0.0003144533976772299,
+          "max_seconds": 0.00032272355966470257
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00030045923576640184,
+            0.0003057083325280297,
+            0.00030592113973632935,
+            0.0003010891503103638,
+            0.00030542429040877087,
+            0.0003011016993813457,
+            0.0002939874526634011
+          ],
+          "median_seconds": 0.0003011016993813457,
+          "min_seconds": 0.0002939874526634011,
+          "max_seconds": 0.00030592113973632935
+        },
+        "speedup": 1.0560114748492038
+      },
+      "traced_peak_bytes": {
+        "baseline": 11426,
+        "candidate": 11310
+      }
+    }
+  ],
+  "edge_checks": [
+    {
+      "case": "near_ultrametric",
+      "gap": 0.0,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_rank_deficient",
+      "rank": 6,
+      "singular_ratio": 1.6214253956966077e-20
+    },
+    {
+      "case": "near_ultrametric",
+      "gap": 1e-09,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.09007462932977155
+    },
+    {
+      "case": "near_ultrametric",
+      "gap": 1e-07,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.09007464468402185
+    },
+    {
+      "case": "near_ultrametric",
+      "gap": 1e-05,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.09007618021005924
+    },
+    {
+      "case": "near_ultrametric",
+      "gap": 0.001,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.09023073339026444
+    },
+    {
+      "case": "time_units",
+      "dimension": 2,
+      "scale": 1e-05,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.0999197686184708
+    },
+    {
+      "case": "time_units",
+      "dimension": 2,
+      "scale": 100000.0,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.09991976861846276
+    },
+    {
+      "case": "shuffled_duplicate_design",
+      "dimension": 2,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.09957005179601217
+    },
+    {
+      "case": "time_units",
+      "dimension": 4,
+      "scale": 1e-05,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 26,
+      "singular_ratio": 0.05771790234811888
+    },
+    {
+      "case": "time_units",
+      "dimension": 4,
+      "scale": 100000.0,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 26,
+      "singular_ratio": 0.057717902348115455
+    },
+    {
+      "case": "shuffled_duplicate_design",
+      "dimension": 4,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 26,
+      "singular_ratio": 0.05762202132494139
+    },
+    {
+      "case": "time_units",
+      "dimension": 8,
+      "scale": 1e-05,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 100,
+      "singular_ratio": 0.039467939238079154
+    },
+    {
+      "case": "time_units",
+      "dimension": 8,
+      "scale": 100000.0,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 100,
+      "singular_ratio": 0.0394679392380896
+    },
+    {
+      "case": "shuffled_duplicate_design",
+      "dimension": 8,
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 100,
+      "singular_ratio": 0.039445457594765775
+    },
+    {
+      "case": "incomplete_subset",
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "inconclusive_design_subset",
+      "rank": 2,
+      "singular_ratio": 0.9612044127733378
+    },
+    {
+      "case": "nonnormal_complex",
+      "all_moments_exact": true,
+      "all_jacobian_entries_exact": true,
+      "all_diagnostic_fields_exact": true,
+      "maximum_moment_difference": 0.0,
+      "status": "local_full_rank",
+      "rank": 7,
+      "singular_ratio": 0.018988439155273547
+    },
+    {
+      "case": "empty_moment_design",
+      "exact": true
+    }
+  ]
+}

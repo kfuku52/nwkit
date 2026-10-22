@@ -1,0 +1,718 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "baseline_source_sha256": "2b2efc267d02b9e0b61143363be8a0b74565f04f95fc56f983b4f6b2103f43bd",
+  "scope": "whole covariance calls including index/setup; and whole fixed Brownian PGLS fit",
+  "workspace_bytes": 4194304,
+  "edge_checks": [
+    {
+      "case": "arbitrary_repeated",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        97,
+        97
+      ]
+    },
+    {
+      "case": "reversed_all",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        95,
+        95
+      ]
+    },
+    {
+      "case": "only_root_repeated",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        40,
+        40
+      ]
+    },
+    {
+      "case": "empty",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        0,
+        0
+      ]
+    },
+    {
+      "case": "signed",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "case": "zero",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "case": "underflow",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "case": "extreme_variance",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "case": "small_variance",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_0",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_1",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_2",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_3",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_4",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_5",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_6",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "random_signed_affine_duplicates_7",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        150,
+        150
+      ]
+    },
+    {
+      "case": "ou_shuffled_duplicates",
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        190,
+        190
+      ]
+    },
+    {
+      "case": "outside_tree",
+      "exception": [
+        "ValueError",
+        "Gaussian covariance requested a node outside the process tree."
+      ],
+      "exact": true
+    },
+    {
+      "case": "flat_root",
+      "exception": [
+        "ValueError",
+        "A flat-root process has no finite unconditional moments."
+      ],
+      "exact": true
+    },
+    {
+      "case": "overflow",
+      "exception": [
+        "ValueError",
+        "Gaussian tree moments exceed floating-point range."
+      ],
+      "exact": true
+    }
+  ],
+  "workloads": [
+    {
+      "size": 16,
+      "topology": "balanced",
+      "model": "brownian",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          16,
+          16
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 250,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0001367553318850696,
+            0.00012982033612206578,
+            0.0001175899999216199,
+            0.0001176953362300992,
+            0.00012082749977707862,
+            0.00011974483216181397,
+            0.0001184370000846684
+          ],
+          "median_seconds": 0.00011974483216181397,
+          "min_seconds": 0.0001175899999216199,
+          "max_seconds": 0.0001367553318850696
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00019143699994310736,
+            0.00018380633601918818,
+            0.0001202103323303163,
+            0.0001179836681112647,
+            0.00012047016387805342,
+            0.00012050400022417307,
+            0.00011782983178272843
+          ],
+          "median_seconds": 0.00012047016387805342,
+          "min_seconds": 0.00011782983178272843,
+          "max_seconds": 0.00019143699994310736
+        },
+        "speedup": 0.9939791588814166
+      },
+      "baseline_peak_bytes": 8616,
+      "candidate_peak_bytes": 8816
+    },
+    {
+      "size": 64,
+      "topology": "balanced",
+      "model": "brownian",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          64,
+          64
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 25,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0012265866808593272,
+            0.0012720833206549286,
+            0.0012325150007382036,
+            0.001258386680856347,
+            0.001407643361017108,
+            0.0012383133172988892,
+            0.0012303016800433398
+          ],
+          "median_seconds": 0.0012383133172988892,
+          "min_seconds": 0.0012265866808593272,
+          "max_seconds": 0.001407643361017108
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0008404299989342689,
+            0.0008366300025954843,
+            0.0008455249993130565,
+            0.0008364933170378208,
+            0.0010069533623754978,
+            0.0008388466807082296,
+            0.0011122999992221594
+          ],
+          "median_seconds": 0.0008404299989342689,
+          "min_seconds": 0.0008364933170378208,
+          "max_seconds": 0.0011122999992221594
+        },
+        "speedup": 1.4734282675168278
+      },
+      "baseline_peak_bytes": 54312,
+      "candidate_peak_bytes": 83096
+    },
+    {
+      "size": 128,
+      "topology": "balanced",
+      "model": "brownian",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          128,
+          128
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 7,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.004544755859699633,
+            0.0048911369937871185,
+            0.004702375004334109,
+            0.004527410708500871,
+            0.004539619000362498,
+            0.004534934580858264,
+            0.004558464279398322
+          ],
+          "median_seconds": 0.004544755859699633,
+          "min_seconds": 0.004527410708500871,
+          "max_seconds": 0.0048911369937871185
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0017216964292206935,
+            0.0017197917082480022,
+            0.0017335952891569053,
+            0.0017074345710820385,
+            0.001714720157906413,
+            0.0017080655587571008,
+            0.0017301369890836732
+          ],
+          "median_seconds": 0.0017197917082480022,
+          "min_seconds": 0.0017074345710820385,
+          "max_seconds": 0.0017335952891569053
+        },
+        "speedup": 2.642619939323639
+      },
+      "baseline_peak_bytes": 179872,
+      "candidate_peak_bytes": 257672
+    },
+    {
+      "size": 512,
+      "topology": "balanced",
+      "model": "brownian",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          512,
+          512
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.07667324994690716,
+            0.0788437919691205,
+            0.09286166704259813,
+            0.07946533395443112,
+            0.07710454205516726,
+            0.08054679201450199,
+            0.07545300002675503
+          ],
+          "median_seconds": 0.0788437919691205,
+          "min_seconds": 0.07545300002675503,
+          "max_seconds": 0.09286166704259813
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.007812167052179575,
+            0.008246707962825894,
+            0.012486082967370749,
+            0.008492541965097189,
+            0.008028375101275742,
+            0.008107749978080392,
+            0.007938374998047948
+          ],
+          "median_seconds": 0.008107749978080392,
+          "min_seconds": 0.007812167052179575,
+          "max_seconds": 0.012486082967370749
+        },
+        "speedup": 9.724497201107296
+      },
+      "baseline_peak_bytes": 2511224,
+      "candidate_peak_bytes": 2515668
+    },
+    {
+      "size": 512,
+      "topology": "balanced",
+      "model": "ou",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          512,
+          512
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.10922195797320455,
+            0.10044950002338737,
+            0.09658270899672061,
+            0.1038362089311704,
+            0.10695525002665818,
+            0.11221912503242493,
+            0.1041931250365451
+          ],
+          "median_seconds": 0.1041931250365451,
+          "min_seconds": 0.09658270899672061,
+          "max_seconds": 0.11221912503242493
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.013006249908357859,
+            0.013395584071986377,
+            0.013452458078972995,
+            0.013501249952241778,
+            0.014656458050012589,
+            0.013899666024371982,
+            0.013306665932759643
+          ],
+          "median_seconds": 0.013452458078972995,
+          "min_seconds": 0.013006249908357859,
+          "max_seconds": 0.014656458050012589
+        },
+        "speedup": 7.745285242658013
+      },
+      "baseline_peak_bytes": 2519648,
+      "candidate_peak_bytes": 3085576
+    },
+    {
+      "size": 256,
+      "topology": "pectinate",
+      "model": "brownian",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          256,
+          256
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.025873249978758395,
+            0.026976666995324194,
+            0.026548624970018864,
+            0.025820375070907176,
+            0.026311707915738225,
+            0.025766792008653283,
+            0.02577795903198421
+          ],
+          "median_seconds": 0.025873249978758395,
+          "min_seconds": 0.025766792008653283,
+          "max_seconds": 0.026976666995324194
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.003696500090882182,
+            0.004348832997493446,
+            0.0038095840718597174,
+            0.003610875108279288,
+            0.003863916965201497,
+            0.003703917027451098,
+            0.0038207919569686055
+          ],
+          "median_seconds": 0.0038095840718597174,
+          "min_seconds": 0.003610875108279288,
+          "max_seconds": 0.004348832997493446
+        },
+        "speedup": 6.791620683705741
+      },
+      "baseline_peak_bytes": 707124,
+      "candidate_peak_bytes": 736876
+    },
+    {
+      "size": 256,
+      "topology": "pectinate",
+      "model": "ou",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          256,
+          256
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.030823708046227694,
+            0.03064416698180139,
+            0.03046420798636973,
+            0.03028612502384931,
+            0.030678292037919164,
+            0.030644499929621816,
+            0.030660999938845634
+          ],
+          "median_seconds": 0.030644499929621816,
+          "min_seconds": 0.03028612502384931,
+          "max_seconds": 0.030823708046227694
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.006462457939051092,
+            0.005909290979616344,
+            0.006175125017762184,
+            0.006122875027358532,
+            0.006006542011164129,
+            0.006057832972146571,
+            0.006224041921086609
+          ],
+          "median_seconds": 0.006122875027358532,
+          "min_seconds": 0.005909290979616344,
+          "max_seconds": 0.006462457939051092
+        },
+        "speedup": 5.004920040453961
+      },
+      "baseline_peak_bytes": 711452,
+      "candidate_peak_bytes": 741509
+    },
+    {
+      "size": 512,
+      "topology": "star",
+      "model": "brownian",
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          512,
+          512
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.05429579096380621,
+            0.05281912488862872,
+            0.0710945000173524,
+            0.05334891693200916,
+            0.05260283302050084,
+            0.051979915937408805,
+            0.05192220793105662
+          ],
+          "median_seconds": 0.05281912488862872,
+          "min_seconds": 0.05192220793105662,
+          "max_seconds": 0.0710945000173524
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.007092208950780332,
+            0.007134833023883402,
+            0.006401499966159463,
+            0.006695250049233437,
+            0.00664425001014024,
+            0.006392583018168807,
+            0.006271166959777474
+          ],
+          "median_seconds": 0.00664425001014024,
+          "min_seconds": 0.006271166959777474,
+          "max_seconds": 0.007134833023883402
+        },
+        "speedup": 7.949599248676355
+      },
+      "baseline_peak_bytes": 2449410,
+      "candidate_peak_bytes": 2453766
+    },
+    {
+      "case": "whole_ordinary_brownian_fit",
+      "size": 64,
+      "equivalence": {
+        "all_fields_exact": true,
+        "fields": [
+          "beta",
+          "beta_covariance",
+          "boundary_warning",
+          "cholesky",
+          "component_variances",
+          "covariance",
+          "evolution_parameter",
+          "evolution_parameter_status",
+          "inverse_residual",
+          "log_variances",
+          "lower_variance",
+          "objective",
+          "optimizer_converged",
+          "optimizer_message",
+          "phylogenetic_covariance",
+          "quadratic",
+          "reml",
+          "residual",
+          "upper_variance"
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 16,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0019828151271212846,
+            0.0017231640595127828,
+            0.0017221796879312024,
+            0.0017194843749166466,
+            0.0017412187517038547,
+            0.0018204739390057512,
+            0.0017274791243835352
+          ],
+          "median_seconds": 0.0017274791243835352,
+          "min_seconds": 0.0017194843749166466,
+          "max_seconds": 0.0019828151271212846
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.001573041627125349,
+            0.0014609114368795417,
+            0.001347710938716773,
+            0.0013390104431891814,
+            0.001390552060911432,
+            0.0013645260623889044,
+            0.001440481806639582
+          ],
+          "median_seconds": 0.001390552060911432,
+          "min_seconds": 0.0013390104431891814,
+          "max_seconds": 0.001573041627125349
+        },
+        "speedup": 1.2422973385485947
+      },
+      "baseline_peak_bytes": 277326,
+      "candidate_peak_bytes": 281506
+    },
+    {
+      "case": "whole_ordinary_brownian_fit",
+      "size": 256,
+      "equivalence": {
+        "all_fields_exact": true,
+        "fields": [
+          "beta",
+          "beta_covariance",
+          "boundary_warning",
+          "cholesky",
+          "component_variances",
+          "covariance",
+          "evolution_parameter",
+          "evolution_parameter_status",
+          "inverse_residual",
+          "log_variances",
+          "lower_variance",
+          "objective",
+          "optimizer_converged",
+          "optimizer_message",
+          "phylogenetic_covariance",
+          "quadratic",
+          "reml",
+          "residual",
+          "upper_variance"
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.02253341698087752,
+            0.02203162497607991,
+            0.022065187513362616,
+            0.02221029152860865,
+            0.022765458503272384,
+            0.02253102051327005,
+            0.02260139596182853
+          ],
+          "median_seconds": 0.02253102051327005,
+          "min_seconds": 0.02203162497607991,
+          "max_seconds": 0.022765458503272384
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.006628000002820045,
+            0.006412978982552886,
+            0.006368104019202292,
+            0.00652649998664856,
+            0.006840541493147612,
+            0.00667368748690933,
+            0.0067281044903211296
+          ],
+          "median_seconds": 0.006628000002820045,
+          "min_seconds": 0.006368104019202292,
+          "max_seconds": 0.006840541493147612
+        },
+        "speedup": 3.399369418177984
+      },
+      "baseline_peak_bytes": 4223901,
+      "candidate_peak_bytes": 4228222
+    }
+  ]
+}

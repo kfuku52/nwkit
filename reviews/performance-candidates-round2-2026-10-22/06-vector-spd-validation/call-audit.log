@@ -1,0 +1,24 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "conditioner_64tips_4traits_propagate_calls": 127,
+  "complete_BM_fit_8tips_2traits": {
+    "propagate_calls": 12893,
+    "fit_status": "ok"
+  },
+  "retained_finite_factor_failure": {
+    "type": "ValueError",
+    "message": "array must not contain infs or NaNs"
+  }
+}

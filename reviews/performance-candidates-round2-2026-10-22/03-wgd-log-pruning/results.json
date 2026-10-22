@@ -1,0 +1,4770 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "source": {
+    "nwkit_file": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "target_file": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/wgd_count_model.py",
+    "target_sha256": "86a7524788bdfe052a61122cea04442482b3c63dc8c6a94fc5b55512d1b23ec4"
+  },
+  "workspace_estimate_bytes": 1048576,
+  "maximum_family_batch": 64,
+  "numerical_checks": {
+    "pruning_and_helper_cases": [
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 5,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 5,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 8,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 5,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 5,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 20,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 1,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 5,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 5,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0.2,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            1e-08,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0.3
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": null,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 7,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 0.3,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 3,
+        "nan_count": 0
+      },
+      {
+        "bound": 86,
+        "detection": [
+          0.65,
+          0.9,
+          0.8
+        ],
+        "rates": [
+          [
+            0,
+            0
+          ]
+        ],
+        "retention": 1.0,
+        "root_mean": 1.7,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "states": 1,
+        "workspace_bytes": 1,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 2,
+        "nan_count": 0
+      },
+      {
+        "states": 1,
+        "workspace_bytes": 16384,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 2,
+        "nan_count": 0
+      },
+      {
+        "states": 1,
+        "workspace_bytes": 1048576,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 2,
+        "nan_count": 0
+      },
+      {
+        "states": 1,
+        "workspace_bytes": 4194304,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 2,
+        "nan_count": 0
+      },
+      {
+        "states": 2,
+        "workspace_bytes": 1,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 68,
+        "nan_count": 0
+      },
+      {
+        "states": 2,
+        "workspace_bytes": 16384,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 68,
+        "nan_count": 0
+      },
+      {
+        "states": 2,
+        "workspace_bytes": 1048576,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 68,
+        "nan_count": 0
+      },
+      {
+        "states": 2,
+        "workspace_bytes": 4194304,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 68,
+        "nan_count": 0
+      },
+      {
+        "states": 17,
+        "workspace_bytes": 1,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 17,
+        "nan_count": 0
+      },
+      {
+        "states": 17,
+        "workspace_bytes": 16384,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 17,
+        "nan_count": 0
+      },
+      {
+        "states": 17,
+        "workspace_bytes": 1048576,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 17,
+        "nan_count": 0
+      },
+      {
+        "states": 17,
+        "workspace_bytes": 4194304,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 17,
+        "nan_count": 0
+      },
+      {
+        "states": 87,
+        "workspace_bytes": 1,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 87,
+        "nan_count": 0
+      },
+      {
+        "states": 87,
+        "workspace_bytes": 16384,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 87,
+        "nan_count": 0
+      },
+      {
+        "states": 87,
+        "workspace_bytes": 1048576,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 87,
+        "nan_count": 0
+      },
+      {
+        "states": 87,
+        "workspace_bytes": 4194304,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 87,
+        "nan_count": 0
+      },
+      {
+        "states": 513,
+        "workspace_bytes": 1,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 513,
+        "nan_count": 0
+      },
+      {
+        "states": 513,
+        "workspace_bytes": 16384,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 513,
+        "nan_count": 0
+      },
+      {
+        "states": 513,
+        "workspace_bytes": 1048576,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 513,
+        "nan_count": 0
+      },
+      {
+        "states": 513,
+        "workspace_bytes": 4194304,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 513,
+        "nan_count": 0
+      }
+    ],
+    "state_doubling": [
+      {
+        "retention": null,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "retention": 0.0,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      {
+        "retention": 0.3,
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      }
+    ]
+  },
+  "pruning_kernel": [
+    {
+      "name": "prune_1x20",
+      "families": 1,
+      "max_count": 20,
+      "setup": "precomputed transitions; includes emissions and complete log pruning",
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 89,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.00034222705682132685,
+            0.0003472827636542615,
+            0.0003542242469684629,
+            0.00033654822585999633,
+            0.00034922659606411214,
+            0.00034431695514306257,
+            0.00036940496582328603
+          ],
+          "median_seconds": 0.0003472827636542615,
+          "min_seconds": 0.00033654822585999633,
+          "max_seconds": 0.00036940496582328603
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.00035465261741970364,
+            0.0003428309881180692,
+            0.0003515454153059406,
+            0.0003554283698832386,
+            0.00033983988870521276,
+            0.00034279120285482555,
+            0.0003510332362872831
+          ],
+          "median_seconds": 0.0003510332362872831,
+          "min_seconds": 0.00033983988870521276,
+          "max_seconds": 0.0003554283698832386
+        },
+        "speedup": 0.9893159044633818
+      },
+      "peak_python_bytes": {
+        "baseline": 31293,
+        "candidate": 31293
+      }
+    },
+    {
+      "name": "prune_16x20",
+      "families": 16,
+      "max_count": 20,
+      "setup": "precomputed transitions; includes emissions and complete log pruning",
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 11,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0027924053561450405,
+            0.0027638295538384805,
+            0.0027934090996330433,
+            0.0028302045433189382,
+            0.0028244356455450707,
+            0.0027659280035136776,
+            0.002915064455009997
+          ],
+          "median_seconds": 0.0027934090996330433,
+          "min_seconds": 0.0027638295538384805,
+          "max_seconds": 0.002915064455009997
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0007280340862714431,
+            0.0007105719149959358,
+            0.0008547992699525573,
+            0.0007401022700254213,
+            0.0007157727271657099,
+            0.0007289241766557097,
+            0.0007066855482249098
+          ],
+          "median_seconds": 0.0007280340862714431,
+          "min_seconds": 0.0007066855482249098,
+          "max_seconds": 0.0008547992699525573
+        },
+        "speedup": 3.8369207600419104
+      },
+      "peak_python_bytes": {
+        "baseline": 55779,
+        "candidate": 378742
+      }
+    },
+    {
+      "name": "prune_128x20",
+      "families": 128,
+      "max_count": 20,
+      "setup": "precomputed transitions; includes emissions and complete log pruning",
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 2,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.020783146028406918,
+            0.020734374993480742,
+            0.02061039552791044,
+            0.02052287495462224,
+            0.020403374976012856,
+            0.0211499790311791,
+            0.020872896013315767
+          ],
+          "median_seconds": 0.020734374993480742,
+          "min_seconds": 0.020403374976012856,
+          "max_seconds": 0.0211499790311791
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0032833960140123963,
+            0.003223770996555686,
+            0.003150916483718902,
+            0.003084750031121075,
+            0.0031808959902264178,
+            0.003250582958571613,
+            0.0035462710075080395
+          ],
+          "median_seconds": 0.003223770996555686,
+          "min_seconds": 0.003084750031121075,
+          "max_seconds": 0.0035462710075080395
+        },
+        "speedup": 6.4317146024434075
+      },
+      "peak_python_bytes": {
+        "baseline": 223949,
+        "candidate": 1543734
+      }
+    },
+    {
+      "name": "prune_128x86",
+      "families": 128,
+      "max_count": 86,
+      "setup": "precomputed transitions; includes emissions and complete log pruning",
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.050904416013509035,
+            0.05905945901758969,
+            0.06635920889675617,
+            0.059330624993890524,
+            0.04784454207401723,
+            0.05365637503564358,
+            0.0535191249800846
+          ],
+          "median_seconds": 0.05365637503564358,
+          "min_seconds": 0.04784454207401723,
+          "max_seconds": 0.06635920889675617
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.03411429200787097,
+            0.03512400004547089,
+            0.03739362501073629,
+            0.04697787493932992,
+            0.03341958299279213,
+            0.034365792060270905,
+            0.043869375018402934
+          ],
+          "median_seconds": 0.03512400004547089,
+          "min_seconds": 0.03341958299279213,
+          "max_seconds": 0.04697787493932992
+        },
+        "speedup": 1.5276271200939815
+      },
+      "peak_python_bytes": {
+        "baseline": 917807,
+        "candidate": 1957026
+      }
+    },
+    {
+      "name": "prune_512x86",
+      "families": 512,
+      "max_count": 86,
+      "setup": "precomputed transitions; includes emissions and complete log pruning",
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.20688316703308374,
+            0.19328958296682686,
+            0.1978869999293238,
+            0.272060208953917,
+            0.2216293750097975,
+            0.19937770802062005,
+            0.1994750420562923
+          ],
+          "median_seconds": 0.1994750420562923,
+          "min_seconds": 0.19328958296682686,
+          "max_seconds": 0.272060208953917
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.1336083330679685,
+            0.16339595906902105,
+            0.1585767079377547,
+            0.13460920902434736,
+            0.14327574998605996,
+            0.13416937494184822,
+            0.1366463330341503
+          ],
+          "median_seconds": 0.1366463330341503,
+          "min_seconds": 0.1336083330679685,
+          "max_seconds": 0.16339595906902105
+        },
+        "speedup": 1.4597906700243468
+      },
+      "peak_python_bytes": {
+        "baseline": 3647279,
+        "candidate": 3647279
+      }
+    },
+    {
+      "name": "prune_128x160",
+      "families": 128,
+      "max_count": 160,
+      "setup": "precomputed transitions; includes emissions and complete log pruning",
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.14801512495614588,
+            0.11123616702388972,
+            0.11140012496616691,
+            0.1085174169857055,
+            0.11857729207258672,
+            0.12268387502990663,
+            0.10888595797587186
+          ],
+          "median_seconds": 0.11140012496616691,
+          "min_seconds": 0.1085174169857055,
+          "max_seconds": 0.14801512495614588
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.1256593749858439,
+            0.12628366705030203,
+            0.1107821250334382,
+            0.1087241250788793,
+            0.11457979097031057,
+            0.11070120800286531,
+            0.10914158297237009
+          ],
+          "median_seconds": 0.1107821250334382,
+          "min_seconds": 0.1087241250788793,
+          "max_seconds": 0.12628366705030203
+        },
+        "speedup": 1.0055785166834648
+      },
+      "peak_python_bytes": {
+        "baseline": 2150793,
+        "candidate": 2149722
+      }
+    }
+  ],
+  "complete_family_likelihood": [
+    {
+      "name": "ordinary_control",
+      "families": 129,
+      "tips": 3,
+      "max_count": 20,
+      "rates": [
+        [
+          0.2,
+          0.3
+        ]
+      ],
+      "event": null,
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 46,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0006521159565359678,
+            0.0008536014331342733,
+            0.0008805235442907914,
+            0.0006814447393559891,
+            0.0006645579781869184,
+            0.0007002237379429457,
+            0.0006656222824898103
+          ],
+          "median_seconds": 0.0006814447393559891,
+          "min_seconds": 0.0006521159565359678,
+          "max_seconds": 0.0008805235442907914
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0006472744558856863,
+            0.000778509956865531,
+            0.000693254519517169,
+            0.0006486992630095261,
+            0.0006694891312888459,
+            0.0007076929348682904,
+            0.0006726086949524672
+          ],
+          "median_seconds": 0.0006726086949524672,
+          "min_seconds": 0.0006472744558856863,
+          "max_seconds": 0.000778509956865531
+        },
+        "speedup": 1.0131369761792126
+      },
+      "peak_python_bytes": {
+        "baseline": 224334,
+        "candidate": 224334
+      }
+    },
+    {
+      "name": "rare_1",
+      "families": 1,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": null,
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [
+        1
+      ],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.034657792071811855,
+            0.03588266693986952,
+            0.044276374974288046,
+            0.033773583942092955,
+            0.033632040955126286,
+            0.03396237501874566,
+            0.033841249998658895
+          ],
+          "median_seconds": 0.03396237501874566,
+          "min_seconds": 0.033632040955126286,
+          "max_seconds": 0.044276374974288046
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.034242540947161615,
+            0.03422283299732953,
+            0.039057667017914355,
+            0.0344940839568153,
+            0.03375470801256597,
+            0.034071499947458506,
+            0.03376825002487749
+          ],
+          "median_seconds": 0.03422283299732953,
+          "min_seconds": 0.03375470801256597,
+          "max_seconds": 0.039057667017914355
+        },
+        "speedup": 0.9923893507412377
+      },
+      "peak_python_bytes": {
+        "baseline": 938613,
+        "candidate": 938409
+      }
+    },
+    {
+      "name": "rare_16",
+      "families": 16,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": null,
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [
+        16
+      ],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.04181441699620336,
+            0.0766716250218451,
+            0.04698674997780472,
+            0.03950533294118941,
+            0.039251584094017744,
+            0.03913479205220938,
+            0.039509625057689846
+          ],
+          "median_seconds": 0.039509625057689846,
+          "min_seconds": 0.03913479205220938,
+          "max_seconds": 0.0766716250218451
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.07285474997479469,
+            0.10183620802126825,
+            0.037858374998904765,
+            0.03758716699667275,
+            0.037554417038336396,
+            0.03757225000299513,
+            0.03761712496634573
+          ],
+          "median_seconds": 0.03761712496634573,
+          "min_seconds": 0.037554417038336396,
+          "max_seconds": 0.10183620802126825
+        },
+        "speedup": 1.0503095356978305
+      },
+      "peak_python_bytes": {
+        "baseline": 975457,
+        "candidate": 2092438
+      }
+    },
+    {
+      "name": "rare_128",
+      "families": 128,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": null,
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [
+        128
+      ],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.08482495800126344,
+            0.10333154199179262,
+            0.0954478339990601,
+            0.0948717090068385,
+            0.08857287501450628,
+            0.0858499159803614,
+            0.08184749993961304
+          ],
+          "median_seconds": 0.08857287501450628,
+          "min_seconds": 0.08184749993961304,
+          "max_seconds": 0.10333154199179262
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0665044579654932,
+            0.0754443749319762,
+            0.07170220895204693,
+            0.07187929202336818,
+            0.07184829108882695,
+            0.06990337499883026,
+            0.06780141603667289
+          ],
+          "median_seconds": 0.07170220895204693,
+          "min_seconds": 0.0665044579654932,
+          "max_seconds": 0.0754443749319762
+        },
+        "speedup": 1.2352879542908104
+      },
+      "peak_python_bytes": {
+        "baseline": 1688050,
+        "candidate": 2719249
+      }
+    },
+    {
+      "name": "rare_512",
+      "families": 512,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": null,
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [
+        512
+      ],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.2273647499969229,
+            0.23548395792022347,
+            0.2392884170403704,
+            0.2945319999707863,
+            0.2824051668867469,
+            0.2349745420506224,
+            0.23376733402255923
+          ],
+          "median_seconds": 0.23548395792022347,
+          "min_seconds": 0.2273647499969229,
+          "max_seconds": 0.2945319999707863
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.17279654101002961,
+            0.17120324994903058,
+            0.1800687499344349,
+            0.1935501249972731,
+            0.1875525830546394,
+            0.19128575001377612,
+            0.1701175000052899
+          ],
+          "median_seconds": 0.1800687499344349,
+          "min_seconds": 0.1701175000052899,
+          "max_seconds": 0.1935501249972731
+        },
+        "speedup": 1.3077447253116707
+      },
+      "peak_python_bytes": {
+        "baseline": 5226046,
+        "candidate": 5225485
+      }
+    },
+    {
+      "name": "rare_128_larger_states",
+      "families": 128,
+      "tips": 3,
+      "max_count": 160,
+      "rates": [
+        [
+          1e-05,
+          0
+        ]
+      ],
+      "event": null,
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [
+        128
+      ],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.2357868750113994,
+            0.23292983300052583,
+            0.2670537499943748,
+            0.26453629101160914,
+            0.3020655419677496,
+            0.2505306249950081,
+            0.2570527499774471
+          ],
+          "median_seconds": 0.2570527499774471,
+          "min_seconds": 0.23292983300052583,
+          "max_seconds": 0.3020655419677496
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.23320787493139505,
+            0.23355466697830707,
+            0.2354485410032794,
+            0.23954733298160136,
+            0.2855555829592049,
+            0.2490932079963386,
+            0.30320095794741064
+          ],
+          "median_seconds": 0.23954733298160136,
+          "min_seconds": 0.23320787493139505,
+          "max_seconds": 0.30320095794741064
+        },
+        "speedup": 1.0730770690617133
+      },
+      "peak_python_bytes": {
+        "baseline": 4315903,
+        "candidate": 4314074
+      }
+    },
+    {
+      "name": "rare_pulse_detection",
+      "families": 64,
+      "tips": 3,
+      "max_count": 86,
+      "rates": [
+        [
+          1e-08,
+          0
+        ]
+      ],
+      "event": {
+        "node": 1,
+        "retention": 0.3,
+        "fraction": 0.5,
+        "multiplicity": 2
+      },
+      "setup": "complete family_log_likelihoods; includes emissions, probability pruning, transitions, log recovery and ascertainment",
+      "rare_rows_per_category": [
+        64
+      ],
+      "equivalence": {
+        "array_equal": true,
+        "max_abs_difference": 0.0,
+        "negative_infinity_count": 0,
+        "nan_count": 0
+      },
+      "timing": {
+        "loops_per_sample": 1,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.09795929200481623,
+            0.09493237501010299,
+            0.09791162493638694,
+            0.09623783407732844,
+            0.09427999996114522,
+            0.09979829099029303,
+            0.09976845898199826
+          ],
+          "median_seconds": 0.09791162493638694,
+          "min_seconds": 0.09427999996114522,
+          "max_seconds": 0.09979829099029303
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.09198279108386487,
+            0.09157395793590695,
+            0.09444741695187986,
+            0.09312858304474503,
+            0.0881185419857502,
+            0.09547887498047203,
+            0.08985954197123647
+          ],
+          "median_seconds": 0.09198279108386487,
+          "min_seconds": 0.0881185419857502,
+          "max_seconds": 0.09547887498047203
+        },
+        "speedup": 1.0644559029211942
+      },
+      "peak_python_bytes": {
+        "baseline": 1334873,
+        "candidate": 2375794
+      }
+    }
+  ]
+}

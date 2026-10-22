@@ -1,0 +1,58 @@
+{
+  "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+  "snapshot": "/private/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline",
+  "files": {
+    "nwkit/__init__.py": {
+      "sha256": "5da0e12ace3af7203259944204a656ecdd2ab80af5ec2673e386428c0de60af2",
+      "matches_git_revision": true
+    },
+    "nwkit/signal_stats.py": {
+      "sha256": "a50742337b97ade6e47d237f147f3775d16cd22e0489c7b793032f383c4d4ec4",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/gaussian_tree.py": {
+      "sha256": "adbf3851b5cc743d5a76712727f022d48df39bd597171d15869099deb7f8a655",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/wgd_count_model.py": {
+      "sha256": "86a7524788bdfe052a61122cea04442482b3c63dc8c6a94fc5b55512d1b23ec4",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/threshold_asr.py": {
+      "sha256": "16f95489e9bb7667a8b9f4e8d02dc25f55a16a2ed33d70effa0256057cd2e740",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/vector_gaussian.py": {
+      "sha256": "ce608a73603916f938f58d3180c3d39d967d882b6a0832990fa98cdbdc2caa33",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/phylogenetic_pca.py": {
+      "sha256": "ba0a284c5e6859d19197b7d6c30677547c226776f5a28518434e0a7299d9cb2a",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/asr.py": {
+      "sha256": "db19c984a4a0ff59c213cce1190ffcd91748d18beae892e508c0d4caadf29f10",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/stochastic_history.py": {
+      "sha256": "c95b5cc7043c62a8e8a05dd12c1ac63f2c92a8de02a43c79c84f54b6e57a6340",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    },
+    "nwkit/full_ou.py": {
+      "sha256": "6fc26153a050cc0c4a12c282a0ecb41c154f3582ee4b4bc3e1a4cd0a9b026606",
+      "matches_git_revision": true,
+      "live_target_still_matches_snapshot": true
+    }
+  },
+  "all_match": true,
+  "live_checkout_head_at_audit": "8664baa7e88afae7e384c0e4d8d16437846493a2",
+  "live_version_note": "Separate task advanced the checkout; all nine performance target modules still match the fixed baseline. The version file is intentionally excluded from that comparison."
+}

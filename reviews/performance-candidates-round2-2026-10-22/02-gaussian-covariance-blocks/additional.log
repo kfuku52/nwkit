@@ -1,0 +1,150 @@
+{
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "machine": "arm64",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "pandas": "3.0.6",
+    "nwkit": "0.43.55",
+    "nwkit_source": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/__init__.py",
+    "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+    "timing_limit": "Exploratory host-local measurements; unrelated CPU jobs are active.",
+    "memory_limit": "tracemalloc peak is not complete RSS or all native allocations."
+  },
+  "controls": [
+    {
+      "case": "small_dispatch",
+      "minimum_requested_for_this_control": 32,
+      "size": 32,
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          32,
+          32
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 81,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.0004323811735957861,
+            0.0003692191367233057,
+            0.00037124176526925077,
+            0.0003732932102004135,
+            0.0003740241848806172,
+            0.00037086419732436355,
+            0.00037117951900272824
+          ],
+          "median_seconds": 0.00037124176526925077,
+          "min_seconds": 0.0003692191367233057,
+          "max_seconds": 0.0004323811735957861
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.0007110324064499618,
+            0.0004397602967435011,
+            0.00043715690090148537,
+            0.0004325504069802938,
+            0.000432454727958014,
+            0.0004304007161408663,
+            0.0004384465067198983
+          ],
+          "median_seconds": 0.00043715690090148537,
+          "min_seconds": 0.0004304007161408663,
+          "max_seconds": 0.0007110324064499618
+        },
+        "speedup": 0.8492185860584441
+      }
+    },
+    {
+      "case": "zero_slope_fallback",
+      "size": 64,
+      "equivalence": {
+        "exact": true,
+        "max_absolute_difference": 0.0,
+        "shape": [
+          64,
+          64
+        ]
+      },
+      "timing": {
+        "loops_per_sample": 18,
+        "repeats": 7,
+        "baseline": {
+          "raw_seconds": [
+            0.001707692113187578,
+            0.0017480926148386465,
+            0.0017155277762665516,
+            0.0028024583330584895,
+            0.0020645069436998004,
+            0.00185206710981826,
+            0.0017258796142414212
+          ],
+          "median_seconds": 0.0017480926148386465,
+          "min_seconds": 0.001707692113187578,
+          "max_seconds": 0.0028024583330584895
+        },
+        "candidate": {
+          "raw_seconds": [
+            0.001915872724364615,
+            0.0018896111093151073,
+            0.0018766157768873705,
+            0.0018875740546112259,
+            0.001970789388805214,
+            0.002196532389562991,
+            0.0019039791659452021
+          ],
+          "median_seconds": 0.0019039791659452021,
+          "min_seconds": 0.0018766157768873705,
+          "max_seconds": 0.002196532389562991
+        },
+        "speedup": 0.9181259155064504
+      }
+    }
+  ],
+  "production_proposal_minimum_requested": 64,
+  "workspace_checks": [
+    {
+      "budget": 24,
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "budget": 192,
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    },
+    {
+      "budget": 4194304,
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        48,
+        48
+      ]
+    }
+  ],
+  "duplicate_arithmetic_fix": {
+    "initial_shortcut_differing_entries": 16,
+    "initial_shortcut_max_absolute_difference": 8.881784197001252e-16,
+    "corrected": {
+      "exact": true,
+      "max_absolute_difference": 0.0,
+      "shape": [
+        254,
+        254
+      ]
+    }
+  }
+}

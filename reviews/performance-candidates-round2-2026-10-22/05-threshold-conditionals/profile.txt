@@ -1,0 +1,43 @@
+         2004923 function calls (2004824 primitive calls) in 0.993 seconds
+
+   Ordered by: cumulative time
+   List reduced from 571 to 35 due to restriction <35>
+
+   ncalls  tottime  percall  cumtime  percall filename:lineno(function)
+        1    0.010    0.010    0.993    0.993 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_asr.py:265(compute_threshold_marginals)
+     3072    0.043    0.000    0.884    0.000 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_asr.py:163(_truncated_draw)
+     7690    0.067    0.000    0.669    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/special/_logsumexp.py:15(logsumexp)
+     3072    0.022    0.000    0.586    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_distn_infrastructure.py:1079(rvs)
+     3072    0.008    0.000    0.516    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_distn_infrastructure.py:1049(_rvs)
+     3072    0.017    0.000    0.508    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10336(_ppf)
+     7690    0.101    0.000    0.416    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/special/_logsumexp.py:201(_logsumexp)
+     2248    0.005    0.000    0.304    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10342(ppf_left)
+     3072    0.002    0.000    0.247    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10168(_log_sum)
+     3072    0.019    0.000    0.226    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10177(_log_gauss_mass)
+     1546    0.001    0.000    0.189    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10187(mass_case_left)
+     1546    0.003    0.000    0.187    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10173(_log_diff)
+      824    0.003    0.000    0.180    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10347(ppf_right)
+    15380    0.005    0.000    0.106    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/array_api_extra/_lib/_at.py:362(set)
+      824    0.001    0.000    0.102    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_continuous_distns.py:10190(mass_case_right)
+    15380    0.039    0.000    0.101    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/array_api_extra/_lib/_at.py:224(_op)
+        1    0.001    0.001    0.088    0.088 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_diagnostics.py:29(diagnose_threshold_draws)
+      253    0.000    0.000    0.087    0.000 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_diagnostics.py:36(append)
+      253    0.003    0.000    0.087    0.000 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/mcmc_diagnostics.py:73(diagnose)
+     7690    0.021    0.000    0.085    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/special/_logsumexp.py:169(_elements_and_indices_with_max_real)
+     7690    0.024    0.000    0.083    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/_array_api.py:524(xp_promote)
+    21592    0.008    0.000    0.071    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/array_api_compat/_internal.py:33(wrapped_f)
+    34164    0.023    0.000    0.063    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/_core/numerictypes.py:328(isdtype)
+    34354    0.025    0.000    0.062    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:66(_wrapreduction)
+    24616    0.014    0.000    0.060    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/_core/fromnumeric.py:2342(sum)
+    15380    0.020    0.000    0.051    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/array_api_compat/common/_aliases.py:631(sign)
+    51482    0.043    0.000    0.043    0.000 {method 'reduce' of 'numpy.ufunc' objects}
+     7690    0.015    0.000    0.031    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/_array_api.py:471(xp_result_type)
+    35710    0.021    0.000    0.031    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/_core/numerictypes.py:309(_preprocess_dtype)
+    15380    0.008    0.000    0.031    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/_lib/array_api_compat/common/_aliases.py:574(isdtype)
+      624    0.006    0.000    0.029    0.000 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/mcmc_diagnostics.py:42(_ess)
+    19958    0.012    0.000    0.026    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/_core/numerictypes.py:418(issubdtype)
+      312    0.001    0.000    0.025    0.000 /tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/mcmc_diagnostics.py:23(_rank)
+      312    0.001    0.000    0.024    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_stats_py.py:9903(rankdata)
+     9216    0.011    0.000    0.024    0.000 /tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/numpy/lib/_stride_tricks_impl.py:588(broadcast_arrays)
+
+

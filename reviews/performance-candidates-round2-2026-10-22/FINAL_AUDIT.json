@@ -1,0 +1,112 @@
+{
+  "result": "passed",
+  "baseline_commit": "86c8f2c537769d852c17e2c789340f6c9de4ef54",
+  "completed_candidate_directories": [
+    "01-lambda-spectrum",
+    "02-gaussian-covariance-blocks",
+    "03-wgd-log-pruning",
+    "04-wgd-log-product",
+    "05-threshold-conditionals",
+    "06-vector-spd-validation",
+    "07-pca-final-reuse",
+    "08-stochastic-preparation",
+    "09-er-pruning",
+    "10-full-ou-moments"
+  ],
+  "decision": {
+    "adoptable_within_tested_scope": [
+      1,
+      2,
+      3,
+      7,
+      8,
+      10
+    ],
+    "requires_unimplemented_fixed_rate_guard": [
+      9
+    ],
+    "deferred_for_weak_whole_operation_benefit": [
+      4,
+      5,
+      6
+    ]
+  },
+  "ruff_check": "passed",
+  "ruff_format_check": "passed",
+  "python_syntax_files": 31,
+  "strict_json_files_including_this_audit": 25,
+  "local_markdown_file_links_checked": 63,
+  "markdown_anchor_validation": "File paths checked; section anchors not separately resolved.",
+  "prototype_existing_test_executions": 532,
+  "test_counts_overlap": true,
+  "test_logs": [
+    {
+      "log": "01-lambda-spectrum/prototype-tests.log",
+      "passed": 49
+    },
+    {
+      "log": "02-gaussian-covariance-blocks/tests.log",
+      "passed": 90
+    },
+    {
+      "log": "03-wgd-log-pruning/tests.log",
+      "passed": 102
+    },
+    {
+      "log": "04-wgd-log-product/tests.log",
+      "passed": 47
+    },
+    {
+      "log": "04-wgd-log-product/split-edge-test.log",
+      "passed": 1
+    },
+    {
+      "log": "05-threshold-conditionals/tests.log",
+      "passed": 21
+    },
+    {
+      "log": "06-vector-spd-validation/tests.log",
+      "passed": 20
+    },
+    {
+      "log": "07-pca-final-reuse/tests.log",
+      "passed": 57
+    },
+    {
+      "log": "08-stochastic-preparation/tests.log",
+      "passed": 57
+    },
+    {
+      "log": "09-er-pruning/tests.log",
+      "passed": 79
+    },
+    {
+      "log": "10-full-ou-moments/tests.log",
+      "passed": 9
+    }
+  ],
+  "snapshot_sources": "10 exact Git byte comparisons; 9 live performance modules still equal",
+  "harness_normalization_smoke": "passed; independent 11-point profile audit, max logpdf difference 1.4210854715202004e-14",
+  "not_run": [
+    "full release gate",
+    "combined prototype integration",
+    "cross-platform BLAS/LAPACK",
+    "new live external scientific backends",
+    "large empirical/population calibration studies"
+  ],
+  "production_edits_by_this_task": false,
+  "commits_or_push_by_this_task": false,
+  "completed_subagents": [
+    "/root/round2_01_lambda",
+    "/root/round2_02_covariance",
+    "/root/round2_03_wgd_prune",
+    "/root/round2_04_log_product",
+    "/root/round2_05_threshold",
+    "/root/round2_06_vector_validation",
+    "/root/round2_07_pca_reuse",
+    "/root/round2_08_stochastic_prep",
+    "/root/round2_09_er_pruning",
+    "/root/round2_10_fullou_moments"
+  ],
+  "subagent_completion_evidence": "All ten final answers received in this task."
+}

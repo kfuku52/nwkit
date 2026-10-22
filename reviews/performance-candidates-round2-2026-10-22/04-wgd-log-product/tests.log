@@ -1,0 +1,10 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- -p candidate04_plugin tests/test_wgd_count_model.py -k pulse or pruning or event or convergence or fully_missing or mixture or root_clade -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate04_plugin tests/test_wgd_count_model.py -k pulse or pruning or event or convergence or fully_missing or mixture or root_clade -rs
+...............................................                          [100%]
+============================= slowest 20 durations =============================
+0.17s call     tests/test_wgd_count_model.py::test_pruning_matches_brute_force_and_ascertainment
+0.12s call     tests/test_wgd_count_model.py::test_root_clade_simulation_observation_and_missingness_selection
+0.06s call     tests/test_wgd_count_model.py::test_high_copy_rare_pulse_likelihood_matches_independent_yule_sum
+
+(17 durations < 0.05s hidden.)
+47 passed, 35 deselected in 0.57s

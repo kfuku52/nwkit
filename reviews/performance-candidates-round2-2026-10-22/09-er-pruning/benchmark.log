@@ -1,0 +1,7 @@
+{'tips': 32, 'states': 2, 'unique_lengths': False, 'fitted_rate': False} 0.9804626190816353 0.0
+{'tips': 64, 'states': 8, 'unique_lengths': False, 'fitted_rate': False} 0.9955263369596135 0.0
+{'tips': 128, 'states': 16, 'unique_lengths': False, 'fitted_rate': False} 1.047652773260323 2.6634804326284017e-15
+{'tips': 128, 'states': 32, 'unique_lengths': False, 'fitted_rate': False} 1.1688415451505674 1.7763568394002505e-15
+{'tips': 128, 'states': 64, 'unique_lengths': False, 'fitted_rate': False} 1.3882646774776632 1.7763568394002505e-15
+{'tips': 128, 'states': 64, 'unique_lengths': True, 'fitted_rate': False} 1.2716301330395814 2.6645352591003757e-15
+{'tips': 32, 'states': 16, 'unique_lengths': False, 'fitted_rate': True} 1.1099361023426315 1.4210864810695001e-06

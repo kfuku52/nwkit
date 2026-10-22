@@ -1,0 +1,8 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 tests/test_gaussian_tree.py tests/test_evolution.py tests/test_numerical_invariance.py -p candidate02_plugin -rs
+........................................................................ [ 80%]
+..................                                                       [100%]
+============================= slowest 20 durations =============================
+0.44s call     tests/test_evolution.py::test_conditioned_sparse_model_supports_exact_reusable_sampling
+
+(19 durations < 0.05s hidden.)
+90 passed in 1.01s

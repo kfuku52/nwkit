@@ -1,0 +1,14 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate06_plugin tests/test_vector_gaussian.py tests/test_vector_fit.py tests/test_asr_multivariate_diagnostics.py -rs
+....................                                                     [100%]
+============================= slowest 20 durations =============================
+3.69s call     tests/test_vector_fit.py::test_pruning_ou_matches_dense_fit[True]
+2.68s call     tests/test_vector_fit.py::test_pruning_ou_matches_dense_fit[False]
+1.69s call     tests/test_vector_fit.py::test_pruning_bm_matches_dense_fit_with_missing_errors[scale1]
+0.92s call     tests/test_vector_fit.py::test_pruning_bm_matches_dense_fit_with_missing_errors[scale0]
+0.10s call     tests/test_asr_multivariate_diagnostics.py::test_fitted_ou_vector_matches_dense_marginals[MV-OU-DIAG]
+0.09s call     tests/test_asr_multivariate_diagnostics.py::test_fitted_ou_vector_matches_dense_marginals[MV-OU]
+0.07s call     tests/test_asr_multivariate_diagnostics.py::test_multivariate_sample_cli_reproducible
+0.07s call     tests/test_vector_fit.py::test_pruning_observation_preparation_has_no_dense_limit
+
+(12 durations < 0.05s hidden.)
+20 passed in 10.13s

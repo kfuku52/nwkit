@@ -1,0 +1,101 @@
+{
+  "failures": [
+    {
+      "case": "zero_branch",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "Threshold ASR requires positive finite non-root branch lengths."
+      }
+    },
+    {
+      "case": "negative_branch",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "Threshold ASR requires positive finite non-root branch lengths."
+      }
+    },
+    {
+      "case": "nonfinite_branch",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "Threshold ASR requires positive finite non-root branch lengths."
+      }
+    },
+    {
+      "case": "threshold_count",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "--thresholds requires 2 increasing values for 3 states."
+      }
+    },
+    {
+      "case": "unordered_thresholds",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "--thresholds values must be finite and strictly increasing."
+      }
+    },
+    {
+      "case": "one_observation",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "Threshold ASR requires at least two unambiguous observations."
+      }
+    },
+    {
+      "case": "missing_ordinal_category",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "Estimating ordinal thresholds requires every state to be observed; missing: mid, high"
+      }
+    },
+    {
+      "case": "no_allowed_state",
+      "same_failure": {
+        "type": "ValueError",
+        "message": "Threshold observation for 'T0' allows no state."
+      }
+    }
+  ],
+  "lifetime": {
+    "new_call_reprepares_changed_branch": true,
+    "repeat_call_exact": true
+  },
+  "profile": {
+    "scope": "one explanatory cProfile call, not a timing comparison",
+    "selected_functions": [
+      {
+        "file": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_diagnostics.py",
+        "line": 29,
+        "function": "diagnose_threshold_draws",
+        "calls": 1,
+        "own_seconds": 0.0005767610000000001,
+        "cumulative_seconds": 0.088432959
+      },
+      {
+        "file": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_asr.py",
+        "line": 163,
+        "function": "_truncated_draw",
+        "calls": 3072,
+        "own_seconds": 0.042607884000000006,
+        "cumulative_seconds": 0.8835072650000001
+      },
+      {
+        "file": "/tmp/nwkit-perf-round2-20261022-rkzoGe/baseline/nwkit/threshold_asr.py",
+        "line": 189,
+        "function": "_conditional_parameters",
+        "calls": 6048,
+        "own_seconds": 0.006564544,
+        "cumulative_seconds": 0.0072504660000000005
+      },
+      {
+        "file": "/tmp/nwkit-perf-20261022-9fYwTD/venv/lib/python3.12/site-packages/scipy/stats/_distn_infrastructure.py",
+        "line": 1079,
+        "function": "rvs",
+        "calls": 3072,
+        "own_seconds": 0.021538553000000002,
+        "cumulative_seconds": 0.586050984
+      }
+    ]
+  }
+}

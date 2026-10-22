@@ -1,0 +1,7 @@
+8tips-2traits-exact-shared 1.2665168571561671 {'baseline': 32734, 'candidate': 29706}
+64tips-4traits-partial-unique 1.07373419568766 {'baseline': 173559, 'candidate': 173207}
+64tips-16traits-noisy-shared 1.015382251102322 {'baseline': 1188035, 'candidate': 1187499}
+128tips-32traits-partial-unique 1.0425234059623627 {'baseline': 8811215, 'candidate': 8810819}
+32tips-64traits-noisy-flat 1.0800249862109068 {'baseline': 8604820, 'candidate': 8604556}
+64tips-4traits-zero-branch-control 0.9620980895479653 {'baseline': 162584, 'candidate': 162320}
+edge_checks 29
