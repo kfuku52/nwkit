@@ -1,0 +1,1310 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    },
+    "host_contention": "Other user-owned CPU workloads were active."
+  },
+  "edge_checks": {
+    "empty": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "scalar": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "vector": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "nonsquare": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "zeros": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "signed_zero": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "nan_diagonal": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "inf_diagonal": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "nan_offdiagonal": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "inf_offdiagonal": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "tiny_offdiagonal": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "complex_diagonal": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "complex_offdiagonal": {
+      "baseline": false,
+      "guarded_exact": true
+    },
+    "integer": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "bool": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "object": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "strings": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "fortran": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "strided": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "negative_stride": {
+      "baseline": true,
+      "guarded_exact": true
+    },
+    "object_diagonal_truth_contract": {
+      "baseline": true,
+      "guarded_exact": true,
+      "bulk_error": "diagonal truth value must not be inspected"
+    }
+  },
+  "cases": [
+    {
+      "name": "diagonal_64",
+      "shape": [
+        64,
+        64
+      ],
+      "dtype": "float64",
+      "strides": [
+        512,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00026165934332311735,
+            0.00015270263656930183,
+            0.00023786800011293963,
+            0.00015165169133979362,
+            0.00015548502324236324,
+            0.00015460693339264253,
+            0.00015166064440563787
+          ],
+          "median_seconds": 0.00015460693339264253,
+          "min_seconds": 0.00015165169133979362,
+          "max_seconds": 0.00026165934332311735,
+          "relative_range": 0.7115311685533943,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 1521,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            2.863197330782441e-06,
+            2.516962709364634e-06,
+            2.573026002039569e-06,
+            2.984324162014218e-06,
+            2.480158443063374e-06,
+            3.1959838864281664e-06,
+            2.495213806241736e-06
+          ],
+          "median_seconds": 2.573026002039569e-06,
+          "min_seconds": 2.480158443063374e-06,
+          "max_seconds": 3.1959838864281664e-06,
+          "relative_range": 0.27820373474553967,
+          "calls_per_sample": 16384,
+          "peak_python_bytes": 144,
+          "speedup_over_baseline": 60.08759074727179
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            5.113601687867231e-06,
+            6.000381475246286e-06,
+            4.39644873040379e-06,
+            4.018081668277773e-06,
+            3.99141431728367e-06,
+            5.1404011287559115e-06,
+            4.125610345795394e-06
+          ],
+          "median_seconds": 4.39644873040379e-06,
+          "min_seconds": 3.99141431728367e-06,
+          "max_seconds": 6.000381475246286e-06,
+          "relative_range": 0.456952254229541,
+          "calls_per_sample": 8192,
+          "peak_python_bytes": 1113,
+          "speedup_over_baseline": 35.16632238275703
+        }
+      }
+    },
+    {
+      "name": "dense_early_exit_64",
+      "shape": [
+        64,
+        64
+      ],
+      "dtype": "float64",
+      "strides": [
+        512,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            2.537902837218553e-06,
+            2.6872685481293956e-06,
+            2.65914916752763e-06,
+            2.7740961314748347e-06,
+            2.6144561786622944e-06,
+            4.038909914072519e-06,
+            2.6094741869542304e-06
+          ],
+          "median_seconds": 2.65914916752763e-06,
+          "min_seconds": 2.537902837218553e-06,
+          "max_seconds": 4.038909914072519e-06,
+          "relative_range": 0.5644689268220113,
+          "calls_per_sample": 16384,
+          "peak_python_bytes": 1521,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            2.4107538436624054e-06,
+            2.4984919377857295e-06,
+            2.509295164543346e-06,
+            2.4813740893137037e-06,
+            2.4740142805512733e-06,
+            3.2748159171092084e-06,
+            6.120880122750805e-06
+          ],
+          "median_seconds": 2.4984919377857295e-06,
+          "min_seconds": 2.4107538436624054e-06,
+          "max_seconds": 6.120880122750805e-06,
+          "relative_range": 1.4849462681782644,
+          "calls_per_sample": 16384,
+          "peak_python_bytes": 144,
+          "speedup_over_baseline": 1.0643016802704923
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            1.413987458676047e-06,
+            1.3978691093541329e-06,
+            1.4468841555981271e-06,
+            1.4258397520450217e-06,
+            1.7134348766489893e-06,
+            2.6578674336974473e-06,
+            5.130558015764564e-06
+          ],
+          "median_seconds": 1.4468841555981271e-06,
+          "min_seconds": 1.3978691093541329e-06,
+          "max_seconds": 5.130558015764564e-06,
+          "relative_range": 2.579811861211083,
+          "calls_per_sample": 32768,
+          "peak_python_bytes": 1113,
+          "speedup_over_baseline": 1.8378452464484727
+        }
+      }
+    },
+    {
+      "name": "late_offdiagonal_64",
+      "shape": [
+        64,
+        64
+      ],
+      "dtype": "float64",
+      "strides": [
+        512,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00017156510511995293,
+            0.00015040608604977024,
+            0.00015116210943233455,
+            0.00014819580064795446,
+            0.0001487434919908992,
+            0.00014824397658230737,
+            0.0001471398086323461
+          ],
+          "median_seconds": 0.0001487434919908992,
+          "min_seconds": 0.0001471398086323461,
+          "max_seconds": 0.00017156510511995293,
+          "relative_range": 0.16421085830835058,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 1521,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            2.4398905651423775e-06,
+            2.464897157494761e-06,
+            2.4422073394703148e-06,
+            2.4548364834231506e-06,
+            2.419845579026969e-06,
+            2.4337997430734504e-06,
+            2.4168624932485727e-06
+          ],
+          "median_seconds": 2.4398905651423775e-06,
+          "min_seconds": 2.4168624932485727e-06,
+          "max_seconds": 2.464897157494761e-06,
+          "relative_range": 0.019687220784586776,
+          "calls_per_sample": 16384,
+          "peak_python_bytes": 144,
+          "speedup_over_baseline": 60.96318175738321
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            3.964528431765757e-06,
+            3.962381967426154e-06,
+            4.08074950541959e-06,
+            3.9866536809540776e-06,
+            3.946421387013288e-06,
+            3.9359232175684156e-06,
+            3.949844355588539e-06
+          ],
+          "median_seconds": 3.962381967426154e-06,
+          "min_seconds": 3.9359232175684156e-06,
+          "max_seconds": 4.08074950541959e-06,
+          "relative_range": 0.03655030964751967,
+          "calls_per_sample": 8192,
+          "peak_python_bytes": 1113,
+          "speedup_over_baseline": 37.538907963362895
+        }
+      }
+    },
+    {
+      "name": "factor_diagonal_64",
+      "shape": [
+        64,
+        64
+      ],
+      "dtype": "float64",
+      "strides": [
+        512,
+        8
+      ],
+      "scope": "factor_covariance",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00015571907397315954,
+            0.00015552571494481526,
+            0.00015543864083156222,
+            0.00015407324235638953,
+            0.00015770654317748267,
+            0.00015397705101349857,
+            0.00015432942564075347
+          ],
+          "median_seconds": 0.00015543864083156222,
+          "min_seconds": 0.00015397705101349857,
+          "max_seconds": 0.00015770654317748267,
+          "relative_range": 0.023993340034576666,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 1521,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            4.890594482276356e-06,
+            4.874781240005177e-06,
+            4.838251712158126e-06,
+            4.867858876878017e-06,
+            4.839462278027895e-06,
+            4.8111215846802224e-06,
+            4.8116455104718625e-06
+          ],
+          "median_seconds": 4.839462278027895e-06,
+          "min_seconds": 4.8111215846802224e-06,
+          "max_seconds": 4.890594482276356e-06,
+          "relative_range": 0.016421844624547627,
+          "calls_per_sample": 8192,
+          "peak_python_bytes": 704,
+          "speedup_over_baseline": 32.11899006575256
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            6.610615969293576e-06,
+            6.622619636686977e-06,
+            6.448618520948912e-06,
+            6.3893076287513395e-06,
+            6.475489371382537e-06,
+            6.513015748055295e-06,
+            6.473398926232221e-06
+          ],
+          "median_seconds": 6.475489371382537e-06,
+          "min_seconds": 6.3893076287513395e-06,
+          "max_seconds": 6.622619636686977e-06,
+          "relative_range": 0.036030019440187085,
+          "calls_per_sample": 8192,
+          "peak_python_bytes": 1113,
+          "speedup_over_baseline": 24.004153495873254
+        }
+      }
+    },
+    {
+      "name": "factor_dense_64",
+      "shape": [
+        64,
+        64
+      ],
+      "dtype": "float64",
+      "strides": [
+        512,
+        8
+      ],
+      "scope": "factor_covariance",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            1.564314749202822e-05,
+            1.4992187516327249e-05,
+            1.5031962391276465e-05,
+            1.6125183094573003e-05,
+            1.5014038069693925e-05,
+            1.5153686490521068e-05,
+            1.5785400364620727e-05
+          ],
+          "median_seconds": 1.5153686490521068e-05,
+          "min_seconds": 1.4992187516327249e-05,
+          "max_seconds": 1.6125183094573003e-05,
+          "relative_range": 0.07476699342793358,
+          "calls_per_sample": 2048,
+          "peak_python_bytes": 66680,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            1.507560250502138e-05,
+            1.5419006388128764e-05,
+            1.4548238254974422e-05,
+            1.4941874553642265e-05,
+            1.602962208835379e-05,
+            1.4974934572364873e-05,
+            1.5531555163761368e-05
+          ],
+          "median_seconds": 1.507560250502138e-05,
+          "min_seconds": 1.4548238254974422e-05,
+          "max_seconds": 1.602962208835379e-05,
+          "relative_range": 0.09826365698392149,
+          "calls_per_sample": 2048,
+          "peak_python_bytes": 66488,
+          "speedup_over_baseline": 1.005179493520984
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            1.389862060818814e-05,
+            1.3883962168392827e-05,
+            1.3539479738255977e-05,
+            1.3667602530631484e-05,
+            1.4601430422089834e-05,
+            1.4468556628344231e-05,
+            1.3969584244932776e-05
+          ],
+          "median_seconds": 1.389862060818814e-05,
+          "min_seconds": 1.3539479738255977e-05,
+          "max_seconds": 1.4601430422089834e-05,
+          "relative_range": 0.076406912151284,
+          "calls_per_sample": 4096,
+          "peak_python_bytes": 66488,
+          "speedup_over_baseline": 1.0903014707512433
+        }
+      }
+    },
+    {
+      "name": "factor_late_offdiagonal_64",
+      "shape": [
+        64,
+        64
+      ],
+      "dtype": "float64",
+      "strides": [
+        512,
+        8
+      ],
+      "scope": "factor_covariance",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00017262760138692101,
+            0.00018905842989624944,
+            0.00020609716784747434,
+            0.00021941520299151307,
+            0.00017281933605772792,
+            0.0004159921877544548,
+            0.00023011539451545104
+          ],
+          "median_seconds": 0.00020609716784747434,
+          "min_seconds": 0.00017262760138692101,
+          "max_seconds": 0.0004159921877544548,
+          "relative_range": 1.1808245057867064,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 66680,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            1.4951436526189354e-05,
+            1.921376565405808e-05,
+            1.4715576185153623e-05,
+            1.9596109837038966e-05,
+            1.5764587431021937e-05,
+            1.896105953846927e-05,
+            1.9899719291061047e-05
+          ],
+          "median_seconds": 1.896105953846927e-05,
+          "min_seconds": 1.4715576185153623e-05,
+          "max_seconds": 1.9899719291061047e-05,
+          "relative_range": 0.2734099903747225,
+          "calls_per_sample": 2048,
+          "peak_python_bytes": 66488,
+          "speedup_over_baseline": 10.869496371198705
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            1.846354200552014e-05,
+            2.6463785673058737e-05,
+            2.920113132631741e-05,
+            2.5480000999777985e-05,
+            1.781825727675823e-05,
+            1.7768920884009276e-05,
+            2.173659225945812e-05
+          ],
+          "median_seconds": 2.173659225945812e-05,
+          "min_seconds": 1.7768920884009276e-05,
+          "max_seconds": 2.920113132631741e-05,
+          "relative_range": 0.5259430873914333,
+          "calls_per_sample": 2048,
+          "peak_python_bytes": 66488,
+          "speedup_over_baseline": 9.481576752574748
+        }
+      }
+    },
+    {
+      "name": "diagonal_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        4096,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0014805312493990641,
+            0.0015844778463360853,
+            0.001766475248587085,
+            0.0016053724066296127,
+            0.001959279936272651,
+            0.0013438762798614334,
+            0.0018600859366415534
+          ],
+          "median_seconds": 0.0016053724066296127,
+          "min_seconds": 0.0013438762798614334,
+          "max_seconds": 0.001959279936272651,
+          "relative_range": 0.38334012336939455,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 1997,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.00012874495519099582,
+            0.00012152400790910178,
+            0.00011820874033219297,
+            0.00014227359952201368,
+            0.00011762500002987508,
+            0.00012374633797662682,
+            0.00014003344722368638
+          ],
+          "median_seconds": 0.00012374633797662682,
+          "min_seconds": 0.00011762500002987508,
+          "max_seconds": 0.00014227359952201368,
+          "relative_range": 0.19918649630499952,
+          "calls_per_sample": 512,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 12.973090217286552
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.00014115397243585903,
+            0.00011845800736409728,
+            0.00013673958574145217,
+            0.00012596760916494532,
+            0.00011094824230895028,
+            0.0001339444961558911,
+            0.00010625114055073936
+          ],
+          "median_seconds": 0.00012596760916494532,
+          "min_seconds": 0.00010625114055073936,
+          "max_seconds": 0.00014115397243585903,
+          "relative_range": 0.2770778306938967,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 1561,
+          "speedup_over_baseline": 12.74432703193958
+        }
+      }
+    },
+    {
+      "name": "dense_early_exit_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        4096,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            2.843811031993937e-06,
+            2.8336231707726256e-06,
+            2.808629389505768e-06,
+            2.7825521158320043e-06,
+            2.7940826328176627e-06,
+            2.9546661437507282e-06,
+            3.5654855849998057e-06
+          ],
+          "median_seconds": 2.8336231707726256e-06,
+          "min_seconds": 2.7825521158320043e-06,
+          "max_seconds": 3.5654855849998057e-06,
+          "relative_range": 0.2763011953188977,
+          "calls_per_sample": 8192,
+          "peak_python_bytes": 1969,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.00010962971873595961,
+            0.00010739526351244422,
+            9.970524024538463e-05,
+            0.00015479899025194754,
+            0.00012071834362359368,
+            0.00017894905477078282,
+            0.0001143889160175604
+          ],
+          "median_seconds": 0.0001143889160175604,
+          "min_seconds": 9.970524024538463e-05,
+          "max_seconds": 0.00017894905477078282,
+          "relative_range": 0.6927578063003332,
+          "calls_per_sample": 512,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 0.0247718334033135
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            1.9534123509856727e-06,
+            1.6239369529102987e-06,
+            1.870549496629792e-06,
+            1.6711120593981832e-06,
+            3.6347376095591244e-06,
+            2.8288624847050414e-06,
+            1.8797581802232344e-06
+          ],
+          "median_seconds": 1.8797581802232344e-06,
+          "min_seconds": 1.6239369529102987e-06,
+          "max_seconds": 3.6347376095591244e-06,
+          "relative_range": 1.0697124118433303,
+          "calls_per_sample": 16384,
+          "peak_python_bytes": 1561,
+          "speedup_over_baseline": 1.5074402657665855
+        }
+      }
+    },
+    {
+      "name": "late_offdiagonal_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        4096,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0016968515556072816,
+            0.0017382865044055507,
+            0.0013162057512090541,
+            0.0020864791877102107,
+            0.002138653624569997,
+            0.0020284791899030097,
+            0.0021304271285771392
+          ],
+          "median_seconds": 0.0020284791899030097,
+          "min_seconds": 0.0013162057512090541,
+          "max_seconds": 0.002138653624569997,
+          "relative_range": 0.4054504859871241,
+          "calls_per_sample": 16,
+          "peak_python_bytes": 1996,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            9.625976508687017e-05,
+            0.0001436933589502587,
+            0.0001354902342427522,
+            9.57805932557676e-05,
+            0.00014328775796457194,
+            0.00013026920350966975,
+            9.551725725032156e-05
+          ],
+          "median_seconds": 0.00013026920350966975,
+          "min_seconds": 9.551725725032156e-05,
+          "max_seconds": 0.0001436933589502587,
+          "relative_range": 0.3698195767072535,
+          "calls_per_sample": 128,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 15.57144079530998
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.00013775130446447292,
+            9.979996457332163e-05,
+            0.0001319360353591037,
+            0.0001298603515351715,
+            0.00011117269150417997,
+            0.0001446513670089189,
+            0.00011264811337241554
+          ],
+          "median_seconds": 0.0001298603515351715,
+          "min_seconds": 9.979996457332163e-05,
+          "max_seconds": 0.0001446513670089189,
+          "relative_range": 0.3453818036481263,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 1561,
+          "speedup_over_baseline": 15.620465876789302
+        }
+      }
+    },
+    {
+      "name": "factor_diagonal_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        4096,
+        8
+      ],
+      "scope": "factor_covariance",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.001701119814242702,
+            0.0013002630294067785,
+            0.0013159531263227109,
+            0.001359312500426313,
+            0.001393076810927596,
+            0.0013273906224640086,
+            0.0013242031236586627
+          ],
+          "median_seconds": 0.0013273906224640086,
+          "min_seconds": 0.0013002630294067785,
+          "max_seconds": 0.001701119814242702,
+          "relative_range": 0.30198856165777416,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 4480,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.00010568457037152257,
+            9.824885955822538e-05,
+            0.00010156738289879286,
+            0.00010147346893063514,
+            0.00010315950385120232,
+            9.901383236865513e-05,
+            9.728239047035458e-05
+          ],
+          "median_seconds": 0.00010147346893063514,
+          "min_seconds": 9.728239047035458e-05,
+          "max_seconds": 0.00010568457037152257,
+          "relative_range": 0.08280174108279982,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 4288,
+          "speedup_over_baseline": 13.081159405039966
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.00010414957796456292,
+            0.00010250960121993558,
+            0.00010031363672169391,
+            0.00010375618785474217,
+            0.00010396647257948644,
+            0.00010374772273280541,
+            0.00010561621093074791
+          ],
+          "median_seconds": 0.00010375618785474217,
+          "min_seconds": 0.00010031363672169391,
+          "max_seconds": 0.00010561621093074791,
+          "relative_range": 0.051106100934216685,
+          "calls_per_sample": 256,
+          "peak_python_bytes": 4288,
+          "speedup_over_baseline": 12.793363460137384
+        }
+      }
+    },
+    {
+      "name": "factor_dense_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        4096,
+        8
+      ],
+      "scope": "factor_covariance",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0020474127486522775,
+            0.001934002593770856,
+            0.0018665742172743194,
+            0.001636739594687242,
+            0.0016453411226393655,
+            0.0017098085918405559,
+            0.0016778073149907868
+          ],
+          "median_seconds": 0.0017098085918405559,
+          "min_seconds": 0.001636739594687242,
+          "max_seconds": 0.0020474127486522775,
+          "relative_range": 0.240186624353641,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 4195448,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.0018820585937646683,
+            0.0020338880312920082,
+            0.0018238125012430828,
+            0.001687714844592847,
+            0.0017672994690656196,
+            0.0017523215938126668,
+            0.00182034634417505
+          ],
+          "median_seconds": 0.00182034634417505,
+          "min_seconds": 0.001687714844592847,
+          "max_seconds": 0.0020338880312920082,
+          "relative_range": 0.19016885869377848,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 4195256,
+          "speedup_over_baseline": 0.9392765268608332
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.00182605859299656,
+            0.0018126328104699496,
+            0.001718919251288753,
+            0.001747153655742295,
+            0.0016172343748621643,
+            0.0016124843750731088,
+            0.0018991810029547196
+          ],
+          "median_seconds": 0.001747153655742295,
+          "min_seconds": 0.0016124843750731088,
+          "max_seconds": 0.0018991810029547196,
+          "relative_range": 0.16409353976356758,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 4195256,
+          "speedup_over_baseline": 0.9786251977443433
+        }
+      }
+    },
+    {
+      "name": "factor_late_offdiagonal_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        4096,
+        8
+      ],
+      "scope": "factor_covariance",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.004526570315647405,
+            0.003071861996431835,
+            0.0031099791231099516,
+            0.003011437504028436,
+            0.002981338562676683,
+            0.003615544250351377,
+            0.005698794309864752
+          ],
+          "median_seconds": 0.0031099791231099516,
+          "min_seconds": 0.002981338562676683,
+          "max_seconds": 0.005698794309864752,
+          "relative_range": 0.8737858485913684,
+          "calls_per_sample": 16,
+          "peak_python_bytes": 4195448,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.0019284478767076507,
+            0.0018927551864180714,
+            0.0018380728724878281,
+            0.0017336666860501282,
+            0.0016356823107344098,
+            0.0016824166887090541,
+            0.0020617187474272214
+          ],
+          "median_seconds": 0.0018380728724878281,
+          "min_seconds": 0.0016356823107344098,
+          "max_seconds": 0.0020617187474272214,
+          "relative_range": 0.2317843014113864,
+          "calls_per_sample": 16,
+          "peak_python_bytes": 4195256,
+          "speedup_over_baseline": 1.6919781417047959
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.001900523442600388,
+            0.0017992838766076602,
+            0.001929408812429756,
+            0.0017726015648804605,
+            0.0017500598769402131,
+            0.0017649843721301295,
+            0.0018154374993173406
+          ],
+          "median_seconds": 0.0017992838766076602,
+          "min_seconds": 0.0017500598769402131,
+          "max_seconds": 0.001929408812429756,
+          "relative_range": 0.09967795400228022,
+          "calls_per_sample": 16,
+          "peak_python_bytes": 4195256,
+          "speedup_over_baseline": 1.7284538385201642
+        }
+      }
+    },
+    {
+      "name": "diagonal_2048",
+      "shape": [
+        2048,
+        2048
+      ],
+      "dtype": "float64",
+      "strides": [
+        16384,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.006464307240094058,
+            0.006601599001442082,
+            0.006582765621715225,
+            0.006625067617278546,
+            0.006514557258924469,
+            0.006518000009236857,
+            0.007191489625256509
+          ],
+          "median_seconds": 0.006582765621715225,
+          "min_seconds": 0.006464307240094058,
+          "max_seconds": 0.007191489625256509,
+          "relative_range": 0.1104676099607164,
+          "calls_per_sample": 8,
+          "peak_python_bytes": 3533,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.0015375507828139234,
+            0.0015912773451418616,
+            0.0015990807187336031,
+            0.001591373686096631,
+            0.0015687083432567306,
+            0.0015524335940426681,
+            0.0018787174703902565
+          ],
+          "median_seconds": 0.0015912773451418616,
+          "min_seconds": 0.0015375507828139234,
+          "max_seconds": 0.0018787174703902565,
+          "relative_range": 0.2143980046080014,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 4.136780833216962
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.0015657083458791021,
+            0.001598678372829454,
+            0.0015856614663789514,
+            0.0015763411574880593,
+            0.0017214349063578993,
+            0.0016009648425097112,
+            0.0017300885629083496
+          ],
+          "median_seconds": 0.001598678372829454,
+          "min_seconds": 0.0015657083458791021,
+          "max_seconds": 0.0017300885629083496,
+          "relative_range": 0.10282256883122508,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 3097,
+          "speedup_over_baseline": 4.117629745665841
+        }
+      }
+    },
+    {
+      "name": "dense_early_exit_2048",
+      "shape": [
+        2048,
+        2048
+      ],
+      "dtype": "float64",
+      "strides": [
+        16384,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            3.3038940472351896e-06,
+            7.22585033940959e-06,
+            3.6164143040195995e-06,
+            3.286092166376875e-06,
+            3.2741851896389562e-06,
+            3.32120764312549e-06,
+            3.26881921353106e-06
+          ],
+          "median_seconds": 3.3038940472351896e-06,
+          "min_seconds": 3.26881921353106e-06,
+          "max_seconds": 7.22585033940959e-06,
+          "relative_range": 1.1976870533090815,
+          "calls_per_sample": 8192,
+          "peak_python_bytes": 3505,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.0016044739677454345,
+            0.0016247435014520306,
+            0.0015607539062330034,
+            0.0016308854064845946,
+            0.0015664947823097464,
+            0.001579342468176037,
+            0.0016146132838912308
+          ],
+          "median_seconds": 0.0016044739677454345,
+          "min_seconds": 0.0015607539062330034,
+          "max_seconds": 0.0016308854064845946,
+          "relative_range": 0.04370996455002519,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 0.0020591758505610013
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            2.1420440674546626e-06,
+            3.037923157478417e-06,
+            2.119519535881409e-06,
+            2.1124420186424686e-06,
+            2.110801702315257e-06,
+            2.1103184835169486e-06,
+            2.181007381807376e-06
+          ],
+          "median_seconds": 2.119519535881409e-06,
+          "min_seconds": 2.1103184835169486e-06,
+          "max_seconds": 3.037923157478417e-06,
+          "relative_range": 0.4376485605619677,
+          "calls_per_sample": 16384,
+          "peak_python_bytes": 3097,
+          "speedup_over_baseline": 1.5587938640354426
+        }
+      }
+    },
+    {
+      "name": "late_offdiagonal_2048",
+      "shape": [
+        2048,
+        2048
+      ],
+      "dtype": "float64",
+      "strides": [
+        16384,
+        8
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.00645709375385195,
+            0.006709479130222462,
+            0.006759921874618158,
+            0.00697745312936604,
+            0.006514994878671132,
+            0.008026541632716544,
+            0.008702807244844735
+          ],
+          "median_seconds": 0.006759921874618158,
+          "min_seconds": 0.00645709375385195,
+          "max_seconds": 0.008702807244844735,
+          "relative_range": 0.3322099770745703,
+          "calls_per_sample": 8,
+          "peak_python_bytes": 3532,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.0015874049349804409,
+            0.0018364101561019197,
+            0.00205115105927689,
+            0.001677285155892605,
+            0.0015879361853876617,
+            0.0018276250011695083,
+            0.0016738476551836357
+          ],
+          "median_seconds": 0.001677285155892605,
+          "min_seconds": 0.0015874049349804409,
+          "max_seconds": 0.00205115105927689,
+          "relative_range": 0.2764861554203979,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 4.03027586029086
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.0018676979379961267,
+            0.002218208341218997,
+            0.001658263001445448,
+            0.0016704921872587875,
+            0.001655515625316184,
+            0.0020459023435250856,
+            0.0015500013141718227
+          ],
+          "median_seconds": 0.0016704921872587875,
+          "min_seconds": 0.0015500013141718227,
+          "max_seconds": 0.002218208341218997,
+          "relative_range": 0.40000607733680915,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 3097,
+          "speedup_over_baseline": 4.046664765137828
+        }
+      }
+    },
+    {
+      "name": "strided_diagonal_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        16384,
+        16
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0017510742181912065,
+            0.0014901692811690737,
+            0.0014291614679677878,
+            0.0013510950630006846,
+            0.0013440338734653778,
+            0.001332136718701804,
+            0.0013342708116397262
+          ],
+          "median_seconds": 0.0013510950630006846,
+          "min_seconds": 0.001332136718701804,
+          "max_seconds": 0.0017510742181912065,
+          "relative_range": 0.3100725559302781,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 1997,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            0.0004427770154507016,
+            0.0007204850235211779,
+            0.00043431640642666025,
+            0.00043968392219539965,
+            0.00042051855507452274,
+            0.0004207630236123805,
+            0.0004186757814750308
+          ],
+          "median_seconds": 0.00043431640642666025,
+          "min_seconds": 0.0004186757814750308,
+          "max_seconds": 0.0007204850235211779,
+          "relative_range": 0.6949063806483474,
+          "calls_per_sample": 128,
+          "peak_python_bytes": 264,
+          "speedup_over_baseline": 3.1108543057740414
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.0004674036408687243,
+            0.000478893234685529,
+            0.00043349414045223966,
+            0.00043613834441202926,
+            0.0004214830705677741,
+            0.0004212330695736455,
+            0.0004238509145579883
+          ],
+          "median_seconds": 0.00043349414045223966,
+          "min_seconds": 0.0004212330695736455,
+          "max_seconds": 0.000478893234685529,
+          "relative_range": 0.13301255941252169,
+          "calls_per_sample": 128,
+          "peak_python_bytes": 1561,
+          "speedup_over_baseline": 3.1167550767610477
+        }
+      }
+    },
+    {
+      "name": "fortran_diagonal_512",
+      "shape": [
+        512,
+        512
+      ],
+      "dtype": "float64",
+      "strides": [
+        8,
+        4096
+      ],
+      "scope": "is_diagonal",
+      "equivalent_exactly": true,
+      "measurements": {
+        "baseline": {
+          "samples_seconds_per_call": [
+            0.0015365065009973478,
+            0.0015044895953906234,
+            0.001530975252535427,
+            0.0017402656267222483,
+            0.0015268060014932416,
+            0.001703492187516531,
+            0.0015861874999245629
+          ],
+          "median_seconds": 0.0015365065009973478,
+          "min_seconds": 0.0015044895953906234,
+          "max_seconds": 0.0017402656267222483,
+          "relative_range": 0.153449419952719,
+          "calls_per_sample": 32,
+          "peak_python_bytes": 1997,
+          "speedup_over_baseline": 1.0
+        },
+        "bulk": {
+          "samples_seconds_per_call": [
+            9.859261126621277e-05,
+            9.337369920103811e-05,
+            9.502514649284421e-05,
+            0.00010687508006412827,
+            9.788435932023276e-05,
+            9.854606059889193e-05,
+            0.00010090217961078451
+          ],
+          "median_seconds": 9.854606059889193e-05,
+          "min_seconds": 9.337369920103811e-05,
+          "max_seconds": 0.00010687508006412827,
+          "relative_range": 0.1370057897904645,
+          "calls_per_sample": 512,
+          "peak_python_bytes": 184,
+          "speedup_over_baseline": 15.591759748279827
+        },
+        "guarded": {
+          "samples_seconds_per_call": [
+            0.00042941308583976934,
+            0.0004182500006209011,
+            0.0004972874376107939,
+            0.0004352421874500578,
+            0.0004246695934853051,
+            0.00045468457028619014,
+            0.0005601546254183631
+          ],
+          "median_seconds": 0.0004352421874500578,
+          "min_seconds": 0.0004182500006209011,
+          "max_seconds": 0.0005601546254183631,
+          "relative_range": 0.3260360068237755,
+          "calls_per_sample": 128,
+          "peak_python_bytes": 1561,
+          "speedup_over_baseline": 3.5302333856909387
+        }
+      }
+    }
+  ],
+  "checks": {
+    "prototype_enabled_existing_tests": {
+      "passed": 50,
+      "skipped": 0,
+      "duration_seconds": 0.41,
+      "log": "tests.log"
+    },
+    "ruff_check": "passed",
+    "ruff_format_check": "passed"
+  },
+  "decision": {
+    "guarded": "adoptable within tested numeric-array scope; integration and quiet-host timing confirmation pending",
+    "unconditional_bulk": "reject: dense early-exit regression and object diagonal semantics"
+  }
+}

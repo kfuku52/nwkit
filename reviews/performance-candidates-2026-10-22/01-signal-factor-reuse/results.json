@@ -1,0 +1,286 @@
+{
+  "candidate": "01-signal-factor-reuse",
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "python": "3.12.14 (main, Aug 25 2026, 13:50:33) [Clang 22.1.3 ]",
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "thread_environment": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    }
+  },
+  "scope": "Complete permutation_test operation; includes candidate factor setup, excludes CLI/tree I/O and observed K calculation common to both",
+  "edge_checks": {
+    "positive_errors": {
+      "p_value": 0.1,
+      "exact_match": true,
+      "rng_exact_match": true
+    },
+    "mixed_errors": {
+      "p_value": 0.1,
+      "exact_match": true,
+      "rng_exact_match": true
+    },
+    "zero_errors": {
+      "p_value": 0.1,
+      "exact_match": true,
+      "rng_exact_match": true
+    },
+    "zero_draw_invalid_covariance": true,
+    "failures": {
+      "singular_covariance": {
+        "exception": [
+          "LinAlgError",
+          "Matrix is not positive definite"
+        ],
+        "exact_match": true
+      },
+      "constant_trait": {
+        "exception": [
+          "ValueError",
+          "K is undefined for constant traits or degenerate covariance."
+        ],
+        "exact_match": true
+      }
+    },
+    "ties_max_k_difference": 0.0,
+    "local_cache_only": "factor is held in a closure owned by one invocation"
+  },
+  "cases": [
+    {
+      "tips": 64,
+      "simulations": 999,
+      "shape": "balanced",
+      "p_value": 0.911,
+      "p_value_exact_match": true,
+      "rng_state_exact_match": true,
+      "maximum_k_absolute_difference_100_permutations": 0.0,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.2234467079397291,
+            0.10523845802526921,
+            0.10202095890417695,
+            0.13855916599277407,
+            0.07961208291817456,
+            0.08385974995326251,
+            0.15761104098055512
+          ],
+          "median_seconds": 0.10523845802526921,
+          "min_seconds": 0.07961208291817456,
+          "max_seconds": 0.2234467079397291,
+          "relative_range": 1.366749643813841
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.07119504106231034,
+            0.05634633300360292,
+            0.025301083107478917,
+            0.026382667012512684,
+            0.023322458961047232,
+            0.02134254202246666,
+            0.029818082926794887
+          ],
+          "median_seconds": 0.026382667012512684,
+          "min_seconds": 0.02134254202246666,
+          "max_seconds": 0.07119504106231034,
+          "relative_range": 1.8895928533760367
+        }
+      },
+      "median_speedup": 3.9889241665885056,
+      "peak_python_bytes": {
+        "baseline": 71203,
+        "candidate": 70837
+      }
+    },
+    {
+      "tips": 256,
+      "simulations": 999,
+      "shape": "balanced",
+      "p_value": 0.867,
+      "p_value_exact_match": true,
+      "rng_state_exact_match": true,
+      "maximum_k_absolute_difference_100_permutations": 0.0,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.5213478750083596,
+            0.687881916994229,
+            0.9589642909122631,
+            0.5197779580485076,
+            0.5400039999512956,
+            0.5282119169132784,
+            0.5281529170460999
+          ],
+          "median_seconds": 0.5282119169132784,
+          "min_seconds": 0.5197779580485076,
+          "max_seconds": 0.9589642909122631,
+          "relative_range": 0.8314585847101609
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.10100225009955466,
+            0.10007933399174362,
+            0.12117920897435397,
+            0.1555790420388803,
+            0.11513129202648997,
+            0.11605620803311467,
+            0.10781529196538031
+          ],
+          "median_seconds": 0.11513129202648997,
+          "min_seconds": 0.10007933399174362,
+          "max_seconds": 0.1555790420388803,
+          "relative_range": 0.4820558083754243
+        }
+      },
+      "median_speedup": 4.5879092262053724,
+      "peak_python_bytes": {
+        "baseline": 1063318,
+        "candidate": 1061557
+      }
+    },
+    {
+      "tips": 512,
+      "simulations": 199,
+      "shape": "balanced",
+      "p_value": 0.255,
+      "p_value_exact_match": true,
+      "rng_state_exact_match": true,
+      "maximum_k_absolute_difference_100_permutations": 0.0,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.5568944999249652,
+            0.5755079159280285,
+            0.5491912909783423,
+            0.5352475419640541,
+            0.5698232080321759,
+            0.5302652919199318,
+            0.5896892079617828
+          ],
+          "median_seconds": 0.5568944999249652,
+          "min_seconds": 0.5302652919199318,
+          "max_seconds": 0.5896892079617828,
+          "relative_range": 0.10670587705545251
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.10693520796485245,
+            0.10188349999953061,
+            0.11355841695331037,
+            0.10994791705161333,
+            0.10018058295827359,
+            0.10107862506993115,
+            0.10519458400085568
+          ],
+          "median_seconds": 0.10519458400085568,
+          "min_seconds": 0.10018058295827359,
+          "max_seconds": 0.11355841695331037,
+          "relative_range": 0.12717226958117883
+        }
+      },
+      "median_speedup": 5.293946501280287,
+      "peak_python_bytes": {
+        "baseline": 4221413,
+        "candidate": 4217557
+      }
+    },
+    {
+      "tips": 128,
+      "simulations": 199,
+      "shape": "ladder",
+      "p_value": 0.035,
+      "p_value_exact_match": true,
+      "rng_state_exact_match": true,
+      "maximum_k_absolute_difference_100_permutations": 0.0,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.02589537505991757,
+            0.022461250075139105,
+            0.024964708019979298,
+            0.027004582923837006,
+            0.022255457937717438,
+            0.02197262505069375,
+            0.021995624992996454
+          ],
+          "median_seconds": 0.022461250075139105,
+          "min_seconds": 0.02197262505069375,
+          "max_seconds": 0.027004582923837006,
+          "relative_range": 0.22402839807713115
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.007871874957345426,
+            0.007083707954734564,
+            0.006856000050902367,
+            0.00680870795622468,
+            0.006857750006020069,
+            0.006848457967862487,
+            0.00682908296585083
+          ],
+          "median_seconds": 0.006856000050902367,
+          "min_seconds": 0.00680870795622468,
+          "max_seconds": 0.007871874957345426,
+          "relative_range": 0.15507103168425665
+        }
+      },
+      "median_speedup": 3.27614496913296,
+      "peak_python_bytes": {
+        "baseline": 270725,
+        "candidate": 269941
+      }
+    },
+    {
+      "tips": 128,
+      "simulations": 199,
+      "shape": "star",
+      "p_value": 1.0,
+      "p_value_exact_match": true,
+      "rng_state_exact_match": true,
+      "maximum_k_absolute_difference_100_permutations": 0.0,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.02328966709319502,
+            0.023372708004899323,
+            0.022603165940381587,
+            0.02274687506724149,
+            0.021903333952650428,
+            0.023817499983124435,
+            0.022995540988631546
+          ],
+          "median_seconds": 0.022995540988631546,
+          "min_seconds": 0.021903333952650428,
+          "max_seconds": 0.023817499983124435,
+          "relative_range": 0.08324074790935886
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.007226250017993152,
+            0.0073137079598382115,
+            0.0067712090676650405,
+            0.0067664580419659615,
+            0.006944832974113524,
+            0.006993916002102196,
+            0.0068561669904738665
+          ],
+          "median_seconds": 0.006944832974113524,
+          "min_seconds": 0.0067664580419659615,
+          "max_seconds": 0.0073137079598382115,
+          "relative_range": 0.07879957947327078
+        }
+      },
+      "median_speedup": 3.3111726479738444,
+      "peak_python_bytes": {
+        "baseline": 270702,
+        "candidate": 269941
+      }
+    }
+  ]
+}

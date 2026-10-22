@@ -1,0 +1,9 @@
+full (32, 2, 0.0)
+full (64, 2, 0.5)
+full (64, 3, 0.75)
+full (192, 2, 0.75)
+multiple/fixed
+kernel (256, 4, 0.5)
+kernel (256, 4, 0.95)
+kernel (512, 4, 0.95)
+completed

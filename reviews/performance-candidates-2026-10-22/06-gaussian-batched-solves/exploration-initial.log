@@ -1,0 +1,17 @@
+('dense', 128, 3, False) 1.3019652944075613
+('dense', 512, 8, True) 1.117212495597187
+('dense-fixed', 128, 3, True) 1.2350565570571317
+('diagonal', 2000, 5, True) 0.9560870927818549
+Traceback (most recent call last):
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/06-gaussian-batched-solves/benchmark.py", line 341, in <module>
+    main()
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/06-gaussian-batched-solves/benchmark.py", line 332, in main
+    result = benchmark_case(*case)
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/06-gaussian-batched-solves/benchmark.py", line 170, in benchmark_case
+    differences = compare(first, second)
+                  ^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/kf/repos/nwkit/reviews/performance-candidates-2026-10-22/06-gaussian-batched-solves/benchmark.py", line 147, in compare
+    assert value == other, (name, value, other)
+           ^^^^^^^^^^^^^^
+AssertionError: ('optimizer_message', 'CONVERGENCE: RELATIVE REDUCTION OF F <= FACTR*EPSMCH', 'CONVERGENCE: NORM OF PROJECTED GRADIENT <= PGTOL')

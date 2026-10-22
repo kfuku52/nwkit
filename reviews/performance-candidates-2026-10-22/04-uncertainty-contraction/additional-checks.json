@@ -1,0 +1,322 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": {
+      "OPENBLAS_NUM_THREADS": "1",
+      "OMP_NUM_THREADS": "1",
+      "VECLIB_MAXIMUM_THREADS": "1",
+      "MKL_NUM_THREADS": "1"
+    },
+    "host_contention": "Unrelated user CPU jobs were active; raw spreads retained."
+  },
+  "edge_checks": [
+    {
+      "case": [
+        "local",
+        1,
+        2,
+        1,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        1,
+        2,
+        1,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        1,
+        2,
+        1,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        7,
+        3,
+        2,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        7,
+        3,
+        2,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        7,
+        3,
+        2,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        65,
+        2,
+        3,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        65,
+        2,
+        3,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "local",
+        65,
+        2,
+        3,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        1,
+        2,
+        1,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        1,
+        2,
+        1,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        1,
+        2,
+        1,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        7,
+        3,
+        2,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        7,
+        3,
+        2,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        7,
+        3,
+        2,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        65,
+        2,
+        3,
+        0.0
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        65,
+        2,
+        3,
+        1e-200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": [
+        "joint",
+        65,
+        2,
+        3,
+        1e+200
+      ],
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "reversed_noncontiguous",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "duplicate_selected_columns",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "multiple_terms",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "continuous",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "continuous_structured",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "empty",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "joint_structured",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "local_structured",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "independent_dense_operator_local",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "independent_dense_operator_joint",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    },
+    {
+      "case": "term_count",
+      "matching_errors": [
+        "ValueError",
+        "Predictor uncertainty and coefficient-column counts differ."
+      ]
+    },
+    {
+      "case": "wrong_group_shape",
+      "matching_errors": [
+        "ValueError",
+        "Grouped predictor uncertainty has wrong dimensions."
+      ]
+    },
+    {
+      "case": "wrong_continuous_shape",
+      "matching_errors": [
+        "ValueError",
+        "Continuous predictor uncertainty has wrong dimensions."
+      ]
+    },
+    {
+      "case": "nan_propagation",
+      "maximum_absolute_difference": 0.0,
+      "maximum_scaled_difference": 0.0,
+      "bitwise_equal": true
+    }
+  ]
+}

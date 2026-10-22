@@ -1,0 +1,25 @@
+Prototype validation command: ['/tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python', 'tools/check.py', 'test', '--', '-p', 'candidate02_plugin', '-rs', 'tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families', 'tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families', 'tests/test_ordinary_regression.py::test_sparse_poisson_glmm_matches_dense_fit', 'tests/test_ordinary_regression.py::test_sparse_binomial_glmm_matches_dense_fit', 'tests/test_ordinary_regression.py::test_sparse_multilevel_glmm_matches_dense_fit', 'tests/test_ordinary_regression.py::test_sparse_glmm_with_group_effect_matches_dense_fit', 'tests/test_ordinary_regression.py::test_sparse_glmm_with_grouped_predictor_uncertainty_matches_dense', 'tests/test_regression_selection.py::test_scalar_mode_verifies_score_instead_of_solver_flag', 'tests/test_regression_selection.py::test_small_penalty_matches_existing_glmm', 'tests/test_regression_inference_contract.py::test_penalized_wald_does_not_report_frequentist_p_or_intervals', 'tests/test_regression_inference_contract.py::test_penalized_poisson_null_bootstrap_refits_both_models']
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate02_plugin -rs tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families tests/test_ordinary_regression.py::test_sparse_poisson_glmm_matches_dense_fit tests/test_ordinary_regression.py::test_sparse_binomial_glmm_matches_dense_fit tests/test_ordinary_regression.py::test_sparse_multilevel_glmm_matches_dense_fit tests/test_ordinary_regression.py::test_sparse_glmm_with_group_effect_matches_dense_fit tests/test_ordinary_regression.py::test_sparse_glmm_with_grouped_predictor_uncertainty_matches_dense tests/test_regression_selection.py::test_scalar_mode_verifies_score_instead_of_solver_flag tests/test_regression_selection.py::test_small_penalty_matches_existing_glmm tests/test_regression_inference_contract.py::test_penalized_wald_does_not_report_frequentist_p_or_intervals tests/test_regression_inference_contract.py::test_penalized_poisson_null_bootstrap_refits_both_models
+..........................                                               [100%]
+============================= slowest 20 durations =============================
+0.72s call     tests/test_ordinary_regression.py::test_sparse_multilevel_glmm_matches_dense_fit[multinomial]
+0.64s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[beta-binomial-values9-extra9]
+0.62s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[hurdle-negative-binomial-values5-extra5]
+0.54s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[zero-inflated-negative-binomial-values3-extra3]
+0.53s call     tests/test_ordinary_regression.py::test_sparse_multilevel_glmm_matches_dense_fit[ordinal]
+0.47s call     tests/test_ordinary_regression.py::test_sparse_glmm_with_grouped_predictor_uncertainty_matches_dense
+0.46s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[beta-values8-extra8]
+0.43s call     tests/test_ordinary_regression.py::test_sparse_glmm_with_group_effect_matches_dense_fit
+0.36s call     tests/test_ordinary_regression.py::test_sparse_binomial_glmm_matches_dense_fit
+0.36s call     tests/test_regression_selection.py::test_small_penalty_matches_existing_glmm[binomial]
+0.34s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[zero-inflated-poisson-values2-extra2]
+0.33s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[hurdle-poisson-values4-extra4]
+0.31s call     tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families[response_values1-options1-multinomial]
+0.27s call     tests/test_ordinary_regression.py::test_sparse_poisson_glmm_matches_dense_fit
+0.25s call     tests/test_regression_selection.py::test_small_penalty_matches_existing_glmm[negative-binomial]
+0.23s call     tests/test_regression_inference_contract.py::test_penalized_poisson_null_bootstrap_refits_both_models
+0.14s call     tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families[response_values0-options0-binomial]
+0.13s call     tests/test_ordinary_regression.py::test_conventional_phylogenetic_glmm_response_families[response_values2-options2-ordinal]
+0.13s call     tests/test_ordinary_regression.py::test_conventional_scalar_non_gaussian_response_families[gamma-values6-extra6]
+0.10s call     tests/test_regression_selection.py::test_small_penalty_matches_existing_glmm[poisson]
+26 passed in 8.03s

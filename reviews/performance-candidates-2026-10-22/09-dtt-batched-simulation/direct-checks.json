@@ -1,0 +1,378 @@
+[
+  {
+    "shape": "balanced",
+    "tips": 8,
+    "traits": 2,
+    "count": 4,
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    },
+    "serial_parallel_exact": true,
+    "individual_draw_exact": true
+  },
+  {
+    "shape": "balanced",
+    "tips": 16,
+    "traits": 1,
+    "count": 33,
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    },
+    "serial_parallel_exact": true,
+    "individual_draw_exact": true
+  },
+  {
+    "shape": "balanced",
+    "tips": 16,
+    "traits": 3,
+    "count": 65,
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    },
+    "serial_parallel_exact": true,
+    "individual_draw_exact": true
+  },
+  {
+    "shape": "ladder",
+    "tips": 20,
+    "traits": 4,
+    "count": 35,
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    },
+    "serial_parallel_exact": true,
+    "individual_draw_exact": true
+  },
+  {
+    "shape": "star",
+    "tips": 12,
+    "traits": 2,
+    "count": 12,
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    },
+    "serial_parallel_exact": true,
+    "individual_draw_exact": true
+  },
+  {
+    "shape": "polytomy",
+    "tips": 27,
+    "traits": 5,
+    "count": 33,
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    },
+    "serial_parallel_exact": true,
+    "individual_draw_exact": true
+  },
+  {
+    "simulation_count": 0,
+    "exact": true
+  },
+  {
+    "simulation_count": 1,
+    "exact": true
+  },
+  {
+    "case": "constant",
+    "outcomes": [
+      [
+        "ValueError",
+        "DTT requires finite, positive total disparity; rescale nonconstant traits."
+      ],
+      [
+        "ValueError",
+        "DTT requires finite, positive total disparity; rescale nonconstant traits."
+      ]
+    ]
+  },
+  {
+    "case": "nonfinite",
+    "outcomes": [
+      [
+        "ValueError",
+        "DTT requires finite, positive total disparity; rescale nonconstant traits."
+      ],
+      [
+        "ValueError",
+        "DTT requires finite, positive total disparity; rescale nonconstant traits."
+      ]
+    ]
+  },
+  {
+    "case": "invalid_seed",
+    "outcomes": [
+      [
+        "ValueError",
+        "expected non-negative integer"
+      ],
+      [
+        "ValueError",
+        "expected non-negative integer"
+      ]
+    ]
+  },
+  {
+    "case": "tiny_factor",
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    }
+  },
+  {
+    "case": "large_factor",
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    }
+  },
+  {
+    "case": "strided_factor",
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    }
+  },
+  {
+    "case": "zero_edges_unary_polytomy",
+    "equivalence": {
+      "exact_curves": true,
+      "max_absolute_difference": 0.0,
+      "summaries": {
+        "mean": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "median": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "envelope": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        },
+        "partial_area": {
+          "exact": true,
+          "max_absolute_difference": 0.0
+        }
+      }
+    }
+  },
+  {
+    "case": "rng_calls_and_final_states",
+    "replicas": 35,
+    "exact": true,
+    "draw_shape": [
+      12,
+      3
+    ]
+  }
+]

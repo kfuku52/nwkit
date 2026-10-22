@@ -1,0 +1,13 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- -p candidate08_plugin tests/test_wgd_count_model.py -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate08_plugin tests/test_wgd_count_model.py -rs
+........................................................................ [ 93%]
+.....                                                                    [100%]
+============================= slowest 20 durations =============================
+0.49s call     tests/test_wgd_count_model.py::test_simulated_frequency_matches_conditional_probability
+0.17s call     tests/test_wgd_count_model.py::test_pruning_matches_brute_force_and_ascertainment
+0.12s call     tests/test_wgd_count_model.py::test_root_clade_simulation_observation_and_missingness_selection
+0.12s call     tests/test_wgd_count_model.py::test_high_copy_low_birth_likelihood_remains_finite_against_yule_law
+0.06s call     tests/test_wgd_count_model.py::test_high_copy_rare_pulse_likelihood_matches_independent_yule_sum
+
+(15 durations < 0.05s hidden.)
+77 passed in 1.25s

@@ -1,0 +1,8 @@
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python tools/check.py test -- -p candidate08_plugin tests/test_wgd_count.py::test_real_cli_and_metadata_no_uncalibrated_probability -rs
++ /tmp/nwkit-perf-20261022-9fYwTD/venv/bin/python -m pytest -q --durations=20 --durations-min=0.05 -p candidate08_plugin tests/test_wgd_count.py::test_real_cli_and_metadata_no_uncalibrated_probability -rs
+.                                                                        [100%]
+============================= slowest 20 durations =============================
+1.12s call     tests/test_wgd_count.py::test_real_cli_and_metadata_no_uncalibrated_probability
+
+(2 durations < 0.05s hidden.)
+1 passed in 1.64s

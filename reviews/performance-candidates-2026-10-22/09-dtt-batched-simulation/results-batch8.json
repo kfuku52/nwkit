@@ -1,0 +1,71 @@
+{
+  "shape": "balanced",
+  "tips": 256,
+  "traits": 3,
+  "simulations": 128,
+  "nodes": 511,
+  "times": 10,
+  "trial_batch_calls": 1,
+  "replica_batch_size": 8,
+  "timings": {
+    "baseline": {
+      "samples_seconds": [
+        0.2550562910037115,
+        0.25512450002133846,
+        0.2548177500721067,
+        0.25661291694268584,
+        0.2601911670062691,
+        0.2547764590708539,
+        0.2572975839721039
+      ],
+      "median_seconds": 0.25512450002133846,
+      "min_seconds": 0.2547764590708539,
+      "max_seconds": 0.2601911670062691,
+      "relative_range": 0.021223786562883318,
+      "peak_python_bytes": 134196
+    },
+    "candidate": {
+      "samples_seconds": [
+        0.1013845419511199,
+        0.10076537495478988,
+        0.09900970791932195,
+        0.10009520803578198,
+        0.10126429097726941,
+        0.09958079201169312,
+        0.10220974998082966
+      ],
+      "median_seconds": 0.10076537495478988,
+      "min_seconds": 0.09900970791932195,
+      "max_seconds": 0.10220974998082966,
+      "relative_range": 0.03175735775253609,
+      "peak_python_bytes": 570044
+    }
+  },
+  "speedup": 2.531866726400854,
+  "equivalence": {
+    "exact_curves": true,
+    "max_absolute_difference": 0.0,
+    "summaries": {
+      "mean": {
+        "exact": true,
+        "max_absolute_difference": 0.0
+      },
+      "median": {
+        "exact": true,
+        "max_absolute_difference": 0.0
+      },
+      "envelope": {
+        "exact": true,
+        "max_absolute_difference": 0.0
+      },
+      "area": {
+        "exact": true,
+        "max_absolute_difference": 0.0
+      },
+      "partial_area": {
+        "exact": true,
+        "max_absolute_difference": 0.0
+      }
+    }
+  }
+}

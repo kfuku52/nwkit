@@ -1,0 +1,764 @@
+{
+  "baseline_commit": "d7116f80b9979739c69a5431a5e34b822795408b",
+  "scope": "complete serial simulate_curves; setup included, imports/fixtures excluded",
+  "environment": {
+    "platform": "macOS-27.0.1-arm64-arm-64bit",
+    "python": "3.12.14",
+    "numpy": "2.5.4",
+    "scipy": "1.17.1",
+    "nwkit": "0.43.54",
+    "threads": 1
+  },
+  "direct_checks": [
+    {
+      "shape": "balanced",
+      "tips": 8,
+      "traits": 2,
+      "count": 4,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      },
+      "serial_parallel_exact": true,
+      "individual_draw_exact": true
+    },
+    {
+      "shape": "balanced",
+      "tips": 16,
+      "traits": 1,
+      "count": 33,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      },
+      "serial_parallel_exact": true,
+      "individual_draw_exact": true
+    },
+    {
+      "shape": "balanced",
+      "tips": 16,
+      "traits": 3,
+      "count": 65,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      },
+      "serial_parallel_exact": true,
+      "individual_draw_exact": true
+    },
+    {
+      "shape": "ladder",
+      "tips": 20,
+      "traits": 4,
+      "count": 35,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      },
+      "serial_parallel_exact": true,
+      "individual_draw_exact": true
+    },
+    {
+      "shape": "star",
+      "tips": 12,
+      "traits": 2,
+      "count": 12,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      },
+      "serial_parallel_exact": true,
+      "individual_draw_exact": true
+    },
+    {
+      "shape": "polytomy",
+      "tips": 27,
+      "traits": 5,
+      "count": 33,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      },
+      "serial_parallel_exact": true,
+      "individual_draw_exact": true
+    },
+    {
+      "simulation_count": 0,
+      "exact": true
+    },
+    {
+      "simulation_count": 1,
+      "exact": true
+    },
+    {
+      "case": "constant",
+      "outcomes": [
+        [
+          "ValueError",
+          "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        ],
+        [
+          "ValueError",
+          "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        ]
+      ]
+    },
+    {
+      "case": "nonfinite",
+      "outcomes": [
+        [
+          "ValueError",
+          "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        ],
+        [
+          "ValueError",
+          "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        ]
+      ]
+    },
+    {
+      "case": "invalid_seed",
+      "outcomes": [
+        [
+          "ValueError",
+          "expected non-negative integer"
+        ],
+        [
+          "ValueError",
+          "expected non-negative integer"
+        ]
+      ]
+    }
+  ],
+  "workloads": [
+    {
+      "shape": "balanced",
+      "tips": 8,
+      "traits": 2,
+      "simulations": 4,
+      "nodes": 15,
+      "times": 5,
+      "trial_batch_calls": 104,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.00032292548096917855,
+            0.00032648598090208206,
+            0.00031144911526308325,
+            0.0003197704332146364,
+            0.0003168457501138059,
+            0.0003102772405747181,
+            0.0005791690670706045
+          ],
+          "median_seconds": 0.0003197704332146364,
+          "min_seconds": 0.0003102772405747181,
+          "max_seconds": 0.0005791690670706045,
+          "relative_range": 0.8408902092439572,
+          "peak_python_bytes": 7034
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.00020834454894961359,
+            0.00021654927919511325,
+            0.00020087780789113962,
+            0.00020956891351558553,
+            0.00020217267312825873,
+            0.0001978301252865304,
+            0.0002562632211125814
+          ],
+          "median_seconds": 0.00020834454894961359,
+          "min_seconds": 0.0001978301252865304,
+          "max_seconds": 0.0002562632211125814,
+          "relative_range": 0.2804637612101986,
+          "peak_python_bytes": 10923
+        }
+      },
+      "speedup": 1.5348154527045978,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "shape": "balanced",
+      "tips": 64,
+      "traits": 2,
+      "simulations": 128,
+      "nodes": 127,
+      "times": 8,
+      "trial_batch_calls": 2,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.06564327102387324,
+            0.06552047899458557,
+            0.07455264549935237,
+            0.06875118747120723,
+            0.06580787495477125,
+            0.06657195853767917,
+            0.07851887500146404
+          ],
+          "median_seconds": 0.06657195853767917,
+          "min_seconds": 0.06552047899458557,
+          "max_seconds": 0.07851887500146404,
+          "relative_range": 0.1952533212541957,
+          "peak_python_bytes": 77311
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.015959520998876542,
+            0.01604174997191876,
+            0.02215004147728905,
+            0.023502999974880368,
+            0.015746062505058944,
+            0.01538514596177265,
+            0.01630806247703731
+          ],
+          "median_seconds": 0.01604174997191876,
+          "min_seconds": 0.01538514596177265,
+          "max_seconds": 0.023502999974880368,
+          "relative_range": 0.5060454144540402,
+          "peak_python_bytes": 458230
+        }
+      },
+      "speedup": 4.149918721723878,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "shape": "balanced",
+      "tips": 256,
+      "traits": 3,
+      "simulations": 128,
+      "nodes": 511,
+      "times": 10,
+      "trial_batch_calls": 1,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.2573459999402985,
+            0.25788291706703603,
+            0.2576641250634566,
+            0.32208087493199855,
+            0.26447900000493973,
+            0.2578454170143232,
+            0.25517787493299693
+          ],
+          "median_seconds": 0.2578454170143232,
+          "min_seconds": 0.25517787493299693,
+          "max_seconds": 0.32208087493199855,
+          "relative_range": 0.25946941688432335,
+          "peak_python_bytes": 134003
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.05829924996942282,
+            0.05885575001593679,
+            0.06249404198024422,
+            0.07263833307661116,
+            0.059135125018656254,
+            0.059108124929480255,
+            0.05898512504063547
+          ],
+          "median_seconds": 0.059108124929480255,
+          "min_seconds": 0.05829924996942282,
+          "max_seconds": 0.07263833307661116,
+          "relative_range": 0.2425907288430445,
+          "peak_python_bytes": 1977778
+        }
+      },
+      "speedup": 4.362266901918292,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "shape": "ladder",
+      "tips": 128,
+      "traits": 1,
+      "simulations": 96,
+      "nodes": 255,
+      "times": 129,
+      "trial_batch_calls": 2,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.1149192294687964,
+            0.12650133349234238,
+            0.10840777098201215,
+            0.12540679197991267,
+            0.14459189597982913,
+            0.11954227049136534,
+            0.1153992289910093
+          ],
+          "median_seconds": 0.11954227049136534,
+          "min_seconds": 0.10840777098201215,
+          "max_seconds": 0.14459189597982913,
+          "relative_range": 0.302688955539209,
+          "peak_python_bytes": 242075
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.02801610401365906,
+            0.026755687489639968,
+            0.021155082969926298,
+            0.025398833502549678,
+            0.02504579146625474,
+            0.0235885625006631,
+            0.026112604537047446
+          ],
+          "median_seconds": 0.025398833502549678,
+          "min_seconds": 0.021155082969926298,
+          "max_seconds": 0.02801610401365906,
+          "relative_range": 0.2701313445376936,
+          "peak_python_bytes": 739747
+        }
+      },
+      "speedup": 4.7066047532995965,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "shape": "star",
+      "tips": 128,
+      "traits": 2,
+      "simulations": 96,
+      "nodes": 129,
+      "times": 3,
+      "trial_batch_calls": 2,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.06867925002006814,
+            0.06186720804544166,
+            0.06086766702355817,
+            0.0642616874538362,
+            0.07461893750587478,
+            0.05926887504756451,
+            0.07858102105092257
+          ],
+          "median_seconds": 0.0642616874538362,
+          "min_seconds": 0.05926887504756451,
+          "max_seconds": 0.07858102105092257,
+          "relative_range": 0.300523480919037,
+          "peak_python_bytes": 59817
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.014473792049102485,
+            0.011594083509407938,
+            0.01447943749371916,
+            0.012934458500239998,
+            0.016119520470965654,
+            0.011772895988542587,
+            0.01175049995072186
+          ],
+          "median_seconds": 0.012934458500239998,
+          "min_seconds": 0.011594083509407938,
+          "max_seconds": 0.016119520470965654,
+          "relative_range": 0.3498744815234242,
+          "peak_python_bytes": 445844
+        }
+      },
+      "speedup": 4.968254948797727,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "shape": "polytomy",
+      "tips": 81,
+      "traits": 4,
+      "simulations": 96,
+      "nodes": 121,
+      "times": 6,
+      "trial_batch_calls": 1,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.06725208298303187,
+            0.04836291691754013,
+            0.047638374962843955,
+            0.04793912498280406,
+            0.047980459057725966,
+            0.048239708063192666,
+            0.04838266596198082
+          ],
+          "median_seconds": 0.048239708063192666,
+          "min_seconds": 0.047638374962843955,
+          "max_seconds": 0.06725208298303187,
+          "relative_range": 0.4065884477263939,
+          "peak_python_bytes": 67673
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.011599084013141692,
+            0.011505500064231455,
+            0.011372292065061629,
+            0.011293875053524971,
+            0.011436667060479522,
+            0.011386957950890064,
+            0.013110291096381843
+          ],
+          "median_seconds": 0.011436667060479522,
+          "min_seconds": 0.011293875053524971,
+          "max_seconds": 0.013110291096381843,
+          "relative_range": 0.1588238980160285,
+          "peak_python_bytes": 608816
+        }
+      },
+      "speedup": 4.217986569696473,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    },
+    {
+      "shape": "balanced",
+      "tips": 64,
+      "traits": 2,
+      "simulations": 1,
+      "nodes": 127,
+      "times": 8,
+      "trial_batch_calls": 48,
+      "replica_batch_size": 32,
+      "timings": {
+        "baseline": {
+          "samples_seconds": [
+            0.0005289652714661012,
+            0.0014439270841345813,
+            0.0007025199568791626,
+            0.0005102213544887491,
+            0.0005303663128870539,
+            0.0005458151038813716,
+            0.0005426649173993306
+          ],
+          "median_seconds": 0.0005426649173993306,
+          "min_seconds": 0.0005102213544887491,
+          "max_seconds": 0.0014439270841345813,
+          "relative_range": 1.7205935001667825,
+          "peak_python_bytes": 17383
+        },
+        "candidate": {
+          "samples_seconds": [
+            0.0005069114583117577,
+            0.0006034288113975587,
+            0.0005355286460447436,
+            0.0005188515618404684,
+            0.0005178984380715216,
+            0.0005369357701662617,
+            0.000522365458891727
+          ],
+          "median_seconds": 0.000522365458891727,
+          "min_seconds": 0.0005069114583117577,
+          "max_seconds": 0.0006034288113975587,
+          "relative_range": 0.1847697841480108,
+          "peak_python_bytes": 17423
+        }
+      },
+      "speedup": 1.0388606447116007,
+      "equivalence": {
+        "exact_curves": true,
+        "max_absolute_difference": 0.0,
+        "summaries": {
+          "mean": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "median": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "envelope": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          },
+          "partial_area": {
+            "exact": true,
+            "max_absolute_difference": 0.0
+          }
+        }
+      }
+    }
+  ]
+}
