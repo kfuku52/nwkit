@@ -552,26 +552,25 @@ class GaussianTreeProcess:
                         covariance[second, first] = value
             elif direct_loadings:
                 assert ancestor_factor is not None
-                if direct_loadings:
-                    for first, first_index in enumerate(requested):
-                        covariance[first, first] = variances[first_index]
-                        first_loading = cumulative_loading[first_index]
-                        for second in range(first + 1, len(nodes)):
-                            second_index = requested[second]
-                            ancestor = common_ancestor(first_index, second_index)
-                            value = (
-                                first_loading
-                                * cumulative_loading[second_index]
-                                * ancestor_factor[ancestor]
+                for first, first_index in enumerate(requested):
+                    covariance[first, first] = variances[first_index]
+                    first_loading = cumulative_loading[first_index]
+                    for second in range(first + 1, len(nodes)):
+                        second_index = requested[second]
+                        ancestor = common_ancestor(first_index, second_index)
+                        value = (
+                            first_loading
+                            * cumulative_loading[second_index]
+                            * ancestor_factor[ancestor]
+                        )
+                        if not math.isfinite(float(value)) or (
+                            value == 0.0 and variances[ancestor] > 0.0
+                        ):
+                            value = stable_covariance(
+                                first_index, second_index, ancestor
                             )
-                            if not math.isfinite(float(value)) or (
-                                value == 0.0 and variances[ancestor] > 0.0
-                            ):
-                                value = stable_covariance(
-                                    first_index, second_index, ancestor
-                                )
-                            covariance[first, second] = value
-                            covariance[second, first] = value
+                        covariance[first, second] = value
+                        covariance[second, first] = value
             if not unit_loadings and not direct_loadings:
                 for first, first_index in enumerate(requested):
                     covariance[first, first] = variances[first_index]

@@ -4,6 +4,24 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.43.57] - 2026-10-22
+
+### Changed
+
+- Reuse a resolved correlation spectrum across exact-observation signal lambda
+  profiles, preserving sampling-error and unresolved-spectrum calculations.
+- Fill large Gaussian covariances by descendant blocks with bounded temporary
+  storage, retaining arbitrary node order, repeated nodes and stable fallbacks.
+- Reuse final PCA whitening and adjacent full-OU moment products without
+  changing ML divisors, rank diagnostics or matrix multiplication order.
+- Batch rare-family log pruning within a workspace estimate, preserving count
+  tails, ascertainment and missing-subtree likelihoods.
+- Reuse validated uniformization preparation within each stochastic-map request
+  while retaining work/storage guards, conditional tails and indexed seeds.
+- Accelerate final ER posterior pruning only for fixed rates and at least 32
+  states, checking the actual transition structure exactly. Rate optimization
+  retains its existing calculation.
+
 ## [0.43.56] - 2026-10-22
 
 ### Fixed
