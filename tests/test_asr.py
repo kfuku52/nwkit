@@ -199,6 +199,68 @@ def test_stochastic_mapping_rejects_excessive_aggregate_work():
         )
 
 
+@pytest.mark.parametrize("size,rate", [(2, 0.1), (32, None), (32, 0.1)])
+def test_structured_er_is_limited_to_large_fixed_rate_posterior(
+    size, rate, monkeypatch
+):
+    tree = Tree("((A:1,B:0.7):0.6,(C:0.8,D:0.4):0.3);", parser=1)
+    states = [str(i) for i in range(size)]
+    observed = {name: str(i % size) for i, name in enumerate("ABCD")}
+    likelihoods = {
+        name: np.array([float(state == value) for state in states])
+        for name, value in observed.items()
+    }
+    calls = []
+    original = asr._er_log_transition_description
+
+    def description(matrix):
+        calls.append(1)
+        return original(matrix)
+
+    monkeypatch.setattr(asr, "_er_log_transition_description", description)
+    actual, fit = asr.compute_mk_marginals(
+        tree, states, observed, likelihoods, rate=rate
+    )
+    assert bool(calls) == (size >= 32 and rate is not None)
+    inside = asr._compute_log_inside_likelihoods
+
+    def generic(*args, **kwargs):
+        kwargs["_structured_er"] = False
+        return inside(*args, **kwargs)
+
+    monkeypatch.setattr(asr, "_compute_log_inside_likelihoods", generic)
+    expected, reference = asr.compute_mk_marginals(
+        tree, states, observed, likelihoods, rate=rate
+    )
+    assert fit["log_likelihood"] == reference["log_likelihood"]
+    np.testing.assert_array_equal(fit["rates"], reference["rates"])
+    for node in tree.traverse():
+        np.testing.assert_allclose(actual[node], expected[node], rtol=0, atol=1e-13)
+
+
+def test_structured_er_checks_supplied_transition_exactly_and_per_call():
+    tree = Tree("(A:1,B:1);", parser=1)
+    matrix = asr._build_rate_matrix("ER", list(map(str, range(32))), [0.01])
+    transition = asr._transition_matrix(matrix, 1.0)
+    evidence = {"A": np.eye(32)[0], "B": np.eye(32)[1]}
+    fixed = {node: transition for node in tree.leaves()}
+    assert asr._er_log_transition_description(transition) is not None
+    asr._compute_log_inside_likelihoods(
+        tree, evidence, matrix, fixed_transition_matrices=fixed, _structured_er=True
+    )
+    transition[0, 1] = np.nextafter(transition[0, 1], np.inf)
+    assert asr._er_log_transition_description(transition) is None
+    actual = asr._compute_log_inside_likelihoods(
+        tree, evidence, matrix, fixed_transition_matrices=fixed, _structured_er=True
+    )
+    expected = asr._compute_log_inside_likelihoods(
+        tree, evidence, matrix, fixed_transition_matrices=fixed
+    )
+    for node in tree.traverse():
+        np.testing.assert_array_equal(actual[0][node], expected[0][node])
+        assert actual[1][node] == expected[1][node]
+
+
 def test_uniformized_two_state_bridge_samples_only_feasible_event_parity():
     matrix = np.array([[-1.0, 1.0], [1.0, -1.0]])
     contexts = {2.0: asr._build_uniformization_context(matrix, 2.0)}

@@ -475,12 +475,14 @@ def _compute_inside_likelihoods(
     *,
     log_space=False,
     fixed_transition_matrices=None,
+    _structured_er=False,
 ):
     inside, log_scales, child_terms, matrices = _compute_log_inside_likelihoods(
         tree,
         likelihood_by_leaf,
         rate_matrix,
         fixed_transition_matrices=fixed_transition_matrices,
+        _structured_er=_structured_er,
     )
     if not log_space:
         inside = {node: np.exp(values) for node, values in inside.items()}
@@ -491,8 +493,32 @@ def _compute_inside_likelihoods(
     return inside, log_scales, child_terms, matrices
 
 
+def _er_log_transition_description(matrix):
+    """Recognize an exact diagonal-plus-constant transition, without rounding."""
+    diagonal = np.diag(matrix)
+    a, b = float(diagonal[0]), float(matrix[0, 1])
+    if (
+        math.isfinite(a)
+        and math.isfinite(b)
+        and 0 <= b <= a
+        and np.all(diagonal == a)
+        and np.count_nonzero(matrix != b) == (0 if a == b else len(matrix))
+    ):
+        delta = a - b
+        return (
+            -math.inf if delta == 0 else math.log(delta),
+            -math.inf if b == 0 else math.log(b),
+        )
+    return None
+
+
 def _compute_log_inside_likelihoods(
-    tree, likelihood_by_leaf, rate_matrix, *, fixed_transition_matrices=None
+    tree,
+    likelihood_by_leaf,
+    rate_matrix,
+    *,
+    fixed_transition_matrices=None,
+    _structured_er=False,
 ):
     if isinstance(rate_matrix, dict):
         sample_matrix = next(iter(rate_matrix.values()))
@@ -506,6 +532,8 @@ def _compute_log_inside_likelihoods(
     child_terms: dict[Any, Any] = {}
     transition_matrices = dict()
     transition_matrix_cache = dict()
+    er_descriptions = {}
+    structured = _structured_er and num_states >= 32
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             inside[node] = _log_probabilities(
@@ -524,7 +552,8 @@ def _compute_log_inside_likelihoods(
             )
             if fixed_transition_matrices is not None:
                 matrix = fixed_transition_matrices[child]
-                log_matrix = _log_probabilities(matrix)
+                if not structured:
+                    log_matrix = _log_probabilities(matrix)
             else:
                 cache_key = (id(child_rate_matrix), branch_length)
                 if cache_key not in transition_matrix_cache:
@@ -535,7 +564,25 @@ def _compute_log_inside_likelihoods(
                     )
                 matrix, log_matrix = transition_matrix_cache[cache_key]
             transition_matrices[child] = matrix
-            term = logsumexp(log_matrix + inside[child][None, :], axis=1)
+            description = None
+            if structured:
+                key = id(matrix)
+                if key not in er_descriptions:
+                    # Retain each array so its identity cannot be recycled.
+                    er_descriptions[key] = (
+                        matrix,
+                        _er_log_transition_description(matrix),
+                    )
+                description = er_descriptions[key][1]
+            if description is None:
+                if structured and fixed_transition_matrices is not None:
+                    log_matrix = _log_probabilities(matrix)
+                term = logsumexp(log_matrix + inside[child][None, :], axis=1)
+            else:
+                log_delta, log_b = description
+                term = np.logaddexp(
+                    log_delta + inside[child], log_b + logsumexp(inside[child])
+                )
             child_terms[node][child] = term
             likelihood += term
             log_scale += log_scales[child]
@@ -1280,6 +1327,7 @@ def compute_mk_marginals(
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=fit.get("rate_matrix_by_node", fit["rate_matrix"]),
         log_space=True,
+        _structured_er=model == "ER" and rate is not None,
     )
     outside = _compute_outside_likelihoods(
         tree=tree,
