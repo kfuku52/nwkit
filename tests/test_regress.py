@@ -38,6 +38,30 @@ from nwkit.sparse_laplace import (
 )
 
 
+@pytest.mark.parametrize(
+    "matrix,expected",
+    [
+        (np.empty((0, 0)), True),
+        (np.zeros((2, 3)), False),
+        (np.diag([1.0, np.inf]), True),
+        (np.diag([1.0, np.nan]), False),
+        (np.array([[1.0, -0.0], [0.0, 2.0]]), True),
+        (np.array([[1.0, np.nextafter(0.0, 1.0)], [0.0, 2.0]]), False),
+        (np.array([[1.0, 0.0], [np.nan, 2.0]]), False),
+    ],
+)
+@pytest.mark.parametrize("transpose", [False, True])
+def test_sampling_diagonal_classification_preserves_special_values(
+    matrix, expected, transpose
+):
+    if transpose:
+        matrix = matrix.T
+    assert (
+        bool(regression_pipeline_mod._is_diagonal_sampling_covariance(matrix))
+        is expected
+    )
+
+
 def _write_raw_regression_inputs(tmp_path, *, biological_replicates=False):
     gene_tree = tmp_path / "gene.nwk"
     species_tree = tmp_path / "species.nwk"

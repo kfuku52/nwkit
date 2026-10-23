@@ -285,6 +285,25 @@ class TestAnnotateScientificNames:
 
 
 class TestAnnotateDuplicationConfidenceScores:
+    @pytest.mark.parametrize(
+        "first,second,expected",
+        [
+            (set(), set(), 0.0),
+            ({"A"}, set(), 0.0),
+            ({"A"}, {"B"}, 0.0),
+            ({"A", "B"}, {"B", "C"}, 1 / 3),
+            ({"A", "B"}, {"A", "B"}, 1.0),
+        ],
+    )
+    def test_supplied_species_sets_preserve_overlap_score(
+        self, first, second, expected
+    ):
+        tree = Tree("(A,B);", parser=1)
+        annotate_duplication_confidence_scores(
+            tree, {tree.children[0]: first, tree.children[1]: second}
+        )
+        assert tree.props["dup_conf_score"] == expected
+
     def test_annotate(self, species_tree):
         tree = annotate_scientific_names(species_tree)
         tree = annotate_duplication_confidence_scores(tree)
@@ -319,6 +338,20 @@ class TestAnnotateDuplicationConfidenceScores:
 
 
 class TestGetSubtreeLeafNameSets:
+    @pytest.mark.parametrize(
+        "source",
+        ["A;", "(Z,A,M);", "(((D),C),(B,A));", "((A,B),A);"],
+    )
+    def test_every_subtree_matches_its_descendant_leaf_walk(self, source):
+        tree = Tree(source, parser=1)
+        observed = get_subtree_leaf_name_sets(tree)
+        unique = len(set(tree.leaf_names())) == len(list(tree.leaf_names()))
+        for node in tree.traverse():
+            expected = list(node.leaf_names())
+            assert observed[node] == set(expected)
+            if unique:
+                assert tuple(observed[node]) == tuple(expected)
+
     def test_sets_are_correct(self):
         tree = Tree("((A:1,B:1):1,(C:1,D:1):1);", parser=1)
         sets = get_subtree_leaf_name_sets(tree)

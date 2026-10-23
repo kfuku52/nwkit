@@ -53,6 +53,7 @@ for the corresponding user guide.
 - [Node diagnostics and fixed-data MC budget follow-up](validation/MUL_NODE_DIAGNOSTICS_AND_MC_BUDGET.md)
 - [Targeted gene-tree search using the supplied BMI1 dataset](validation/GENE_TREE_SEARCH_BMI1.md)
 - [Ten performance candidates and adoption decisions](validation/PERFORMANCE_CANDIDATES_20261023.md)
+- [Further performance candidates and consumer checks](validation/PERFORMANCE_CANDIDATES_20261023_ROUND2.md)
 
 ## Project operations
 

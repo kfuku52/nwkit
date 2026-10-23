@@ -36,7 +36,7 @@ from nwkit.evolution import (
     parameter_near_boundary,
     transformed_edge_variances,
 )
-from nwkit.gaussian import DiagonalLowRankCovariance
+from nwkit.gaussian import DiagonalLowRankCovariance, is_diagonal
 from nwkit.measurement_error import fit_latent_predictor, fit_sparse_latent_predictor
 from nwkit.model_matrix import (
     PredictorTerm,
@@ -1075,6 +1075,13 @@ def _build_species_contrasts(
     )
 
 
+def _is_diagonal_sampling_covariance(covariance):
+    """Recognize exact diagonal sampling matrices without a dense temporary."""
+    diagonal = np.diag(covariance)
+    # Preserve array_equal's rejection of NaNs, including on the diagonal.
+    return is_diagonal(covariance) and np.array_equal(diagonal, diagonal)
+
+
 def _prepare_reconciled_tip_predictors(
     args: Any,
     species_tree,
@@ -1124,7 +1131,7 @@ def _prepare_reconciled_tip_predictors(
         if np.all(sampling_diagonal > 0.0) and (
             isinstance(sampling, DiagonalLowRankCovariance)
             or sampling.ndim == 1
-            or np.array_equal(sampling, np.diag(sampling_diagonal))
+            or _is_diagonal_sampling_covariance(sampling)
         ):
             sparse_prior = build_sparse_evolutionary_model(
                 species_tree,
@@ -1651,8 +1658,8 @@ def _prepare_response_tip_simulator(
                 if sampling_covariance.ndim == 1
                 else np.diag(sampling_covariance)
             )
-            if sampling_covariance.ndim == 1 or np.array_equal(
-                sampling_covariance, np.diag(sampling_diagonal)
+            if sampling_covariance.ndim == 1 or _is_diagonal_sampling_covariance(
+                sampling_covariance
             ):
                 if np.any(sampling_diagonal < 0.0):
                     raise ValueError("Bootstrap tip sampling covariance is not PSD.")
@@ -2828,9 +2835,7 @@ def _fit_reconciled_multivariate_responses(
         if isinstance(covariance, DiagonalLowRankCovariance):
             fixed_diagonal[start : start + len(gene_tip_names)] = covariance.diagonal
             fixed_loading_blocks.append(sparse.csr_matrix(covariance.low_rank))
-        elif covariance.ndim == 1 or np.array_equal(
-            covariance, np.diag(np.diag(covariance))
-        ):
+        elif covariance.ndim == 1 or _is_diagonal_sampling_covariance(covariance):
             fixed_diagonal[start : start + len(gene_tip_names)] = (
                 covariance if covariance.ndim == 1 else np.diag(covariance)
             )

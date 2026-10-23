@@ -2127,10 +2127,10 @@ def get_subtree_leaf_name_sets(tree):
             index = name_to_index[node.name]
             intervals[node] = (index, index + 1)
         else:
-            child_intervals = [intervals[child] for child in node.get_children()]
+            # DFS leaf order makes each child's interval contiguous and ordered.
             intervals[node] = (
-                min(start for start, _ in child_intervals),
-                max(end for _, end in child_intervals),
+                intervals[node.children[0]][0],
+                intervals[node.children[-1]][1],
             )
     return {
         node: _LeafIntervalSet(leaf_names, name_to_index, start, end)
@@ -2229,8 +2229,8 @@ def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
             continue
         sp_child1 = subtree_sci_name_sets[children[0]]
         sp_child2 = subtree_sci_name_sets[children[1]]
-        num_union = len(sp_child1.union(sp_child2))
         num_intersection = len(sp_child1.intersection(sp_child2))
+        num_union = len(sp_child1) + len(sp_child2) - num_intersection
         if num_union == 0:
             node.add_props(dup_conf_score=0.0)
         else:

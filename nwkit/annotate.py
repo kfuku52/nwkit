@@ -412,6 +412,7 @@ def _aggregate_tree_nodes(
             summaries_by_column[column][node] = summary
         if node.is_leaf:
             continue
+        descendant_taxa = None
         for column, method, prop in aggregations:
             value, assign, reason = _aggregate_summary(
                 summaries_by_column[column][node], method, column
@@ -421,11 +422,13 @@ def _aggregate_tree_nodes(
                 node.props[prop] = value
                 annotated += 1
             if collect_report:
+                if descendant_taxa is None:
+                    descendant_taxa = _format_taxa(node)
                 report_rows.append(
                     {
                         "branch_id": node_ids[node],
                         "node_class": get_node_class(node),
-                        "descendant_taxa": _format_taxa(node),
+                        "descendant_taxa": descendant_taxa,
                         "input_column": column,
                         "property": prop,
                         "aggregation": method,

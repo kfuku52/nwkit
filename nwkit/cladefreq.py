@@ -25,13 +25,20 @@ CLADEFREQ_COLUMNS = ("descendant_taxa", "num_taxa", "weight_sum", "frequency")
 def _mask_to_leaf_set(mask, leaf_names):
     names = list()
     remaining = int(mask)
-    index = 0
+    if remaining >= 0 and 4 * remaining.bit_count() >= remaining.bit_length():
+        # Dense masks use a simple scan rather than locating each bit separately.
+        return [
+            leaf_names[index]
+            for index in range(remaining.bit_length())
+            if remaining & (1 << index)
+        ]
+    offset = 0
     while remaining:
-        bit = 1 << index
-        if remaining & bit:
-            names.append(leaf_names[index])
-            remaining ^= bit
-        index += 1
+        # Drop consumed positions before locating the next selected bit.
+        step = (remaining & -remaining).bit_length()
+        offset += step
+        names.append(leaf_names[offset - 1])
+        remaining >>= step
     return names
 
 

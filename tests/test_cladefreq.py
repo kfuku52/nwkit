@@ -1,9 +1,16 @@
 import pandas as pd
 import pytest
 
-from nwkit.cladefreq import cladefreq_main
+from nwkit.cladefreq import _mask_to_leaf_set, cladefreq_main
 from tests.helpers import make_args
 from tests.helpers import write_tree_collection as _write_tree_collection
+
+
+@pytest.mark.parametrize("selected", [[], [0, 31, 127, 511], list(range(512))])
+def test_mask_taxa_preserve_index_order_for_sparse_and_dense_clades(selected):
+    names = ["T{}".format(index) for index in range(512)]
+    mask = sum(1 << index for index in selected)
+    assert _mask_to_leaf_set(mask, names) == [names[index] for index in selected]
 
 
 class TestCladefreqMain:
