@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.44.0] - 2026-10-23
+
+### Changed
+
+- Reduce repeated ancestor and descendant traversal in LCA queries, consensus
+  construction, clade summaries, monophyly checks and tree-to-table output.
+- Reduce temporary allocations in Gaussian covariance construction, Brownian
+  DTT batches, TSV input and sampling-covariance validation.
+- Reuse trait-independent contrast metadata and requested descendant-taxon
+  summaries while preserving trait-specific calculations and output order.
+- Document two rounds of measured performance candidates, including rejected
+  approaches, exact-output checks and workload-specific tradeoffs.
+
 ## [0.43.57] - 2026-10-22
 
 ### Changed
