@@ -59,13 +59,14 @@ def nwk2table_main(args):
             raise ValueError("Tree must be ultrametric when '--age yes'.") from exc
     rows = list()
     include_rooting = rooting_needs_serialization(tree)
-    for node in tree.traverse():
+    # The mapping preserves traversal order, with ascending branch IDs.
+    for node in node_to_branch_id:
         rows.append(
             _node_row(
                 node, node_to_branch_id, args.sister, age_by_node, include_rooting
             )
         )
-    table = pd.DataFrame(rows).sort_values("branch_id").reset_index(drop=True)
+    table = pd.DataFrame(rows)
     if args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
     else:

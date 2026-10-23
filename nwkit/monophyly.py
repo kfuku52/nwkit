@@ -84,11 +84,12 @@ def monophyly_main(args):
             prop="name",
             unrooted=args.unrooted,
         )
+        leaf_name_set = set(leaf_names)
         intruder_leaf_names = sorted(
             {
                 str(foreign_leaf.name)
                 for foreign_leaf in foreign_leaves
-                if str(foreign_leaf.name) not in set(leaf_names)
+                if str(foreign_leaf.name) not in leaf_name_set
             }
         )
         row = {

@@ -187,7 +187,6 @@ def _row_squared_norms(delta):
 
 
 def _batched_disparities(design, values, counts):
-    replicas = values.shape[1]
     means = np.zeros_like(values)
     sums = np.zeros(values.shape[:2])
     for node in range(len(counts) - 1, -1, -1):
@@ -199,14 +198,12 @@ def _batched_disparities(design, values, counts):
             total = merged + counts[child]
             delta = means[child] - means[node]
             squared = _row_squared_norms(delta)
-            sums[node] += sums[child] + squared * merged * counts[child] / np.full(
-                replicas, total
-            )
+            sums[node] += sums[child] + squared * merged * counts[child] / total
             means[node] += delta * (counts[child] / total)
             merged = total
     disparities = np.divide(
         2 * sums,
-        np.repeat((counts - 1)[:, None], replicas, axis=1),
+        (counts - 1)[:, None],
         out=np.zeros_like(sums),
         where=counts[:, None] > 1,
     )

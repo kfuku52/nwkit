@@ -233,7 +233,6 @@ def read_tsv_preserving_leaf_name(path, *, preserve_columns=()):
         raise ValueError(
             "Failed to preserve the 'leaf_name' column while parsing: {}".format(path)
         )
-    dataframe = dataframe.copy()
     dataframe["leaf_name"] = raw_leaf_names
     return dataframe
 

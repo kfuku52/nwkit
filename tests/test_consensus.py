@@ -545,3 +545,61 @@ class TestConsensusMain:
         )
         with pytest.raises(ValueError, match="weight"):
             consensus_main(args)
+
+
+@pytest.mark.parametrize("reverse_masks", [False, True])
+def test_build_consensus_subtree_preserves_noncontiguous_clades_and_leaf_order(
+    reverse_masks,
+):
+    from nwkit.consensus import _build_consensus_subtree
+
+    # Only A/C/E/F belong to this parent; B/D is a selected clade elsewhere.
+    masks = [0b010101, 0b000101, 0b001010]
+    if reverse_masks:
+        masks.reverse()
+    tree = _build_consensus_subtree(
+        parent_mask=0b110101,
+        selected_masks=masks,
+        support_by_mask={0b000101: 54.25, 0b010101: 0, 0b110101: 77},
+        dist_by_mask={1: None, 4: 0.0, 16: 1.25, 32: 2.0, 5: -2.0, 53: 2.5},
+        bit_to_name={1 << i: name for i, name in enumerate("ABCDEF")},
+        bit_to_order={1: 3, 2: 2, 4: 0, 8: 6, 16: 5, 32: 1},
+        all_mask=0b111111,
+    )
+
+    assert list(tree.leaf_names()) == ["C", "A", "E", "F"]
+    assert [list(child.leaf_names()) for child in tree.children] == [
+        ["C", "A", "E"],
+        ["F"],
+    ]
+    inner = tree.children[0]
+    pair = inner.children[0]
+    assert [child.name for child in pair.children] == ["C", "A"]
+    assert (tree.dist, tree.support) == (2.5, 77)
+    assert (inner.dist, inner.support) == (None, 0)
+    assert (pair.dist, pair.support) == (-2.0, 54.25)
+    assert [leaf.dist for leaf in tree.leaves()] == [0.0, None, 1.25, 2.0]
+
+
+def test_build_consensus_tree_preserves_deep_clade_hierarchy():
+    from nwkit.consensus import _build_consensus_tree
+
+    n = 2048
+    tree = _build_consensus_tree(
+        ["tip_{}".format(i) for i in range(n)],
+        (1 << n) - 1,
+        [(1 << size) - 1 for size in range(n - 1, 1, -1)],
+        {},
+        {},
+    )
+
+    assert list(tree.leaf_names()) == ["tip_{}".format(i) for i in range(n)]
+    assert sum(1 for _ in tree.traverse()) == 2 * n - 1
+    assert tree.dist is None
+    assert tree.support is None
+    current = tree
+    for size in range(n, 2, -1):
+        assert len(current.children) == 2
+        assert current.children[1].name == "tip_{}".format(size - 1)
+        current = current.children[0]
+    assert [child.name for child in current.children] == ["tip_0", "tip_1"]

@@ -50,13 +50,12 @@ def _fill_covariance_blocks(
                     own_value == 0 and variances[ancestor] > 0
                 ):
                     own_value = stable(ancestor, ancestor, ancestor)
-            covariance[np.ix_(own, own)] = own_value
+            covariance[own[:, None], own] = own_value
             covariance[own, own] = variances[ancestor]
         start = 0
         for group in groups:
             if start:
-                # Two product temporaries may coexist; tile both axes.
-                # Include the finite/zero masks as well as the two products.
+                # Tile both axes, allowing for the product and finite/zero masks.
                 max_entries = max(1, _COVARIANCE_WORKSPACE_BYTES // 24)
                 columns = min(len(group), max_entries)
                 rows = max(1, min(start, max_entries // columns))
@@ -65,8 +64,8 @@ def _fill_covariance_blocks(
                     for first in range(0, start, rows):
                         left = merged[first : min(start, first + rows)]
                         if factors is None:
-                            covariance[np.ix_(left, right)] = variances[ancestor]
-                            covariance[np.ix_(right, left)] = variances[ancestor]
+                            covariance[left[:, None], right] = variances[ancestor]
+                            covariance[right[:, None], left] = variances[ancestor]
                             continue
                         with np.errstate(
                             over="ignore", under="ignore", invalid="ignore"
@@ -74,8 +73,8 @@ def _fill_covariance_blocks(
                             block = (
                                 output_loading[left, None]
                                 * output_loading[right][None, :]
-                                * factors[ancestor]
                             )
+                            block *= factors[ancestor]
                         bad = ~np.isfinite(block) | (
                             (block == 0) & (variances[ancestor] > 0)
                         )
@@ -84,8 +83,8 @@ def _fill_covariance_blocks(
                             block[row, column] = stable(
                                 requested[one], requested[two], ancestor
                             )
-                        covariance[np.ix_(left, right)] = block
-                        covariance[np.ix_(right, left)] = block.T
+                        covariance[left[:, None], right] = block
+                        covariance[right[:, None], left] = block.T
                         del block, bad
             merged[start : start + len(group)] = group
             start += len(group)

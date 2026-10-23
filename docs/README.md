@@ -52,6 +52,7 @@ for the corresponding user guide.
 - [Conditional reference, KL intervals and GeneGalleon integration](validation/MUL_LOCUS_CONDITIONAL_INTEGRATION.md)
 - [Node diagnostics and fixed-data MC budget follow-up](validation/MUL_NODE_DIAGNOSTICS_AND_MC_BUDGET.md)
 - [Targeted gene-tree search using the supplied BMI1 dataset](validation/GENE_TREE_SEARCH_BMI1.md)
+- [Ten performance candidates and adoption decisions](validation/PERFORMANCE_CANDIDATES_20261023.md)
 
 ## Project operations
 

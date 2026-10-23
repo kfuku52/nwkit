@@ -1,6 +1,7 @@
 import csv
 import math
 from io import StringIO
+from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -1419,7 +1420,8 @@ def build_contrast_table(
     branch_ids = assign_branch_ids(tree)
     clades = CladeIndex(tree)
     orientation_by_node = _orient_children(tree, clades, reconciliation_by_id)
-    rows = list()
+    rows: list[dict[str, Any]] = []
+    common_rows = None
     coefficient_by_trait_and_clade = {}
     leaf_names_by_trait = {}
     for trait, values_by_leaf in values_by_trait.items():
@@ -1442,6 +1444,9 @@ def build_contrast_table(
         else:
             contrasts, contrast_coefficients, leaf_names = contrast_result
             leaf_names_by_trait[trait] = leaf_names
+        if common_rows is None and rows:
+            # Reuse the first trait's metadata only when another trait needs it.
+            common_rows = {row["branch_id"]: row for row in rows}
         for node in tree.traverse():
             if node.is_leaf:
                 continue
@@ -1463,40 +1468,45 @@ def build_contrast_table(
                     and reconciliation["coverage_status"] != "complete"
                 ):
                     continue
-            numerator, denominator = orientation_by_node[node]
-            row = {
-                "tree_id": tree_id,
-                "branch_id": branch_id,
-                "branch_clade_id": branch_clade_id,
-                "node_class": get_node_class(node),
-                "descendant_taxa": clades.csv_for_node(node),
-                "num_taxa": clades.count_for_node(node),
-                "trait": trait,
-                "evolution_model": evolution_model,
-                "evolution_parameter_name": evolution_spec.parameter_name or "",
-                "evolution_parameter": (
-                    evolution_parameter if evolution_parameter is not None else ""
-                ),
-                "branch_length_mode": (
-                    branch_length
-                    if evolution_spec.branch_lengths_used
-                    else "not-applicable"
-                ),
-                "numerator_branch_id": branch_ids[numerator],
-                "numerator_clade_id": clades.clade_id_for_node(numerator),
-                "denominator_branch_id": branch_ids[denominator],
-                "denominator_clade_id": clades.clade_id_for_node(denominator),
-                "numerator_taxa": clades.csv_for_node(numerator),
-                "denominator_taxa": clades.csv_for_node(denominator),
-            }
+            if common_rows is None:
+                numerator, denominator = orientation_by_node[node]
+                row = {
+                    "tree_id": tree_id,
+                    "branch_id": branch_id,
+                    "branch_clade_id": branch_clade_id,
+                    "node_class": get_node_class(node),
+                    "descendant_taxa": clades.csv_for_node(node),
+                    "num_taxa": clades.count_for_node(node),
+                    "trait": trait,
+                    "evolution_model": evolution_model,
+                    "evolution_parameter_name": evolution_spec.parameter_name or "",
+                    "evolution_parameter": (
+                        evolution_parameter if evolution_parameter is not None else ""
+                    ),
+                    "branch_length_mode": (
+                        branch_length
+                        if evolution_spec.branch_lengths_used
+                        else "not-applicable"
+                    ),
+                    "numerator_branch_id": branch_ids[numerator],
+                    "numerator_clade_id": clades.clade_id_for_node(numerator),
+                    "denominator_branch_id": branch_ids[denominator],
+                    "denominator_clade_id": clades.clade_id_for_node(denominator),
+                    "numerator_taxa": clades.csv_for_node(numerator),
+                    "denominator_taxa": clades.csv_for_node(denominator),
+                }
+                if reconciliation is not None:
+                    for column in RECONCILIATION_CONTEXT_COLUMNS:
+                        row[column] = reconciliation[column]
+            else:
+                # Trait and numerical results are replaced for each copied row.
+                row = common_rows[branch_id].copy()
+                row["trait"] = trait
             row.update(contrasts[node])
             if contrast_coefficients is not None:
                 coefficient_by_trait_and_clade[(trait, branch_clade_id)] = (
                     contrast_coefficients[node]
                 )
-            if reconciliation is not None:
-                for column in RECONCILIATION_CONTEXT_COLUMNS:
-                    row[column] = reconciliation[column]
             rows.append(row)
     columns = list(BASE_CONTRAST_COLUMNS)
     if reconciliation_by_id is not None:

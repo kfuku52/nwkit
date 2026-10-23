@@ -601,6 +601,7 @@ def _build_consensus_subtree(
 def _assemble_consensus_clades(
     masks, owner, minimum_order, all_mask, dist_by_mask, support_by_mask
 ):
+    component_masks: dict[Any, int] = {}
     for mask in sorted(masks, key=lambda value: (count_set_bits(value), value)):
         node = Tree()
         node.dist = None if mask == all_mask else dist_by_mask.get(mask)
@@ -609,10 +610,17 @@ def _assemble_consensus_clades(
             if mask == all_mask
             else support_by_mask.get(mask, MISSING_SUPPORT_VALUE)
         )
-        children = set()
-        for bit in _iter_mask_bits(mask):
-            children.add(owner[bit])
-            owner[bit] = node
+        children = []
+        remaining = mask
+        while remaining:
+            # Laminar clades contain whole current components. Their lowest
+            # bit identifies the component, so skip its other descendant bits.
+            bit = remaining & -remaining
+            child = owner[bit]
+            children.append(child)
+            remaining ^= component_masks.pop(child, bit)
+        owner[mask & -mask] = node
+        component_masks[node] = mask
         for child in sorted(children, key=minimum_order.__getitem__):
             node.add_child(child)
         minimum_order[node] = min(minimum_order[child] for child in children)

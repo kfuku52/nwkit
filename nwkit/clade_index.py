@@ -92,9 +92,10 @@ class LcaIndex:
         if self.depth[index1] < self.depth[index2]:
             index1, index2 = index2, index1
         depth_difference = self.depth[index1] - self.depth[index2]
-        for level, ancestors in enumerate(self.ancestors):
-            if depth_difference & (1 << level):
-                index1 = ancestors[index1]
+        while depth_difference:
+            level = depth_difference.bit_length() - 1
+            index1 = self.ancestors[level][index1]
+            depth_difference ^= 1 << level
         if index1 == index2:
             return index1
         for ancestors in reversed(self.ancestors):
