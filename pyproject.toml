@@ -42,6 +42,8 @@ dependencies = [
 
 [project.optional-dependencies]
 test = [
+  "jsonschema>=4",
+  "pypdf>=5",
   "hypothesis>=6.165",
   "pytest>=7",
   "pytest-xdist>=3.8",
@@ -51,6 +53,8 @@ image = ["CairoSVG"]
 # Compatibility alias: XLS parsing is now built in.
 xls = []
 dev = [
+  "jsonschema>=4",
+  "pypdf>=5",
   "bandit>=1.9",
   "build>=1.3",
   "check-wheel-contents>=0.6",
@@ -87,7 +91,7 @@ include = ["nwkit"]
 namespaces = false
 
 [tool.setuptools.package-data]
-nwkit = ["data_tree/*.nwk", "data_model/*.txt", "data_iqtree/*.cpp", "data_angiocal/*.tsv", "data_angiocal/README.md"]
+nwkit = ["data_tree/*.nwk", "data_model/*.txt", "data_iqtree/*.cpp", "data_angiocal/*.tsv", "data_angiocal/README.md", "data_schema/*.json"]
 
 [tool.ruff]
 target-version = "py310"

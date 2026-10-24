@@ -5,6 +5,8 @@ project entry points and release metadata.
 
 ## Guides
 
+- [Generic reconciliation documents and embedded PDF/SVG drawing](guides/RECONCILIATION_DOCUMENT.md)
+
 User-facing command, data-format, model, and mathematical documentation lives
 in [`guides/`](guides/):
 
@@ -40,6 +42,7 @@ adoption decisions live in [`validation/`](validation/). These documents record
 the evidence and limits for experimental features; they are not a replacement
 for the corresponding user guide.
 
+- [Generic reconciliation contract and N1/N2 validation](validation/RECONCILIATION_N1_N2.md)
 - [Native WGD and Ks scientific audit](validation/WGD_SCIENTIFIC_VALIDATION.md)
 - [MUL-tree exact and original-GRAMPA validation](validation/MUL_RECONCILE_VALIDATION.md)
 - [Conditional allopolyploid MUL/MSC prototype validation](validation/MUL_MSC_VALIDATION.md)

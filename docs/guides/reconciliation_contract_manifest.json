@@ -1,0 +1,15 @@
+{
+  "schema_version": "0.1.0",
+  "date": "2026-10-14",
+  "authority": "nwkit/data_schema; aioi copies are file-only producer contracts",
+  "bases": {
+    "nwkit": "d1e7f97a84fc069dd336b6e2661ecdb5cc9b80e9",
+    "aioi": "4a68cd8bd04d2a33f19b6a44759b44a2c19ce1a9"
+  },
+  "schemas": {
+    "reconciliation_comparison.schema.json": "74b47ec17a7ffe80b863ae22ca77edfbaa06acba33128f499f6a86f4745fe787",
+    "reconciliation_document.schema.json": "b518b2264c1eef39d72e70cf190a85882a232fb7479a455248def59aa1142ba7",
+    "reconciliation_view.schema.json": "c0a2f843d436a2c0a67808639700df7f5b1d8dd06d6b79cc38fdbcb6e661fc45"
+  },
+  "configuration_status": "document/view/comparison executable; native aioi fixed-state producer, file-only nwkit consumer"
+}

@@ -143,6 +143,9 @@ minimal worked example, in
 
 See [reconciliation and dating figures](docs/guides/RECONCILIATION_PLOTS.md) for result reports and redrawing saved outputs.
 
+For generic recPhyloXML/JSON input and two-level embedded PDF/SVG output, see
+[reconciliation documents](docs/guides/RECONCILIATION_DOCUMENT.md).
+
 
 ## Citation
 There is no published paper on NWKIT itself, but we used and cited NWKIT in several papers including [Fukushima & Pollock (2023, Nat Ecol Evol 7: 155-170)](https://www.nature.com/articles/s41559-022-01932-7).

@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<recPhylo>
+  <spTree><phylogeny rooted="true"><clade><name>ABC</name>
+    <clade><name>AB</name><clade><name>A</name></clade><clade><name>B</name></clade></clade>
+    <clade><name>C</name></clade>
+  </clade></phylogeny></spTree>
+  <recGeneTree><phylogeny rooted="true"><clade><name>root</name><eventsRec><speciation speciesLocation="ABC"/></eventsRec>
+    <clade><name>dup</name><eventsRec><duplication speciesLocation="AB"/></eventsRec>
+      <clade><name>s1</name><eventsRec><speciation speciesLocation="AB"/></eventsRec>
+        <clade><name>gA1</name><eventsRec><leaf speciesLocation="A" geneName="gA1"/></eventsRec></clade>
+        <clade><name>gB1</name><eventsRec><leaf speciesLocation="B" geneName="gB1"/></eventsRec></clade>
+      </clade>
+      <clade><name>s2</name><eventsRec><speciation speciesLocation="AB"/></eventsRec>
+        <clade><name>gA2</name><eventsRec><leaf speciesLocation="A" geneName="gA2"/></eventsRec></clade>
+        <clade><name>lostB</name><eventsRec><loss speciesLocation="B"/></eventsRec></clade>
+      </clade>
+    </clade>
+    <clade><name>transfer</name><eventsRec><branchingOut speciesLocation="C"/></eventsRec>
+      <clade><name>gC</name><eventsRec><leaf speciesLocation="C" geneName="gC"/></eventsRec></clade>
+      <clade><name>gA3</name><eventsRec><transferBack destinationSpecies="A"/><leaf speciesLocation="A" geneName="gA3"/></eventsRec></clade>
+    </clade>
+  </clade></phylogeny></recGeneTree>
+</recPhylo>

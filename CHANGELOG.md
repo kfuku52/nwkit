@@ -4,6 +4,23 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.45.0] - 2026-10-24
+
+### Added
+
+- Read validated reconciliation documents from canonical JSON, recPhyloXML,
+  phyloXML, Newick/NHX and saved reconciliation tables through `nwkit draw`.
+- Render embedded, paired and nested histories and arbitrary comparison panels
+  as PDF, SVG, PNG or offline HTML with selectable events and embedded PDF.
+- Preserve source trees, recorded events and provenance in normalized document
+  output, with explicit display selections and recoverable output bundles.
+
+### Fixed
+
+- Keep nested copy paths orthogonal, separate concurrent forks, retain terminal
+  loss versus marginalized-empty-side distinctions, and include labels and
+  transfer curves in export bounds.
+
 ## [0.44.0] - 2026-10-23
 
 ### Changed

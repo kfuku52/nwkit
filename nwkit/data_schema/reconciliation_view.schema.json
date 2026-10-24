@@ -1,0 +1,115 @@
+{
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "layout"
+  ],
+  "properties": {
+    "schema_version": {
+      "const": "0.1.0"
+    },
+    "kind": {
+      "const": "reconciliation_view"
+    },
+    "layout": {
+      "enum": [
+        "standalone",
+        "topology_embedded",
+        "paired"
+      ]
+    },
+    "leaf_order": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "type": "string",
+          "minLength": 1
+        },
+        "uniqueItems": true
+      }
+    },
+    "collapsed_clades": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "tree",
+          "node"
+        ],
+        "properties": {
+          "tree": {
+            "type": "string",
+            "minLength": 1
+          },
+          "node": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "event_colors": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^#[0-9a-fA-F]{6}$"
+      }
+    },
+    "font": {
+      "type": "object",
+      "required": [
+        "family",
+        "size"
+      ],
+      "properties": {
+        "family": {
+          "type": "string",
+          "minLength": 1
+        },
+        "size": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 72
+        }
+      },
+      "additionalProperties": false
+    },
+    "output": {
+      "type": "object",
+      "required": [
+        "format"
+      ],
+      "properties": {
+        "format": {
+          "enum": [
+            "pdf",
+            "svg",
+            "png",
+            "html"
+          ]
+        },
+        "pdf_pages": {
+          "enum": [
+            "auto",
+            "single",
+            "tiled"
+          ]
+        },
+        "pdf_page_size": {
+          "enum": [
+            "A4",
+            "A3"
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:reconciliation-view:0.1.0",
+  "description": "Executable file-only drawing contract for nwkit draw. Scientific data and display state remain separate."
+}

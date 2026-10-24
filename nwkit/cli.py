@@ -2304,6 +2304,28 @@ pdist.set_defaults(handler=command_dist)
 
 
 def command_draw(args):
+    if (
+        getattr(args, "document", None)
+        or getattr(args, "comparison", None)
+        or getattr(args, "view", None)
+    ):
+        from nwkit.draw_document import draw_document_main
+
+        return draw_document_main(args)
+    if any(
+        getattr(args, key, default) != default
+        for key, default in (
+            ("document_out", None),
+            ("view_config", None),
+            ("view_out", None),
+            ("document_clade", None),
+            ("pdf_pages", "auto"),
+            ("pdf_page_size", "A4"),
+        )
+    ):
+        raise ValueError(
+            "Document output/page options require --document or --view embedded."
+        )
     if getattr(args, "reconciliation", None) or getattr(args, "radte_prefix", None):
         from nwkit.result_plot import draw_saved_results
 
@@ -6550,6 +6572,9 @@ from nwkit.result_plot_cli import register_result_plot_options  # noqa: E402
 register_result_plot_options(
     pdraw, preconcile, subparsers.choices["radte"], finite_float
 )
+from nwkit.reconciliation_cli import register_document_options  # noqa: E402
+
+register_document_options(pdraw)
 from nwkit.shift_cli import register_shift  # noqa: E402
 
 register_shift(subparsers, p_tree_input, p_table_output)
@@ -6670,6 +6695,16 @@ def main(argv=None):
             validate_command_path_roles(args)
 
             def invoke_handler(parsed_args):
+                if parsed_args.command == "draw":
+                    parsed_args._nwkit_draw_explicit_options = {
+                        option.split("=", 1)[0].replace("_", "-")
+                        for option in raw_argv
+                        if option.startswith("--")
+                    }
+                    parsed_args._nwkit_draw_font_explicit = any(
+                        option.split("=", 1)[0] in {"--font-family", "--font_family"}
+                        for option in raw_argv
+                    )
                 _warn_deprecated_option_aliases(raw_argv, parsed_args.command)
                 _validate_stdin_ownership(parsed_args)
                 return parsed_args.handler(parsed_args)
