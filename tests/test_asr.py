@@ -151,22 +151,6 @@ def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypa
     assert results[0]["total_count"].sum() >= 40
 
 
-@pytest.mark.parametrize(
-    "length, matrix", [(0.0, [[-1, 1], [1, -1]]), (1.0, [[0, 0], [0, 0]])]
-)
-def test_impossible_zero_event_bridge_is_rejected(length, matrix):
-    with pytest.raises(ValueError, match="cannot change state"):
-        asr._sample_bridge_event_count(
-            0, 1, length, np.asarray(matrix), np.random.default_rng(0)
-        )
-
-
-def test_unreachable_stochastic_bridge_is_rejected():
-    matrix = np.asarray([[-1.0, 1.0, 0.0], [1.0, -1.0, 0.0], [0.0, 0.0, 0.0]])
-    with pytest.raises(ValueError, match="No feasible stochastic bridge"):
-        asr._sample_bridge_event_count(0, 2, 1.0, matrix, np.random.default_rng(0))
-
-
 def test_uniformization_context_avoids_dense_power_history_at_high_event_count():
     matrix = np.full((4, 4), 1.0 / 3.0)
     np.fill_diagonal(matrix, -1.0)

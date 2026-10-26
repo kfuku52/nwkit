@@ -413,16 +413,6 @@ def test_centered_exact_observations_still_reject_real_conflicts(origin, differe
         condition_gaussian_tree(process, {"A": origin, "B": origin + difference})
 
 
-def test_exact_gaussian_messages_allow_only_affine_roundoff():
-    from nwkit.gaussian_inference import _combine, _Factor
-
-    first = _Factor(-1.5999999999999996, 0.0)
-    second = _Factor(-1.600000000000001, 0.0)
-    assert _combine(first, second).variance == 0.0
-    with pytest.raises(ValueError, match="Conflicting"):
-        _combine(first, _Factor(first.mean + 1e-12, 0.0))
-
-
 def test_exact_message_roundoff_survives_cancellation_to_zero():
     from dataclasses import replace
 

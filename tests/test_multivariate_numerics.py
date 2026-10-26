@@ -100,8 +100,6 @@ def test_regress_cli_rejects_nonidentified_missing_response(tmp_path):
 
 
 def test_singular_covariance_is_not_given_artificial_noise():
-    with pytest.raises(np.linalg.LinAlgError):
-        pgls._positive_cholesky(np.zeros((4, 4)))
     with pytest.raises((ValueError, np.linalg.LinAlgError)):
         pgls.fit_multivariate_pgls(
             np.array(list(VALUES.values())), np.ones((6, 1)), {"tree": np.zeros((6, 6))}

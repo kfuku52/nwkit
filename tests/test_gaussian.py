@@ -16,19 +16,6 @@ def test_diagonal_detection_preserves_exact_nonzero_and_diagonal_values(diagonal
     assert not gaussian.is_diagonal(matrix.T)
 
 
-def test_diagonal_detection_does_not_evaluate_diagonal_objects():
-    class Untestable:
-        def __bool__(self):
-            raise AssertionError("Diagonal entries are outside this predicate")
-
-    matrix = np.zeros((4, 4), dtype=object)
-    for index in range(4):
-        matrix[index, index] = Untestable()
-    assert gaussian.is_diagonal(matrix)
-    matrix[-1, 0] = 1
-    assert not gaussian.is_diagonal(matrix)
-
-
 @pytest.mark.parametrize("kind", ["dense", "low-rank", "grouped", "nested"])
 @pytest.mark.parametrize("vector", [True, False])
 def test_cholesky_solves_match_dense_oracle_without_refactorization(

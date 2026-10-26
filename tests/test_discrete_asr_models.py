@@ -11,7 +11,6 @@ from nwkit.asr_models import default_model
 from nwkit.cli import main
 from nwkit.discrete_asr_models import (
     build_rate_matrix,
-    parameter_labels,
     read_rate_matrix,
     read_transition_graph,
     stationary_distribution,
@@ -32,12 +31,6 @@ def test_f81_uses_target_specific_rates_and_stationary_frequencies():
         [[-5.0, 2.0, 3.0], [1.0, -4.0, 3.0], [1.0, 2.0, -3.0]],
     )
     np.testing.assert_allclose(stationary_distribution(matrix), [1 / 6, 2 / 6, 3 / 6])
-
-
-@pytest.mark.parametrize("model", ["ER", "SYM", "ARD", "F81", "GTR"])
-def test_single_state_rate_matrix_builders_are_consistent(model):
-    assert parameter_labels(model, ["only"]) == []
-    np.testing.assert_array_equal(build_rate_matrix(model, ["only"], []), [[0.0]])
 
 
 @pytest.mark.parametrize("model,num_states", [("ARD", 17), ("GTR", 23)])

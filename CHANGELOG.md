@@ -4,6 +4,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.45.1] - 2026-10-26
+
+### Changed
+
+- Remove tests for unreachable internal inputs and unsupported helper use cases,
+  plus helper assertions already covered by higher-level numerical regressions.
+
 ## [0.45.0] - 2026-10-24
 
 ### Added
