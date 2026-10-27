@@ -3,7 +3,7 @@
 The file contract is `reconciliation_document` version **0.1.0**, independent
 of any inference program's run-schema version. The authoritative schema is
 `nwkit/data_schema/reconciliation_document.schema.json`; aioi keeps an identical
-copy for its future C++ producer. Schema bytes and their SHA-256 are frozen in
+copy for its C++ producer. Schema bytes and their SHA-256 are frozen in
 the stage readout. Changes require a coordinated producer/consumer update and
 a version change when meaning or compatibility changes.
 
@@ -41,6 +41,164 @@ is `((B,C),A)`. Latent consumed blocks must not overlap; boundary leaf identitie
 and the target local split are validated. X1 has no fabricated species-branch
 placement. N3 renders source/target trees and highlights the recorded consumed clades. Arbitrary other transformation models are preserved as extension
 blocks but do not acquire X1 semantics.
+
+### Observed G inside S
+
+The 0.45.2 delivery check on 2026-10-27 passed `tools/check.py release`:
+5,484 regression tests passed, 130 were skipped, and branch coverage was 86.21%
+(80% required). Static checks, dependency audit, maintainability limits and
+byte-reproducible wheel/sdist inspection passed. Optional scientific studies
+and unavailable optional integrations remain distinct from tested backends.
+
+```sh
+nwkit draw --document history.json --view observed-embedded --outfile observed.pdf \
+  --view-out observed.view.json
+nwkit draw --document history.json --view-config observed.view.json --outfile observed.html
+```
+
+This is the default for a reconciliation document containing X1 when neither
+`--view` nor a saved `--view-config` selects a different layout. Explicit
+`--view embedded`, `--view paired` and legacy saved views retain their previous
+layouts. The view draws the exact recorded G topology, recorded D/T/L events
+and X1 in a single species tree. G tips
+use H's recorded leaf-to-species placements. Internal G joins use common-ancestor
+species corridors with parent-before-child display spacing; a species split may
+carry several separate gene lineages. Interior crossings have gaps and open
+circles identify G nodes. Ordinary G branches use the same teal as the recorded
+H history. Purple marks only the two consumed G nodes and the internal branch
+connecting them; incoming and boundary branches retain their ordinary colors.
+Compatible source events are actual forks on event-expanded G routes. Each transfer subdivides its G edge into a
+donor, an arrow to a fresh entry inside the recipient species branch, and a
+continuation to that lineage's descendants. Native recipient copies remain on
+separate lanes. Pruning recorded extinct sides and suppressing display subdivisions reconstructs exact G,
+including every X1 branching order. Biological event colors and source IDs
+are retained. An ancestral display extension may be needed,
+including for a history with crown origin: it is not an
+inferred stem, G origin, event time, coalescent history or evidence of ILS. Gene
+substitution lengths and species lengths are retained without becoming a shared
+time scale. The scientific JSON is unchanged.
+
+G's display stem extends into S's root corridor, including when the G-root LCA
+is below the S root. Vertical G turns are centered as bundles on the species
+branch's centerline, retaining their common pitch. Opposite-direction turns
+whose vertical spans overlap share a bundle to prevent coincident strokes.
+G joins keep the same pitch and precede the leftmost outgoing turn. The stem
+is ordinary branch geometry; no origin event or ancestral state is added.
+An existing root-family origin stays on its recorded history's incoming stem,
+retaining its source event identity.
+
+The view requires one recorded history and one H-to-G X1 transformation. Both X1
+resolutions, multiple nonoverlapping blocks and recorded D/T histories are
+supported. D/T/L and origin markers retain their recorded species placements in
+that same S when compatible with G. Visible S/D forks retain their parent/child
+order, with daughters diverging upward and downward. Compatible extinct
+branches end at their recorded losses. Source forks replaced by X, including
+suppressed internal chains and their extinct sides, remain in the original
+scientific JSON and the X details. Select a purple G node or its internal edge
+in HTML to inspect those source records in ancestral order. They are not
+rendered as extra G forks. There are no H comparison routes, paired H/G labels,
+dashed gene routes or additional species-tree panels. Ordinary branches stay
+teal and purple is confined to the X1 pair.
+Ordered source events sharing one H node are expanded into separate display
+positions. Recorded marginalized S/T sides remain E stubs, including internal
+species branches; an unspecified unobserved side is not turned into a loss.
+Extinct sides have reserved lanes and crossing gaps, keeping their terminal
+losses distinct from surviving G branches.
+Empty-observation, expectation and unresolved histories fail explicitly; use
+the explicit embedded or paired view for those records. Without a transformation,
+the recorded histories keep their existing embedded representation. Order the S
+tips with `leaf_order`; an independent G tip order is rejected because G tips
+follow their recorded species. Species-context collapse remains unsupported.
+
+An explicit complete history may include terminal lost lineages on either tip
+or internal species branches. It then connects to the observed-copy H through
+the display extension `prune_recorded_losses_and_suppress_unary` (empty blocks).
+The viewer independently prunes recorded unobserved terminal loss nodes,
+suppresses unary nodes, verifies the entire resulting H topology and derives
+the H-to-history node correspondence. If `annotations.retained_nodes` is supplied,
+it must match that derived map exactly. The optional projection is followed by
+the ordinary validated X1 H-to-G transformation, giving exactly S/history/H/G
+trees. A missing, unknown or inconsistent projection is an explicit error, not
+a reason to silently remove losses. Compatible markers and extinct side branches remain in the same species tree;
+X-replaced source events remain in the source document and interactive X details. Multiple transfers along a
+single observed edge retain their source order, and entirely extinct transfer
+recipients still receive a fresh entry and terminal side branch. If X1 cuts
+through the inside of a transfer-recipient clade so it no longer forms one
+clade in G, a single-lineage embedding is undefined and fails explicitly;
+the explicit embedded or paired view remains available.
+
+The display configuration uses `reconciliation_view` **0.2.0**. Readers also
+accept existing 0.1.0 display files; the scientific document remains 0.1.0.
+Comparison view schemas and aioi's file-only schema copies accept both display
+versions. HTML selection exposes recorded X1 boundary correspondences, and its
+saved display file re-renders the same mode through the CLI.
+
+G branch rotations and species-junction turn order are chosen from actual
+polyline geometry to reduce intersections. The objective first avoids overlapping
+segments, then minimizes intersection/false-junction points, then intersections
+in the ancestral stem, and finally drawn path length. Genuine shared G nodes are
+excluded. Counts are taken before display gaps are cut. Canonical orientation
+and routing remain a comparison candidate with the same pitch and centering. Trees
+with at most seven
+internal G nodes compare all rotations; larger trees use at most 128 orientation
+candidates with X1 nodes prioritized. This is a bounded display search, not a
+certificate of the globally smallest crossing count over all possible routes.
+S tip order and scientific G child references remain unchanged.
+
+In the README three-species example, rotating the stem split to put B above the
+AC lineage and changing turn order reduces raw intersections from **3 to 1**,
+with stem intersections falling from **2 to 0**. Rotating the stem split alone
+under the old turn order leaves three intersections. All four G orientations
+were compared; the remaining intersection is at the A/B species junction.
+
+The 2026-10-25 crossing update passed 111 focused tests with no skips through
+`tools/check.py quick`, including both X1 resolutions, multiple blocks, reversed
+S tip order, stable child-storage order, previous-layout comparisons, shared-node
+versus false-junction counts, bounded large-tree search, PDF/SVG/HTML and offline
+viewer interactions. Ruff, formatting, mypy and maintainability hard limits
+passed. Full repository release checks were not run.
+
+Two-level H and observed-G layouts now use a common horizontal track pitch for
+gene joins and species-junction turns, instead of distributing joins over an
+entire species branch and squeezing turns into a separate span. At the regular
+8 pt setting the pitch is six scene units, including when adjacent species
+branches carry different numbers of lineages. Uniform tracks remain uniform
+within a bundle when branch length or the species corridor envelope requires a
+smaller common pitch. Observed-G turn bundles are centered independently on
+their species branches. Origin stars receive extra clearance; they are not
+vertical fork columns. These are display coordinates, not inferred event times.
+Recorded event order, node identities and source trees remain unchanged.
+
+The README renderer uses one scale and horizontal frame for all main panels in
+each figure, so equal scene-unit pitches also appear equal in those panels.
+Standalone tree panels keep their own fitted display scale.
+
+Observed-G corridor widths follow the number of lineages in each species
+branch, rather than copying the most crowded ancestral width to every tip.
+Both children of each species split use the larger of their required widths,
+so the upward and downward branches have equal thickness. This local widening
+is applied before packing the species corridors, preserving lane clearance.
+This keeps complex X1 layouts compact while preserving centered vertical
+bundles, one common horizontal pitch and the G display stem.
+Species pipes use flat caps and square joins in SVG, HTML and PDF; junctions
+do not acquire round caps or circular swellings. The same geometry is used by
+the README renderer.
+
+The horizontal-spacing update passed 152 focused tests with no skips through
+`tools/check.py quick`, including a three-copy A/C fixture whose species-branch
+display lengths differ twofold, equal recorded/observed pitch, multiple font and
+canvas sizes, crowded tracks and the existing geometry/export/HTML contracts.
+Ruff, formatting, mypy and maintainability hard limits passed. Full repository
+release checks were not run.
+
+Validation on 2026-10-24: the focused `tools/check.py quick` selection covering
+observed geometry, document/view schemas, corridors, bounds, offline HTML,
+draw/CLI contracts and reconciliation exports passed **443 tests**, with one
+optional CairoSVG/native-Cairo image post-processing case skipped. Ruff and
+mypy passed; the maintainability check respected all hard limits. The HTML
+interaction cases used a working Node.js runtime. This is not a full repository
+release-suite result. aioi's peer-schema/inventory check also passed and verified
+all 21 preserved specification-bundle files without changes.
 
 View and comparison schemas are executable N3/N4 contracts. Use `--view-config`,
 `--view-out` and `--comparison` with `nwkit draw`. Comparison documents have
@@ -132,7 +290,9 @@ size along with ordinary labels.
 Duplication nodes are red squares, speciation nodes blue circles, and losses red
 crosses. Transfers use an orange hollow circle at the donor and an orange
 directed arc with an arrowhead at the recipient. Imported explicit transfer-entry
-markers remain orange; X1 consumed branches stay purple, separate from transfer.
+markers remain orange; the internal branch joining each X1 consumed pair stays
+purple, separate from transfer. Branches entering or leaving that pair retain
+their ordinary colors.
 
 Display-only subtree selection uses `--document-clade TREE_ID/NODE_ID`; IDs are
 available in normalized JSON. It retains the complete upper context, records

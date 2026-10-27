@@ -49,8 +49,8 @@ def register_document_options(draw):
     draw.add_argument(
         "--view",
         default=None,
-        choices=["embedded", "standalone", "paired"],
-        help="Embed recorded lower-tree histories in the upper tree. Requires --document or --reconciliation.",
+        choices=["embedded", "observed-embedded", "standalone", "paired"],
+        help="Default: G, compatible recorded D/T/L and X1 in one species tree for X1 histories, otherwise recorded histories. X-replaced source events remain in HTML details. Explicit embedded, paired and saved views remain available. Requires --document or --reconciliation.",
     )
     draw.add_argument(
         "--pdf-pages",

@@ -4,6 +4,19 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.45.2] - 2026-10-27
+
+### Changed
+
+- Draw one observed gene tree inside the species tree by default for X1
+  documents, preserving its topology and compatible recorded D/T/L events.
+- Start transferred copies on fresh recipient branches, preserve opposite-arm
+  S/D forks, and retain X-replaced source events in selectable HTML details.
+- Reduce display crossings with bounded branch rotations and use centered,
+  uniformly spaced turns and equal-width sibling species corridors.
+- Accept display schema 0.2.0 while retaining legacy saved views and the
+  unchanged scientific document schema.
+
 ## [0.45.1] - 2026-10-26
 
 ### Changed

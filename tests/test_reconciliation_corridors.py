@@ -364,6 +364,101 @@ def test_duplicated_lineages_keep_separate_rectangular_speciation_forks(
     assert doc.record == original
 
 
+@pytest.mark.parametrize(
+    "gene_tree", ["((a1,b1),(a2,b2));", "(((a1,b1),(a2,b2)),(a3,b3));"]
+)
+def test_recorded_duplications_and_species_forks_use_the_same_horizontal_pitch(
+    gene_tree,
+):
+    doc = duplicated_document(gene_tree)
+    rec = doc.record["reconciliations"][0]
+    scene = build_scene(doc, width=380)
+    xs = sorted(
+        {
+            scene.event_points[rec["id"], e["id"]][0]
+            for e in rec["events"]
+            if e["type"] in {"duplication", "speciation"}
+        }
+    )
+    assert len(xs) >= 3
+    assert [b - a for a, b in zip(xs[:-1], xs[1:], strict=True)] == pytest.approx(
+        [6] * (len(xs) - 1)
+    )
+
+
+def test_equal_copy_counts_keep_the_same_x_pitch_in_unequal_species_branches():
+    source = import_tree_document("((A,B),C);")
+    upper = source["trees"][0]
+    lower = import_tree_document("(((a1,a2),a3),((c1,c2),c3));")["trees"][0]
+    upper["id"], lower["id"] = "S", "H"
+    species = {n["label"]: n["id"] for n in upper["nodes"] if not n["children"]}
+    ab = next(
+        n["id"] for n in upper["nodes"] if n["children"] and n["id"] != upper["root"]
+    )
+    nodes = {n["id"]: n for n in lower["nodes"]}
+    events = []
+    for node in lower["nodes"]:
+        leaf = node
+        while leaf["children"]:
+            leaf = nodes[leaf["children"][0]]
+        branch = species[leaf["label"][0].upper()]
+        if node["id"] == lower["root"]:
+            kind, branch = "speciation", upper["root"]
+        else:
+            kind = "duplication" if node["children"] else "leaf"
+            if (
+                node["id"] in nodes[lower["root"]]["children"]
+                and branch == species["A"]
+            ):
+                events.append(
+                    {
+                        "id": "pass-AB",
+                        "type": "speciation",
+                        "lower_node": node["id"],
+                        "upper_node": ab,
+                    }
+                )
+        events.append(
+            {
+                "id": node["id"],
+                "type": kind,
+                "lower_node": node["id"],
+                "upper_node": branch,
+            }
+        )
+    source.update(
+        trees=[upper, lower],
+        reconciliations=[
+            {
+                "id": "copies",
+                "upper_tree": "S",
+                "lower_tree": "H",
+                "history_kind": "unspecified",
+                "selection": {},
+                "model": {},
+                "events": events,
+            }
+        ],
+    )
+    doc = validate_document(source)
+    scene = build_scene(doc, width=380)
+    lengths = {}
+    for label in ("A", "C"):
+        corridor = next(
+            p
+            for p in scene.primitives
+            if p.kind == "upper" and p.owner[1] == species[label]
+        )
+        lengths[label] = corridor.points[-1][0] - corridor.points[0][0]
+        xs = sorted(
+            scene.event_points["copies", e["id"]][0]
+            for e in events
+            if e["type"] == "duplication" and e["upper_node"] == species[label]
+        )
+        assert len(xs) == 2 and xs[1] - xs[0] == pytest.approx(6)
+    assert lengths["C"] == pytest.approx(2 * lengths["A"])
+
+
 def with_outer_layer(doc):
     record = copy.deepcopy(doc.record)
     middle = record["trees"][0]

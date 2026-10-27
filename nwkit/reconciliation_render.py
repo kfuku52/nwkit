@@ -59,8 +59,8 @@ def _primitive(ax, primitive, font_size, scale=1):
                 [y for _, y in points],
                 color=primitive.outline_color,
                 linewidth=(primitive.width + 1.8) * scale,
-                solid_capstyle="round",
-                solid_joinstyle="round",
+                solid_capstyle="butt",
+                solid_joinstyle="miter",
                 zorder=0.5,
             )[0]
             outline.set_gid(f"outline:{primitive.id}")
@@ -69,9 +69,10 @@ def _primitive(ax, primitive, font_size, scale=1):
             [y for _, y in points],
             color=primitive.color,
             linewidth=primitive.width * scale,
-            solid_capstyle="round",
-            solid_joinstyle="round",
-            zorder=1 if primitive.kind == "upper" else 3,
+            solid_capstyle="butt" if primitive.kind == "upper" else "round",
+            solid_joinstyle="miter" if primitive.kind == "upper" else "round",
+            linestyle=(0, (3, 2)) if primitive.dashed else "-",
+            zorder=1 if primitive.kind == "upper" else 2 if primitive.dashed else 3,
         )[0]
     elif primitive.kind == "transfer":
         artist = FancyArrowPatch(

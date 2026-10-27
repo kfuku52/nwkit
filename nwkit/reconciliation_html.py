@@ -43,23 +43,31 @@ def _svg(scene, font_size, font_family="DejaVu Sans"):
                     "kind": p.kind,
                     "text": p.text,
                     "annotation": p.annotation,
+                    **(
+                        {"source_event_ids": p.source_event_ids}
+                        if p.source_event_ids
+                        else {}
+                    ),
                 }
             ),
             quote=True,
         )
         attrs = f'data-detail="{data}" stroke-width="{p.width}"'
+        if p.dashed:
+            attrs += ' stroke-dasharray="3 2"'
         color = html.escape(p.color)
         coords = " ".join(f"{x:.5f},{y:.5f}" for x, y in p.points)
         if p.kind == "upper" and p.outline_color:
             outlines.append(
                 f'<polyline aria-hidden="true" points="{coords}" '
                 f'stroke="{html.escape(p.outline_color)}" stroke-width="{p.width + 1.8}" '
-                'stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+                'stroke-linecap="butt" stroke-linejoin="miter" fill="none"/>'
             )
         if p.kind in {"line", "upper"}:
+            cap, join = ("butt", "miter") if p.kind == "upper" else ("round", "round")
             element = (
                 f'<polyline points="{coords}" {attrs} stroke="{color}" '
-                'stroke-linecap="round" stroke-linejoin="round" fill="none"/>'
+                f'stroke-linecap="{cap}" stroke-linejoin="{join}" fill="none"/>'
             )
         elif p.kind == "transfer":
             (x, y), (xx, yy) = p.points[0], p.points[-1]
@@ -128,14 +136,15 @@ function download(text,name,type){const a=document.createElement('a');a.href=URL
 function documents(){return source.kind==='reconciliation_document'?[source]:source.documents;}
 function documentFor(info){if(source.kind==='reconciliation_document')return source;const panels=source.panels.filter(p=>p.document!==null);const index=panels.findIndex(p=>p.id===info.panel);return source.documents[index]||null;}
 function treeFor(info){const doc=documentFor(info);if(!doc||!info.owner)return null;let tree=doc.trees.find(t=>t.id===(info.tree||info.owner[0]));if(!tree){const rec=doc.reconciliations.find(r=>r.id===info.owner[0]);if(rec)tree=doc.trees.find(t=>t.id===rec.lower_tree);}return tree&&tree.nodes.some(n=>n.id===info.owner[1])?tree:null;}
+function sourceEventsFor(info){const doc=documentFor(info),keys=info.source_event_ids||[];if(!doc)return [];return keys.flatMap(([rid,eid])=>{const rec=doc.reconciliations.find(r=>r.id===rid),event=rec&&rec.events.find(e=>e.id===eid);return event?[{reconciliation:rec.id,history_kind:rec.history_kind,selection:rec.selection,model:rec.model,event,placement:"Source event replaced by X; retained as a record, not drawn as a G event."}]:[];});}
 function nodeSet(tree,node){const result=new Set();const nodes=new Map(tree.nodes.map(n=>[n.id,n]));let queue=[node];while(queue.length){let id=queue.pop();result.add(id);queue.push(...nodes.get(id).children);}return result;}
 const cladeCache=new WeakMap();
 function cladeKey(tree,node){let keys=cladeCache.get(tree);if(!keys){keys=new Map();const nodes=new Map(tree.nodes.map(n=>[n.id,n]));const order=[],stack=[tree.root],leaves=new Map();while(stack.length){const id=stack.pop();order.push(id);stack.push(...nodes.get(id).children);}for(const id of order.reverse()){const n=nodes.get(id);const labels=n.children.length?n.children.flatMap(c=>leaves.get(c)).sort():[n.label];leaves.set(id,labels);keys.set(id,JSON.stringify([tree.id,labels]));}cladeCache.set(tree,keys);}return keys.get(node);}
-function collapseProblem(tree,node){if(state.layout==='topology_embedded'&&documents().some(doc=>doc.reconciliations.some(r=>r.upper_tree===tree.id)))return 'Upper context collapse requires a standalone or paired view.';const keys=documents().flatMap(doc=>doc.trees.filter(t=>t.id===tree.id&&t.nodes.some(n=>n.id===node)).map(t=>cladeKey(t,node)));return new Set(keys).size>1?'This tree/node ID names different clades across panels; a shared collapse would be ambiguous.':null;}
+function collapseProblem(tree,node){if(['topology_embedded','observed_embedded'].includes(state.layout)&&documents().some(doc=>doc.reconciliations.some(r=>r.upper_tree===tree.id)))return 'Upper context collapse requires a standalone or paired view.';const keys=documents().flatMap(doc=>doc.trees.filter(t=>t.id===tree.id&&t.nodes.some(n=>n.id===node)).map(t=>cladeKey(t,node)));return new Set(keys).size>1?'This tree/node ID names different clades across panels; a shared collapse would be ambiguous.':null;}
 function applyCollapse(){for(const item of items)item.removeAttribute("hidden");for(const clade of state.collapsed_clades||[]){for(const item of items){const info=details(item);const tree=treeFor(info);if(tree&&tree.id===clade.tree&&tree.nodes.some(n=>n.id===clade.node)&&info.owner[1]!==clade.node&&nodeSet(tree,clade.node).has(info.owner[1]))item.setAttribute("hidden","");}}}
-function select(item){items.forEach(x=>x.classList.remove('selected'));selected=details(item);const tree=treeFor(selected);for(const x of items){const d=details(x),other=treeFor(d);if(tree&&other&&cladeKey(tree,selected.owner[1])===cladeKey(other,d.owner[1]))x.classList.add('selected');}const metadata=[],doc=documentFor(selected);if(tree&&doc){for(const rec of doc.reconciliations){const lower=rec.lower_tree===tree.id,upper=rec.upper_tree===tree.id;if(!lower&&!upper)continue;for(const event of rec.events)if((lower?event.lower_node:event.upper_node)===selected.owner[1])metadata.push({panel:selected.panel,reconciliation:rec.id,history_kind:rec.history_kind,selection:rec.selection,model:rec.model,event});}}const button=document.getElementById('collapse');const problem=tree?collapseProblem(tree,selected.owner[1]):'Select a recorded clade.';button.disabled=!!problem;button.title=problem||'';document.getElementById('detail').textContent=JSON.stringify({primitive:selected,records:metadata,collapse_notice:problem},null,2);}
+function select(item){items.forEach(x=>x.classList.remove('selected'));selected=details(item);const tree=treeFor(selected);for(const x of items){const d=details(x),other=treeFor(d);if(tree&&other&&cladeKey(tree,selected.owner[1])===cladeKey(other,d.owner[1]))x.classList.add('selected');}const metadata=[],doc=documentFor(selected);if(tree&&doc){for(const rec of doc.reconciliations){const lower=rec.lower_tree===tree.id,upper=rec.upper_tree===tree.id;if(!lower&&!upper)continue;for(const event of rec.events)if((lower?event.lower_node:event.upper_node)===selected.owner[1])metadata.push({panel:selected.panel,reconciliation:rec.id,history_kind:rec.history_kind,selection:rec.selection,model:rec.model,event});}}if(tree&&doc){for(const transform of doc.transformations||[]){if(transform.model_id!=='X1')continue;const side=transform.source_tree===tree.id?'source':transform.target_tree===tree.id?'target':null;if(!side)continue;for(const block of transform.blocks){if(block[side+'_nodes'].includes(selected.owner[1])||block.boundaries.some(b=>b[side+'_node']===selected.owner[1]))metadata.push({transformation:transform.id,model_id:transform.model_id,block,placement:'Display only; no inferred species placement or time'});}}}metadata.push(...sourceEventsFor(selected));const button=document.getElementById('collapse');const problem=tree?collapseProblem(tree,selected.owner[1]):'Select a recorded clade.';button.disabled=!!problem;button.title=problem||'';document.getElementById('detail').textContent=JSON.stringify({primitive:selected,records:metadata,collapse_notice:problem},null,2);}
 items.forEach(item=>{item.addEventListener('click',()=>select(item));item.addEventListener('keydown',event=>{if(event.key==='Enter'||event.key===' '){event.preventDefault();select(item);}});});
-document.getElementById('search').addEventListener('input',event=>{const q=event.target.value.toLowerCase();items.forEach(item=>{const d=details(item);item.classList.toggle('match',!!q&&JSON.stringify(d).toLowerCase().includes(q));});});
+document.getElementById('search').addEventListener('input',event=>{const q=event.target.value.toLowerCase();items.forEach(item=>{const d=details(item);item.classList.toggle('match',!!q&&JSON.stringify([d,sourceEventsFor(d)]).toLowerCase().includes(q));});});
 document.getElementById('collapse').onclick=()=>{if(!selected)return;const tree=treeFor(selected);if(!tree||collapseProblem(tree,selected.owner[1]))return;state.collapsed_clades??=[];const key={tree:tree.id,node:selected.owner[1]};let i=state.collapsed_clades.findIndex(x=>x.tree===key.tree&&x.node===key.node);if(i<0)state.collapsed_clades.push(key);else state.collapsed_clades.splice(i,1);applyCollapse();};
 function zoom(scale){let [x,y,w,h]=svg.getAttribute('viewBox').split(' ').map(Number);if(w*scale<20||w*scale>100000)return;svg.setAttribute('viewBox',`${x+w*(1-scale)/2} ${y+h*(1-scale)/2} ${w*scale} ${h*scale}`);}
 document.getElementById('zoomin').onclick=()=>zoom(1/1.3);

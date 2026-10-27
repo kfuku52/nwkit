@@ -635,7 +635,9 @@ def test_x1_highlight_preserves_biological_event_colors():
     scene = build_scene(validate_document(record))
     assert any(p.kind == "line" and p.color == "#a03faa" for p in scene.primitives)
     assert all(
-        p.color == EVENT_STYLE[p.text][0] for p in scene.primitives if p.kind == "event"
+        p.color == EVENT_STYLE[p.text][0]
+        for p in scene.primitives
+        if p.kind == "event" and p.id.startswith("event:")
     )
 
 

@@ -22,6 +22,7 @@ from nwkit.reconciliation_import import import_saved_tsv
 from nwkit.reconciliation_render import write_scene
 from nwkit.reconciliation_scene import build_scene
 from nwkit.reconciliation_view import (
+    default_view,
     read_comparison,
     read_view,
     validate_comparison_view,
@@ -133,20 +134,18 @@ def draw_document_main(args):
     view: dict[str, Any] = (
         read_view(args.view_config, document)
         if args.view_config
-        else (
-            record["view"]
-            if record
-            else {
-                "schema_version": "0.1.0",
-                "kind": "reconciliation_view",
-                "layout": "topology_embedded",
-            }
-        )
+        else (record["view"] if record else default_view(document))
     )
     if args.view:
         view = dict(
-            view, layout={"embedded": "topology_embedded"}.get(args.view, args.view)
+            view,
+            layout={
+                "embedded": "topology_embedded",
+                "observed-embedded": "observed_embedded",
+            }.get(args.view, args.view),
         )
+        if args.view == "observed-embedded":
+            view["schema_version"] = "0.2.0"
     if document:
         validate_view(view, document)
     if documents:

@@ -14,6 +14,18 @@ from nwkit.reconciliation_document import (
 )
 
 
+def default_view(document):
+    """Use schematic G-in-S for X1 histories unless a saved/explicit view overrides it."""
+    observed = bool(document.record["reconciliations"]) and any(
+        t["model_id"] == "X1" for t in document.record["transformations"]
+    )
+    return {
+        "schema_version": "0.2.0" if observed else "0.1.0",
+        "kind": "reconciliation_view",
+        "layout": "observed_embedded" if observed else "topology_embedded",
+    }
+
+
 def validate_view(view, document=None):
     _fields(
         view,
@@ -23,9 +35,11 @@ def validate_view(view, document=None):
     )
     _string(view["layout"], "view layout")
     if (
-        view["schema_version"] != "0.1.0"
+        view["schema_version"] not in {"0.1.0", "0.2.0"}
         or view["kind"] != "reconciliation_view"
-        or view["layout"] not in {"standalone", "topology_embedded", "paired"}
+        or view["layout"]
+        not in {"standalone", "topology_embedded", "observed_embedded", "paired"}
+        or (view["layout"] == "observed_embedded" and view["schema_version"] != "0.2.0")
     ):
         raise ValueError("Unsupported reconciliation view version/layout.")
     for key in ("leaf_order", "event_colors"):
@@ -57,7 +71,7 @@ def validate_view(view, document=None):
             or item["node"] not in document.trees[item["tree"]].nodes
         ):
             raise ValueError("Collapsed clade is not in the scientific document.")
-    if document and view["layout"] == "topology_embedded":
+    if document and view["layout"] in {"topology_embedded", "observed_embedded"}:
         upper = {r["upper_tree"] for r in document.record["reconciliations"]}
         if any(item["tree"] in upper for item in view.get("collapsed_clades", [])):
             raise ValueError(

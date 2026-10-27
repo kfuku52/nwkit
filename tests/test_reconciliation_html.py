@@ -18,6 +18,46 @@ from nwkit.reconciliation_scene import build_scene
 TOY = Path(__file__).parents[1] / "examples/reconciliation/toy.json"
 
 
+def test_observed_embedding_keeps_x1_records_and_species_context():
+    from tests.test_reconciliation_observed import VIEW, fixture_document
+
+    doc = fixture_document()
+    actions = """
+const gene=items.find(x=>details(x).id.startsWith('observed-node:G:')&&details(x).owner[1]===source.trees.find(t=>t.id==='G').root);
+select(gene);assert.equal(document.getElementById('collapse').disabled,false);
+assert(document.getElementById('detail').textContent.includes('"model_id": "X1"'));
+document.getElementById('collapse').onclick();assert(items.some(x=>x.attrs.hidden!==undefined&&details(x).tree==='G'));
+assert(items.filter(x=>details(x).tree==='H').every(x=>x.attrs.hidden===undefined));
+const species=items.find(x=>details(x).id.startsWith('observed-upper:'));
+select(species);assert.equal(document.getElementById('collapse').disabled,true);
+"""
+    run_script(build_scene(doc, view=VIEW), doc.record, VIEW, actions)
+
+
+def test_default_mixed_projection_keeps_x1_and_recorded_dtl_interactions():
+    from nwkit.reconciliation_view import default_view
+    from tests.test_reconciliation_projection import mixed_document
+
+    doc = mixed_document()
+    actions = """
+assert.equal(state.layout,'observed_embedded');
+assert(!items.some(x=>details(x).id.startsWith('history-context:')||details(x).id.startsWith('context-')));
+const gene=items.find(x=>details(x).id.startsWith('observed-node:G:')&&details(x).owner[1]===source.trees.find(t=>t.id==='G').root);
+select(gene);assert(document.getElementById('detail').textContent.includes('"model_id": "X1"'));
+document.getElementById('collapse').onclick();
+assert(items.filter(x=>details(x).tree==='F').every(x=>x.attrs.hidden===undefined));
+for(const kind of ['duplication','loss']){
+select(gene);assert(document.getElementById('detail').textContent.includes('\"type\": \"'+kind+'\"'));
+assert(!items.some(x=>details(x).kind==='event'&&details(x).text===kind));
+}
+for(const kind of ['transfer']){
+const event=items.find(x=>details(x).tree==='F'&&details(x).kind==='event'&&details(x).text===kind);
+assert(event);select(event);assert(document.getElementById('detail').textContent.includes('"type": "'+kind+'"'));
+}
+"""
+    run_script(build_scene(doc), doc.record, default_view(doc), actions)
+
+
 def run_script(scene, source, view, actions):
     node = os.environ.get("NWKIT_TEST_NODE") or shutil.which("node")
     if node is None:

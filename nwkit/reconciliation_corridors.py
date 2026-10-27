@@ -6,6 +6,42 @@ import textwrap
 from bisect import bisect_left, bisect_right
 from collections import defaultdict
 
+from nwkit.reconciliation_spacing import horizontal_pitch, horizontal_tracks
+
+
+def sibling_corridor_widths(tree, widths):
+    """Keep both sides of each species split as wide as its crowded child."""
+    result = dict(widths)
+    for node in tree.nodes.values():
+        children = node["children"]
+        if children:
+            width = max(widths[child] for child in children)
+            result.update((child, width) for child in children)
+    return result
+
+
+def corridor_pitch(recs, unit, lanes, widths, spacing=12):
+    counts: defaultdict[str, list[int]] = defaultdict(lambda: [0, 0])
+    offsets: defaultdict[str, float] = defaultdict(float)
+    for rec in recs:
+        for event in rec["events"]:
+            branch = event["upper_node"]
+            if branch is None:
+                continue
+            if event["type"] == "speciation":
+                counts[branch][1] += 1
+            elif event["type"] != "leaf":
+                counts[branch][0] += 2 if event["type"] == "origin" else 1
+            offsets[branch] = max(
+                offsets[branch], abs(lanes[rec["id"], branch, event["lower_node"]])
+            )
+    return horizontal_pitch(
+        unit,
+        [sum(c) for c in counts.values()],
+        [(c[1], widths[b], offsets[b]) for b, c in counts.items()],
+        spacing,
+    )
+
 
 def corridor_lanes(recs, trees, spacing):
     """Share lanes across an ancestor and its descendant copy branches."""
@@ -116,7 +152,7 @@ def corridor_centers(tree, leaves, widths, spacing):
     return y, heights[tree.root]
 
 
-def speciation_forks(recs, xy, unit, lanes, widths):
+def speciation_forks(recs, xy, unit, lanes, widths, *, pitch=None):
     """Separate concurrent copy forks inside the species junction envelope."""
     groups = defaultdict(list)
     for rec in recs:
@@ -125,13 +161,14 @@ def speciation_forks(recs, xy, unit, lanes, widths):
                 branch = event["upper_node"]
                 lane = lanes[rec["id"], branch, event["lower_node"]]
                 groups[branch].append((lane, rec["id"], event["id"]))
+    if pitch is None:
+        pitch = corridor_pitch(recs, unit, lanes, widths)
     forks = {}
     for branch, events in groups.items():
         events.sort()
-        span = min(12 * (len(events) - 1), widths[branch] / 2 - 3, unit * 0.15)
-        for index, (_, rid, eid) in enumerate(events):
-            shift = span * (1 - index / max(1, len(events) - 1))
-            forks[rid, eid] = xy[branch][0] - shift
+        tracks = horizontal_tracks(xy[branch][0], len(events), pitch)
+        for (_, rid, eid), x in zip(events, tracks, strict=True):
+            forks[rid, eid] = x
     return forks
 
 

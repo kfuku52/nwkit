@@ -207,7 +207,10 @@
       ],
       "properties": {
         "schema_version": {
-          "const": "0.1.0"
+          "enum": [
+            "0.1.0",
+            "0.2.0"
+          ]
         },
         "kind": {
           "const": "reconciliation_view"
@@ -216,7 +219,8 @@
           "enum": [
             "standalone",
             "topology_embedded",
-            "paired"
+            "paired",
+            "observed_embedded"
           ]
         },
         "leaf_order": {
@@ -310,8 +314,30 @@
       },
       "additionalProperties": false,
       "$schema": "https://json-schema.org/draft/2020-12/schema",
-      "$id": "urn:reconciliation-view:0.1.0",
-      "description": "Executable display configuration; no inference is performed."
+      "$id": "urn:reconciliation-view:0.2.0",
+      "description": "Display contract; accepts legacy 0.1.0 and 0.2.0 schematic observed-G embedding. Scientific data remain separate.",
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "schema_version": {
+                "const": "0.1.0"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "layout": {
+                "enum": [
+                  "standalone",
+                  "topology_embedded",
+                  "paired"
+                ]
+              }
+            }
+          }
+        }
+      ]
     }
   },
   "additionalProperties": false,

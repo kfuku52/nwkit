@@ -7,14 +7,17 @@ import textwrap
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 
+from nwkit.reconciliation_colors import GENE_COLORS
 from nwkit.reconciliation_corridors import (
     add_marginalized_side_stubs,
     corridor_centers,
     corridor_lanes,
+    corridor_pitch,
     speciation_forks,
 )
 from nwkit.reconciliation_document import ReconciliationDocument
 from nwkit.reconciliation_labels import model_label, source_label, summary_label
+from nwkit.reconciliation_view import default_view
 
 
 @dataclass
@@ -31,6 +34,8 @@ class Primitive:
     tree: str | None = None
     outline_color: str | None = None
     annotation: str = ""
+    dashed: bool = False
+    source_event_ids: tuple[tuple[str, str], ...] = ()
 
 
 @dataclass
@@ -171,7 +176,7 @@ def _canonical_order(tree):
     return result
 
 
-def _event_geometry(rec, lower, upper, xy, unit, lanes, forks):
+def _event_geometry(rec, lower, upper, xy, unit, lanes, forks, pitch):
     by_node, by_branch = defaultdict(list), defaultdict(list)
     rank = {nid: index for index, nid in enumerate(_canonical_order(lower))}
     event_rank = {e["id"]: index for index, e in enumerate(rec["events"])}
@@ -193,30 +198,44 @@ def _event_geometry(rec, lower, upper, xy, unit, lanes, forks):
             (forks[rec["id"], e["id"]] for e in events if e["type"] == "speciation"),
             default=xy[branch][0],
         )
-        for index, event in enumerate(events):
+        free = [e for e in events if e["type"] not in {"leaf", "speciation"}]
+        offsets, cursor = {}, 0.0
+        for event in reversed(free):
+            if event["type"] == "origin":
+                cursor += pitch  # The larger origin star is not a vertical fork.
+            offsets[event["id"]] = cursor
+            cursor += pitch
+        parent_x = (
+            xy[upper.parents[branch]][0]
+            if branch in upper.parents
+            else xy[branch][0] - unit
+        )
+        if any(e["type"] == "speciation" for e in events):
+            free_right = interior_end - pitch
+        else:
+            free_right = (parent_x + xy[branch][0]) / 2 + (
+                min(offsets.values(), default=0) + max(offsets.values(), default=0)
+            ) / 2
+        free_positions = {eid: free_right - offset for eid, offset in offsets.items()}
+        for event in events:
             x, y = xy[branch]
-            fraction = (index + 1) / (len(events) + 1)
-            if event["type"] in {"leaf", "speciation"}:
-                fraction = 1
             y += lanes[rec["id"], branch, event["lower_node"]]
-            parent_x = (
-                xy[upper.parents[branch]][0] if branch in upper.parents else x - unit
-            )
             if event["type"] == "speciation":
                 event_x = forks[rec["id"], event["id"]]
+            elif event["type"] == "leaf":
+                event_x = x
             else:
-                right = x if event["type"] == "leaf" else interior_end
-                event_x = parent_x + (right - parent_x) * fraction
+                event_x = free_positions[event["id"]]
             positions[event["id"]] = (event_x, y)
             branches[event["id"]] = branch
     return by_node, positions, branches
 
 
-def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes, forks):
+def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes, forks, pitch):
     by_node, positions, branches = _event_geometry(
-        rec, lower, upper, xy, unit, lanes, forks
+        rec, lower, upper, xy, unit, lanes, forks, pitch
     )
-    color = ("#287d8e", "#bb7432", "#5e5fa8", "#478443")[offset % 4]
+    color = GENE_COLORS[offset % len(GENE_COLORS)]
     for nid in lower.order:
         events = by_node[nid]
         links = [(events[i - 1], events[i]) for i in range(1, len(events))]
@@ -234,16 +253,39 @@ def _lower_primitives(scene, rec, lower, upper, xy, unit, offset, lanes, forks):
                     raise ValueError(
                         "Transfer endpoint does not match its recorded recipient entry."
                     )
+                # Reserve a fresh recipient entry before its first event.
+                branch = branches[after["id"]]
+                parent_x = (
+                    xy[upper.parents[branch]][0]
+                    if branch in upper.parents
+                    else xy[branch][0] - unit
+                )
+                entry = (
+                    end
+                    if after["type"] == "transfer_in"
+                    else ((parent_x + end[0]) / 2, end[1])
+                )
                 scene.primitives.append(
                     Primitive(
                         "transfer",
                         f"transfer:{rec['id']}:{before['id']}",
-                        [start, end],
+                        [start, entry],
                         color=EVENT_STYLE["transfer"][0],
                         owner=(rec["id"], nid),
                         tree=lower.id,
                     )
                 )
+                if entry != end:
+                    scene.primitives.append(
+                        Primitive(
+                            "line",
+                            f"transfer-entry:{rec['id']}:{before['id']}",
+                            [entry, end],
+                            color=color,
+                            owner=(rec["id"], nid),
+                            tree=lower.id,
+                        )
+                    )
             else:
                 points = _route(
                     upper,
@@ -375,10 +417,21 @@ def build_scene(
         raise ValueError("Document width must be at least 5 inches.")
     if not math.isfinite(font_size) or not 0 < font_size <= 72:
         raise ValueError("Font size must be positive and at most 72 points.")
+    if view is None:
+        view = default_view(document)
     spacing = max(12, font_size * 1.5)
     recs = document.record["reconciliations"]
     upper_ids = {r["upper_tree"] for r in recs}
     lower_ids = {r["lower_tree"] for r in recs}
+    if (view or {}).get("layout") == "observed_embedded":
+        from nwkit.reconciliation_composition import compose_observed_document
+
+        return _display_selection(
+            compose_observed_document(
+                document, width=width, font_size=font_size, view=view
+            ),
+            document,
+        )
     if (view or {}).get("layout") == "standalone" or not recs:
         scene = _standalone_scene(document, width, spacing, view)
         scene.notices.append(source_label(document.record))
@@ -415,7 +468,8 @@ def build_scene(
         branch_widths=widths,
     )
     scene = Scene(width, height)
-    forks = speciation_forks(recs, xy, unit, lanes, widths)
+    pitch = corridor_pitch(recs, unit, lanes, widths, spacing)
+    forks = speciation_forks(recs, xy, unit, lanes, widths, pitch=pitch)
     for nid, points in _upper_paths(upper, xy, unit).items():
         scene.primitives.append(
             Primitive(
@@ -454,6 +508,7 @@ def build_scene(
             index,
             lanes,
             forks,
+            pitch,
         )
         scene.notices.append(model_label(rec))
         if (

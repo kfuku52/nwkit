@@ -5,8 +5,10 @@ from __future__ import annotations
 import copy
 from collections import Counter
 
+from nwkit.reconciliation_colors import X1_COLOR, x1_internal_children
 from nwkit.reconciliation_document import validate_document
 from nwkit.reconciliation_labels import runtime_label, source_label
+from nwkit.reconciliation_projection import history_x1_edges, observed_context
 from nwkit.reconciliation_scene import Primitive, Scene, _standalone_scene, build_scene
 from nwkit.reconciliation_view import view_for_document
 
@@ -43,6 +45,44 @@ def subset(document, trees, recs=()):
     record["transformations"] = []
     record["provenance"].pop("display_selection", None)
     return validate_document(record)
+
+
+def compose_observed_document(document, *, width, font_size, view):
+    from nwkit.reconciliation_observed import observed_topology_scene
+
+    if not document.record["transformations"]:
+        return build_scene(
+            document,
+            width=width,
+            font_size=font_size,
+            view=dict(view, layout="topology_embedded"),
+        )
+    return observed_topology_scene(
+        document, width=width, font_size=font_size, view=view
+    )
+
+
+def observed_history_scene(document, *, width, font_size, view=None):
+    """Keep recorded events and highlight X1 correspondences through loss pruning."""
+    context = observed_context(document)
+    rec = context.rec
+    part = subset(document, {rec["upper_tree"], rec["lower_tree"]}, [rec])
+    history = build_scene(part, width=width, font_size=font_size, view=view)
+    internal = history_x1_edges(context)
+    for primitive in history.primitives:
+        if (
+            primitive.kind == "line"
+            and primitive.tree == rec["lower_tree"]
+            and primitive.owner
+            and primitive.owner[1] in internal
+        ):
+            primitive.color = X1_COLOR
+            primitive.width = max(primitive.width, 2.4)
+            primitive.annotation = (
+                "X1 internal-branch correspondence to H; any loss-pruned history mapping "
+                "is verified. Recorded events and their colors remain unchanged."
+            )
+    return history
 
 
 def compose_document(document, *, width, font_size, view=None):
@@ -90,21 +130,22 @@ def compose_document(document, *, width, font_size, view=None):
         )
         for block in transform["blocks"]:
             scene.notices.append(
-                f"{block['id']}: two adjacent H nodes map to two adjacent {transform['target_tree']} nodes; resolution={block['resolution']}; three boundary clades retained in source JSON. Purple branches mark the consumed nodes. X1 has no physical event time or ILS interpretation."
+                f"{block['id']}: two adjacent H nodes map to two adjacent {transform['target_tree']} nodes; resolution={block['resolution']}; three boundary clades retained in source JSON. Purple marks the internal branch joining each consumed pair; incoming and boundary branches retain their usual colors. X1 has no physical event time or ILS interpretation."
             )
             for side, field in (
                 ("source_tree", "source_nodes"),
                 ("target_tree", "target_nodes"),
             ):
                 tid = transform[side]
+                internal = x1_internal_children(document.trees[tid], [block], field)
                 for p in scene.primitives:
                     if (
                         p.kind == "line"
                         and p.owner
                         and p.tree == tid
-                        and p.owner[1] in block[field]
+                        and p.owner[1] in internal
                     ):
-                        p.color = "#a03faa"
+                        p.color = X1_COLOR
                         p.width = max(p.width, 2.4)
     if len({r["upper_tree"] for r in recs} & {r["lower_tree"] for r in recs}):
         scene.notices.append(

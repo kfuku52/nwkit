@@ -27,10 +27,16 @@ def test_every_recorded_event_and_transfer_endpoint_is_in_scene():
     donor = next(e for e in rec["events"] if e["type"] == "transfer_out")
     receiver = next(e for e in rec["events"] if e["type"] == "transfer_in")
     arrow = next(p for p in scene.primitives if p.kind == "transfer")
-    assert arrow.points == [
-        scene.event_points[rec["id"], donor["id"]],
-        scene.event_points[rec["id"], receiver["id"]],
-    ]
+    continuation = next(
+        p
+        for p in scene.primitives
+        if p.kind == "line"
+        and p.points[0] == scene.event_points[rec["id"], receiver["id"]]
+    )
+    assert arrow.points[0] == scene.event_points[rec["id"], donor["id"]]
+    assert arrow.points[-1] == continuation.points[0]
+    assert arrow.points[-1] == scene.event_points[rec["id"], receiver["id"]]
+    assert continuation.points[0][0] < continuation.points[-1][0]
     assert "do not represent times" in scene.caption
 
 
