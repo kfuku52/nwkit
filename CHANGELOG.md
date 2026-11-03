@@ -4,6 +4,16 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.45.3] - 2026-11-03
+
+### Added
+
+- Export stable species-clade IDs for every implied LCA loss, including repeated
+  losses of separate copies on one species edge. Counts retain the existing
+  duplication/speciation convention and exclude losses above the gene root.
+- Keep loss locations unavailable for NHX/overlap or unmapped events; mapped
+  LCA gene leaves explicitly have an empty loss list.
+
 ## [0.45.2] - 2026-10-27
 
 ### Changed
