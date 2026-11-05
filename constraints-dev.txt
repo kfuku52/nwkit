@@ -7,11 +7,11 @@ check-wheel-contents==0.6.3
 coverage==7.16.2
 diff-cover==10.6.0
 hypothesis==6.168.5
-mypy==2.4.0
+mypy==2.4.1
 pip-audit==2.10.1
-pytest==9.1.1
+pytest==9.2.0
 pytest-cov==7.1.0
 pytest-xdist==3.8.0
 radon==6.0.1
-ruff==0.16.10
+ruff==0.17.3
 twine==7.0.0
