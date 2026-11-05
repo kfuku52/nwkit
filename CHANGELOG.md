@@ -4,6 +4,26 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.0] - 2026-11-05
+
+### Added
+
+- Provide reusable parent/LCA, branch-feature, constraint, foreground, tool-tree,
+  calibration, reconciliation-record and presentation APIs for workflows.
+- Add opt-in `extended-taxonomic` species parsing, ASTRAL support-label
+  conversion, comment removal and optional R tree/chain diagnostic backends.
+
+### Fixed
+
+- Preserve strict support transfer and ordered raw reconciliation evidence;
+  reject invalid result taxa, repeated chain inputs and malformed samples.
+- Stage validated GeneRax exports before publication and protect input paths.
+
+### Performance
+
+- Avoid quadratic ancestor and foreground-clade storage on deep trees, batch
+  numbered clade keys, and avoid unused split reports during property transfer.
+
 ## [0.45.3] - 2026-11-03
 
 ### Added

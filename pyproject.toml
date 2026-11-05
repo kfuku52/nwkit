@@ -91,7 +91,7 @@ include = ["nwkit"]
 namespaces = false
 
 [tool.setuptools.package-data]
-nwkit = ["data_tree/*.nwk", "data_model/*.txt", "data_iqtree/*.cpp", "data_angiocal/*.tsv", "data_angiocal/README.md", "data_schema/*.json"]
+nwkit = ["data_r/*.R", "data_geology/*.tsv", "data_tree/*.nwk", "data_model/*.txt", "data_iqtree/*.cpp", "data_angiocal/*.tsv", "data_angiocal/README.md", "data_schema/*.json"]
 
 [tool.ruff]
 target-version = "py310"

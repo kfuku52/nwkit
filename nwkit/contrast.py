@@ -1634,3 +1634,7 @@ def contrast_main(args):
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":
         print(table.to_csv(sep="\t", index=False), end="")
+
+
+# Public trait preparation API; private spellings remain compatible.
+read_mixed_replicate_traits = _read_mixed_replicate_traits

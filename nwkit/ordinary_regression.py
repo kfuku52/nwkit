@@ -3490,3 +3490,8 @@ def write_ordinary_regression_outputs(
         _write_dataframes_transactionally(file_outputs)
     if args.outfile == "-":
         print(artifacts.results.to_csv(sep="\t", index=False), end="")
+
+
+# Public trait preparation API; private spellings remain compatible.
+ordinary_predictor_values = _ordinary_predictor_values
+sampling_covariance_table = _sampling_covariance_table
