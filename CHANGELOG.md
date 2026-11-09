@@ -4,6 +4,26 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.1] - 2026-11-09
+
+### Added
+
+- Use the checksum-verified VertLife amphibian consensus as a reference for
+  topology constraints, dated branch lengths, rooting, and divergence-age reports.
+- Support offline reference files and cached downloads. Include species matching
+  and source provenance in the reports.
+
+### Fixed
+
+- Preserve input branch precision and annotations in VertLife rooting and age
+  reports. Accept rooted polytomies in the age-report mode.
+- Read UTF-8 species lists with an optional byte-order mark.
+
+### Performance
+
+- Check repeated-species groups and projected root splits without rescanning
+  descendant tip sets. Share downloads across concurrent cache misses.
+
 ## [0.46.0] - 2026-11-05
 
 ### Added

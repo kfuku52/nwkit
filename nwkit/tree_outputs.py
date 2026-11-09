@@ -23,13 +23,20 @@ def write_table_report(table, path):
 
 
 def write_tree_with_tables(
-    tree, args, *, format, tables=(), props=None, create_table_parents=False
+    tree,
+    args,
+    *,
+    format,
+    tables=(),
+    props=None,
+    create_table_parents=False,
+    parser=None,
 ):
     tables = [(path, table) for path, table in tables if path not in (None, "")]
     if any(path == "-" for path, _ in tables):
         raise ValueError("Companion tables require file paths, not '-'.")
     if not tables:
-        write_tree(tree, args, format=format, props=props)
+        write_tree(tree, args, format=format, props=props, parser=parser)
         return
     stream_output = args.outfile == "-" or hasattr(args.outfile, "write")
     paths = [path for path, _ in tables]
@@ -64,7 +71,7 @@ def write_tree_with_tables(
                 )
             if stream_output:
                 output_args.outfile = buffer
-                write_tree(tree, output_args, format=format, props=props)
+                write_tree(tree, output_args, format=format, props=props, parser=parser)
                 if args.outfile == "-":
                     # write_tree normally uses print() for stdout, but writes
                     # no newline when given a file-like object.
@@ -73,6 +80,8 @@ def write_tree_with_tables(
 
                 def write_staged_tree(handle):
                     output_args.outfile = handle
-                    write_tree(tree, output_args, format=format, props=props)
+                    write_tree(
+                        tree, output_args, format=format, props=props, parser=parser
+                    )
 
                 staged.write_text(args.outfile, write_staged_tree)

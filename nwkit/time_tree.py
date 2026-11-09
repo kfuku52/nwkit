@@ -438,19 +438,8 @@ def posterior_sample_tree(tree, posterior, sample_index):
     return copied
 
 
-def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
-    """Annotate ages, allowing rounding within one whole-tree error budget.
-
-    The root-to-tip spread must not exceed ``max(tolerance, tolerance *
-    height)``. Scaling by the tree height keeps rounded short terminal branches
-    from failing a much tighter local test. Tracking the extreme paths, rather
-    than just child means, prevents errors accumulating unnoticed in deep trees.
-    Existing point estimates, intervals and branch lengths are preserved.
-    """
-
-    tolerance = float(tolerance)
-    if not math.isfinite(tolerance) or tolerance < 0.0:
-        raise ValueError("Dated-tree tolerance must be finite and nonnegative.")
+def node_age_estimates_and_ranges(tree):
+    """Compute ages from child means and the range of paths to extant tips."""
     age_by_node = {}
     ranges = {}
     for node in tree.traverse(strategy="postorder"):
@@ -474,6 +463,23 @@ def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
             raise ValueError("Dated-tree path lengths must be finite.")
         age_by_node[node] = age
         ranges[node] = (min(minima), max(maxima))
+    return age_by_node, ranges
+
+
+def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
+    """Annotate ages, allowing rounding within one whole-tree error budget.
+
+    The root-to-tip spread must not exceed ``max(tolerance, tolerance *
+    height)``. Scaling by the tree height keeps rounded short terminal branches
+    from failing a much tighter local test. Tracking the extreme paths, rather
+    than just child means, prevents errors accumulating unnoticed in deep trees.
+    Existing point estimates, intervals and branch lengths are preserved.
+    """
+
+    tolerance = float(tolerance)
+    if not math.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("Dated-tree tolerance must be finite and nonnegative.")
+    age_by_node, ranges = node_age_estimates_and_ranges(tree)
     low, high = ranges[tree]
     if high - low > max(tolerance, tolerance * high):
         raise ValueError(

@@ -243,6 +243,20 @@ p_download.add_argument(
     help="Force a checksum check and rebuild the ETE4 taxonomy cache when NCBI has a newer archive.",
 )
 
+p_vertlife = NwkitArgumentParser(add_help=False)
+p_vertlife.add_argument(
+    "--vertlife-dataset",
+    "--vertlife_dataset",
+    metavar="ID",
+    help="Use the specified VertLife reference. Supported: amphibians-2018-consensus.",
+)
+p_vertlife.add_argument(
+    "--vertlife-file",
+    "--vertlife_file",
+    metavar="PATH",
+    help="Use a local checksum-verified copy of the selected VertLife reference.",
+)
+
 p_tree_input = NwkitArgumentParser(add_help=False, parents=[p_audit])
 p_tree_input.add_argument(
     "-i",
@@ -1482,7 +1496,7 @@ def command_constrain(args):
 pconstrain = subparsers.add_parser(
     "constrain",
     help="Generate a species-tree-like Newick file for topological constraint",
-    parents=[p_parent, p_download, p_species],
+    parents=[p_parent, p_download, p_species, p_vertlife],
 )
 pconstrain.add_argument(
     "--species-list",
@@ -1514,19 +1528,33 @@ pconstrain.add_argument(
 )
 pconstrain.add_argument(
     "--backbone",
-    metavar="ncbi|ncbi_apgiv|ncbi_apgv|ncbi_user|user",
+    metavar="ncbi|ncbi_apgiv|ncbi_apgv|ncbi_user|user|vertlife",
     default="ncbi",
     type=str,
     required=False,
     action="store",
-    choices=["ncbi", "ncbi_apgiv", "ncbi_apgv", "ncbi_user", "user"],
+    choices=["ncbi", "ncbi_apgiv", "ncbi_apgv", "ncbi_user", "user", "vertlife"],
     help="default=%(default)s: The backbone for tree constraint. "
-    '--infile is not required except for "user". '
+    '--infile is required for "user" and "ncbi_user". '
     "ncbi: Infer NCBI Taxonomy ID from species name, and generate a tree based on the ranks. "
     "ncbi_apgiv: Infer NCBI Taxonomy ID from species name, and match it with the order-level angiosperm phylogeny in APG IV (https://doi.org/10.1111/boj.12385). "
     "ncbi_apgv: Infer NCBI Taxonomy ID from species name, and match it with the APG V angiosperm backbone (66 orders plus Huaceae and Columelliaceae; https://doi.org/10.1111/jse.70096). "
     "ncbi_user: Infer NCBI Taxonomy ID from species name, and match the ranks with the labels of the user-provided tree. "
-    "user: User-provided tree in --infile.",
+    "user: User-provided tree in --infile. "
+    "vertlife: Match species against the tree selected by --vertlife-dataset.",
+)
+pconstrain.add_argument(
+    "--branch-length",
+    "--branch_length",
+    choices=["none", "original"],
+    default="none",
+    help="default=none: Output topology only. With --backbone vertlife, "
+    "original preserves the reference's dated branch lengths in millions of years.",
+)
+pconstrain.add_argument(
+    "--report",
+    metavar="PATH",
+    help="Optional TSV of species matches and source provenance for --backbone vertlife.",
 )
 pconstrain.add_argument(
     "--rank",
@@ -4924,7 +4952,7 @@ def command_mcmctree(args):
 pmcmctree = subparsers.add_parser(
     "mcmctree",
     help="Prepare MCMCtree calibrations or summarize its posterior node ages",
-    parents=[p_tree_input, p_download, p_species],
+    parents=[p_tree_input, p_download, p_species, p_vertlife],
 )
 pmcmctree.add_argument(
     "-o",
@@ -4934,7 +4962,8 @@ pmcmctree.add_argument(
     type=str,
     required=False,
     action="store",
-    help='default=%(default)s: Output MCMCtree calibration tree or posterior dated NHX tree. Use "-" for STDOUT.',
+    help="default=%(default)s: Output MCMCtree calibration tree or posterior dated NHX tree. "
+    'With --vertlife-dataset, write the input tree alongside the age report. Use "-" for STDOUT.',
 )
 pmcmctree.add_argument(
     "--left-species",
@@ -5101,7 +5130,8 @@ pmcmctree.add_argument(
     "--report",
     metavar="PATH",
     default=None,
-    help="default=None: AngioCal TSV with each fossil's placement, bounds, references and exclusion reason.",
+    help="AngioCal fossil placement TSV, or required VertLife TSV with reference ages "
+    "for matching clades. VertLife ages are reported as estimates without assigning priors.",
 )
 pmcmctree.add_argument(
     "--higher-rank-search",
@@ -5410,7 +5440,7 @@ def command_root(args):
 proot = subparsers.add_parser(
     "root",
     help="Place or transfer the tree root",
-    parents=[p_parent, p_download, p_species],
+    parents=[p_parent, p_download, p_species, p_vertlife],
 )
 proot.add_argument(
     "-i2",
@@ -5546,8 +5576,9 @@ proot.add_argument(
     help='default=%(default)s: Comma-separated taxonomy/tree sources used when --method "taxonomy" is selected. '
     "Each source is tried in order until rooting succeeds. When taxids are inferred from leaf labels, "
     "taxonomy queries are controlled by --species-parser/--species-regex/--species-map-tsv. "
-    "Repeated species labels are allowed for timetree/opentree only when their tips are monophyletic. "
-    "Supported sources: ncbi, timetree, opentree.",
+    "For timetree, opentree, and vertlife, repeated species labels require monophyletic tips. "
+    "Supported sources: ncbi, timetree, opentree, vertlife. "
+    "VertLife requires --vertlife-dataset.",
 )
 proot.add_argument(
     "--taxid-tsv",

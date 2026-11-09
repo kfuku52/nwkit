@@ -8,8 +8,14 @@ import ete4
 import numpy as np
 import pandas as pd
 
+from nwkit.file_paths import (
+    validate_distinct_output_paths,
+    validate_outputs_do_not_replace_inputs,
+)
 from nwkit.rooting_state import set_rooting_info
+from nwkit.tree_outputs import write_table_report, write_tree_with_tables
 from nwkit.util import (
+    TREE_FORMAT_PROP,
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     label2sciname,
@@ -479,8 +485,109 @@ def _prepare_constraint_output(tree, backbone):
     return tree
 
 
+def _vertlife_constraint_options(args):
+    dated = getattr(args, "branch_length", "none") == "original"
+    report = getattr(args, "report", None)
+    if args.backbone != "vertlife":
+        if dated or any(
+            (
+                report,
+                getattr(args, "vertlife_dataset", None),
+                getattr(args, "vertlife_file", None),
+            )
+        ):
+            raise ValueError("VertLife options require '--backbone vertlife'.")
+        return None
+    if getattr(args, "infile", "-") != "-" or getattr(args, "rank", "no") != "no":
+        raise ValueError(
+            "'--infile' and '--rank' do not apply to '--backbone vertlife'."
+        )
+    if report == "-":
+        raise ValueError("'--report' requires a file path.")
+    return dated
+
+
+def _vertlife_constraint_output(tree, args, dated, report):
+    from nwkit.vertlife import precise_tree_parser
+
+    format = 9
+    parser = None
+    if dated:
+        requested = getattr(args, "outformat", "auto")
+        format = tree.props[TREE_FORMAT_PROP] if requested == "auto" else int(requested)
+        parser = precise_tree_parser(format)
+        if any(fields[1]["pname"] != "dist" for fields in parser.values()):
+            raise ValueError("'--outformat' must retain branch lengths in dated mode.")
+    write_tree_with_tables(
+        tree,
+        args,
+        format=format,
+        tables=[(getattr(args, "report", None), report)],
+        parser=parser,
+    )
+
+
+def _constrain_vertlife(args, labels, dated):
+    from nwkit.vertlife import load_vertlife, match_species, subset_reference
+
+    report_path = getattr(args, "report", None)
+    outputs = [("--outfile", args.outfile), ("--report", report_path)]
+    validate_distinct_output_paths(outputs)
+    validate_outputs_do_not_replace_inputs(
+        [
+            ("--species-list", args.species_list),
+            ("--species-map-tsv", getattr(args, "species_map_tsv", None)),
+        ],
+        outputs,
+    )
+    dataset, reference = load_vertlife(args)
+    matches = match_species(reference, labels, args)
+    groups = defaultdict(list)
+    for label, _, name, _ in matches:
+        if name is not None:
+            groups[name].append(label)
+    duplicate = {name for name, group in groups.items() if len(group) > 1}
+    conflicting = duplicate if dated and not args.collapse else set()
+    report = pd.DataFrame(
+        [
+            (label, query, name, "duplicate_species" if name in conflicting else status)
+            for label, query, name, status in matches
+        ],
+        columns=("leaf_name", "taxonomy_query", "vertlife_leaf_name", "status"),
+    ).assign(dataset=dataset.id, source_doi=dataset.doi, source_sha256=dataset.sha256)
+    unmatched = [label for label, _, name, _ in matches if name is None]
+    if unmatched or conflicting or (dated and len(groups) < 2):
+        write_table_report(report, report_path)
+        if unmatched:
+            raise ValueError(
+                "Unmatched VertLife labels: {}.".format(", ".join(unmatched))
+            )
+        if conflicting:
+            raise ValueError(
+                "Dated VertLife constraints require one label per species or '--collapse yes': {}.".format(
+                    ", ".join(sorted(conflicting))
+                )
+            )
+        raise ValueError(
+            "Dated VertLife constraints require at least two matched species."
+        )
+    tree = subset_reference(reference, groups)
+    if not args.collapse:
+        for leaf in tree.leaves():
+            leaf.props["taxon_names"] = groups[leaf.name]
+        polytomize_one2many_matches(tree)
+    for node in tree.traverse():
+        node.name = (node.name or "").replace(" ", "_")
+    validate_unique_named_leaves(tree, option_name="--species-list")
+    _vertlife_constraint_output(tree, args, dated, report)
+
+
 def constrain_main(args):
+    vertlife_dated = _vertlife_constraint_options(args)
     labels, taxid_df = check_input_file(args)
+    if vertlife_dated is not None:
+        _constrain_vertlife(args, labels, vertlife_dated)
+        return
     if args.backbone == "ncbi":
         ncbi = get_ete_ncbitaxa(args=args)
         try:

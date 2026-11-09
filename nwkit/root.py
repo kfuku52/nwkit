@@ -6,7 +6,7 @@ from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal, localcontext
 from fractions import Fraction
-from itertools import combinations
+from itertools import combinations, pairwise
 from typing import Any
 
 import requests
@@ -39,6 +39,7 @@ from nwkit.util import (
     extract_taxonomy_query,
     get_ete_ncbitaxa,
     get_species_group_records,
+    get_subtree_leaf_index_extents,
     get_subtree_leaf_name_sets,
     get_tree_property_names,
     is_all_leaf_names_identical,
@@ -562,6 +563,7 @@ def _prepare_annotations_for_reroot(tree):
         "internal": _snapshot_internal_branch_annotations(tree),
         "root": _snapshot_node_annotation(tree),
         "root_dist": tree.dist,
+        "tree_format": tree.props.get(TREE_FORMAT_PROP),
         "missing_branch_lengths": _snapshot_missing_branch_lengths(tree),
         "leaves_by_identity": {
             id(leaf): _snapshot_node_annotation(leaf, include_name=False)
@@ -595,6 +597,8 @@ def _finish_annotations_after_reroot(tree, snapshot, verbose=False):
         _restore_node_annotation(leaf, annotation, include_name=False)
     _restore_missing_branch_lengths(tree, snapshot["missing_branch_lengths"])
     tree.dist = snapshot["root_dist"]
+    if snapshot["tree_format"] is not None:
+        tree.props[TREE_FORMAT_PROP] = snapshot["tree_format"]
     if verbose and snapshot["internal"]["conflicts"]:
         sys.stderr.write(
             "Dropped {} conflicting root-edge annotation(s) while rerooting.\n".format(
@@ -1881,7 +1885,10 @@ def _order_taxid_tsv_to_match_tree(tree, taxid_df):
     return taxid_df.set_index("leaf_name").loc[tree_leaf_names].reset_index()
 
 
-def _parse_taxonomy_sources(taxonomy_source):
+def _parse_taxonomy_sources(taxonomy_source, *, allow_vertlife=False):
+    supported: tuple[str, ...] = SUPPORTED_TAXONOMY_SOURCES
+    if allow_vertlife:
+        supported += ("vertlife",)
     if isinstance(taxonomy_source, (list, tuple)):
         raw_sources = taxonomy_source
     else:
@@ -1892,11 +1899,11 @@ def _parse_taxonomy_sources(taxonomy_source):
         source = str(raw_source).strip().lower()
         if source == "":
             continue
-        if source not in SUPPORTED_TAXONOMY_SOURCES:
+        if source not in supported:
             raise ValueError(
                 "Unknown taxonomy source: {}. Supported sources are: {}.".format(
                     source,
-                    ", ".join(SUPPORTED_TAXONOMY_SOURCES),
+                    ", ".join(supported),
                 )
             )
         if source in seen:
@@ -1945,7 +1952,7 @@ def _build_ncbi_reference_tree(
 def _resolve_full_outgroup_set_from_resolved_split(
     tree, resolved_outgroup_set, resolved_leaf_set, source_name
 ):
-    analysis_tree = _collapse_singleton_root(tree.copy())
+    analysis_tree = _collapse_singleton_root(tree)
     validate_unique_named_leaves(
         analysis_tree, option_name="--infile", context=" for taxonomy rooting"
     )
@@ -1958,42 +1965,48 @@ def _resolve_full_outgroup_set_from_resolved_split(
         raise ValueError("No root bipartition found in --infile.")
     if not resolved_leaf_set <= leaf_name_set:
         raise ValueError("No root bipartition found in --infile.")
-    root_children = analysis_tree.get_children()
-    subtree_leaf_sets = get_subtree_leaf_name_sets(analysis_tree)
-    matching_edges: dict[Any, Any] = {}
     resolved_ingroup_set = resolved_leaf_set - resolved_outgroup_set
-    for node in analysis_tree.traverse():
+    outgroup_counts = (len(resolved_outgroup_set), 0)
+    ingroup_counts = (0, len(resolved_ingroup_set))
+    counts: dict[Any, tuple[int, int]] = {}
+    match_edge = match_node = None
+    descendant_side_is_outgroup = False
+    for node in analysis_tree.traverse(strategy="postorder"):
         if node.is_root:
             continue
-        node_leaf_set = set(subtree_leaf_sets[node])
-        node_resolved_set = node_leaf_set.intersection(resolved_leaf_set)
-        if (len(node_resolved_set) == 0) or (node_resolved_set == resolved_leaf_set):
-            continue
-        if node_resolved_set == resolved_outgroup_set:
-            full_outgroup_set = node_leaf_set
-        elif node_resolved_set == resolved_ingroup_set:
-            full_outgroup_set = leaf_name_set - node_leaf_set
+        if node.is_leaf:
+            pair = (
+                int(node.name in resolved_outgroup_set),
+                int(node.name in resolved_ingroup_set),
+            )
         else:
+            children = [counts.pop(child) for child in node.children]
+            pair = (sum(out for out, _ in children), sum(inn for _, inn in children))
+        counts[node] = pair
+        if pair not in (outgroup_counts, ingroup_counts):
             continue
-        edge_key = (
-            ("root_edge",)
-            if ((node.up is analysis_tree) and (len(root_children) == 2))
+        # The two branches of a binary root are the halves of one edge.
+        edge = (
+            analysis_tree
+            if node.up is analysis_tree and len(analysis_tree.children) == 2
             else node
         )
-        previous = matching_edges.get(edge_key)
-        if previous is None:
-            matching_edges[edge_key] = set(full_outgroup_set)
-        elif previous != set(full_outgroup_set):
-            raise ValueError("Internal error while deduplicating candidate root edges.")
-    if len(matching_edges) == 0:
-        raise ValueError("No root bipartition found in --infile.")
-    if len(matching_edges) > 1:
-        raise ValueError(
-            "Unresolved leaf clade(s) interfere with the {}-derived root position in --infile.".format(
-                source_name
+        if match_edge is not None and edge is not match_edge:
+            raise ValueError(
+                "Unresolved leaf clade(s) interfere with the {}-derived root position in --infile.".format(
+                    source_name
+                )
             )
-        )
-    return next(iter(matching_edges.values()))
+        match_edge, match_node = edge, node
+        descendant_side_is_outgroup = pair == outgroup_counts
+    if match_node is None:
+        raise ValueError("No root bipartition found in --infile.")
+    descendant_side = set(match_node.leaf_names())
+    return (
+        descendant_side
+        if descendant_side_is_outgroup
+        else leaf_name_set - descendant_side
+    )
 
 
 def _transfer_root_from_reference_with_unresolved(
@@ -2143,10 +2156,8 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
     outgroup_set = set(outgroup_set)
     if len(outgroup_set) == 0:
         raise ValueError("No root bipartition found in --infile.")
-    leaf_name_set = set(tree.leaf_names())
-    if not outgroup_set <= leaf_name_set:
-        raise ValueError("No root bipartition found in --infile.")
-    if outgroup_set == leaf_name_set:
+    leaves = {leaf.name: leaf for leaf in tree.leaves()}
+    if not outgroup_set < leaves.keys():
         raise ValueError("No root bipartition found in --infile.")
     if verbose:
         sys.stderr.write("Outgroups: {}\n".format(" ".join(sorted(outgroup_set))))
@@ -2158,24 +2169,17 @@ def _root_by_outgroup_set(tree, outgroup_set, verbose=False):
     )
     annotation_backup = None
     if not is_root_bipartition_already_matching:
-        ingroup_set = leaf_name_set - outgroup_set
         annotation_backup = _prepare_annotations_for_reroot(tree)
         for node in tree.traverse():
             if node.dist is None:
                 node.dist = 0.0
         _normalize_root_distance_for_reroot(tree)
-        tree.set_outgroup(_first_leaf_name(tree, ingroup_set))
-        if len(outgroup_set) == 1:
-            outgroup_name = min(outgroup_set, key=str)
-            outgroup_ancestor = None
-            for leaf in tree.leaves():
-                if leaf.name == outgroup_name:
-                    outgroup_ancestor = leaf
-                    break
-            if outgroup_ancestor is None:
-                raise ValueError("No root bipartition found in --infile.")
-        else:
-            outgroup_ancestor = tree.common_ancestor(sorted(outgroup_set, key=str))
+        tree.set_outgroup(
+            next(leaf for name, leaf in leaves.items() if name not in outgroup_set)
+        )
+        outgroup_ancestor = tree.common_ancestor(
+            [leaves[name] for name in outgroup_set]
+        )
         reroot_leaf_sets = get_subtree_leaf_name_sets(tree)
         if outgroup_set != reroot_leaf_sets[outgroup_ancestor]:
             raise ValueError("No root bipartition found in --infile.")
@@ -2428,6 +2432,74 @@ def _build_opentree_reference_tree(tree, args=None):
             close()
 
 
+def _validate_vertlife_species_groups(tree, groups, labels):
+    repeated = [group for group in groups.values() if len(group) > 1]
+    if not repeated:
+        return
+    tip_order = {name: i for i, name in enumerate(labels)}
+    edge_extents = set(get_subtree_leaf_index_extents(tree, tip_order).values())
+    for group in repeated:
+        positions = [tip_order[name] for name in group]
+        if not _is_vertlife_species_split(positions, edge_extents, len(labels)):
+            raise ValueError(
+                "Labels matched to the same VertLife species must be monophyletic "
+                "on the unrooted input topology: {}.".format(", ".join(group))
+            )
+
+
+def _is_vertlife_species_split(positions, edge_extents, tip_count):
+    first, last = positions[0], positions[-1]
+    group_size = len(positions)
+    gap_size = tip_count - group_size
+    if (first, last, group_size) in edge_extents:
+        return True
+    # The complementary side of an edge can also be a contiguous interval.
+    if first == 0 and last + 1 == group_size:
+        return (last + 1, tip_count - 1, gap_size) in edge_extents
+    if last == tip_count - 1 and tip_count - first == group_size:
+        return (0, first - 1, gap_size) in edge_extents
+    return (
+        first == 0
+        and last == tip_count - 1
+        and any(
+            right - left - 1 == gap_size
+            and (left + 1, right - 1, gap_size) in edge_extents
+            for left, right in pairwise(positions)
+        )
+    )
+
+
+def _build_vertlife_reference_split(tree, args):
+    from nwkit.vertlife import load_vertlife, match_species, subset_reference
+
+    validate_unique_named_leaves(tree, option_name="--infile")
+    try:
+        dataset, reference = load_vertlife(args)
+    except OSError as exc:
+        raise ValueError(f"Unable to load the VertLife reference: {exc}") from exc
+    labels = list(tree.leaf_names())
+    groups = defaultdict(list)
+    unresolved = set()
+    for label, _, name, _ in match_species(reference, labels, args):
+        if name is None:
+            unresolved.add(label)
+        else:
+            groups[name].append(label)
+    if len(groups) < 2:
+        raise ValueError(
+            "At least two distinct VertLife species must match '--infile'."
+        )
+    _validate_vertlife_species_groups(tree, groups, labels)
+    reference = subset_reference(reference, groups)
+    outgroup = _get_reference_root_outgroup_set(reference, source_name="VertLife")
+    sys.stderr.write(f"VertLife reference: {dataset.id} (doi:{dataset.doi})\n")
+    return (
+        {label for name in outgroup for label in groups[name]},
+        set(labels) - unresolved,
+        unresolved,
+    )
+
+
 @rooting_operation
 def taxonomy_rooting(
     tree,
@@ -2441,7 +2513,7 @@ def taxonomy_rooting(
     if len(list(tree.leaves())) <= 1:
         return tree
     errors = list()
-    taxonomy_sources = _parse_taxonomy_sources(taxonomy_source)
+    taxonomy_sources = _parse_taxonomy_sources(taxonomy_source, allow_vertlife=True)
     for source in taxonomy_sources:
         if verbose:
             sys.stderr.write(
@@ -2476,6 +2548,10 @@ def taxonomy_rooting(
             elif source == "opentree":
                 outgroup_set, resolved_leaf_set, unresolved_leaf_set = (
                     _build_opentree_reference_tree(tree=tree, args=args)
+                )
+            elif source == "vertlife":
+                outgroup_set, resolved_leaf_set, unresolved_leaf_set = (
+                    _build_vertlife_reference_split(tree, args)
                 )
             else:
                 raise ValueError("Unknown taxonomy source: {}".format(source))
@@ -2993,7 +3069,32 @@ def _write_reconciliation_candidates(tree, evaluation, args, output_properties):
         write_tree(tree, args, format=args.outformat, props=output_properties)
 
 
+def _validate_vertlife_root_options(args):
+    configured = getattr(args, "vertlife_dataset", None) or getattr(
+        args, "vertlife_file", None
+    )
+    sources = (
+        _parse_taxonomy_sources(
+            getattr(args, "taxonomy_source", DEFAULT_TAXONOMY_SOURCE_CHAIN),
+            allow_vertlife=True,
+        )
+        if args.method == "taxonomy"
+        else ()
+    )
+    if "vertlife" in sources:
+        from nwkit.vertlife import vertlife_input_path
+
+        vertlife_input_path(args)
+        return True
+    elif configured:
+        raise ValueError(
+            "VertLife options require '--method taxonomy --taxonomy-source vertlife'."
+        )
+    return False
+
+
 def root_main(args):
+    vertlife_enabled = _validate_vertlife_root_options(args)
     candidates_out = getattr(args, "candidates_out", None)
     if candidates_out is not None and (
         args.method != "reconciliation" or candidates_out in ("", "-")
@@ -3025,6 +3126,7 @@ def root_main(args):
         args.quoted_node_names,
         rooted=getattr(args, "input_rooted", "auto"),
     )
+    input_root_named = bool(tree.name)
     output_properties = set(get_tree_property_names(tree))
     if args.method == "transfer":
         if args.infile2 in ["", None]:
@@ -3109,4 +3211,16 @@ def root_main(args):
     if candidates_out:
         _write_reconciliation_candidates(tree, evaluation, args, output_properties)
     else:
-        write_tree(tree, args, format=args.outformat, props=output_properties)
+        format = args.outformat
+        parser = None
+        if vertlife_enabled:
+            from nwkit.vertlife import precise_tree_copy_format, precise_tree_parser
+
+            if format == "auto":
+                format, parser = precise_tree_copy_format(
+                    tree, include_root_name=input_root_named
+                )
+                output_properties.update(("dist", "support"))
+            else:
+                parser = precise_tree_parser(format)
+        write_tree(tree, args, format=format, props=output_properties, parser=parser)

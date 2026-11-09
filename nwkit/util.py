@@ -831,10 +831,10 @@ def acquire_exclusive_lock(
     poll_seconds=DOWNLOAD_LOCK_POLL_SECONDS,
     timeout_seconds=DOWNLOAD_LOCK_TIMEOUT_SECONDS,
 ):
-    poll_seconds = int(poll_seconds)
+    poll_seconds = float(poll_seconds)
     timeout_seconds = int(timeout_seconds)
-    if poll_seconds <= 0:
-        raise ValueError("poll_seconds must be > 0.")
+    if not math.isfinite(poll_seconds) or poll_seconds <= 0:
+        raise ValueError("poll_seconds must be finite and > 0.")
     if timeout_seconds <= 0:
         raise ValueError("timeout_seconds must be > 0.")
     absolute_lock_path = os.path.abspath(os.fspath(lock_path))
@@ -2155,6 +2155,21 @@ def get_subtree_leaf_bitmasks(tree, leaf_name_to_bit):
     return subtree_leaf_bitmasks
 
 
+def get_subtree_leaf_index_extents(tree, tip_order):
+    """Return inclusive index bounds and tip counts in the given leaf order."""
+    extents = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            index = tip_order[node.name]
+            extents[node] = (index, index, 1)
+        else:
+            first, last, counts = zip(
+                *(extents[child] for child in node.children), strict=True
+            )
+            extents[node] = (min(first), max(last), sum(counts))
+    return extents
+
+
 def validate_unique_named_leaves(tree, option_name, context=""):
     leaf_names = list(tree.leaf_names())
     if len(leaf_names) != len(set(leaf_names)):
@@ -2176,9 +2191,9 @@ def validate_unique_named_leaves(tree, option_name, context=""):
 
 def read_item_per_line_file(file):
     if file == "-":
-        out = sys.stdin.read().splitlines()
+        out = sys.stdin.read().removeprefix("\ufeff").splitlines()
     else:
-        with open(file, "r") as f:
+        with open(file, encoding="utf-8-sig") as f:
             out = f.read().splitlines()
     out = [o.strip() for o in out if o.strip() != ""]
     return out

@@ -31,6 +31,7 @@ in [`guides/`](guides/):
 - [SHIFT inference](guides/SHIFT.md)
 - [Targeted gene-tree search and GeneRax evaluation](guides/GENE_TREE_SEARCH.md)
 - [Tree format conversion](guides/CONVERT.md)
+- [VertLife topology, rooting, and divergence ages](guides/VERTLIFE.md)
 
 The complete guide list is available in the directory; filenames retain the
 historical names used by the CLI and examples.

@@ -76,6 +76,10 @@ paths and nominal-bound checks are documented in [ANGIOCAL.md](ANGIOCAL.md).
 Its tree/report pair is staged together; an all-excluded import intentionally
 writes the diagnostic report while leaving the result tree untouched.
 
+`constrain`, `root`, and `mcmctree` can use a checksum-verified VertLife
+reference. The [VertLife guide](VERTLIFE.md) describes the cache, source
+selection, topology and age semantics, and companion TSV schemas.
+
 ## Related outputs and node editing
 
 `sample`, `skim`, `annotate`, `transfer`, and `compose` stage a successful tree
