@@ -4,6 +4,10 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## 0.46.1 (2026-11-09)
+
+- Dependabot dependency update (automated metadata).
+
 ## [0.46.0] - 2026-11-05
 
 ### Added
