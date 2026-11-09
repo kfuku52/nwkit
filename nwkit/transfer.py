@@ -866,10 +866,29 @@ def _transfer_one_property(
     allow_projected_values,
     policy,
     fill,
+    equal_value_ambiguity=False,
 ):
+    if (
+        equal_value_ambiguity
+        and match.status == "ambiguous"
+        and source_prop == "support"
+    ):
+        from dataclasses import replace
+
+        values = [_get_property(node, source_prop) for node in match.source_candidates]
+        if values and all(known and value == values[0][0] for value, known in values):
+            match = replace(
+                match,
+                source=match.source_candidates[0],
+                status="exact_match",
+                reason="equal_support_on_repeated_split",
+                source_taxa=match.target_taxa,
+            )
     previous_value, _ = _get_property(target_node, target_prop)
     projected_split = (
-        match.projected_split if match_basis == "split" or collect_report else None
+        match.projected_split
+        if collect_report or (match_basis == "split" and target_prop == "length")
+        else None
     )
     target_candidates, source_candidates = _transfer_root_edge_candidates(
         target_prop,
@@ -1064,6 +1083,7 @@ def transfer_properties(
     allow_target_reroot=True,
     root_edge_policies=None,
     collect_report=True,
+    equal_value_ambiguity=False,
 ):
     if policy not in ("compatible-only", "strict"):
         raise ValueError("Unsupported transfer policy: {}".format(policy))
@@ -1113,7 +1133,9 @@ def transfer_properties(
         match_basis=match_basis,
     )
     match_by_target_id = {id(match.target): match for match in mapping.matches}
-    if match_basis == "split":
+    if match_basis == "split" and any(
+        target_prop == "length" for _, target_prop in property_specs
+    ):
         target_physical_split_candidates = _physical_split_candidates(
             target,
             mapping.shared_taxa,
@@ -1185,6 +1207,7 @@ def transfer_properties(
                 allow_projected_values,
                 policy,
                 fill,
+                equal_value_ambiguity,
             )
             failed = failed or state["failed"]
             if state["changed"]:

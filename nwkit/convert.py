@@ -92,6 +92,7 @@ def convert_tree_text(
     rooted="auto",
     node_label="",
     properties="keep",
+    comments="keep",
     rooting_token=False,
     rooting_nhx=False,
 ):
@@ -101,6 +102,14 @@ def convert_tree_text(
     factor = finite_decimal(time_factor, positive=True)
     detected, statements = read_container(text, source)
     statement = _select_statement(detected, statements, tree_index)
+    if node_label:
+        from nwkit.astral import has_label_annotations
+
+        if has_label_annotations(statement):
+            statement = transform_annotations(statement, node_label=node_label)
+            # ASTRAL annotations occupy the internal-name slot, including a
+            # block whose requested key is missing and must remain unchanged.
+            tree_format = 1
     _validate_reserved_properties(statement)
     tree = read_tree(
         statement, tree_format, quoted_node_names, quiet=True, rooted=rooted
@@ -142,6 +151,14 @@ def convert_tree_text(
     if nhx:
         state = "unknown" if info.rooted is None else ("yes" if info.rooted else "no")
         converted = converted[:-1] + f"[&&NHX:{ROOTED_PROP}={state}];"
+    if comments not in {"keep", "drop"}:
+        raise ValueError("comments must be keep or drop")
+    if comments == "drop":
+        from nwkit.tree_formats import tokens
+
+        converted = "".join(
+            token.text for token in tokens(converted) if token.kind != "comment"
+        )
     converted = prefix + converted
     # Verify the emitted numeric values and the exact downstream reader boundary.
     # The input quoting policy was checked above. Generated labels are always
@@ -168,6 +185,7 @@ def convert_main(args):
         rooted=getattr(args, "input_rooted", "auto"),
         node_label=getattr(args, "node_label", ""),
         properties=getattr(args, "properties", "keep"),
+        comments=getattr(args, "comments", "keep"),
         **rooting_output_options(args),
     )
     if args.outfile == "-":

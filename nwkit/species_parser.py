@@ -5,7 +5,7 @@ from dataclasses import dataclass
 
 DEFAULT_SPECIES_REGEX = r"^([^_]+_[^_]+)(?:_|$)"
 DEFAULT_SPECIES_PARSER = "legacy"
-SUPPORTED_SPECIES_PARSERS = ("legacy", "taxonomic")
+SUPPORTED_SPECIES_PARSERS = ("legacy", "taxonomic", "extended-taxonomic")
 TAXONOMIC_SPECIES_SUFFIX_TOKENS = {"cf", "aff", "nr"}
 GENUS_ONLY_PLACEHOLDER_TOKENS = {"sp", "sp.", "spp", "spp."}
 TAXONOMIC_RANK_ALIASES = {
@@ -270,6 +270,14 @@ class SpeciesParser:
     def parse(self, label):
         if self.preset == "legacy":
             parsed_species = self._parse_legacy(label)
+        elif self.preset == "extended-taxonomic":
+            from nwkit.taxonomic_labels import base_species_label, extract_species_label
+
+            species = extract_species_label(label)
+            parsed_species = ParsedSpecies(
+                species_label=species or None,
+                taxonomy_query=base_species_label(species).replace("_", " ") or None,
+            )
         elif self.preset == "taxonomic":
             parsed_species = self._parse_taxonomic(label)
         else:
@@ -330,3 +338,52 @@ def extract_parsed_species(
         species_map_tsv=species_map_tsv,
     )
     return parser.parse(label)
+
+
+def parse_species_labels(
+    labels, *, species_parser=None, species_regex=None, species_map_tsv=None
+):
+    """Parse a batch with one species map and preserve input order."""
+    parser = SpeciesParser(species_parser, species_regex, species_map_tsv)
+    return [parser.parse(label) for label in labels]
+
+
+def main():
+    """JSON bridge for R and other clients using the same native presets."""
+    import argparse
+    import json
+    from pathlib import Path
+
+    from nwkit.file_paths import validate_outputs_do_not_replace_inputs
+    from nwkit.output_transaction import output_transaction
+
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--infile", required=True)
+    parser.add_argument("--outfile", required=True)
+    parser.add_argument(
+        "--species-parser",
+        choices=SUPPORTED_SPECIES_PARSERS,
+        default=DEFAULT_SPECIES_PARSER,
+    )
+    args = parser.parse_args()
+    validate_outputs_do_not_replace_inputs(
+        [("labels", args.infile)], [("species", args.outfile)]
+    )
+    labels = json.loads(Path(args.infile).read_text(encoding="utf-8-sig"))
+    if not isinstance(labels, list) or any(
+        not isinstance(label, str) for label in labels
+    ):
+        raise ValueError("Expected a JSON array of labels")
+    parsed = parse_species_labels(labels, species_parser=args.species_parser)
+    species = [
+        result.species_label or label
+        for label, result in zip(labels, parsed, strict=True)
+    ]
+    with output_transaction([args.outfile]) as staged:
+        Path(staged[args.outfile]).write_text(
+            json.dumps(species, ensure_ascii=False), encoding="utf-8"
+        )
+
+
+if __name__ == "__main__":
+    main()

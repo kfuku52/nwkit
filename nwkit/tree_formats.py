@@ -257,6 +257,14 @@ def annotation_attributes(comment):
             key, value = field.split("=", 1)
             _add_attribute(attributes, key, value)
         return attributes, []
+    if comment.startswith("[") and not comment.startswith("[&"):
+        from nwkit.astral import parse_annotation
+
+        values = parse_annotation(comment[1:-1])
+        if values and any(
+            key in values for key in ("q1", "q2", "q3", "pp1", "pp2", "pp3")
+        ):
+            return values, []
     if not comment.startswith("[&") or comment.upper() in {"[&R]", "[&U]"}:
         return attributes, [comment]
     other = []
@@ -360,6 +368,16 @@ def _node_suffix(
             comments.extend(other)
         else:
             fields.append(part)
+    if internal and fields and fields[0].kind == "name":
+        label_text = fields[0].text
+        if label_text[:1] in {"'", '"'}:
+            content = label_text[1:-1]
+            if content.startswith("[") and content.endswith("]"):
+                values, other = annotation_attributes(content)
+                if values and not other and node_label in values:
+                    for key, value in values.items():
+                        _add_attribute(attributes, key, value)
+                    fields.pop(0)
     kinds = [field.kind for field in fields]
     if kinds not in ([], ["name"], [":", "name"], ["name", ":", "name"]):
         raise ValueError("Malformed Newick node label or branch length.")

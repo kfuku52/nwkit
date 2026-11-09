@@ -763,6 +763,13 @@ object with estimates, bounds, local rank and optimizer diagnostics. See the
 ### Reconciliation loss counts
 
 `reconcile` includes nullable integer `implied_losses` per gene-tree event.
+Its companion `implied_loss_species_clade_ids` is a JSON array of stable
+species-clade IDs identifying the incoming edges of missing sister lineages.
+Repeated IDs represent separate lost copies; the array length equals
+`implied_losses`. Mapped LCA gene leaves have `[]`. Locations, like counts,
+remain missing for other event sources or unmapped events. Only edges below
+the gene-root mapping are considered. Consumers must match these IDs against
+the same complete rooted species tree, rather than traversal indices.
 For LCA events these count missing lineages on species-tree edges below the
 event; leaves have zero losses. Losses above the gene root are excluded.
 Non-LCA and unmapped events have missing values, never fabricated zeros.

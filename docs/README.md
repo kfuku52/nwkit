@@ -63,3 +63,5 @@ for the corresponding user guide.
 - [Development checks](../DEVELOPMENT.md)
 - [Release checklist](../RELEASING.md)
 - [Change history](../CHANGELOG.md)
+
+Reusable tree, annotation, rendering and posterior APIs are described in [workflow APIs](guides/WORKFLOW_APIS.md).

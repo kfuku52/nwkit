@@ -139,6 +139,21 @@ tail probabilities and seed unchanged. Validate an IQ2MC executable against
 `test_real_paml_consumes_angiocal_minimum_prior` before substituting it for these
 calibration checks.
 
+### GeneRax in a single-host container without SSH
+
+Open MPI can attempt an SSH launch during GeneRax's singleton initialization.
+If the container has no SSH client, select the local process manager for the
+validation command:
+
+```sh
+OMPI_MCA_ras=^gridengine OMPI_MCA_plm=isolated \
+OMPI_MCA_plm_rsh_agent=/bin/false OMPI_MCA_btl=^openib \
+python tools/check.py release
+```
+
+This runs the real GeneRax fits with the same models and inputs. These settings
+are for a single host; do not apply them to a multi-node MPI job.
+
 CI regression jobs use four pytest processes on Linux/Windows and three on
 macOS, with one BLAS/OpenMP thread per process. Every platform still runs its
 complete selected regression suite; weekly/manual scientific studies retain

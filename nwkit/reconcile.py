@@ -1,3 +1,4 @@
+import json
 import sys
 from typing import Any
 
@@ -32,6 +33,7 @@ RECONCILIATION_COLUMNS = [
     "event_type",
     "event_source",
     "implied_losses",
+    "implied_loss_species_clade_ids",
     "event_status",
     "collapsed_event_boundary",
     "transfer_source_species",
@@ -318,6 +320,30 @@ def lca_duplication_loss_contribution(
         child_depth - parent_depth - speciation_offset for child_depth in child_depths
     )
     return int(is_duplication), losses
+
+
+def lca_loss_species_nodes(mapped_species_node, child_species_nodes):
+    """Locate implied losses on missing sister edges below one LCA event.
+
+    The returned node identifies the incoming species-tree edge. Repeated
+    nodes represent separate lost copies. Nothing above the gene root is
+    considered, and a speciation consumes the first edge on each child path.
+    """
+    children = tuple(child_species_nodes)
+    duplication = any(child is mapped_species_node for child in children)
+    losses: list[Any] = []
+    for child in children:
+        current = child
+        while current is not mapped_species_node:
+            parent = current.up
+            if parent is None:
+                raise ValueError("Child mapping is not below its LCA event")
+            if duplication or parent is not mapped_species_node:
+                losses.extend(
+                    sister for sister in parent.children if sister is not current
+                )
+            current = parent
+    return losses
 
 
 def _is_subset(mask, container_mask):
@@ -721,16 +747,36 @@ def build_reconciliation_table(
         # LCA losses below this event, excluding losses above the gene root.
         # NHX/overlap events are not an LCA loss model; keep them undefined.
         losses = None
+        loss_clades = None
         if event_source == "lca" and mapping_status == "mapped":
             if node.is_leaf:
                 losses = 0
+                loss_clades = []
             else:
+                mapped_children = [
+                    species_node_by_gene_node[child] for child in node.children
+                ]
                 _, losses = lca_duplication_loss_contribution(
                     mapped_species_node,
-                    [species_node_by_gene_node[child] for child in node.children],
+                    mapped_children,
                     species_depths,
                 )
+                loss_clades = sorted(
+                    species_clades.clade_id_for_node(lost)
+                    for lost in lca_loss_species_nodes(
+                        mapped_species_node, mapped_children
+                    )
+                )
+                if len(loss_clades) != losses:
+                    raise ValueError(
+                        "LCA loss locations disagree with implied loss count"
+                    )
         rows[-1]["implied_losses"] = losses
+        rows[-1]["implied_loss_species_clade_ids"] = (
+            json.dumps(loss_clades, separators=(",", ":"))
+            if loss_clades is not None
+            else None
+        )
     table = pd.DataFrame(rows, columns=RECONCILIATION_COLUMNS)
     table["implied_losses"] = pd.array(table["implied_losses"], dtype="Int64")
     return table

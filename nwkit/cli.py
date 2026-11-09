@@ -347,7 +347,8 @@ p_species.add_argument(
     help="default=%(default)s: Species parser preset. "
     "legacy keeps the historical GENUS_SPECIES[_...] behavior. "
     "taxonomic keeps qualifier-aware species labels such as GENUS_SPECIES_cf or GENUS_sp_LABEL "
-    "for internal identity while simplifying taxonomy queries.",
+    "for internal identity while simplifying taxonomy queries. "
+    "extended-taxonomic additionally preserves cultivar groups, subgroups and hybrid binomials.",
 )
 p_species.add_argument(
     "--species-regex",
@@ -4904,6 +4905,12 @@ pconvert.add_argument(
     choices=["keep", "drop"],
     default="keep",
     help="default=%(default)s: Explicitly discard normalized NHX/age properties with drop; includes age intervals. Ordinary comments and explicit rooting remain.",
+)
+pconvert.add_argument(
+    "--comments",
+    choices=["keep", "drop"],
+    default="keep",
+    help="Keep or remove ordinary comments in the exported tree.",
 )
 pconvert.set_defaults(handler=command_convert)
 
