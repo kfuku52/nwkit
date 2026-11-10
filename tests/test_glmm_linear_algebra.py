@@ -6,6 +6,17 @@ import pytest
 from nwkit import phylogenetic_glmm as glmm
 
 
+def test_dense_glmm_still_evaluates_user_covariance_callbacks():
+    first = np.eye(2)
+    second = np.array([[1.0, 0.25], [0.25, 1.0]])
+    covariances = iter([first, second])
+    normalized = glmm._dense_glmm_covariance_at(
+        lambda _parameter: next(covariances), 2, False
+    )
+    np.testing.assert_array_equal(normalized(None), first)
+    np.testing.assert_array_equal(normalized(None), second)
+
+
 @pytest.mark.parametrize("categorical", [False, True])
 def test_glmm_marginal_information_uses_existing_cholesky(categorical, monkeypatch):
     rng = np.random.default_rng(451)

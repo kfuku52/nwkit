@@ -4,6 +4,7 @@ import json
 import math
 import warnings
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
@@ -23,6 +24,7 @@ from scipy.stats import chi2
 from scipy.stats import nbinom as nbinom_distribution
 from scipy.stats import poisson as poisson_distribution
 
+from nwkit.evolution import EvolutionaryCovarianceFactory
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 from nwkit.regression_inference import (
@@ -485,6 +487,21 @@ def _normalize_covariance(
             )
     else:
         _positive_definite_cholesky(normalized)
+    return normalized
+
+
+def _dense_glmm_covariance_at(factory, size, estimate_shape):
+    def normalized(parameter):
+        return _normalize_covariance(factory(parameter), size, "Phylogenetic")
+
+    # An in-memory tree covariance is fixed within this fit. User callbacks
+    # and external custom matrices keep their existing evaluation behavior.
+    if (
+        type(factory) is EvolutionaryCovarianceFactory
+        and factory.custom_covariance is None
+        and not estimate_shape
+    ):
+        return lru_cache(maxsize=1)(normalized)
     return normalized
 
 
@@ -2748,6 +2765,10 @@ def _fit_scalar_phylogenetic_glmm(
             decoded_parameter,
         )
 
+    dense_covariance_at = _dense_glmm_covariance_at(
+        phylogenetic_covariance, n_tips, estimate_shape
+    )
+
     def state(parameters: np.ndarray):
         coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
             parameters
@@ -2804,9 +2825,7 @@ def _fit_scalar_phylogenetic_glmm(
                 observation_loading,
                 posterior_factor,
             )
-        phylo_base = _normalize_covariance(
-            phylogenetic_covariance(decoded), n_tips, "Phylogenetic"
-        )
+        phylo_base = dense_covariance_at(decoded)
         random_covariance = math.exp(float(log_variances[0])) * phylo_base
         if group_base is not None:
             random_covariance += math.exp(float(log_variances[1])) * group_base
@@ -3602,6 +3621,10 @@ def fit_phylogenetic_glmm(
         )
         return coefficients, thresholds, log_variances, decoded_parameter
 
+    dense_covariance_at = _dense_glmm_covariance_at(
+        phylogenetic_covariance, len(design), estimate_shape
+    )
+
     def state(parameters: np.ndarray):
         coefficients, thresholds, log_variances, decoded_parameter = unpack(parameters)
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
@@ -3655,11 +3678,7 @@ def fit_phylogenetic_glmm(
                 expanded_design,
                 posterior_factor,
             )
-        phylo_base = _normalize_covariance(
-            phylogenetic_covariance(decoded_parameter),
-            len(design),
-            "Phylogenetic",
-        )
+        phylo_base = dense_covariance_at(decoded_parameter)
         random_covariance = np.exp(log_variances[0]) * phylo_base
         if group_base is not None:
             random_covariance = (
