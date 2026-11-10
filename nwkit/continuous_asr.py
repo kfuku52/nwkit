@@ -126,13 +126,14 @@ def _merge(first, second_mean, second_variance):
                 "zero-length branches or under sigma2=0."
             )
         return first, 0.0, 0.0, 0
-    ratio = min(first.variance, second_variance) / larger
+    smaller = min(first.variance, second_variance)
+    ratio = smaller / larger
     denominator = 1.0 + ratio
     first_weight = (second_variance / larger) / denominator
     second_weight = (first.variance / larger) / denominator
     mean = first_weight * first.mean + second_weight * second_mean
-    variance = min(first.variance, second_variance) / denominator
-    if min(first.variance, second_variance) > 0.0 and variance == 0.0:
+    variance = smaller / denominator
+    if smaller > 0.0 and variance == 0.0:
         raise ValueError(
             "A positive conditional variance underflowed; rescale the input units."
         )
@@ -367,13 +368,18 @@ def _prune(data, rate, *, allow_edge_underflow=False, collect_inside=True):
         if not math.isfinite(variance):
             raise ValueError("An ancestral variance exceeds floating-point range.")
         parent = parents[index]
+        parent_message = inside[parent]
+        if parent_message is None:
+            inside[parent] = GaussianMarginal(message.mean, variance)
+            continue
         merged, log_variance, quadratic, df = _merge(
-            inside[parent], message.mean, variance
+            parent_message, message.mean, variance
         )
         inside[parent] = merged
-        log_variances.append(log_variance)
-        quadratics.append(quadratic)
-        residual_df += df
+        if df:
+            log_variances.append(log_variance)
+            quadratics.append(quadratic)
+            residual_df += df
     return _PruningResult(
         tuple(inside) if collect_inside else (),
         math.fsum(log_variances),
