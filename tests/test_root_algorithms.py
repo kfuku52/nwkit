@@ -321,6 +321,18 @@ class TestMadRooting:
             if not node.is_root
         )
 
+    def test_subnormal_branches_retain_precise_root_position(self):
+        tree = Tree("((A:5e-324,B:1e-323):5e-324,C:1,D:1);", parser=1)
+
+        rooted, evaluation = mad_rooting(tree, _return_evaluation=True)
+
+        best = evaluation.candidates[0]
+        assert best.split == (frozenset({"C"}), frozenset({"A", "B", "D"}))
+        assert best.position_fraction_from_side_a == 5.0 / 9.0
+        distances = {leaf.name: leaf.dist for leaf in rooted.leaves()}
+        assert distances["A"] == 5e-324
+        assert distances["B"] == 1e-323
+
     def test_heterogeneous_lengths_do_not_corrupt_path_delta_cancellation(self):
         tree = Tree(
             "(X1:1086.5437592639944,"

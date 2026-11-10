@@ -1152,9 +1152,10 @@ def _mad_lowest_common_ancestor_index(first_index, second_index, tree_index):
     return left if left < right else right
 
 
-def _iter_mad_pair_records(tips, node_index_by_id, tree_index):
+def _iter_mad_pair_records(
+    tips, node_index_by_id, tree_index, depths, depth_denominator
+):
     effective_node_indices = [node_index_by_id[id(tip)] for tip in tips]
-    root_distances = tree_index["root_distances"]
     for first_index, second_index in combinations(range(len(tips)), 2):
         first_node_index = effective_node_indices[first_index]
         second_node_index = effective_node_indices[second_index]
@@ -1162,9 +1163,9 @@ def _iter_mad_pair_records(tips, node_index_by_id, tree_index):
             first_node_index, second_node_index, tree_index
         )
         pair_distance = (
-            root_distances[first_node_index]
-            + root_distances[second_node_index]
-            - (2 * root_distances[ancestor_index])
+            depths[first_node_index]
+            + depths[second_node_index]
+            - (2 * depths[ancestor_index])
         )
         if pair_distance <= 0:
             raise ValueError("MAD rooting requires at least 3 effective leaves.")
@@ -1173,7 +1174,7 @@ def _iter_mad_pair_records(tips, node_index_by_id, tree_index):
             second_node_index,
             ancestor_index,
             pair_distance,
-            float(pair_distance),
+            pair_distance / depth_denominator,
         )
 
 
@@ -1228,8 +1229,30 @@ def _mad_objective_data(
         if use_float_arithmetic
         else Fraction.from_float(weight_distance_scale)
     )
+    depth_denominator = 1
+    depths = root_distances
+    weight_shift = None
+    if not use_float_arithmetic:
+        # All exact depths are sums of binary floats, so every denominator
+        # divides the largest one. Use a shared unit for integer pair depths.
+        depth_denominator = max(depth.denominator for depth in root_distances)
+        depths = [
+            depth.numerator * (depth_denominator // depth.denominator)
+            for depth in root_distances
+        ]
+        # The smallest ratio's binary exponent bounds every denominator.
+        # Squaring doubles the exponent of their common denominator.
+        smallest_ratio = weight_distance_scale / maximum_pair_distance
+        significand_bits = sys.float_info.mant_dig
+        if smallest_ratio > 0.0:
+            exponent = math.frexp(smallest_ratio)[1]
+            weight_shift = 2 * max(0, significand_bits - exponent)
+        else:
+            weight_shift = 2 * (significand_bits - sys.float_info.min_exp)
     node_count = len(all_nodes)
     zero = tree_index["zero"]
+    if weight_shift is not None:
+        zero = 0
     cut_weights = [zero] * node_count
     numerator_constants = [zero] * node_count
     numerator_depths = [zero] * node_count
@@ -1240,17 +1263,21 @@ def _mad_objective_data(
         ancestor,
         pair_distance_number,
         pair_distance,
-    ) in _iter_mad_pair_records(tips, node_index_by_id, tree_index):
+    ) in _iter_mad_pair_records(
+        tips, node_index_by_id, tree_index, depths, depth_denominator
+    ):
         weight_ratio = weight_distance_scale / pair_distance
-        weight_number = (
-            weight_ratio if use_float_arithmetic else Fraction.from_float(weight_ratio)
-        )
-        weight = weight_number * weight_number
+        if weight_shift is None:
+            weight = weight_ratio * weight_ratio
+        else:
+            numerator, denominator = weight_ratio.as_integer_ratio()
+            shift = weight_shift - 2 * (denominator.bit_length() - 1)
+            weight = (numerator * numerator) << shift
         cut_weights[first] += weight
         cut_weights[second] += weight
         cut_weights[ancestor] -= 2 * weight
-        first_constant = weight * (pair_distance_number - 2 * root_distances[first])
-        second_constant = weight * (pair_distance_number - 2 * root_distances[second])
+        first_constant = weight * (pair_distance_number - 2 * depths[first])
+        second_constant = weight * (pair_distance_number - 2 * depths[second])
         numerator_constants[first] += first_constant
         numerator_constants[second] += second_constant
         numerator_constants[ancestor] -= first_constant + second_constant
@@ -1258,8 +1285,25 @@ def _mad_objective_data(
         numerator_depths[first] += depth_coefficient
         numerator_depths[second] += depth_coefficient
         numerator_depths[ancestor] -= 2 * depth_coefficient
-        root_difference = root_distances[first] - root_distances[second]
+        root_difference = depths[first] - depths[second]
         root_objective += weight * root_difference * root_difference
+
+    if weight_shift is not None:
+        # Convert only the accumulated totals back to rational values before
+        # evaluating the objective along the tree.
+        weight_denominator = 1 << weight_shift
+        constant_denominator = weight_denominator * depth_denominator
+        root_objective = Fraction(
+            root_objective, constant_denominator * depth_denominator
+        )
+        cut_weights = [Fraction(value, weight_denominator) for value in cut_weights]
+        numerator_constants = [
+            Fraction(value, constant_denominator) for value in numerator_constants
+        ]
+        numerator_depths = [
+            Fraction(value, weight_denominator) for value in numerator_depths
+        ]
+        zero = tree_index["zero"]
 
     parent_indices = tree_index["parent_indices"]
     for node in tree.traverse(strategy="postorder"):
