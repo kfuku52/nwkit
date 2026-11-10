@@ -1102,7 +1102,6 @@ def _mad_subtree_masks(tree, tips, all_tips):
 def _mad_tree_index(all_nodes, node_index_by_id, use_float_arithmetic):
     node_count = len(all_nodes)
     parent_indices = [0] * node_count
-    topological_depths = [0] * node_count
     zero = 0.0 if use_float_arithmetic else Fraction(0)
     root_distances_by_index = [zero] * node_count
     for node in all_nodes:
@@ -1112,7 +1111,6 @@ def _mad_tree_index(all_nodes, node_index_by_id, use_float_arithmetic):
             continue
         parent_index = node_index_by_id[id(node.up)]
         parent_indices[node_index] = parent_index
-        topological_depths[node_index] = topological_depths[parent_index] + 1
         float_edge_length = float(node.dist)
         edge_length: float | Fraction = float_edge_length
         if not use_float_arithmetic:
@@ -1120,51 +1118,38 @@ def _mad_tree_index(all_nodes, node_index_by_id, use_float_arithmetic):
         root_distances_by_index[node_index] = (
             root_distances_by_index[parent_index] + edge_length
         )
-    ancestor_levels = [parent_indices]
-    while (1 << len(ancestor_levels)) <= max(topological_depths):
-        previous = ancestor_levels[-1]
-        ancestor_levels.append(
-            [previous[previous[index]] for index in range(node_count)]
+    parent_minima = [parent_indices]
+    half_span = 1
+    while 2 * half_span <= node_count:
+        previous = parent_minima[-1]
+        parent_minima.append(
+            [
+                min(previous[start], previous[start + half_span])
+                for start in range(len(previous) - half_span)
+            ]
         )
+        half_span *= 2
     return {
         "parent_indices": parent_indices,
-        "topological_depths": topological_depths,
         "root_distances": root_distances_by_index,
-        "ancestor_levels": ancestor_levels,
+        "parent_minima": parent_minima,
         "zero": zero,
     }
 
 
-def _mad_lift_node_index(node_index, levels, ancestor_levels):
-    bit = 0
-    while levels:
-        if levels & 1:
-            node_index = ancestor_levels[bit][node_index]
-        levels >>= 1
-        bit += 1
-    return node_index
-
-
 def _mad_lowest_common_ancestor_index(first_index, second_index, tree_index):
-    depths = tree_index["topological_depths"]
-    ancestor_levels = tree_index["ancestor_levels"]
-    first_depth = depths[first_index]
-    second_depth = depths[second_index]
-    if first_depth > second_depth:
-        first_index = _mad_lift_node_index(
-            first_index, first_depth - second_depth, ancestor_levels
-        )
-    elif second_depth > first_depth:
-        second_index = _mad_lift_node_index(
-            second_index, second_depth - first_depth, ancestor_levels
-        )
     if first_index == second_index:
         return first_index
-    for ancestors in reversed(ancestor_levels):
-        if ancestors[first_index] != ancestors[second_index]:
-            first_index = ancestors[first_index]
-            second_index = ancestors[second_index]
-    return tree_index["parent_indices"][first_index]
+    if first_index > second_index:
+        first_index, second_index = second_index, first_index
+    # In preorder the interval (first, second] is inside the LCA's subtree
+    # and contains one of its immediate children. Its least parent index is
+    # therefore the LCA. Two overlapping blocks cover the queried interval.
+    level = (second_index - first_index).bit_length() - 1
+    minima = tree_index["parent_minima"][level]
+    left = minima[first_index + 1]
+    right = minima[second_index - (1 << level) + 1]
+    return left if left < right else right
 
 
 def _iter_mad_pair_records(tips, node_index_by_id, tree_index):
@@ -1192,17 +1177,49 @@ def _iter_mad_pair_records(tips, node_index_by_id, tree_index):
         )
 
 
+def _mad_pair_distance_extrema(tree, tips, node_index_by_id, root_distances):
+    """Find the closest and farthest effective pair using their LCA depths."""
+    effective_tips = set(tips)
+    pending = {}
+    minimum_pair_distance = math.inf
+    maximum_pair_distance = 0.0
+    for node in tree.traverse(strategy="postorder"):
+        depth = root_distances[node_index_by_id[id(node)]]
+        if node.is_leaf:
+            if node in effective_tips:
+                pending[node] = depth, depth
+            continue
+        depth_bounds = None
+        for child in node.children:
+            child_bounds = pending.pop(child, None)
+            if child_bounds is None:
+                continue
+            if depth_bounds is None:
+                depth_bounds = child_bounds
+                continue
+            low, high = depth_bounds
+            child_low, child_high = child_bounds
+            # All cross-child pairs have this node as their LCA. Addition
+            # and subtraction are monotone in the two root distances.
+            nearest = low + child_low - 2 * depth
+            farthest = high + child_high - 2 * depth
+            if nearest <= 0:
+                raise ValueError("MAD rooting requires at least 3 effective leaves.")
+            minimum_pair_distance = min(minimum_pair_distance, float(nearest))
+            maximum_pair_distance = max(maximum_pair_distance, float(farthest))
+            depth_bounds = min(low, child_low), max(high, child_high)
+        if depth_bounds is not None:
+            pending[node] = depth_bounds
+    return minimum_pair_distance, maximum_pair_distance
+
+
 def _mad_objective_data(
     tree, all_nodes, node_index_by_id, tips, tree_index, use_float_arithmetic
 ):
-    def pair_records():
-        return _iter_mad_pair_records(tips, node_index_by_id, tree_index)
-
-    minimum_pair_distance = math.inf
-    maximum_pair_distance = 0.0
-    for _, _, _, _, pair_distance in pair_records():
-        minimum_pair_distance = min(minimum_pair_distance, pair_distance)
-        maximum_pair_distance = max(maximum_pair_distance, pair_distance)
+    root_distances = tree_index["root_distances"]
+    minimum_pair_distance, maximum_pair_distance = _mad_pair_distance_extrema(
+        tree, tips, node_index_by_id, root_distances
+    )
     weight_distance_scale = math.sqrt(minimum_pair_distance) * math.sqrt(
         maximum_pair_distance
     )
@@ -1217,8 +1234,13 @@ def _mad_objective_data(
     numerator_constants = [zero] * node_count
     numerator_depths = [zero] * node_count
     root_objective = zero
-    root_distances = tree_index["root_distances"]
-    for first, second, ancestor, pair_distance_number, pair_distance in pair_records():
+    for (
+        first,
+        second,
+        ancestor,
+        pair_distance_number,
+        pair_distance,
+    ) in _iter_mad_pair_records(tips, node_index_by_id, tree_index):
         weight_ratio = weight_distance_scale / pair_distance
         weight_number = (
             weight_ratio if use_float_arithmetic else Fraction.from_float(weight_ratio)
