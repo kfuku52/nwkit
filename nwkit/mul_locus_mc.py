@@ -3,6 +3,7 @@
 import math
 from collections import Counter
 from dataclasses import asdict, dataclass
+from functools import lru_cache
 
 import numpy as np
 from scipy.stats import beta
@@ -279,6 +280,7 @@ def category_bound(species_count, max_tips, *, confidence_budget=None):
     return total
 
 
+@lru_cache(maxsize=1024, typed=True)
 def probability_interval(hits, samples, alpha):
     lower = 0.0 if hits == 0 else float(beta.ppf(alpha / 2, hits, samples - hits + 1))
     upper = (

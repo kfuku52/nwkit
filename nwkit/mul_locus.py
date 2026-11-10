@@ -132,6 +132,15 @@ def combine_counts(distributions, charge=None):
     return result
 
 
+@lru_cache(maxsize=1024, typed=True)
+def _coalescent_probabilities(*log_weights):
+    values = np.asarray(log_weights)
+    probabilities = np.exp(values - logsumexp(values))
+    if np.any(~np.isfinite(probabilities)):
+        raise ArithmeticError("Invalid conditional coalescent weights.")
+    return probabilities
+
+
 class LocusCoalescent:
     """Count DP and backward sampling; no rejection of rare daughter bounds."""
 
@@ -199,11 +208,8 @@ class LocusCoalescent:
             rng.random()
             return key
         keys, logs = zip(*options, strict=True)
-        values = np.asarray(logs)
-        probabilities = np.exp(values - logsumexp(values))
-        if np.any(~np.isfinite(probabilities)):
-            raise ArithmeticError("Invalid conditional coalescent weights.")
-        return keys[int(rng.choice(len(keys), p=probabilities))]
+        probabilities = _coalescent_probabilities(*logs)
+        return keys[int(rng.choice(len(keys), p=probabilities.copy()))]
 
     def sample(self, rng):
         root_count = self.choose(list(self.base[self.root].items()), rng)
