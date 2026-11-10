@@ -12,14 +12,24 @@ from scipy.optimize import brentq, minimize_scalar
 from scipy.stats import chi2
 
 
-def gls(covariance, values):
+def _prepare_gls(covariance, count):
     factor = np.linalg.cholesky(covariance)
-    weights = cho_solve((factor, True), np.ones(len(values)))
-    mean = float(weights @ values / weights.sum())
+    weights = cho_solve((factor, True), np.ones(count))
+    precision = float(weights.sum())
+    logdet = float(2 * np.log(np.diag(factor)).sum())
+    return factor, weights, precision, logdet
+
+
+def _gls_from_preparation(prepared, values):
+    factor, weights, precision, logdet = prepared
+    mean = float(weights @ values / precision)
     residual = values - mean
     quadratic = float(residual @ cho_solve((factor, True), residual))
-    logdet = float(2 * np.log(np.diag(factor)).sum())
-    return mean, quadratic, logdet, float(weights.sum())
+    return mean, quadratic, logdet, precision
+
+
+def gls(covariance, values):
+    return _gls_from_preparation(_prepare_gls(covariance, len(values)), values)
 
 
 def k_statistic(covariance, values):
@@ -46,16 +56,19 @@ def _best_scalar(function, grid):
     return max(candidates, key=lambda item: item[1][0])
 
 
+def _zero_error_rate(gls_result, count):
+    mean, quadratic, logdet, _ = gls_result
+    rate = quadratic / count
+    if rate <= 0:
+        raise ValueError("Zero residual variance has no finite Gaussian density.")
+    likelihood = -0.5 * (count * (1 + np.log(2 * np.pi * rate)) + logdet)
+    return float(likelihood), float(rate), mean
+
+
 def rate_fit(covariance, values, errors):
     """Profile the root mean and ML diffusion rate, retaining rate=0."""
-    n = len(values)
     if not np.any(errors):
-        mean, quadratic, logdet, _ = gls(covariance, values)
-        rate = quadratic / n
-        if rate <= 0:
-            raise ValueError("Zero residual variance has no finite Gaussian density.")
-        likelihood = -0.5 * (n * (1 + np.log(2 * np.pi * rate)) + logdet)
-        return float(likelihood), float(rate), mean
+        return _zero_error_rate(gls(covariance, values), len(values))
     evaluate, lower, upper = _error_rate_profile(covariance, values, errors)
     if upper <= 0:
         return evaluate(0.0)
@@ -198,20 +211,19 @@ def _zero_error_lambda_spectrum(covariance):
     return sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet
 
 
-def _zero_error_lambda_profile(covariance, values, errors, prepare_spectrum=None):
+def _zero_error_lambda_profile(covariance, values, errors, prepare_profile=None):
     """Prepare an exact-observation profile from the covariance spectrum."""
     if np.any(errors) or np.ptp(values) == 0:
         return None
     # Check the endpoints first, including rejection of a singular covariance.
-    boundary = {
-        0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
-        1.0: rate_fit(covariance, values, errors),
-    }
-    spectrum = (
-        _zero_error_lambda_spectrum(covariance)
-        if prepare_spectrum is None
-        else prepare_spectrum()
-    )
+    if prepare_profile is None:
+        boundary = {
+            0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
+            1.0: rate_fit(covariance, values, errors),
+        }
+        spectrum = _zero_error_lambda_spectrum(covariance)
+    else:
+        boundary, spectrum = prepare_profile(values)
     if spectrum is None:
         return None
     sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet = spectrum
@@ -241,14 +253,14 @@ def lambda_fit(covariance, values, errors, ci_level=0.95):
     return _fit_lambda(covariance, values, errors, ci_level)
 
 
-def _fit_lambda(covariance, values, errors, ci_level, prepare_spectrum=None):
+def _fit_lambda(covariance, values, errors, ci_level, prepare_profile=None):
     diagonal = np.diag(np.diag(covariance))
     shared = covariance - diagonal
     if not np.any(shared):
         return {"status": "unidentifiable_lambda"}
     cache = {}
     spectral_profile = _zero_error_lambda_profile(
-        covariance, values, errors, prepare_spectrum
+        covariance, values, errors, prepare_profile
     )
 
     def profile(value):
@@ -309,11 +321,43 @@ def lambda_parametric_bootstrap(
     def prepare_spectrum():
         return _zero_error_lambda_spectrum(covariance)
 
+    @cache
+    def prepare_null():
+        return _prepare_gls(np.diag(diagonal), len(diagonal))
+
+    @cache
+    def prepare_bm():
+        return _prepare_gls(covariance, len(diagonal))
+
+    cache_endpoints = False
+
+    def prepare_profile(simulated):
+        nonlocal cache_endpoints
+        # Finish the first eigensolve before retaining the endpoint factors.
+        if not cache_endpoints:
+            boundary = {
+                0.0: rate_fit(np.diag(diagonal), simulated, errors),
+                1.0: rate_fit(covariance, simulated, errors),
+            }
+            spectrum = prepare_spectrum()
+            cache_endpoints = spectrum is not None
+            return boundary, spectrum
+        count = len(diagonal)
+        boundary = {
+            0.0: _zero_error_rate(
+                _gls_from_preparation(prepare_null(), simulated), count
+            ),
+            1.0: _zero_error_rate(
+                _gls_from_preparation(prepare_bm(), simulated), count
+            ),
+        }
+        return boundary, prepare_spectrum()
+
     exceed = 0
     tolerance = 1e-12 * max(1.0, abs(observed_lr))
     for _ in range(simulations):
         simulated = null_mean + standard_deviation * rng.standard_normal(len(values))
-        fit = _fit_lambda(covariance, simulated, errors, None, prepare_spectrum)
+        fit = _fit_lambda(covariance, simulated, errors, None, prepare_profile)
         # A zero-rate or flat replicate has no detectable lambda effect (LR=0).
         lr = fit.get("likelihood_ratio", 0.0)
         exceed += lr >= observed_lr - tolerance
