@@ -281,13 +281,14 @@ class SequenceLikelihood:
                     transition[child], derivatives[child] = p, dp
                     messages[child] = partials[child] @ p.T
                     value *= messages[child]
-                    scale += scales[child]
+                    scale += scales.pop(child)
                 norm = value.max(axis=1)
                 if np.any(norm <= 0):
                     raise ValueError(
                         "Sequence likelihood underflow: incompatible zero-length branches."
                     )
-                partials[node] = value / norm[:, None]
+                value /= norm[:, None]
+                partials[node] = value
                 scales[node] = scale + np.log(norm)
         root = self.chronology.gene
         log_likelihood = np.log(partials[root] @ self.pi) + scales[root]
@@ -296,16 +297,20 @@ class SequenceLikelihood:
         for node in self.preorder:
             if node.is_leaf:
                 continue
+            parent_outside = outside.pop(node)
             first, second = node.children
             for child, sibling in [(first, second), (second, first)]:
-                context = outside[node] * messages[sibling]
+                context = parent_outside * messages[sibling]
                 denominator = np.sum(context * messages[child], axis=1)
                 numerator = np.sum(
                     context * (partials[child] @ derivatives[child].T), axis=1
                 )
                 gradient[self.edge_id[child]] = numerator / denominator
-                value = context @ transition[child]
-                outside[child] = value / value.max(axis=1)[:, None]
+                # The outside message is only read when visiting a parent.
+                if not child.is_leaf:
+                    value = context @ transition[child]
+                    value /= value.max(axis=1)[:, None]
+                    outside[child] = value
         return log_likelihood, gradient
 
     def value_gradient(self, lengths):
