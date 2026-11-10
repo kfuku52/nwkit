@@ -56,3 +56,22 @@ def test_dated_presentation_rejects_interleaved_tip_order(tmp_path):
         render_dated_tree(tree, plot, tip_order=tip_order)
 
     assert not plot.exists()
+
+
+def test_dated_presentation_keeps_repeated_unary_clade_ages(tmp_path):
+    tree = tmp_path / "tree.nwk"
+    tree.write_text("((A:1,B:1):1);\n")
+    age_clades = tmp_path / "ages.tsv"
+    age_clades.write_text("descendant_species\nA,B\n")
+    events = tmp_path / "events.tsv"
+    events.write_text("descendant_species\tlabel\tsymbol\nB,A\tEvent\tD\n")
+
+    report = render_dated_tree(
+        tree,
+        tmp_path / "dated.svg",
+        age_clades=age_clades,
+        branch_annotations=events,
+    )
+
+    assert report["mean_age_label_count"] == 2
+    assert report["branch_annotations"][0]["display_position_Ma"] == 1.5

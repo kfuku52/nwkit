@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 from nwkit.draw_quality import measure_figure_renderer
+from nwkit.util import get_subtree_leaf_index_extents
 
 STATUS = ("single", "duplicated", "fragmented", "missing")
 STATUS_LABELS = ("Single-copy", "Duplicated", "Fragmented", "Missing")
@@ -85,11 +86,27 @@ def interval_label(nodes):
     return "; ".join(labels)
 
 
-def read_branch_annotations(path, nodes, ys):
+def _clade_span(names, ranks):
+    try:
+        positions = [ranks[name] for name in names]
+    except KeyError:
+        return None
+    first, last = min(positions), max(positions)
+    count = len(positions)
+    return (first, last, count) if last - first + 1 == count else None
+
+
+def read_branch_annotations(path, nodes, ys, *, clade_lookup=None):
     """Map presentation symbols to exact stem branches, never estimate dates."""
     from matplotlib.colors import is_color_like
 
-    clades = {frozenset(node.leaf_names()): node for node in nodes}
+    if clade_lookup is None:
+        clades = {frozenset(node.leaf_names()): node for node in nodes}
+
+        def lookup(names):
+            return clades.get(frozenset(names))
+    else:
+        lookup = clade_lookup
     required = {"descendant_species", "label", "symbol"}
     optional = {"event_id", "colour", "branch_fraction"}
     events, identifiers, positions = [], set(), set()
@@ -112,7 +129,7 @@ def read_branch_annotations(path, nodes, ys):
                 )
             row = {key: value.strip() for key, value in row.items()}
             names = [name.strip() for name in row["descendant_species"].split(",")]
-            node = clades.get(frozenset(names))
+            node = lookup(names)
             if (
                 not all(names)
                 or len(names) != len(set(names))
@@ -285,35 +302,48 @@ def _prepare_node_annotations(
             if not is_color_like(row["colour"]):
                 raise ValueError("Invalid tip annotation colour.")
             styles[name] = row
+    nodes = list(tree.traverse())
+    ranks = {name: index for index, name in enumerate(order)}
+    extents = (
+        get_subtree_leaf_index_extents(tree, ranks)
+        if age_clades or branch_annotations
+        else {}
+    )
     selected = set()
     if age_clades:
+        requested = set()
         for row in read_metadata_table(age_clades, ["descendant_species"]):
             names = [name.strip() for name in row["descendant_species"].split(",")]
             clade = frozenset(names)
-            if not all(names) or len(names) != len(clade) or clade in selected:
+            if not all(names) or len(names) != len(clade) or clade in requested:
                 raise ValueError(
                     "Age clades require unique nonempty species and no repeated clade."
                 )
-            selected.add(clade)
-        actual = {
-            frozenset(node.leaf_names()) for node in tree.traverse() if not node.is_leaf
+            requested.add(clade)
+        spans = {_clade_span(clade, ranks) for clade in requested}
+        selected = {
+            node for node, span in extents.items() if not node.is_leaf and span in spans
         }
-        if not selected <= actual:
+        if {extents[node] for node in selected} != spans:
             raise ValueError(
                 "A requested age label is not an internal clade in the tree."
             )
-    nodes = list(tree.traverse())
     count = len(species)
-    ranks = {name: index for index, name in enumerate(order)}
     ys = {leaf: float(count - 1 - ranks[leaf.name]) for leaf in leaves}
     for node in tree.traverse(strategy="postorder"):
         if not node.is_leaf:
             ys[node] = (ys[node.children[0]] + ys[node.children[-1]]) / 2
-    events = (
-        read_branch_annotations(branch_annotations, nodes, ys)
-        if branch_annotations
-        else []
-    )
+    events = []
+    if branch_annotations:
+        # Repeated unary clades select the last node in the existing tree order.
+        branch_by_span = {extents[node]: node for node in nodes}
+
+        def find_branch(names):
+            return branch_by_span.get(_clade_span(names, ranks))
+
+        events = read_branch_annotations(
+            branch_annotations, nodes, ys, clade_lookup=find_branch
+        )
     max_age = max(
         float(node.props.get("age_ci_high", node.props["age"])) for node in nodes
     )
@@ -825,7 +855,7 @@ def _draw_tip_and_age_labels(
         if node.is_leaf or not (
             node_ages == "all"
             or (node_ages == "root" and node.is_root)
-            or (selected and frozenset(node.leaf_names()) in selected)
+            or node in selected
         ):
             continue
         text = axis.annotate(
