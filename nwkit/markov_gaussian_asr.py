@@ -1,6 +1,7 @@
 """CTMC-modulated scalar BM/OU, integrating uncertain regime histories."""
 
 import math
+from functools import lru_cache
 
 import numpy as np
 
@@ -109,6 +110,7 @@ def fit_markov_gaussian(
     """
     from nwkit.asr import (
         _build_uniformization_context,
+        _conditional_node_state_probabilities,
         _sample_node_states,
         compute_mk_marginals,
     )
@@ -141,8 +143,18 @@ def fit_markov_gaussian(
         for length in set(lengths.values())
     }
 
+    @lru_cache(maxsize=4096)
+    def conditional_probabilities(child, parent_state):
+        return _conditional_node_state_probabilities(discrete_fit, child, parent_state)
+
     def propose(rng):
-        node_states = _sample_node_states(tree, states, discrete_fit, rng)
+        node_states = _sample_node_states(
+            tree,
+            states,
+            discrete_fit,
+            rng,
+            conditional_probabilities=conditional_probabilities,
+        )
         segments = {
             node: sample_bridge_segments(
                 node_states[node.up],

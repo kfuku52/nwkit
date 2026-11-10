@@ -4,6 +4,7 @@ import sys
 from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 from copy import copy
+from functools import partial
 from typing import Any
 
 import numpy as np
@@ -2670,24 +2671,29 @@ def _resolve_uniformization_context(
     return _build_uniformization_context(rate_matrix, branch_length)
 
 
-def _sample_node_states(tree, states, fit, rng):
+def _conditional_node_state_probabilities(fit, child, parent_state):
+    transition_matrix = fit["transition_matrices"][child]
+    weights = (
+        _log_probabilities(transition_matrix[parent_state, :])
+        + fit["log_inside"][child]
+    )
+    return _probabilities_from_logs(weights)
+
+
+def _sample_node_states(tree, states, fit, rng, *, conditional_probabilities=None):
+    if conditional_probabilities is None:
+        conditional_probabilities = partial(_conditional_node_state_probabilities, fit)
     sampled_states = dict()
     num_states = len(fit["posterior_by_node"][tree])
+    state_indices = np.arange(num_states)
     sampled_states[tree] = int(
-        rng.choice(np.arange(num_states), p=fit["posterior_by_node"][tree])
+        rng.choice(state_indices, p=fit["posterior_by_node"][tree])
     )
     for node in tree.traverse(strategy="preorder"):
         for child in node.get_children():
             parent_state = sampled_states[node]
-            transition_matrix = fit["transition_matrices"][child]
-            weights = (
-                _log_probabilities(transition_matrix[parent_state, :])
-                + fit["log_inside"][child]
-            )
-            probabilities = _probabilities_from_logs(weights)
-            sampled_states[child] = int(
-                rng.choice(np.arange(num_states), p=probabilities)
-            )
+            probabilities = conditional_probabilities(child, parent_state)
+            sampled_states[child] = int(rng.choice(state_indices, p=probabilities))
     return sampled_states
 
 
