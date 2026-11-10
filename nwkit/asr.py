@@ -2693,22 +2693,22 @@ def _simulation_seed_sequence(seed, num_simulations):
     return seed_sequence.spawn(num_simulations)
 
 
-def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts):
+def _build_stochastic_map_spec(
+    tree, fit, node_to_branch_id, uniformization_contexts, *, prepare_probabilities=True
+):
     nodes = list(tree.traverse(strategy="preorder"))
     node_to_index = {node: index for index, node in enumerate(nodes)}
     children_by_index: list[list[int]] = [[] for _ in nodes]
     parent_indices = [-1] * len(nodes)
     branch_ids = [-1] * len(nodes)
     branch_lengths = [0.0] * len(nodes)
-    transition_matrices = np.zeros(
-        (len(nodes), fit["rate_matrix"].shape[0], fit["rate_matrix"].shape[1]),
-        dtype=float,
-    )
-    rate_matrices = np.zeros_like(transition_matrices)
+    rate_matrix = fit["rate_matrix"]
+    num_states = rate_matrix.shape[0]
+    node_weights = np.full((len(nodes), num_states, num_states), np.nan)
+    rate_matrices = [rate_matrix] * len(nodes)
+    rate_by_node = fit.get("rate_matrix_by_node", {})
     contexts = [None] * len(nodes)
-    inside = np.zeros((len(nodes), fit["rate_matrix"].shape[0]), dtype=float)
     for node, node_index in node_to_index.items():
-        inside[node_index, :] = fit["log_inside"][node]
         if node.is_root:
             continue
         parent_index = node_to_index[node.up]
@@ -2716,23 +2716,34 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
         children_by_index[parent_index].append(node_index)
         branch_ids[node_index] = node_to_branch_id[node]
         branch_lengths[node_index] = float(node.dist)
-        transition_matrices[node_index, :, :] = fit["transition_matrices"][node]
-        rate_matrices[node_index, :, :] = fit.get("rate_matrix_by_node", {}).get(
-            node, fit["rate_matrix"]
+        log_weights = _log_probabilities(
+            np.asarray(fit["transition_matrices"][node], dtype=float)
         )
+        log_weights += np.asarray(fit["log_inside"][node], dtype=float)
+        if prepare_probabilities:
+            normalizers = logsumexp(log_weights, axis=1)
+            valid = np.isfinite(normalizers)
+            # Impossible parent states are never used by a valid draw.
+            node_weights[node_index, valid] = np.exp(
+                log_weights[valid] - normalizers[valid, None]
+            )
+        else:
+            node_weights[node_index] = log_weights
+        rate_matrices[node_index] = rate_by_node.get(node, rate_matrix)
         contexts[node_index] = _stochastic_map_context(uniformization_contexts, node)
     return {
         "children_by_index": children_by_index,
         "parent_indices": parent_indices,
         "branch_ids": branch_ids,
         "branch_lengths": branch_lengths,
-        "log_inside": inside,
-        "log_transition_matrices": _log_probabilities(transition_matrices),
-        "rate_matrix": fit["rate_matrix"],
+        "node_weights": node_weights,
+        "probabilities_prepared": prepare_probabilities,
+        "state_indices": np.arange(num_states),
+        "rate_matrix": rate_matrix,
         "rate_matrices": rate_matrices,
         "root_posterior": fit["posterior_by_node"][tree],
         "uniformization_contexts": contexts,
-        "num_states": fit["rate_matrix"].shape[0],
+        "num_states": num_states,
         "state_projection": fit.get("state_projection"),
     }
 
@@ -2745,16 +2756,18 @@ def _stochastic_map_context(uniformization_contexts, node):
 
 def _sample_node_states_from_spec(spec, rng):
     sampled_states = np.zeros(len(spec["parent_indices"]), dtype=int)
-    state_indices = np.arange(spec["num_states"])
+    state_indices = spec["state_indices"]
+    node_weights = spec["node_weights"]
+    probabilities_prepared = spec["probabilities_prepared"]
     sampled_states[0] = int(rng.choice(state_indices, p=spec["root_posterior"]))
     for parent_index, child_indices in enumerate(spec["children_by_index"]):
         parent_state = sampled_states[parent_index]
         for child_index in child_indices:
-            transition_matrix = spec["log_transition_matrices"][child_index]
-            weights = (
-                transition_matrix[parent_state, :] + spec["log_inside"][child_index]
-            )
-            probabilities = _probabilities_from_logs(weights)
+            probabilities = node_weights[child_index, parent_state]
+            if not probabilities_prepared:
+                probabilities = _probabilities_from_logs(probabilities)
+            elif not math.isfinite(probabilities[0]):
+                raise ValueError("Failed to calculate posterior state probabilities.")
             sampled_states[child_index] = int(
                 rng.choice(state_indices, p=probabilities)
             )
@@ -2970,7 +2983,13 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
         fit, branches, _parameters=parameters
     )
     del parameters
-    spec = _build_stochastic_map_spec(tree, fit, node_to_branch_id, contexts)
+    spec = _build_stochastic_map_spec(
+        tree,
+        fit,
+        node_to_branch_id,
+        contexts,
+        prepare_probabilities=num_simulations > 1,
+    )
     seed_sequences = _simulation_seed_sequence(seed, num_simulations)
     total_counts, any_counts = _run_stochastic_simulations(
         spec, seed_sequences, threads

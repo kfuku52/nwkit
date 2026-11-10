@@ -16,7 +16,7 @@ from nwkit.stochastic_map_tables import (
     probability_table,
     time_table,
 )
-from nwkit.util import read_tree
+from nwkit.util import assign_branch_ids, read_tree
 
 
 @pytest.fixture(scope="module")
@@ -40,6 +40,31 @@ def problem():
 def sample(problem):
     tree, states, fit = problem
     return sample_histories(tree, states, fit, 80, seed=192)
+
+
+@pytest.mark.parametrize("prepare_probabilities", [False, True])
+def test_impossible_parent_state_is_rejected_only_if_sampled(prepare_probabilities):
+    tree = read_tree("(A:0,B:1);", 0, False)
+    states = ["red", "blue"]
+    observed = {"A": "red", "B": None}
+    likelihoods = {"A": np.array([1.0, 0.0]), "B": np.ones(2)}
+    _, fit = asr.compute_mk_marginals(
+        tree, states, observed, likelihoods, model="ER", rate=0.8
+    )
+    contexts = asr._stochastic_uniformization_contexts(fit, list(tree.children))
+    spec = asr._build_stochastic_map_spec(
+        tree,
+        fit,
+        assign_branch_ids(tree),
+        contexts,
+        prepare_probabilities=prepare_probabilities,
+    )
+
+    sampled = asr._sample_node_states_from_spec(spec, np.random.default_rng(21))
+    assert tuple(sampled[:2]) == (0, 0)
+    spec["root_posterior"] = np.array([0.0, 1.0])
+    with pytest.raises(ValueError, match="posterior state probabilities"):
+        asr._sample_node_states_from_spec(spec, np.random.default_rng(21))
 
 
 @pytest.mark.parametrize("histories", [False, True])

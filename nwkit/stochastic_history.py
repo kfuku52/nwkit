@@ -102,7 +102,7 @@ def _history_work(fit, branches, count, *, _return_parameters=False):
             "Map histories exceed 100,000 draw/node records; reduce --n-sim."
         )
     size = fit["rate_matrix"].shape[0]
-    # The legacy specification builds Q, P and log(P), plus inside likelihoods.
+    # Keep the established conservative budget for dense simulation arrays.
     dense_bytes = (len(branches) + 1) * (3 * size * size + size) * 8
     if dense_bytes > 256 * 1024**2:
         raise ValueError(
@@ -160,7 +160,9 @@ def sample_histories(tree, states, fit, count, *, seed=None, threads=1):
         fit, branches, _parameters=parameters
     )
     del parameters
-    spec = _build_stochastic_map_spec(tree, fit, identifiers, contexts)
+    spec = _build_stochastic_map_spec(
+        tree, fit, identifiers, contexts, prepare_probabilities=count > 1
+    )
     indexed = list(enumerate(_simulation_seed_sequence(seed, count)))
     if threads == 1 or count == 1:
         draws = _draw_chunk((spec, indexed))
