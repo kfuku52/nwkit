@@ -1,6 +1,7 @@
 """Validated count-model inputs and transactional WGM candidate outputs."""
 
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -9,12 +10,12 @@ import pandas as pd
 
 from nwkit import __version__
 from nwkit.clade_index import CladeIndex
-from nwkit.gene_family_input import read_gene_family_table
+from nwkit.gene_family_input import read_gene_family_rows, read_gene_family_table
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import require_rooted
 from nwkit.util import (
     assign_branch_ids,
-    is_missing_table_value,
+    parse_table_missing_values,
     read_tree,
     validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
@@ -24,19 +25,27 @@ from nwkit.wgd_count_model import CountLikelihood, CountTree, rate_categories
 
 
 def read_counts(path, names, missing_values):
-    header, rows = read_gene_family_table(path, ["family_id", *names])
+    header, rows = read_gene_family_rows(path, ["family_id", *names])
     if set(header) != {"family_id", *names}:
         raise ValueError(
             "Count columns must exactly match the species-tree tips plus family_id."
         )
-    families = [row["family_id"] for row in rows]
+    index_by_name = {name: index for index, name in enumerate(header)}
+    family_column = index_by_name["family_id"]
+    families = [row[family_column] for row in rows]
     if any(not family for family in families) or len(set(families)) != len(families):
         raise ValueError("family_id values must be nonempty and unique.")
+    columns = [(name, index_by_name[name]) for name in names]
+    markers = (
+        missing_values
+        if isinstance(missing_values, set)
+        else parse_table_missing_values(missing_values)
+    )
     counts = np.empty((len(rows), len(names)))
     for i, row in enumerate(rows):
-        for j, name in enumerate(names):
-            value = row[name]
-            if is_missing_table_value(value, missing_values):
+        for j, (name, column) in enumerate(columns):
+            value = row[column]
+            if value.strip() in markers:
                 counts[i, j] = np.nan
                 continue
             try:
@@ -45,7 +54,7 @@ def read_counts(path, names, missing_values):
                 raise ValueError(
                     f"{families[i]}/{name}: count must be a nonnegative integer or missing."
                 ) from exc
-            if not np.isfinite(number) or number < 0 or number != np.floor(number):
+            if not math.isfinite(number) or number < 0 or not number.is_integer():
                 raise ValueError(
                     f"{families[i]}/{name}: count must be a nonnegative integer or missing."
                 )
