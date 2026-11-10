@@ -3,7 +3,6 @@
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -20,10 +19,10 @@ from nwkit.disparity import (
 )
 from nwkit.evolution import build_evolutionary_process, tree_depths
 from nwkit.output_transaction import output_transaction, validate_output_targets
-from nwkit.rooting_state import require_rooted, set_rooting_info
+from nwkit.rooting_state import require_rooted
 from nwkit.trait_input import numeric_trait_matrix, parse_trait_columns
 from nwkit.util import (
-    assign_branch_ids,
+    copy_retained_crown,
     get_node_class,
     read_tip_table,
     read_tree,
@@ -107,31 +106,7 @@ def _ultrametric_depths(tree):
 
 
 def _prune_to_crown(tree, names):
-    identifiers = assign_branch_ids(tree)
-    crown = tree.common_ancestor(names)
-    retained = set(names)
-    keep: dict[Any, bool] = {}
-    for node in crown.traverse("postorder"):
-        keep[node] = (
-            node.name in retained
-            if node.is_leaf
-            else any(keep[c] for c in node.children)
-        )
-    # ETE's deepcopy recursively copies child links and fails on valid deep trees.
-    # Copy the retained topology iteratively; node property dictionaries are distinct.
-    copies = {}
-    for node in crown.traverse("preorder"):
-        if not keep[node]:
-            continue
-        copy = type(tree)()
-        copy.props.update(node.props)
-        copy.add_prop(_ID, identifiers[node])
-        copies[node] = copy
-        if node is not crown:
-            copies[node.up].add_child(copy)
-    root = copies[crown]
-    set_rooting_info(root, True, source="operation")
-    return root
+    return copy_retained_crown(tree, names, _ID)
 
 
 def _read_data(args):

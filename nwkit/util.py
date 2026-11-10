@@ -1710,6 +1710,56 @@ def assign_branch_ids(tree, strategy="levelorder"):
     return node_to_branch_id
 
 
+def _crown_for_names(tree, names, retained):
+    matched = set()
+    first = last = None
+    for node in tree.traverse("preorder"):
+        name = node.name
+        if name not in retained:
+            continue
+        if name in matched:
+            # Keep ETE's ambiguity diagnostic, including its traversal order.
+            return tree.common_ancestor(names)
+        matched.add(name)
+        if first is None:
+            first = node
+        last = node
+    if first is None or matched != retained:
+        return tree.common_ancestor(names)
+    # The outermost matching nodes in preorder bound the selected crown.
+    return tree.common_ancestor(first, last)
+
+
+def copy_retained_crown(tree, names, branch_id_property):
+    """Copy a trait sample's crown with branch IDs from the original tree."""
+    identifiers = assign_branch_ids(tree)
+    retained = set(names)
+    crown = _crown_for_names(tree, names, retained)
+    keep = set()
+    for node in crown.traverse("postorder"):
+        has_retained_tip = (
+            node.name in retained
+            if node.is_leaf
+            else any(child in keep for child in node.children)
+        )
+        if has_retained_tip:
+            keep.add(node)
+    # ETE deepcopy recurses through child links, even on valid deep trees.
+    copies = {}
+    for node in crown.traverse("preorder"):
+        if node not in keep:
+            continue
+        clone = type(tree)()
+        clone.props.update(node.props)
+        clone.add_prop(branch_id_property, identifiers[node])
+        copies[node] = clone
+        if node is not crown:
+            copies[node.up].add_child(clone)
+    root = copies[crown]
+    set_rooting_info(root, True, source="operation")
+    return root
+
+
 def get_node_class(node):
     if node.is_root:
         return "root"

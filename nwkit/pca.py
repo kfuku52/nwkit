@@ -3,7 +3,6 @@
 import json
 import sys
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -15,10 +14,10 @@ from nwkit.evolution import build_evolutionary_process
 from nwkit.file_paths import validate_outputs_do_not_replace_inputs
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.phylogenetic_pca import fit_pca
-from nwkit.rooting_state import require_rooted, set_rooting_info
+from nwkit.rooting_state import require_rooted
 from nwkit.trait_input import numeric_trait_matrix, parse_trait_columns
 from nwkit.util import (
-    assign_branch_ids,
+    copy_retained_crown,
     get_node_class,
     read_tip_table,
     read_tree,
@@ -61,30 +60,7 @@ def _validate_outputs(args):
 
 
 def _retained_tree(tree, names):
-    identifiers = assign_branch_ids(tree)
-    retained = set(names)
-    crown = tree.common_ancestor(names)
-    keep: dict[Any, bool] = {}
-    for node in crown.traverse("postorder"):
-        keep[node] = (
-            node.name in retained
-            if node.is_leaf
-            else any(keep[child] for child in node.children)
-        )
-    # Copy retained nodes iteratively: ETE deepcopy recurses through child links.
-    copies = {}
-    for node in crown.traverse("preorder"):
-        if not keep[node]:
-            continue
-        clone = type(tree)()
-        clone.props.update(node.props)
-        clone.add_prop(_ID, identifiers[node])
-        copies[node] = clone
-        if node is not crown:
-            copies[node.up].add_child(clone)
-    root = copies[crown]
-    set_rooting_info(root, True, source="operation")
-    return root
+    return copy_retained_crown(tree, names, _ID)
 
 
 def _read_data(args):
