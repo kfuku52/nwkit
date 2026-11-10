@@ -49,18 +49,22 @@ def _stable_median(values):
     return _midpoint(values[(len(values) - 1) // 2], values[len(values) // 2])
 
 
-def _weighted_median(values, weights, order=None):
+def _weighted_median(values, weights):
     values = np.asarray(values)
-    if order is None:
-        order = np.argsort(values, kind="stable")
-    weights = np.asarray(weights, dtype=np.int64)[order]
-    total = int(weights.sum())
-    if total == 0:
+    order = np.argsort(values, kind="stable")
+    return _ordered_weighted_median(
+        values[order], np.asarray(weights, dtype=np.int64)[order]
+    )
+
+
+def _ordered_weighted_median(values, weights):
+    cumulative = np.cumsum(weights, dtype=np.int64)
+    if not cumulative.size or not cumulative[-1]:
         return float("nan")
-    cumulative = np.cumsum(weights)
-    low = int(np.searchsorted(cumulative, (total - 1) // 2, side="right"))
-    high = int(np.searchsorted(cumulative, total // 2, side="right"))
-    return _midpoint(values[order[low]], values[order[high]])
+    total = int(cumulative[-1])
+    low = int(cumulative.searchsorted((total - 1) // 2, side="right"))
+    high = int(cumulative.searchsorted(total // 2, side="right"))
+    return _midpoint(values[low], values[high])
 
 
 class PairKs:
@@ -188,17 +192,16 @@ def bootstrap_corrections(pairs, trios, draws, seed):
         observations = pairs.pairs.get(pair)
         if observations is not None:
             values, families = observations
-            prepared.append(
-                (position, values, families, np.argsort(values, kind="stable"))
-            )
+            order = np.argsort(values, kind="stable")
+            prepared.append((position, values[order], families[order]))
 
     rng = np.random.default_rng(seed)
     num_families = len(pairs.families)
     for draw in range(draws):
         selected = rng.integers(0, num_families, size=num_families)
         weights = np.bincount(selected, minlength=num_families)
-        for position, values, families, order in prepared:
-            pair_values[position] = _weighted_median(values, weights[families], order)
+        for position, values, families in prepared:
+            pair_values[position] = _ordered_weighted_median(values, weights[families])
         first, second, third = pair_values[trio_rows].T
         # Subtract first to keep the intermediate in range for finite,
         # nonnegative pair medians. A missing pair makes the trio unavailable.
