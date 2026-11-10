@@ -90,17 +90,37 @@ def _score_task(task):
     return candidate.id, score, checks
 
 
+_SCORE_WORKER_GENES = None
+
+
+def _init_score_worker(genes):
+    global _SCORE_WORKER_GENES
+    _SCORE_WORKER_GENES = genes
+
+
+def _score_worker_task(task):
+    candidate, parser, limit, collect_checks = task
+    return _score_task((candidate, _SCORE_WORKER_GENES, parser, limit, collect_checks))
+
+
 def run_search(
     candidates, genes, parser, *, cpus=1, max_state_pairs=10000000, collect_checks=True
 ):
-    tasks = (
-        (candidate, genes, parser, max_state_pairs, collect_checks)
-        for candidate in candidates
-    )
     if cpus == 1:
-        return tuple(map(_score_task, tasks))
-    with ProcessPoolExecutor(max_workers=min(cpus, len(candidates))) as pool:
-        return tuple(pool.map(_score_task, tasks, chunksize=1))
+        return tuple(
+            _score_task((candidate, genes, parser, max_state_pairs, collect_checks))
+            for candidate in candidates
+        )
+    tasks = (
+        (candidate, parser, max_state_pairs, collect_checks) for candidate in candidates
+    )
+    # Each worker reads the same trees. Only the candidate changes between tasks.
+    with ProcessPoolExecutor(
+        max_workers=min(cpus, len(candidates)),
+        initializer=_init_score_worker,
+        initargs=(genes,),
+    ) as pool:
+        return tuple(pool.map(_score_worker_task, tasks, chunksize=1))
 
 
 def mul_reconcile_main(args):
