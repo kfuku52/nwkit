@@ -99,6 +99,15 @@ def _lambda(covariance, values, model, fixed):
     return fit.x, True
 
 
+def _scaled_covariance(covariance, lam):
+    scaled = np.multiply(covariance, lam)
+    diagonal = scaled.diagonal() + (1 - lam) * covariance.diagonal()
+    # Preserve the sign of zeros from adding the diagonal matrix.
+    np.add(scaled, 0.0, out=scaled)
+    np.fill_diagonal(scaled, diagonal)
+    return scaled
+
+
 def fit_pca(covariance, values, *, model="BM", mode="cov", lambda_value=None):
     values = np.asarray(values, dtype=float)
     covariance = np.asarray(covariance, dtype=float)
@@ -119,7 +128,7 @@ def fit_pca(covariance, values, *, model="BM", mode="cov", lambda_value=None):
             "PCA requires nonconstant trait columns; remove constant columns."
         )
     lam, estimated = _lambda(covariance, values, model, lambda_value)
-    covariance = lam * covariance + (1 - lam) * np.diag(np.diag(covariance))
+    covariance = _scaled_covariance(covariance, lam)
     factor, center, residual = _centered(covariance, values)
     white = _finite(solve_triangular(factor, residual, lower=True), "Whitened traits")
     n, p = values.shape
