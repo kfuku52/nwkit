@@ -192,32 +192,55 @@ class Cell:
     choices: list[tuple[int, int]]
 
 
-class Reconciliation:
-    """State = gene node and its species-node map; costs compose through LCA."""
-
-    def __init__(self, gene, species, parser, max_state_pairs=10000000):
-        validate_binary(gene, "Gene tree")
+class _SpeciesIndex:
+    def __init__(self, species):
         validate_binary(species, "MUL-tree", unique=False)
-        self.gene = gene
-        self.nodes = tuple(gene.traverse("postorder"))
-        self.gene_index = {node: index for index, node in enumerate(self.nodes)}
         self.lca = LcaIndex(species)
-        self.species = self.lca.nodes
-        self.depth = self.lca.depth
-        self.labels = tuple(node.name for node in self.species)
-        self.states: list[dict[int, Cell]] = []
+        self.labels = tuple(node.name for node in self.lca.nodes)
         occurrences: dict[str, list[int]] = {}
-        for index, node in enumerate(self.species):
+        for index, node in enumerate(self.lca.nodes):
             if node.is_leaf:
                 name = node.props.get("mul_species", node.name)
                 occurrences.setdefault(name, []).append(index)
+        self.occurrences = occurrences
+
+
+def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
+    """Reuse the fixed species index while evaluating gene trees in input order."""
+    species_index = None
+    for gene in genes:
+        result = Reconciliation(
+            gene, species, parser, max_state_pairs, _species_index=species_index
+        )
+        species_index = result._species_index
+        yield result
+
+
+class Reconciliation:
+    """State = gene node and its species-node map; costs compose through LCA."""
+
+    def __init__(
+        self, gene, species, parser, max_state_pairs=10000000, *, _species_index=None
+    ):
+        validate_binary(gene, "Gene tree")
+        if _species_index is None:
+            _species_index = _SpeciesIndex(species)
+        self._species_index = _species_index
+        self.gene = gene
+        self.nodes = tuple(gene.traverse("postorder"))
+        self.gene_index = {node: index for index, node in enumerate(self.nodes)}
+        self.lca = _species_index.lca
+        self.species = self.lca.nodes
+        self.depth = self.lca.depth
+        self.labels = _species_index.labels
+        self.states: list[dict[int, Cell]] = []
         self.combinations = 1
         self.ambiguous_tips = 0
         self.state_pairs = 0
         for node in self.nodes:
             if node.is_leaf:
                 name = parser.parse(node.name).species_label
-                options = occurrences.get(name, ())
+                options = _species_index.occurrences.get(name, ())
                 if not options:
                     raise ValueError(f"Gene tip does not match a species: {node.name}")
                 self.combinations *= len(options)

@@ -12,7 +12,7 @@ from urllib.parse import quote
 import pandas as pd
 
 from nwkit import __version__
-from nwkit.mul_reconcile_model import Reconciliation, hypotheses, validate_binary
+from nwkit.mul_reconcile_model import hypotheses, reconcile_genes, validate_binary
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import rooting_output_options
 from nwkit.species_parser import get_species_parser
@@ -69,8 +69,9 @@ def annotated_mapping_text(gene, mapping, args=None):
 def _score_task(task):
     candidate, genes, parser, limit, collect_checks = task
     checks, score = [], 0
-    for number, gene in enumerate(genes, 1):
-        result = Reconciliation(gene, candidate.tree, parser, limit)
+    for number, result in enumerate(
+        reconcile_genes(genes, candidate.tree, parser, limit), 1
+    ):
         score += result.score
         if not collect_checks:
             continue
@@ -245,8 +246,9 @@ def mul_reconcile_main(args):
             lineterminator="\n",
         )
         writer.writeheader()
-        for number, gene in enumerate(genes, 1):
-            result = Reconciliation(gene, best.tree, parser, args.max_state_pairs)
+        for number, result in enumerate(
+            reconcile_genes(genes, best.tree, parser, args.max_state_pairs), 1
+        ):
             for duplications, losses, mapping in result.mappings(args.max_maps):
                 writer.writerow(
                     {
@@ -255,7 +257,7 @@ def mul_reconcile_main(args):
                         "dups": duplications,
                         "losses": losses,
                         "total.score": duplications + losses,
-                        "maps": annotated_mapping_text(gene, mapping, args),
+                        "maps": annotated_mapping_text(result.gene, mapping, args),
                         "node.maps": json.dumps(mapping, separators=(",", ":")),
                         "maps.format": "grampa-annotated-newick",
                         "node.maps.format": "nwkit-node-map-json-v1",
