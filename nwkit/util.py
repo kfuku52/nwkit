@@ -2192,10 +2192,16 @@ def get_subtree_leaf_index_extents(tree, tip_order):
             index = tip_order[node.name]
             extents[node] = (index, index, 1)
         else:
-            first, last, counts = zip(
-                *(extents[child] for child in node.children), strict=True
-            )
-            extents[node] = (min(first), max(last), sum(counts))
+            children = iter(node.children)
+            first, last, count = extents[next(children)]
+            for child in children:
+                child_first, child_last, child_count = extents[child]
+                if child_first < first:
+                    first = child_first
+                if child_last > last:
+                    last = child_last
+                count += child_count
+            extents[node] = (first, last, count)
     return extents
 
 
