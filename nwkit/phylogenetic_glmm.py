@@ -490,8 +490,10 @@ def _normalize_covariance(
     return normalized
 
 
-def _dense_glmm_covariance_at(factory, size, estimate_shape):
-    def normalized(parameter):
+def _glmm_covariance_at(factory, size, estimate_shape, *, use_sparse):
+    def prepared(parameter):
+        if use_sparse:
+            return _sparse_covariance_from_factory(factory, parameter)
         return _normalize_covariance(factory(parameter), size, "Phylogenetic")
 
     # An in-memory tree covariance is fixed within this fit. User callbacks
@@ -501,8 +503,8 @@ def _dense_glmm_covariance_at(factory, size, estimate_shape):
         and factory.custom_covariance is None
         and not estimate_shape
     ):
-        return lru_cache(maxsize=1)(normalized)
-    return normalized
+        return lru_cache(maxsize=1)(prepared)
+    return prepared
 
 
 def _multinomial_terms(
@@ -595,8 +597,7 @@ def _sparse_covariance_from_factory(factory, parameter):
 
 
 def _sparse_glmm_latent_model(
-    phylogenetic_covariance,
-    parameter,
+    phylogenetic,
     component_variances,
     group_covariance,
     random_dimension,
@@ -604,7 +605,6 @@ def _sparse_glmm_latent_model(
     predictor_columns=(),
     coefficients=None,
 ):
-    phylogenetic = _sparse_covariance_from_factory(phylogenetic_covariance, parameter)
     if phylogenetic is None:
         return None
     components = {"phylogenetic": (component_variances["phylogenetic"], phylogenetic)}
@@ -2765,8 +2765,8 @@ def _fit_scalar_phylogenetic_glmm(
             decoded_parameter,
         )
 
-    dense_covariance_at = _dense_glmm_covariance_at(
-        phylogenetic_covariance, n_tips, estimate_shape
+    covariance_at = _glmm_covariance_at(
+        phylogenetic_covariance, n_tips, estimate_shape, use_sparse=use_sparse
     )
 
     def state(parameters: np.ndarray):
@@ -2776,8 +2776,7 @@ def _fit_scalar_phylogenetic_glmm(
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
         if use_sparse:
             latent = _sparse_glmm_latent_model(
-                phylogenetic_covariance,
-                decoded,
+                covariance_at(decoded),
                 components,
                 group_covariance,
                 1,
@@ -2825,7 +2824,7 @@ def _fit_scalar_phylogenetic_glmm(
                 observation_loading,
                 posterior_factor,
             )
-        phylo_base = dense_covariance_at(decoded)
+        phylo_base = covariance_at(decoded)
         random_covariance = math.exp(float(log_variances[0])) * phylo_base
         if group_base is not None:
             random_covariance += math.exp(float(log_variances[1])) * group_base
@@ -3246,8 +3245,9 @@ def _prepare_glmm_sampler(fit, design, phylogenetic_covariance, options):
     random_cholesky = None
     if sparse_capable:
         latent_model = _sparse_glmm_latent_model(
-            phylogenetic_covariance,
-            fit.evolution_parameter,
+            _sparse_covariance_from_factory(
+                phylogenetic_covariance, fit.evolution_parameter
+            ),
             fit.component_variances,
             options.group_covariance,
             fit.coefficients.shape[1],
@@ -3621,8 +3621,8 @@ def fit_phylogenetic_glmm(
         )
         return coefficients, thresholds, log_variances, decoded_parameter
 
-    dense_covariance_at = _dense_glmm_covariance_at(
-        phylogenetic_covariance, len(design), estimate_shape
+    covariance_at = _glmm_covariance_at(
+        phylogenetic_covariance, len(design), estimate_shape, use_sparse=use_sparse
     )
 
     def state(parameters: np.ndarray):
@@ -3630,8 +3630,7 @@ def fit_phylogenetic_glmm(
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
         if use_sparse:
             latent = _sparse_glmm_latent_model(
-                phylogenetic_covariance,
-                decoded_parameter,
+                covariance_at(decoded_parameter),
                 components,
                 group_covariance,
                 random_dimension,
@@ -3678,7 +3677,7 @@ def fit_phylogenetic_glmm(
                 expanded_design,
                 posterior_factor,
             )
-        phylo_base = dense_covariance_at(decoded_parameter)
+        phylo_base = covariance_at(decoded_parameter)
         random_covariance = np.exp(log_variances[0]) * phylo_base
         if group_base is not None:
             random_covariance = (

@@ -10,8 +10,8 @@ def test_dense_glmm_still_evaluates_user_covariance_callbacks():
     first = np.eye(2)
     second = np.array([[1.0, 0.25], [0.25, 1.0]])
     covariances = iter([first, second])
-    normalized = glmm._dense_glmm_covariance_at(
-        lambda _parameter: next(covariances), 2, False
+    normalized = glmm._glmm_covariance_at(
+        lambda _parameter: next(covariances), 2, False, use_sparse=False
     )
     np.testing.assert_array_equal(normalized(None), first)
     np.testing.assert_array_equal(normalized(None), second)
