@@ -3,6 +3,7 @@
 import csv
 import hashlib
 import json
+from functools import lru_cache
 
 from nwkit.clade_index import CladeIndex
 from nwkit.mul_reconcile_model import Reconciliation
@@ -34,15 +35,34 @@ NODE_FIELDS = (
 )
 
 
-def rooted_topology_id(tree):
-    """Identify labeled rooted topology, ignoring lengths and child order."""
+def _rooted_topology_index(tree):
     validate_unique_named_leaves(tree, "Node diagnostic tree")
     require_rooted(tree, "Node diagnostic tree must be rooted.")
     index = CladeIndex(tree)
     digest = hashlib.sha256(b"nwkit-rooted-topology-v1\0")
     for clade in sorted(index.clade_id_for_node(n) for n in tree.traverse()):
         digest.update(clade.encode("ascii") + b"\0")
-    return "rooted-topology-sha256:" + digest.hexdigest()
+    return "rooted-topology-sha256:" + digest.hexdigest(), index
+
+
+def rooted_topology_id(tree):
+    """Identify labeled rooted topology, ignoring lengths and child order."""
+    identity, _ = _rooted_topology_index(tree)
+    return identity
+
+
+def _mapped_taxa_lookup(clades):
+    @lru_cache(maxsize=64)
+    def lookup(mapped):
+        return (
+            json.dumps(clades.names_for_node(mapped), ensure_ascii=True),
+            json.dumps(
+                sorted({n.props.get("mul_species", n.name) for n in mapped.leaves()}),
+                ensure_ascii=True,
+            ),
+        )
+
+    return lookup
 
 
 def write_node_diagnostics(
@@ -55,13 +75,23 @@ def write_node_diagnostics(
     for candidate in candidates:
         # Occurrence clades cannot be compared using duplicate literal labels.
         validate_unique_named_leaves(candidate.tree, "MUL node diagnostic tree")
-        mul_clades = CladeIndex(candidate.tree)
+        mapped_taxa = _mapped_taxa_lookup(CladeIndex(candidate.tree))
+        species_index = None
         for number, gene in enumerate(genes, 1):
-            gene_id, gene_clades = rooted_topology_id(gene), CladeIndex(gene)
-            result = Reconciliation(gene, candidate.tree, parser, max_state_pairs)
+            gene_id, gene_clades = _rooted_topology_index(gene)
+            result = Reconciliation(
+                gene,
+                candidate.tree,
+                parser,
+                max_state_pairs,
+                _species_index=species_index,
+            )
+            species_index = result._species_index
             for mapping_id, (_, _, mapping) in enumerate(result.mappings(max_maps), 1):
                 for node, row in zip(result.nodes, mapping, strict=True):
-                    mapped = result.species[row["mul_node"]]
+                    descendants, species_labels = mapped_taxa(
+                        result.species[row["mul_node"]]
+                    )
                     writer.writerow(
                         {
                             **row,
@@ -77,17 +107,7 @@ def write_node_diagnostics(
                             "mapping.id": mapping_id,
                             "optimal.mappings": result.num_maps,
                             "total.score": result.score,
-                            "mul_descendant_tips": json.dumps(
-                                mul_clades.names_for_node(mapped), ensure_ascii=True
-                            ),
-                            "mapped_species": json.dumps(
-                                sorted(
-                                    {
-                                        n.props.get("mul_species", n.name)
-                                        for n in mapped.leaves()
-                                    }
-                                ),
-                                ensure_ascii=True,
-                            ),
+                            "mul_descendant_tips": descendants,
+                            "mapped_species": species_labels,
                         }
                     )
