@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tempfile
 from collections import OrderedDict
+from itertools import chain, islice
 from pathlib import Path
 
 import numpy as np
@@ -217,27 +218,41 @@ def read_export(prefix, *, single_tip_root=False, derivatives=True):
         raise ValueError(
             "IQ-TREE did not produce its required IQ2MC derivative export."
         )
-    lines = [line.strip() for line in export.read_text().splitlines() if line.strip()]
-    if len(lines) < 6:
-        raise ValueError("Incomplete IQ-TREE derivative export.")
-    tree = Tree(lines[1], parser=1)
-    nodes = [node for node in tree.traverse("preorder") if node is not tree]
-    if single_tip_root:
-        # IQ2MC puts the first root-tip edge last in its derivative vectors,
-        # while leaving that tip first in the accompanying Newick.
-        nodes = nodes[1:] + nodes[:1]
-    count = 2 * int(lines[0]) - 3
-    lengths = np.fromstring(lines[2], sep=" ")
-    gradient = np.fromstring(lines[3], sep=" ")
-    hessian = np.array([np.fromstring(line, sep=" ") for line in lines[5:]])
-    if (
-        len(nodes) != count
-        or lengths.shape != (count,)
-        or gradient.shape != (count,)
-        or hessian.shape != (count, count)
-        or lines[4] != "Hessian"
-    ):
-        raise ValueError("Unsupported IQ-TREE Hessian export layout.")
+    layout_error = "Unsupported IQ-TREE Hessian export layout."
+    with export.open() as handle:
+        stripped = (line.strip() for line in handle)
+        lines = (line for line in stripped if line)
+        header = list(islice(lines, 6))
+        if len(header) < 6:
+            raise ValueError("Incomplete IQ-TREE derivative export.")
+        tree = Tree(header[1], parser=1)
+        nodes = [node for node in tree.traverse("preorder") if node is not tree]
+        if single_tip_root:
+            # IQ2MC puts the first root-tip edge last in its derivative vectors,
+            # while leaving that tip first in the accompanying Newick.
+            nodes = nodes[1:] + nodes[:1]
+        count = 2 * int(header[0]) - 3
+        lengths = np.fromstring(header[2], sep=" ")
+        gradient = np.fromstring(header[3], sep=" ")
+        if (
+            len(nodes) != count
+            or lengths.shape != (count,)
+            or gradient.shape != (count,)
+            or header[4] != "Hessian"
+        ):
+            raise ValueError(layout_error)
+        hessian = np.empty((count, count))
+        rows = chain(header[5:], lines)
+        for index in range(count):
+            line = next(rows, None)
+            if line is None:
+                raise ValueError(layout_error)
+            row = np.fromstring(line, sep=" ")
+            if row.shape != (count,):
+                raise ValueError(layout_error)
+            hessian[index] = row
+        if next(rows, None) is not None:
+            raise ValueError(layout_error)
     if not np.allclose(lengths, [n.dist for n in nodes], rtol=1e-5, atol=1e-9):
         raise ValueError("IQ-TREE Hessian branch order does not match its tree.")
     if not np.isfinite(lengths).all():
@@ -248,7 +263,9 @@ def read_export(prefix, *, single_tip_root=False, derivatives=True):
     score = float(data["CandidateSet.0"].split()[0])
     if not np.isfinite(score):
         raise ValueError("Nonfinite IQ-TREE likelihood export.")
-    return tree, nodes, lengths, -score, -gradient, -hessian, data
+    np.negative(gradient, out=gradient)
+    np.negative(hessian, out=hessian)
+    return tree, nodes, lengths, -score, gradient, hessian, data
 
 
 def validate_derivatives(lengths, gradient, hessian):
