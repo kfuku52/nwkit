@@ -185,6 +185,18 @@ def test_general_ou_stationarity_and_short_edges():
         vector_ou_process(tree, -attraction, diffusion, [2.0, -1.0])
 
 
+def test_general_ou_equal_length_branches_have_independent_transition_arrays():
+    from nwkit.vector_processes import vector_ou_process
+
+    tree = read_tree("(A:1,B:1)R;", "1", True, quiet=True, rooted="yes")
+    process = vector_ou_process(tree, np.eye(2), np.eye(2), [2.0, -1.0])
+    first, second = process.transitions.values()
+    for field in ("slope", "intercept", "covariance"):
+        left, right = getattr(first, field), getattr(second, field)
+        np.testing.assert_array_equal(left, right)
+        assert not np.shares_memory(left, right)
+
+
 def test_nearly_singular_proper_root_does_not_create_spurious_likelihood():
     from scipy.stats import multivariate_normal
 

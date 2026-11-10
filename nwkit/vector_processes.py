@@ -50,12 +50,23 @@ def vector_ou_process(tree, attraction, diffusion, theta):
     stationary = (stationary + stationary.T) / 2
     _inverse(stationary, "OU stationary covariance")
     transitions = {}
+    transition_by_time: dict[float, VectorTransition] = {}
+    attraction_norm = np.linalg.norm(attraction, ord=1)
+    scale_product = np.outer(scales, scales)
     block = np.block([[-attraction, diffusion], [np.zeros((d, d)), attraction.T]])
     for node in CompiledTree.from_tree(tree).nodes[1:]:
         time = float(node.dist)
         if not np.isfinite(time) or time < 0:
             raise ValueError("Vector branch lengths must be finite and nonnegative.")
-        if time * np.linalg.norm(attraction, ord=1) < 0.5:
+        cached = transition_by_time.get(time)
+        if cached is not None:
+            transitions[node] = VectorTransition(
+                cached.slope.copy(order="K"),
+                cached.intercept.copy(order="K"),
+                cached.covariance.copy(order="K"),
+            )
+            continue
+        if time * attraction_norm < 0.5:
             exponential = expm(block * time)
             slope = exponential[:d, :d]
             covariance = exponential[:d, d:] @ slope.T
@@ -63,10 +74,10 @@ def vector_ou_process(tree, attraction, diffusion, theta):
             slope = expm(-attraction * time)
             covariance = stationary - slope @ stationary @ slope.T
         slope = slope * scales[:, None] / scales[None, :]
-        covariance = covariance * np.outer(scales, scales)
-        transitions[node] = VectorTransition(
+        covariance = covariance * scale_product
+        transition = VectorTransition(
             slope, theta - slope @ theta, (covariance + covariance.T) / 2
         )
-    return VectorProcess(
-        tree, d, transitions, theta, stationary * np.outer(scales, scales)
-    )
+        transitions[node] = transition
+        transition_by_time[time] = transition
+    return VectorProcess(tree, d, transitions, theta, stationary * scale_product)
