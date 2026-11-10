@@ -15,7 +15,7 @@ class TestTable2NwkMain:
     def test_input_containers_preserve_literal_node_names(
         self, tmp_path, monkeypatch, mode
     ):
-        text = "\ufeffbranch_id\tparent\tname\n0\t-1\tR\n1\t0\t001\n2\t0\tNA\n"
+        text = "\ufeffbranch_id\tparent\tname\n2\t0\t001\n0\t-1\tR\n1\t0\tNA\n"
         source = tmp_path / ("input.tsv.gz" if mode == "gzip" else "input.tsv")
         if mode == "gzip":
             with gzip.open(source, "wt", encoding="utf-8") as handle:

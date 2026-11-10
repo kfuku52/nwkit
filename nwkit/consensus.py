@@ -81,9 +81,11 @@ def _read_tree_weights(weight_tsv, num_trees=None):
         if weight_df["tree_id"].isna().any():
             raise ValueError("--weight-tsv contains missing values in 'tree_id'.")
         parsed_rows = list()
-        for _, row in weight_df.iterrows():
+        for tree_id_raw, weight_raw in zip(
+            weight_df["tree_id"], weight_df["weight"], strict=True
+        ):
             try:
-                tree_id_value = float(row["tree_id"])
+                tree_id_value = float(tree_id_raw)
             except ValueError as exc:
                 raise ValueError(
                     "--weight-tsv 'tree_id' values must be integers."
@@ -95,7 +97,7 @@ def _read_tree_weights(weight_tsv, num_trees=None):
                 raise ValueError(
                     "--weight-tsv tree_id is out of range: {}".format(tree_id)
                 )
-            parsed_rows.append((tree_id, row["weight"]))
+            parsed_rows.append((tree_id, weight_raw))
         expected_count = (
             num_trees
             if num_trees is not None

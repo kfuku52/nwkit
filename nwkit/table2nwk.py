@@ -1,5 +1,6 @@
 import math
 import sys
+from itertools import repeat
 from typing import Any
 
 import pandas as pd
@@ -148,31 +149,31 @@ def table2nwk_main(args):
     records = list()
     seen_branch_ids = set()
     root_ids = list()
-    for row_idx, (_, row) in enumerate(table.iterrows()):
-        if _is_empty(row["branch_id"]):
+    row_columns = [
+        table.get(column, repeat("", len(table)))
+        for column in ("branch_id", "parent", "name", "dist", "support", "rooted")
+    ]
+    for branch_value, parent_value, name, dist, support, rooted in zip(
+        *row_columns, strict=True
+    ):
+        if _is_empty(branch_value):
             raise ValueError("Column 'branch_id' must not contain missing values.")
-        branch_id = _parse_int(row["branch_id"], "branch_id")
+        branch_id = _parse_int(branch_value, "branch_id")
         if branch_id in seen_branch_ids:
             raise ValueError("Duplicated 'branch_id' values are not supported.")
         seen_branch_ids.add(branch_id)
-        if _is_empty(row["parent"]):
-            parent_id = -1
-        else:
-            parent_id = _parse_int(row["parent"], "parent")
+        parent_id = (
+            -1 if _is_empty(parent_value) else _parse_int(parent_value, "parent")
+        )
         if parent_id == -1:
             root_ids.append(branch_id)
         record = {
             "branch_id": branch_id,
             "parent": parent_id,
-            "name": _normalize_name(row["name"]) if "name" in row else "",
-            "dist": _parse_optional_float(row["dist"], "dist")
-            if "dist" in row
-            else None,
-            "support": _parse_optional_float(row["support"], "support")
-            if "support" in row
-            else None,
-            "row_order": row_idx,
-            "rooted": str(row.get("rooted", "")).strip(),
+            "name": _normalize_name(name),
+            "dist": _parse_optional_float(dist, "dist"),
+            "support": _parse_optional_float(support, "support"),
+            "rooted": str(rooted).strip(),
         }
         records.append(record)
     if len(root_ids) != 1:
@@ -197,10 +198,8 @@ def table2nwk_main(args):
         if parent_id == -1:
             continue
         child_ids[parent_id].append(record["branch_id"])
-    for _branch_id, children in child_ids.items():
-        children.sort(key=lambda child_id: records_by_id[child_id]["row_order"])
     nodes = dict()
-    for record in sorted(records, key=lambda rec: rec["row_order"]):
+    for record in records:
         node = Tree()
         node.name = record["name"]
         node.dist = record["dist"]
@@ -211,7 +210,7 @@ def table2nwk_main(args):
         else:
             node.support = record["support"]
         nodes[record["branch_id"]] = node
-    for record in sorted(records, key=lambda rec: rec["row_order"]):
+    for record in records:
         parent_id = record["parent"]
         if parent_id == -1:
             continue
