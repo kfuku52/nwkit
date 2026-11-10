@@ -161,11 +161,16 @@ def _weighted_median(values, weights):
     return sorted_pairs[-1][0]
 
 
-def _aggregate_branch_lengths(observations, method):
+def _aggregate_branch_lengths(observations, method, *, masks=None):
     if method == "none":
         return dict()
+    records_by_mask = (
+        observations.items()
+        if masks is None
+        else ((mask, observations[mask]) for mask in masks if mask in observations)
+    )
     out = dict()
-    for mask, records in observations.items():
+    for mask, records in records_by_mask:
         if method == "mean" and isinstance(records, tuple):
             running_mean, weight_sum = records
             out[mask] = None if weight_sum == 0 else running_mean
@@ -706,7 +711,10 @@ def _annotate_reference_tree(
 
 def consensus_main(args):
     method = getattr(args, "method", "greedy")
-    branch_length = getattr(args, "branch_length", "none")
+    annotate_reference = args.reference not in ("", None)
+    branch_length = (
+        "none" if annotate_reference else getattr(args, "branch_length", "none")
+    )
     comparison = getattr(args, "comparison", "rooted")
     weight_tsv = getattr(args, "weight_tsv", None)
     if comparison not in ("rooted", "unrooted"):
@@ -753,7 +761,7 @@ def consensus_main(args):
         raise ValueError("--weight-tsv must contain exactly one row per input tree.")
     sys.stderr.write("Number of input trees = {:,}\n".format(num_trees))
     total_weight = float(num_trees) if tree_weights is None else math.fsum(tree_weights)
-    if args.reference not in ["", None]:
+    if annotate_reference:
         reference_tree = read_tree(
             args.reference,
             args.reference_format,
@@ -794,7 +802,9 @@ def consensus_main(args):
         dist_by_mask = _aggregate_branch_lengths(
             observations=branch_length_observations,
             method=branch_length,
+            masks=chain(support_by_mask, (1 << bit for bit in range(len(leaf_names)))),
         )
+        del branch_length_observations
         output_tree = _build_consensus_tree(
             leaf_names=leaf_names,
             all_mask=all_mask,
