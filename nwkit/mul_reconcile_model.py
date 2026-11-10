@@ -136,10 +136,19 @@ def hypotheses(tree, h1=None, h2=None, *, multree=False, max_candidates=10000):
             "Species labels cannot be numeric, internal <n> tags, or end in '+'/'*'."
         )
     selected_h1, selected_h2 = select_nodes(original, h1), select_nodes(original, h2)
+    leaf_positions = {leaf.name: index for index, leaf in enumerate(original.leaves())}
+    bounds = get_subtree_leaf_index_extents(original, leaf_positions)
     pairs: list[tuple[str, str]] = []
     for first in selected_h1:
+        first_low, first_high, _ = bounds[first]
         for second in selected_h2:
-            if first is not second and first in second.ancestors():
+            second_low, second_high, _ = bounds[second]
+            # Clade spans nest exactly along an ancestor chain.
+            if (
+                first is not second
+                and first_low <= second_low
+                and second_high <= first_high
+            ):
                 continue
             if len(pairs) + 1 >= max_candidates:
                 raise ValueError(
