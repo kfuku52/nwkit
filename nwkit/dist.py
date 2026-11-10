@@ -305,7 +305,8 @@ def _path_distance_matrix(tree1, tree2, leaf_names, topological):
         return 0.0
     scale = float(np.max(np.abs(upper)))
     if scale == 0.0:
-        return 0.0
+        # Rounded path sums can agree even when a branch length changed.
+        return 0.0 if topological else None
     matrix_scale = max(
         float(np.max(matrix1)),
         float(np.max(matrix2)),
@@ -467,6 +468,11 @@ def _rounded_dyadic_norm(squared, unit_exponent):
 
 def _weighted_path_distance(tree1, tree2, leaf_names):
     import numpy as np
+
+    first_vector, second_vector = _matched_edge_vectors(tree1, tree2, "unrooted")
+    if first_vector == second_vector:
+        return 0.0
+    del first_vector, second_vector
 
     # Finite float lengths are integer multiples of a common power of two.
     units: dict[Any, tuple[int, int]] = {}

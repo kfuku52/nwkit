@@ -190,6 +190,13 @@ class TestDistanceMetrics:
             _path_distance(first, second, list("ABCD"), topological=False) == 2 * step
         )
 
+    def test_path_length_recovers_a_difference_hidden_by_rounded_path_sums(self):
+        first = Tree("(A:1.0,B:549755813888.0);", parser=1)
+        second = Tree("(A:1.0000000000000002,B:549755813888.0);", parser=1)
+        assert _path_distance(first, second, ["A", "B"], topological=False) == math.ulp(
+            1.0
+        )
+
     @pytest.mark.parametrize(
         ("lengths", "message"),
         [
