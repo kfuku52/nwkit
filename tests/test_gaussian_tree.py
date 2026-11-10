@@ -222,8 +222,9 @@ def test_flat_root_process_refuses_finite_covariance_views():
 
 @pytest.mark.parametrize("slopes", ["unit", "signed", "zero"])
 @pytest.mark.parametrize("workspace", [24, 4 * 1024**2])
+@pytest.mark.parametrize("root_variance", [0.6, 0.0, -0.0])
 def test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order(
-    slopes, workspace, monkeypatch
+    slopes, workspace, root_variance, monkeypatch
 ):
     tree = tree_from("((A:1,B:2)I:0.5,(C:3,D:0.25)J:0.4)R;")
     nodes = list(tree.traverse("preorder"))
@@ -236,9 +237,8 @@ def test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order(
         elif slopes == "zero" and index % 3 == 0:
             slope = 0.0
         transitions[node] = GaussianTransition(slope, 0, float(rng.uniform(0.1, 2)))
-    process = GaussianTreeProcess(
-        tree, transitions, GaussianRootPrior("gaussian", 0, 0.6), "custom"
-    )
+    root = GaussianRootPrior("gaussian" if root_variance else "fixed", 0, root_variance)
+    process = GaussianTreeProcess(tree, transitions, root, "custom")
     requested = [nodes[i] for i in rng.integers(0, len(nodes), 64)]
     expected = np.empty((64, 64))
     expected[:63, :63] = process.covariance(requested[:63])
@@ -246,4 +246,6 @@ def test_large_covariance_blocks_preserve_arbitrary_duplicate_node_order(
         pair = process.covariance([node, requested[-1]])
         expected[i, -1] = expected[-1, i] = pair[0, 1] if i < 63 else pair[1, 1]
     monkeypatch.setattr(gaussian_tree, "_COVARIANCE_WORKSPACE_BYTES", workspace)
-    np.testing.assert_array_equal(process.covariance(requested), expected)
+    actual = process.covariance(requested)
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(np.signbit(actual), np.signbit(expected))

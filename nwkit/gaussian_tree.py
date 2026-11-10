@@ -52,9 +52,16 @@ def _fill_covariance_blocks(
                     own_value = stable(ancestor, ancestor, ancestor)
             covariance[own[:, None], own] = own_value
             covariance[own, own] = variances[ancestor]
+        # Unit-loading blocks start in a zero-filled matrix. Still assign
+        # negative zero explicitly so the pairwise and block paths agree.
+        skip_cross_blocks = (
+            factors is None
+            and variances[ancestor] == 0.0
+            and not np.signbit(variances[ancestor])
+        )
         start = 0
         for group in groups:
-            if start:
+            if start and not skip_cross_blocks:
                 # Tile both axes, allowing for the product and finite/zero masks.
                 max_entries = max(1, _COVARIANCE_WORKSPACE_BYTES // 24)
                 columns = min(len(group), max_entries)
@@ -477,15 +484,17 @@ class GaussianTreeProcess:
         path_zero_count = np.zeros(len(lca.nodes), dtype=np.int64)
         path_negative_parity = np.zeros(len(lca.nodes), dtype=bool)
         variances[0] = self.root.variance
-        unit_loadings = True
+        descendants = lca.nodes[1:]
+        unit_loadings = all(self.transitions[node].slope == 1.0 for node in descendants)
         direct_loadings = True
-        for index, node in enumerate(lca.nodes[1:], start=1):
+        for index, node in enumerate(descendants, start=1):
             parent = lca.ancestors[0][index]
             transition = self.transitions[node]
             slope = transition.slope
             variances[index] = slope * slope * variances[parent] + transition.variance
+            if unit_loadings:
+                continue
             cumulative_loading[index] = cumulative_loading[parent] * slope
-            unit_loadings = unit_loadings and slope == 1.0
             direct_loadings = direct_loadings and (
                 cumulative_loading[index] != 0.0
                 and math.isfinite(float(cumulative_loading[index]))
@@ -523,14 +532,16 @@ class GaussianTreeProcess:
             negative = path_negative_parity[first] ^ path_negative_parity[second]
             return -value if negative else value
 
-        covariance = np.empty((len(nodes), len(nodes)), dtype=float)
         common_ancestor = lca.common_ancestor_indices
         ancestor_factor = None
         if not unit_loadings and direct_loadings:
             with np.errstate(over="ignore", under="ignore", divide="ignore"):
                 ancestor_factor = variances / (cumulative_loading * cumulative_loading)
             direct_loadings = bool(np.isfinite(ancestor_factor).all())
-        if len(nodes) >= 64 and (unit_loadings or direct_loadings):
+        use_blocks = len(nodes) >= 64 and (unit_loadings or direct_loadings)
+        allocate = np.zeros if use_blocks and unit_loadings else np.empty
+        covariance = allocate((len(nodes), len(nodes)), dtype=float)
+        if use_blocks:
             _fill_covariance_blocks(
                 covariance,
                 lca,
@@ -579,7 +590,8 @@ class GaussianTreeProcess:
                         value = stable_covariance(first_index, second_index, ancestor)
                         covariance[first, second] = value
                         covariance[second, first] = value
-        if not np.isfinite(covariance).all():
+        # With unit loadings every entry comes directly from a finite variance.
+        if not unit_loadings and not np.isfinite(covariance).all():
             raise ValueError("Gaussian tree covariance exceeds floating-point range.")
         return covariance
 
