@@ -56,6 +56,9 @@ class _Factor:
     roundoff: float = 0.0
 
 
+_UNIT_FACTOR = _Factor()
+
+
 @dataclass(frozen=True, slots=True)
 class GaussianSamples:
     nodes: tuple[Any, ...]
@@ -87,6 +90,11 @@ def _normal_log_density(value: float, mean: float, variance: float) -> float:
 
 def _combine(first: _Factor, second: _Factor) -> _Factor:
     if first.mean is None:
+        # Adding the unit weight would turn a negative zero into positive zero.
+        if first is _UNIT_FACTOR and (
+            second.log_weight != 0.0 or math.copysign(1.0, second.log_weight) > 0.0
+        ):
+            return second
         return _Factor(
             second.mean,
             second.variance,
@@ -95,6 +103,10 @@ def _combine(first: _Factor, second: _Factor) -> _Factor:
             second.roundoff,
         )
     if second.mean is None:
+        if second is _UNIT_FACTOR and (
+            first.log_weight != 0.0 or math.copysign(1.0, first.log_weight) > 0.0
+        ):
+            return first
         return _Factor(
             first.mean,
             first.variance,
@@ -376,7 +388,7 @@ def _message_pass(
         raise ValueError(
             "A flat-root Gaussian process requires at least one observation."
         )
-    local = [_Factor() for _ in compiled.nodes]
+    local = [_UNIT_FACTOR] * len(compiled.nodes)
     latent_positions = list(range(len(compiled.nodes)))
     for index in range(1, len(compiled.nodes)):
         transition = scaled_process.transitions[compiled.nodes[index]]
@@ -395,12 +407,10 @@ def _message_pass(
         roundoff = (
             _coordinate_roundoff(original_value, exponent) if variance == 0.0 else 0.0
         )
-        local[index] = _combine(
-            local[index], _Factor(value, variance, roundoff=roundoff)
-        )
+        local[index] = _Factor(value, variance, roundoff=roundoff)
         observed_positions.add(latent_positions[index])
     inside = list(local)
-    upward = [_Factor() for _ in compiled.nodes]
+    upward = [_UNIT_FACTOR] * len(compiled.nodes)
     for index in compiled.postorder:
         factor = inside[index]
         for child in compiled.children[index]:
@@ -470,14 +480,14 @@ def condition_gaussian_tree(
     root_posterior = messages.root_posterior
     root = scaled_process.root
 
-    outside = [_Factor() for _ in compiled.nodes]
+    outside = [_UNIT_FACTOR] * len(compiled.nodes)
     root_roundoff = (
         _coordinate_roundoff(process.root.mean, exponent)
         if root.variance == 0.0
         else 0.0
     )
     outside[0] = (
-        _Factor()
+        _UNIT_FACTOR
         if root.mode == "flat"
         else _Factor(root.mean, root.variance or 0.0, roundoff=root_roundoff)
     )
@@ -489,7 +499,7 @@ def condition_gaussian_tree(
         for child in children:
             prefix.append(_combine(prefix[-1], upward[child]))
         posterior[index] = prefix[-1]
-        suffix = _Factor()
+        suffix = _UNIT_FACTOR
         for position in range(len(children) - 1, -1, -1):
             child = children[position]
             cavity = _combine(prefix[position], suffix)
