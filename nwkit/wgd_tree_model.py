@@ -255,7 +255,7 @@ class TopologyLikelihood:
             return new_survival, logs.astype(dtype) + log_h
         log_z = log_b - denominator
         columns = logs.shape[1]
-        polynomials: list[np.ndarray] = []
+        polynomials: dict[int, np.ndarray] = {}
         result = np.full(logs.shape, -np.inf, dtype=dtype)
         # L_g = H F_g(z), where F'_g = c_g F_left F_right. Every F is
         # a positive polynomial of degree at most the observed tip count - 1.
@@ -265,7 +265,7 @@ class TopologyLikelihood:
             )
             coefficients[0] = logs[node]
             if children:
-                left, right = (polynomials[child] for child in children)
+                left, right = (polynomials.pop(child) for child in children)
                 for i in np.flatnonzero(np.isfinite(left[:, 0])):
                     for j in np.flatnonzero(np.isfinite(right[:, 0])):
                         power = i + j + 1
@@ -282,7 +282,7 @@ class TopologyLikelihood:
                                 left[i, 1:] + right[j, 0], left[i, 0] + right[j, 1:]
                             ),
                         )
-            polynomials.append(coefficients)
+            polynomials[node] = coefficients
             powers = np.arange(len(coefficients), dtype=dtype) * dtype(log_z)
             powers[0] = 0
             result[node] = dtype(log_h) + logsumexp(
@@ -326,15 +326,16 @@ class TopologyLikelihood:
         log_survivors = np.full(nodes, -np.inf)
         log_extinctions = np.zeros(nodes)
         columns = 1 + len(self.targets) if event is not None else 1
-        probabilities = [
-            np.full((len(self.gene.children), columns), -np.inf) for _ in range(nodes)
-        ]
+        probabilities: dict[int, np.ndarray] = {}
         tips = dict(
             zip(self.tree.tip_nodes, range(len(self.tree.tip_nodes)), strict=True)
         )
         for node in reversed(range(nodes)):
             if node in tips:
                 i = tips[node]
+                probabilities[node] = np.full(
+                    (len(self.gene.children), columns), -np.inf
+                )
                 survivors[node] = self.detection[i]
                 log_survivors[node] = (
                     math.log(self.detection[i]) if self.detection[i] else -np.inf
@@ -376,6 +377,7 @@ class TopologyLikelihood:
                                 a_logs[first, 0] + b_logs[second, 1:],
                             ),
                         )
+                del probabilities[left], probabilities[right]
             if node:
                 duplication, loss = rates[self.groups[node]] * scale
                 length = self.tree.lengths[node]
