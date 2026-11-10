@@ -25,6 +25,14 @@ def _rank(x):
     return ndtri((ranks - 0.375) / (x.size + 0.25))
 
 
+def _rank_binary(x):
+    # Tied zeros and ones each occupy one block of ranks.
+    zeros = x.size - np.count_nonzero(x)
+    ranks = np.array([(zeros + 1) / 2, (zeros + 1 + x.size) / 2])
+    scores = ndtri((ranks - 0.375) / (x.size + 0.25))
+    return np.where(x == 0, scores[0], scores[1])
+
+
 def _constant(x):
     return bool(np.any(np.ptp(x, axis=1) == 0))
 
@@ -44,13 +52,14 @@ def _ess(x):
     m, n = x.shape
     if n < 3 or np.ptp(x) == 0:
         return math.nan
-    centered = x - x.mean(axis=1, keepdims=True)
+    means = x.mean(axis=1)
+    centered = x - means[:, None]
     length = next_fast_len(2 * n)
     spectrum = np.fft.rfft(centered, n=length, axis=1)
     acov = np.fft.irfft(spectrum * spectrum.conjugate(), n=length, axis=1)
     acov = acov[:, :n].mean(axis=0) / n
     within = acov[0] * n / (n - 1)
-    pooled = acov[0] + np.var(x.mean(axis=1), ddof=1)
+    pooled = acov[0] + np.var(means, ddof=1)
     rho = np.zeros(n)
     rho[0] = even = 1.0
     rho[1] = odd = 1 - (within - acov[1]) / pooled
@@ -90,11 +99,12 @@ def diagnose(values, *, indicator=False, structural=False):
         return {**result, "status": "mcmc_rhat_unavailable"}
     if x.shape[1] < 8:
         return {**result, "status": "insufficient_draws"}
-    if _constant(x) or _constant(_split(x)):
+    split = None if _constant(x) else _split(x)
+    if split is None or _constant(split):
         reason = "unresolved_rare_category" if indicator else "constant_trace"
         return {**result, "status": reason}
-    split = _split(x)
-    ranked = _rank(split)
+    binary = indicator and isinstance(values, np.ndarray) and values.dtype.kind == "b"
+    ranked = _rank_binary(split) if binary else _rank(split)
     rank_rhat = _rhat(ranked)
     if indicator:
         # Folding a balanced binary variable can be identically constant.
