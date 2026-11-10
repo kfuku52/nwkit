@@ -107,14 +107,20 @@ class GaussianTransition:
     variance: float
 
     def __post_init__(self) -> None:
-        values = (float(self.slope), float(self.intercept), float(self.variance))
-        if not all(math.isfinite(value) for value in values):
+        slope = float(self.slope)
+        intercept = float(self.intercept)
+        variance = float(self.variance)
+        if not (
+            math.isfinite(slope)
+            and math.isfinite(intercept)
+            and math.isfinite(variance)
+        ):
             raise ValueError("Gaussian branch transitions must be finite.")
-        if values[2] < 0.0:
+        if variance < 0.0:
             raise ValueError("Gaussian branch variances must be non-negative.")
-        object.__setattr__(self, "slope", values[0])
-        object.__setattr__(self, "intercept", values[1])
-        object.__setattr__(self, "variance", values[2])
+        object.__setattr__(self, "slope", slope)
+        object.__setattr__(self, "intercept", intercept)
+        object.__setattr__(self, "variance", variance)
 
     def scaled_variance(self, scale: float) -> "GaussianTransition":
         """Return the same affine transition with its innovation variance scaled."""
@@ -415,9 +421,7 @@ class GaussianTreeProcess:
     def __post_init__(self) -> None:
         expected = {node for node in self.tree.traverse() if not node.is_root}
         transitions = dict(self.transitions)
-        missing = expected - set(transitions)
-        extra = set(transitions) - expected
-        if missing or extra:
+        if transitions.keys() != expected:
             raise ValueError(
                 "Gaussian tree transitions must cover every non-root node exactly."
             )
