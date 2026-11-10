@@ -1,6 +1,7 @@
 """Brownian motion plus a Gaussian compound-Poisson evolutionary jump process."""
 
 import math
+from functools import lru_cache
 
 from nwkit.gaussian_tree import (
     GaussianRootPrior,
@@ -43,22 +44,25 @@ def fit_jump_bm(
     jump_sd = finite_parameter(jump_sd, "jump_sd")
     branches = tuple(node for node in tree.traverse() if not node.is_root)
     lengths = {node: finite_parameter(node.dist, "branch length") for node in branches}
-    if any(jump_rate * length > 1e8 for length in lengths.values()):
+    expected_counts = {node: jump_rate * length for node, length in lengths.items()}
+    if any(count > 1e8 for count in expected_counts.values()):
         raise ValueError("Expected branch jump counts exceed the supported range.")
+
+    @lru_cache(maxsize=1024)
+    def transition(length, count):
+        return GaussianTransition(1.0, 0.0, sigma2 * length + count * jump_sd**2)
+
+    root = GaussianRootPrior("flat", variance=None)
 
     def propose(rng):
         counts = {
-            node: int(rng.poisson(jump_rate * lengths[node])) for node in branches
+            node: int(rng.poisson(expected_count))
+            for node, expected_count in expected_counts.items()
         }
         process = GaussianTreeProcess(
             tree,
-            {
-                node: GaussianTransition(
-                    1.0, 0.0, sigma2 * lengths[node] + counts[node] * jump_sd**2
-                )
-                for node in branches
-            },
-            GaussianRootPrior("flat", variance=None),
+            {node: transition(lengths[node], count) for node, count in counts.items()},
+            root,
             "JUMP-BM",
         )
         return process, counts
