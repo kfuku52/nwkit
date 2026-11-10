@@ -21,7 +21,11 @@ from nwkit.vector_fit import (
     normalized_vector_observations,
     restored_vector_posterior,
 )
-from nwkit.vector_gaussian import VectorProcess, VectorTransition, condition_vector_tree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    prepare_vector_conditioning,
+)
 
 
 def _ou_geometry(data):
@@ -202,6 +206,9 @@ def fit_pruning_mvou(
         + bounds
         + [(None, None)] * dimension
     )
+    condition = prepare_vector_conditioning(
+        data.compiled, dimension, observed, error_covariances=errors
+    )
 
     def evaluate(parameters):
         rates = fixed
@@ -214,9 +221,7 @@ def fit_pruning_mvou(
         sigma = covariance / denominator if diagonal else covariance
         diffusion = covariance if diagonal else covariance * denominator
         theta = np.asarray(parameters[-dimension:])
-        result = condition_vector_tree(
-            _process(data, rates, sigma, theta), observed, error_covariances=errors
-        )
+        result = condition(_process(data, rates, sigma, theta))
         return result, rates, sigma, diffusion, theta
 
     def objective(parameters):

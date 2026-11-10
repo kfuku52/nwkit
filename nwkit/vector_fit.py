@@ -18,7 +18,11 @@ from nwkit.multivariate_gaussian_asr import (
     _validate_posterior_size,
 )
 from nwkit.optimization import deterministic_multistart
-from nwkit.vector_gaussian import VectorProcess, VectorTransition, condition_vector_tree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    prepare_vector_conditioning,
+)
 
 
 def _depths(compiled):
@@ -151,14 +155,13 @@ def fit_pruning_mvbm(
     _validate_sparse_bm_design(data, depths)
     time_scale = float(np.max(depths[data.node_indices])) or 1.0
     initial, bounds = _initial_cholesky(dimension)
+    condition = prepare_vector_conditioning(
+        data.compiled, dimension, observed, error_covariances=errors
+    )
 
     def evaluate(parameters):
         sigma, _ = _decode_cholesky(parameters, dimension)
-        return sigma, condition_vector_tree(
-            _brownian_process(data, sigma, time_scale),
-            observed,
-            error_covariances=errors,
-        )
+        return sigma, condition(_brownian_process(data, sigma, time_scale))
 
     def objective(parameters):
         try:

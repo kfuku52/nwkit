@@ -19,7 +19,7 @@ from nwkit.multivariate_gaussian_asr import (
 )
 from nwkit.optimization import deterministic_multistart
 from nwkit.vector_fit import normalized_vector_observations, restored_vector_posterior
-from nwkit.vector_gaussian import condition_vector_tree
+from nwkit.vector_gaussian import prepare_vector_conditioning
 from nwkit.vector_mean import stationary_mean_gls
 from nwkit.vector_ou_fit import _ou_geometry
 from nwkit.vector_processes import vector_ou_process
@@ -127,6 +127,9 @@ def fit_full_mvou(
         )
     initial += [0.0] * dimension
     bounds += [(None, None)] * dimension
+    condition = prepare_vector_conditioning(
+        data.compiled, dimension, observed, error_covariances=errors
+    )
 
     def evaluate(parameters):
         matrices = (
@@ -136,7 +139,7 @@ def fit_full_mvou(
         )
         theta = np.asarray(parameters[-dimension:])
         process = vector_ou_process(tree, matrices[0], matrices[1], theta)
-        result = condition_vector_tree(process, observed, error_covariances=errors)
+        result = condition(process)
         return result, matrices, theta
 
     def objective(parameters):

@@ -13,6 +13,8 @@ from scipy.linalg import cho_factor, cho_solve
 
 from nwkit.compiled_tree import CompiledTree
 
+_ObservationFactor = tuple[np.ndarray, np.ndarray, float, dict[int, float]]
+
 
 @dataclass(frozen=True)
 class VectorTransition:
@@ -94,11 +96,8 @@ def _inverse(matrix, label):
     )
 
 
-def _observations(
-    process, compiled, observed, error_covariances
-) -> list[tuple[np.ndarray, np.ndarray, float, dict[int, float]]]:
-    d = process.dimension
-    factors: list[tuple[np.ndarray, np.ndarray, float, dict[int, float]]] = [
+def _observations(d, compiled, observed, error_covariances) -> list[_ObservationFactor]:
+    factors: list[_ObservationFactor] = [
         (np.zeros((d, d)), np.zeros(d), 0.0, {}) for _ in compiled.nodes
     ]
     unknown = set(observed) - set(compiled.leaf_index_by_name)
@@ -270,7 +269,30 @@ def condition_vector_tree(process, observed, *, error_covariances=None):
     if isinstance(d, bool) or not isinstance(d, int) or d < 1:
         raise ValueError("Vector dimension must be a positive integer.")
     compiled = CompiledTree.from_tree(process.tree)
-    local = _observations(process, compiled, observed, error_covariances)
+    local = _observations(d, compiled, observed, error_covariances)
+    return _condition_vector_tree(process, compiled, local)
+
+
+def prepare_vector_conditioning(
+    compiled, dimension, observed, *, error_covariances=None
+):
+    """Reuse the observation factors while fitting processes on one topology."""
+    factors: list[_ObservationFactor] | None = None
+
+    def condition(process):
+        nonlocal factors
+        compiled.require_tree(process.tree)
+        if process.dimension != dimension:
+            raise ValueError("Vector process dimension differs from its observations.")
+        if factors is None:
+            factors = _observations(dimension, compiled, observed, error_covariances)
+        return _condition_vector_tree(process, compiled, factors.copy())
+
+    return condition
+
+
+def _condition_vector_tree(process, compiled, local):
+    d = process.dimension
     n = len(compiled.nodes)
     slopes = np.zeros((n, d, d))
     intercepts = np.zeros((n, d))
@@ -289,12 +311,15 @@ def condition_vector_tree(process, observed, *, error_covariances=None):
                 raise ValueError(
                     "Zero-variance vector branches must be identity transitions."
                 )
-            for trait, value in fixed.items():
-                if trait in parent_fixed and parent_fixed[trait] != value:
-                    raise ValueError(
-                        "Conflicting exact observations across zero-length branches."
-                    )
-                parent_fixed[trait] = value
+            if fixed:
+                # Cached local observation factors can be shared between fits.
+                parent_fixed = parent_fixed.copy()
+                for trait, value in fixed.items():
+                    if trait in parent_fixed and parent_fixed[trait] != value:
+                        raise ValueError(
+                            "Conflicting exact observations across zero-length branches."
+                        )
+                    parent_fixed[trait] = value
             message = precision, linear, constant
             slopes[index] = np.eye(d)
         else:

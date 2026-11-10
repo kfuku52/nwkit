@@ -4,7 +4,12 @@ from scipy.stats import multivariate_normal
 
 from nwkit.compiled_tree import CompiledTree
 from nwkit.util import read_tree
-from nwkit.vector_gaussian import VectorProcess, VectorTransition, condition_vector_tree
+from nwkit.vector_gaussian import (
+    VectorProcess,
+    VectorTransition,
+    condition_vector_tree,
+    prepare_vector_conditioning,
+)
 
 
 def fixture():
@@ -136,6 +141,28 @@ def test_zero_length_branches_preserve_exact_observations():
         condition_vector_tree(
             process, {"A": [1.0, None], "B": [2.0, None], "C": [2.0, 3.0]}
         )
+
+
+def test_prepared_conditioning_keeps_exact_constraints_local_to_each_process():
+    from nwkit.vector_processes import vector_brownian_process
+
+    tree = read_tree("(A:1,B:1)R;", "1", True, quiet=True, rooted="yes")
+    process = vector_brownian_process(tree, np.eye(1))
+    observed = {"A": [1.0], "B": [3.0]}
+    condition = prepare_vector_conditioning(CompiledTree.from_tree(tree), 1, observed)
+    zero = VectorTransition(np.eye(1), np.zeros(1), np.zeros((1, 1)))
+    transitions = dict(process.transitions)
+    first, second = tree.children
+    transitions[first] = zero
+    condition(VectorProcess(tree, 1, transitions))
+    with pytest.raises(ValueError, match="Conflicting exact"):
+        condition(VectorProcess(tree, 1, {first: zero, second: zero}))
+
+    expected = condition_vector_tree(process, observed)
+    actual = condition(process)
+    assert actual.log_likelihood == expected.log_likelihood
+    np.testing.assert_array_equal(actual.means, expected.means)
+    np.testing.assert_array_equal(actual.covariances, expected.covariances)
 
 
 def test_general_ou_stationarity_and_short_edges():
