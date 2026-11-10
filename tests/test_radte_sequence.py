@@ -11,8 +11,10 @@ from nwkit.radte import _likelihood_data, read_likelihood_summary
 from nwkit.radte_inputs import build_chronology
 from nwkit.radte_model import DatingProblem, fit_dates
 from nwkit.radte_sequence import (
+    DNA_STATES,
     QuadraticLikelihood,
     SequenceLikelihood,
+    _site_patterns,
     build_quadratic,
     gamma_rates,
     read_alignment,
@@ -25,6 +27,19 @@ def write_alignment(tmp_path, sequences):
     path = tmp_path / "alignment.fasta"
     path.write_text("".join(f">{name}\n{seq}\n" for name, seq in sequences.items()))
     return path
+
+
+def test_dna_patterns_preserve_order_across_packed_words():
+    rng = np.random.default_rng(653)
+    patterns = rng.integers(1, 16, size=(17, 12), dtype=np.uint32)
+    patterns[:16, 1] = patterns[:16, 0]
+    patterns[0, 0:2] = 15
+    patterns[16, 0:2] = [14, 1]
+    alignment = patterns[:, rng.integers(0, patterns.shape[1], size=128)]
+    expected, expected_counts = np.unique(alignment, axis=1, return_counts=True)
+    actual, counts = _site_patterns(alignment, DNA_STATES)
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(counts, expected_counts)
 
 
 @pytest.mark.parametrize("categories", [1, 4])

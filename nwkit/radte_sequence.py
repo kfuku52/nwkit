@@ -155,6 +155,45 @@ def substitution_matrix(
     return matrix, frequencies
 
 
+def _site_patterns(matrix, states):
+    if (
+        states != DNA_STATES
+        or type(matrix) is not np.ndarray
+        or matrix.dtype != np.uint32
+        or matrix.ndim != 2
+        or not matrix.size
+        or matrix.shape[1] < max(64, 4 * len(matrix))
+        or matrix.max() > 15
+    ):
+        return np.unique(matrix, axis=1, return_counts=True)
+
+    # Keep the first tip in each word in its most significant position.
+    # Unsigned lexicographic order then matches the original tip columns.
+    num_words = (len(matrix) + 15) // 16
+    packed = np.empty((matrix.shape[1], num_words), dtype=np.uint64)
+    word = np.empty(len(packed), dtype=np.uint64) if num_words > 1 else packed[:, 0]
+    for index, first in enumerate(range(0, len(matrix), 16)):
+        word[:] = matrix[first]
+        for row in matrix[first + 1 : first + 16]:
+            word <<= 4
+            word |= row
+        if num_words > 1:
+            packed[:, index] = word
+    del word
+    if num_words == 1:
+        keys, counts = np.unique(packed[:, 0], return_counts=True)
+        keys = keys[:, None]
+    else:
+        keys, counts = np.unique(packed, axis=0, return_counts=True)
+    del packed
+    patterns = np.empty((len(matrix), len(counts)), dtype=matrix.dtype, order="F")
+    for index in range(len(matrix) - 1, -1, -1):
+        word = keys[:, index // 16]
+        np.bitwise_and(word, 15, out=patterns[index], casting="unsafe")
+        word >>= 4
+    return patterns, counts
+
+
 class SequenceLikelihood:
     def __init__(
         self,
@@ -199,7 +238,7 @@ class SequenceLikelihood:
                 else (AA_STATES if alphabet == "protein" else DNA_STATES)
             )
         self.raw_matrix = matrix
-        self.patterns, self.counts = np.unique(matrix, axis=1, return_counts=True)
+        self.patterns, self.counts = _site_patterns(matrix, self.states)
         self.rates = gamma_rates(gamma_shape, gamma_categories)
         self.kappa, self.gamma_shape, self.gamma_categories = (
             kappa,
