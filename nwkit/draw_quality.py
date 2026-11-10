@@ -170,7 +170,7 @@ def _count_branch_crossings(branch_lines, segment_limit=8000):
 
 
 def _artist_bounds(figure, artists):
-    figure.canvas.draw()
+    figure.draw_without_rendering()
     renderer = figure.canvas.get_renderer()
     bounds = {}
     for item in artists:

@@ -933,7 +933,7 @@ def _fit_artists_within_figure(figure, axes, artists, padding_points=2.0):
         }
     padding_pixels = float(padding_points) * figure.dpi / 72.0
     for _ in range(4):
-        figure.canvas.draw()
+        figure.draw_without_rendering()
         renderer = figure.canvas.get_renderer()
         bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
         left = min(bound.x0 for bound in bounds)
@@ -957,7 +957,7 @@ def _fit_artists_within_figure(figure, axes, artists, padding_points=2.0):
         axes.set_position(
             [new_left, new_bottom, new_right - new_left, new_top - new_bottom]
         )
-    figure.canvas.draw()
+    figure.draw_without_rendering()
     renderer = figure.canvas.get_renderer()
     bounds = [artist.get_window_extent(renderer=renderer) for artist in artists]
     figure_bounds = figure.bbox
