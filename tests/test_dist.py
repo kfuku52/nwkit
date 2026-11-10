@@ -139,15 +139,17 @@ class TestDistanceMetrics:
         first = Tree("(((B,C),A),((D),E,F));", parser=1)
         second = Tree("(F,(A,(E,(C,D))),B);", parser=1)
         names = list("EBCAFD")
-        expected = 0.0
+        squared = 0
         for left, right in combinations(names, 2):
             first_distance = first.get_distance(left, right, topological=True)
             if (left in "ABC") != (right in "ABC"):
                 first_distance -= 1
             second_distance = second.get_distance(left, right, topological=True)
-            expected = math.hypot(expected, first_distance - second_distance)
+            squared += int(first_distance - second_distance) ** 2
 
-        assert _path_distance(first, second, names, topological=True) == expected
+        assert _path_distance(first, second, names, topological=True) == math.sqrt(
+            squared
+        )
 
     def test_path_length_falls_back_for_nearly_identical_distance_matrices(self):
         def balanced_newick(names):

@@ -367,11 +367,22 @@ def _topological_path_rows(tree, leaf_names):
         yield distances[order[row + 1 :]]
 
 
-def _topological_path_differences(tree1, tree2, leaf_names):
+def _topological_path_distance(tree1, tree2, leaf_names):
+    import numpy as np
+
+    # Each path uses fewer edges than the number of nodes in its tree.
+    max_nodes = max(sum(1 for _ in tree.traverse()) for tree in (tree1, tree2))
+    int64_safe = len(leaf_names) * max_nodes**2 <= np.iinfo(np.int64).max
     rows1 = _topological_path_rows(tree1, leaf_names)
     rows2 = _topological_path_rows(tree2, leaf_names)
+    squared = 0
     for first, second in zip(rows1, rows2, strict=True):
-        yield from (first - second).tolist()
+        differences = first - second
+        if int64_safe:
+            squared += int(differences @ differences)
+        else:
+            squared += sum(int(value) ** 2 for value in differences)
+    return math.sqrt(squared)
 
 
 def _weighted_path_differences(tree1, tree2, leaf_names):
@@ -431,13 +442,10 @@ def _path_distance(tree1, tree2, leaf_names, topological):
         )
         if matrix_distance is not None:
             return matrix_distance
-    differences = (
-        _topological_path_differences(tree1, tree2, leaf_names)
-        if topological
-        else _weighted_path_differences(tree1, tree2, leaf_names)
-    )
+    if topological:
+        return _topological_path_distance(tree1, tree2, leaf_names)
     distance = 0.0
-    for difference in differences:
+    for difference in _weighted_path_differences(tree1, tree2, leaf_names):
         distance = math.hypot(distance, difference)
     if not math.isfinite(distance):
         raise ValueError("The path distance is too large to represent.")
