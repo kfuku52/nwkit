@@ -172,14 +172,17 @@ def test_time_units_and_semigroup():
     np.testing.assert_allclose(composed[:5], p[:5], atol=2e-14)
 
 
-def test_event_limits_and_tail_not_renormalized():
-    np.testing.assert_array_equal(multiplication_transition(0, 2, 8), np.eye(9))
-    full = multiplication_transition(1, 3, 8)
+@pytest.mark.parametrize("bound", [8, 70])
+def test_event_limits_and_tail_not_renormalized(bound):
+    np.testing.assert_array_equal(
+        multiplication_transition(0, 2, bound), np.eye(bound + 1)
+    )
+    full = multiplication_transition(1, 3, bound)
     assert full[2, 6] == 1
-    assert full[3].sum() == 0
-    partial = multiplication_transition(0.5, 2, 8)
+    assert full[bound // 3 + 1].sum() == 0
+    partial = multiplication_transition(0.5, 2, bound)
     np.testing.assert_allclose(partial[2, 2:5], [0.25, 0.5, 0.25])
-    assert partial[8].sum() == pytest.approx(0.5**8)
+    assert partial[bound].sum() == pytest.approx(0.5**bound, rel=1e-12, abs=0)
     assert root_probabilities(4, 3).sum() == pytest.approx(1 - 0.75**3)
 
 

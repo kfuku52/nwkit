@@ -11,6 +11,7 @@ from scipy.special import gammaln, logsumexp
 from scipy.stats import binom, gamma
 
 _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
+_PULSE_BATCH_ENTRIES = 4096
 
 
 def _log_pruning_contribution(matrix, values):
@@ -177,10 +178,14 @@ def multiplication_transition(
         raise ValueError("Multiplicity must be an integer >= 2.")
     if isinstance(max_count, bool) or not isinstance(max_count, int) or max_count < 1:
         raise ValueError("max_count must be a positive integer.")
-    result = np.zeros((max_count + 1, max_count + 1))
-    for count in range(max_count + 1):
-        extra = np.arange(max_count - count + 1)
-        result[count, count:] = binom.pmf(extra, count * (multiplicity - 1), retention)
+    states = np.arange(max_count + 1)
+    trials = np.array([count * (multiplicity - 1) for count in range(len(states))])
+    result = np.empty((len(states), len(states)))
+    batch = max(1, _PULSE_BATCH_ENTRIES // len(states))
+    for first in range(0, len(states), batch):
+        last = min(first + batch, len(states))
+        extra = states[None, :] - states[first:last, None]
+        result[first:last] = binom.pmf(extra, trials[first:last, None], retention)
     return result
 
 
@@ -474,13 +479,15 @@ class CountLikelihood:
         for node, time in enumerate(self.tree.lengths[1:], 1):
             duplication, loss = rates[self.branch_groups[node]] * scale
             key = (float(duplication), float(loss), time)
-            if key not in cache:
-                cache[key] = birth_death_transition(duplication, loss, time, max_count)
             if (
                 event is None
                 or event.node != node
                 or (event.retention == 0 and not _split_zero_event)
             ):
+                if key not in cache:
+                    cache[key] = birth_death_transition(
+                        duplication, loss, time, max_count
+                    )
                 matrices[node] = cache[key]
             else:
                 before = birth_death_transition(
