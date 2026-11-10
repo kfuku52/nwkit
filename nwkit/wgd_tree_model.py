@@ -302,22 +302,22 @@ class TopologyLikelihood:
         )
         if np.isfinite(log_carry):
             result = logs + log_carry
-        for node, children in enumerate(self.gene.children):
-            if not children:
-                continue
-            left, right = children
+        for origin_index, node in enumerate(self.targets):
+            left, right = self.gene.children[node]
             factor = math.log(q * self.coefficients[node])
             split = factor + logs[left, 0] + logs[right, 0]
             result[node, 0] = np.logaddexp(result[node, 0], split)
-            for column, target in enumerate(self.targets, 1):
-                terms = [
-                    result[node, column],
-                    factor + logs[left, column] + logs[right, 0],
-                    factor + logs[left, 0] + logs[right, column],
-                ]
-                if node == target:
-                    terms.append(split)
-                result[node, column] = logsumexp(terms)
+            terms = np.column_stack(
+                (
+                    result[node, 1:],
+                    factor + logs[left, 1:] + logs[right, 0],
+                    factor + logs[left, 0] + logs[right, 1:],
+                )
+            )
+            markers = logsumexp(terms, axis=1)
+            # Only the marker for this node gains a new origin at the pulse.
+            markers[origin_index] = logsumexp([*terms[origin_index], split])
+            result[node, 1:] = markers
         return survival * (1 + q - q * survival), result
 
     def _category(self, rates, root_mean, event, scale, dtype):
