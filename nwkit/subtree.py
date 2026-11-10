@@ -22,8 +22,7 @@ def subtree_main(args):
         context=" for 'subtree'",
     )
     leaf_nodes = list(tree.leaves())
-    leaf_name_set = set(leaf.name for leaf in leaf_nodes)
-    leaf_by_name = {leaf.name: leaf for leaf in leaf_nodes}
+    leaf_positions = {leaf.name: index for index, leaf in enumerate(leaf_nodes)}
     if args.leaves is not None:
         seed_leaf_names = [
             name.strip() for name in args.leaves.split(",") if name.strip() != ""
@@ -37,16 +36,22 @@ def subtree_main(args):
         ]
     if len(seed_leaf_names) == 0:
         raise ValueError("Specify either '--leaves' or '--left-leaf/--right-leaf'.")
+    first = len(leaf_nodes)
+    last = -1
     for leaf_name in seed_leaf_names:
-        if leaf_name not in leaf_name_set:
+        position = leaf_positions.get(leaf_name)
+        if position is None:
             raise Exception(
                 "Specified leaf not found in the tree: {}".format(leaf_name)
             )
-    seed_leaf_nodes = [leaf_by_name[leaf_name] for leaf_name in seed_leaf_names]
-    if len(seed_leaf_nodes) == 1:
-        mrca = seed_leaf_nodes[0]
-    else:
-        mrca = tree.common_ancestor(seed_leaf_nodes)
+        first = min(first, position)
+        last = max(last, position)
+    # All descendant leaves of a clade are contiguous in DFS order.
+    mrca = (
+        leaf_nodes[first]
+        if first == last
+        else tree.common_ancestor([leaf_nodes[first], leaf_nodes[last]])
+    )
     if args.orthogroup:
         tree = annotate_scientific_names(tree, args=args)
         species_counts = annotate_duplication_confidence_and_count_species(tree)
