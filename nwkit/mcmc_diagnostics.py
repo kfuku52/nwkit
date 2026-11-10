@@ -53,10 +53,11 @@ def _ess(x):
     if n < 3 or np.ptp(x) == 0:
         return math.nan
     means = x.mean(axis=1)
-    centered = x - means[:, None]
     length = next_fast_len(2 * n)
-    spectrum = np.fft.rfft(centered, n=length, axis=1)
-    acov = np.fft.irfft(spectrum * spectrum.conjugate(), n=length, axis=1)
+    spectrum = np.fft.rfft(x - means[:, None], n=length, axis=1)
+    spectrum *= spectrum.conjugate()
+    acov = np.fft.irfft(spectrum, n=length, axis=1)
+    del spectrum
     acov = acov[:, :n].mean(axis=0) / n
     within = acov[0] * n / (n - 1)
     pooled = acov[0] + np.var(means, ddof=1)
