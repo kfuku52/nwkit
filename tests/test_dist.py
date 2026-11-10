@@ -1,5 +1,6 @@
 import csv
 import math
+from itertools import combinations
 
 import pytest
 from ete4 import Tree
@@ -133,6 +134,21 @@ class TestDistMain:
 
 
 class TestDistanceMetrics:
+    def test_topological_path_rows_match_explicit_paths(self, monkeypatch):
+        monkeypatch.setattr("nwkit.dist.PATH_MATRIX_MAX_TAXA", 0)
+        first = Tree("(((B,C),A),((D),E,F));", parser=1)
+        second = Tree("(F,(A,(E,(C,D))),B);", parser=1)
+        names = list("EBCAFD")
+        expected = 0.0
+        for left, right in combinations(names, 2):
+            first_distance = first.get_distance(left, right, topological=True)
+            if (left in "ABC") != (right in "ABC"):
+                first_distance -= 1
+            second_distance = second.get_distance(left, right, topological=True)
+            expected = math.hypot(expected, first_distance - second_distance)
+
+        assert _path_distance(first, second, names, topological=True) == expected
+
     def test_path_length_falls_back_for_nearly_identical_distance_matrices(self):
         def balanced_newick(names):
             if len(names) == 1:

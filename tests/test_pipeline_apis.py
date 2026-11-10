@@ -58,6 +58,25 @@ def test_foreground_clades_and_partial_backbone():
     assert unrooted_splits(tree, {"A", "B", "C", "D"}) == {frozenset({"A", "B"})}
 
 
+@pytest.mark.parametrize(
+    "newick",
+    ["(((B),D),(C,A,E));", "(((B),D),(D,A,B));", "A;"],
+)
+def test_clade_rank_ids_preserve_mask_order_and_unary_ties(newick):
+    from nwkit.branch_features import assign_clade_rank_ids
+
+    tree = Tree(newick, parser=1)
+    nodes = list(tree.traverse())
+    bits = {name: 1 << i for i, name in enumerate(sorted(tree.leaf_names()))}
+    expected = sorted(
+        nodes, key=lambda node: sum(bits[name] for name in set(node.leaf_names()))
+    )
+
+    assert assign_clade_rank_ids(tree) is tree
+    assert sorted(nodes, key=lambda node: node.props["branch_id"]) == expected
+    assert [node.props["branch_id"] for node in expected] == list(range(len(nodes)))
+
+
 def test_strict_support_normalizes_only_verified_edge_representations():
     from nwkit.branch_features import map_internal_support_by_split
 
@@ -168,6 +187,19 @@ def test_constraint_scope_and_partial_backbone_are_explicit():
     }
     with pytest.raises(ValueError, match="scope"):
         verify_constraint(tree, constraint, set("ABCDE"), "typo")
+
+
+def test_partial_constraint_projects_extra_tips_on_both_sides_of_a_split():
+    from nwkit.tree_features import verify_constraint
+
+    constraint = Tree("((C,D),(B,A));", parser=1)
+    matching = Tree("(E,(A,(F,B)),(C,(G,D)));", parser=1)
+    conflicting = Tree("(E,(A,(F,C)),(B,(G,D)));", parser=1)
+    taxa = set("ABCDEFG")
+
+    assert verify_constraint(matching, constraint, taxa, "partial") == {frozenset("AB")}
+    with pytest.raises(ValueError, match="violates 1 required"):
+        verify_constraint(conflicting, constraint, taxa, "partial")
 
 
 @pytest.mark.parametrize(

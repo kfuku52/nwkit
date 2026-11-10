@@ -1,4 +1,5 @@
 from collections import defaultdict
+from itertools import chain
 from typing import Any
 
 """Shared topology features for native trees and external tree adapters."""
@@ -41,41 +42,138 @@ def unrooted_splits(tree, taxa):
     return result
 
 
+def _complement_intervals(anchor_path, tip_count):
+    """Summarize the sides opposite the anchor, from the root to the tip."""
+    lo, hi, size = tip_count, -1, 0
+    count = 0
+    intervals = set()
+    for first, last, sibling_size, siblings in reversed(anchor_path):
+        components = siblings + bool(size)
+        lo = min(lo, first)
+        hi = max(hi, last)
+        size += sibling_size
+        # A single component repeats the previous complement or a sibling.
+        if components > 1 and size <= tip_count - 2:
+            count += 1
+            if hi - lo + 1 == size:
+                intervals.add((lo, hi))
+    return count, intervals
+
+
+def _split_intervals(postorder, positions, rooted):
+    """Count distinct splits, indexing those contiguous in the reference order.
+
+    Every reference tip occurs once. Extra tips are ignored in the projection.
+    """
+    tip_count = len(positions)
+    max_size = tip_count - (1 if rooted else 2)
+    empty = (tip_count, -1, 0)
+    extents: dict[Any, tuple[int, int, int] | None] = {}
+    count = 0
+    intervals = set()
+    anchor_path = []
+    for node, children in postorder:
+        if not children:
+            index = positions.get(node.name)
+            if index is None:
+                extents[node] = empty  # Tip outside the projected taxon set.
+            elif index == 0 and not rooted:
+                extents[node] = None  # Mark the path to the reference anchor.
+            else:
+                extents[node] = (index, index, 1)
+            continue
+        lo, hi, size = empty
+        has_anchor = False
+        components = len(children)
+        for child in children:
+            extent = extents.pop(child)
+            if extent is None:
+                has_anchor = True
+                components -= 1
+                continue
+            first, last, child_size = extent
+            if not child_size:
+                components -= 1
+                continue
+            if first < lo:
+                lo = first
+            if last > hi:
+                hi = last
+            size += child_size
+        if has_anchor:
+            anchor_path.append((lo, hi, size, components))
+            extents[node] = None
+        else:
+            extents[node] = (lo, hi, size)
+            # A single projected child displays the same split one edge below.
+            if components > 1 and size <= max_size:
+                count += 1
+                if hi - lo + 1 == size:
+                    intervals.add((lo, hi))
+
+    if anchor_path:
+        extra_count, extra_intervals = _complement_intervals(anchor_path, tip_count)
+        count += extra_count
+        intervals.update(extra_intervals)
+    return count, intervals
+
+
+def _smaller_split_side(tip_names, lo, hi):
+    inside = hi - lo + 1
+    outside = len(tip_names) - inside
+    if inside < outside:
+        return frozenset(tip_names[lo : hi + 1])
+    complement = frozenset(chain(tip_names[:lo], tip_names[hi + 1 :]))
+    if outside < inside:
+        return complement
+    side = frozenset(tip_names[lo : hi + 1])
+    return min(side, complement, key=sorted)
+
+
 def verify_constraint(tree, constraint, taxa, scope="complete"):
     if scope not in {"complete", "partial"}:
         raise ValueError("Constraint scope must be complete or partial")
     taxa = set(taxa)
     _, order = _tree_order(constraint)
-    labels = _validate_tip_labels(order)
+    tip_names = _validated_tip_names(order)
+    labels = set(tip_names)
     _, result_order = _tree_order(tree)
-    if _validate_tip_labels(result_order) != taxa:
+    if set(_validated_tip_names(result_order)) != taxa:
         raise ValueError("Result tree and selected taxa differ")
     if labels - taxa or (scope == "complete" and labels != taxa):
         raise ValueError("Constraint and selected taxa differ")
-    required = unrooted_splits(constraint, labels)
+    positions = {name: index for index, name in enumerate(tip_names)}
+    _, required = _split_intervals(
+        ((node, tree_children(node)) for node in reversed(order)), positions, False
+    )
     if not required:
         raise ValueError(
             "Constraint must specify at least one nontrivial unrooted split"
         )
-    missing = required - unrooted_splits(tree, labels)
+    _, displayed = _split_intervals(
+        ((node, tree_children(node)) for node in reversed(result_order)),
+        positions,
+        False,
+    )
+    missing = required - displayed
     if missing:
         raise ValueError(
             f"Result tree violates {len(missing)} required unrooted constraint splits"
         )
-    return required
+    return {_smaller_split_side(tip_names, lo, hi) for lo, hi in required}
 
 
-def _validate_tip_labels(order):
+def _validated_tip_names(order):
     names = [node.name for node in order if not tree_children(node)]
     if any(not name for name in names) or len(names) != len(set(names)):
         raise ValueError("Tree tips must have unique nonempty names")
-    return set(names)
+    return names
 
 
 def foreground_components(tree, foreground):
     foreground = set(foreground)
     root, order = _tree_order(tree)
-    unknown = foreground - _validate_tip_labels(order)
+    unknown = foreground.difference(_validated_tip_names(order))
     if unknown:
         raise ValueError(f"Foreground tips absent from tree: {sorted(unknown)}")
     all_foreground: dict[Any, bool] = {}
@@ -121,7 +219,7 @@ def patristic_distances(tree):
             ) or 0.0
             graph[parent].append((child, length))
             graph[child].append((parent, length))
-    _validate_tip_labels(order)
+    _validated_tip_names(order)
     leaves = {
         tip: tip.name for tip in (node for node in order if not tree_children(node))
     }

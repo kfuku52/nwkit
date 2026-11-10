@@ -1,7 +1,6 @@
 import csv
 import math
 import sys
-from itertools import combinations
 from typing import Any
 
 from nwkit.rf_distance import robinson_foulds
@@ -270,6 +269,95 @@ def _path_distance_matrix(tree1, tree2, leaf_names, topological):
     return distance
 
 
+def _topological_path_rows(tree, leaf_names):
+    """Yield upper-triangle rows in the requested tip order."""
+    import numpy as np
+
+    depths: list[int] = []
+    adjacent_lca_depths: list[int] = []
+    tip_positions = {}
+    depth = shallowest = 0
+    for is_post, node in tree.iter_prepostorder():
+        if is_post:
+            depth -= 1
+            # The next subtree is reached via this node's parent.
+            shallowest = min(shallowest, depth - 1)
+        elif node.children:
+            depth += 1
+        else:
+            tip_positions[node.name] = len(depths)
+            if depths:
+                adjacent_lca_depths.append(shallowest)
+            depths.append(depth)
+            shallowest = depth - 1
+
+    tip_depths = np.asarray(depths, dtype=np.int64)
+    gaps = np.asarray(adjacent_lca_depths, dtype=np.int64)
+    order = np.asarray([tip_positions[name] for name in leaf_names], dtype=np.intp)
+    lca_depths = np.empty_like(tip_depths)
+    suppress_binary_root = len(tree.children) == 2
+    for row, left in enumerate(order[:-1]):
+        # Between two DFS tips, the shallowest adjacent-tip ancestor is
+        # their LCA. Cumulative minima compute the whole row in linear space.
+        np.minimum.accumulate(gaps[:left][::-1], out=lca_depths[:left][::-1])
+        np.minimum.accumulate(gaps[left:], out=lca_depths[left + 1 :])
+        lca_depths[left] = tip_depths[left]
+        distances = tip_depths[left] + tip_depths - 2 * lca_depths
+        if suppress_binary_root:
+            # Crossing a degree-two root uses one edge after suppression.
+            distances -= lca_depths == 0
+        yield distances[order[row + 1 :]]
+
+
+def _topological_path_differences(tree1, tree2, leaf_names):
+    rows1 = _topological_path_rows(tree1, leaf_names)
+    rows2 = _topological_path_rows(tree2, leaf_names)
+    for first, second in zip(rows1, rows2, strict=True):
+        yield from (first - second).tolist()
+
+
+def _weighted_path_differences(tree1, tree2, leaf_names):
+    leaves1 = {leaf.name: leaf for leaf in tree1.leaves()}
+    leaves2 = {leaf.name: leaf for leaf in tree2.leaves()}
+
+    def path_to_root(leaf):
+        nodes: list[Any] = []
+        positions: dict[Any, int] = {}
+        lengths: list[float] = []
+        while leaf is not None:
+            positions[leaf] = len(nodes)
+            nodes.append(leaf)
+            leaf = leaf.up
+        return nodes, positions, lengths
+
+    def path_edge_lengths(first_path, second_leaf):
+        nodes, positions, first_lengths = first_path
+        second_lengths = []
+        while second_leaf not in positions:
+            second_lengths.append(float(second_leaf.dist))
+            second_leaf = second_leaf.up
+        end = positions[second_leaf]
+        if end > len(first_lengths):
+            first_lengths.extend(
+                float(node.dist) for node in nodes[len(first_lengths) : end]
+            )
+        lengths = first_lengths[:end]
+        lengths.extend(second_lengths)
+        return lengths
+
+    # Reuse the first leaf's path across its row while passing the edge
+    # lengths in their original order to the stable subtraction.
+    names = list(leaf_names)
+    for index, first in enumerate(names[:-1]):
+        first_path1 = path_to_root(leaves1[first])
+        first_path2 = path_to_root(leaves2[first])
+        for second in names[index + 1 :]:
+            yield _stable_component_difference(
+                path_edge_lengths(first_path1, leaves1[second]),
+                path_edge_lengths(first_path2, leaves2[second]),
+            )
+
+
 def _path_distance(tree1, tree2, leaf_names, topological):
     if _path_matrix_is_safe(
         tree1,
@@ -285,64 +373,13 @@ def _path_distance(tree1, tree2, leaf_names, topological):
         )
         if matrix_distance is not None:
             return matrix_distance
-    leaves1 = {leaf.name: leaf for leaf in tree1.leaves()}
-    leaves2 = {leaf.name: leaf for leaf in tree2.leaves()}
-    root_sides1 = _binary_root_sides(tree1) if topological else None
-    root_sides2 = _binary_root_sides(tree2) if topological else None
-
-    def path_edge_lengths(first_leaf, second_leaf):
-        first_ancestors = set()
-        cursor = first_leaf
-        while cursor is not None:
-            first_ancestors.add(cursor)
-            cursor = cursor.up
-        common_ancestor = second_leaf
-        while common_ancestor not in first_ancestors:
-            common_ancestor = common_ancestor.up
-        lengths = []
-        for leaf in (first_leaf, second_leaf):
-            cursor = leaf
-            while cursor is not common_ancestor:
-                lengths.append(float(cursor.dist))
-                cursor = cursor.up
-        return lengths
-
-    def differences():
-        for leaf_name1, leaf_name2 in combinations(leaf_names, 2):
-            leaf1_tree1 = leaves1[leaf_name1]
-            leaf2_tree1 = leaves1[leaf_name2]
-            leaf1_tree2 = leaves2[leaf_name1]
-            leaf2_tree2 = leaves2[leaf_name2]
-            if topological:
-                distance1 = tree1.get_distance(
-                    leaf1_tree1,
-                    leaf2_tree1,
-                    topological=True,
-                )
-                distance2 = tree2.get_distance(
-                    leaf1_tree2,
-                    leaf2_tree2,
-                    topological=True,
-                )
-                if (
-                    root_sides1 is not None
-                    and root_sides1[leaf_name1] != root_sides1[leaf_name2]
-                ):
-                    distance1 -= 1
-                if (
-                    root_sides2 is not None
-                    and root_sides2[leaf_name1] != root_sides2[leaf_name2]
-                ):
-                    distance2 -= 1
-                yield float(distance1) - float(distance2)
-                continue
-            yield _stable_component_difference(
-                path_edge_lengths(leaf1_tree1, leaf2_tree1),
-                path_edge_lengths(leaf1_tree2, leaf2_tree2),
-            )
-
+    differences = (
+        _topological_path_differences(tree1, tree2, leaf_names)
+        if topological
+        else _weighted_path_differences(tree1, tree2, leaf_names)
+    )
     distance = 0.0
-    for difference in differences():
+    for difference in differences:
         distance = math.hypot(distance, difference)
     if not math.isfinite(distance):
         raise ValueError("The path distance is too large to represent.")

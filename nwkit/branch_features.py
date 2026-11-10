@@ -25,16 +25,48 @@ def get_leaf_names_compat(tree):
 
 def _ensure_branch_ids(tree):
     nodes = list(tree.traverse())
-    if len(nodes) == 0:
+    if not nodes:
         return tree
-    all_leaf_names = sorted([leaf.name for leaf in iter_leaves(tree)])
-    if len(all_leaf_names) == 0:
-        for i, node in enumerate(nodes):
-            _set_node_prop(node, "branch_id", i)
+    leaf_names = sorted(leaf.name for leaf in iter_leaves(tree))
+    if not leaf_names:
+        for rank, node in enumerate(nodes):
+            _set_node_prop(node, "branch_id", rank)
         return tree
-    leaf_branch_ids = {
-        leaf_name: (1 << i) for i, leaf_name in enumerate(all_leaf_names)
-    }
+    if len(set(leaf_names)) == len(leaf_names):
+        keys = _unique_clade_rank_keys(tree, leaf_names)
+    else:
+        keys = _clade_rank_masks(tree, leaf_names)
+    # Stable sorting keeps the original level order for identical clades.
+    # Once sorted, reuse the key mapping for the assigned ranks.
+    for rank, node in enumerate(sorted(nodes, key=keys.__getitem__)):
+        keys[node] = rank
+    for node in nodes:
+        _set_node_prop(node, "branch_id", keys[node])
+    return tree
+
+
+def _unique_clade_rank_keys(tree, leaf_names):
+    # The highest differing bit orders disjoint clades. Clades sharing
+    # their highest bit are nested, so size orders them.
+    tip_ranks = {name: rank for rank, name in enumerate(leaf_names)}
+    keys = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node_is_leaf(node):
+            keys[node] = (tip_ranks[node.name], 1)
+        else:
+            largest_rank, tip_count = -1, 0
+            for child in node.get_children():
+                child_rank, child_count = keys[child]
+                if child_rank > largest_rank:
+                    largest_rank = child_rank
+                tip_count += child_count
+            keys[node] = (largest_rank, tip_count)
+    return keys
+
+
+def _clade_rank_masks(tree, leaf_names):
+    # With duplicate names, disjoint subtrees can share some of their bits.
+    leaf_branch_ids = {name: 1 << i for i, name in enumerate(leaf_names)}
     node_label_sum = {}
     for node in tree.traverse(strategy="postorder"):
         if node_is_leaf(node):
@@ -44,14 +76,7 @@ def _ensure_branch_ids(tree):
             for child in node.get_children():
                 node_mask |= node_label_sum[child]
             node_label_sum[node] = node_mask
-    branch_ids = [node_label_sum[node] for node in nodes]
-    sorted_node_indices = sorted(range(len(nodes)), key=lambda idx: branch_ids[idx])
-    rank_by_node_index = {
-        node_index: rank for rank, node_index in enumerate(sorted_node_indices)
-    }
-    for node_index, node in enumerate(nodes):
-        _set_node_prop(node, "branch_id", rank_by_node_index[node_index])
-    return tree
+    return node_label_sum
 
 
 def _get_node_label(node):
