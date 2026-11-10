@@ -35,19 +35,41 @@ def make_design(tree, names, depths):
     parents = np.asarray([-1 if node.is_root else index[node.up] for node in nodes])
     starts = np.asarray([0.0 if node.is_root else depths[node.up] for node in nodes])
     ends = np.asarray([depths[node] for node in nodes])
-    row_indices, column_indices, weights = [0], [0], [1.0]
-    clade_counts = [1]
-    for row, time in enumerate(times[1:], 1):
-        active = np.flatnonzero(
-            (parents >= 0) & (counts > 1) & (starts <= time) & (ends > time)
-        )
-        clade_counts.append(len(active))
-        row_indices.extend([row] * len(active))
-        column_indices.extend(active)
-        if len(active):
-            weights.extend([1 / len(active)] * len(active))
+    # An eligible branch covers one contiguous, half-open range of split rows.
+    event_times = times[1:-1]
+    eligible = np.flatnonzero((parents >= 0) & (counts > 1))
+    eligible_starts, eligible_ends = starts[eligible], ends[eligible]
+    first_rows = np.searchsorted(event_times, eligible_starts) + 1
+    stop_rows = np.searchsorted(event_times, eligible_ends) + 1
+    has_events = first_rows < stop_rows
+    first_rows, stop_rows = first_rows[has_events], stop_rows[has_events]
+    changes = np.bincount(first_rows, minlength=len(times))
+    changes -= np.bincount(stop_rows, minlength=len(times))
+    clade_counts = np.cumsum(changes, dtype=counts.dtype)
+    clade_counts[0] = 1
+    present = eligible[(eligible_starts <= 1) & (eligible_ends > 1)]
+    clade_counts[-1] = len(present)
+
+    # Fill the CSR slots in preorder so each row retains its sum order.
+    indptr = np.empty(len(times) + 1, dtype=np.intp)
+    indptr[0] = 0
+    np.cumsum(clade_counts, out=indptr[1:])
+    indices = np.empty(int(indptr[-1]), dtype=np.intp)
+    indices[0] = 0
+    indices[indptr[-2] :] = present
+    next_index = indptr[:-1].copy()
+    for column, first, stop in zip(
+        eligible[has_events], first_rows, stop_rows, strict=True
+    ):
+        offsets = next_index[first:stop]
+        indices[offsets] = column
+        offsets += 1
+    row_weights = np.divide(
+        1.0, clade_counts, out=np.zeros(len(times)), where=clade_counts > 0
+    )
     matrix = csr_matrix(
-        (weights, (row_indices, column_indices)), shape=(len(times), len(nodes))
+        (np.repeat(row_weights, clade_counts), indices, indptr),
+        shape=(len(times), len(nodes)),
     )
     return DTTDesign(
         parents,
@@ -56,7 +78,7 @@ def make_design(tree, names, depths):
         np.asarray([0.0 if node.is_root else node.dist for node in nodes]),
         times,
         matrix,
-        np.asarray(clade_counts),
+        clade_counts,
     )
 
 
