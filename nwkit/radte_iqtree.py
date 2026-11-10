@@ -431,17 +431,23 @@ class IQTreeLikelihood:
         return result.stdout
 
     def _newick(self, lengths):
-        parts: dict[object, str] = {}
-        for node in self.chronology.gene.traverse("postorder"):
-            value = (
-                self.aliases[str(node.name)]
-                if node.is_leaf
-                else "(" + ",".join(parts[c] for c in node.children) + ")"
-            )
-            if node in self.edge_id:
-                value += ":" + format(lengths[self.edge_id[node]], ".17g")
-            parts[node] = value
-        return parts[self.chronology.gene] + ";"
+        root = self.chronology.gene
+        parts = []
+        for is_post, node in root.iter_prepostorder():
+            if is_post:
+                parts.append(")")
+            else:
+                if node is not root and node is not node.up.children[0]:
+                    parts.append(",")
+                if not node.is_leaf:
+                    parts.append("(")
+                    continue
+                parts.append(self.aliases[str(node.name)])
+            index = self.edge_id.get(node)
+            if index is not None:
+                parts.append(":" + format(lengths[index], ".17g"))
+        parts.append(";")
+        return "".join(parts)
 
     def _evaluate(self, lengths, model, *, fixed, derivatives=True):
         with tempfile.TemporaryDirectory(dir=self.directory) as scratch:
