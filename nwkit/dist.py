@@ -201,18 +201,22 @@ def _matched_edge_vectors(tree1, tree2, comparison):
 
 
 def _stable_component_difference(positive, negative):
-    scale = max(
-        (abs(value) for value in (*positive, *negative)),
-        default=0.0,
-    )
-    if scale == 0.0:
-        return 0.0
-    difference = scale * math.fsum(
-        [
-            *(value / scale for value in positive),
-            *(-value / scale for value in negative),
-        ]
-    )
+    if len(positive) <= 1 and len(negative) <= 1:
+        # Preserve the scaling but sum the two signed terms directly.
+        left = positive[0] if positive else 0.0
+        right = negative[0] if negative else 0.0
+        scale = max(abs(left), abs(right)) if positive else abs(right)
+        difference = scale * (left / scale - right / scale) if scale else 0.0
+    else:
+        scale = max(abs(value) for value in chain(positive, negative))
+        if scale == 0.0:
+            return 0.0
+        difference = scale * math.fsum(
+            [
+                *(value / scale for value in positive),
+                *(-value / scale for value in negative),
+            ]
+        )
     if not math.isfinite(difference):
         raise ValueError("A branch-length difference is too large to represent.")
     return difference
