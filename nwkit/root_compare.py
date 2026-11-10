@@ -9,7 +9,7 @@ from decimal import Decimal, localcontext
 from fractions import Fraction
 from typing import Any
 
-from nwkit.clade_mapping import canonical_split
+from nwkit.clade_mapping import canonical_split, physical_edge_lookup
 from nwkit.draw import _draw_tree
 from nwkit.output_transaction import output_transaction
 from nwkit.root import (
@@ -34,7 +34,6 @@ from nwkit.root_evaluation import (
 from nwkit.rooting_state import require_rooted
 from nwkit.species_parser import get_species_parser
 from nwkit.util import (
-    get_subtree_leaf_name_sets,
     read_tree,
     remove_singleton,
     validate_distinct_output_paths,
@@ -447,9 +446,7 @@ def _split_sort_key(split):
     return tuple(sorted(split[0])), tuple(sorted(split[1]))
 
 
-def _physical_edge_endpoints(tree):
-    all_taxa = _leaf_taxa(tree)
-    taxon_sets = get_subtree_leaf_name_sets(tree)
+def _physical_edge_endpoint_lookup(tree):
     nodes = list(tree.traverse())
     component_parent = {id(node): id(node) for node in nodes}
 
@@ -491,53 +488,32 @@ def _physical_edge_endpoints(tree):
     ):
         union_components(root_children[0], root_children[1])
 
-    nodes_by_split: dict[Any, list[Any]] = {}
-    for node in nodes:
-        if node.is_root:
-            continue
-        side = frozenset(str(name) for name in taxon_sets[node])
-        split = canonical_split(side, all_taxa - side)
-        nodes_by_split.setdefault(split, []).append(node)
+    find_edge = physical_edge_lookup(tree)
 
-    endpoints = {}
-    root_child_ids = {id(child) for child in root_children}
-    for split, nodes in nodes_by_split.items():
-        if len(nodes) == 1:
-            node = nodes[0]
-            side = frozenset(str(name) for name in taxon_sets[node])
-            raw_endpoints = (node, node.up) if side == split[0] else (node.up, node)
-            endpoints[split] = tuple(
-                find_component(id(endpoint)) for endpoint in raw_endpoints
-            )
-            continue
-        if len(nodes) == 2 and {id(node) for node in nodes} == root_child_ids:
-            side_a = next(
-                node
-                for node in nodes
-                if frozenset(str(name) for name in taxon_sets[node]) == split[0]
-            )
-            side_b = nodes[0] if nodes[1] is side_a else nodes[1]
-            endpoints[split] = (
-                find_component(id(side_a)),
-                find_component(id(side_b)),
-            )
-    return endpoints
+    def find_endpoints(split):
+        edge = find_edge(split)
+        if edge is None:
+            return None
+        first, second = edge
+        return find_component(id(first)), find_component(id(second))
+
+    return find_endpoints
 
 
 def _candidate_equivalent_splits(candidate):
     return candidate.equivalent_splits or (candidate.split,)
 
 
-def _normalize_physical_root_positions(tree, evaluation, endpoints_by_split=None):
+def _normalize_physical_root_positions(tree, evaluation, find_endpoints=None):
     if not evaluation.candidates:
         return evaluation
-    if endpoints_by_split is None:
-        endpoints_by_split = _physical_edge_endpoints(tree)
+    if find_endpoints is None:
+        find_endpoints = _physical_edge_endpoint_lookup(tree)
     node_groups: dict[int, tuple[Any, list[RootingCandidate]]] = {}
     retained = []
     for candidate in evaluation.candidates:
         fraction = candidate.position_fraction_from_side_a
-        endpoints = endpoints_by_split.get(candidate.split)
+        endpoints = find_endpoints(candidate.split)
         endpoint_index = None
         if (
             candidate.position_kind in {"exact", "node"}
@@ -570,7 +546,7 @@ def _normalize_physical_root_positions(tree, evaluation, endpoints_by_split=None
 
     for endpoint, candidates in node_groups.values():
         representative = min(candidates, key=lambda item: _split_sort_key(item.split))
-        representative_endpoints = endpoints_by_split[representative.split]
+        representative_endpoints = find_endpoints(representative.split)
         fraction = 0.0 if representative_endpoints[0] == endpoint else 1.0
         equivalent_splits = {
             split
@@ -604,7 +580,7 @@ def evaluate_root_compare_methods(tree, methods, args, automatic, *, rooted_tree
     cache: dict[str, Any] = {}
     if rooted_trees is not None:
         cache["rooted_trees"] = {}
-    endpoints_by_split = None
+    find_endpoints = None
     for method in methods:
         try:
             evaluation = _evaluate_method(tree, method, args, cache)
@@ -629,12 +605,12 @@ def evaluate_root_compare_methods(tree, methods, args, automatic, *, rooted_tree
                 )
             )
         if evaluation.status == "ok":
-            if endpoints_by_split is None:
-                endpoints_by_split = _physical_edge_endpoints(tree)
+            if find_endpoints is None:
+                find_endpoints = _physical_edge_endpoint_lookup(tree)
             evaluation = _normalize_physical_root_positions(
                 tree,
                 evaluation,
-                endpoints_by_split=endpoints_by_split,
+                find_endpoints=find_endpoints,
             )
         evaluations.append(evaluation)
     if rooted_trees is not None:

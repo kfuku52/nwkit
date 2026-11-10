@@ -292,6 +292,58 @@ def canonical_split(side_a, side_b):
     return frozenset(side_b), frozenset(side_a)
 
 
+def physical_edge_lookup(tree, *, available_edges=None):
+    """Look up the endpoints of a canonical split, ordered from side A to B."""
+    taxa = sorted(_leaf_set(tree))
+    tip_count = len(taxa)
+    bits = {name: 1 << index for index, name in enumerate(taxa)}
+    all_mask = (1 << tip_count) - 1
+    masks = _projected_masks(tree, bits)
+    nodes_by_split: dict[int, list[Any]] = {}
+    for node in tree.traverse():
+        if node.is_root or (
+            available_edges is not None and node not in available_edges
+        ):
+            continue
+        side = masks[node]
+        size = side.bit_count()
+        complement_size = tip_count - size
+        # For equally sized sides the one containing the first taxon sorts first.
+        if size > complement_size or (size == complement_size and not side & 1):
+            side = all_mask ^ side
+        nodes_by_split.setdefault(side, []).append(node)
+
+    endpoints = {}
+    root_child_ids = {id(child) for child in tree.children}
+    for side, nodes in nodes_by_split.items():
+        if len(nodes) == 1:
+            node = nodes[0]
+            endpoints[side] = (
+                (node, node.up) if masks[node] == side else (node.up, node)
+            )
+        elif len(nodes) == 2 and {id(node) for node in nodes} == root_child_ids:
+            side_a = next(node for node in nodes if masks[node] == side)
+            side_b = nodes[0] if nodes[1] is side_a else nodes[1]
+            endpoints[side] = (side_a, side_b)
+
+    def lookup(split):
+        side_a, side_b = split
+        if len(side_a) + len(side_b) != tip_count:
+            return None
+        try:
+            first = sum(bits[name] for name in side_a)
+            edge = endpoints.get(first)
+            if edge is not None and sum(bits[name] for name in side_b) == (
+                all_mask ^ first
+            ):
+                return edge
+        except KeyError:
+            return None
+        return None
+
+    return lookup
+
+
 def node_projected_split(node, shared_taxa, taxon_sets=None):
     if node.is_root:
         return None

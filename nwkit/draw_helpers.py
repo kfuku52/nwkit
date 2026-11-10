@@ -23,7 +23,7 @@ from matplotlib.text import Text
 from matplotlib.transforms import ScaledTranslation
 from mpl_toolkits.axes_grid1.anchored_artists import AnchoredSizeBar
 
-from nwkit.clade_mapping import canonical_split
+from nwkit.clade_mapping import physical_edge_lookup
 from nwkit.draw_layouts import get_rectangular_coordinates, make_tree_layout
 from nwkit.draw_quality import DrawingArtist, measure_figure_renderer
 from nwkit.time_tree import (
@@ -31,7 +31,6 @@ from nwkit.time_tree import (
 )
 from nwkit.util import (
     extract_species_label,
-    get_subtree_leaf_name_sets,
     read_tip_table,
     validate_unique_named_leaves,
 )
@@ -1580,40 +1579,23 @@ def _branch_style_maps(
     )
 
 
-def _physical_edge_paths(tree, drawing_layout):
-    all_taxa = frozenset(str(name) for name in tree.leaf_names())
-    taxon_sets = get_subtree_leaf_name_sets(tree)
-    nodes_by_split: dict[Any, list[Any]] = {}
-    for node in tree.traverse():
-        if node.is_root or node not in drawing_layout.edge_paths:
-            continue
-        side = frozenset(str(name) for name in taxon_sets[node])
-        split = canonical_split(side, all_taxa - side)
-        nodes_by_split.setdefault(split, []).append(node)
-
+def _physical_edge_paths(tree, drawing_layout, splits):
+    edge_paths = drawing_layout.edge_paths
+    find_edge = physical_edge_lookup(tree, available_edges=edge_paths)
     paths = {}
-    for split, nodes in nodes_by_split.items():
-        if len(nodes) == 1:
-            node = nodes[0]
-            path = list(drawing_layout.edge_paths[node])
-            side = frozenset(str(name) for name in taxon_sets[node])
-            if side == split[0]:
-                path.reverse()
-            paths[split] = path
+    for split in dict.fromkeys(splits):
+        edge = find_edge(split)
+        if edge is None:
             continue
-        root_children = tree.get_children()
-        if len(nodes) == 2 and {id(node) for node in nodes} == {
-            id(child) for child in root_children
-        }:
-            side_a = next(
-                node
-                for node in nodes
-                if frozenset(str(name) for name in taxon_sets[node]) == split[0]
+        side_a, side_b = edge
+        if side_a.up is side_b:
+            paths[split] = list(reversed(edge_paths[side_a]))
+        elif side_b.up is side_a:
+            paths[split] = list(edge_paths[side_b])
+        else:
+            paths[split] = (
+                list(reversed(edge_paths[side_a])) + list(edge_paths[side_b])[1:]
             )
-            side_b = nodes[0] if nodes[1] is side_a else nodes[1]
-            path_a = list(reversed(drawing_layout.edge_paths[side_a]))
-            path_b = list(drawing_layout.edge_paths[side_b])
-            paths[split] = path_a + path_b[1:]
     return paths
 
 
@@ -1648,7 +1630,10 @@ def _point_on_path(path, fraction):
 
 
 def _draw_branch_marker_overlays(ax, figure, tree, drawing_layout, branch_markers):
-    edge_paths = _physical_edge_paths(tree, drawing_layout)
+    branch_markers = tuple(branch_markers)
+    edge_paths = _physical_edge_paths(
+        tree, drawing_layout, (marker["split"] for marker in branch_markers)
+    )
     resolved = []
     for marker in branch_markers:
         split = marker["split"]
