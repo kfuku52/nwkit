@@ -84,13 +84,17 @@ def _array(value, shape, label):
     return result
 
 
-def _inverse(matrix, label):
+def _cholesky(matrix, label):
     if not np.allclose(matrix, matrix.T, rtol=1e-12, atol=1e-14):
         raise ValueError(f"{label} must be symmetric.")
     try:
-        factor = cho_factor(matrix, lower=True, check_finite=False)
+        return cho_factor(matrix, lower=True, check_finite=False)
     except np.linalg.LinAlgError as exc:
         raise ValueError(f"{label} must be positive definite.") from exc
+
+
+def _inverse(matrix, label):
+    factor = _cholesky(matrix, label)
     return cho_solve(factor, np.eye(len(matrix))), 2 * float(
         np.log(np.diag(factor[0])).sum()
     )
@@ -163,7 +167,8 @@ def _propagate(precision, linear, constant, fixed, transition, dimension):
     covariance = _array(
         transition.covariance, (dimension, dimension), "Branch covariance"
     )
-    _inverse(covariance, "Branch covariance")
+    # Branch validation only needs the finite Cholesky factor.
+    np.asarray_chkfinite(_cholesky(covariance, "Branch covariance")[0])
     free, coordinates, reduced_linear, constant = _restrict(
         precision, linear, constant, fixed
     )
