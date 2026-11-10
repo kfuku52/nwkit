@@ -18,6 +18,7 @@ from ete4 import Tree
 
 from nwkit.fasta import parse_fasta
 from nwkit.radte_sequence import read_alignment
+from nwkit.util import get_subtree_leaf_bitmasks
 
 BASES = {
     "JC": "dna",
@@ -199,6 +200,17 @@ def split_key(node, names: frozenset[str]):
     return min((first, second), key=lambda value: (len(value), value))
 
 
+def _canonical_split_mask(side, all_tips):
+    return min(side, all_tips ^ side)
+
+
+def _match_split_masks(keys, expected, edge_keys, error):
+    index_by_split = {key: index for index, key in enumerate(keys)}
+    if len(index_by_split) != len(keys) or index_by_split.keys() != expected:
+        raise ValueError(error)
+    return np.array([index_by_split[key] for key in edge_keys])
+
+
 def read_export(prefix, *, single_tip_root=False, derivatives=True):
     export = Path(str(prefix) + ".mcmctree.hessian")
     if not export.is_file():
@@ -294,6 +306,23 @@ class IQTreeLikelihood:
         }
         self.aliases = {name: f"T{i}" for i, name in enumerate(self.names)}
         self.all_aliases = frozenset(self.aliases.values())
+        self._alias_positions = {
+            alias: index for index, alias in enumerate(self.aliases.values())
+        }
+        self._full_alias_mask = (1 << len(self._alias_positions)) - 1
+        source_positions = {
+            tip.name: self._alias_positions[self.aliases[str(tip.name)]]
+            for tip in chronology.gene.leaves()
+        }
+        source_keys = {
+            node: _canonical_split_mask(mask, self._full_alias_mask)
+            for node, mask in get_subtree_leaf_bitmasks(
+                chronology.gene, source_positions
+            ).items()
+            if node is not chronology.gene
+        }
+        self._source_split_keys = set(source_keys.values())
+        self._edge_split_keys = tuple(source_keys[node] for node in self.edges)
         self.threads, self.seed = threads, seed
         self._temporary = tempfile.TemporaryDirectory(prefix="nwkit-iqtree-")
         self.directory = Path(self._temporary.name)
@@ -383,26 +412,16 @@ class IQTreeLikelihood:
             ]
         )
 
-        def canonical(side):
-            other = self.all_aliases - side
-            return min(
-                (tuple(sorted(side)), tuple(sorted(other))), key=lambda x: (len(x), x)
-            )
-
-        keys = [canonical(side) for side in self.worker.splits]
-        expected = [
-            canonical(frozenset(self.aliases[str(n.name)] for n in edge.leaves()))
-            for edge in self.edges
-        ]
-        if (
-            len(keys) != len(set(keys))
-            or set(keys) != set(expected)
-            or any(not side <= self.all_aliases for side in self.worker.splits)
-        ):
-            raise ValueError(
-                "IQ-TREE library worker changed the fixed topology or sequence set."
-            )
-        self.worker_mapping = np.array([keys.index(key) for key in expected])
+        error = "IQ-TREE library worker changed the fixed topology or sequence set."
+        keys = []
+        for side in self.worker.splits:
+            if not side <= self.all_aliases:
+                raise ValueError(error)
+            mask = sum(1 << self._alias_positions[alias] for alias in side)
+            keys.append(_canonical_split_mask(mask, self._full_alias_mask))
+        self.worker_mapping = _match_split_masks(
+            keys, set(self._edge_split_keys), self._edge_split_keys, error
+        )
         combined = np.bincount(self.worker_mapping, weights=self.initial_lengths)
         if not np.allclose(combined, self.worker.lengths, rtol=1e-7, atol=1e-12):
             raise ValueError(
@@ -449,6 +468,19 @@ class IQTreeLikelihood:
         parts.append(";")
         return "".join(parts)
 
+    def _export_edge_mapping(self, tree, nodes):
+        """Map rooted input edges to the export's unrooted derivative order."""
+        error = "IQ-TREE changed the sequence set or fixed topology."
+        if set(tree.leaf_names()) != self.all_aliases:
+            raise ValueError(error)
+        masks = get_subtree_leaf_bitmasks(tree, self._alias_positions)
+        keys = [
+            _canonical_split_mask(masks[node], self._full_alias_mask) for node in nodes
+        ]
+        return _match_split_masks(
+            keys, self._source_split_keys, self._edge_split_keys, error
+        )
+
     def _evaluate(self, lengths, model, *, fixed, derivatives=True):
         with tempfile.TemporaryDirectory(dir=self.directory) as scratch:
             prefix = Path(scratch) / "run"
@@ -488,35 +520,7 @@ class IQTreeLikelihood:
                 single_tip_root=self.chronology.gene.children[0].is_leaf,
                 derivatives=derivatives,
             )
-        keys = [split_key(node, self.all_aliases) for node in nodes]
-        source = Tree(self._newick(lengths), parser=1)
-        source_keys = [
-            split_key(node, self.all_aliases)
-            for node in source.traverse("preorder")
-            if node is not source
-        ]
-        # Chronology.edges need not be preorder.
-        source_by_clade = {
-            frozenset(n.name for n in node.leaves()): split_key(node, self.all_aliases)
-            for node in source.traverse()
-            if node is not source
-        }
-        mapping = np.array(
-            [
-                keys.index(
-                    source_by_clade[
-                        frozenset(self.aliases[str(n.name)] for n in edge.leaves())
-                    ]
-                )
-                for edge in self.edges
-            ]
-        )
-        if (
-            len(keys) != len(set(keys))
-            or set(source_keys) != set(keys)
-            or set(n.name for n in tree.leaves()) != self.all_aliases
-        ):
-            raise ValueError("IQ-TREE changed the sequence set or fixed topology.")
+        mapping = self._export_edge_mapping(tree, nodes)
         combined = np.bincount(mapping, weights=lengths)
         # Newick has more precision except when tiny lengths round to zero.
         exported = np.array(
