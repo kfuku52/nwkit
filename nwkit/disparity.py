@@ -93,7 +93,13 @@ def clade_disparities(design, values):
             counts[node] = 1
             means[node] = values[design.tip_rows[node]]
             continue
-        for child in design.children[node]:
+        children = design.children[node]
+        first = children[0]
+        # The first child's moments initialize an empty accumulator directly.
+        counts[node] = counts[first]
+        means[node] += means[first]
+        sums[node] += sums[first]
+        for child in children[1:]:
             total = counts[node] + counts[child]
             delta = means[child] - means[node]
             sums[node] += (
@@ -215,8 +221,12 @@ def _batched_disparities(design, values, counts):
         if design.tip_rows[node] >= 0:
             means[node] = values[node]
             continue
-        merged = 0
-        for child in design.children[node]:
+        children = design.children[node]
+        first = children[0]
+        merged = counts[first]
+        means[node] += means[first]
+        sums[node] += sums[first]
+        for child in children[1:]:
             total = merged + counts[child]
             delta = means[child] - means[node]
             squared = _row_squared_norms(delta)

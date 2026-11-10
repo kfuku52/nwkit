@@ -88,6 +88,17 @@ def test_geiger_2011_reference_and_independent_pairwise_oracle():
     )
 
 
+def test_disparity_handles_large_common_trait_offsets():
+    _, design = design_for("(A:1,B:1,C:1);")
+    offset = 2.0**520
+    step = 2.0**472
+    values = np.array([[offset], [offset + step], [offset + 2 * step]])
+    disparities, counts = clade_disparities(design, values)
+
+    assert counts[0] == 3
+    assert disparities[0] == 2 * step * step
+
+
 def test_bm_rate_geiger_and_gls_oracle():
     tree, _ = design_for()
     covariance = build_evolutionary_process(tree).tip_covariance(list("ABCDEFGH"))
