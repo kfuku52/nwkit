@@ -330,11 +330,22 @@ def response_count_matrix(
 def _positive_definite_cholesky(matrix: np.ndarray) -> np.ndarray:
     symmetric = (matrix + matrix.T) / 2.0
     scale = max(1.0, float(np.max(np.diag(symmetric))))
+    finite_scale = math.isfinite(scale)
+    if finite_scale:
+        symmetric = symmetric.astype(
+            np.result_type(symmetric.dtype, np.float64), copy=False
+        )
+        diagonal = symmetric.diagonal().copy()
+        # Match the off-diagonal addition of positive zero.
+        np.add(symmetric, 0.0, out=symmetric)
     for multiplier in (0.0, 1e-12, 1e-10, 1e-8, 1e-6):
+        if finite_scale:
+            np.fill_diagonal(symmetric, diagonal + scale * multiplier)
+            candidate = symmetric
+        else:
+            candidate = symmetric + np.eye(len(symmetric)) * scale * multiplier
         try:
-            return np.linalg.cholesky(
-                symmetric + np.eye(len(symmetric)) * scale * multiplier
-            )
+            return np.linalg.cholesky(candidate)
         except np.linalg.LinAlgError:
             continue
     raise np.linalg.LinAlgError("Matrix is not positive definite.")
