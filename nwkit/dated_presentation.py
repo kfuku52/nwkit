@@ -243,11 +243,13 @@ def _prepare_tree_view(
         if len(order) != len(species) or set(order) != set(species):
             raise ValueError("Tip order must contain each tree species exactly once.")
         ranks = {name: rank for rank, name in enumerate(order)}
+        first_ranks = {}
         for node in tree.traverse(strategy="postorder"):
-            if not node.is_leaf:
-                node.children.sort(
-                    key=lambda child: min(ranks[name] for name in child.leaf_names())
-                )
+            if node.is_leaf:
+                first_ranks[node] = ranks[node.name]
+            else:
+                node.children.sort(key=first_ranks.__getitem__)
+                first_ranks[node] = first_ranks[node.children[0]]
         if list(tree.leaf_names()) != order:
             raise ValueError("Requested tip order is not compatible with the topology.")
     return inputs, leaves, order, outfile, outputs, species, tree
@@ -647,7 +649,7 @@ def _draw_geological_axes(
     if period_texts:
         # Spread crowded names within the header while retaining their
         # original time anchors. A short leader connects a shifted name.
-        figure.canvas.draw()
+        figure.draw_without_rendering()
         renderer = figure.canvas.get_renderer()
         ordered = list(reversed(period_texts))
         widths = [text.get_window_extent(renderer).width for text in ordered]
@@ -822,7 +824,7 @@ def _draw_tip_and_age_labels(
         if node.is_leaf or not (
             node_ages == "all"
             or (node_ages == "root" and node.is_root)
-            or frozenset(node.leaf_names()) in selected
+            or (selected and frozenset(node.leaf_names()) in selected)
         ):
             continue
         text = axis.annotate(
@@ -839,11 +841,12 @@ def _draw_tip_and_age_labels(
 
 def _place_age_labels(age_texts, axis, branches, event_markers, figure):
     """Place age labels."""
-    figure.canvas.draw()
+    import numpy as np
+
+    if not age_texts and not event_markers:
+        return []
+    figure.draw_without_rendering()
     renderer = figure.canvas.get_renderer()
-    branch_pixels = [
-        (axis.transData.transform(a), axis.transData.transform(b)) for a, b in branches
-    ]
     event_boxes = [
         marker.get_window_extent(renderer).padded(1.2 * figure.dpi / 72)
         for marker in event_markers
@@ -856,6 +859,11 @@ def _place_age_labels(age_texts, axis, branches, event_markers, figure):
         raise ValueError(
             "Branch symbols overlap; adjust branch_fraction or increase figure size."
         )
+    if not age_texts:
+        return event_boxes
+    endpoints = axis.transData.transform(np.asarray(branches).reshape(-1, 2))
+    lower = np.minimum(endpoints[::2], endpoints[1::2])
+    upper = np.maximum(endpoints[::2], endpoints[1::2])
     occupied = list(event_boxes)
     for text in age_texts:
         placed = False
@@ -881,14 +889,11 @@ def _place_age_labels(age_texts, axis, branches, event_markers, figure):
             text.set_position((dx, dy))
             text.set_ha(align)
             box = text.get_window_extent(renderer).padded(0.5 * figure.dpi / 72)
-            crosses = any(
-                (
-                    min(a[0], b[0]) < box.x1
-                    and max(a[0], b[0]) > box.x0
-                    and min(a[1], b[1]) < box.y1
-                    and max(a[1], b[1]) > box.y0
-                )
-                for a, b in branch_pixels
+            crosses = np.any(
+                (lower[:, 0] < box.x1)
+                & (upper[:, 0] > box.x0)
+                & (lower[:, 1] < box.y1)
+                & (upper[:, 1] > box.y0)
             )
             if (
                 not crosses
@@ -1071,7 +1076,7 @@ def _validate_presentation_bounds(
     """Validate presentation bounds."""
     import matplotlib
 
-    figure.canvas.draw()
+    figure.draw_without_rendering()
     renderer = figure.canvas.get_renderer()
     period_boxes = [text.get_window_extent(renderer) for text in period_texts]
     if any(
