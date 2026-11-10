@@ -7,7 +7,7 @@ from typing import Any
 
 from nwkit.clade_index import LcaIndex
 from nwkit.rooting_state import require_rooted
-from nwkit.util import validate_unique_named_leaves
+from nwkit.util import get_subtree_leaf_index_extents, validate_unique_named_leaves
 
 
 def validate_binary(tree, label, *, unique=True):
@@ -31,13 +31,35 @@ def label_nodes(tree):
             node.name = f"<{count}>"
 
 
+def _clade_selector_lookup(tree, nodes):
+    leaf_names = list(tree.leaf_names())
+    tip_order = {name: index for index, name in enumerate(leaf_names)}
+    if len(tip_order) != len(leaf_names):
+        clade_sets = {frozenset(node.leaf_names()): node for node in nodes}
+        return lambda members: clade_sets.get(frozenset(members))
+
+    # With unique labels, a clade is an entire interval in tree leaf order.
+    extents = get_subtree_leaf_index_extents(tree, tip_order)
+    clade_ranges = {extents[node]: node for node in nodes}
+
+    def lookup(members):
+        try:
+            positions = [tip_order[name] for name in members]
+        except KeyError:
+            return None
+        return clade_ranges.get((min(positions), max(positions), len(positions)))
+
+    return lookup
+
+
 def select_nodes(tree, selectors):
     nodes = tuple(tree.traverse("postorder"))
     if selectors is None:
         return nodes
     lookup = {node.name: node for node in nodes}
-    clades = {frozenset(node.leaf_names()): node for node in nodes}
+    lookup_clade = None
     result = []
+    seen = set()
     for selector in selectors.split():
         key = f"<{selector}>" if selector.isdigit() else selector
         if key in lookup:
@@ -48,10 +70,13 @@ def select_nodes(tree, selectors):
                 raise ValueError(
                     f"Duplicate species in hypothesis selector: {selector}"
                 )
-            node = clades.get(frozenset(members))
+            if lookup_clade is None:
+                lookup_clade = _clade_selector_lookup(tree, nodes)
+            node = lookup_clade(members)
             if node is None:
                 raise ValueError(f"Unknown or non-monophyletic hypothesis: {selector}")
-        if node not in result:
+        if node not in seen:
+            seen.add(node)
             result.append(node)
     if not result:
         raise ValueError("Hypothesis selectors must not be empty.")
