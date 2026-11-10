@@ -122,6 +122,18 @@ def test_alignment_validation(tmp_path, sequences):
         read_alignment(path, ["A", "B"])
 
 
+@pytest.mark.parametrize("alphabet", ["dna", "protein"])
+@pytest.mark.parametrize("sequence, invalid", [("A@北", "@"), ("A北@", "北")])
+def test_alignment_reports_the_first_invalid_character(
+    tmp_path, alphabet, sequence, invalid
+):
+    path = write_alignment(tmp_path, {"A": sequence, "B": "AAA"})
+    with pytest.raises(
+        ValueError, match=f"Unsupported {alphabet} alignment character: {invalid}"
+    ):
+        read_alignment(path, ["A", "B"], alphabet)
+
+
 def test_quadratic_root_pair_and_gradient():
     likelihood = QuadraticLikelihood(
         np.log([0.3, 0.1]),

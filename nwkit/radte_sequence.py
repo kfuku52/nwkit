@@ -49,6 +49,7 @@ def read_alignment(path, names, alphabet="dna"):
         seqs[record.name] = (
             "".join(record.raw.splitlines()[1:]).replace(" ", "").upper()
         )
+    del records
     if set(seqs) != set(names):
         raise ValueError("Alignment names must exactly match the gene-tree tips.")
     lengths = {len(s) for s in seqs.values()}
@@ -72,11 +73,21 @@ def read_alignment(path, names, alphabet="dna"):
     )
     matrix = np.empty((len(names), next(iter(lengths))), dtype=np.uint32)
     state_id = {s: i for i, s in enumerate(states)}
+    lookup = np.zeros(128, dtype=matrix.dtype)
+    for code, compatible_states in codes.items():
+        lookup[ord(code)] = sum(1 << state_id[state] for state in compatible_states)
     for i, name in enumerate(names):
-        for j, code in enumerate(seqs[name]):
-            if code not in codes:
-                raise ValueError(f"Unsupported {alphabet} alignment character: {code}")
-            matrix[i, j] = sum(1 << state_id[s] for s in codes[code])
+        sequence = seqs[name]
+        if not sequence.isascii():
+            invalid = next(code for code in sequence if code not in codes)
+            raise ValueError(f"Unsupported {alphabet} alignment character: {invalid}")
+        encoded = np.frombuffer(sequence.encode("ascii"), dtype=np.uint8)
+        row = lookup[encoded]
+        invalid_positions = row == 0
+        if invalid_positions.any():
+            invalid = sequence[invalid_positions.argmax()]
+            raise ValueError(f"Unsupported {alphabet} alignment character: {invalid}")
+        matrix[i] = row
     return matrix, states
 
 
