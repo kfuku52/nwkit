@@ -286,11 +286,9 @@ def read_tip_table(
                 option_name, ", ".join(missing_columns)
             )
         )
-    dataframe = dataframe.copy()
-    dataframe["leaf_name"] = [
-        str(leaf_name) for leaf_name in dataframe["leaf_name"].tolist()
-    ]
-    if any(leaf_name.strip() == "" for leaf_name in dataframe["leaf_name"].tolist()):
+    leaf_names = [str(leaf_name) for leaf_name in dataframe["leaf_name"].tolist()]
+    dataframe["leaf_name"] = leaf_names
+    if any(leaf_name.strip() == "" for leaf_name in leaf_names):
         raise ValueError(
             "Column 'leaf_name' in '{}' must not contain empty values.".format(
                 option_name
@@ -319,7 +317,7 @@ def read_tip_table(
     if tree_leaf_names is not None:
         tree_leaf_names = [str(name) for name in tree_leaf_names]
         tree_leaf_set = set(tree_leaf_names)
-        table_leaf_set = set(dataframe["leaf_name"])
+        table_leaf_set = set(leaf_names)
         table_only = sorted(table_leaf_set - tree_leaf_set)
         tree_only = sorted(tree_leaf_set - table_leaf_set)
         if unmatched not in ("warn", "error", "ignore"):
@@ -346,12 +344,21 @@ def read_tip_table(
                     )
                 )
     markers = parse_table_missing_values(missing_values)
+    default_markers = markers == set(DEFAULT_TABLE_MISSING_VALUES)
     for column in dataframe.columns:
         if column == "leaf_name":
             continue
+        values = dataframe[column]
+        # A populated numeric column cannot match any default text marker.
+        if (
+            default_markers
+            and pd.api.types.is_numeric_dtype(values)
+            and not values.hasnans
+        ):
+            continue
         dataframe[column] = [
             pd.NA if is_missing_table_value(value, markers) else value
-            for value in dataframe[column].tolist()
+            for value in values.tolist()
         ]
     return dataframe, table_only, tree_only
 
