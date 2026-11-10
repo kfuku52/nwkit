@@ -205,6 +205,10 @@ _SIMULATION_WORKSPACE_BYTES = 4 * 1024**2
 
 
 def _row_squared_norms(delta):
+    if delta.shape[1] == 1:
+        # A one-component dot product has no reduction order to preserve.
+        with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+            return np.square(delta[:, 0])
     # Fresh vectors retain the original dot reduction, including on backends
     # whose reduction differs for offset rows of a batched buffer.
     output = []
