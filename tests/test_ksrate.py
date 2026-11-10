@@ -60,6 +60,25 @@ def test_finite_ks_cancellation_does_not_overflow_intermediate_sum():
         corrected_ks(1e308, 1e308, 0)
 
 
+def test_bootstrap_keeps_finite_cancellation_and_rejects_true_overflow():
+    trios = [KsTrio("A", "B", "C", "AB", 1)]
+
+    def pairs(outgroup):
+        return PairKs(
+            [
+                KsObservation("A", "B", "f", 1e308),
+                KsObservation("A", "C", "f", 1e308),
+                KsObservation("B", "C", "f", outgroup),
+            ],
+            "ABC",
+        )
+
+    result = bootstrap_corrections(pairs(1e308), trios, 2, 1)
+    np.testing.assert_array_equal(result[("A", "AB")], [1e308, 1e308])
+    with pytest.raises(ValueError, match="representable as a finite float"):
+        bootstrap_corrections(pairs(0.0), trios, 2, 1)
+
+
 @pytest.mark.parametrize("value", [1e308, 5e-324])
 def test_pair_and_group_medians_are_stable_at_float_extremes(value):
     pairs = PairKs([KsObservation("A", "B", f"f{i}", value) for i in range(2)], "AB")

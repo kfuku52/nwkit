@@ -49,9 +49,10 @@ def _stable_median(values):
     return _midpoint(values[(len(values) - 1) // 2], values[len(values) // 2])
 
 
-def _weighted_median(values, weights):
-    order = np.argsort(values, kind="stable")
-    values = np.asarray(values)[order]
+def _weighted_median(values, weights, order=None):
+    values = np.asarray(values)
+    if order is None:
+        order = np.argsort(values, kind="stable")
     weights = np.asarray(weights, dtype=np.int64)[order]
     total = int(weights.sum())
     if total == 0:
@@ -59,7 +60,7 @@ def _weighted_median(values, weights):
     cumulative = np.cumsum(weights)
     low = int(np.searchsorted(cumulative, (total - 1) // 2, side="right"))
     high = int(np.searchsorted(cumulative, total // 2, side="right"))
-    return _midpoint(values[low], values[high])
+    return _midpoint(values[order[low]], values[order[high]])
 
 
 class PairKs:
@@ -132,17 +133,21 @@ class PairKs:
         return 0 if values is None else len(values[0])
 
 
+def _trio_pairs(trio):
+    return tuple(
+        tuple(sorted(pair))
+        for pair in (
+            (trio.focal, trio.sister),
+            (trio.focal, trio.outgroup),
+            (trio.sister, trio.outgroup),
+        )
+    )
+
+
 def trio_values(trios, estimates):
     values = np.full(len(trios), np.nan)
     for index, trio in enumerate(trios):
-        distances = [
-            estimates.get(tuple(sorted(pair)), np.nan)
-            for pair in (
-                (trio.focal, trio.sister),
-                (trio.focal, trio.outgroup),
-                (trio.sister, trio.outgroup),
-            )
-        ]
+        distances = [estimates.get(pair, np.nan) for pair in _trio_pairs(trio)]
         if np.all(np.isfinite(distances)):
             values[index] = corrected_ks(*distances)
     return values
@@ -164,18 +169,48 @@ def bootstrap_corrections(pairs, trios, draws, seed):
     """Resample shared family IDs jointly, preserving across-pair dependence."""
     if not isinstance(draws, int) or draws < 0 or not isinstance(seed, int) or seed < 0:
         raise ValueError("Ks bootstrap count and seed must be nonnegative integers.")
-    keys = tuple(grouped_corrections(trios, np.zeros(len(trios))))
-    results = {key: np.full(draws, np.nan) for key in keys}
+    groups: dict[tuple[str, str], list[int]] = {}
+    positions: dict[tuple[str, ...], int] = {}
+    trio_rows = []
+    for index, trio in enumerate(trios):
+        groups.setdefault((trio.focal, trio.species_event_id), []).append(index)
+        trio_rows.append(
+            [positions.setdefault(pair, len(positions)) for pair in _trio_pairs(trio)]
+        )
+    results = {key: np.full(draws, np.nan) for key in groups}
+    if not draws or not results:
+        return results
+
+    pair_values = np.full(len(positions), np.nan)
+    trio_rows = np.asarray(trio_rows, dtype=int)
+    prepared = []
+    for pair, position in positions.items():
+        observations = pairs.pairs.get(pair)
+        if observations is not None:
+            values, families = observations
+            prepared.append(
+                (position, values, families, np.argsort(values, kind="stable"))
+            )
+
     rng = np.random.default_rng(seed)
     num_families = len(pairs.families)
     for draw in range(draws):
         selected = rng.integers(0, num_families, size=num_families)
         weights = np.bincount(selected, minlength=num_families)
-        corrections = grouped_corrections(
-            trios, trio_values(trios, pairs.estimates(weights))
-        )
-        for key in keys:
-            results[key][draw] = corrections[key]
+        for position, values, families, order in prepared:
+            pair_values[position] = _weighted_median(values, weights[families], order)
+        first, second, third = pair_values[trio_rows].T
+        # Subtract first to keep the intermediate in range for finite,
+        # nonnegative pair medians. A missing pair makes the trio unavailable.
+        with np.errstate(over="ignore"):
+            corrected = (first - third) + second
+        if np.any(np.isinf(corrected)):
+            raise ValueError("Corrected Ks must be representable as a finite float.")
+        for key, indices in groups.items():
+            selected_values = corrected[indices]
+            results[key][draw] = _stable_median(
+                selected_values[np.isfinite(selected_values)]
+            )
     return results
 
 
