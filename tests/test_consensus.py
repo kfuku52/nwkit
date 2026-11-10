@@ -161,7 +161,8 @@ class TestConsensusMain:
             frozenset({"D"}),
         }
 
-    def test_builds_majority_consensus_tree(self, tmp_path):
+    @pytest.mark.parametrize("method", ["greedy", "majority"])
+    def test_builds_majority_consensus_tree(self, tmp_path, method):
         infile = _write_tree_collection(
             tmp_path,
             [
@@ -178,7 +179,7 @@ class TestConsensusMain:
             reference=None,
             reference_format="auto",
             support_scale="percent",
-            method="greedy",
+            method=method,
             branch_length="none",
             weight_tsv=None,
         )

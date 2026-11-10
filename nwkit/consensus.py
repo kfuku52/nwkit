@@ -552,7 +552,9 @@ def _get_method_min_freq(method, min_freq):
     raise ValueError("Unsupported '--method': {}".format(method))
 
 
-def _select_consensus_masks(clade_weights, total_weight, min_freq):
+def _select_consensus_masks(
+    clade_weights, total_weight, min_freq, *, exact_counts=False
+):
     selected_masks: list[tuple[Any, Any, float]] = []
     candidates = list()
     for mask, weight in clade_weights.items():
@@ -560,6 +562,10 @@ def _select_consensus_masks(clade_weights, total_weight, min_freq):
         if freq >= min_freq:
             candidates.append((mask, weight, freq))
     candidates.sort(key=lambda item: (-item[1], -count_set_bits(item[0]), int(item[0])))
+    # Two clades found in more than half the trees must occur together in at
+    # least one tree. This shortcut is for exact counts of unweighted trees.
+    if exact_counts and min_freq > 0.5:
+        return candidates
     for mask, weight, freq in candidates:
         if all(
             _masks_are_compatible(mask, selected_mask)
@@ -759,6 +765,7 @@ def consensus_main(args):
             clade_weights=clade_weights,
             total_weight=total_weight,
             min_freq=_get_method_min_freq(method, args.min_freq),
+            exact_counts=tree_weights is None and num_trees <= 2**53,
         )
         support_by_mask = {
             mask: _scale_support(freq, args.support_scale)
