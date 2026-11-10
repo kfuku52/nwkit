@@ -236,10 +236,19 @@ def combine_sparse_covariance_models(
         )
     if not precisions:
         raise ValueError("At least one sparse covariance component is required.")
+    if len(precisions) == 1:
+        precision = precisions[0]
+        # Keep the combined loading separate from the component loading.
+        loading = loadings[0].copy()
+        sampling_factor = sampling_factors[0]
+    else:
+        precision = sparse.block_diag(precisions, format="csc")
+        loading = sparse.hstack(loadings, format="csr")
+        sampling_factor = sparse.block_diag(sampling_factors, format="csr")
     return SparseLatentModel(
-        precision=sparse.block_diag(precisions, format="csc"),
-        loading=sparse.hstack(loadings, format="csr"),
-        sampling_precision_factor=sparse.block_diag(sampling_factors, format="csr"),
+        precision=precision,
+        loading=loading,
+        sampling_precision_factor=sampling_factor,
         prior_logdet=float(prior_logdet),
         component_slices=component_slices,
         component_loadings=component_loadings,
