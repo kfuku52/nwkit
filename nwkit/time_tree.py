@@ -297,27 +297,25 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
         raise ValueError(
             "MCMCtree node-age columns must contain numeric values."
         ) from exc
-    if not np.isfinite(values).all():
+    minimum = values.min(initial=0.0)
+    if not math.isfinite(minimum) or not math.isfinite(values.max(initial=0.0)):
         raise ValueError("MCMCtree node-age samples must be finite.")
-    if (values < 0.0).any():
+    if minimum < 0.0:
         raise ValueError("MCMCtree node-age samples must be non-negative.")
     id_to_column = {node_id: index for index, node_id in enumerate(internal_ids)}
     node_to_id = {node: node_id for node_id, node in mapping.items()}
     for child in tree.traverse():
-        if child.is_root:
+        # A zero-age tip cannot be older than a nonnegative parent.
+        if child.is_root or child.is_leaf:
             continue
         parent = child.up
         parent_ages = values[:, id_to_column[node_to_id[parent]]]
-        child_ages = (
-            np.zeros(values.shape[0], dtype=float)
-            if child.is_leaf
-            else values[:, id_to_column[node_to_id[child]]]
-        )
-        invalid = np.flatnonzero(parent_ages + 1e-12 < child_ages)
-        if invalid.size:
+        child_ages = values[:, id_to_column[node_to_id[child]]]
+        invalid = parent_ages + 1e-12 < child_ages
+        if invalid.any():
             raise ValueError(
                 "MCMCtree sample {} makes child node {} older than its parent {}.".format(
-                    burnin + (int(invalid[0]) * thin) + 1,
+                    burnin + (int(invalid.argmax()) * thin) + 1,
                     node_to_id[child],
                     node_to_id[parent],
                 )
