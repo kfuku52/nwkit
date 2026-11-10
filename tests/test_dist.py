@@ -181,6 +181,34 @@ class TestDistanceMetrics:
             abs=0.0,
         )
 
+    def test_path_length_sums_subnormal_differences_before_rounding(self):
+        step = math.ulp(0.0)
+        first = Tree(f"(A:{step},B:0,C:0,D:1);", parser=1)
+        second = Tree(f"(A:{2 * step},B:0,C:0,D:1);", parser=1)
+        # Three pairs differ by one subnormal step. sqrt(3) rounds to two steps.
+        assert (
+            _path_distance(first, second, list("ABCD"), topological=False) == 2 * step
+        )
+
+    @pytest.mark.parametrize(
+        ("lengths", "message"),
+        [
+            ([1e308, 1e308], "A branch-length difference is too large"),
+            ([1e308, 0, 0, 0, 0], "The path distance is too large"),
+        ],
+    )
+    def test_path_length_distinguishes_pair_and_total_overflow(self, lengths, message):
+        names = list("ABCDE")[: len(lengths)]
+        first = Tree(
+            "("
+            + ",".join(f"{n}:{d}" for n, d in zip(names, lengths, strict=True))
+            + ");",
+            parser=1,
+        )
+        second = Tree("(" + ",".join(f"{name}:0" for name in names) + ");", parser=1)
+        with pytest.raises(ValueError, match=message):
+            _path_distance(first, second, names, topological=False)
+
     def test_all_is_default_and_uses_stable_long_form_rows(self, tmp_nwk, tmp_outfile):
         path1 = tmp_nwk("((A:1,B:1):1,(C:1,D:1):1);", "tree1.nwk")
         path2 = tmp_nwk("((A:1,C:1):1,(B:1,D:1):1);", "tree2.nwk")

@@ -327,6 +327,22 @@ def _path_distance_matrix(tree1, tree2, leaf_names, topological):
     return distance
 
 
+def _ancestor_rows(tip_depths, adjacent_lca_depths, order):
+    """Find the shallowest adjacent ancestor between requested DFS tips."""
+    import numpy as np
+
+    ancestors = np.empty_like(tip_depths)
+    for row, left in enumerate(order[:-1]):
+        # The shallowest adjacent-tip ancestor between two DFS tips is their LCA.
+        np.minimum.accumulate(
+            adjacent_lca_depths[:left][::-1], out=ancestors[:left][::-1]
+        )
+        np.minimum.accumulate(adjacent_lca_depths[left:], out=ancestors[left + 1 :])
+        ancestors[left] = tip_depths[left]
+        right = order[row + 1 :]
+        yield left, right, ancestors[right]
+
+
 def _topological_path_rows(tree, leaf_names):
     """Yield upper-triangle rows in the requested tip order."""
     import numpy as np
@@ -352,19 +368,13 @@ def _topological_path_rows(tree, leaf_names):
     tip_depths = np.asarray(depths, dtype=np.int64)
     gaps = np.asarray(adjacent_lca_depths, dtype=np.int64)
     order = np.asarray([tip_positions[name] for name in leaf_names], dtype=np.intp)
-    lca_depths = np.empty_like(tip_depths)
     suppress_binary_root = len(tree.children) == 2
-    for row, left in enumerate(order[:-1]):
-        # Between two DFS tips, the shallowest adjacent-tip ancestor is
-        # their LCA. Cumulative minima compute the whole row in linear space.
-        np.minimum.accumulate(gaps[:left][::-1], out=lca_depths[:left][::-1])
-        np.minimum.accumulate(gaps[left:], out=lca_depths[left + 1 :])
-        lca_depths[left] = tip_depths[left]
-        distances = tip_depths[left] + tip_depths - 2 * lca_depths
+    for left, right, lca_depths in _ancestor_rows(tip_depths, gaps, order):
+        distances = tip_depths[left] + tip_depths[right] - 2 * lca_depths
         if suppress_binary_root:
             # Crossing a degree-two root uses one edge after suppression.
             distances -= lca_depths == 0
-        yield distances[order[row + 1 :]]
+        yield distances
 
 
 def _topological_path_distance(tree1, tree2, leaf_names):
@@ -382,49 +392,116 @@ def _topological_path_distance(tree1, tree2, leaf_names):
             squared += int(differences @ differences)
         else:
             squared += sum(int(value) ** 2 for value in differences)
-    return math.sqrt(squared)
+    return _rounded_dyadic_norm(squared, 0)
 
 
-def _weighted_path_differences(tree1, tree2, leaf_names):
-    leaves1 = {leaf.name: leaf for leaf in tree1.leaves()}
-    leaves2 = {leaf.name: leaf for leaf in tree2.leaves()}
+def _weighted_path_coordinates(tree, leaf_names, units, exponent):
+    import numpy as np
 
-    def path_to_root(leaf):
-        nodes: list[Any] = []
-        positions: dict[Any, int] = {}
-        lengths: list[float] = []
-        while leaf is not None:
-            positions[leaf] = len(nodes)
-            nodes.append(leaf)
-            leaf = leaf.up
-        return nodes, positions, lengths
+    tip_depths: list[int] = []
+    adjacent_lca_depths: list[int] = []
+    tip_positions = {}
+    depth: dict[Any, int] = {tree: 0}
+    shallowest = 0
+    for is_post, node in tree.iter_prepostorder():
+        if is_post:
+            if node is not tree:
+                shallowest = min(shallowest, depth[node.up])
+            continue
+        if node is not tree:
+            numerator, edge_exponent = units[node]
+            depth[node] = depth[node.up] + (numerator << (exponent - edge_exponent))
+        if node.is_leaf:
+            tip_positions[node.name] = len(tip_depths)
+            if tip_depths:
+                adjacent_lca_depths.append(shallowest)
+            tip_depths.append(depth[node])
+            if node is not tree:
+                shallowest = depth[node.up]
 
-    def path_edge_lengths(first_path, second_leaf):
-        nodes, positions, first_lengths = first_path
-        second_lengths = []
-        while second_leaf not in positions:
-            second_lengths.append(float(second_leaf.dist))
-            second_leaf = second_leaf.up
-        end = positions[second_leaf]
-        if end > len(first_lengths):
-            first_lengths.extend(
-                float(node.dist) for node in nodes[len(first_lengths) : end]
-            )
-        lengths = first_lengths[:end]
-        lengths.extend(second_lengths)
-        return lengths
+    # Even when depths need Python integers, their ranks fit in NumPy arrays.
+    coordinates = sorted(set(tip_depths).union(adjacent_lca_depths))
+    rank = {value: index for index, value in enumerate(coordinates)}
+    tip_ranks = np.asarray([rank[value] for value in tip_depths], dtype=np.intp)
+    gap_ranks = np.asarray(
+        [rank[value] for value in adjacent_lca_depths], dtype=np.intp
+    )
+    order = np.asarray([tip_positions[name] for name in leaf_names], dtype=np.intp)
+    return coordinates, tip_ranks, gap_ranks, order
 
-    # Reuse the first leaf's path across its row while passing the edge
-    # lengths in their original order to the stable subtraction.
-    names = list(leaf_names)
-    for index, first in enumerate(names[:-1]):
-        first_path1 = path_to_root(leaves1[first])
-        first_path2 = path_to_root(leaves2[first])
-        for second in names[index + 1 :]:
-            yield _stable_component_difference(
-                path_edge_lengths(first_path1, leaves1[second]),
-                path_edge_lengths(first_path2, leaves2[second]),
-            )
+
+def _weighted_path_rows(plan, dtype):
+    import numpy as np
+
+    coordinates, tip_ranks, gap_ranks, order = plan
+    levels = np.asarray(coordinates, dtype=dtype)
+    tips = levels[tip_ranks]
+    for left, right, ancestors in _ancestor_rows(tip_ranks, gap_ranks, order):
+        yield tips[left] + tips[right] - 2 * levels[ancestors]
+
+
+def _rounded_dyadic_norm(squared, unit_exponent):
+    """Round sqrt(squared) / 2**unit_exponent directly to a float."""
+    if squared == 0:
+        return 0.0
+    # Round sqrt(squared) in units of the result's floating-point ulp.
+    root_exponent = (squared.bit_length() - 1) // 2
+    mantissa_bits = sys.float_info.mant_dig
+    ulp_exponent = max(
+        sys.float_info.min_exp - mantissa_bits,
+        root_exponent - unit_exponent - mantissa_bits + 1,
+    )
+    shift = unit_exponent + ulp_exponent
+    if shift < 0:
+        squared <<= -2 * shift
+        shift = 0
+    lower = math.isqrt(squared) >> shift
+    midpoint_squared = ((2 * lower + 1) << shift) ** 2
+    scaled_squared = squared << 2
+    if scaled_squared > midpoint_squared or (
+        scaled_squared == midpoint_squared and lower % 2
+    ):
+        lower += 1
+    return math.ldexp(lower, ulp_exponent)
+
+
+def _weighted_path_distance(tree1, tree2, leaf_names):
+    import numpy as np
+
+    # Finite float lengths are integer multiples of a common power of two.
+    units: dict[Any, tuple[int, int]] = {}
+    exponent = 0
+    for tree in (tree1, tree2):
+        for node in tree.traverse("preorder"):
+            if node is tree:
+                continue
+            numerator, denominator = float(node.dist).as_integer_ratio()
+            edge_exponent = denominator.bit_length() - 1
+            exponent = max(exponent, edge_exponent)
+            units[node] = (numerator, edge_exponent)
+    first = _weighted_path_coordinates(tree1, leaf_names, units, exponent)
+    second = _weighted_path_coordinates(tree2, leaf_names, units, exponent)
+    bound = 2 * max(first[0][-1], second[0][-1])
+    int64_safe = len(leaf_names) * bound**2 <= np.iinfo(np.int64).max
+    dtype = np.int64 if int64_safe else object
+    # Preserve the distinction between an overflowing pair and the total norm.
+    half_ulp = 1 << (sys.float_info.max_exp - sys.float_info.mant_dig - 1)
+    pair_limit = (int(sys.float_info.max) + half_ulp) << exponent
+    check_pairs = bound >= pair_limit
+    squared = 0
+    for a, b in zip(
+        _weighted_path_rows(first, dtype),
+        _weighted_path_rows(second, dtype),
+        strict=True,
+    ):
+        differences = a - b
+        if check_pairs and any(abs(value) >= pair_limit for value in differences):
+            raise ValueError("A branch-length difference is too large to represent.")
+        squared += int(differences @ differences)
+    try:
+        return _rounded_dyadic_norm(squared, exponent)
+    except OverflowError:
+        raise ValueError("The path distance is too large to represent.") from None
 
 
 def _path_distance(tree1, tree2, leaf_names, topological):
@@ -444,12 +521,7 @@ def _path_distance(tree1, tree2, leaf_names, topological):
             return matrix_distance
     if topological:
         return _topological_path_distance(tree1, tree2, leaf_names)
-    distance = 0.0
-    for difference in _weighted_path_differences(tree1, tree2, leaf_names):
-        distance = math.hypot(distance, difference)
-    if not math.isfinite(distance):
-        raise ValueError("The path distance is too large to represent.")
-    return distance
+    return _weighted_path_distance(tree1, tree2, leaf_names)
 
 
 def _calculate_distances(tree1, tree2, leaf_names, metrics, comparison):
