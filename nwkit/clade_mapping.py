@@ -252,8 +252,10 @@ def projected_root_split(tree, shared_taxa):
     children = tree.get_children()
     if len(children) != 2:
         return None
-    taxon_sets = _node_taxon_sets(tree)
-    sides = [frozenset(taxon_sets[child] & shared_taxa) for child in children]
+    sides = [
+        frozenset(name for name in child.leaf_names() if name in shared_taxa)
+        for child in children
+    ]
     if (not sides[0]) or (not sides[1]) or ((sides[0] | sides[1]) != shared_taxa):
         return None
     return canonical_split(sides[0], sides[1])
@@ -315,12 +317,28 @@ def find_root_split_candidates(target, source, taxon_mode="exact"):
     left, right = source_split
     if not left.isdisjoint(right):
         return shared_taxa, source_split, []
-    taxon_to_bit = {name: 1 << index for index, name in enumerate(sorted(shared_taxa))}
-    split_masks = {sum(taxon_to_bit[name] for name in side) for side in source_split}
-    target_masks = _projected_masks(target, taxon_to_bit)
-    candidates = [
-        node
-        for node in target.traverse()
-        if not node.is_root and target_masks[node] in split_masks
-    ]
+    side_by_name = {name: 1 for name in left}
+    side_by_name.update((name, 2) for name in right)
+    required_sizes = {1: len(left), 2: len(right)}
+    pending: dict[Any, tuple[set, int]] = {}
+    matches = set()
+    for node in target.traverse(strategy="postorder"):
+        members = set()
+        sides = 0
+        if node.is_leaf:
+            sides = side_by_name.get(node.name, 0)
+            if sides:
+                members.add(node.name)
+        else:
+            for child in node.children:
+                child_members, child_sides = pending.pop(child)
+                # Reuse the larger set once the child's match is recorded.
+                if len(members) < len(child_members):
+                    members, child_members = child_members, members
+                members.update(child_members)
+                sides |= child_sides
+        if not node.is_root and len(members) == required_sizes.get(sides):
+            matches.add(node)
+        pending[node] = members, sides
+    candidates = [node for node in target.traverse() if node in matches]
     return shared_taxa, source_split, candidates

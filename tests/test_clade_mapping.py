@@ -102,3 +102,13 @@ def test_root_split_candidates_require_disjoint_source_sides():
 
     assert split == (frozenset({"A", "B"}), frozenset({"B", "C"}))
     assert candidates == []
+
+
+def test_root_split_candidates_distinguish_missing_and_literal_tip_names():
+    target = Tree("(A,(None,C)other);", parser=1)
+    target["None"].name = None
+    source = Tree("(A,(None,C)other);", parser=1)
+
+    _, _, candidates = find_root_split_candidates(target, source)
+
+    assert candidates == [target["A"]]
