@@ -147,20 +147,31 @@ def gaussian_mixture_summary(means, variances, weights, *, level=0.95):
     between = float(weights @ ((means - mean) ** 2))
     standard_deviations = np.sqrt(variances)
     continuous = standard_deviations > 0
+    all_continuous = bool(continuous.all())
+    continuous_means = means if all_continuous else means[continuous]
+    continuous_deviations = (
+        standard_deviations if all_continuous else standard_deviations[continuous]
+    )
+    probabilities = None if all_continuous else np.empty_like(means)
+    minimum = float(np.min(means - 40 * standard_deviations))
+    maximum = float(np.max(means + 40 * standard_deviations))
 
     def tail_probability(value, upper_tail):
-        probabilities = np.asarray(
-            value < means if upper_tail else value >= means, dtype=float
-        )
         sign = -1 if upper_tail else 1
-        probabilities[continuous] = ndtr(
-            sign * (value - means[continuous]) / standard_deviations[continuous]
+        continuous_probabilities = ndtr(
+            sign * (value - continuous_means) / continuous_deviations
         )
+        if probabilities is None:
+            return float(weights @ continuous_probabilities)
+        if upper_tail:
+            np.less(value, means, out=probabilities)
+        else:
+            np.greater_equal(value, means, out=probabilities)
+        probabilities[continuous] = continuous_probabilities
         return float(weights @ probabilities)
 
     def quantile(probability, upper_tail=False):
-        lower = float(np.min(means - 40 * standard_deviations))
-        upper = float(np.max(means + 40 * standard_deviations))
+        lower, upper = minimum, maximum
         if lower == upper:
             return lower
         for _ in range(200):

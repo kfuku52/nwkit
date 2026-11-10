@@ -202,6 +202,11 @@ def test_gaussian_mixture_extreme_confidence_uses_stable_survival_tail():
     assert result.lower == pytest.approx(-expected)
 
 
+def test_gaussian_mixture_interval_can_fall_inside_an_atom():
+    result = gaussian_mixture_summary([0, 0], [0, 1], [0.99, 0.01])
+    assert (result.lower, result.upper) == (0.0, 0.0)
+
+
 def test_compatible_weights_reject_different_root_groups():
     assert compatible_model_weights([10, 12], ["BM:flat", "BM:flat"]) == pytest.approx(
         [1 / (1 + np.exp(-1)), 1 / (1 + np.exp(1))]
