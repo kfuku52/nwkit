@@ -1649,7 +1649,7 @@ def _profile_covariance_fit(
                         math.sqrt(float(variance)) * normalized_factors[name]
                     )
                 else:
-                    covariance = covariance + variance * component
+                    covariance += variance * component
             if np.any(covariance <= 0.0) or not np.isfinite(covariance).all():
                 return float("inf")
             try:
@@ -1657,20 +1657,8 @@ def _profile_covariance_fit(
                     cholesky = factor_diagonal_low_rank_updates(
                         covariance, low_rank_updates
                     )
-                    low_rank = (
-                        sparse.hstack(
-                            [sparse.csr_matrix(update) for update in low_rank_updates],
-                            format="csr",
-                        )
-                        if any(sparse.issparse(update) for update in low_rank_updates)
-                        else np.column_stack(low_rank_updates)
-                    )
-                    covariance_representation = DiagonalLowRankCovariance(
-                        covariance, low_rank
-                    )
                 else:
                     cholesky = np.sqrt(covariance)
-                    covariance_representation = covariance
                 inverse_design = _solve_positive_definite(cholesky, design)
                 gram = design.T @ inverse_design
                 gram_sign, gram_logdet = np.linalg.slogdet(gram)
@@ -1691,9 +1679,9 @@ def _profile_covariance_fit(
                 variances, normalized_components, strict=True
             ):
                 assert component is not None
-                covariance = covariance + variance * component
-            covariance = (covariance + covariance.T) / 2.0
-            covariance_representation = covariance
+                covariance += variance * component
+            covariance += covariance.T
+            covariance /= 2.0
             try:
                 cholesky = np.linalg.cholesky(covariance)
                 inverse_design = _solve_positive_definite(cholesky, design)
@@ -1722,6 +1710,17 @@ def _profile_covariance_fit(
             return float("inf")
         if not return_details:
             return objective
+        covariance_representation = covariance
+        if structured_model and low_rank_updates:
+            low_rank = (
+                sparse.hstack(
+                    [sparse.csr_matrix(update) for update in low_rank_updates],
+                    format="csr",
+                )
+                if any(sparse.issparse(update) for update in low_rank_updates)
+                else np.column_stack(low_rank_updates)
+            )
+            covariance_representation = DiagonalLowRankCovariance(covariance, low_rank)
         beta_covariance = np.linalg.inv(gram)
         component_variances = {
             name: float(variance / scale)
