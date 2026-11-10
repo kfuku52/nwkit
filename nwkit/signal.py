@@ -22,6 +22,7 @@ from nwkit.signal_stats import (
 from nwkit.trait_input import numeric_trait_value as _number
 from nwkit.trait_input import parse_trait_columns as _columns
 from nwkit.util import (
+    parse_table_missing_values,
     read_tip_table,
     read_tree,
     validate_unique_named_leaves,
@@ -89,16 +90,15 @@ def _inputs(args):
         unmatched=args.unmatched,
     )
     table = table.set_index("leaf_name").reindex(names)
+    missing_values = parse_table_missing_values(args.missing_values)
     data = []
     for index, column in enumerate(columns):
-        values = np.array(
-            [_number(x, column, args.missing_values) for x in table[column]]
-        )
+        values = np.array([_number(x, column, missing_values) for x in table[column]])
         errors = np.zeros(len(names))
         if se_columns:
             errors = np.array(
                 [
-                    _number(x, se_columns[index], args.missing_values)
+                    _number(x, se_columns[index], missing_values)
                     for x in table[se_columns[index]]
                 ]
             )

@@ -1,8 +1,11 @@
 """Shared continuous trait-column parsing for comparative summaries."""
 
+import math
+
 import numpy as np
 
-from nwkit.util import is_missing_table_value
+from nwkit.conventions import DEFAULT_TABLE_MISSING_VALUES
+from nwkit.util import is_missing_table_value, parse_table_missing_values
 
 
 def parse_trait_columns(value):
@@ -23,6 +26,33 @@ def numeric_trait_value(value, column, missing):
         raise ValueError(
             f"Column '{column}' must contain continuous numeric values."
         ) from exc
-    if not np.isfinite(result):
+    if not math.isfinite(result):
         raise ValueError(f"Column '{column}' contains a non-finite value.")
     return result
+
+
+def numeric_trait_matrix(table, columns, missing_values):
+    """Parse selected columns in the table's current tip order."""
+    markers = parse_table_missing_values(missing_values)
+    if markers == set(DEFAULT_TABLE_MISSING_VALUES) and all(
+        table[column].dtype.kind in "biuf" for column in columns
+    ):
+        values = np.ascontiguousarray(
+            table[columns].to_numpy(dtype=float, na_value=np.nan)
+        )
+        infinite = np.isinf(values)
+        if infinite.any():
+            column = columns[int(infinite.argmax()) % len(columns)]
+            raise ValueError(f"Column '{column}' contains a non-finite value.")
+        return values
+
+    rows = zip(*(table[column].array for column in columns), strict=True)
+    return np.asarray(
+        [
+            [
+                numeric_trait_value(value, column, markers)
+                for column, value in zip(columns, row, strict=True)
+            ]
+            for row in rows
+        ]
+    )

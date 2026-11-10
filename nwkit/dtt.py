@@ -21,7 +21,7 @@ from nwkit.disparity import (
 from nwkit.evolution import build_evolutionary_process, tree_depths
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import require_rooted, set_rooting_info
-from nwkit.trait_input import numeric_trait_value, parse_trait_columns
+from nwkit.trait_input import numeric_trait_matrix, parse_trait_columns
 from nwkit.util import (
     assign_branch_ids,
     get_node_class,
@@ -157,17 +157,7 @@ def _read_data(args):
         unmatched=args.unmatched,
     )
     table = table.set_index("leaf_name").reindex(names)
-    values = np.asarray(
-        [
-            [
-                numeric_trait_value(
-                    table.loc[name, column], column, args.missing_values
-                )
-                for column in columns
-            ]
-            for name in names
-        ]
-    )
+    values = numeric_trait_matrix(table, columns, args.missing_values)
     complete = np.isfinite(values).all(axis=1)
     excluded = [name for name, valid in zip(names, complete, strict=True) if not valid]
     if excluded and args.missing == "error":
