@@ -80,6 +80,9 @@ COMMON_ETE_CACHE_DIRS = (
     os.path.join(os.path.expanduser("~"), ".local", "share", "ete"),
     os.path.join(os.path.expanduser("~"), ".etetoolkit"),
 )
+_IMMUTABLE_TREE_PROP_TYPES = frozenset(
+    {str, int, float, bool, bytes, complex, type(None)}
+)
 
 
 def copy_tree_iteratively(tree):
@@ -89,7 +92,19 @@ def copy_tree_iteratively(tree):
     def copy_node(source):
         target = Tree()
         target.props.clear()
-        target.props.update(copy.deepcopy(source.props, copied_values))
+        props = source.props
+        # Once a compound value needs copying, keep its memo for later nodes.
+        if (
+            not copied_values
+            and type(props) is dict
+            and all(
+                type(key) is str and type(value) in _IMMUTABLE_TREE_PROP_TYPES
+                for key, value in props.items()
+            )
+        ):
+            target.props.update(props)
+        else:
+            target.props.update(copy.deepcopy(props, copied_values))
         return target
 
     copied_root = copy_node(tree)

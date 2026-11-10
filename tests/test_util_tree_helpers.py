@@ -41,6 +41,22 @@ class TestCopyTreeIteratively:
         assert tree.props["metadata"] == {"values": [1, 2]}
         assert next(tree.leaves()).name == "T0"
 
+    def test_late_nested_properties_keep_shared_references_in_copy(self):
+        tree = Tree("(A:1,B:1,C:1);", parser=1)
+        first, second, third = tree.children
+        shared = {"properties": first.props, "values": [1, 2]}
+        second.props["metadata"] = third.props["metadata"] = shared
+
+        copied = copy_tree_iteratively(tree)
+
+        _, second_copy, third_copy = copied.children
+        copied_metadata = second_copy.props["metadata"]
+        assert copied_metadata is third_copy.props["metadata"]
+        assert copied_metadata["properties"] == first.props
+        assert copied_metadata["properties"] is not first.props
+        copied_metadata["values"].append(3)
+        assert shared["values"] == [1, 2]
+
 
 class TestSpeciesGrouping:
     def test_monophyletic_duplicate_species_are_grouped(self):
