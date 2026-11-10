@@ -76,9 +76,10 @@ def _lambda(covariance, values, model, fixed):
         raise ValueError("--lambda-value requires LAMBDA and a finite value in [0,1].")
     if model == "BM" or fixed is not None:
         return 1.0 if model == "BM" else float(fixed), False
-    diagonal = np.diag(np.diag(covariance))
-    shared = covariance - diagonal
-    if not np.any(shared):
+    diagonal = np.diag(covariance)
+    trial = covariance.copy()
+    np.fill_diagonal(trial, 0.0)
+    if not np.any(trial):
         raise ValueError(
             "Lambda is unidentifiable on this tree; use BM or fix --lambda-value."
         )
@@ -86,9 +87,13 @@ def _lambda(covariance, values, model, fixed):
     # different measurement units as numerical rank loss in its likelihood.
     differences = _finite(values - values[0], "Trait range")
     scaled = differences / np.max(np.abs(differences), axis=0)
-    fit = global_bounded_scalar_minimize(
-        lambda value: -_profile_likelihood(diagonal + value * shared, scaled), (0, 1)
-    )
+
+    def objective(value):
+        np.multiply(covariance, value, out=trial)
+        np.fill_diagonal(trial, diagonal)
+        return -_profile_likelihood(trial, scaled)
+
+    fit = global_bounded_scalar_minimize(objective, (0, 1))
     if not fit.success or not np.isfinite(fit.fun):
         raise ValueError("PCA lambda optimization failed.")
     return fit.x, True
