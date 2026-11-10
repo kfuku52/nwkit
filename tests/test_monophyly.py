@@ -109,6 +109,35 @@ class TestMonophylyMain:
         assert row_x["num_intruder_taxa"] == 0
         assert pd.isna(row_x["intruder_taxa"])
 
+    @pytest.mark.parametrize(
+        ("foreign_cherries", "intruders"),
+        [
+            ("(E:1,F:1):1,(G:1,H:1):1", "B,D,G,H"),
+            ("(G:1,H:1):1,(E:1,F:1):1", "B,D,E,F"),
+        ],
+    )
+    def test_unrooted_tied_sides_follow_tree_order(
+        self, tmp_nwk, tmp_path, foreign_cherries, intruders
+    ):
+        infile = tmp_nwk(f"((A:1,B:1):1,(C:1,D:1):1,{foreign_cherries});", "tree.nwk")
+        traits = tmp_path / "traits.tsv"
+        traits.write_text(
+            "leaf_name\tgroup\nA\tx\nB\t\nC\tx\nD\t\nE\t\nF\t\nG\t\nH\t\n"
+        )
+        output = tmp_path / "monophyly.tsv"
+        monophyly_main(
+            make_args(
+                infile=infile,
+                outfile=str(output),
+                trait=str(traits),
+                group_by="group",
+                unrooted=True,
+            )
+        )
+        result = pd.read_csv(output, sep="\t").iloc[0]
+        assert result["status"] == "polyphyletic"
+        assert result["intruder_taxa"] == intruders
+
     def test_fail_on_non_monophyly_raises(self, tmp_nwk, tmp_path):
         infile = tmp_nwk("(((A:1,B:1):1,C:1):1,(D:1,E:1):1);", "tree.nwk")
         trait_path = tmp_path / "traits.tsv"
