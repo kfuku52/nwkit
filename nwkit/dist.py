@@ -1,12 +1,13 @@
 import csv
 import math
 import sys
+from collections import defaultdict
+from itertools import chain
 from typing import Any
 
 from nwkit.rf_distance import robinson_foulds
 from nwkit.rooting_state import require_rooted
 from nwkit.util import (
-    get_subtree_leaf_name_sets,
     read_tree,
     validate_unique_named_leaves,
 )
@@ -118,30 +119,85 @@ def _validate_branch_lengths(tree, option_name, metrics):
             )
 
 
-def _canonical_unrooted_split(descendant_taxa, all_taxa):
-    other_taxa = all_taxa.difference(descendant_taxa)
-    if len(descendant_taxa) < len(other_taxa):
-        return frozenset(descendant_taxa)
-    if len(other_taxa) < len(descendant_taxa):
-        return frozenset(other_taxa)
-    descendant_key = tuple(sorted(descendant_taxa))
-    other_key = tuple(sorted(other_taxa))
-    return frozenset(descendant_taxa if descendant_key <= other_key else other_taxa)
-
-
-def _edge_length_vector(tree, comparison):
-    subtree_taxa = get_subtree_leaf_name_sets(tree)
-    all_taxa = frozenset(tree.leaf_names())
-    vector: dict[Any, list[float]] = {}
-    for node in tree.traverse():
-        if node.is_root:
-            continue
-        if comparison == "rooted":
-            key = frozenset(subtree_taxa[node])
+def _edge_postorder(tree, anchor):
+    """Yield each node with the original edge and children in the chosen direction."""
+    if anchor is None:
+        for node in tree.traverse(strategy="postorder"):
+            if node is not tree:
+                yield node, node, node.children
+        return
+    if anchor is tree:
+        return
+    # Orient away from the anchor tip without modifying the input tree.
+    order = []
+    pending = [(anchor.up, anchor)]
+    while pending:
+        node, parent = pending.pop()
+        if node.up is parent:
+            children = node.children
+            edge = node
         else:
-            key = _canonical_unrooted_split(subtree_taxa[node], all_taxa)
-        vector.setdefault(key, []).append(float(node.dist))
-    return {key: tuple(lengths) for key, lengths in vector.items()}
+            children = [child for child in node.children if child is not parent]
+            if node is not tree:
+                children.append(node.up)
+            edge = parent
+        order.append((node, edge, children))
+        pending.extend((child, node) for child in children)
+    yield from reversed(order)
+
+
+def _edge_interval_vector(tree, positions, anchor):
+    extents: dict[Any, tuple[int, int, int, Any]] = {}
+    keys = {}
+    for node, edge, children in _edge_postorder(tree, anchor):
+        key: Any
+        if node.is_leaf:
+            lo = hi = positions[node.name]
+            size = 1
+            key = (lo, hi)
+        else:
+            lo, hi, size = len(positions), -1, 0
+            components = 0
+            key = ()
+            for child in children:
+                first, last, count, child_key = extents.pop(child)
+                if count:
+                    lo = min(lo, first)
+                    hi = max(hi, last)
+                    size += count
+                    components += 1
+                    key = child_key
+            if components > 1:
+                # Noncontiguous clades cannot occur in the reference. Within
+                # this tree, only unary paths can repeat them, so reuse the
+                # sole child's key above and use node identity for new clades.
+                key = (lo, hi) if hi - lo + 1 == size else node
+        extents[node] = (lo, hi, size, key)
+        keys[edge] = key
+
+    # Keep the input traversal order when a split has multiple edge lengths.
+    vector: dict[Any, list[float]] = defaultdict(list)
+    for node in tree.traverse():
+        if node in keys:
+            vector[keys[node]].append(float(node.dist))
+    return vector
+
+
+def _matched_edge_vectors(tree1, tree2, comparison):
+    tips = list(tree1.leaves())
+    positions = {node.name: index for index, node in enumerate(tips)}
+    first_anchor = second_anchor = None
+    if comparison == "unrooted":
+        # The side excluding the first reference tip is a contiguous range
+        # in the reference DFS order, including complements along its path.
+        first_anchor = tips[0]
+        second_anchor = next(
+            node for node in tree2.leaves() if node.name == first_anchor.name
+        )
+    return (
+        _edge_interval_vector(tree1, positions, first_anchor),
+        _edge_interval_vector(tree2, positions, second_anchor),
+    )
 
 
 def _stable_component_difference(positive, negative):
@@ -163,7 +219,7 @@ def _stable_component_difference(positive, negative):
 
 
 def _vector_distances(vector1, vector2):
-    keys = vector1.keys() | vector2.keys()
+    keys = chain(vector1, (key for key in vector2 if key not in vector1))
     differences = [
         _stable_component_difference(
             vector1.get(key, ()),
@@ -175,9 +231,7 @@ def _vector_distances(vector1, vector2):
         weighted_rf = math.fsum(abs(difference) for difference in differences)
     except OverflowError as exc:
         raise ValueError("The weighted RF distance is too large to represent.") from exc
-    branch_score = 0.0
-    for difference in differences:
-        branch_score = math.hypot(branch_score, difference)
+    branch_score = math.hypot(*differences)
     if not math.isfinite(weighted_rf) or not math.isfinite(branch_score):
         raise ValueError("The branch-length distance is too large to represent.")
     return weighted_rf, branch_score
@@ -398,8 +452,7 @@ def _calculate_distances(tree1, tree2, leaf_names, metrics, comparison):
         normalized_rf = 0.0 if max_rf_distance == 0 else rf_distance / max_rf_distance
         results["normalized-rf"] = (normalized_rf, 1.0)
     if {"weighted-rf", "branch-score"}.intersection(metrics):
-        vector1 = _edge_length_vector(tree1, comparison)
-        vector2 = _edge_length_vector(tree2, comparison)
+        vector1, vector2 = _matched_edge_vectors(tree1, tree2, comparison)
         weighted_rf, branch_score = _vector_distances(vector1, vector2)
         results["weighted-rf"] = (weighted_rf, "")
         results["branch-score"] = (branch_score, "")

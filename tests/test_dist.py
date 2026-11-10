@@ -324,6 +324,30 @@ class TestDistanceMetrics:
         )
 
     @pytest.mark.parametrize(
+        ("comparison", "score"),
+        [("rooted", math.sqrt(82)), ("unrooted", math.sqrt(162))],
+    )
+    def test_branch_metrics_combine_repeated_noncontiguous_splits(
+        self, tmp_nwk, tmp_outfile, comparison, score
+    ):
+        first = tmp_nwk("(((A:1,B:1):2):3,(C:1,D:1):4);", "first.nwk")
+        second = tmp_nwk("(((A:1,C:1):2):3,(B:1,D:1):4);", "second.nwk")
+        args = make_args(
+            infile=first,
+            infile2=second,
+            outfile=tmp_outfile,
+            format2="auto",
+            metric=["weighted-rf,branch-score"],
+            comparison=comparison,
+        )
+
+        dist_main(args)
+
+        rows = {row["metric"]: row for row in _read_tsv(tmp_outfile)}
+        assert float(rows["weighted-rf"]["distance"]) == pytest.approx(18.0)
+        assert float(rows["branch-score"]["distance"]) == pytest.approx(score)
+
+    @pytest.mark.parametrize(
         ("source_length", "expected_distance"),
         [
             ("1e308", 0.0),
