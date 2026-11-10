@@ -2261,9 +2261,37 @@ def get_subtree_sci_name_sets(tree):
     return subtree_sci_name_sets
 
 
+def _duplication_confidence_score(first, second):
+    overlap = len(first.intersection(second))
+    union = len(first) + len(second) - overlap
+    return overlap / union if union else 0.0
+
+
+def annotate_duplication_confidence_and_count_species(tree):
+    """Annotate internal nodes and return the species count of each subtree."""
+    active: dict[Tree, set[Any]] = {}
+    counts = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            names = {node.props.get("species_label", node.props.get("sci_name"))}
+        else:
+            groups = [active.pop(child) for child in node.get_children()]
+            score = _duplication_confidence_score(*groups) if len(groups) == 2 else 0.0
+            node.add_props(dup_conf_score=score)
+            # Counts and scores are fixed below this node, so reuse the largest set.
+            names = max(groups, key=len)
+            for group in groups:
+                if group is not names:
+                    names.update(group)
+        active[node] = names
+        counts[node] = len(names)
+    return counts
+
+
 def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
     if subtree_sci_name_sets is None:
-        subtree_sci_name_sets = get_subtree_sci_name_sets(tree)
+        annotate_duplication_confidence_and_count_species(tree)
+        return tree
     for node in tree.traverse():
         if node.is_leaf:
             continue
@@ -2273,12 +2301,9 @@ def annotate_duplication_confidence_scores(tree, subtree_sci_name_sets=None):
             continue
         sp_child1 = subtree_sci_name_sets[children[0]]
         sp_child2 = subtree_sci_name_sets[children[1]]
-        num_intersection = len(sp_child1.intersection(sp_child2))
-        num_union = len(sp_child1) + len(sp_child2) - num_intersection
-        if num_union == 0:
-            node.add_props(dup_conf_score=0.0)
-        else:
-            node.add_props(dup_conf_score=num_intersection / num_union)
+        node.add_props(
+            dup_conf_score=_duplication_confidence_score(sp_child1, sp_child2)
+        )
     return tree
 
 

@@ -1,9 +1,8 @@
 import sys
 
 from nwkit.util import (
-    annotate_duplication_confidence_scores,
+    annotate_duplication_confidence_and_count_species,
     annotate_scientific_names,
-    get_subtree_sci_name_sets,
     read_tree,
     validate_unique_named_leaves,
     write_tree,
@@ -50,22 +49,19 @@ def subtree_main(args):
         mrca = tree.common_ancestor(seed_leaf_nodes)
     if args.orthogroup:
         tree = annotate_scientific_names(tree, args=args)
-        subtree_sci_name_sets = get_subtree_sci_name_sets(tree)
-        tree = annotate_duplication_confidence_scores(
-            tree, subtree_sci_name_sets=subtree_sci_name_sets
-        )
-        num_all_species = len(subtree_sci_name_sets[tree])
+        species_counts = annotate_duplication_confidence_and_count_species(tree)
+        num_all_species = species_counts[tree]
         sys.stderr.write(
             "Number of species in input tree: {:,}\n".format(num_all_species)
         )
-        num_species_last_updated = len(subtree_sci_name_sets[mrca])
+        num_species_last_updated = species_counts[mrca]
         node_species_last_updated = mrca
         for current_node in mrca.ancestors():
             if current_node.is_root:
                 break
             if num_species_last_updated == num_all_species:
                 break
-            current_num_species = len(subtree_sci_name_sets[current_node])
+            current_num_species = species_counts[current_node]
             is_species_num_increased = current_num_species > num_species_last_updated
             is_sufficiently_small_dup_conf_score = (
                 current_node.props.get("dup_conf_score")
@@ -77,7 +73,7 @@ def subtree_main(args):
             # txt = 'i: {}, dup_conf_score: {}, num_species: {}'
             # print(txt.format(i, current_node.props.get('dup_conf_score'), current_num_species))
         subtree = node_species_last_updated
-        num_species_subtree = len(subtree_sci_name_sets[subtree])
+        num_species_subtree = species_counts[subtree]
         sys.stderr.write(
             "Number of species in output orthogroup tree: {:,}\n".format(
                 num_species_subtree

@@ -2,6 +2,7 @@ import pytest
 from ete4 import Tree
 
 from nwkit.util import (
+    annotate_duplication_confidence_and_count_species,
     annotate_duplication_confidence_scores,
     annotate_scientific_names,
     copy_tree_iteratively,
@@ -301,6 +302,20 @@ class TestAnnotateScientificNames:
 
 
 class TestAnnotateDuplicationConfidenceScores:
+    def test_parent_merge_keeps_child_counts_and_scores(self):
+        tree = Tree("(((A1),B1),(B2,C2));", parser=1)
+        for leaf in tree.leaves():
+            leaf.props["species_label"] = leaf.name[0]
+
+        counts = annotate_duplication_confidence_and_count_species(tree)
+
+        left, right = tree.children
+        assert counts[tree] == 3
+        assert counts[left] == counts[right] == 2
+        assert counts[left.children[0]] == 1
+        assert tree.props["dup_conf_score"] == 1 / 3
+        assert left.props["dup_conf_score"] == right.props["dup_conf_score"] == 0.0
+
     @pytest.mark.parametrize(
         "first,second,expected",
         [
