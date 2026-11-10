@@ -333,8 +333,8 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
     )
 
 
-def _hpd_interval(values, level):
-    ordered = np.sort(np.asarray(values, dtype=float))
+def _hpd_interval(values, level, *, presorted=False):
+    ordered = values if presorted else np.sort(np.asarray(values, dtype=float))
     count = len(ordered)
     alpha = 1.0 - float(level)
     initial_low = int(count * alpha / 2.0 + 1e-12)
@@ -347,13 +347,13 @@ def _hpd_interval(values, level):
     return float(ordered[start]), float(ordered[start + index_width])
 
 
-def _credible_interval(values, level, kind):
+def _credible_interval(values, level, kind, *, presorted=False):
     kind = str(kind).strip().lower()
     if kind == "hpd":
-        return _hpd_interval(values, level)
+        return _hpd_interval(values, level, presorted=presorted)
     if kind == "equal-tail":
         tail = (1.0 - float(level)) / 2.0
-        ordered = np.sort(np.asarray(values, dtype=float))
+        ordered = values if presorted else np.sort(np.asarray(values, dtype=float))
         low_index = min(len(ordered) - 1, int(len(ordered) * tail + 1e-12))
         high_index = min(
             len(ordered) - 1,
@@ -386,8 +386,23 @@ def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=
             continue
         values = posterior.values[:, column_by_id[node_id]]
         mean = float(np.mean(values))
-        median = float(np.median(values))
-        low, high = _credible_interval(values, level=level, kind=ci)
+        if (
+            type(values) is np.ndarray
+            and values.dtype == np.float64
+            and values.size
+            and np.min(values) > 0.0
+        ):
+            # Positive ages avoid signed-zero ties when reusing the sorted sample.
+            ordered = np.sort(values)
+            middle = len(ordered) // 2
+            median = float(np.mean(ordered[(len(ordered) - 1) // 2 : middle + 1]))
+            low, high = _credible_interval(
+                ordered, level=level, kind=ci, presorted=True
+            )
+            del ordered
+        else:
+            median = float(np.median(values))
+            low, high = _credible_interval(values, level=level, kind=ci)
         selected = mean if point == "mean" else median
         age_by_node[node] = selected
         node.props.update(
