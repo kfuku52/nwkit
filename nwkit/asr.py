@@ -519,6 +519,7 @@ def _compute_log_inside_likelihoods(
     *,
     fixed_transition_matrices=None,
     _structured_er=False,
+    retain_messages=True,
 ):
     if isinstance(rate_matrix, dict):
         sample_matrix = next(iter(rate_matrix.values()))
@@ -544,7 +545,8 @@ def _compute_log_inside_likelihoods(
 
         likelihood = np.zeros(num_states, dtype=float)
         log_scale = 0.0
-        child_terms[node] = dict()
+        if retain_messages:
+            child_terms[node] = dict()
         for child in node.get_children():
             branch_length = float(child.dist)
             child_rate_matrix = (
@@ -563,7 +565,6 @@ def _compute_log_inside_likelihoods(
                         _log_probabilities(matrix),
                     )
                 matrix, log_matrix = transition_matrix_cache[cache_key]
-            transition_matrices[child] = matrix
             description = None
             if structured:
                 key = id(matrix)
@@ -583,9 +584,14 @@ def _compute_log_inside_likelihoods(
                 term = np.logaddexp(
                     log_delta + inside[child], log_b + logsumexp(inside[child])
                 )
-            child_terms[node][child] = term
             likelihood += term
             log_scale += log_scales[child]
+            if retain_messages:
+                child_terms[node][child] = term
+                transition_matrices[child] = matrix
+            else:
+                del inside[child]
+                del log_scales[child]
         scale = float(np.max(likelihood))
         if not math.isfinite(scale):
             inside[node] = likelihood
@@ -604,12 +610,12 @@ def _log_likelihood(
     *,
     fixed_transition_matrices=None,
 ):
-    inside, log_scales, _, _ = _compute_inside_likelihoods(
+    inside, log_scales, _, _ = _compute_log_inside_likelihoods(
         tree=tree,
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=rate_matrix,
-        log_space=True,
         fixed_transition_matrices=fixed_transition_matrices,
+        retain_messages=False,
     )
     root_term = float(logsumexp(_log_probabilities(root_prior) + inside[tree]))
     return log_scales[tree] + root_term
