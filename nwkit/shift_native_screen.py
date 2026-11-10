@@ -154,8 +154,9 @@ def _loss_gradient(matrices, responses, coefficients):
     return loss, gradient
 
 
-def _proximal_step(matrices, responses, coefficients, strength, step):
-    loss, gradient = _loss_gradient(matrices, responses, coefficients)
+def _proximal_step(
+    matrices, responses, coefficients, strength, step, *, loss, gradient
+):
     for _ in range(40):
         trial = coefficients - step * gradient
         norms = np.linalg.norm(trial, axis=1)
@@ -171,7 +172,7 @@ def _proximal_step(matrices, responses, coefficients, strength, step):
             + float(np.sum(delta**2)) / (2 * step)
         )
         if trial_loss <= bound + 1e-12 * max(1, loss):
-            return trial, trial_gradient, step
+            return trial, trial_loss, trial_gradient, step
         step *= 0.5
     raise ValueError("Group-lasso backtracking could not verify its quadratic bound.")
 
@@ -202,6 +203,7 @@ def group_lasso_screen(
     preliminary = np.argsort(-correlation, kind="stable")[:preliminary_count]
     matrices = [x[:, preliminary] for x in matrices]
     coefficients = np.zeros((preliminary_count, len(responses)))
+    loss, gradient = _loss_gradient(matrices, responses, coefficients)
     maximum = float(np.max(correlation))
     magnitudes = np.zeros(preliminary_count)
     records = []
@@ -210,8 +212,14 @@ def group_lasso_screen(
         strength = maximum * fraction
         residual = 0.0
         for _iteration in range(iterations):
-            coefficients, gradient, step = _proximal_step(
-                matrices, responses, coefficients, strength, step
+            coefficients, loss, gradient, step = _proximal_step(
+                matrices,
+                responses,
+                coefficients,
+                strength,
+                step,
+                loss=loss,
+                gradient=gradient,
             )
             residual = _kkt_residual(coefficients, gradient, strength)
             if residual <= 1e-5 * max(1, maximum):

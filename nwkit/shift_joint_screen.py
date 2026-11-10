@@ -73,12 +73,12 @@ def joint_path(matrix, response, p, *, iterations, paths):
     maximum = float(np.max(np.linalg.norm(initial_gradient, axis=1)))
     coefficients = np.zeros((groups, p))
     step = 1 / max(1.0, float(np.sum(matrix * matrix)))
+    residual = matrix @ coefficients.ravel() - response
+    gradient = (matrix.T @ residual).reshape(groups, p)
+    loss = 0.5 * float(residual @ residual)
     for fraction in paths:
         strength = maximum * fraction
         for _iteration in range(iterations):
-            residual = matrix @ coefficients.ravel() - response
-            gradient = (matrix.T @ residual).reshape(groups, p)
-            loss = 0.5 * float(residual @ residual)
             for _ in range(40):
                 trial = coefficients - step * gradient
                 norms = np.linalg.norm(trial, axis=1)
@@ -87,11 +87,10 @@ def joint_path(matrix, response, p, *, iterations, paths):
                 )[:, None]
                 change = trial - coefficients
                 r = matrix @ trial.ravel() - response
-                if 0.5 * float(r @ r) <= loss + float(
-                    np.sum(gradient * change)
-                ) + float(np.sum(change * change)) / (2 * step) + 1e-12 * max(
-                    1.0, loss
-                ):
+                trial_loss = 0.5 * float(r @ r)
+                if trial_loss <= loss + float(np.sum(gradient * change)) + float(
+                    np.sum(change * change)
+                ) / (2 * step) + 1e-12 * max(1.0, loss):
                     break
                 step *= 0.5
             else:
@@ -99,6 +98,7 @@ def joint_path(matrix, response, p, *, iterations, paths):
                     "Joint group-lasso backtracking failed its quadratic bound."
                 )
             coefficients = trial
+            loss = trial_loss
             gradient = (matrix.T @ r).reshape(groups, p)
             norms = np.linalg.norm(coefficients, axis=1)
             active = norms > 0
