@@ -371,13 +371,15 @@ class CountLikelihood:
         self.counts = np.asarray(counts, dtype=float)
         if self.counts.ndim != 2 or self.counts.shape[1] != len(tree.tip_names):
             raise ValueError("Counts need one column per ordered species-tree tip.")
-        observed = self.counts[~np.isnan(self.counts)]
+        missing = np.isnan(self.counts)
+        observed = self.counts[~missing]
         if (
             np.any(~np.isfinite(observed))
             or np.any(observed < 0)
             or np.any(observed != np.floor(observed))
         ):
             raise ValueError("Observed counts must be finite nonnegative integers.")
+        del observed
         if self.counts.shape[0] == 0 or np.any(np.nansum(self.counts, axis=1) == 0):
             raise ValueError("Every analyzed family needs at least one observed copy.")
         self.detection = (
@@ -419,16 +421,15 @@ class CountLikelihood:
         if ascertainment not in {"observed", "root-clades"}:
             raise ValueError("Ascertainment must be observed or root-clades.")
         self.ascertainment = ascertainment
-        self.root_clade_columns = []
-        for child in self.children[0]:
-            columns = []
-            for column, node in enumerate(tree.tip_nodes):
-                ancestor = node
-                while tree.parents[ancestor] != 0:
-                    ancestor = tree.parents[ancestor]
-                if ancestor == child:
-                    columns.append(column)
-            self.root_clade_columns.append(columns)
+        root_child = [0] * len(tree.parents)
+        for node, parent in enumerate(tree.parents[1:], 1):
+            root_child[node] = node if parent == 0 else root_child[parent]
+        columns_by_clade: dict[int, list[int]] = {
+            child: [] for child in self.children[0]
+        }
+        for column, node in enumerate(tree.tip_nodes):
+            columns_by_clade[root_child[node]].append(column)
+        self.root_clade_columns = list(columns_by_clade.values())
         if ascertainment == "root-clades" and any(
             np.any(np.nansum(self.counts[:, columns], axis=1) == 0)
             for columns in self.root_clade_columns
@@ -436,11 +437,15 @@ class CountLikelihood:
             raise ValueError(
                 "Root-clade ascertainment requires observed copies in every root-child clade, for every family."
             )
-        self.patterns, self.pattern_index = np.unique(
-            np.isnan(self.counts), axis=0, return_inverse=True
+        # Packing the first tip into the most significant bit preserves the
+        # lexicographic order of missingness patterns and their inverse indices.
+        packed = np.packbits(missing, axis=1)
+        patterns, self.pattern_index = np.unique(packed, axis=0, return_inverse=True)
+        self.patterns = np.unpackbits(patterns, axis=1, count=missing.shape[1]).view(
+            bool
         )
         self.subtree_missing = {
-            node: np.isnan(self.counts[:, column])
+            node: missing[:, column].copy()
             for column, node in enumerate(tree.tip_nodes)
         }
         for node in range(len(tree.parents) - 1, -1, -1):
@@ -499,7 +504,7 @@ class CountLikelihood:
         rows = next(iter(emissions.values())).shape[0]
         for node in range(len(self.tree.parents) - 1, -1, -1):
             if node in emissions:
-                value = emissions[node].copy()
+                value = emissions[node]
                 scale = np.zeros(rows)
             else:
                 value = np.ones((rows, len(prior)))
@@ -652,9 +657,15 @@ class CountLikelihood:
         for column, node in enumerate(self.tree.tip_nodes):
             values = self.counts[:, column]
             missing = np.isnan(values)
-            matrix = binom.pmf(
-                np.nan_to_num(values)[:, None], states[None, :], self.detection[column]
-            )
+            probability = self.detection[column]
+            if probability == 1:
+                matrix = (values[:, None] == states[None, :]).astype(float)
+            else:
+                # Families with the same observed count have identical emissions.
+                counts, inverse = np.unique(np.nan_to_num(values), return_inverse=True)
+                matrix = binom.pmf(counts[:, None], states[None, :], probability)[
+                    inverse
+                ]
             matrix[missing] = 1.0
             emissions[node] = matrix
         observed_logs, selection_logs = [], []

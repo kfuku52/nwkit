@@ -234,6 +234,29 @@ def test_missing_is_not_zero_and_observation_conditioning_normalizes():
     )
 
 
+def test_missing_patterns_keep_tip_order_across_byte_boundary():
+    design = CountTree(
+        (-1, 0, *([1] * 8), 0),
+        (0.0, *([1.0] * 10)),
+        tuple(range(10, 1, -1)),
+        tuple(f"T{i}" for i in range(9)),
+        tuple(range(11)),
+        tuple(f"C{i}" for i in range(11)),
+    )
+    rows = np.ones((5, 9))
+    rows[[0, 2], -1] = np.nan
+    rows[1, 0] = np.nan
+    rows[4, [3, 8]] = np.nan
+    missing = np.isnan(rows)
+    expected_patterns, expected_index = np.unique(missing, axis=0, return_inverse=True)
+    model = CountLikelihood(design, rows)
+
+    assert model.root_clade_columns == [list(range(1, 9)), [0]]
+    assert model.patterns.dtype == bool
+    np.testing.assert_array_equal(model.patterns, expected_patterns)
+    np.testing.assert_array_equal(model.pattern_index, expected_index)
+
+
 def test_rate_mixture_conditioned_after_mixing():
     model = CountLikelihood(tree(), np.array([[1, 0]]), rate_scales=np.array([0.1, 3]))
     components = [
