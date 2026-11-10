@@ -2154,25 +2154,39 @@ def _resample_polyline(path, sample_count=32):
 def _convex_hull(points):
     """Return the counter-clockwise convex hull of two-dimensional points."""
 
-    unique = sorted({(float(x), float(y)) for x, y in points})
+    if (
+        type(points) is np.ndarray
+        and points.dtype == np.float64
+        and points.ndim == 2
+        and points.shape[1] == 2
+        and np.isfinite(points).all()
+    ):
+        # Stable ordering retains the first representative of signed-zero ties.
+        ordered = points[np.lexsort((points[:, 1], points[:, 0]))]
+        distinct = np.ones(len(ordered), dtype=bool)
+        distinct[1:] = np.any(ordered[1:] != ordered[:-1], axis=1)
+        unique = ordered[distinct].tolist()
+    else:
+        unique = sorted({(float(x), float(y)) for x, y in points})
     if len(unique) <= 1:
         return np.asarray(unique, dtype=float)
 
-    def cross(origin, first, second):
-        return (first[0] - origin[0]) * (second[1] - origin[1]) - (
-            first[1] - origin[1]
-        ) * (second[0] - origin[0])
+    def half_hull(ordered_points):
+        half: list[Any] = []
+        for point in ordered_points:
+            x, y = point
+            while len(half) >= 2:
+                ax, ay = half[-2]
+                bx, by = half[-1]
+                if (bx - ax) * (y - ay) - (by - ay) * (x - ax) <= 0.0:
+                    half.pop()
+                else:
+                    break
+            half.append(point)
+        return half
 
-    lower: list[tuple[float, float]] = []
-    for point in unique:
-        while len(lower) >= 2 and cross(lower[-2], lower[-1], point) <= 0.0:
-            lower.pop()
-        lower.append(point)
-    upper: list[tuple[float, float]] = []
-    for point in reversed(unique):
-        while len(upper) >= 2 and cross(upper[-2], upper[-1], point) <= 0.0:
-            upper.pop()
-        upper.append(point)
+    lower = half_hull(unique)
+    upper = half_hull(reversed(unique))
     return np.asarray(lower[:-1] + upper[:-1], dtype=float)
 
 
