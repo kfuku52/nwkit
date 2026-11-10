@@ -172,14 +172,14 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
             (log_ndtr(-a), log_ndtr(-b)) if a >= 0 else (log_ndtr(b), log_ndtr(a))
         )
         log_masses.append(high + np.log(-np.expm1(low - high)))
-    normalization = logsumexp(log_masses)
+    single_interval = len(intervals) == 1
+    normalization = log_masses[0] if single_interval else logsumexp(log_masses)
     if not math.isfinite(normalization):
         raise ValueError(
             "Threshold conditional interval masses are not numerically resolvable."
         )
-    interval = intervals[
-        int(rng.choice(len(intervals), p=np.exp(log_masses - normalization)))
-    ]
+    probabilities = (1.0,) if single_interval else np.exp(log_masses - normalization)
+    interval = intervals[int(rng.choice(len(intervals), p=probabilities))]
     lower, upper = interval
     a = -math.inf if lower == -math.inf else (lower - mean) / sd
     b = math.inf if upper == math.inf else (upper - mean) / sd
