@@ -4,6 +4,29 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.2] - 2026-11-11
+
+### Fixed
+
+- Preserve small nonzero weighted path differences and accumulate large
+  topological and weighted path distances in exact branch units before rounding.
+- Normalize staged package permissions for reproducible wheel builds.
+
+### Performance
+
+- Index clades, leaf intervals, projected splits and repeated tree mappings
+  across comparison, reconciliation, annotation, sampling and subtree commands.
+- Reduce retained drawing layouts, posterior samples, annotation buffers and
+  temporary containers during Newick and table processing.
+- Reuse Gaussian factors, branch transitions and fixed covariance models in
+  ASR, regression, GLMM, phylogenetic signal and PCA calculations.
+- Reuse WGD emissions, transitions and topology terms, and prepare shared-family
+  Ks bootstrap observations and trio indices once per calculation.
+- Stream DTT simulation tables and IQ-TREE Hessian exports, reuse codon state
+  masks, pack DNA site patterns and inspect FASTA alphabets record by record.
+- Share MUL species indexes and gene-tree inputs across candidate evaluations
+  and worker processes.
+
 ## [0.46.1] - 2026-11-09
 
 ### Added
