@@ -9,6 +9,7 @@ import pytest
 
 from nwkit.mul_reconcile import annotated_mapping_text, run_search
 from nwkit.mul_reconcile_model import Reconciliation, hypotheses
+from nwkit.rooting_state import ROOTED_PROP, set_rooting_info
 from nwkit.species_parser import get_species_parser
 from nwkit.util import read_tree
 
@@ -158,6 +159,21 @@ def test_selectors_numbering_and_candidate_placement():
         hypotheses(tree("((A,X),B);"), "A,B")
     with pytest.raises(ValueError, match="max-candidates"):
         hypotheses(tree("((A,X),B);"), max_candidates=1)
+
+
+@pytest.mark.parametrize("size", [(0.0, 0.0), (2.5, 3.0)])
+def test_hypothesis_graft_retains_branch_properties_and_size(size):
+    source = tree("((A,B),C);")
+    set_rooting_info(source, True)
+    source.children[0].props["metadata"] = "retained"
+    source.children[0].size = size
+
+    candidate = hypotheses(source, "A,B", "C")[1]
+    graft = candidate.tree.common_ancestor(["A*", "B*"])
+
+    assert graft.props["metadata"] == "retained"
+    assert ROOTED_PROP not in graft.props
+    assert graft.size == size
 
 
 @pytest.mark.parametrize("label", ["1", "<1>", "A+", "X*"])

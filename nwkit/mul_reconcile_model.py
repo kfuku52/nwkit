@@ -5,9 +5,16 @@ from dataclasses import dataclass
 from itertools import product
 from typing import Any
 
+from ete4 import Tree
+
 from nwkit.clade_index import LcaIndex
 from nwkit.rooting_state import require_rooted
-from nwkit.util import get_subtree_leaf_index_extents, validate_unique_named_leaves
+from nwkit.util import (
+    _IMMUTABLE_TREE_PROP_TYPES,
+    copy_tree_iteratively,
+    get_subtree_leaf_index_extents,
+    validate_unique_named_leaves,
+)
 
 
 def validate_binary(tree, label, *, unique=True):
@@ -94,7 +101,24 @@ class Hypothesis:
 
 def hypotheses(tree, h1=None, h2=None, *, multree=False, max_candidates=10000):
     validate_binary(tree, "Species tree", unique=not multree)
-    original = tree.copy()
+    # Keep ETE's copy protocol for subclasses, cached sizes and custom properties.
+    plain_tree = all(
+        type(node) is Tree
+        and node.size == (0.0, 0.0)
+        and type(node.props) is dict
+        and all(
+            type(key) is str and type(value) in _IMMUTABLE_TREE_PROP_TYPES
+            for key, value in node.props.items()
+        )
+        for node in tree.traverse()
+    )
+
+    def clone(node):
+        if plain_tree:
+            return copy_tree_iteratively(node, inherit_rooting=False)
+        return node.copy()
+
+    original = clone(tree)
     for leaf in original.leaves():
         leaf.add_prop("mul_species", leaf.name)
     label_nodes(original)
@@ -126,9 +150,9 @@ def hypotheses(tree, h1=None, h2=None, *, multree=False, max_candidates=10000):
         raise ValueError("No admissible H1/H2 combinations: H2 cannot be below H1.")
     result = [Hypothesis(0, original)]
     for number, (first, second) in enumerate(pairs, 1):
-        candidate = original.copy()
+        candidate = clone(original)
         lookup = {node.name: node for node in candidate.traverse()}
-        copied = lookup[first].copy()
+        copied = clone(lookup[first])
         copied.up = None
         for leaf in copied.leaves():
             leaf.name += "*"
@@ -139,8 +163,6 @@ def hypotheses(tree, h1=None, h2=None, *, multree=False, max_candidates=10000):
         position = parent.children.index(destination) if parent is not None else 0
         if parent is not None:
             destination.detach()
-        from ete4 import Tree
-
         joint = Tree()
         joint.add_child(destination)
         joint.add_child(copied)

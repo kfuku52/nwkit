@@ -85,7 +85,7 @@ _IMMUTABLE_TREE_PROP_TYPES = frozenset(
 )
 
 
-def copy_tree_iteratively(tree):
+def copy_tree_iteratively(tree, *, inherit_rooting=True):
     """Return a topology-and-properties copy without recursing over the tree."""
     copied_values: dict[int, Any] = {}
 
@@ -117,7 +117,9 @@ def copy_tree_iteratively(tree):
             target_parent.add_child(target_child)
             child_pairs.append((source_child, target_child))
         stack.extend(reversed(child_pairs))
-    return inherit_subtree_rooting(tree, copied_root)
+    if inherit_rooting:
+        return inherit_subtree_rooting(tree, copied_root)
+    return copied_root
 
 
 def read_input_text(infile):
