@@ -89,7 +89,7 @@ def _mask_mapping_key(node_class, mask, all_mask, match_basis):
     return (min(mask, complement), max(mask, complement))
 
 
-def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade"):
+def validate_mapping_taxa(target, source, taxon_mode, match_basis="clade"):
     if taxon_mode not in SUPPORTED_TAXON_MODES:
         raise ValueError(
             "Unsupported taxon mode '{}'. Choose from: {}.".format(
@@ -128,7 +128,13 @@ def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade")
     shared_taxa = target_leaf_set & source_leaf_set
     if not shared_taxa:
         raise ValueError("The input trees do not share any uniquely named tips.")
+    return target_leaf_set, source_leaf_set, shared_taxa
 
+
+def build_clade_mapping(target, source, taxon_mode="exact", match_basis="clade"):
+    target_leaf_set, source_leaf_set, shared_taxa = validate_mapping_taxa(
+        target, source, taxon_mode, match_basis
+    )
     target_taxa_by_node = _node_taxon_sets(target)
     source_taxa_by_node = _node_taxon_sets(source)
     same_leaf_set = target_leaf_set == source_leaf_set
