@@ -228,13 +228,14 @@ def patristic_distances(tree):
         row, stack = {}, [(tip, None, 0.0)]
         while stack:
             node, previous, distance = stack.pop()
-            if node in leaves:
-                row[leaves[node]] = distance
-            stack.extend(
-                (child, node, distance + length)
-                for child, length in graph[node]
-                if child is not previous
-            )
+            leaf_name = leaves.get(node)
+            if leaf_name is not None:
+                row[leaf_name] = distance
+                if previous is not None:
+                    continue  # A reached tip has no onward edges.
+            for child, length in graph[node]:
+                if child is not previous:
+                    stack.append((child, node, distance + length))
         result[name] = row
     return result
 

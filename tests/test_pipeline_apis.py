@@ -6,7 +6,11 @@ from ete4 import Tree
 from nwkit.astral import extract_support_labels
 from nwkit.parent_index import ParentIndex, validate_parent_links
 from nwkit.species_parser import SpeciesParser
-from nwkit.tree_features import foreground_components, unrooted_splits
+from nwkit.tree_features import (
+    foreground_components,
+    patristic_distances,
+    unrooted_splits,
+)
 
 
 def test_parent_index_handles_deep_tree_without_quadratic_ancestor_storage():
@@ -267,9 +271,17 @@ def test_posterior_diagnostics_require_distinct_chain_files(
     assert output.read_bytes() == b"previous diagnostics"
 
 
+def test_distance_matrix_accumulates_paths_from_each_starting_tip():
+    tree = Tree("((A:1,B:3):2,C:4);", parser=1)
+
+    assert patristic_distances(tree) == {
+        "A": {"A": 0.0, "B": 4.0, "C": 7.0},
+        "B": {"B": 0.0, "A": 4.0, "C": 9.0},
+        "C": {"C": 0.0, "B": 9.0, "A": 7.0},
+    }
+
+
 @pytest.mark.parametrize("text", ["((A:1,B:1):1,A:2);", "(A:1,:2);"])
 def test_distance_matrix_rejects_labels_that_would_drop_or_alias_rows(text):
-    from nwkit.tree_features import patristic_distances
-
     with pytest.raises(ValueError, match="unique nonempty"):
         patristic_distances(Tree(text, parser=1))
