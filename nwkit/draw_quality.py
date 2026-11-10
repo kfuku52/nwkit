@@ -128,16 +128,17 @@ def _proper_segment_intersection(first, second):
 def _count_branch_crossings(branch_lines, segment_limit=8000):
     """Count crossing branch pairs with a bounded spatial-index audit."""
 
-    branch_segments = [
-        (owner, segment)
-        for owner, line in branch_lines
-        for segment in _line_segments(line)
-    ]
-    if len(branch_segments) > int(segment_limit):
+    segment_limit = int(segment_limit)
+    if segment_limit < 0:
         return 0, False
+    branch_segments: list[tuple[object, tuple]] = []
+    for owner, line in branch_lines:
+        segments = _line_segments(line)
+        if len(branch_segments) + len(segments) > segment_limit:
+            return 0, False
+        branch_segments.extend((owner, segment) for segment in segments)
     cell_size = 36.0
     grid: dict[tuple[int, int], list[int]] = {}
-    tested = set()
     crossing_owners = set()
     for index, (owner, (start, end)) in enumerate(branch_segments):
         x0, x1 = sorted((float(start[0]), float(end[0])))
@@ -155,10 +156,6 @@ def _count_branch_crossings(branch_lines, segment_limit=8000):
         ]
         candidates = {previous for cell in cells for previous in grid.get(cell, ())}
         for previous in candidates:
-            pair = (previous, index)
-            if pair in tested:
-                continue
-            tested.add(pair)
             other_owner, other_segment = branch_segments[previous]
             if owner is other_owner:
                 continue
