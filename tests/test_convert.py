@@ -7,11 +7,18 @@ import pytest
 
 from nwkit.cli import main
 from nwkit.convert import convert_tree_text
+from nwkit.tree_formats import transform_annotations
 from nwkit.util import read_tree
 
 
 def parsed(text):
     return read_tree(text, "auto", True, quiet=True)
+
+
+def test_annotation_transform_reports_later_lexical_error_first():
+    source = "(A[&age=1,age=2],B);('unclosed,C);"
+    with pytest.raises(ValueError, match="Unterminated quoted tree label"):
+        transform_annotations(source)
 
 
 def test_property_labels_are_internal_only_and_precede_removal():

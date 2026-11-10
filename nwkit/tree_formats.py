@@ -34,7 +34,10 @@ class Token:
 
 def tokens(text):
     """Tokenize punctuation only outside quoted names and nested comments."""
-    result = []
+    return list(_iter_tokens(text))
+
+
+def _iter_tokens(text):
     i = 0
     length = len(text)
     while i < length:
@@ -57,8 +60,7 @@ def tokens(text):
             assert tail is not None
             i = tail.end()
             kind = "name"
-        result.append(Token(kind, text[start:i]))
-    return result
+        yield Token(kind, text[start:i])
 
 
 def _quote_end(text, start):
@@ -439,25 +441,32 @@ def transform_annotations(
     result: list[str] = []
     suffix: list[Token] = []
     internal = False
-    for token in tokens(text):
-        if token.kind in {"(", ")", ",", ";"}:
-            result.append(
-                _node_suffix(
-                    suffix,
-                    output,
-                    factor,
-                    age_ci,
-                    parser,
-                    node_label,
-                    properties,
-                    internal,
+    stream = _iter_tokens(text)
+    try:
+        for token in stream:
+            if token.kind in {"(", ")", ",", ";"}:
+                result.append(
+                    _node_suffix(
+                        suffix,
+                        output,
+                        factor,
+                        age_ci,
+                        parser,
+                        node_label,
+                        properties,
+                        internal,
+                    )
                 )
-            )
-            result.append(token.text)
-            suffix = []
-            internal = token.kind == ")"
-        else:
-            suffix.append(token)
+                result.append(token.text)
+                suffix = []
+                internal = token.kind == ")"
+            else:
+                suffix.append(token)
+    except (ValueError, ArithmeticError):
+        # Report a lexical error anywhere in the input before semantic errors.
+        for _ in stream:
+            pass
+        raise
     result.append(
         _node_suffix(
             suffix, output, factor, age_ci, parser, node_label, properties, internal
