@@ -162,7 +162,7 @@ def reference_family(
         if not 2 <= len(detected) <= config["max_observed_tips"]:
             continue
         demography = msprime.Demography.from_species_tree(
-            dated_text(root)[4:], initial_size=point.ne, time_units="gen"
+            dated_text(root).strip(), initial_size=point.ne, time_units="gen"
         )
         samples = [msprime.SampleSet(1, population=pop, ploidy=1) for pop in labels]
         for _draw in range(1, 50001):
