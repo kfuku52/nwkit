@@ -235,15 +235,26 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
     return table, pd.DataFrame([summary]), clades, null_mdi
 
 
-def _simulation_table(times, simulations):
-    return pd.DataFrame(
-        {
-            "simulation": np.repeat(np.arange(1, len(simulations) + 1), len(times)),
-            "time_index": np.tile(np.arange(1, len(times) + 1), len(simulations)),
-            "relative_time": np.tile(times, len(simulations)),
-            "relative_disparity": simulations.ravel(),
-        }
-    )
+def _write_simulation_table(handle, times, simulations):
+    time_count = len(times)
+    time_indices = np.arange(1, time_count + 1)
+    batch_size = max(1, 16_384 // time_count)
+    for start in range(0, len(simulations), batch_size):
+        batch = simulations[start : start + batch_size]
+        count = len(batch)
+        table = pd.DataFrame(
+            {
+                "simulation": np.repeat(
+                    np.arange(start + 1, start + count + 1), time_count
+                ),
+                "time_index": np.tile(time_indices, count),
+                "relative_time": np.tile(times, count),
+                "relative_disparity": batch.ravel(),
+            }
+        )
+        table.to_csv(
+            handle, sep="\t", index=False, float_format="%.12g", header=start == 0
+        )
 
 
 def dtt_main(args):
@@ -266,8 +277,6 @@ def dtt_main(args):
         tree, design, values, simulations, height, interval, args
     )
     tables = {"outfile": curve, "summary_out": summary, "clades_out": clades}
-    if args.simulations_out:
-        tables["simulations_out"] = _simulation_table(design.times, simulations)
     metadata = {
         "schema_version": 1,
         "nwkit_version": __version__,
@@ -319,6 +328,9 @@ def dtt_main(args):
                     figure_columns=args.figure_columns,
                     figure_scale=args.figure_scale,
                 )
+            elif role == "simulations_out":
+                with Path(staged[path]).open("w", encoding="utf-8") as handle:
+                    _write_simulation_table(handle, design.times, simulations)
             else:
                 Path(staged[path]).write_text(
                     model_json if role == "model_out" else serialized[role],

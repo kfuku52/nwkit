@@ -20,7 +20,7 @@ from nwkit.disparity import (
     transform_traits,
     validate_work,
 )
-from nwkit.dtt import _ultrametric_depths
+from nwkit.dtt import _ultrametric_depths, _write_simulation_table
 from nwkit.evolution import build_evolutionary_process
 from nwkit.util import read_tree
 
@@ -176,6 +176,25 @@ def test_area_duplicate_root_and_interpolated_range():
     curves = np.array([[1, 2, 0, 0], [1, 4, 0, 0]])
     assert curve_area(times, curves) == pytest.approx([0.5, 1])
     assert curve_area(times, curves, (0.1, 0.4)) == pytest.approx([0.3, 0.6])
+
+
+def test_simulation_table_keeps_row_order_across_output_batches():
+    times = np.arange(129) / 128
+    simulations = np.arange(130 * len(times)).reshape(130, -1) / 8
+    output = StringIO()
+    _write_simulation_table(output, times, simulations)
+    output.seek(0)
+    table = pd.read_csv(output, sep="\t")
+    assert list(table.columns) == [
+        "simulation",
+        "time_index",
+        "relative_time",
+        "relative_disparity",
+    ]
+    np.testing.assert_array_equal(table.simulation, np.repeat(np.arange(1, 131), 129))
+    np.testing.assert_array_equal(table.time_index, np.tile(np.arange(1, 130), 130))
+    np.testing.assert_array_equal(table.relative_time, np.tile(times, 130))
+    np.testing.assert_array_equal(table.relative_disparity, simulations.ravel())
 
 
 @pytest.mark.parametrize(
