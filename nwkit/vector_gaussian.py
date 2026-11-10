@@ -161,7 +161,7 @@ def _restrict(precision, linear, constant, fixed):
     return free, coordinates, reduced_linear, float(constant)
 
 
-def _propagate(precision, linear, constant, fixed, transition, dimension):
+def _validated_positive_transition(transition, dimension):
     slope = _array(transition.slope, (dimension, dimension), "Branch slope")
     intercept = _array(transition.intercept, (dimension,), "Branch intercept")
     covariance = _array(
@@ -169,6 +169,11 @@ def _propagate(precision, linear, constant, fixed, transition, dimension):
     )
     # Branch validation only needs the finite Cholesky factor.
     np.asarray_chkfinite(_cholesky(covariance, "Branch covariance")[0])
+    return slope, intercept, covariance
+
+
+def _propagate(precision, linear, constant, fixed, branch, dimension):
+    slope, intercept, covariance = branch
     free, coordinates, reduced_linear, constant = _restrict(
         precision, linear, constant, fixed
     )
@@ -243,14 +248,10 @@ def _root(precision, linear, constant, fixed, process):
         # Integrate in covariance form. Adding a nearly singular root's huge
         # precision and then subtracting its quadratic form can create a
         # spurious positive likelihood during covariance optimization.
-        message, conditional = _propagate(
-            precision,
-            linear,
-            constant,
-            fixed,
-            VectorTransition(np.zeros((d, d)), mean, covariance),
-            d,
+        branch = _validated_positive_transition(
+            VectorTransition(np.zeros((d, d)), mean, covariance), d
         )
+        message, conditional = _propagate(precision, linear, constant, fixed, branch, d)
         return conditional[1], conditional[2], float(message[2])
     elif process.root_covariance is not None:
         raise ValueError("Root covariance requires a root mean.")
@@ -302,6 +303,11 @@ def _condition_vector_tree(process, compiled, local):
     slopes = np.zeros((n, d, d))
     intercepts = np.zeros((n, d))
     covariances = np.zeros((n, d, d))
+    identity = np.eye(d)
+    zero_covariance = np.zeros((d, d))
+    zero_intercept = np.zeros(d)
+    previous_transition = object()
+    branch = None
     for index in compiled.postorder:
         if index == 0:
             break
@@ -309,13 +315,19 @@ def _condition_vector_tree(process, compiled, local):
         parent = compiled.parents[index]
         parent_precision, parent_linear, parent_constant, parent_fixed = local[parent]
         transition = process.transitions[compiled.nodes[index]]
-        if np.array_equal(transition.covariance, np.zeros((d, d))):
-            if not np.array_equal(transition.slope, np.eye(d)) or not np.array_equal(
-                transition.intercept, np.zeros(d)
-            ):
-                raise ValueError(
-                    "Zero-variance vector branches must be identity transitions."
-                )
+        if transition is not previous_transition:
+            previous_transition = transition
+            if np.array_equal(transition.covariance, zero_covariance):
+                if not np.array_equal(transition.slope, identity) or not np.array_equal(
+                    transition.intercept, zero_intercept
+                ):
+                    raise ValueError(
+                        "Zero-variance vector branches must be identity transitions."
+                    )
+                branch = None
+            else:
+                branch = _validated_positive_transition(transition, d)
+        if branch is None:
             if fixed:
                 # Cached local observation factors can be shared between fits.
                 parent_fixed = parent_fixed.copy()
@@ -326,10 +338,10 @@ def _condition_vector_tree(process, compiled, local):
                         )
                     parent_fixed[trait] = value
             message = precision, linear, constant
-            slopes[index] = np.eye(d)
+            slopes[index] = identity
         else:
             message, conditional = _propagate(
-                precision, linear, constant, fixed, transition, d
+                precision, linear, constant, fixed, branch, d
             )
             slopes[index], intercepts[index], covariances[index] = conditional
         local[parent] = (

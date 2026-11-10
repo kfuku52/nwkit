@@ -82,15 +82,20 @@ def _alpha_spec(data, alpha, alpha_by_trait, alpha_bounds, diagonal):
 
 
 def _process(data, rates, covariance, theta):
+    rate_sums = rates[:, None] + rates[None, :]
     transitions = {}
+    by_time: dict[float, VectorTransition] = {}
     for node in data.compiled.nodes[1:]:
-        attenuation = np.exp(-rates * float(node.dist))
-        innovation = covariance * -np.expm1(
-            -(rates[:, None] + rates[None, :]) * float(node.dist)
-        )
-        transitions[node] = VectorTransition(
-            np.diag(attenuation), theta * (1 - attenuation), innovation
-        )
+        time = float(node.dist)
+        transition = by_time.get(time)
+        if transition is None:
+            attenuation = np.exp(-rates * time)
+            innovation = covariance * -np.expm1(-rate_sums * time)
+            transition = VectorTransition(
+                np.diag(attenuation), theta * (1 - attenuation), innovation
+            )
+            by_time[time] = transition
+        transitions[node] = transition
     return VectorProcess(data.compiled.tree, len(rates), transitions, theta, covariance)
 
 

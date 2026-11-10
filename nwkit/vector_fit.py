@@ -91,18 +91,18 @@ def normalized_vector_observations(data):
 
 def _brownian_process(data, sigma, time_scale):
     dimension = len(data.trait_names)
-    return VectorProcess(
-        data.compiled.tree,
-        dimension,
-        {
-            node: VectorTransition(
-                np.eye(dimension),
-                np.zeros(dimension),
-                sigma * (float(node.dist) / time_scale),
-            )
-            for node in data.compiled.nodes[1:]
-        },
-    )
+    identity = np.eye(dimension)
+    intercept = np.zeros(dimension)
+    transitions = {}
+    by_time: dict[float, VectorTransition] = {}
+    for node in data.compiled.nodes[1:]:
+        time = float(node.dist) / time_scale
+        transition = by_time.get(time)
+        if transition is None:
+            transition = VectorTransition(identity, intercept, sigma * time)
+            by_time[time] = transition
+        transitions[node] = transition
+    return VectorProcess(data.compiled.tree, dimension, transitions)
 
 
 def restored_vector_posterior(result, data):
