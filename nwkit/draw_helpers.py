@@ -1970,17 +1970,11 @@ def _densitree_edge_key(node):
 
 
 def _densitree_topology_signature(tree):
-    all_tips = frozenset(str(name) for name in tree.leaf_names())
+    tip_count = len({str(name) for name in tree.leaf_names()})
+    clades = (_densitree_edge_key(node) for node in tree.traverse() if not node.is_root)
     return tuple(
         sorted(
-            (
-                tuple(sorted(_densitree_edge_key(node)))
-                for node in tree.traverse()
-                if (
-                    not node.is_root
-                    and 1 < len(_densitree_edge_key(node)) < len(all_tips)
-                )
-            ),
+            (tuple(sorted(clade)) for clade in clades if 1 < len(clade) < tip_count),
             key=lambda clade: (len(clade), clade),
         )
     )
@@ -2007,7 +2001,11 @@ def _make_posterior_drawing_layouts(
 ):
     """Render corresponding posterior trees with exactly the main-tree settings."""
 
-    reference_nodes = list(tree.traverse(strategy="preorder"))
+    reference_clades = [
+        None if node.is_root else _densitree_edge_key(node)
+        for node in tree.traverse(strategy="preorder")
+    ]
+    reference_tip_names = [node.name for node in tree.leaves()]
     layouts = []
     for sample_index in range(posterior.sample_count):
         posterior_tree = posterior_sample_tree(
@@ -2018,13 +2016,11 @@ def _make_posterior_drawing_layouts(
         if ladderize:
             posterior_tree.ladderize()
         sample_nodes = list(posterior_tree.traverse(strategy="preorder"))
-        if len(sample_nodes) != len(reference_nodes):
+        if len(sample_nodes) != len(reference_clades):
             raise ValueError(
                 "Posterior sample topology differs from the displayed topology."
             )
-        if [node.name for node in posterior_tree.leaves()] != [
-            node.name for node in tree.leaves()
-        ]:
+        if [node.name for node in posterior_tree.leaves()] != reference_tip_names:
             raise ValueError(
                 "Posterior sample topology has a different ordered tip set."
             )
@@ -2052,9 +2048,9 @@ def _make_posterior_drawing_layouts(
             daylight_iterations=daylight_iterations,
         )
         path_by_clade = {
-            _densitree_edge_key(reference): sample_layout.edge_paths[sample]
-            for reference, sample in zip(reference_nodes, sample_nodes, strict=True)
-            if not reference.is_root
+            clade: sample_layout.edge_paths[sample]
+            for clade, sample in zip(reference_clades, sample_nodes, strict=True)
+            if clade is not None
         }
         layouts.append((sample_layout.bounds, path_by_clade))
     return layouts
