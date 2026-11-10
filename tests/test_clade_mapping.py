@@ -1,7 +1,11 @@
 import pytest
 from ete4 import Tree
 
-from nwkit.clade_mapping import build_clade_mapping, projected_root_split
+from nwkit.clade_mapping import (
+    build_clade_mapping,
+    find_root_split_candidates,
+    projected_root_split,
+)
 from nwkit.root import transfer_root_with_taxon_mode
 
 
@@ -79,3 +83,22 @@ def test_partial_root_transfer_matches_projected_split_and_preserves_tips():
     shared = frozenset({"A", "B", "C", "D"})
     assert projected_root_split(result, shared) == projected_root_split(source, shared)
     assert set(result.leaf_names()) == {"A", "B", "C", "D", "X"}
+
+
+def test_root_split_candidates_retain_ambiguous_edges_in_traversal_order():
+    target = Tree("(((A,B)near,X)outer,(C,D)other);", parser=1)
+    source = Tree("((A,B),(C,D));", parser=1)
+
+    _, _, candidates = find_root_split_candidates(target, source, "intersection")
+
+    assert [node.name for node in candidates] == ["outer", "other", "near"]
+
+
+def test_root_split_candidates_require_disjoint_source_sides():
+    target = Tree("((A,B),C);", parser=1)
+    source = Tree("((A,B),(B,C));", parser=1)
+
+    _, split, candidates = find_root_split_candidates(target, source)
+
+    assert split == (frozenset({"A", "B"}), frozenset({"B", "C"}))
+    assert candidates == []

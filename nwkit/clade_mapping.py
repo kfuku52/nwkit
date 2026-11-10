@@ -312,10 +312,15 @@ def find_root_split_candidates(target, source, taxon_mode="exact"):
         raise ValueError(
             "The source root does not define a usable bipartition on shared tips."
         )
-    target_taxa_by_node = _node_taxon_sets(target)
-    candidates = list()
-    for node in target.traverse():
-        split = node_projected_split(node, shared_taxa, taxon_sets=target_taxa_by_node)
-        if split == source_split:
-            candidates.append(node)
+    left, right = source_split
+    if not left.isdisjoint(right):
+        return shared_taxa, source_split, []
+    taxon_to_bit = {name: 1 << index for index, name in enumerate(sorted(shared_taxa))}
+    split_masks = {sum(taxon_to_bit[name] for name in side) for side in source_split}
+    target_masks = _projected_masks(target, taxon_to_bit)
+    candidates = [
+        node
+        for node in target.traverse()
+        if not node.is_root and target_masks[node] in split_masks
+    ]
     return shared_taxa, source_split, candidates
