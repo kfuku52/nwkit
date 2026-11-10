@@ -48,40 +48,42 @@ def make_trios(tree, focal_names=None, outgroup_policy="nearest", max_trios=1000
         raise ValueError("Outgroup policy must be nearest or all.")
     trios: list[KsTrio] = []
     events = []
+    descendant_taxa = {}
     for focal in focal_names:
         child = leaves[focal]
         while child.up is not None:
             node = child.up
-            sisters = sorted(
-                set(clades.names_for_node(node)) - set(clades.names_for_node(child))
-            )
-            if node.is_root:
-                outgroups = []
-            else:
+            node_mask = clades.mask_by_node[node]
+            sister_mask = node_mask & ~clades.mask_by_node[child]
+            outgroup_mask = 0
+            if not node.is_root:
                 comparison = node.up if outgroup_policy == "nearest" else tree
-                outgroups = sorted(
-                    set(clades.names_for_node(comparison))
-                    - set(clades.names_for_node(node))
-                )
+                outgroup_mask = clades.mask_by_node[comparison] & ~node_mask
             event_id = clades.clade_id_for_node(node)
-            indices = []
-            for sister in sisters:
-                for outgroup in outgroups:
-                    indices.append(len(trios))
-                    trios.append(
-                        KsTrio(focal, sister, outgroup, event_id, branches[node])
+            branch_id = branches[node]
+            first = len(trios)
+            if sister_mask and outgroup_mask:
+                count = sister_mask.bit_count() * outgroup_mask.bit_count()
+                if first + count > max_trios:
+                    raise ValueError(
+                        "Too many Ks trios; restrict --focals or use nearest outgroups."
                     )
-                    if len(trios) > max_trios:
-                        raise ValueError(
-                            "Too many Ks trios; restrict --focals or use nearest outgroups."
-                        )
+                sisters = clades.names_for_mask(sister_mask)
+                outgroups = clades.names_for_mask(outgroup_mask)
+                trios.extend(
+                    KsTrio(focal, sister, outgroup, event_id, branch_id)
+                    for sister in sisters
+                    for outgroup in outgroups
+                )
+            if node not in descendant_taxa:
+                descendant_taxa[node] = clades.csv_for_node(node)
             events.append(
                 {
                     "focal": focal,
                     "species_event_id": event_id,
-                    "branch_id": branches[node],
-                    "descendant_taxa": clades.csv_for_node(node),
-                    "trio_indices": indices,
+                    "branch_id": branch_id,
+                    "descendant_taxa": descendant_taxa[node],
+                    "trio_indices": list(range(first, len(trios))),
                 }
             )
             child = node
