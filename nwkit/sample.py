@@ -373,6 +373,50 @@ def select_max_pd(candidate_order, path_edges_by_leaf, n):
     return selected
 
 
+def _select_tree_max_pd(tree, candidate_order, n):
+    """Select by exact greedy rooted PD without materializing every tip path."""
+    ranks = {name: rank for rank, name in enumerate(candidate_order)}
+    zero = Fraction(0)
+    gains = [zero] * len(candidate_order)
+    paths: dict[Any, tuple[Fraction, int]] = {}
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            rank = ranks.get(node.name)
+            if rank is None:
+                continue
+            negative_distance = zero
+        else:
+            best = None
+            for child in node.children:
+                path = paths.pop(child, None)
+                if path is not None and (best is None or path < best):
+                    best = path
+            if best is None:
+                continue
+            negative_distance, rank = best
+        length = _exact_length(_edge_length(node))
+        gains[rank] += length
+        paths[node] = negative_distance - length, rank
+
+    # Each edge belongs to the tip with the longest path below it. A tip
+    # that lost a shared edge follows the winning tip in gain and rank
+    # order, so its remaining edges are exposed at the same greedy step.
+    selected = []
+    total = zero
+    order = sorted(range(len(candidate_order)), key=lambda rank: (-gains[rank], rank))
+    for rank in order[:n]:
+        gain = gains[rank]
+        total += gain
+        selected.append(
+            {
+                "leaf_name": candidate_order[rank],
+                "pd_gain": _finite_pd_value(gain, "gain"),
+                "pd_total": _finite_pd_value(total, "total"),
+            }
+        )
+    return selected
+
+
 def _build_output_table(selected_rows, candidate_df):
     selected_df = pd.DataFrame(selected_rows)
     selected_df.insert(0, "sample_order", range(1, len(selected_df.index) + 1))
@@ -428,18 +472,14 @@ def sample_main(args):
         )
     n_select = min(args.n, len(candidate_order))
 
-    leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
-    path_candidates = (
-        candidate_order[:n_select] if args.method == "ranked" else candidate_order
-    )
-    path_edges_by_leaf = {
-        leaf_name: _leaf_path_edges(leaf_by_name[leaf_name])
-        for leaf_name in path_candidates
-    }
-
     if args.method == "max-pd":
-        selected_rows = select_max_pd(candidate_order, path_edges_by_leaf, n_select)
+        selected_rows = _select_tree_max_pd(tree, candidate_order, n_select)
     elif args.method == "ranked":
+        leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+        path_edges_by_leaf = {
+            name: _leaf_path_edges(leaf_by_name[name])
+            for name in candidate_order[:n_select]
+        }
         selected_rows = select_ranked(candidate_order, path_edges_by_leaf, n_select)
     else:
         raise ValueError("Unsupported --method: {}".format(args.method))
