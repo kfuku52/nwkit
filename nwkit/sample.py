@@ -290,6 +290,31 @@ def select_ranked(candidate_order, path_edges_by_leaf, n):
     return selected
 
 
+def _select_tree_ranked(tree, candidate_order, n):
+    leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
+    covered_edges = set()
+    selected = []
+    zero = Fraction(0)
+    total = zero
+    for leaf_name in candidate_order[:n]:
+        node = leaf_by_name[leaf_name]
+        gain = zero
+        # Once an edge is covered, every edge above it is covered as well.
+        while not node.is_root and node not in covered_edges:
+            gain += _exact_length(_edge_length(node))
+            covered_edges.add(node)
+            node = node.up
+        total += gain
+        selected.append(
+            {
+                "leaf_name": leaf_name,
+                "pd_gain": _finite_pd_value(gain, "gain"),
+                "pd_total": _finite_pd_value(total, "total"),
+            }
+        )
+    return selected
+
+
 def select_max_pd(candidate_order, path_edges_by_leaf, n):
     leaf_names = list(candidate_order)
     if n <= 0 or len(leaf_names) == 0:
@@ -475,12 +500,7 @@ def sample_main(args):
     if args.method == "max-pd":
         selected_rows = _select_tree_max_pd(tree, candidate_order, n_select)
     elif args.method == "ranked":
-        leaf_by_name = {leaf.name: leaf for leaf in tree.leaves()}
-        path_edges_by_leaf = {
-            name: _leaf_path_edges(leaf_by_name[name])
-            for name in candidate_order[:n_select]
-        }
-        selected_rows = select_ranked(candidate_order, path_edges_by_leaf, n_select)
+        selected_rows = _select_tree_ranked(tree, candidate_order, n_select)
     else:
         raise ValueError("Unsupported --method: {}".format(args.method))
 

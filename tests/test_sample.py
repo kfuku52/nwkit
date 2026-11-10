@@ -7,6 +7,7 @@ from nwkit.sample import (
     _leaf_path_edges,
     _path_gain,
     _select_tree_max_pd,
+    _select_tree_ranked,
     apply_filters,
     parse_filter_spec,
     sample_main,
@@ -256,6 +257,7 @@ class TestSampleMain:
 
         assert [row["leaf_name"] for row in selected] == ["A", "B"]
         assert selected[1]["pd_gain"] == pytest.approx(2.0)
+        assert _select_tree_ranked(tree, candidate_order, 2) == selected
 
     @pytest.mark.parametrize("method", ["max-pd", "ranked"])
     @pytest.mark.parametrize(
