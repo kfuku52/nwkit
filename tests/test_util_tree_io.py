@@ -142,8 +142,11 @@ class TestReadTree:
         assert abs(tree.children[0].support - 90.0) < 1e-9
         assert str(tree.children[0].name or "") == ""
 
-    def test_read_tree_auto_prefers_quoted_numeric_internal_names(self, tmp_nwk):
-        path = tmp_nwk("((A:1,B:1)'42':1,C:1)'99':1;")
+    @pytest.mark.parametrize("comment", ["", "[ordinary[nested]]\u3000"])
+    def test_read_tree_auto_prefers_quoted_numeric_internal_names(
+        self, tmp_nwk, comment
+    ):
+        path = tmp_nwk(f"((A:1,B:1){comment}'42':1,C:1)'99':1;")
         tree = read_tree(path, format="auto", quoted_node_names=True, quiet=True)
         assert tree.name == "99"
         child_names = {str(child.name or "") for child in tree.children}

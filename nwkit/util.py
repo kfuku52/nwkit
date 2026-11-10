@@ -58,6 +58,7 @@ from nwkit.species_parser import (
 )
 
 NUMERIC_NODE_NAME_PATTERN = re.compile(r"[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?")
+_INTERNAL_LABEL_SCAN = re.compile(r"""['"\[)]""")
 UNQUOTED_NODE_NAME_PATTERN = re.compile(r"""^[^\s\(\)\[\]'":;,]+$""")
 TREE_FORMAT_PROP = "_nwkit_parser_format"
 MISSING_SUPPORT_VALUE = -999999.0
@@ -514,7 +515,8 @@ def _internal_node_label_kinds(newick_text):
     has_numeric = False
     has_other = False
     i = 0
-    while i < len(text):
+    while (match := _INTERNAL_LABEL_SCAN.search(text, i)) is not None:
+        i = match.start()
         char = text[i]
         if char in ("'", '"'):
             quote_char = char
@@ -538,10 +540,6 @@ def _internal_node_label_kinds(newick_text):
                     depth -= 1
                 i += 1
             continue
-        if char != ")":
-            i += 1
-            continue
-
         j = i + 1
         while True:
             while j < len(text) and text[j].isspace():

@@ -16,6 +16,7 @@ TREE_ASSIGNMENT = re.compile(
 )
 MCMCTREE_MARKER = re.compile(r"^\s*Species tree for FigTree\b[^\n]*$", re.MULTILINE)
 CI_KEY = re.compile(rf"(?:height_)?({NUMBER})%(?:_?(HPD))?", re.IGNORECASE)
+_UNQUOTED_TOKEN_TAIL = re.compile(r"""[^\s(),'"\[\]:;]*""")
 AGE_FIELDS = frozenset({"age", "age_mean", "age_median", "age_ci_low", "age_ci_high"})
 CI_FIELDS = frozenset({"age_ci_low", "age_ci_high", "age_ci_kind", "age_ci_level"})
 HEIGHT_FIELDS = {
@@ -35,7 +36,8 @@ def tokens(text):
     """Tokenize punctuation only outside quoted names and nested comments."""
     result = []
     i = 0
-    while i < len(text):
+    length = len(text)
+    while i < length:
         char = text[i]
         if char.isspace():
             i += 1
@@ -51,11 +53,9 @@ def tokens(text):
             i += 1
             kind = char
         else:
-            i += 1
-            while (
-                i < len(text) and not text[i].isspace() and text[i] not in "(),'\"[]:;"
-            ):
-                i += 1
+            tail = _UNQUOTED_TOKEN_TAIL.match(text, i + 1)
+            assert tail is not None
+            i = tail.end()
             kind = "name"
         result.append(Token(kind, text[start:i]))
     return result
@@ -357,6 +357,8 @@ def _node_suffix(
     properties="keep",
     internal=False,
 ):
+    if not parts:
+        return ""
     attributes: dict[str, str] = {}
     comments: list[str] = []
     fields: list[Token] = []
@@ -381,7 +383,8 @@ def _node_suffix(
     kinds = [field.kind for field in fields]
     if kinds not in ([], ["name"], [":", "name"], ["name", ":", "name"]):
         raise ValueError("Malformed Newick node label or branch length.")
-    validate_age_attributes(attributes)
+    if attributes:
+        validate_age_attributes(attributes)
     if internal and node_label and node_label in attributes:
         value = attributes[node_label]
         label = Token("name", "'" + value.replace("'", "''") + "'")
