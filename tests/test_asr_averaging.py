@@ -225,6 +225,21 @@ def test_tree_mapping_uses_clades_not_branch_order():
         align_ensemble_nodes(reference, tree_from("(A:1,B:1)R;"))
 
 
+def test_tree_mapping_keeps_deepest_exact_clade_and_supports_attached_trees():
+    reference = tree_from("(((A:1,B:1)AB:1,D:1)ABD:1,C:1)R;")
+    wrapper = tree_from("(E:1,(((A:1,B:1)ab:1)unary:1,(C:1,D:1)cd:1)S:1)W;")
+    sampled = wrapper.children[1]
+    by_name = {node.name: node for node in reference.traverse()}
+
+    exact = align_ensemble_nodes(reference, sampled)
+    mapped = align_ensemble_nodes(reference, sampled, mapping="mrca")
+
+    assert exact[by_name["AB"]].name == "ab"
+    assert by_name["ABD"] not in exact
+    assert mapped[by_name["ABD"]] is sampled
+    assert mapped[reference] is sampled
+
+
 def test_tree_ensemble_reports_clade_support_and_between_tree_uncertainty():
     reference = tree_from("((A:1,B:1)AB:1,(C:1,D:1)CD:1)R;")
     different = tree_from("((A:1,C:1)AC:1,(B:1,D:1)BD:1)R;")

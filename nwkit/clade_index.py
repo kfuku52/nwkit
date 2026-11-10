@@ -87,7 +87,7 @@ class LcaIndex:
         parent = list()
         depth = list()
         for node in self.nodes:
-            if node.is_root:
+            if node is tree:
                 parent.append(self.index_by_node[node])
                 depth.append(0)
             else:
