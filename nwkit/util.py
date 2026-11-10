@@ -1606,20 +1606,29 @@ def iter_tree_strings(infile):
         )
 
 
-def read_trees(infile, format, quoted_node_names, quiet=False, *, rooted="auto"):
-    tree_text = normalize_phylogenetic_tree_text(
-        read_input_text(infile),
-        collection=True,
-    )
-    tree_strings = split_newick_stream(tree_text)
+def read_trees(
+    infile, format, quoted_node_names, quiet=False, *, rooted="auto", retain=slice(None)
+):
+    """Parse every input tree and retain the requested slice."""
+    tree_strings = read_tree_strings(infile)
     if len(tree_strings) == 0:
         raise Exception("Failed to parse the input trees.")
-    trees = [
-        read_tree(tree_string, format, quoted_node_names, quiet=True, rooted=rooted)
-        for tree_string in tree_strings
-    ]
+    selected = range(len(tree_strings))[retain]
+    trees = []
+    for index, tree_string in enumerate(tree_strings):
+        tree = read_tree(
+            tree_string, format, quoted_node_names, quiet=True, rooted=rooted
+        )
+        if index in selected:
+            trees.append(tree)
+        else:
+            # Break parent-child cycles in trees that the caller will not use.
+            for node in tree.traverse(strategy="preorder"):
+                node.up = None
+    if selected.step < 0:
+        trees.reverse()
     if not quiet:
-        sys.stderr.write("Number of input trees = {:,}\n".format(len(trees)))
+        sys.stderr.write("Number of input trees = {:,}\n".format(len(tree_strings)))
     return trees
 
 
