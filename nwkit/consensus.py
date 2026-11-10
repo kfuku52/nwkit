@@ -566,13 +566,31 @@ def _select_consensus_masks(
     # least one tree. This shortcut is for exact counts of unweighted trees.
     if exact_counts and min_freq > 0.5:
         return candidates
-    for mask, weight, freq in candidates:
+    majority_count = 0
+    if exact_counts and min_freq == 0.5:
+        # A majority clade is also compatible with every half-frequency
+        # candidate. Only pairs within the tied group need checking.
+        majority_count = next(
+            (
+                index
+                for index, (_, weight, _) in enumerate(candidates)
+                if 2 * weight <= total_weight
+            ),
+            len(candidates),
+        )
+        if majority_count == len(candidates):
+            return candidates
+    for mask, weight, freq in islice(candidates, majority_count, None):
         if all(
             _masks_are_compatible(mask, selected_mask)
             for selected_mask, _, _ in selected_masks
         ):
             selected_masks.append((mask, weight, freq))
-    return selected_masks
+    return (
+        candidates[:majority_count] + selected_masks
+        if majority_count
+        else selected_masks
+    )
 
 
 def _build_consensus_subtree(

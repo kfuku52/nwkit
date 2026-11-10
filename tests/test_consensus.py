@@ -548,6 +548,23 @@ class TestConsensusMain:
             consensus_main(args)
 
 
+def test_exact_consensus_counts_keep_greedy_order_among_conflicting_half_ties():
+    from nwkit.consensus import _select_consensus_masks
+
+    weights = {
+        0b110000: 4.0,
+        0b001111: 4.0,
+        0b000011: 2.0,
+        0b001100: 2.0,
+        0b000101: 2.0,
+        0b001010: 2.0,
+    }
+
+    result = _select_consensus_masks(weights, 4.0, 0.5, exact_counts=True)
+
+    assert [mask for mask, _, _ in result] == [0b001111, 0b110000, 0b000011, 0b001100]
+
+
 @pytest.mark.parametrize("reverse_masks", [False, True])
 def test_build_consensus_subtree_preserves_noncontiguous_clades_and_leaf_order(
     reverse_masks,
