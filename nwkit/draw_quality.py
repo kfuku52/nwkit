@@ -169,9 +169,16 @@ def _count_branch_crossings(branch_lines, segment_limit=8000):
     return len(crossing_owners), True
 
 
+def measure_figure_renderer(figure):
+    """Prepare artist geometry and return the canvas renderer."""
+    # Matplotlib added draw_without_rendering in 3.5.
+    draw = getattr(figure, "draw_without_rendering", figure.canvas.draw)
+    draw()
+    return figure.canvas.get_renderer()
+
+
 def _artist_bounds(figure, artists):
-    figure.draw_without_rendering()
-    renderer = figure.canvas.get_renderer()
+    renderer = measure_figure_renderer(figure)
     bounds = {}
     for item in artists:
         if not item.artist.get_visible():

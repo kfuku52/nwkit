@@ -5,7 +5,15 @@ import pytest
 from nwkit.dated_presentation import render_dated_tree
 
 
-def test_dated_presentation_preserves_tip_order_and_annotation_layout(tmp_path):
+@pytest.mark.parametrize("legacy_canvas", [False, True])
+def test_dated_presentation_preserves_tip_order_and_annotation_layout(
+    tmp_path, monkeypatch, legacy_canvas
+):
+    if legacy_canvas:
+        from matplotlib.figure import Figure
+
+        monkeypatch.delattr(Figure, "draw_without_rendering", raising=False)
+
     tree = tmp_path / "tree.nwk"
     tree.write_text("((A:8,B:8):8,(C:8,D:8):8);\n")
     tip_order = tmp_path / "tips.tsv"

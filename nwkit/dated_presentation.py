@@ -14,6 +14,8 @@ from contextlib import ExitStack
 from pathlib import Path
 from typing import Any
 
+from nwkit.draw_quality import measure_figure_renderer
+
 STATUS = ("single", "duplicated", "fragmented", "missing")
 STATUS_LABELS = ("Single-copy", "Duplicated", "Fragmented", "Missing")
 STATUS_COLOURS = ("#000000", "#B22222", "#666666", "#CCCCCC")
@@ -649,8 +651,7 @@ def _draw_geological_axes(
     if period_texts:
         # Spread crowded names within the header while retaining their
         # original time anchors. A short leader connects a shifted name.
-        figure.draw_without_rendering()
-        renderer = figure.canvas.get_renderer()
+        renderer = measure_figure_renderer(figure)
         ordered = list(reversed(period_texts))
         widths = [text.get_window_extent(renderer).width for text in ordered]
         gap = 2 * figure.dpi / 72
@@ -845,8 +846,7 @@ def _place_age_labels(age_texts, axis, branches, event_markers, figure):
 
     if not age_texts and not event_markers:
         return []
-    figure.draw_without_rendering()
-    renderer = figure.canvas.get_renderer()
+    renderer = measure_figure_renderer(figure)
     event_boxes = [
         marker.get_window_extent(renderer).padded(1.2 * figure.dpi / 72)
         for marker in event_markers
@@ -1076,8 +1076,7 @@ def _validate_presentation_bounds(
     """Validate presentation bounds."""
     import matplotlib
 
-    figure.draw_without_rendering()
-    renderer = figure.canvas.get_renderer()
+    renderer = measure_figure_renderer(figure)
     period_boxes = [text.get_window_extent(renderer) for text in period_texts]
     if any(
         a.overlaps(b) for i, a in enumerate(period_boxes) for b in period_boxes[i + 1 :]
