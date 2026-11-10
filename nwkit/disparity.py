@@ -248,15 +248,19 @@ def _batched_disparities(design, values, counts):
 
 def _simulate_chunk(payload):
     design, factor, seeds = payload
-    if len(seeds) <= 1:
-        return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
     nodes, traits = len(design.parents), factor.shape[0]
+    curves = np.empty(
+        (len(seeds), len(design.times)),
+        dtype=np.result_type(design.weights.dtype, np.float64),
+    )
     # Include products, moment/denominator arrays and temporary curve storage.
     # Large trees/trait dimensions retain the single-replica workspace.
     replica_bytes = 8 * (nodes * (3 * traits + 6) + 2 * len(design.times))
     batch = max(1, min(32, _SIMULATION_WORKSPACE_BYTES // max(1, replica_bytes)))
-    if batch == 1:
-        return [(index, _simulate_one(design, factor, seed)) for index, seed in seeds]
+    if len(seeds) <= 1 or batch == 1:
+        for index, seed in enumerate(seeds):
+            curves[index] = _simulate_one(design, factor, seed)
+        return curves
     counts = np.zeros(nodes, dtype=int)
     for node in range(nodes - 1, -1, -1):
         counts[node] = (
@@ -265,12 +269,11 @@ def _simulate_chunk(payload):
             else sum(counts[child] for child in design.children[node])
         )
     square_roots = np.sqrt(design.lengths)
-    indexed: list[tuple[int, np.ndarray]] = []
     for start in range(0, len(seeds), batch):
         selected = seeds[start : start + batch]
         replicas = len(selected)
         innovations = np.empty((nodes - 1, replicas, traits))
-        for column, (_, seed) in enumerate(selected):
+        for column, seed in enumerate(selected):
             rng = np.random.default_rng(seed)
             innovations[:, column, :] = (
                 rng.standard_normal((nodes - 1, traits)) @ factor.T
@@ -282,21 +285,12 @@ def _simulate_chunk(payload):
                 + square_roots[node] * innovations[node - 1]
             )
         disparities = _batched_disparities(design, values, counts)
-        curves = np.asarray(
-            [
-                np.asarray(
-                    design.weights @ (disparities[:, column] / disparities[0, column])
-                )
-                for column in range(replicas)
-            ]
-        )
+        for column in range(replicas):
+            curves[start + column] = design.weights @ (
+                disparities[:, column] / disparities[0, column]
+            )
         del innovations, values, disparities
-        indexed.extend(
-            (index, curve.copy())
-            for (index, _), curve in zip(selected, curves, strict=True)
-        )
-        del curves
-    return indexed
+    return curves
 
 
 def validate_work(design, traits, count, export_simulations=False):
@@ -314,23 +308,25 @@ def validate_work(design, traits, count, export_simulations=False):
 
 
 def simulate_curves(design, factor, count, seed=1, threads=1):
-    seeds = list(enumerate(np.random.SeedSequence(seed).spawn(count)))
-    if threads == 1 or count <= 1:
-        indexed = _simulate_chunk((design, factor, seeds))
-    else:
-        workers = min(threads, count)
-        chunks = [seeds[i::workers] for i in range(workers)]
-        with ProcessPoolExecutor(
-            max_workers=workers, mp_context=multiprocessing.get_context("spawn")
-        ) as pool:
-            indexed = [
-                item
-                for chunk in pool.map(
-                    _simulate_chunk, ((design, factor, chunk) for chunk in chunks)
-                )
-                for item in chunk
-            ]
-    return np.asarray([curve for _, curve in sorted(indexed, key=lambda item: item[0])])
+    seeds = np.random.SeedSequence(seed).spawn(count)
+    if not seeds:
+        return np.empty(0)
+    if threads == 1 or count == 1:
+        return _simulate_chunk((design, factor, seeds))
+    workers = min(threads, count)
+    chunks = [seeds[i::workers] for i in range(workers)]
+    with ProcessPoolExecutor(
+        max_workers=workers, mp_context=multiprocessing.get_context("spawn")
+    ) as pool:
+        curves = np.empty(
+            (count, len(design.times)),
+            dtype=np.result_type(design.weights.dtype, np.float64),
+        )
+        for worker, worker_curves in enumerate(
+            pool.map(_simulate_chunk, ((design, factor, chunk) for chunk in chunks))
+        ):
+            curves[worker::workers] = worker_curves
+    return curves
 
 
 def curve_area(times, curves, interval=(0.0, 1.0)):
