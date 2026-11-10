@@ -3,6 +3,30 @@ import hashlib
 from io import StringIO
 
 CLADE_ID_PREFIX = "clade-sha256:"
+_POSITIONS_BY_BYTE = tuple(
+    tuple(bit for bit in range(8) if value & (1 << bit)) for value in range(256)
+)
+
+
+def names_from_mask(mask, leaf_names):
+    remaining = int(mask)
+    length = remaining.bit_length()
+    if remaining >= 0 and length >= 64 and 32 * remaining.bit_count() >= length:
+        # Dense masks need only one byte conversion and small table lookups.
+        packed = remaining.to_bytes((length + 7) // 8, "little")
+        return [
+            leaf_names[byte * 8 + bit]
+            for byte, value in enumerate(packed)
+            for bit in _POSITIONS_BY_BYTE[value]
+        ]
+    names = []
+    offset = 0
+    while remaining:
+        step = (remaining & -remaining).bit_length()
+        offset += step
+        names.append(leaf_names[offset - 1])
+        remaining >>= step
+    return names
 
 
 class CladeIndex:
@@ -23,13 +47,8 @@ class CladeIndex:
         self._clade_id_by_node = dict()
 
     def names_for_mask(self, mask):
-        names = []
         remaining = int(mask) & ((1 << len(self.names)) - 1)
-        while remaining:
-            lowest_bit = remaining & -remaining
-            names.append(self.names[lowest_bit.bit_length() - 1])
-            remaining ^= lowest_bit
-        return tuple(names)
+        return tuple(names_from_mask(remaining, self.names))
 
     def names_for_node(self, node):
         return self.names_for_mask(self.mask_by_node[node])
