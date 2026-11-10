@@ -77,9 +77,18 @@ def test_lambda_spectrum_retains_error_constant_and_resolution_guards(monkeypatc
 
 def test_exact_lambda_bootstrap_preserves_draws_against_cholesky(monkeypatch):
     c = covariance()
+    original = signal_stats.eigh
+    calls = []
+
+    def counted(*args, **kwargs):
+        calls.append(1)
+        return original(*args, **kwargs)
+
+    monkeypatch.setattr(signal_stats, "eigh", counted)
     first = np.random.default_rng(443)
     second = np.random.default_rng(443)
     actual = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, first)
+    assert len(calls) == 1
     monkeypatch.setattr(signal_stats, "_zero_error_lambda_profile", lambda *args: None)
     expected = lambda_parametric_bootstrap(c, VALUES, np.zeros(8), 2.0, 19, second)
     assert actual == expected

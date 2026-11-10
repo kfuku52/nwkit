@@ -4,6 +4,8 @@ Independent implementation of Blomberg's K and Pagel's lambda. Covariances
 are relative to the retained tips' MRCA; the root mean is profiled by GLS.
 """
 
+from functools import cache
+
 import numpy as np
 from scipy.linalg import cho_solve, eigh, solve_triangular
 from scipy.optimize import brentq, minimize_scalar
@@ -179,16 +181,7 @@ def permutation_test(covariance, values, errors, observed, simulations, rng):
     return (1 + exceed) / (1 + simulations)
 
 
-def _zero_error_lambda_profile(covariance, values, errors):
-    """Prepare one well-conditioned spectrum for an exact-observation fit."""
-    if np.any(errors) or np.ptp(values) == 0:
-        return None
-    # Retain the original endpoint calculations, including rejection of a
-    # singular supplied covariance. No rank or scientific tolerance is changed.
-    boundary = {
-        0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
-        1.0: rate_fit(covariance, values, errors),
-    }
+def _zero_error_lambda_spectrum(covariance):
     sd = np.sqrt(np.diag(covariance))
     correlation = covariance / sd[:, None] / sd[None, :]
     eigenvalues, eigenvectors = eigh(correlation, driver="evd")
@@ -196,14 +189,34 @@ def _zero_error_lambda_profile(covariance, values, errors):
     # near lambda=1, spectral errors grow with conditioning and sample size.
     # Keep Cholesky profiles in that regime without changing scientific rank.
     accuracy_floor = (
-        np.sqrt(np.finfo(float).eps) * len(values) * np.max(np.abs(eigenvalues))
+        np.sqrt(np.finfo(float).eps) * len(sd) * np.max(np.abs(eigenvalues))
     )
     if eigenvalues[0] <= accuracy_floor:
         return None
-    reference = values[0]
-    projected_one = eigenvectors.T @ (np.ones(len(values)) / sd)
-    projected_y = eigenvectors.T @ ((values - reference) / sd)
+    projected_one = eigenvectors.T @ (np.ones(len(sd)) / sd)
     diagonal_logdet = float(2 * np.log(sd).sum())
+    return sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet
+
+
+def _zero_error_lambda_profile(covariance, values, errors, prepare_spectrum=None):
+    """Prepare an exact-observation profile from the covariance spectrum."""
+    if np.any(errors) or np.ptp(values) == 0:
+        return None
+    # Check the endpoints first, including rejection of a singular covariance.
+    boundary = {
+        0.0: rate_fit(np.diag(np.diag(covariance)), values, errors),
+        1.0: rate_fit(covariance, values, errors),
+    }
+    spectrum = (
+        _zero_error_lambda_spectrum(covariance)
+        if prepare_spectrum is None
+        else prepare_spectrum()
+    )
+    if spectrum is None:
+        return None
+    sd, eigenvalues, eigenvectors, projected_one, diagonal_logdet = spectrum
+    reference = values[0]
+    projected_y = eigenvectors.T @ ((values - reference) / sd)
 
     def profile(value):
         if value in boundary:
@@ -225,12 +238,18 @@ def _zero_error_lambda_profile(covariance, values, errors):
 
 def lambda_fit(covariance, values, errors, ci_level=0.95):
     """Fit lambda; a None interval level skips profile limits for resampling."""
+    return _fit_lambda(covariance, values, errors, ci_level)
+
+
+def _fit_lambda(covariance, values, errors, ci_level, prepare_spectrum=None):
     diagonal = np.diag(np.diag(covariance))
     shared = covariance - diagonal
     if not np.any(shared):
         return {"status": "unidentifiable_lambda"}
     cache = {}
-    spectral_profile = _zero_error_lambda_profile(covariance, values, errors)
+    spectral_profile = _zero_error_lambda_profile(
+        covariance, values, errors, prepare_spectrum
+    )
 
     def profile(value):
         value = float(value)
@@ -285,11 +304,16 @@ def lambda_parametric_bootstrap(
     # simulations would count as exceedances, so the Monte Carlo P is 1.
     if observed_lr == 0:
         return 1.0
+
+    @cache
+    def prepare_spectrum():
+        return _zero_error_lambda_spectrum(covariance)
+
     exceed = 0
     tolerance = 1e-12 * max(1.0, abs(observed_lr))
     for _ in range(simulations):
         simulated = null_mean + standard_deviation * rng.standard_normal(len(values))
-        fit = lambda_fit(covariance, simulated, errors, ci_level=None)
+        fit = _fit_lambda(covariance, simulated, errors, None, prepare_spectrum)
         # A zero-rate or flat replicate has no detectable lambda effect (LR=0).
         lr = fit.get("likelihood_ratio", 0.0)
         exceed += lr >= observed_lr - tolerance
