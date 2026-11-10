@@ -67,11 +67,12 @@ def _mapping_key(node_class, taxa, shared_taxa, match_basis):
     return _projected_split_from_taxa(taxa, shared_taxa)
 
 
-def _projected_masks(tree, taxon_to_bit):
+def _projected_masks(tree, taxon_to_bit, *, stringify_names=True):
     masks = dict()
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
-            masks[node] = taxon_to_bit.get(str(node.name), 0)
+            name = str(node.name) if stringify_names else node.name
+            masks[node] = taxon_to_bit.get(name, 0)
         else:
             mask = 0
             for child in node.get_children():
