@@ -302,10 +302,10 @@ def _annotate_leaf_properties(
 
 
 def _add_aggregation_input_values(
-    value_by_leaf_and_column, rows_by_leaf, aggregations, missing_values
+    value_by_leaf_and_column, rows_by_leaf, columns, missing_values
 ):
     for leaf_name, table_row in rows_by_leaf.items():
-        for column, _method, _prop in aggregations:
+        for column in columns:
             value_by_leaf_and_column[(leaf_name, column)] = _python_value(
                 table_row[column], missing_values
             )
@@ -403,10 +403,7 @@ def _aggregate_tree_nodes(
                 )
             else:
                 summary = _merge_aggregation_summaries(
-                    [
-                        summaries_by_column[column][child]
-                        for child in node.get_children()
-                    ],
+                    [summaries_by_column[column].pop(child) for child in node.children],
                     requirements,
                 )
             summaries_by_column[column][node] = summary
@@ -511,7 +508,20 @@ def annotate_main(args):
     output_properties.update(prop for _, prop in column_specs)
     output_properties.update(prop for _, _, prop in aggregations)
     collect_report = getattr(args, "report", None) not in (None, "")
-    rows_by_leaf = {str(row["leaf_name"]): row for _, row in table.iterrows()}
+    requirements_by_column = _aggregation_requirements(aggregations)
+    columns = list(
+        dict.fromkeys(
+            [
+                "leaf_name",
+                *(column for column, _ in column_specs),
+                *requirements_by_column,
+            ]
+        )
+    )
+    rows_by_leaf = {
+        str(row[0]): dict(zip(columns, row, strict=True))
+        for row in table[columns].itertuples(index=False, name=None)
+    }
     node_ids = assign_branch_ids(tree) if collect_report else {}
     report_rows: list[dict[str, Any]] = []
     annotated, value_by_leaf_and_column = _annotate_leaf_properties(
@@ -523,30 +533,32 @@ def annotate_main(args):
         node_ids,
         report_rows,
     )
-    _add_aggregation_input_values(
-        value_by_leaf_and_column, rows_by_leaf, aggregations, missing_values
-    )
-    requirements_by_column = _aggregation_requirements(aggregations)
-    has_aggregation_target = any(not node.is_leaf for node in tree.traverse())
-    leaf_order = {str(leaf.name): index for index, leaf in enumerate(tree.leaves())}
-    numeric_values = _numeric_aggregation_values(
-        value_by_leaf_and_column,
-        requirements_by_column,
-        aggregations,
-        leaf_order,
-        has_aggregation_target,
-    )
-    annotated += _aggregate_tree_nodes(
-        tree,
-        aggregations,
-        requirements_by_column,
-        value_by_leaf_and_column,
-        numeric_values,
-        leaf_order,
-        collect_report,
-        node_ids,
-        report_rows,
-    )
+    if aggregations:
+        _add_aggregation_input_values(
+            value_by_leaf_and_column,
+            rows_by_leaf,
+            requirements_by_column,
+            missing_values,
+        )
+        leaf_order = {str(leaf.name): index for index, leaf in enumerate(tree.leaves())}
+        numeric_values = _numeric_aggregation_values(
+            value_by_leaf_and_column,
+            requirements_by_column,
+            aggregations,
+            leaf_order,
+            not tree.is_leaf,
+        )
+        annotated += _aggregate_tree_nodes(
+            tree,
+            aggregations,
+            requirements_by_column,
+            value_by_leaf_and_column,
+            numeric_values,
+            leaf_order,
+            collect_report,
+            node_ids,
+            report_rows,
+        )
     if collect_report:
         _append_unmatched_table_rows(
             report_rows, table_only, column_specs, rows_by_leaf, missing_values
