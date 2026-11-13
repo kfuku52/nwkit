@@ -4,6 +4,20 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.3] - 2026-11-13
+
+### Fixed
+
+- Enforce minimum RADTE age gaps at fixed calibration boundaries and report
+  why a converged optimizer candidate failed validation (issue #31).
+- Preserve minimum age gaps at RADTE profile endpoints and reject infeasible
+  fixed chronologies before calculating likelihoods.
+
+### Performance
+
+- Keep the RADTE branch-initialization precision matrix sparse, reuse the
+  age-gradient design, and compute feasible profile endpoints in one pass.
+
 ## [0.46.2] - 2026-11-11
 
 ### Fixed
