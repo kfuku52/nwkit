@@ -261,9 +261,8 @@ class MarginalDatingProblem(DatingProblem):
         return initial
 
     def bounds_and_constraint(self):
-        c = self.chronology
-        lower = c.lower[self.free].tolist() + [-30.0]
-        upper = c.upper[self.free].tolist() + [30.0]
+        lower = self.age_lower.tolist() + [-30.0]
+        upper = self.age_upper.tolist() + [30.0]
         if self.fixed_sd is None:
             lower.append(0.0)
             upper.append(float(np.exp(4.0)))

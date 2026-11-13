@@ -425,6 +425,66 @@ def test_no_successful_optimizer_attempt_is_an_error(monkeypatch):
         fit_dates(small_chronology(), starts=1)
 
 
+@pytest.mark.parametrize(
+    ("objective", "reason"),
+    [(1.0, "chronology constraints violated"), (np.inf, "non-finite objective")],
+)
+def test_successful_optimizer_reports_why_candidate_was_rejected(
+    monkeypatch, objective, reason
+):
+    from scipy.optimize import OptimizeResult
+
+    chronology = small_chronology()
+    monkeypatch.setattr(
+        "nwkit.radte_model.minimize",
+        lambda *a, **kw: OptimizeResult(
+            success=True,
+            x=np.array([1.0]),
+            fun=objective,
+            nit=1,
+            message="Optimization terminated successfully",
+        ),
+    )
+    with pytest.raises(ValueError, match=reason):
+        fit_dates(chronology, starts=1)
+
+
+def test_duplication_fit_respects_duration_at_fixed_species_boundary():
+    species = Tree("(((A:2,B:2)AB:2,C:4)ABC:4,(D:4,E:4)DE:4)ROOT;", parser=1)
+    gene = Tree(
+        "((((A_1:0.07732,A_2:0.00030)dupA:0.00276,C_1:0.01965)abc:0.00002,"
+        "(B_1:2.0194,B_2:0.84652)dupB:0.00007)x:0.00023,"
+        "((D_1:0.0181,D_2:0.01418)dupD:1.85745,E_1:0.54255)de:0.00055)g;",
+        parser=1,
+    )
+    events = build_reconciliation_table(
+        gene, species, {node.name: node.name.split("_")[0] for node in gene.leaves()}
+    )
+    chronology = build_chronology(gene, species, events)
+    fit, problem = fit_dates(chronology, starts=1)
+    durations = problem.constraints @ fit.ages
+    assert durations.min() >= chronology.min_duration
+    ages = result_tables(chronology, fit)["nodes"].set_index("gene_name").estimated_age
+    assert ages["dupB"] == pytest.approx(2 - chronology.scale * chronology.min_duration)
+    assert fit.objective == pytest.approx(79.11029667)
+
+
+def test_age_bounds_can_pin_the_last_free_coordinate():
+    species = Tree("((A:2,B:2)AB:2,C:4)ABC;", parser=1)
+    gene = Tree("((A_1:1,A_2:1)D:1,C_1:2)R;", parser=1)
+    events = build_reconciliation_table(
+        gene, species, {node.name: node.name.split("_")[0] for node in gene.leaves()}
+    )
+    chronology = build_chronology(gene, species, events)
+    # The calibration upper limit coincides with the supplied lower limit.
+    lower = chronology.lower.copy()
+    lower[chronology.upper > lower] = 0.25
+    chronology = replace(chronology, lower=lower, min_duration=0.25)
+    fit, problem = fit_dates(chronology, starts=1)
+    assert fit.ages[problem.free].tolist() == [0.25]
+    assert (problem.constraints @ fit.ages).min() == chronology.min_duration
+
+
 def test_scale_invariance_of_time_and_substitution_units():
     c = small_chronology()
     before, _ = fit_dates(c)

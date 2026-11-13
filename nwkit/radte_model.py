@@ -82,7 +82,8 @@ class DatingProblem:
     ):
         self.chronology = chronology
         self.rho = rho
-        self.free = np.flatnonzero(chronology.upper > chronology.lower)
+        is_free = chronology.upper > chronology.lower
+        self.free = np.flatnonzero(is_free)
         self.fixed = chronology.lower.copy()
         self.precision, self.logdet = rate_precision(chronology, rho)
         self.observation_indices = np.array(
@@ -139,13 +140,38 @@ class DatingProblem:
             shape=(len(chronology.constraint_parent), len(chronology.groups)),
         ).tocsr()
         self.free_design = self.age_design[:, self.free]
-        self.free_constraints = self.constraints[:, self.free]
+
+        # Calibration-only gaps can vanish within SLSQP's linear constraint
+        # tolerance without a corresponding short branch in the likelihood.
+        # Encode those constraints as box bounds when one event age is fixed.
+        parent, child = chronology.constraint_parent, chronology.constraint_child
+        parent_free, child_free = is_free[parent], is_free[child]
+        gene_edges = set(zip(chronology.parent, chronology.child, strict=True))
+        calibration_only = np.array(
+            [pair not in gene_edges for pair in zip(parent, child, strict=True)],
+            dtype=bool,
+        )
+        lower, upper = chronology.lower.copy(), chronology.upper.copy()
+        tighten_lower = calibration_only & parent_free & ~child_free
+        tighten_upper = calibration_only & child_free & ~parent_free
+        np.maximum.at(
+            lower,
+            parent[tighten_lower],
+            self.fixed[child[tighten_lower]] + chronology.min_duration,
+        )
+        np.minimum.at(
+            upper,
+            child[tighten_upper],
+            self.fixed[parent[tighten_upper]] - chronology.min_duration,
+        )
+        self.age_lower, self.age_upper = lower[self.free], upper[self.free]
+        active = (parent_free | child_free) & ~(tighten_lower | tighten_upper)
         fixed_ages = self.fixed.copy()
         fixed_ages[self.free] = 0
-        self.constraint_lower = chronology.min_duration - self.constraints @ fixed_ages
-        active = np.asarray(self.free_constraints.getnnz(axis=1) > 0)
-        self.free_constraints = self.free_constraints[active]
-        self.constraint_lower = self.constraint_lower[active]
+        self.free_constraints = self.constraints[active][:, self.free]
+        self.constraint_lower = (
+            chronology.min_duration - self.constraints[active] @ fixed_ages
+        )
 
     def unpack_ages(self, x):
         ages = self.fixed.copy()
@@ -213,8 +239,8 @@ class DatingProblem:
         return float(nll), gradient
 
     def bounds_and_constraint(self):
-        lower = self.chronology.lower[self.free].tolist()
-        upper = self.chronology.upper[self.free].tolist()
+        lower = self.age_lower.tolist()
+        upper = self.age_upper.tolist()
         extras = 0
         if self.likelihood is not None:
             # Bounds protect exponentials, not time calibration semantics.
@@ -283,6 +309,10 @@ def solve_problem(
             dict(success=True, objective=problem.value_gradient(x0)[0], iterations=0)
         ]
     bounds, constraint = problem.bounds_and_constraint()
+    if np.any(bounds.lb > bounds.ub):
+        raise DatingOptimizationError(
+            "Dating optimization failed; fixed ages leave conflicting bounds.", []
+        )
     rng = np.random.default_rng(seed)
     attempts, solutions = [], []
     for attempt in range(starts):
@@ -327,15 +357,20 @@ def solve_problem(
             constraints=[constraint] if constraint.A.shape[0] else [],
             options={"maxiter": maxiter, "ftol": 1e-10},
         )
-        success = bool(
-            result.success and problem.feasible(result.x) and np.isfinite(result.fun)
-        )
+        message = str(result.message)
+        success = bool(result.success)
+        if success and not np.isfinite(result.fun):
+            success = False
+            message += " (rejected by RADTE: non-finite objective)"
+        elif success and not problem.feasible(result.x):
+            success = False
+            message += " (rejected by RADTE: chronology constraints violated)"
         attempts.append(
             dict(
                 success=success,
                 objective=float(result.fun),
-                iterations=int(result.nit),
-                message=str(result.message),
+                iterations=int(getattr(result, "nit", 0)),
+                message=message,
             )
         )
         if success:
