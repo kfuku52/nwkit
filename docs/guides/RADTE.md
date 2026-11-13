@@ -336,8 +336,10 @@ LG matrix for protein, or with BASEML for DNA when
 `--mcmctree-likelihood approximate` is selected. The precomputation executable
 must be beside the selected MCMCTree executable or on PATH. Each chain then
 uses `usedata=2` with the same approximation. The manifest records the
-effective model and likelihood. See `nwkit radte --help` for chain count,
-burn-in, thinning, sample count, and rate and variance priors.
+effective model and likelihood. Up to two chains run concurrently by default.
+Use `--mcmctree-workers 1` for serial execution, or set a higher limit when
+running more chains. See `nwkit radte --help` for chain count, burn-in,
+thinning, sample count, and rate and variance priors.
 PAML uses soft calibration priors, unlike the native hard intervals, and not
 every duplication bound can be selected. Tables and the manifest distinguish
 these policies. Unrepresented species events are not posterior estimates.

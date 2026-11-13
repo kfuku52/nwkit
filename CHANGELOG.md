@@ -4,6 +4,24 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.5] - 2026-11-13
+
+### Added
+
+- Date gene trees from amino acid alignments with the RADTE MCMCTree backend
+  using CODEML, the bundled LG matrix and approximate likelihood (issue #32).
+
+### Fixed
+
+- Normalize unknown DNA bases for PAML and reject incomplete or invalid
+  MCMCTree traces before publishing RADTE results.
+- Stop PAML child processes on timeout on POSIX.
+
+### Performance
+
+- Run independent MCMCTree chains concurrently and read each alignment and
+  chain trace once. Build RADTE age-sample tables from arrays.
+
 ## [0.46.4] - 2026-11-13
 
 ### Fixed

@@ -16,7 +16,7 @@ from scipy.optimize import minimize
 from scipy.special import logsumexp
 from scipy.stats import gamma
 
-from nwkit.fasta import parse_fasta
+from nwkit.fasta import iter_fasta
 from nwkit.radte_codon import CODON_MODELS, CODONS, codon_matrix, encode_codons
 
 DNA_STATES = "ACGT"
@@ -37,41 +37,44 @@ DNA_CODES.update(
     **{"?": "ACGT", "-": "ACGT", "U": "T"},
 )
 AA_STATES = "ARNDCQEGHILKMFPSTWYV"
+AA_CODES = {
+    **dict(zip(AA_STATES, AA_STATES, strict=True)),
+    "B": "DN",
+    "Z": "EQ",
+    "J": "IL",
+    "X": AA_STATES,
+    "?": AA_STATES,
+    "-": AA_STATES,
+}
 
 
-def read_alignment(path, names, alphabet="dna"):
+def read_alignment_sequences(path, names):
     with open(path, encoding="utf-8") as handle:
-        records = parse_fasta(handle)
-    seqs = {}
-    for record in records:
-        if record.name in seqs:
-            raise ValueError(f"Duplicate alignment sequence: {record.name}")
-        seqs[record.name] = (
-            "".join(record.raw.splitlines()[1:]).replace(" ", "").upper()
-        )
-    del records
+        seqs = {}
+        for record in iter_fasta(handle):
+            if record.name in seqs:
+                raise ValueError(f"Duplicate alignment sequence: {record.name}")
+            seqs[record.name] = (
+                "".join(record.raw.splitlines()[1:])
+                .replace(" ", "")
+                .replace("\t", "")
+                .upper()
+            )
     if set(seqs) != set(names):
         raise ValueError("Alignment names must exactly match the gene-tree tips.")
     lengths = {len(s) for s in seqs.values()}
     if len(lengths) != 1 or not next(iter(lengths)):
         raise ValueError("Alignment must have a positive, equal sequence length.")
+    return seqs
+
+
+def read_alignment(path, names, alphabet="dna"):
+    seqs = read_alignment_sequences(path, names)
     if alphabet == "codon":
         return encode_codons(seqs, names, DNA_CODES)
     states = DNA_STATES if alphabet == "dna" else AA_STATES
-    codes = (
-        DNA_CODES
-        if alphabet == "dna"
-        else {
-            **dict(zip(states, states, strict=True)),
-            "B": "DN",
-            "Z": "EQ",
-            "J": "IL",
-            "X": states,
-            "?": states,
-            "-": states,
-        }
-    )
-    matrix = np.empty((len(names), next(iter(lengths))), dtype=np.uint32)
+    codes = DNA_CODES if alphabet == "dna" else AA_CODES
+    matrix = np.empty((len(names), len(next(iter(seqs.values())))), dtype=np.uint32)
     state_id = {s: i for i, s in enumerate(states)}
     lookup = np.zeros(128, dtype=matrix.dtype)
     for code, compatible_states in codes.items():

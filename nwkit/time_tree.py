@@ -238,7 +238,7 @@ def _validate_mcmctree_header(table_source):
         table_source.seek(0)
 
 
-def _read_mcmctree_dataframe(source):
+def read_mcmctree_table(source):
     is_file = source != "-" and os.path.isfile(source)
     if is_file:
         if os.path.getsize(source) == 0:
@@ -261,7 +261,13 @@ def _read_mcmctree_dataframe(source):
 
 def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
     """Read and validate MCMCtree ``mcmc.txt`` node-age samples."""
+    return mcmctree_posterior_from_table(
+        read_mcmctree_table(source), tree, burnin, thin
+    )
 
+
+def mcmctree_posterior_from_table(dataframe, tree, burnin=0, thin=1):
+    """Validate node ages from a table produced by read_mcmctree_table."""
     if any(
         len(node.get_children()) != 2 for node in tree.traverse() if not node.is_leaf
     ):
@@ -273,7 +279,6 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
         raise ValueError("'--posterior-burnin' must be zero or greater.")
     if thin < 1:
         raise ValueError("'--posterior-thin' must be at least 1.")
-    dataframe = _read_mcmctree_dataframe(source)
     mapping = paml_node_mapping(tree)
     internal_ids = tuple(
         node_id for node_id, node in mapping.items() if not node.is_leaf

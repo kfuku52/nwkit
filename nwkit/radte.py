@@ -628,21 +628,20 @@ def result_tables(c, fit, *, bound_policy="hard"):
         absent = species.estimation_status == "calibration-only"
         species.loc[absent, "estimated_age"] = np.nan
         species.loc[absent, "estimation_status"] = "not-sampled"
-    if fit.samples is None:
-        samples = pd.DataFrame(columns=["replicate", "shared_age_id", "estimated_age"])
-    else:
-        samples = pd.DataFrame(
-            [
+    samples = pd.DataFrame(columns=["replicate", "shared_age_id", "estimated_age"])
+    if fit.samples is not None:
+        rows, cols = np.nonzero(np.isfinite(fit.samples))
+        if rows.size:
+            sample_ids = (
+                rows + 1 if fit.sample_ids is None else np.asarray(fit.sample_ids)[rows]
+            )
+            samples = pd.DataFrame(
                 dict(
-                    replicate=i + 1 if fit.sample_ids is None else fit.sample_ids[i],
-                    shared_age_id=key,
-                    estimated_age=float(age * c.scale),
+                    replicate=sample_ids,
+                    shared_age_id=np.asarray(c.groups, dtype=object)[cols],
+                    estimated_age=fit.samples[rows, cols] * c.scale,
                 )
-                for i, sample in enumerate(fit.samples)
-                for key, age in zip(c.groups, sample, strict=True)
-                if np.isfinite(age)
-            ]
-        )
+            )
     return dict(
         nodes=nodes, species=species, events=c.events, groups=groups, samples=samples
     )

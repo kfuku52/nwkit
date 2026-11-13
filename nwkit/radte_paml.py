@@ -7,22 +7,32 @@ that distinction from the native engine's hard chronology constraints.
 import hashlib
 import os
 import shutil
+import signal
 import subprocess
 import tempfile
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from importlib.resources import files
 from pathlib import Path
+from threading import Event
 
 import numpy as np
 import pandas as pd
 
 from nwkit.clade_index import CladeIndex
-from nwkit.fasta import parse_fasta
 from nwkit.radte_model import DatingFit
-from nwkit.radte_sequence import read_alignment
-from nwkit.radte_sequence_fit import default_sequence_model
-from nwkit.time_tree import paml_node_mapping, read_mcmctree_posterior
+from nwkit.radte_sequence import AA_CODES, DNA_CODES, read_alignment_sequences
+from nwkit.time_tree import (
+    mcmctree_posterior_from_table,
+    paml_node_mapping,
+    read_mcmctree_table,
+)
 
 PAML_MODELS = {"jc69": 0, "hky": 4, "lg": 2}
+DNA_LETTERS = str.maketrans("", "", "".join(DNA_CODES))
+AA_LETTERS = str.maketrans("", "", "".join(AA_CODES))
+PAML_DNA_TRANSLATION = str.maketrans("UX", "TN")
+PAML_AA_TRANSLATION = str.maketrans("BJZ", "XXX")
 
 
 def paml_tree(c):
@@ -86,30 +96,31 @@ def paml_tree(c):
     return f"{len(aliases)} 1\n" + "".join(tokens) + ";\n", aliases, len(mirrors)
 
 
-def paml_alignment(path, aliases, alphabet):
-    read_alignment(path, list(aliases), alphabet)
-    with open(path, encoding="utf-8") as handle:
-        records = parse_fasta(handle)
-    # PAML supports unknown residues (X) but lacks B, J and Z ambiguity codes.
-    translation = (
-        str.maketrans("BJZ", "XXX") if alphabet == "protein" else {ord("U"): "T"}
-    )
-    sequences = {
-        r.name: "".join("".join(r.raw.splitlines()[1:]).split())
-        .upper()
-        .translate(translation)
-        for r in records
-    }
+def paml_alignment(sequences, aliases, alphabet):
+    protein = alphabet == "protein"
+    letters = AA_LETTERS if protein else DNA_LETTERS
+    # PAML uses N for unknown DNA bases and X for unknown protein residues.
+    translation = PAML_AA_TRANSLATION if protein else PAML_DNA_TRANSLATION
     length = len(next(iter(sequences.values())))
-    return f"{len(sequences)} {length}\n" + "".join(
-        f"{aliases[name]}  {seq}\n" for name, seq in sequences.items()
-    )
+    rows = [f"{len(sequences)} {length}\n"]
+    for name, seq in sequences.items():
+        invalid = seq.translate(letters)
+        if invalid:
+            raise ValueError(
+                f"Unsupported {alphabet} alignment character: {invalid[0]}"
+            )
+        rows.append(f"{aliases[name]}  {seq.translate(translation)}\n")
+    return "".join(rows)
 
 
-def paml_sequence_settings(args):
+def paml_sequence_settings(args, sequences):
     model = args.substitution_model
     if model is None:
-        model = "lg" if default_sequence_model(args.alignment) == "lg" else "hky"
+        model = (
+            "lg"
+            if any(seq.translate(DNA_LETTERS) for seq in sequences.values())
+            else "hky"
+        )
     if model not in PAML_MODELS:
         raise ValueError("MCMCTree supports JC69 or HKY for DNA and LG for protein.")
     if model == "lg":
@@ -205,22 +216,50 @@ def chain_diagnostics(chains):
     )
 
 
-def execute_paml(executable, work, args, *, environment=None):
+def _wait_for_paml(process, timeout, cancelled):
+    if cancelled is None:
+        return process.wait(timeout=timeout)
+    deadline = time.monotonic() + timeout
+    while not cancelled.is_set():
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise subprocess.TimeoutExpired(process.args, timeout)
+        try:
+            return process.wait(timeout=min(remaining, 0.25))
+        except subprocess.TimeoutExpired:
+            continue
+    raise ValueError("MCMCTree chain cancelled.")
+
+
+def execute_paml(executable, work, args, *, environment=None, cancelled=None):
     with (
         open(work / "stdout.txt", "w", encoding="utf-8") as stdout,
         open(work / "stderr.txt", "w", encoding="utf-8") as stderr,
-    ):
-        completed = subprocess.run(
+        subprocess.Popen(
             [executable, "mcmctree.ctl"],
             cwd=work,
+            stdin=subprocess.DEVNULL,
             stdout=stdout,
             stderr=stderr,
-            timeout=args.mcmctree_timeout or 1800,
-            check=False,
             env=environment,
-        )
-    if completed.returncode != 0:
-        raise ValueError(f"MCMCTree exited with status {completed.returncode}.")
+            start_new_session=os.name == "posix",
+        ) as process,
+    ):
+        try:
+            status = _wait_for_paml(process, args.mcmctree_timeout or 1800, cancelled)
+            if status:
+                raise ValueError(f"MCMCTree {work.name} exited with status {status}.")
+        except BaseException:
+            # During approximation MCMCTree launches CODEML or BASEML itself.
+            if os.name == "posix":
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                process.kill()
+            process.wait()
+            raise
 
 
 def prepare_paml_approximation(
@@ -252,8 +291,70 @@ def prepare_paml_approximation(
     return summary
 
 
+def _read_chain(work, args, gene):
+    table = read_mcmctree_table(work / "mcmc.txt")
+    expected = args.mcmctree_samples or 20000
+    thin = args.mcmctree_sampfreq or 10
+    required = ["Gen", "mu", "lnL"]
+    if (args.mcmctree_clock or 2) > 1:
+        required.append("sigma2")
+    if any(column not in table for column in required):
+        raise ValueError(
+            "MCMCTree trace is missing required generation or model columns."
+        )
+    # Recent PAML versions emit a generation-1 row before the thinned series.
+    # With sampling frequency one that row is already part of the series.
+    initial_record = int(len(table) == expected + 1 and table.Gen.iloc[0] == 1)
+    retained = table.iloc[initial_record:]
+    if len(retained) != expected or not np.array_equal(
+        retained.Gen, np.arange(1, expected + 1) * thin
+    ):
+        raise ValueError("MCMCTree did not produce the requested sample generations.")
+    values = retained[required].to_numpy(dtype=float)
+    if not np.isfinite(values).all() or (retained.mu < 0).any():
+        raise ValueError("MCMCTree trace requires finite values and nonnegative rates.")
+    if "sigma2" in retained and (retained.sigma2 < 0).any():
+        raise ValueError("MCMCTree trace contains negative rate variances.")
+    return retained, mcmctree_posterior_from_table(table, gene, burnin=initial_record)
+
+
+def _run_chains(executable, works, args):
+    workers = min(len(works), args.mcmctree_workers or 2, os.cpu_count() or 1)
+    if workers == 1:
+        for work in works:
+            execute_paml(executable, work, args)
+        return
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        cancelled = Event()
+        pending = [
+            pool.submit(execute_paml, executable, work, args, cancelled=cancelled)
+            for work in works
+        ]
+        try:
+            for finished in as_completed(pending):
+                finished.result()
+        finally:
+            cancelled.set()
+            for future in pending:
+                future.cancel()
+
+
+def _sample_ages(c, posterior, group_by_node, node_ids, samples):
+    seen = set()
+    for node in c.gene.leaves():
+        samples[:, group_by_node[node]] = 0
+    for j, node_id in enumerate(posterior.node_ids):
+        group = group_by_node[node_ids[node_id]]
+        values = posterior.values[:, j]
+        if group in seen and not np.allclose(
+            samples[:, group], values, rtol=1e-7, atol=1e-8
+        ):
+            raise ValueError("MCMCTree mirror ages differ within posterior samples.")
+        samples[:, group] = values
+        seen.add(group)
+
+
 def run_mcmctree(c, args):
-    model, likelihood = paml_sequence_settings(args)
     binary = args.mcmctree_bin or "mcmctree"
     executable = shutil.which(binary)
     if executable is None:
@@ -262,16 +363,20 @@ def run_mcmctree(c, args):
         os.path.realpath(os.path.dirname(executable)), os.path.basename(executable)
     )
     tree, aliases, mirrors = paml_tree(c)
+    sequences = read_alignment_sequences(args.alignment, aliases)
+    model, likelihood = paml_sequence_settings(args, sequences)
     alignment = paml_alignment(
-        args.alignment, aliases, "protein" if model == "lg" else "dna"
+        sequences, aliases, "protein" if model == "lg" else "dna"
     )
+    del sequences
     parent = Path(args.out_prefix).absolute().parent
     parent.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix=".nwkit-mcmctree-", dir=parent))
-    chain_tables, age_samples = [], []
+    chain_tables = []
     node_ids = paml_node_mapping(c.gene)
     group_by_node = dict(zip(c.nodes, c.group_by_node, strict=True))
     count = args.mcmctree_chains or 2
+    expected = args.mcmctree_samples or 20000
     try:
         summary = (
             prepare_paml_approximation(
@@ -280,6 +385,7 @@ def run_mcmctree(c, args):
             if likelihood == "approximate"
             else None
         )
+        works = []
         for chain in range(count):
             work = directory / f"chain-{chain + 1}"
             work.mkdir()
@@ -297,49 +403,23 @@ def run_mcmctree(c, args):
             )
             if summary is not None:
                 shutil.copyfile(summary, work / "in.BV")
-            execute_paml(executable, work, args)
-            table = pd.read_csv(work / "mcmc.txt", sep=r"\s+")
-            expected = args.mcmctree_samples or 20000
-            thin = args.mcmctree_sampfreq or 10
-            initial_record = (
-                len(table) == expected + 1
-                and "Gen" in table
-                and table.Gen.iloc[0] == 1
-                and np.array_equal(
-                    table.Gen.iloc[1:], np.arange(1, expected + 1) * thin
-                )
-            )
-            # PAML 4.10.10 emits an extra initial state (Gen=1) before its
-            # regularly thinned series. Keep the regular series for ESS/CI.
-            if initial_record:
-                table = table.iloc[1:].reset_index(drop=True)
-            if len(table) != expected:
-                raise ValueError(
-                    "MCMCTree did not produce the requested number of samples."
-                )
-            posterior = read_mcmctree_posterior(
-                str(work / "mcmc.txt"), c.gene, burnin=int(initial_record)
+            works.append(work)
+        _run_chains(executable, works, args)
+        samples = np.full((count * expected, len(c.groups)), np.nan)
+        for chain, work in enumerate(works):
+            table, posterior = _read_chain(work, args, c.gene)
+            _sample_ages(
+                c,
+                posterior,
+                group_by_node,
+                node_ids,
+                samples[chain * expected : (chain + 1) * expected],
             )
             chain_tables.append(table)
-            samples = np.full((len(table), len(c.groups)), np.nan)
-            for node in c.gene.leaves():
-                samples[:, group_by_node[node]] = 0
-            for j, node_id in enumerate(posterior.node_ids):
-                group = group_by_node[node_ids[node_id]]
-                values = posterior.values[:, j]
-                if np.isfinite(samples[:, group]).all() and not np.allclose(
-                    samples[:, group], values, rtol=1e-7, atol=1e-8
-                ):
-                    raise ValueError(
-                        "MCMCTree mirror ages differ within posterior samples."
-                    )
-                samples[:, group] = values
-            age_samples.append(samples)
     except Exception as exc:
         raise ValueError(
             f"MCMCTree reference failed; inspect {directory}: {exc}"
         ) from exc
-    samples = np.concatenate(age_samples)
     sampled = np.isfinite(samples).all(axis=0)
     ages, lo, hi = (
         c.initial.copy(),
@@ -358,10 +438,15 @@ def run_mcmctree(c, args):
         [table.assign(chain=i + 1) for i, table in enumerate(chain_tables)],
         ignore_index=True,
     )
+    mean_rate = trace.mu.mean() / c.scale
+    if not np.isfinite(mean_rate) or mean_rate <= 0:
+        raise ValueError(
+            f"MCMCTree reference failed; inspect {directory}: invalid mean rate."
+        )
     fit = DatingFit(
         ages,
         np.full(len(c.edges), np.nan),
-        float(np.log(trace.mu.mean() / c.scale)),
+        float(np.log(mean_rate)),
         float(np.sqrt(trace.sigma2.mean())) if "sigma2" in trace else 0.0,
         -float(trace.lnL.mean()),
         np.array([]),

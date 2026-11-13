@@ -1,19 +1,27 @@
 import json
+import os
 import shutil
+import subprocess
+import time
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
+from ete4 import Tree
 
 from nwkit.cli import main, parser
 from nwkit.radte_paml import (
+    _read_chain,
     chain_diagnostics,
+    execute_paml,
     paml_alignment,
     paml_control,
     paml_sequence_settings,
     paml_tree,
 )
+from nwkit.radte_sequence import read_alignment_sequences
 from tests.test_radte import cli_inputs, small_chronology
 from tests.test_radte_sequence import simulated_alignment, write_alignment
 
@@ -60,24 +68,66 @@ def test_paml_detects_alphabet_and_accepts_explicit_lg(tmp_path):
         ["radte", *cli_inputs(tmp_path), "--out-prefix", str(tmp_path / "paml")]
     )
     aliases = {"A": "g1", "B": "g2"}
-    args.alignment = write_alignment(tmp_path, {"B": "ACGU", "A": "ACT?"})
-    assert paml_sequence_settings(args) == ("hky", "exact")
-    assert paml_alignment(args.alignment, aliases, "dna") == "2 4\ng2  ACGT\ng1  ACT?\n"
+    path = write_alignment(tmp_path, {"B": "AC\tGU", "A": "ACX?"})
+    sequences = read_alignment_sequences(path, aliases)
+    assert paml_sequence_settings(args, sequences) == ("hky", "exact")
+    assert paml_alignment(sequences, aliases, "dna") == "2 4\ng2  ACGT\ng1  ACN?\n"
 
-    args.alignment = write_alignment(tmp_path, {"B": "Lbjz", "A": "AX-?"})
-    assert paml_sequence_settings(args) == ("lg", "approximate")
-    assert (
-        paml_alignment(args.alignment, aliases, "protein")
-        == "2 4\ng2  LXXX\ng1  AX-?\n"
-    )
+    path = write_alignment(tmp_path, {"B": "Lbjz", "A": "AX-?"})
+    sequences = read_alignment_sequences(path, aliases)
+    assert paml_sequence_settings(args, sequences) == ("lg", "approximate")
+    assert paml_alignment(sequences, aliases, "protein") == "2 4\ng2  LXXX\ng1  AX-?\n"
     args.mcmctree_likelihood = "exact"
     with pytest.raises(ValueError, match="approximate for protein"):
-        paml_sequence_settings(args)
+        paml_sequence_settings(args, sequences)
 
-    args.alignment = write_alignment(tmp_path, {"B": "ACGT", "A": "ARNT"})
+    path = write_alignment(tmp_path, {"B": "ACGT", "A": "ARNT"})
     args.substitution_model = "lg"
     args.mcmctree_likelihood = None
-    assert paml_sequence_settings(args) == ("lg", "approximate")
+    assert paml_sequence_settings(args, read_alignment_sequences(path, aliases)) == (
+        "lg",
+        "approximate",
+    )
+
+
+@pytest.mark.parametrize(
+    ("header", "rows", "error"),
+    [
+        ("Gen t_n3 mu lnL", "1 2 .1 -3\n3 2 .2 -3\n", "sample generations"),
+        ("Gen t_n3 mu lnL", "1 2 .1 -3\n2 2 nan -3\n", "finite values"),
+        ("Gen t_n3 mu mu lnL", "1 2 .1 .1 -3\n2 2 .2 .2 -3\n", "duplicate columns"),
+    ],
+)
+def test_paml_rejects_invalid_chain(tmp_path, header, rows, error):
+    args = SimpleNamespace(mcmctree_samples=2, mcmctree_sampfreq=1, mcmctree_clock=1)
+    (tmp_path / "mcmc.txt").write_text(f"{header}\n{rows}", encoding="utf-8")
+    with pytest.raises(ValueError, match=error):
+        _read_chain(tmp_path, args, Tree("(A,B);", parser=1))
+
+
+@pytest.mark.skipif(os.name != "posix", reason="Tests POSIX process group cleanup")
+def test_paml_timeout_stops_approximation_children(tmp_path, monkeypatch):
+    executable = tmp_path / "mcmctree"
+    executable.write_text(
+        "#!/bin/sh\n(touch started; sleep 1; touch escaped) &\nwait\n", encoding="utf-8"
+    )
+    executable.chmod(0o700)
+    wait = subprocess.Popen.wait
+
+    def wait_after_child_starts(process, timeout=None):
+        if timeout is not None:
+            deadline = time.monotonic() + 5
+            while not (tmp_path / "started").is_file():
+                assert time.monotonic() < deadline
+                time.sleep(0.01)
+        return wait(process, timeout=timeout)
+
+    monkeypatch.setattr(subprocess.Popen, "wait", wait_after_child_starts)
+    args = SimpleNamespace(mcmctree_timeout=0.25)
+    with pytest.raises(subprocess.TimeoutExpired):
+        execute_paml(str(executable), tmp_path, args)
+    time.sleep(1)
+    assert not (tmp_path / "escaped").exists()
 
 
 def test_chain_diagnostics_identify_separated_chains():

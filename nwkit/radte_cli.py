@@ -287,6 +287,12 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         help="Timeout seconds per MCMCTree chain or approximation run (default: 1800).",
     )
     add(
+        "mcmctree_workers",
+        type=int,
+        default=None,
+        help="Maximum concurrent MCMCTree chains (default: 2, limited by CPU and chain counts). Use 1 for serial execution.",
+    )
+    add(
         "mcmctree_rate_prior",
         default=None,
         help="PAML rgene_gamma triple in normalized time units (default: '2 20 1').",
