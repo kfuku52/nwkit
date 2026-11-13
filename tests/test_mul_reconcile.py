@@ -249,6 +249,26 @@ def test_unused_check_rows_are_not_collected():
     assert all(checks == [] for _, _, checks in rows)
 
 
+@pytest.mark.parametrize("cpus", [1, 2])
+def test_search_reuses_single_pass_gene_and_candidate_inputs(cpus):
+    candidates = hypotheses(tree("((A,X),B);"), "X")
+    genes = [
+        tree("((a_A,x1_X),(b_B,x2_X));"),
+        tree("(a_A,b_B);"),
+    ]
+    expected = run_search(candidates, genes, parser())
+    assert run_search(iter(candidates), iter(genes), parser(), cpus=cpus) == expected
+
+
+def test_search_parses_each_gene_tip_once_across_hypotheses():
+    from unittest.mock import Mock
+
+    genes = [tree("((a_A,x1_X),(b_B,x2_X));"), tree("(x1_X,b_B);")]
+    species_parser = Mock(wraps=parser())
+    run_search(hypotheses(tree("((A,X),B);")), genes, species_parser)
+    assert species_parser.parse.call_count == 6
+
+
 def test_legacy_annotation_escapes_comment_metacharacters_but_json_retains_names():
     gene = tree("('a_A]x','b_B[x');")
     candidate = hypotheses(tree("('A]x','B[x');"))[0]

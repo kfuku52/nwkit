@@ -214,15 +214,32 @@ class _SpeciesIndex:
         self.occurrences = occurrences
 
 
+class _GeneIndex:
+    def __init__(self, gene, parser):
+        validate_binary(gene, "Gene tree")
+        self.gene = gene
+        self.nodes = tuple(gene.traverse("postorder"))
+        self.indices = {node: index for index, node in enumerate(self.nodes)}
+        self.taxa = {
+            node: parser.parse(node.name).species_label
+            for node in self.nodes
+            if node.is_leaf
+        }
+
+
 def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
     """Reuse the fixed species index while evaluating gene trees in input order."""
+    yield from _reconcile_indexed_genes(
+        (_GeneIndex(gene, parser) for gene in genes), species, max_state_pairs
+    )
+
+
+def _reconcile_indexed_genes(genes, species, max_state_pairs):
     species_index = None
     for gene in genes:
-        result = Reconciliation(
-            gene, species, parser, max_state_pairs, _species_index=species_index
-        )
-        species_index = result._species_index
-        yield result
+        if species_index is None:
+            species_index = _SpeciesIndex(species)
+        yield Reconciliation._from_indexes(gene, species_index, max_state_pairs)
 
 
 class Reconciliation:
@@ -231,25 +248,33 @@ class Reconciliation:
     def __init__(
         self, gene, species, parser, max_state_pairs=10000000, *, _species_index=None
     ):
-        validate_binary(gene, "Gene tree")
+        gene_index = _GeneIndex(gene, parser)
         if _species_index is None:
             _species_index = _SpeciesIndex(species)
-        self._species_index = _species_index
-        self.gene = gene
-        self.nodes = tuple(gene.traverse("postorder"))
-        self.gene_index = {node: index for index, node in enumerate(self.nodes)}
-        self.lca = _species_index.lca
+        self._solve(gene_index, _species_index, max_state_pairs)
+
+    @classmethod
+    def _from_indexes(cls, gene, species, max_state_pairs):
+        result = cls.__new__(cls)
+        result._solve(gene, species, max_state_pairs)
+        return result
+
+    def _solve(self, gene, species, max_state_pairs):
+        self._species_index = species
+        self.gene = gene.gene
+        self.nodes = gene.nodes
+        self.gene_index = gene.indices
+        self.lca = species.lca
         self.species = self.lca.nodes
         self.depth = self.lca.depth
-        self.labels = _species_index.labels
+        self.labels = species.labels
         self.states: list[dict[int, Cell]] = []
         self.combinations = 1
         self.ambiguous_tips = 0
         self.state_pairs = 0
         for node in self.nodes:
             if node.is_leaf:
-                name = parser.parse(node.name).species_label
-                options = _species_index.occurrences.get(name, ())
+                options = species.occurrences.get(gene.taxa[node], ())
                 if not options:
                     raise ValueError(f"Gene tip does not match a species: {node.name}")
                 self.combinations *= len(options)

@@ -4,6 +4,18 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.4] - 2026-11-13
+
+### Fixed
+
+- Score the same gene trees for every MUL hypothesis when a caller supplies
+  a single-pass iterable.
+
+### Performance
+
+- Validate and index gene topologies and resolve species labels once per
+  D+L search instead of repeating those operations for each MUL hypothesis.
+
 ## [0.46.3] - 2026-11-13
 
 ### Fixed

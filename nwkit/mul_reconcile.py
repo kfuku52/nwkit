@@ -12,7 +12,12 @@ from urllib.parse import quote
 import pandas as pd
 
 from nwkit import __version__
-from nwkit.mul_reconcile_model import hypotheses, reconcile_genes, validate_binary
+from nwkit.mul_reconcile_model import (
+    _GeneIndex,
+    _reconcile_indexed_genes,
+    hypotheses,
+    reconcile_genes,
+)
 from nwkit.output_transaction import output_transaction, validate_output_targets
 from nwkit.rooting_state import rooting_output_options
 from nwkit.species_parser import get_species_parser
@@ -66,11 +71,10 @@ def annotated_mapping_text(gene, mapping, args=None):
     ).rstrip(";")
 
 
-def _score_task(task):
-    candidate, genes, parser, limit, collect_checks = task
+def _score_task(candidate, genes, limit, collect_checks):
     checks, score = [], 0
     for number, result in enumerate(
-        reconcile_genes(genes, candidate.tree, parser, limit), 1
+        _reconcile_indexed_genes(genes, candidate.tree, limit), 1
     ):
         score += result.score
         if not collect_checks:
@@ -99,26 +103,31 @@ def _init_score_worker(genes):
 
 
 def _score_worker_task(task):
-    candidate, parser, limit, collect_checks = task
-    return _score_task((candidate, _SCORE_WORKER_GENES, parser, limit, collect_checks))
+    candidate, limit, collect_checks = task
+    return _score_task(candidate, _SCORE_WORKER_GENES, limit, collect_checks)
 
 
 def run_search(
     candidates, genes, parser, *, cpus=1, max_state_pairs=10000000, collect_checks=True
 ):
-    if cpus == 1:
+    if cpus < 1:
+        raise ValueError("cpus must be positive.")
+    candidates = tuple(candidates)
+    if not candidates:
+        return ()
+    # Gene topology and taxon labels do not depend on the MUL hypothesis.
+    prepared = tuple(_GeneIndex(gene, parser) for gene in genes)
+    if cpus == 1 or len(candidates) == 1:
         return tuple(
-            _score_task((candidate, genes, parser, max_state_pairs, collect_checks))
+            _score_task(candidate, prepared, max_state_pairs, collect_checks)
             for candidate in candidates
         )
-    tasks = (
-        (candidate, parser, max_state_pairs, collect_checks) for candidate in candidates
-    )
+    tasks = ((candidate, max_state_pairs, collect_checks) for candidate in candidates)
     # Each worker reads the same trees. Only the candidate changes between tasks.
     with ProcessPoolExecutor(
         max_workers=min(cpus, len(candidates)),
         initializer=_init_score_worker,
-        initargs=(genes,),
+        initargs=(prepared,),
     ) as pool:
         return tuple(pool.map(_score_worker_task, tasks, chunksize=1))
 
@@ -213,8 +222,6 @@ def mul_reconcile_main(args):
     )
     if not genes:
         raise ValueError("At least one gene tree is required.")
-    for gene in genes:
-        validate_binary(gene, "Gene tree")
     parser = get_species_parser(args)
     candidates = hypotheses(
         species,
