@@ -438,6 +438,15 @@ def transform_annotations(
         raise ValueError("--age-ci must be keep or drop.")
     if properties not in {"keep", "drop"}:
         raise ValueError("--properties must be keep or drop.")
+    if (
+        parser
+        and factor == 1
+        and not node_label
+        and "[" not in text
+        and "]" not in text
+    ):
+        # Plain suffixes need validation but have no annotations to normalize.
+        return _normalize_plain_suffixes(text)
     result: list[str] = []
     suffix: list[Token] = []
     internal = False
@@ -472,6 +481,29 @@ def transform_annotations(
             suffix, output, factor, age_ci, parser, node_label, properties, internal
         )
     )
+    return "".join(result)
+
+
+def _normalize_plain_suffixes(text):
+    result: list[str] = []
+    kinds: list[str] = []
+    stream = _iter_tokens(text)
+    allowed = ([], ["name"], [":", "name"], ["name", ":", "name"])
+    try:
+        for token in stream:
+            if token.kind in {"(", ")", ",", ";"}:
+                if kinds not in allowed:
+                    raise ValueError("Malformed Newick node label or branch length.")
+                kinds.clear()
+            else:
+                kinds.append(token.kind)
+            result.append(token.text)
+    except (ValueError, ArithmeticError):
+        for _ in stream:
+            pass
+        raise
+    if kinds not in allowed:
+        raise ValueError("Malformed Newick node label or branch length.")
     return "".join(result)
 
 

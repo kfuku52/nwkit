@@ -21,6 +21,20 @@ def test_annotation_transform_reports_later_lexical_error_first():
         transform_annotations(source)
 
 
+@pytest.mark.parametrize("source", ["(A B,C);", "(A:,B);", "(A:1:2,B);"])
+def test_parser_normalization_rejects_malformed_plain_suffix(source):
+    with pytest.raises(ValueError, match="Malformed Newick"):
+        transform_annotations(source, parser=True)
+
+
+def test_parser_normalization_retains_plain_suffix_text_and_annotated_nodes():
+    source = "('A B':1.001e-10, (C,D)095:2.50[&&NHX:S=CD])root;"
+    assert (
+        transform_annotations(source, parser=True)
+        == "('A B':1.001e-10,(C,D)095:2.50[&&NHX:S=CD])root;"
+    )
+
+
 def test_property_labels_are_internal_only_and_precede_removal():
     source = "((A:1[&&NHX:S=tip],B:2)old:3[&&NHX:S=AB:D=Y],C:4)root[&&NHX:S=ancestor];"
     result = convert_tree_text(
