@@ -9,6 +9,7 @@ import os
 import shutil
 import subprocess
 import tempfile
+from importlib.resources import files
 from pathlib import Path
 
 import numpy as np
@@ -18,7 +19,10 @@ from nwkit.clade_index import CladeIndex
 from nwkit.fasta import parse_fasta
 from nwkit.radte_model import DatingFit
 from nwkit.radte_sequence import read_alignment
+from nwkit.radte_sequence_fit import default_sequence_model
 from nwkit.time_tree import paml_node_mapping, read_mcmctree_posterior
+
+PAML_MODELS = {"jc69": 0, "hky": 4, "lg": 2}
 
 
 def paml_tree(c):
@@ -82,14 +86,18 @@ def paml_tree(c):
     return f"{len(aliases)} 1\n" + "".join(tokens) + ";\n", aliases, len(mirrors)
 
 
-def paml_alignment(path, aliases):
-    read_alignment(path, list(aliases), "dna")
+def paml_alignment(path, aliases, alphabet):
+    read_alignment(path, list(aliases), alphabet)
     with open(path, encoding="utf-8") as handle:
         records = parse_fasta(handle)
+    # PAML supports unknown residues (X) but lacks B, J and Z ambiguity codes.
+    translation = (
+        str.maketrans("BJZ", "XXX") if alphabet == "protein" else {ord("U"): "T"}
+    )
     sequences = {
         r.name: "".join("".join(r.raw.splitlines()[1:]).split())
         .upper()
-        .replace("U", "T")
+        .translate(translation)
         for r in records
     }
     length = len(next(iter(sequences.values())))
@@ -98,10 +106,22 @@ def paml_alignment(path, aliases):
     )
 
 
-def paml_control(args, mirrors, seed):
-    model = args.substitution_model or "hky"
-    if model not in {"jc69", "hky"}:
-        raise ValueError("The MCMCTree reference currently supports DNA JC69 or HKY.")
+def paml_sequence_settings(args):
+    model = args.substitution_model
+    if model is None:
+        model = "lg" if default_sequence_model(args.alignment) == "lg" else "hky"
+    if model not in PAML_MODELS:
+        raise ValueError("MCMCTree supports JC69 or HKY for DNA and LG for protein.")
+    if model == "lg":
+        if args.mcmctree_likelihood == "exact":
+            raise ValueError(
+                "MCMCTree requires --mcmctree-likelihood approximate for protein alignments."
+            )
+        return model, "approximate"
+    return model, args.mcmctree_likelihood or "exact"
+
+
+def paml_control(args, mirrors, seed, *, model, usedata):
     values = dict(
         seed=seed,
         seqfile="input.phy",
@@ -109,10 +129,10 @@ def paml_control(args, mirrors, seed):
         outfile="out.txt",
         mcmcfile="mcmc.txt",
         ndata=1,
-        seqtype=0,
-        usedata="2 in.BV" if args.mcmctree_likelihood == "approximate" else 1,
+        seqtype=2 if model == "lg" else 0,
+        usedata="2 in.BV" if usedata == 2 else usedata,
         clock=args.mcmctree_clock or 2,
-        model=0 if model == "jc69" else 4,
+        model=PAML_MODELS[model],
         alpha=0,
         ncatG=4,
         cleandata=0,
@@ -127,6 +147,8 @@ def paml_control(args, mirrors, seed):
         duplication=int(mirrors > 0),
         print=1,
     )
+    if model == "lg" and usedata == 3:
+        values["aaRatefile"] = "lg.dat"
     return "".join(f"{key} = {value}\n" for key, value in values.items())
 
 
@@ -201,24 +223,27 @@ def execute_paml(executable, work, args, *, environment=None):
         raise ValueError(f"MCMCTree exited with status {completed.returncode}.")
 
 
-def prepare_paml_approximation(directory, executable, args, tree, alignment, mirrors):
-    if args.mcmctree_likelihood != "approximate":
-        return None
+def prepare_paml_approximation(
+    directory, executable, args, tree, alignment, mirrors, *, model
+):
     environment = os.environ.copy()
     environment["PATH"] = (
         str(Path(executable).parent) + os.pathsep + environment.get("PATH", "")
     )
-    if shutil.which("baseml", path=environment["PATH"]) is None:
+    engine = "codeml" if model == "lg" else "baseml"
+    if shutil.which(engine, path=environment["PATH"]) is None:
         raise ValueError(
-            "Approximate MCMCTree requires BASEML beside MCMCTree or on PATH."
+            f"Approximate MCMCTree requires {engine.upper()} beside MCMCTree or on PATH."
         )
     work = directory / "approximation"
     work.mkdir()
     (work / "input.tre").write_text(tree, encoding="utf-8")
     (work / "input.phy").write_text(alignment, encoding="utf-8")
-    control = paml_control(args, mirrors, max(1, args.seed)).replace(
-        "usedata = 2 in.BV", "usedata = 3"
-    )
+    if model == "lg":
+        lg = files("nwkit").joinpath("data_model/lg.txt").read_text(encoding="utf-8")
+        matrix = "\n".join(line for line in lg.splitlines() if not line.startswith("#"))
+        (work / "lg.dat").write_text(matrix + "\n", encoding="utf-8")
+    control = paml_control(args, mirrors, max(1, args.seed), model=model, usedata=3)
     (work / "mcmctree.ctl").write_text(control, encoding="utf-8")
     execute_paml(executable, work, args, environment=environment)
     summary = work / "out.BV"
@@ -228,6 +253,7 @@ def prepare_paml_approximation(directory, executable, args, tree, alignment, mir
 
 
 def run_mcmctree(c, args):
+    model, likelihood = paml_sequence_settings(args)
     binary = args.mcmctree_bin or "mcmctree"
     executable = shutil.which(binary)
     if executable is None:
@@ -235,18 +261,24 @@ def run_mcmctree(c, args):
     executable = os.path.join(
         os.path.realpath(os.path.dirname(executable)), os.path.basename(executable)
     )
+    tree, aliases, mirrors = paml_tree(c)
+    alignment = paml_alignment(
+        args.alignment, aliases, "protein" if model == "lg" else "dna"
+    )
     parent = Path(args.out_prefix).absolute().parent
     parent.mkdir(parents=True, exist_ok=True)
     directory = Path(tempfile.mkdtemp(prefix=".nwkit-mcmctree-", dir=parent))
-    tree, aliases, mirrors = paml_tree(c)
-    alignment = paml_alignment(args.alignment, aliases)
     chain_tables, age_samples = [], []
     node_ids = paml_node_mapping(c.gene)
     group_by_node = dict(zip(c.nodes, c.group_by_node, strict=True))
     count = args.mcmctree_chains or 2
     try:
-        summary = prepare_paml_approximation(
-            directory, executable, args, tree, alignment, mirrors
+        summary = (
+            prepare_paml_approximation(
+                directory, executable, args, tree, alignment, mirrors, model=model
+            )
+            if likelihood == "approximate"
+            else None
         )
         for chain in range(count):
             work = directory / f"chain-{chain + 1}"
@@ -254,7 +286,14 @@ def run_mcmctree(c, args):
             (work / "input.tre").write_text(tree, encoding="utf-8")
             (work / "input.phy").write_text(alignment, encoding="utf-8")
             (work / "mcmctree.ctl").write_text(
-                paml_control(args, mirrors, max(1, args.seed) + chain), encoding="utf-8"
+                paml_control(
+                    args,
+                    mirrors,
+                    max(1, args.seed) + chain,
+                    model=model,
+                    usedata=2 if summary is not None else 1,
+                ),
+                encoding="utf-8",
             )
             if summary is not None:
                 shutil.copyfile(summary, work / "in.BV")
@@ -338,9 +377,9 @@ def run_mcmctree(c, args):
         work_directory=str(directory),
         executable=executable,
         executable_sha256=hashlib.sha256(Path(executable).read_bytes()).hexdigest(),
-        likelihood=args.mcmctree_likelihood or "exact",
+        likelihood=likelihood,
         clock=args.mcmctree_clock or 2,
-        model=args.substitution_model or "hky",
+        model=model,
         time_scale=c.scale,
         mirror_groups=mirrors,
         diagnostics=diagnostics,

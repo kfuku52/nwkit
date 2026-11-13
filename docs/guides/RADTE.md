@@ -321,15 +321,23 @@ lengths, so reusing a summary does not substitute the input Newick lengths.
 
 ## Optional MCMCTree reference
 
-`--backend mcmctree --alignment family.fasta --substitution-model hky` invokes
-an installed executable directly, without R. `--mcmctree-bin` selects its path.
+`--backend mcmctree --alignment family.fasta` invokes an installed executable
+directly. `--mcmctree-bin` selects its path.
 Mirrored node labels enforce the same speciation-age groups in every sample.
-The backend supports JC69/HKY, separate chains, and explicit burn-in, thinning,
-sample-count, rate-prior, and variance-prior options; see `nwkit radte --help`.
-`--mcmctree-likelihood approximate` runs PAML's own `usedata=3`/BASEML
-precomputation once and then `usedata=2` for each chain. BASEML must be beside
-the selected MCMCTree executable or on PATH. The default uses direct sequence
-likelihood. Both routes retain their control files and approximation artifacts.
+DNA supports JC69 and HKY, with HKY and exact sequence likelihood as defaults.
+Protein uses LG and requires approximate likelihood. RADTE detects the alphabet
+when no substitution model is given. Use `--substitution-model lg` to select
+protein explicitly when the alignment letters can also be read as DNA.
+PAML treats protein gaps and unknown residues as missing. RADTE converts the
+protein ambiguity codes `B`, `J`, and `Z` to unknown residues (`X`).
+
+Approximate likelihood runs PAML `usedata=3` once with CODEML and the bundled
+LG matrix for protein, or with BASEML for DNA when
+`--mcmctree-likelihood approximate` is selected. The precomputation executable
+must be beside the selected MCMCTree executable or on PATH. Each chain then
+uses `usedata=2` with the same approximation. The manifest records the
+effective model and likelihood. See `nwkit radte --help` for chain count,
+burn-in, thinning, sample count, and rate and variance priors.
 PAML uses soft calibration priors, unlike the native hard intervals, and not
 every duplication bound can be selected. Tables and the manifest distinguish
 these policies. Unrepresented species events are not posterior estimates.

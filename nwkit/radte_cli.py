@@ -148,7 +148,7 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
             "ecmrest",
         ],
         default=None,
-        help="Default detects DNA (GTR) or protein (LG); choose explicitly for ambiguous alphabets.",
+        help="Default detects DNA (native GTR, MCMCTree HKY) or protein (LG). Choose explicitly for ambiguous alphabets.",
     )
     add(
         "kappa",
@@ -259,7 +259,7 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         "mcmctree_likelihood",
         choices=["exact", "approximate"],
         default=None,
-        help="PAML sequence likelihood (default: exact); approximate builds out.BV with BASEML once, then uses usedata=2.",
+        help="PAML likelihood (default: exact for DNA, approximate for protein). Approximate builds out.BV once with BASEML or CODEML.",
     )
     add(
         "mcmctree_clock",
@@ -284,7 +284,7 @@ def register_radte(subparsers, audit_parent, species_parent, finite_float):
         "mcmctree_timeout",
         type=finite_float,
         default=None,
-        help="Timeout seconds per MCMCTree chain (default: 1800).",
+        help="Timeout seconds per MCMCTree chain or approximation run (default: 1800).",
     )
     add(
         "mcmctree_rate_prior",
