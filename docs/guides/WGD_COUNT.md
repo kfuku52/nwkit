@@ -118,6 +118,10 @@ estimate is `(1 + exceedances)/(1 + draws)`. Failed simulated refits abort;
 draws are not silently discarded. This handles the finite search and retention
 boundary but remains a plug-in, model-conditional calibration, not a supremum
 test over nuisance parameters or guaranteed composite-null error control.
+Use `--bootstrap-workers` to run multiple null refits concurrently. Use one
+BLAS thread per worker (for example, set `OPENBLAS_NUM_THREADS=1` and
+`OMP_NUM_THREADS=1` before launching the command) and allow memory for one
+fit per worker. Simulation and reduction order stay the same for a fixed seed.
 
 Each candidate also has an independently fitted branch-burst alternative:
 the branch gets its own continuous DL rates without a genome pulse. The

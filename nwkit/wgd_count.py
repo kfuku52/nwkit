@@ -181,6 +181,9 @@ def _paths(args):
 
 def wgd_count_main(args):
     paths = _paths(args)
+    workers = getattr(args, "bootstrap_workers", 1)
+    if workers < 1:
+        raise ValueError("--bootstrap-workers must be positive.")
     if (
         args.bootstrap < 0
         or args.seed < 0
@@ -237,7 +240,13 @@ def wgd_count_main(args):
             print(f"WGM count bootstrap: {done}/{total}", file=sys.stderr)
 
         result = calibrate_scan(
-            model, result, args.bootstrap, args.seed, progress=progress, **options
+            model,
+            result,
+            args.bootstrap,
+            args.seed,
+            progress=progress,
+            workers=workers,
+            **options,
         )
     rows = []
     for rank, candidate in enumerate(result.candidates, 1):

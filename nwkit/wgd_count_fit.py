@@ -1,6 +1,9 @@
 """Candidate scanning and plug-in, search-wide parametric bootstrap for counts."""
 
+from collections import deque
+from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass, replace
+from multiprocessing import get_context
 from typing import Any
 
 import numpy as np
@@ -383,6 +386,21 @@ def scan_counts(
     )
 
 
+def _bootstrap_scan_statistic(
+    tree, counts, detection, rate_scales, groups, ascertainment, options
+):
+    simulated = CountLikelihood(
+        tree,
+        counts,
+        detection=detection,
+        rate_scales=rate_scales,
+        branch_groups=groups,
+        ascertainment=ascertainment,
+    )
+    result = scan_counts(simulated, **options)
+    return max(candidate.improvement for candidate in result.candidates)
+
+
 def calibrate_scan(
     model: CountLikelihood,
     observed: CountScan,
@@ -395,6 +413,7 @@ def calibrate_scan(
     state_tolerance: float = 1e-7,
     max_iterations: int = 200,
     progress=None,
+    workers: int = 1,
 ) -> CountScan:
     """Plug-in null bootstrap of the maximum statistic across searched branches.
 
@@ -406,6 +425,8 @@ def calibrate_scan(
         raise ValueError("Bootstrap draws must be a positive integer.")
     if not isinstance(seed, int) or seed < 0:
         raise ValueError("Seed must be a nonnegative integer.")
+    if isinstance(workers, bool) or not isinstance(workers, int) or workers < 1:
+        raise ValueError("Bootstrap workers must be a positive integer.")
     fractions = observed.fractions if fractions is None else tuple(fractions)
     multiplicity = observed.multiplicity if multiplicity is None else multiplicity
     if fractions != observed.fractions or multiplicity != observed.multiplicity:
@@ -415,32 +436,54 @@ def calibrate_scan(
     if not observed.candidates:
         raise ValueError("Bootstrap needs a nonempty observed candidate search.")
     rng = np.random.default_rng(seed)
-    statistics = []
-    for draw in range(draws):
+    options = dict(
+        nodes=tuple(candidate.node for candidate in observed.candidates),
+        fractions=fractions,
+        multiplicity=multiplicity,
+        max_states=max_states,
+        state_tolerance=state_tolerance,
+        max_iterations=max_iterations,
+        compare_bursts=False,
+    )
+
+    def draw_args():
         counts = model.simulate(
             observed.background.rates, observed.background.root_mean, rng
         )
-        simulated = CountLikelihood(
+        return (
             model.tree,
             counts,
-            detection=model.detection,
-            rate_scales=model.rate_scales,
-            branch_groups=model.branch_groups,
-            ascertainment=model.ascertainment,
+            model.detection,
+            model.rate_scales,
+            model.branch_groups,
+            model.ascertainment,
+            options,
         )
-        result = scan_counts(
-            simulated,
-            nodes=tuple(candidate.node for candidate in observed.candidates),
-            fractions=fractions,
-            multiplicity=multiplicity,
-            max_states=max_states,
-            state_tolerance=state_tolerance,
-            max_iterations=max_iterations,
-            compare_bursts=False,
-        )
-        statistics.append(max(candidate.improvement for candidate in result.candidates))
+
+    statistics: list[float] = []
+
+    def record(value):
+        statistics.append(value)
         if progress is not None:
-            progress(draw + 1, draws)
+            progress(len(statistics), draws)
+
+    workers = min(workers, draws)
+    if workers == 1:
+        for _ in range(draws):
+            record(_bootstrap_scan_statistic(*draw_args()))
+    else:
+        # Generate in the parent and consume in order to preserve the original RNG stream.
+        with ProcessPoolExecutor(
+            max_workers=workers, mp_context=get_context("spawn")
+        ) as pool:
+            pending = deque(
+                pool.submit(_bootstrap_scan_statistic, *draw_args())
+                for _ in range(workers)
+            )
+            for draw in range(draws):
+                record(pending.popleft().result())
+                if draw + workers < draws:
+                    pending.append(pool.submit(_bootstrap_scan_statistic, *draw_args()))
     candidates = []
     for candidate in observed.candidates:
         exceedances = sum(value >= candidate.improvement - 1e-9 for value in statistics)

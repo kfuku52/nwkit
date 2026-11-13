@@ -109,6 +109,27 @@ def test_calibration_uses_maximum_and_repeats_null_fit(monkeypatch):
     assert result.calibration == "plugin-parametric-bootstrap-search-maximum"
 
 
+def test_parallel_bootstrap_preserves_simulation_stream_and_order():
+    data = model(np.tile([2, 2, 1], (10, 1)))
+    observed = scan_counts(data, nodes=(1,), fractions=(0.5,), max_states=64)
+    progress = []
+    serial = calibrate_scan(data, observed, 3, 919, max_states=64)
+    parallel = calibrate_scan(
+        data,
+        observed,
+        3,
+        919,
+        max_states=64,
+        workers=2,
+        progress=lambda done, total: progress.append((done, total)),
+    )
+    assert progress == [(1, 3), (2, 3), (3, 3)]
+    assert parallel.bootstrap_statistics == serial.bootstrap_statistics
+    assert [c.p_value for c in parallel.candidates] == [
+        c.p_value for c in serial.candidates
+    ]
+
+
 def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
     data = model([[1, 1, 1]])
     with pytest.raises(ValueError, match="twice"):
