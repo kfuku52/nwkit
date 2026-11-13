@@ -70,6 +70,31 @@ def rate_precision(chronology, rho=0.0):
     return precision.tocsr(), float(logdet)
 
 
+def _marginal_rate_precision(precision, logdet, observed, missing):
+    """Eliminate the unobserved rates using their small precision block."""
+    retained = precision[observed][:, observed]
+    eliminated = precision[missing][:, missing].toarray()
+    cross = precision[observed][:, missing].tocoo()
+    # Only direct precision neighbors can fill in during elimination.
+    neighbors, rows = np.unique(cross.row, return_inverse=True)
+    if len(neighbors):
+        coupling = np.zeros((len(neighbors), len(missing)))
+        coupling[rows, cross.col] = cross.data
+        update = coupling @ np.linalg.solve(eliminated, coupling.T)
+        retained -= sparse.csr_matrix(
+            (
+                update.ravel(),
+                (
+                    np.repeat(neighbors, len(neighbors)),
+                    np.tile(neighbors, len(neighbors)),
+                ),
+            ),
+            shape=retained.shape,
+        )
+    # det(Q) = det(Q_missing) * det(Q_marginal).
+    return retained, logdet + float(np.linalg.slogdet(eliminated)[1])
+
+
 class DatingProblem:
     def __init__(
         self,
@@ -86,29 +111,22 @@ class DatingProblem:
         self.free = np.flatnonzero(is_free)
         self.fixed = chronology.lower.copy()
         self.precision, self.logdet = rate_precision(chronology, rho)
-        self.observation_indices = np.array(
-            [
-                i
-                for i, node in enumerate(chronology.edges)
-                if not omit_root_observations or node.up is not chronology.gene
-            ]
-        )
+        self.observation_indices = np.arange(len(chronology.edges))
         if omit_root_observations:
             missing = np.array(
                 [
                     i
                     for i, node in enumerate(chronology.edges)
                     if node.up is chronology.gene
-                ]
+                ],
+                dtype=int,
             )
-            cross = self.precision[self.observation_indices][:, missing].toarray()
-            missing_precision = self.precision[missing][:, missing].toarray()
-            marginal = self.precision[self.observation_indices][
-                :, self.observation_indices
-            ].toarray()
-            marginal -= cross @ np.linalg.solve(missing_precision, cross.T)
-            self.precision = sparse.csr_matrix(marginal)
-            self.logdet = -float(np.linalg.slogdet(marginal)[1])
+            observed = np.ones(len(chronology.edges), dtype=bool)
+            observed[missing] = False
+            self.observation_indices = np.flatnonzero(observed)
+            self.precision, self.logdet = _marginal_rate_precision(
+                self.precision, self.logdet, self.observation_indices, missing
+            )
         self.ones = np.ones(len(self.observation_indices))
         self.qones = self.precision @ self.ones
         self.mean_precision = self.ones @ self.qones
@@ -140,6 +158,12 @@ class DatingProblem:
             shape=(len(chronology.constraint_parent), len(chronology.groups)),
         ).tocsr()
         self.free_design = self.age_design[:, self.free]
+        self.age_gradient_design = self.free_design.T
+        self.observation_gradient_design = (
+            self.free_design[self.observation_indices].T
+            if omit_root_observations
+            else self.age_gradient_design
+        )
 
         # Calibration-only gaps can vanish within SLSQP's linear constraint
         # tolerance without a corresponding short branch in the likelihood.
@@ -180,12 +204,15 @@ class DatingProblem:
 
     def branch_statistics(self, ages):
         duration = self.chronology.durations(ages)
+        return (duration, *self._log_rate_statistics(duration))
+
+    def _log_rate_statistics(self, duration):
         log_rates = (self.log_observed - np.log(duration))[self.observation_indices]
         mean = float(self.qones @ log_rates / self.mean_precision)
         residual = log_rates - mean
         qres = self.precision @ residual
         sse = float(residual @ qres)
-        return duration, mean, residual, qres, max(0.0, sse)
+        return mean, residual, qres, max(0.0, sse)
 
     def value(self, x):
         return self._value_gradient(x, derivatives=False)[0]
@@ -201,11 +228,11 @@ class DatingProblem:
             # exterior penalty guides it back; it can never pass final QA.
             violation = np.minimum(duration - self.chronology.min_duration, 0)
             grad = np.zeros_like(x)
-            grad[: len(self.free)] = self.free_design.T @ (2e12 * violation)
+            grad[: len(self.free)] = self.age_gradient_design @ (2e12 * violation)
             return float(1e12 * (1 + violation @ violation)), grad
         if self.likelihood is None:
-            _, _, _, qres, sse = self.branch_statistics(ages)
-            gradient = self.free_design[self.observation_indices].T @ (
+            _, _, qres, sse = self._log_rate_statistics(duration)
+            gradient = self.observation_gradient_design @ (
                 -qres / duration[self.observation_indices]
             )
             # Profiling the normal mean and variance makes minimizing SSE
@@ -223,7 +250,7 @@ class DatingProblem:
             return float(nll), None
         nll, branch_gradient = self.likelihood.value_gradient(lengths)
         log_length_gradient = branch_gradient * lengths
-        age_gradient = self.free_design.T @ (log_length_gradient / duration)
+        age_gradient = self.age_gradient_design @ (log_length_gradient / duration)
         if self.rate_sd > 0:
             prior_gradient = self.precision @ deviations / self.rate_sd**2
             nll += 0.5 * deviations @ prior_gradient
@@ -305,9 +332,18 @@ def solve_problem(
         else initial_parameters.copy()
     )
     if len(x0) == 0:
-        return x0, [
-            dict(success=True, objective=problem.value_gradient(x0)[0], iterations=0)
-        ]
+        if not problem.feasible(x0):
+            raise DatingOptimizationError(
+                "Dating optimization failed; fixed ages violate chronology constraints.",
+                [],
+            )
+        objective = problem.value_gradient(x0)[0]
+        if not np.isfinite(objective):
+            raise DatingOptimizationError(
+                "Dating optimization failed; fixed ages give a non-finite objective.",
+                [],
+            )
+        return x0, [dict(success=True, objective=objective, iterations=0)]
     bounds, constraint = problem.bounds_and_constraint()
     if np.any(bounds.lb > bounds.ub):
         raise DatingOptimizationError(

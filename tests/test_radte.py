@@ -12,10 +12,12 @@ from nwkit.cli import main, parser
 from nwkit.radte import dated_newick, radte_paths, result_tables
 from nwkit.radte_inputs import build_chronology, read_inputs
 from nwkit.radte_model import (
+    DatingOptimizationError,
     DatingProblem,
     fit_dates,
     laplace_intervals,
     rate_precision,
+    solve_problem,
 )
 from nwkit.radte_uncertainty import bootstrap_intervals, profile_intervals
 from nwkit.reconcile import build_reconciliation_table
@@ -126,6 +128,27 @@ def test_clock_gradient_and_covariance_match_dense_gaussian(rho):
             assert covariance[i, j] == pytest.approx(
                 rho ** (distance + ancestors[node]), abs=1e-10
             )
+
+
+@pytest.mark.parametrize("rho", [0, 0.4, 0.95])
+def test_root_rate_marginalization_matches_dense_covariance(rho):
+    c = small_chronology(gene_text="(A_1:0.1,(B_1:0.2,(B_2:0.3,B_3:0.4)D:0.1)S:0.1)R;")
+    precision, _ = rate_precision(c, rho)
+    problem = DatingProblem(c, rho=rho, omit_root_observations=True)
+    observed = [i for i, edge in enumerate(c.edges) if edge.up is not c.gene]
+    covariance = np.linalg.inv(precision.toarray())[np.ix_(observed, observed)]
+    np.testing.assert_array_equal(problem.observation_indices, observed)
+    np.testing.assert_allclose(
+        problem.precision.toarray(), np.linalg.inv(covariance), atol=1e-12
+    )
+    assert problem.logdet == pytest.approx(np.linalg.slogdet(covariance)[1], abs=1e-12)
+    x = problem.initial_parameters()
+    _, analytic = problem.value_gradient(x)
+    step = 1e-5 * np.eye(len(x))
+    numeric = np.array(
+        [(problem.value(x + dx) - problem.value(x - dx)) / 2e-5 for dx in step]
+    )
+    np.testing.assert_allclose(analytic, numeric, atol=1e-6)
 
 
 def test_shared_interval_is_one_variable_and_duplications_track_species_age(tmp_path):
@@ -485,6 +508,14 @@ def test_age_bounds_can_pin_the_last_free_coordinate():
     assert (problem.constraints @ fit.ages).min() == chronology.min_duration
 
 
+def test_fixed_age_fit_rejects_zero_duration():
+    chronology = small_chronology()
+    ages = chronology.lower.copy()
+    problem = DatingProblem(replace(chronology, lower=ages, upper=ages))
+    with pytest.raises(DatingOptimizationError, match="fixed ages violate chronology"):
+        solve_problem(problem)
+
+
 def test_scale_invariance_of_time_and_substitution_units():
     c = small_chronology()
     before, _ = fit_dates(c)
@@ -572,3 +603,16 @@ def test_profile_retains_calibration_limited_endpoint():
     assert fit.interval_status == "conditional-profile-calibration-limited"
     assert fit.interval_upper[group] == problem.chronology.upper[group]
     assert fit.interval_lower[group] < fit.ages[group]
+
+
+def test_profile_domain_retains_minimum_age_gap_at_calibration():
+    species = Tree("((A:2,B:2)AB:2,C:4)ABC;", parser=1)
+    gene = Tree("((A_1:1,A_2:1)D:0.01,C_1:2)R;", parser=1)
+    events = build_reconciliation_table(
+        gene, species, {node.name: node.name.split("_")[0] for node in gene.leaves()}
+    )
+    chronology = build_chronology(gene, species, events)
+    fit, problem = fit_dates(chronology, rate_sd=0.4)
+    profile_intervals(fit, problem)
+    assert fit.interval_status == "conditional-profile-calibration-limited"
+    assert fit.interval_upper[problem.free[0]] == 0.5 - chronology.min_duration

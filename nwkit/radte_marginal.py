@@ -210,7 +210,7 @@ class MarginalDatingProblem(DatingProblem):
         if np.any(duration <= 0):
             violation = np.minimum(duration - self.chronology.min_duration, 0)
             gradient = np.zeros_like(x)
-            gradient[: len(self.free)] = self.free_design.T @ (2e12 * violation)
+            gradient[: len(self.free)] = self.age_gradient_design @ (2e12 * violation)
             return float(1e12 * (1 + violation @ violation)), gradient
         value, duration, sd, z, root_weight, v, inverse, weights = self.components(x)
         root = self.root_row
@@ -222,7 +222,7 @@ class MarginalDatingProblem(DatingProblem):
             weights @ (v[:, root] * (1 - root_weight)) / duration[second]
         )
         gradient = np.concatenate(
-            [self.free_design.T @ edge_gradient, [weights @ v.sum(axis=1)]]
+            [self.age_gradient_design @ edge_gradient, [weights @ v.sum(axis=1)]]
         )
         if self.fixed_sd is None:
             covariance_derivative = self.projected_covariance

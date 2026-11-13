@@ -9,7 +9,6 @@ import copy
 from dataclasses import replace
 
 import numpy as np
-from scipy.optimize import linprog
 from scipy.stats import binomtest
 
 from nwkit.radte_model import solve_problem
@@ -62,18 +61,15 @@ def _constrained(problem, group, age):
         raise ValueError("Candidate age is outside the hard calibration bounds.")
     lower, upper = c.lower.copy(), c.upper.copy()
     lower[group] = upper[group] = age
-    feasible = linprog(
-        np.zeros(len(lower)),
-        A_ub=-problem.constraints,
-        b_ub=np.full(problem.constraints.shape[0], -c.min_duration),
-        bounds=list(zip(lower, upper, strict=True)),
-        method="highs",
-    )
-    if not feasible.success:
+    constrained = replace(c, lower=lower, upper=upper)
+    feasible_lower, feasible_upper = chronology_domain(constrained)
+    if np.any(feasible_lower > feasible_upper):
         raise ValueError("Candidate age is outside the feasible chronology.")
     return _problem_like(
         problem,
-        replace(c, lower=lower, upper=upper, initial=feasible.x),
+        replace(
+            constrained, initial=feasible_lower + (feasible_upper - feasible_lower) / 2
+        ),
         problem.likelihood,
     )
 

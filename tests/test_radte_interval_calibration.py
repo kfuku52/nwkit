@@ -176,6 +176,15 @@ def test_calibrated_profile_rejects_joint_map_instead_of_using_penalty_lr():
         )
 
 
+def test_calibrated_profile_rejects_age_with_zero_root_duration():
+    from nwkit.radte_calibrated import _constrained
+
+    _, problem = fit_dates(small_chronology())
+    group = problem.free[0]
+    with pytest.raises(ValueError, match="outside the feasible chronology"):
+        _constrained(problem, group, problem.chronology.lower[group])
+
+
 def test_calibrated_failure_clears_stale_intervals(monkeypatch):
     import nwkit.radte_calibrated as module
 

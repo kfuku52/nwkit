@@ -56,11 +56,11 @@ def rate_variance_information(fit, problem):
 
 
 def chronology_domain(chronology):
-    """Project all hard age/order constraints onto each coordinate.
+    """Return the coordinatewise smallest and largest feasible chronologies.
 
-    These are marginal feasible ranges, not a rectangular joint confidence set.
-    Difference constraints on the acyclic shared-age graph permit propagation
-    instead of a separate linear program for every free age.
+    Propagate the difference constraints from children into lower bounds
+    and from parents into upper bounds. Each endpoint vector satisfies all
+    joint order constraints when the resulting bounds are consistent.
     """
     lower, upper = chronology.lower.copy(), chronology.upper.copy()
     children: dict[int, set[int]] = {i: set() for i in range(len(chronology.groups))}
