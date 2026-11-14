@@ -6,7 +6,12 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.optimize import minimize_scalar
 
-from nwkit.continuous_asr import GaussianMarginal, _finite_number, compute_bm_marginals
+from nwkit.continuous_asr import (
+    GaussianMarginal,
+    _finite_number,
+    _ldexp,
+    compute_bm_marginals,
+)
 from nwkit.evolution import build_evolutionary_process
 
 
@@ -380,41 +385,45 @@ def compute_bm_drift_marginals(
         message = "drift fixed"
     else:
         tip_depths = np.asarray([depths[node] for node, _ in observed], dtype=float)
-        if len(tip_depths) < 2 or np.ptp(tip_depths) == 0.0:
+        if not np.isfinite(tip_depths).all():
+            raise ValueError("BM-DRIFT sampling depths must be finite.")
+        if len(tip_depths) < 2 or tip_depths.max() == tip_depths.min():
             raise ValueError(
                 "BM-DRIFT drift is not identifiable when observed tips have one sampling depth; fix --drift."
             )
         responses = np.asarray([value for _, value in observed], dtype=float)
+        _, time_exponent = math.frexp(float(np.max(np.abs(tip_depths))))
+        _, trait_exponent = math.frexp(float(np.max(np.abs(responses))))
+        scaled_depths = np.ldexp(tip_depths, -time_exponent)
+        scaled_responses = np.ldexp(responses, -trait_exponent)
+        centered_depths = scaled_depths - scaled_depths.mean()
+        centered_responses = scaled_responses - scaled_responses.mean()
         ordinary_slope = float(
-            np.dot(tip_depths - tip_depths.mean(), responses - responses.mean())
-            / np.dot(tip_depths - tip_depths.mean(), tip_depths - tip_depths.mean())
+            np.dot(centered_depths, centered_responses)
+            / np.dot(centered_depths, centered_depths)
         )
-        if not math.isfinite(ordinary_slope):
-            raise ValueError(
-                "BM-DRIFT trend exceeds floating-point range; rescale trait or time units."
-            )
         scale = max(
             abs(ordinary_slope),
-            float(np.ptp(responses)) / float(np.ptp(tip_depths)),
+            float(np.ptp(scaled_responses)) / float(np.ptp(scaled_depths)),
             np.finfo(float).eps,
         )
 
-        def fit_at(current_drift, *, compute_posterior):
-            return _run_drift(
-                tree,
-                values_by_leaf,
-                depths,
-                leaf_by_name,
-                current_drift,
-                fixed_sigma2,
-                standard_errors,
-                _tree_validated,
-                compute_posterior=compute_posterior,
-            )
+        def original_drift(slope):
+            return _ldexp(slope, trait_exponent - time_exponent, "BM-DRIFT trend")
 
-        def trial_fit(current_drift):
+        def trial_fit(slope):
             try:
-                _, fit = fit_at(current_drift, compute_posterior=False)
+                _, fit = _run_drift(
+                    tree,
+                    values_by_leaf,
+                    depths,
+                    leaf_by_name,
+                    original_drift(slope),
+                    fixed_sigma2,
+                    standard_errors,
+                    _tree_validated,
+                    compute_posterior=False,
+                )
             except (ValueError, ArithmeticError):
                 return None
             return fit
@@ -425,7 +434,7 @@ def compute_bm_drift_marginals(
             and boundary_candidate.sigma2 == 0.0
             and boundary_candidate.restricted_log_likelihood is None
         ):
-            fitted_drift = ordinary_slope
+            fitted_slope = ordinary_slope
             evaluations = 1
             success = True
             message = "exact zero-diffusion boundary"
@@ -442,7 +451,7 @@ def compute_bm_drift_marginals(
                     objectives[key] = 1e100 if likelihood is None else -likelihood
                 return objectives[key]
 
-            fitted_drift, objective, optimizer_message = _minimize_unbounded_profile(
+            fitted_slope, objective, optimizer_message = _minimize_unbounded_profile(
                 evaluate,
                 ordinary_slope,
                 scale,
@@ -453,7 +462,17 @@ def compute_bm_drift_marginals(
             evaluations = len(objectives)
             success = True
             message = f"adaptive unbounded profile; {optimizer_message}"
-        posterior, bm_fit = fit_at(fitted_drift, compute_posterior=True)
+        fitted_drift = original_drift(fitted_slope)
+        posterior, bm_fit = _run_drift(
+            tree,
+            values_by_leaf,
+            depths,
+            leaf_by_name,
+            fitted_drift,
+            fixed_sigma2,
+            standard_errors,
+            _tree_validated,
+        )
     fit = BrownianDriftFit(
         sigma2=bm_fit.sigma2,
         sigma2_estimated=bm_fit.sigma2_estimated,

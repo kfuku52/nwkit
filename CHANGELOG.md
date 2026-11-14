@@ -30,6 +30,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   to avoid overflowing statistics that are finite in the original units.
 - Fit shared MV-OU attraction in normalized time units so the initialization
   and search remain finite under extreme branch-length rescaling.
+- Initialize and fit Brownian directional drift in normalized trait and time
+  units so rescaling branches preserves the fitted trend and likelihood.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.

@@ -69,6 +69,32 @@ def test_drift_is_estimated_from_heterochronous_tips():
     assert posterior[tree].mean == pytest.approx(1.0, abs=2e-7)
 
 
+@pytest.mark.parametrize("time_scale", [1e-180, 1e180])
+@pytest.mark.parametrize("sigma2", [None, 1.0])
+def test_drift_estimation_is_invariant_to_extreme_time_units(time_scale, sigma2):
+    values = {"A": 0.3, "B": 2.1, "C": 2.3, "D": 8.0}
+    tree = tree_from("(A:1,B:2,C:3,D:4)R;")
+    expected, expected_fit = compute_bm_drift_marginals(tree, values, sigma2=sigma2)
+    scaled = tree_from(
+        "("
+        + ",".join(
+            f"{name}:{index * time_scale}" for index, name in enumerate(values, 1)
+        )
+        + ")R;"
+    )
+    posterior, fit = compute_bm_drift_marginals(
+        scaled, values, sigma2=None if sigma2 is None else sigma2 / time_scale
+    )
+
+    assert fit.drift * time_scale == pytest.approx(expected_fit.drift, rel=2e-7)
+    assert fit.sigma2 * time_scale == pytest.approx(expected_fit.sigma2)
+    assert fit.restricted_log_likelihood == pytest.approx(
+        expected_fit.restricted_log_likelihood, abs=1e-10
+    )
+    assert posterior[scaled].mean == pytest.approx(expected[tree].mean, rel=2e-7)
+    assert posterior[scaled].variance == pytest.approx(expected[tree].variance)
+
+
 def test_drift_search_expands_beyond_ordinary_least_squares_scale():
     tree = tree_from("(A:1,B:2,C:1.00001,D:1.00002)R;")
     values = {"A": 0.0, "B": 0.0, "C": 0.0, "D": 1.0}
