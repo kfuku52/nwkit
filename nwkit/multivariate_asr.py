@@ -14,8 +14,13 @@ from nwkit.continuous_asr import (
     _tree_groups,
     compute_bm_marginals,
 )
-from nwkit.continuous_asr_io import _normal_interval_multiplier, _summary
-from nwkit.util import assign_branch_ids, get_node_class, write_tree
+from nwkit.continuous_asr_io import (
+    _asr_node_metadata,
+    _asr_table_from_columns,
+    _marginal_columns,
+    _summary,
+)
+from nwkit.util import assign_branch_ids, write_tree
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -361,7 +366,7 @@ def multivariate_output_table(
     selected_nodes = tuple(selected_nodes)
     traits = np.asarray(trait_names, dtype=object)
     trait_count = len(traits)
-    metadata = _multivariate_node_metadata(selected_nodes, assign_branch_ids(tree))
+    metadata = _asr_node_metadata(selected_nodes, assign_branch_ids(tree))
     columns = {
         **{name: np.repeat(values, trait_count) for name, values in metadata.items()},
         "trait": np.tile(traits, len(selected_nodes)),
@@ -413,30 +418,7 @@ def _multivariate_marginal_columns(nodes, posterior, trait_count, ci_level):
         marginal = posterior[node]
         means[index] = marginal.mean[:trait_count]
         variances[index] = np.diag(marginal.covariance)[:trait_count]
-    if np.any(variances < 0.0):
-        raise ValueError("An ancestral marginal variance is negative.")
-    sd = np.sqrt(variances)
-    width = _normal_interval_multiplier(ci_level) * sd
-    with np.errstate(over="ignore", invalid="ignore"):
-        lower, upper = means - width, means + width
-    if not np.isfinite(lower).all() or not np.isfinite(upper).all():
-        raise ValueError(
-            "An ancestral interval exceeds floating-point range; rescale the trait units."
-        )
-    return {
-        "mean": means.ravel(),
-        "variance": variances.ravel(),
-        "sd": sd.ravel(),
-        "ci_lower": lower.ravel(),
-        "ci_upper": upper.ravel(),
-        "ci_level": np.full(means.size, ci_level),
-    }
-
-
-def _asr_table_from_columns(columns):
-    if not len(columns["branch_id"]):
-        return pd.DataFrame(columns=tuple(columns))
-    return pd.DataFrame(columns)
+    return _marginal_columns(means.ravel(), variances.ravel(), ci_level)
 
 
 def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
@@ -446,7 +428,7 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
     first, second = np.triu_indices(len(traits))
     pair_count = len(first)
     node_count = len(selected_nodes)
-    metadata = _multivariate_node_metadata(selected_nodes, ids)
+    metadata = _asr_node_metadata(selected_nodes, ids)
     covariance = np.empty((node_count, pair_count), dtype=float)
     correlation = np.empty((node_count, pair_count), dtype=object)
     for index, node in enumerate(selected_nodes):
@@ -470,22 +452,6 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
             "correlation": correlation_column,
         }
     )
-
-
-def _multivariate_node_metadata(nodes, ids):
-    return {
-        "branch_id": np.asarray([ids[node] for node in nodes], dtype=int),
-        "parent": np.asarray(
-            [-1 if node.is_root else ids[node.up] for node in nodes], dtype=int
-        ),
-        "node_class": np.asarray(
-            [get_node_class(node) for node in nodes], dtype=object
-        ),
-        "name": np.asarray(
-            ["" if node.name in (None, "") else str(node.name) for node in nodes],
-            dtype=object,
-        ),
-    }
 
 
 def _upper_triangle_correlations(matrix, covariance, first, second):
