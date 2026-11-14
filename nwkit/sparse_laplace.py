@@ -39,17 +39,11 @@ class SparseCovarianceModel:
         """Draw one tip vector without materializing its covariance."""
         scale = float(np.sqrt(variance))
         if len(self.sampling_parent) == self.n_states:
-            states = np.empty(self.n_states, dtype=float)
             innovations = rng.normal(size=self.n_states)
-            for index in range(self.n_states):
-                parent = int(self.sampling_parent[index])
-                parent_value = 0.0 if parent < 0 else states[parent]
-                states[index] = (
-                    self.sampling_transition[index] * parent_value
-                    + scale
-                    * np.sqrt(self.sampling_variance[index])
-                    * innovations[index]
-                )
+            deviations = scale * np.sqrt(self.sampling_variance)
+            states = _propagate_sparse_tree_draw(
+                self.sampling_parent, self.sampling_transition, deviations * innovations
+            )
         else:
             precision_factor = self.precision_factor()
             factor = factor_sparse_positive_definite(self.precision)
@@ -187,6 +181,18 @@ class GmrfPredictorUncertainty:
     model: SparseCovarianceModel
     observation_index: np.ndarray
     row_scale: np.ndarray | None = None
+
+
+def _propagate_sparse_tree_draw(parents, slopes, innovations):
+    # Branch arithmetic is sequential. Unbox the buffers once so each step
+    # uses native float arithmetic without creating NumPy scalars.
+    parents = parents.tolist()
+    slopes = slopes.tolist()
+    states = innovations.tolist()
+    for index, parent in enumerate(parents):
+        parent_value = 0.0 if parent < 0 else states[parent]
+        states[index] = slopes[index] * parent_value + states[index]
+    return np.asarray(states)
 
 
 def factor_sparse_positive_definite(

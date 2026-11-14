@@ -217,6 +217,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   descendant order.
 - Reuse the same covariance across Pagel's lambda trials when tips share no
   nonzero branch variance.
+- Scale sparse tree simulation innovations in one array operation before
+  propagating them through the tree.
 - Group regression inputs and replicate observations by tip before processing
   individual traits. Build ancestral and sampling covariance output tables
   by column.
