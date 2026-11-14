@@ -678,8 +678,12 @@ def _log_likelihood(
         prepared_leaves=prepared_leaves,
         prepared_branches=prepared_branches,
     )
-    root_term = float(_edge_logsumexp(_log_probabilities(root_prior) + inside[tree]))
-    return log_scales[tree] + root_term
+    return _mk_root_log_likelihood(root_prior, inside[tree], log_scales[tree])
+
+
+def _mk_root_log_likelihood(root_prior, inside, log_scale):
+    root_term = float(_edge_logsumexp(_log_probabilities(root_prior) + inside))
+    return log_scale + root_term
 
 
 def _is_informative_tip_likelihood(likelihood):
@@ -752,23 +756,23 @@ def _fit_custom_rate_matrix(
     rate_bounds,
     fixed_rate_matrix,
     prior_for,
+    *,
+    retain_inside=False,
 ):
     if fixed_rate_matrix is None:
         raise ValueError("--model CUSTOM requires --rate-matrix.")
     rate_matrix = validate_rate_matrix(fixed_rate_matrix, num_states=len(states))
     final_prior = prior_for(rate_matrix)
-    return {
+    fit = {
         "model": "CUSTOM",
         "rates": np.array([], dtype=float),
         "rate_matrix": rate_matrix,
-        "log_likelihood": _log_likelihood(
-            tree, likelihood_by_leaf, final_prior, rate_matrix
-        ),
         "rate_estimated": False,
         "rate_bounds": rate_bounds,
         "root_prior": final_prior,
         "fit_status": "fixed",
     }
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside)
 
 
 def _rate_root_prior(root_prior, root_prior_factory, matrix):
@@ -785,23 +789,41 @@ def _fixed_parametric_rate_fit(
     transition_graph,
     rate_design,
     prior_for,
+    *,
+    retain_inside=False,
 ):
     rate_matrix = _build_rate_matrix(
         model, states, rates, transition_graph, rate_design
     )
     final_prior = prior_for(rate_matrix)
-    return {
+    fit = {
         "model": model,
         "rates": np.asarray(rates, dtype=float),
         "rate_matrix": rate_matrix,
-        "log_likelihood": _log_likelihood(
-            tree, likelihood_by_leaf, final_prior, rate_matrix
-        ),
         "rate_estimated": False,
         "rate_bounds": rate_bounds,
         "root_prior": final_prior,
         "fit_status": "fixed",
     }
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside)
+
+
+def _fit_mk_likelihood(tree, likelihood_by_leaf, fit, retain_inside):
+    rate_matrix = fit.get("rate_matrix_by_node", fit["rate_matrix"])
+    root_prior = fit["root_prior"]
+    if retain_inside:
+        inside, scales, child_terms, matrices = _compute_inside_likelihoods(
+            tree, likelihood_by_leaf, rate_matrix, log_space=True
+        )
+        fit["log_likelihood"] = _mk_root_log_likelihood(
+            root_prior, inside[tree], scales[tree]
+        )
+        fit["_inside_messages"] = (inside, child_terms, matrices)
+    else:
+        fit["log_likelihood"] = _log_likelihood(
+            tree, likelihood_by_leaf, root_prior, rate_matrix
+        )
+    return fit
 
 
 def _validate_initial_rate_likelihood(
@@ -907,6 +929,7 @@ def _fit_parametric_rate_matrix(
     transition_graph=None,
     rate_design=None,
     root_prior_factory=None,
+    retain_inside=False,
 ):
     def prior_for(matrix):
         return _rate_root_prior(root_prior, root_prior_factory, matrix)
@@ -929,6 +952,7 @@ def _fit_parametric_rate_matrix(
             transition_graph,
             rate_design,
             prior_for,
+            retain_inside=retain_inside,
         )
 
     if model == "ER" and rate is not None:
@@ -945,6 +969,7 @@ def _fit_parametric_rate_matrix(
             transition_graph,
             rate_design,
             prior_for,
+            retain_inside=retain_inside,
         )
 
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
@@ -1026,12 +1051,10 @@ def _fit_parametric_rate_matrix(
         model, states, rates, transition_graph, rate_design
     )
     final_prior = prior_for(rate_matrix)
-    log_likelihood = _log_likelihood(tree, likelihood_by_leaf, final_prior, rate_matrix)
     result = {
         "model": model,
         "rates": rates,
         "rate_matrix": rate_matrix,
-        "log_likelihood": log_likelihood,
         "rate_estimated": True,
         "rate_bounds": rate_bounds,
         "optimizer_success": optimized.success,
@@ -1042,7 +1065,7 @@ def _fit_parametric_rate_matrix(
         "root_prior": final_prior,
     }
     result.update(_parameter_boundary_summary(rates, parameter_kinds, parameter_bounds))
-    return result
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, result, retain_inside)
 
 
 def _fit_rate_matrix(
@@ -1059,6 +1082,7 @@ def _fit_rate_matrix(
     root_prior_factory=None,
     regime_assignment=None,
     regime_model="ER",
+    retain_inside=False,
 ):
     if model not in SUPPORTED_MODELS:
         raise ValueError("Unsupported '--model': {}".format(model))
@@ -1077,6 +1101,7 @@ def _fit_rate_matrix(
             rate_bounds,
             fixed_rate_matrix,
             prior_for,
+            retain_inside=retain_inside,
         )
     num_parameters = (
         1
@@ -1101,6 +1126,7 @@ def _fit_rate_matrix(
             root_prior_factory=root_prior_factory,
             regime_assignment=regime_assignment,
             regime_model=regime_model,
+            retain_inside=retain_inside,
         )
     return _fit_parametric_rate_matrix(
         tree=tree,
@@ -1113,6 +1139,7 @@ def _fit_rate_matrix(
         transition_graph=transition_graph,
         rate_design=rate_design,
         root_prior_factory=root_prior_factory,
+        retain_inside=retain_inside,
     )
 
 
@@ -1163,6 +1190,8 @@ def _fit_regime_rate_matrices(
     root_prior_factory,
     regime_assignment,
     regime_model,
+    *,
+    retain_inside=False,
 ):
     if regime_assignment is None:
         raise ValueError("--model MK-REGIME requires --regime-map.")
@@ -1255,7 +1284,6 @@ def _fit_regime_rate_matrices(
     parameters = np.exp(optimized.x)
     by_regime, by_node = matrices_for(parameters)
     final_prior = prior_for(by_regime)
-    log_likelihood = _log_likelihood(tree, likelihood_by_leaf, final_prior, by_node)
     rates_by_regime = {
         regime: parameters[index * per_regime : (index + 1) * per_regime]
         for index, regime in enumerate(regimes)
@@ -1272,7 +1300,6 @@ def _fit_regime_rate_matrices(
         "regime_by_node": regime_assignment.by_node,
         "regime_map_source": regime_assignment.source,
         "root_regime": regime_assignment.root_regime,
-        "log_likelihood": log_likelihood,
         "rate_estimated": True,
         "rate_bounds": rate_bounds,
         "optimizer_success": optimized.success,
@@ -1283,7 +1310,7 @@ def _fit_regime_rate_matrices(
         "root_prior": final_prior,
     }
     result.update(_parameter_boundary_summary(parameters, all_kinds, bounds))
-    return result
+    return _fit_mk_likelihood(tree, likelihood_by_leaf, result, retain_inside)
 
 
 def _compute_outside_likelihoods(
@@ -1402,6 +1429,7 @@ def compute_mk_marginals(
         root_prior_factory=root_prior_factory,
         regime_assignment=regime_assignment,
         regime_model=regime_model,
+        retain_inside=_compute_posterior,
     )
     root_prior = fit.get("root_prior", root_prior)
     if not math.isfinite(fit["log_likelihood"]):
@@ -1413,16 +1441,11 @@ def compute_mk_marginals(
     _add_rate_design_fit_metadata(fit, rate_design)
     if not _compute_posterior:
         return {}, fit
-    return _mk_marginals_from_fit(tree, likelihood_by_leaf, fit), fit
+    return _mk_marginals_from_fit(tree, fit), fit
 
 
-def _mk_marginals_from_fit(tree, likelihood_by_leaf, fit):
-    inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
-        tree=tree,
-        likelihood_by_leaf=likelihood_by_leaf,
-        rate_matrix=fit.get("rate_matrix_by_node", fit["rate_matrix"]),
-        log_space=True,
-    )
+def _mk_marginals_from_fit(tree, fit):
+    inside, child_terms, transition_matrices = fit.pop("_inside_messages")
     outside = _compute_outside_likelihoods(
         tree=tree,
         child_terms=child_terms,
