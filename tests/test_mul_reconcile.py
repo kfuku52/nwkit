@@ -320,6 +320,40 @@ def test_state_limit_is_failure_not_candidate_dependent_filter():
         )
 
 
+@pytest.mark.parametrize("cpus", [1, 2])
+def test_score_subtree_reuse_keeps_multiplicity_orientation_and_per_family_limits(cpus):
+    candidates = hypotheses(tree("((A,X),B);"), "X", "B")
+    genes = [
+        tree("(((a1_A,x1_X),(a2_A,x2_X)),b1_B);"),
+        tree("(b2_B,((x3_X,a3_A),(x4_X,a4_A)));"),
+        tree("((a5_A,x5_X),b3_B);"),
+    ]
+    expected = tuple(
+        run_search([candidate], genes, parser(), cpus=1, collect_checks=True)[0]
+        for candidate in candidates
+    )
+    assert run_search(candidates, genes, parser(), cpus=cpus) == expected
+    actual = run_search(candidates, genes, parser(), cpus=cpus, collect_checks=False)
+    assert [(i, s) for i, s, _ in actual] == [(i, s) for i, s, _ in expected]
+    # Reusing prior entries must not make repeated state pairs free under the cap.
+    first = max(
+        row["state.pairs"]
+        for _, _, rows in expected
+        for row in rows
+        if row["gene.tree"] == 1
+    )
+    repeated = genes[-1:] + [genes[1]]
+    with pytest.raises(ValueError, match="max-state-pairs"):
+        run_search(
+            candidates,
+            repeated,
+            parser(),
+            cpus=cpus,
+            collect_checks=False,
+            max_state_pairs=first - 1,
+        )
+
+
 def invoke(tmp_path, extra=(), text=None):
     species = tmp_path / "species.nwk"
     genes = tmp_path / "genes.nwk"

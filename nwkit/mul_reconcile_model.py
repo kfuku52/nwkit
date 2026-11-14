@@ -205,6 +205,7 @@ class Cell:
 _CONSUMED_STATE: dict[int, Cell] = {}
 _CONSUMED_SCORE: dict[int, int] = {}
 _LCA_CACHE_SIZE = 4096
+_MAX_CACHED_SUBTREE_TIPS = 8
 
 
 class _SpeciesIndex:
@@ -237,6 +238,36 @@ class _GeneIndex:
         self.children = tuple(
             tuple(self.indices[child] for child in node.children) for node in self.nodes
         )
+        self.score_keys = None
+
+
+def prepare_score_cache(genes):
+    """Intern frequent small species-colored subtrees once for the search."""
+    ids: dict[Any, int] = {}
+    sizes: list[int] = []
+    counts: list[int] = []
+    for gene in genes:
+        keys: list[int] = []
+        for node, children in zip(gene.nodes, gene.children, strict=True):
+            if children:
+                a, b = (keys[i] for i in children)
+                if a < 0 or b < 0 or sizes[a] + sizes[b] > _MAX_CACHED_SUBTREE_TIPS:
+                    keys.append(-1)
+                    continue
+                key, size = (min(a, b), max(a, b)), sizes[a] + sizes[b]
+            else:
+                key, size = gene.taxa[node], 1
+            index = ids.setdefault(key, len(ids))
+            if index == len(counts):
+                sizes.append(size)
+                counts.append(0)
+            counts[index] += 1
+            keys.append(index)
+        gene.score_keys = keys
+    for gene in genes:
+        gene.score_keys = tuple(
+            i if i >= 0 and counts[i] > 1 else -1 for i in gene.score_keys
+        )
 
 
 def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
@@ -248,17 +279,19 @@ def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
 
 def _reconcile_indexed_genes(genes, species, max_state_pairs, *, keep_choices=True):
     species_index = None
+    cache = None if keep_choices else {}
     for gene in genes:
         if species_index is None:
             species_index = _SpeciesIndex(species)
         yield Reconciliation._from_indexes(
-            gene, species_index, max_state_pairs, keep_choices=keep_choices
+            gene, species_index, max_state_pairs, keep_choices=keep_choices, cache=cache
         )
 
 
 def _score_indexed_genes(genes, species, max_state_pairs):
     """Compute exact minimum costs without counting or storing optimal maps."""
     species_index = None
+    cached: dict[int, dict[int, int]] = {}
     for gene in genes:
         if species_index is None:
             species_index = _SpeciesIndex(species)
@@ -266,32 +299,51 @@ def _score_indexed_genes(genes, species, max_state_pairs):
         lca = species_index.common_ancestor_indices
         states: list[dict[int, int]] = []
         state_pairs = 0
-        for node, children in zip(gene.nodes, gene.children, strict=True):
+        for index, (node, children) in enumerate(
+            zip(gene.nodes, gene.children, strict=True)
+        ):
+            key = -1 if gene.score_keys is None else gene.score_keys[index]
             if not children:
-                options = species_index.occurrences.get(gene.taxa[node])
-                if options is None:
-                    raise ValueError(f"Gene tip does not match a species: {node.name}")
-                states.append(dict.fromkeys(options, 0))
+                combined = cached.get(key) if key >= 0 else None
+                if combined is None:
+                    options = species_index.occurrences.get(gene.taxa[node])
+                    if options is None:
+                        raise ValueError(
+                            f"Gene tip does not match a species: {node.name}"
+                        )
+                    combined = dict.fromkeys(options, 0)
+                    if key >= 0:
+                        cached[key] = combined
+                states.append(combined)
                 continue
             left, right = states[children[0]], states[children[1]]
             state_pairs += len(left) * len(right)
             if state_pairs > max_state_pairs:
                 raise ValueError("Reconciliation exceeds --max-state-pairs.")
-            combined: dict[int, int] = {}
-            for first, score_left in left.items():
-                partial = score_left + depth[first]
-                for second, score_right in right.items():
-                    parent = lca(first, second)
-                    cost = partial + score_right + depth[second] - 2 * depth[parent]
-                    # A speciation adds -2 to the edge losses, a duplication +1.
-                    cost += 1 if parent in (first, second) else -2
-                    previous = combined.get(parent)
-                    if previous is None or cost < previous:
-                        combined[parent] = cost
+            combined = cached.get(key) if key >= 0 else None
+            if combined is None:
+                combined = _combine_scores(left, right, depth, lca)
+                if key >= 0:
+                    cached[key] = combined
             states.append(combined)
             # Each gene subtree is consumed exactly once in postorder.
             states[children[0]] = states[children[1]] = _CONSUMED_SCORE
         yield min(score + depth[mapped] for mapped, score in states[-1].items())
+
+
+def _combine_scores(left, right, depth, lca):
+    combined: dict[int, int] = {}
+    for first, score_left in left.items():
+        partial = score_left + depth[first]
+        for second, score_right in right.items():
+            parent = lca(first, second)
+            cost = partial + score_right + depth[second] - 2 * depth[parent]
+            # A speciation adds -2 to the edge losses, a duplication +1.
+            cost += 1 if parent in (first, second) else -2
+            previous = combined.get(parent)
+            if previous is None or cost < previous:
+                combined[parent] = cost
+    return combined
 
 
 class Reconciliation:
@@ -306,12 +358,16 @@ class Reconciliation:
         self._solve(gene_index, _species_index, max_state_pairs)
 
     @classmethod
-    def _from_indexes(cls, gene, species, max_state_pairs, *, keep_choices=True):
+    def _from_indexes(
+        cls, gene, species, max_state_pairs, *, keep_choices=True, cache=None
+    ):
         result = cls.__new__(cls)
-        result._solve(gene, species, max_state_pairs, keep_choices=keep_choices)
+        result._solve(
+            gene, species, max_state_pairs, keep_choices=keep_choices, cache=cache
+        )
         return result
 
-    def _solve(self, gene, species, max_state_pairs, *, keep_choices=True):
+    def _solve(self, gene, species, max_state_pairs, *, keep_choices=True, cache=None):
         self._keep_choices = keep_choices
         self._species_index = species
         self.gene = gene.gene
@@ -325,7 +381,10 @@ class Reconciliation:
         self.combinations = 1
         self.ambiguous_tips = 0
         self.state_pairs = 0
-        for node, children in zip(self.nodes, gene.children, strict=True):
+        keys = gene.score_keys if cache is not None else None
+        for index, (node, children) in enumerate(
+            zip(self.nodes, gene.children, strict=True)
+        ):
             if not children:
                 options = species.occurrences.get(gene.taxa[node], ())
                 if not options:
@@ -338,7 +397,13 @@ class Reconciliation:
                 self.state_pairs += len(left) * len(right)
                 if self.state_pairs > max_state_pairs:
                     raise ValueError("Reconciliation exceeds --max-state-pairs.")
-                self.states.append(self._combine(left, right, keep_choices))
+                key = -1 if keys is None else keys[index]
+                combined = cache.get(key) if key >= 0 else None
+                if combined is None:
+                    combined = self._combine(left, right, keep_choices)
+                    if key >= 0:
+                        cache[key] = combined
+                self.states.append(combined)
                 if not keep_choices:
                     self.states[children[0]] = self.states[children[1]] = (
                         _CONSUMED_STATE

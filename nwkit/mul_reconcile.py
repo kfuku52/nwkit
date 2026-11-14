@@ -17,6 +17,7 @@ from nwkit.mul_reconcile_model import (
     _reconcile_indexed_genes,
     _score_indexed_genes,
     hypotheses,
+    prepare_score_cache,
     reconcile_genes,
 )
 from nwkit.output_transaction import output_transaction, validate_output_targets
@@ -118,6 +119,8 @@ def run_search(
         return ()
     # Gene topology and taxon labels do not depend on the MUL hypothesis.
     prepared = tuple(_GeneIndex(gene, parser) for gene in genes)
+    if len(prepared) > 1 and len(candidates) > 1:
+        prepare_score_cache(prepared)
     if cpus == 1 or len(candidates) == 1:
         return tuple(
             _score_task(candidate, prepared, max_state_pairs, collect_checks)
