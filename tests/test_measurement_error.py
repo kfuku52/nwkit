@@ -127,6 +127,34 @@ def test_dense_eiv_accepts_fixed_covariance_as_a_sampling_factor():
     assert after["objective"] == pytest.approx(before["objective"], abs=1e-10)
 
 
+def test_dense_eiv_accepts_an_implicit_evolutionary_component():
+    rng = np.random.default_rng(18)
+    design = np.column_stack((np.ones(12), rng.normal(size=12)))
+    response = design @ [0.3, 0.8] + rng.normal(size=12)
+    loading = sparse.csr_matrix(np.column_stack((np.eye(12), np.ones(12) * 0.25)))
+    matrix = (loading @ loading.T).toarray()
+    uncertainty = [np.eye(12) * 0.05]
+    sampling = np.full(12, 0.1)
+    before = fit_conditional_eiv_gaussian(
+        response, design, uncertainty, [1], sampling, [("rate", matrix)], reml=False
+    )
+    after = fit_conditional_eiv_gaussian(
+        response,
+        design,
+        uncertainty,
+        [1],
+        sampling,
+        [("rate", None)],
+        component_factors={"rate": loading},
+        reml=False,
+    )
+    assert after["objective"] == pytest.approx(before["objective"], abs=1e-9)
+    np.testing.assert_allclose(after["beta"], before["beta"], rtol=1e-6, atol=1e-8)
+    np.testing.assert_allclose(
+        after["covariance"], before["covariance"], rtol=1e-6, atol=1e-8
+    )
+
+
 @pytest.mark.parametrize("factor_path", [False, True])
 @pytest.mark.parametrize("exponent", [-1023, 1023])
 def test_latent_predictor_normalizes_extreme_evolutionary_covariances(

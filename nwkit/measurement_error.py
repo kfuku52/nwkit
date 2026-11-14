@@ -990,6 +990,23 @@ def _prepare_eiv_components(components, component_factors, n_observations):
     return normalized_components, component_scales
 
 
+def _eiv_working_components(components, component_factors, n_observations, structured):
+    normalized, scales = _prepare_eiv_components(
+        components, component_factors, n_observations
+    )
+    if structured:
+        return normalized, scales
+    for index, (name, matrix) in enumerate(normalized):
+        if matrix is None:
+            loading = component_factors[name]
+            covariance = loading @ loading.T
+            normalized[index] = (
+                name,
+                covariance.toarray() if sparse.issparse(covariance) else covariance,
+            )
+    return normalized, scales
+
+
 def _structured_eiv_base(fixed_covariance):
     if isinstance(fixed_covariance, DiagonalLowRankCovariance):
         return np.asarray(fixed_covariance.diagonal, dtype=float).copy(), [
@@ -1516,8 +1533,8 @@ def fit_conditional_eiv_gaussian(
     )
     if len(predictor_uncertainties) != len(predictor_columns):
         raise ValueError("Each uncertain predictor requires coefficient columns.")
-    normalized_components, component_scales = _prepare_eiv_components(
-        components, component_factors, len(response)
+    normalized_components, component_scales = _eiv_working_components(
+        components, component_factors, len(response), structured
     )
     centered_response, beta_offset = center_response(
         response,
