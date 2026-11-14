@@ -442,6 +442,97 @@ def _dense_covariance_inputs(components, n_tips, fixed_covariance, use_sparse):
     return component_covariance, fixed_dense
 
 
+def _rescale_covariance_rows(matrix, exponents):
+    if sparse.issparse(matrix):
+        scaled = matrix.tocoo(copy=True)
+        scaled.data = np.ldexp(scaled.data, exponents[scaled.row])
+        return scaled.tocsr()
+    return np.ldexp(matrix, exponents[:, None])
+
+
+def _rescale_fixed_covariance(covariance, exponents):
+    if covariance is None:
+        return None
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        return DiagonalLowRankCovariance(
+            np.ldexp(covariance.diagonal, 2 * exponents),
+            _rescale_covariance_rows(covariance.low_rank, exponents),
+        )
+    if covariance.ndim == 1:
+        return np.ldexp(covariance, 2 * exponents)
+    return np.ldexp(covariance, exponents[:, None] + exponents)
+
+
+def _fixed_covariance_size_by_row(covariance):
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        loading = covariance.low_rank
+        if loading.shape[1] == 0:
+            largest_loading = 0.0
+        elif sparse.issparse(loading):
+            largest_loading = np.asarray(abs(loading).max(axis=1).toarray()).ravel()
+        else:
+            largest_loading = np.max(np.abs(loading), initial=0.0, axis=1)
+        return np.maximum(np.sqrt(covariance.diagonal), largest_loading)
+    diagonal = covariance if covariance.ndim == 1 else np.diag(covariance)
+    return np.sqrt(np.maximum(diagonal, 0.0))
+
+
+def _multivariate_response_units(responses, fixed_covariance):
+    magnitude = np.nanmax(np.abs(responses), axis=0)
+    if fixed_covariance is not None:
+        sampling_size = _fixed_covariance_size_by_row(fixed_covariance)
+        magnitude = np.maximum(
+            magnitude,
+            np.max(sampling_size.reshape(responses.shape, order="F"), axis=0),
+        )
+    _, exponent = np.frexp(magnitude)
+    cells = np.repeat(exponent, len(responses))
+    if not np.any(exponent):
+        return responses, fixed_covariance, exponent, cells
+    return (
+        np.ldexp(responses, -exponent),
+        _rescale_fixed_covariance(fixed_covariance, -cells),
+        exponent,
+        cells,
+    )
+
+
+def _restore_multivariate_response_units(
+    coefficients,
+    coefficient_covariance,
+    fitted_covariance,
+    components,
+    exponent,
+    cells,
+):
+    if not np.any(exponent):
+        return coefficients, coefficient_covariance, fitted_covariance, components
+    coefficient_exponents = np.repeat(exponent, coefficients.shape[1])
+    try:
+        with np.errstate(over="raise", under="ignore"):
+            coefficients = np.ldexp(coefficients, exponent[:, None])
+            coefficient_covariance = np.ldexp(
+                coefficient_covariance,
+                coefficient_exponents[:, None] + coefficient_exponents,
+            )
+            components = {
+                name: np.ldexp(matrix, exponent[:, None] + exponent)
+                for name, matrix in components.items()
+            }
+            if isinstance(fitted_covariance, SparseFittedCovariance):
+                fitted_covariance = SparseFittedCovariance(
+                    fitted_covariance.precision,
+                    _rescale_covariance_rows(fitted_covariance.loading, cells),
+                )
+            else:
+                fitted_covariance = _rescale_fixed_covariance(fitted_covariance, cells)
+    except FloatingPointError as exc:
+        raise ValueError(
+            "Multivariate PGLS estimates exceed the range of the response units."
+        ) from exc
+    return coefficients, coefficient_covariance, fitted_covariance, components
+
+
 def fit_multivariate_pgls(
     responses: np.ndarray,
     design: np.ndarray,
@@ -475,6 +566,9 @@ def fit_multivariate_pgls(
         allow_large_dense,
     )
     n_tips, n_traits = responses.shape
+    responses, fixed_covariance, trait_exponents, cell_exponents = (
+        _multivariate_response_units(responses, fixed_covariance)
+    )
     trait_parameter_count = n_traits * (n_traits + 1) // 2
     initial_trait = _initial_trait_parameters(responses)
     initial = np.tile(initial_trait, len(covariance_components))
@@ -629,8 +723,23 @@ def fit_multivariate_pgls(
         np.min(np.linalg.eigvalsh(covariance)) < 1e-10
         for covariance in component_trait_covariances.values()
     )
+    (
+        coefficients,
+        coefficient_covariance,
+        fitted_covariance,
+        component_trait_covariances,
+    ) = _restore_multivariate_response_units(
+        coefficients.reshape(n_traits, design.shape[1]),
+        coefficient_covariance,
+        fitted_covariance,
+        component_trait_covariances,
+        trait_exponents,
+        cell_exponents,
+    )
+    contribution_counts = observed.sum(axis=0) - int(reml) * design.shape[1]
+    fitted_objective += float(contribution_counts @ trait_exponents) * np.log(2.0)
     return MultivariatePglsFit(
-        coefficients=coefficients.reshape(n_traits, design.shape[1]),
+        coefficients=coefficients,
         coefficient_covariance=coefficient_covariance,
         component_trait_covariances=component_trait_covariances,
         fitted_covariance=fitted_covariance,

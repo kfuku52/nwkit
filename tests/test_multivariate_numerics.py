@@ -11,6 +11,7 @@ from nwkit import multivariate_gaussian_asr as dense
 from nwkit import multivariate_pgls as pgls
 from nwkit.asr_compare import ComparisonCandidate, ComparisonContext, _fit_continuous
 from nwkit.cli import main
+from nwkit.gaussian import DiagonalLowRankCovariance
 from nwkit.multivariate_asr import compute_mvbm_marginals
 from nwkit.optimization import FitResourceError
 from nwkit.sparse_laplace import SparseCovarianceModel
@@ -136,6 +137,71 @@ def test_pgls_likelihood_matches_reported_covariance():
         + residual @ np.linalg.solve(fit.fitted_covariance, residual)
     )
     assert fit.log_likelihood == pytest.approx(expected, abs=1e-9)
+
+
+@pytest.mark.parametrize("reml", [False, True])
+@pytest.mark.parametrize("sparse_path", [False, True])
+def test_pgls_rescales_traits_with_missing_values_and_sampling_error(
+    reml, sparse_path, monkeypatch
+):
+    phylogeny = tree()
+    names = list(VALUES)
+    covariance = pgls.EvolutionaryCovarianceFactory(phylogeny, tuple(names))
+    responses = np.asarray(list(VALUES.values()))
+    responses[2, 0] = np.nan
+    design = np.ones((len(names), 1))
+    exponents = np.array([-260, 300])
+    scales = np.ldexp(np.ones(2), exponents)
+    cell_scales = np.repeat(scales, len(names))
+    fixed_loading = np.linspace(-0.03, 0.06, responses.size)[:, None]
+    fixed_diagonal = np.full(responses.size, 0.005)
+    if sparse_path:
+        monkeypatch.setattr(pgls, "MAX_DENSE_MULTIVARIATE_DIMENSION", 1)
+    before = pgls.fit_multivariate_pgls(
+        responses,
+        design,
+        {"tree": covariance},
+        fixed_covariance=DiagonalLowRankCovariance(
+            fixed_diagonal, sparse.csr_matrix(fixed_loading)
+        ),
+        reml=reml,
+    )
+    after = pgls.fit_multivariate_pgls(
+        responses * scales,
+        design,
+        {"tree": covariance},
+        fixed_covariance=DiagonalLowRankCovariance(
+            fixed_diagonal * cell_scales**2,
+            sparse.csr_matrix(fixed_loading * cell_scales[:, None]),
+        ),
+        reml=reml,
+    )
+
+    counts = np.isfinite(responses).sum(axis=0) - int(reml)
+    assert after.log_likelihood + counts @ np.log(scales) == pytest.approx(
+        before.log_likelihood, abs=1e-7
+    )
+    assert after.boundary_warning == before.boundary_warning
+    np.testing.assert_allclose(
+        after.coefficients[:, 0] / scales, before.coefficients[:, 0], atol=1e-6
+    )
+    np.testing.assert_allclose(
+        after.coefficient_covariance / np.outer(scales, scales),
+        before.coefficient_covariance,
+        rtol=2e-5,
+    )
+    before_covariance, after_covariance = (
+        before.fitted_covariance,
+        after.fitted_covariance,
+    )
+    if sparse_path:
+        before_covariance = before_covariance.materialize()
+        after_covariance = after_covariance.materialize()
+    np.testing.assert_allclose(
+        after_covariance / np.outer(cell_scales, cell_scales),
+        before_covariance,
+        rtol=2e-5,
+    )
 
 
 def test_pgls_cached_components_preserve_covariance_scale(monkeypatch):
