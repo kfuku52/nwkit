@@ -225,6 +225,31 @@ def test_unreachable_stochastic_bridge_is_rejected():
         asr._sample_bridge_event_count(0, 2, 1.0, matrix, np.random.default_rng(0))
 
 
+def test_stochastic_bridge_retains_two_changes_below_probability_range():
+    matrix = np.array(
+        [
+            [-1.0, 1e-180, 0.0, 1.0],
+            [0.0, -1.0, 1e-180, 1.0],
+            [0.0, 0.0, 0.0, 0.0],
+            [0.0, 0.0, 0.0, 0.0],
+        ]
+    )
+    context = asr._build_uniformization_context(matrix, 0.01)
+    rng = np.random.default_rng(89)
+    for _ in range(8):
+        counts = asr._draw_bridge_transition_counts(0, 2, context, rng)
+        assert counts == {(0, 1): 1, (1, 2): 1}
+
+
+def test_stochastic_bridge_retains_event_weights_below_intensity_range():
+    rate = 1e-200
+    matrix = np.array([[-rate, rate], [0.0, 0.0]])
+    count = asr._sample_bridge_event_count(
+        0, 1, 1e-200, matrix, np.random.default_rng(1)
+    )
+    assert count == 1
+
+
 def test_uniformization_context_avoids_dense_power_history_at_high_event_count():
     matrix = np.full((4, 4), 1.0 / 3.0)
     np.fill_diagonal(matrix, -1.0)

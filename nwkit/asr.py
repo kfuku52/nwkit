@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from scipy.linalg import expm
 from scipy.optimize import OptimizeResult, minimize
-from scipy.special import logsumexp
+from scipy.special import gammaln, logsumexp
 from scipy.stats import gamma as gamma_distribution
 from scipy.stats import poisson
 
@@ -2560,18 +2560,36 @@ def _build_uniformization_context(rate_matrix, branch_length):
     r_matrix = np.maximum(r_matrix, 0.0)
     r_matrix = r_matrix / r_matrix.sum(axis=1, keepdims=True)
     event_counts = np.arange(max_n + 1, dtype=np.int64)
-    log_poisson = poisson.logpmf(event_counts, lam)
+    log_poisson = _uniformization_log_event_weights(
+        event_counts, omega, branch_length, lam
+    )
     full_cache_bytes = 2 * (max_n + 1) * num_states * num_states * 8
     cache_small_context = full_cache_bytes <= _MAX_CACHED_BACKWARD_BYTES
     return {
         "no_events": False,
         "max_n": max_n,
         "r_matrix": r_matrix,
+        "rate_matrix": rate_matrix,
+        "omega": omega,
         "event_counts": event_counts,
         "log_poisson": log_poisson,
         "backward_by_end": {} if cache_small_context else None,
         "bridge_probability_cache": {} if cache_small_context else None,
     }
+
+
+def _uniformization_log_event_weights(counts, omega, branch_length, intensity):
+    if intensity >= np.finfo(float).tiny:
+        return poisson.logpmf(counts, intensity)
+    log_intensity = math.log(omega) + math.log(branch_length)
+    return counts * log_intensity - gammaln(counts + 1.0) - intensity
+
+
+def _uniformization_log_jump_matrix(rate_matrix, omega, jump_matrix):
+    log_jump = _log_probabilities(jump_matrix)
+    tiny = (rate_matrix > 0.0) & (jump_matrix < np.finfo(float).tiny)
+    log_jump[tiny] = np.log(rate_matrix[tiny]) - math.log(omega)
+    return log_jump
 
 
 def _build_uniformization_contexts(rate_matrix, branch_lengths):
@@ -2612,10 +2630,17 @@ def _bridge_probabilities(weights):
     return _normalize_probability_vector(weights)
 
 
-def _backward_bridge_messages(context, end_state):
+def _bridge_message_cache(context, end_state):
     cache = context.get("backward_by_end")
     if cache is not None and end_state in cache:
         return cache[end_state]
+    backward = _backward_bridge_messages(context, end_state)
+    if cache is not None:
+        cache[end_state] = (backward, False)
+    return backward, False
+
+
+def _backward_bridge_messages(context, end_state):
     r_matrix = context["r_matrix"]
     num_states = r_matrix.shape[0]
     max_n = len(context["event_counts"]) - 1
@@ -2624,9 +2649,44 @@ def _backward_bridge_messages(context, end_state):
     backward[0, end_state] = 1.0
     for event_count in range(max_n):
         backward[event_count + 1, :] = r_matrix.dot(backward[event_count, :])
-    if cache is not None:
-        cache[end_state] = backward
     return backward
+
+
+def _log_backward_bridge_messages(context, end_state):
+    log_r = context.get("log_r_matrix")
+    if log_r is None:
+        log_r = _uniformization_log_jump_matrix(
+            context["rate_matrix"], context["omega"], context["r_matrix"]
+        )
+        context["log_r_matrix"] = log_r
+    history = np.full((len(context["event_counts"]), len(log_r)), -math.inf)
+    history[0, end_state] = 0.0
+    for index in range(1, len(history)):
+        history[index] = _edge_logsumexp(log_r + history[index - 1][None, :])
+    cache = context.get("backward_by_end")
+    if cache is not None:
+        cache[end_state] = (history, True)
+    return history
+
+
+def _bridge_log_weights(start_state, end_state, context, backward, logged):
+    if not logged:
+        probabilities = backward[:, start_state]
+        log_weights = context["log_poisson"] + _log_probabilities(probabilities)
+        maximum_weight = float(np.max(log_weights))
+        small = probabilities < np.finfo(float).tiny
+        # A lost bridge term is bounded by the Poisson weight times the
+        # smallest normal float. Recompute only when it could matter.
+        small_upper_bound = np.max(context["log_poisson"][small], initial=-math.inf)
+        small_upper_bound += math.log(np.finfo(float).tiny)
+        if math.isfinite(maximum_weight) and small_upper_bound < maximum_weight - 36.0:
+            return log_weights, backward, False
+        del probabilities, log_weights, backward
+        cache = context.get("backward_by_end")
+        if cache is not None:
+            cache.pop(end_state, None)
+        backward = _log_backward_bridge_messages(context, end_state)
+    return context["log_poisson"] + backward[:, start_state], backward, True
 
 
 def _draw_bridge_event_count(start_state, end_state, context, rng):
@@ -2635,17 +2695,10 @@ def _draw_bridge_event_count(start_state, end_state, context, rng):
     cache = context.get("bridge_probability_cache")
     cache_key = (start_state, end_state)
     probabilities = None if cache is None else cache.get(cache_key)
-    backward = _backward_bridge_messages(context, end_state)
+    backward, logged = _bridge_message_cache(context, end_state)
     if probabilities is None:
-        bridge_probabilities = backward[:, start_state]
-        valid = bridge_probabilities > 0.0
-        if not np.any(valid):
-            raise ValueError(
-                "No feasible stochastic bridge connects the requested states."
-            )
-        log_weights = np.full(len(bridge_probabilities), -math.inf, dtype=float)
-        log_weights[valid] = context["log_poisson"][valid] + np.log(
-            bridge_probabilities[valid]
+        log_weights, backward, logged = _bridge_log_weights(
+            start_state, end_state, context, backward, logged
         )
         normalizer = float(logsumexp(log_weights))
         if not math.isfinite(normalizer):
@@ -2656,28 +2709,35 @@ def _draw_bridge_event_count(start_state, end_state, context, rng):
         if cache is not None:
             cache[cache_key] = probabilities
     event_count = int(rng.choice(context["event_counts"], p=probabilities))
-    return event_count, backward
+    return event_count, (backward, logged)
 
 
 def _draw_bridge_transition_counts(start_state, end_state, context, rng):
-    event_count, backward = _draw_bridge_event_count(
+    event_count, messages = _draw_bridge_event_count(
         start_state, end_state, context, rng
     )
     counts: defaultdict[Any, int] = defaultdict(int)
     if event_count == 0:
         return counts
-    r_matrix = context["r_matrix"]
-    num_states = len(r_matrix)
+    backward, logged = messages
+    num_states = len(context["r_matrix"])
     current_state = start_state
     for step_index in range(event_count):
         remaining = event_count - step_index - 1
-        weights = r_matrix[current_state, :] * backward[remaining, :]
-        probabilities = _bridge_probabilities(weights)
+        probabilities = _bridge_step_probabilities(
+            context, backward[remaining], current_state, logged
+        )
         next_state = int(rng.choice(num_states, p=probabilities))
         if next_state != current_state:
             counts[(current_state, next_state)] += 1
         current_state = next_state
     return counts
+
+
+def _bridge_step_probabilities(context, backward, state, logged):
+    if logged:
+        return _probabilities_from_logs(context["log_r_matrix"][state] + backward)
+    return _bridge_probabilities(context["r_matrix"][state] * backward)
 
 
 def _sample_node_states(tree, states, fit, rng):
