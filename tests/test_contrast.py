@@ -92,6 +92,42 @@ def test_dense_tip_sampling_covariance_keeps_small_projected_variance():
     )
 
 
+def test_contrast_table_preserves_trait_specific_sampling_covariance():
+    tree = Tree("((A:1,B:1):1,C:2);", parser=1)
+    values = {
+        "first": {"A": 1.0, "B": 3.0, "C": 4.0},
+        "second": {"A": 5.0, "B": 2.0, "C": -3.0},
+    }
+    covariances = {
+        "first": np.array([0.1, 0.2, 0.3]),
+        "second": np.array([0.8, 0.1, 0.2]),
+    }
+    options = dict(
+        evolution_model="lambda",
+        evolution_parameter=0.65,
+        return_sampling_covariance=True,
+    )
+    table, covariance = build_contrast_table(
+        tree,
+        values,
+        sampling_covariance_by_trait=covariances,
+        replicate_model_by_trait=dict.fromkeys(values, "pooled"),
+        **options,
+    )
+    for trait, observations in values.items():
+        expected, expected_covariance = build_contrast_table(
+            tree,
+            {trait: observations},
+            sampling_covariance_by_trait={trait: covariances[trait]},
+            replicate_model_by_trait={trait: "pooled"},
+            **options,
+        )
+        for combined, single in ((table, expected), (covariance, expected_covariance)):
+            pd.testing.assert_frame_equal(
+                combined.loc[combined["trait"] == trait].reset_index(drop=True), single
+            )
+
+
 def test_contrast_sign_is_invariant_to_newick_child_order():
     values = {"A": 1.0, "B": 3.0, "C": 4.0}
     tree1 = Tree("((A:1,B:1):1,C:2);", parser=1)

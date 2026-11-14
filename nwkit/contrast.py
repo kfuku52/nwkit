@@ -980,12 +980,64 @@ def _orient_children(tree, clades, reconciliation_by_id):
     return orientation_by_node
 
 
-def _edge_variance(node, edge_variances):
-    return float(edge_variances[node])
+def _contrast_output_rows(
+    tree,
+    branch_ids,
+    clades,
+    orientation_by_node,
+    reconciliation_by_id,
+    *,
+    tree_id,
+    event_type,
+    eligible_only,
+    speciation_coverage,
+):
+    rows = []
+    for node in tree.traverse():
+        if node.is_leaf:
+            continue
+        branch_clade_id = clades.clade_id_for_node(node)
+        reconciliation = (
+            None
+            if reconciliation_by_id is None
+            else reconciliation_by_id[branch_clade_id]
+        )
+        if reconciliation is not None:
+            if event_type != "all" and reconciliation["event_type"] != event_type:
+                continue
+            if eligible_only and reconciliation["eligible"] != "yes":
+                continue
+            if (
+                eligible_only
+                and speciation_coverage == "complete"
+                and reconciliation["coverage_status"] != "complete"
+            ):
+                continue
+        numerator, denominator = orientation_by_node[node]
+        row = {
+            "tree_id": tree_id,
+            "branch_id": branch_ids[node],
+            "branch_clade_id": branch_clade_id,
+            "node_class": get_node_class(node),
+            "descendant_taxa": clades.csv_for_node(node),
+            "num_taxa": clades.count_for_node(node),
+            "numerator_branch_id": branch_ids[numerator],
+            "numerator_clade_id": clades.clade_id_for_node(numerator),
+            "denominator_branch_id": branch_ids[denominator],
+            "denominator_clade_id": clades.clade_id_for_node(denominator),
+            "numerator_taxa": clades.csv_for_node(numerator),
+            "denominator_taxa": clades.csv_for_node(denominator),
+        }
+        if reconciliation is not None:
+            row.update(
+                {key: reconciliation[key] for key in RECONCILIATION_CONTEXT_COLUMNS}
+            )
+        rows.append((node, row))
+    return rows
 
 
-def _validated_leaf_values(tree, values_by_leaf):
-    expected = {str(leaf.name) for leaf in tree.leaves()}
+def _validated_leaf_values(leaf_names, values_by_leaf):
+    expected = set(leaf_names)
     observed = {str(name) for name in values_by_leaf}
     missing = sorted(expected - observed)
     extra = sorted(observed - expected)
@@ -1013,11 +1065,6 @@ def _require_finite(value, label):
     return value
 
 
-def _stable_ancestral_estimate(value1, variance1, value2, variance2):
-    weight1, weight2 = _stable_ancestral_weights(variance1, variance2)
-    return value1 * weight1 + value2 * weight2
-
-
 def _stable_ancestral_weights(variance1, variance2):
     scale = max(variance1, variance2)
     scaled1 = variance1 / scale
@@ -1030,6 +1077,90 @@ def _stable_adjusted_variance(variance1, variance2):
     smaller = min(variance1, variance2)
     larger = max(variance1, variance2)
     return smaller / (1.0 + smaller / larger)
+
+
+def _prepare_contrast_branches(
+    tree, branch_length, evolution_model, evolution_parameter, orientation_by_node
+):
+    edge_variances = transformed_edge_variances(
+        tree,
+        model=evolution_model,
+        parameter=evolution_parameter,
+        branch_length=branch_length,
+    )
+    variance_by_node = {}
+    branches = []
+    for node in tree.traverse(strategy="postorder"):
+        if node.is_leaf:
+            variance_by_node[node] = float(edge_variances[node])
+            continue
+        numerator, denominator = orientation_by_node[node]
+        numerator_variance = variance_by_node[numerator]
+        denominator_variance = variance_by_node[denominator]
+        contrast_variance = numerator_variance + denominator_variance
+        if contrast_variance <= 0.0 or not math.isfinite(contrast_variance):
+            raise ValueError("A contrast has non-positive or non-finite variance.")
+        weight1, weight2 = _stable_ancestral_weights(
+            numerator_variance, denominator_variance
+        )
+        adjusted_variance = _stable_adjusted_variance(
+            numerator_variance, denominator_variance
+        )
+        variance_by_node[node] = _require_finite(
+            adjusted_variance + float(edge_variances[node]),
+            "adjusted variance",
+        )
+        branches.append(
+            (node, numerator, denominator, contrast_variance, weight1, weight2)
+        )
+    return branches
+
+
+def _contrast_coefficients(leaves, branches, sparse_coefficients):
+    coefficient_by_node = {}
+    contrast_coefficient_by_node = {}
+    for index, leaf in enumerate(leaves):
+        if sparse_coefficients:
+            coefficients = sparse.csr_matrix(
+                ([1.0], ([0], [index])), shape=(1, len(leaves))
+            )
+        else:
+            coefficients = np.zeros(len(leaves), dtype=float)
+            coefficients[index] = 1.0
+        coefficient_by_node[leaf] = coefficients
+    for node, numerator, denominator, _, weight1, weight2 in branches:
+        first = coefficient_by_node.pop(numerator)
+        second = coefficient_by_node.pop(denominator)
+        contrast_coefficient_by_node[node] = first - second
+        coefficient_by_node[node] = weight1 * first + weight2 * second
+    return contrast_coefficient_by_node
+
+
+def _evaluate_contrasts(leaves, values_by_leaf, branches):
+    estimate_by_node = {leaf: values_by_leaf[str(leaf.name)] for leaf in leaves}
+    contrast_by_node = {}
+    for node, numerator, denominator, contrast_variance, weight1, weight2 in branches:
+        numerator_estimate = estimate_by_node[numerator]
+        denominator_estimate = estimate_by_node[denominator]
+        raw_contrast = _require_finite(
+            numerator_estimate - denominator_estimate, "raw contrast"
+        )
+        ancestral_estimate = _require_finite(
+            numerator_estimate * weight1 + denominator_estimate * weight2,
+            "ancestral estimate",
+        )
+        standardized_contrast = _require_finite(
+            raw_contrast / math.sqrt(contrast_variance),
+            "standardized contrast",
+        )
+        estimate_by_node[node] = ancestral_estimate
+        contrast_by_node[node] = {
+            "raw_contrast": raw_contrast,
+            "contrast_variance": contrast_variance,
+            "standardized_contrast": standardized_contrast,
+            "ancestral_estimate": ancestral_estimate,
+        }
+    return contrast_by_node
 
 
 def calculate_contrasts(
@@ -1049,97 +1180,23 @@ def calculate_contrasts(
         tree,
         branch_length if evolution_spec.branch_lengths_used else "unit",
     )
-    edge_variances = transformed_edge_variances(
-        tree,
-        model=evolution_model,
-        parameter=evolution_parameter,
-        branch_length=branch_length,
-    )
-    values_by_leaf = _validated_leaf_values(tree, values_by_leaf)
+    leaves = tuple(tree.leaves())
+    leaf_names = [str(leaf.name) for leaf in leaves]
+    values = _validated_leaf_values(leaf_names, values_by_leaf)
     if orientation_by_node is None:
         clades = CladeIndex(tree)
         orientation_by_node = _orient_children(tree, clades, reconciliation_by_id=None)
-    estimate_by_node = dict()
-    variance_by_node = dict()
-    contrast_by_node = dict()
-    coefficient_by_node = dict()
-    contrast_coefficient_by_node = dict()
-    leaf_names = [str(leaf.name) for leaf in tree.leaves()]
-    leaf_index = {name: index for index, name in enumerate(leaf_names)}
-    for node in tree.traverse(strategy="postorder"):
-        if node.is_leaf:
-            estimate_by_node[node] = values_by_leaf[str(node.name)]
-            variance_by_node[node] = _edge_variance(node, edge_variances)
-            if return_coefficients:
-                if sparse_coefficients:
-                    coefficients = sparse.csr_matrix(
-                        (
-                            [1.0],
-                            ([0], [leaf_index[str(node.name)]]),
-                        ),
-                        shape=(1, len(leaf_names)),
-                    )
-                else:
-                    coefficients = np.zeros(len(leaf_names), dtype=float)
-                    coefficients[leaf_index[str(node.name)]] = 1.0
-                coefficient_by_node[node] = coefficients
-            continue
-        numerator, denominator = orientation_by_node[node]
-        numerator_variance = variance_by_node[numerator]
-        denominator_variance = variance_by_node[denominator]
-        contrast_variance = numerator_variance + denominator_variance
-        if contrast_variance <= 0.0 or not math.isfinite(contrast_variance):
-            raise ValueError("A contrast has non-positive or non-finite variance.")
-        numerator_estimate = estimate_by_node[numerator]
-        denominator_estimate = estimate_by_node[denominator]
-        raw_contrast = _require_finite(
-            numerator_estimate - denominator_estimate, "raw contrast"
-        )
-        ancestral_estimate = _require_finite(
-            _stable_ancestral_estimate(
-                numerator_estimate,
-                numerator_variance,
-                denominator_estimate,
-                denominator_variance,
-            ),
-            "ancestral estimate",
-        )
-        weight1, weight2 = _stable_ancestral_weights(
-            numerator_variance, denominator_variance
-        )
-        if return_coefficients:
-            contrast_coefficients = (
-                coefficient_by_node[numerator] - coefficient_by_node[denominator]
-            )
-            ancestral_coefficients = (
-                weight1 * coefficient_by_node[numerator]
-                + weight2 * coefficient_by_node[denominator]
-            )
-        adjusted_variance = _stable_adjusted_variance(
-            numerator_variance, denominator_variance
-        )
-        node_variance = _require_finite(
-            adjusted_variance + _edge_variance(node, edge_variances),
-            "adjusted variance",
-        )
-        standardized_contrast = _require_finite(
-            raw_contrast / math.sqrt(contrast_variance),
-            "standardized contrast",
-        )
-        estimate_by_node[node] = ancestral_estimate
-        variance_by_node[node] = node_variance
-        if return_coefficients:
-            coefficient_by_node[node] = ancestral_coefficients
-            contrast_coefficient_by_node[node] = contrast_coefficients
-        contrast_by_node[node] = {
-            "raw_contrast": raw_contrast,
-            "contrast_variance": contrast_variance,
-            "standardized_contrast": standardized_contrast,
-            "ancestral_estimate": ancestral_estimate,
-        }
+    branches = _prepare_contrast_branches(
+        tree, branch_length, evolution_model, evolution_parameter, orientation_by_node
+    )
+    contrasts = _evaluate_contrasts(leaves, values, branches)
     if return_coefficients:
-        return contrast_by_node, contrast_coefficient_by_node, leaf_names
-    return contrast_by_node
+        return (
+            contrasts,
+            _contrast_coefficients(leaves, branches, sparse_coefficients),
+            leaf_names,
+        )
+    return contrasts
 
 
 def _structured_tip_sampling_factor(coefficients, leaf_names, covariance):
@@ -1426,85 +1483,70 @@ def build_contrast_table(
     branch_ids = assign_branch_ids(tree)
     clades = CladeIndex(tree)
     orientation_by_node = _orient_children(tree, clades, reconciliation_by_id)
+    leaves = tuple(tree.leaves())
+    leaf_names = [str(leaf.name) for leaf in leaves]
+    branches = (
+        _prepare_contrast_branches(
+            tree,
+            branch_length,
+            evolution_model,
+            evolution_parameter,
+            orientation_by_node,
+        )
+        if values_by_trait
+        else ()
+    )
+    contrast_coefficients = (
+        _contrast_coefficients(
+            leaves,
+            branches,
+            len(leaves) > MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS,
+        )
+        if sampling_covariance_by_trait is not None and values_by_trait
+        else None
+    )
+    metadata_rows = (
+        _contrast_output_rows(
+            tree,
+            branch_ids,
+            clades,
+            orientation_by_node,
+            reconciliation_by_id,
+            tree_id=tree_id,
+            event_type=event_type,
+            eligible_only=eligible_only,
+            speciation_coverage=speciation_coverage,
+        )
+        if values_by_trait
+        else ()
+    )
+    evolution_columns = {
+        "evolution_model": evolution_model,
+        "evolution_parameter_name": evolution_spec.parameter_name or "",
+        "evolution_parameter": evolution_parameter
+        if evolution_parameter is not None
+        else "",
+        "branch_length_mode": branch_length
+        if evolution_spec.branch_lengths_used
+        else "not-applicable",
+    }
     rows = list()
     coefficient_by_trait_and_clade = {}
     leaf_names_by_trait = {}
     for trait, values_by_leaf in values_by_trait.items():
-        contrast_result = calculate_contrasts(
-            tree,
-            values_by_leaf,
-            branch_length=branch_length,
-            evolution_model=evolution_model,
-            evolution_parameter=evolution_parameter,
-            orientation_by_node=orientation_by_node,
-            return_coefficients=sampling_covariance_by_trait is not None,
-            sparse_coefficients=(
-                sampling_covariance_by_trait is not None
-                and len(list(tree.leaves())) > MAX_FULL_SAMPLING_COVARIANCE_CONTRASTS
-            ),
+        contrasts = _evaluate_contrasts(
+            leaves, _validated_leaf_values(leaf_names, values_by_leaf), branches
         )
-        if sampling_covariance_by_trait is None:
-            contrasts = contrast_result
-            contrast_coefficients = None
-        else:
-            contrasts, contrast_coefficients, leaf_names = contrast_result
+        if contrast_coefficients is not None:
             leaf_names_by_trait[trait] = leaf_names
-        for node in tree.traverse():
-            if node.is_leaf:
-                continue
-            branch_id = branch_ids[node]
-            branch_clade_id = clades.clade_id_for_node(node)
-            reconciliation = (
-                None
-                if reconciliation_by_id is None
-                else reconciliation_by_id[branch_clade_id]
+        for node, metadata in metadata_rows:
+            rows.append(
+                {**metadata, **evolution_columns, "trait": trait, **contrasts[node]}
             )
-            if reconciliation is not None:
-                if event_type != "all" and reconciliation["event_type"] != event_type:
-                    continue
-                if eligible_only and reconciliation["eligible"] != "yes":
-                    continue
-                if (
-                    eligible_only
-                    and speciation_coverage == "complete"
-                    and reconciliation["coverage_status"] != "complete"
-                ):
-                    continue
-            numerator, denominator = orientation_by_node[node]
-            row = {
-                "tree_id": tree_id,
-                "branch_id": branch_id,
-                "branch_clade_id": branch_clade_id,
-                "node_class": get_node_class(node),
-                "descendant_taxa": clades.csv_for_node(node),
-                "num_taxa": clades.count_for_node(node),
-                "trait": trait,
-                "evolution_model": evolution_model,
-                "evolution_parameter_name": evolution_spec.parameter_name or "",
-                "evolution_parameter": (
-                    evolution_parameter if evolution_parameter is not None else ""
-                ),
-                "branch_length_mode": (
-                    branch_length
-                    if evolution_spec.branch_lengths_used
-                    else "not-applicable"
-                ),
-                "numerator_branch_id": branch_ids[numerator],
-                "numerator_clade_id": clades.clade_id_for_node(numerator),
-                "denominator_branch_id": branch_ids[denominator],
-                "denominator_clade_id": clades.clade_id_for_node(denominator),
-                "numerator_taxa": clades.csv_for_node(numerator),
-                "denominator_taxa": clades.csv_for_node(denominator),
-            }
-            row.update(contrasts[node])
             if contrast_coefficients is not None:
-                coefficient_by_trait_and_clade[(trait, branch_clade_id)] = (
+                coefficient_by_trait_and_clade[(trait, metadata["branch_clade_id"])] = (
                     contrast_coefficients[node]
                 )
-            if reconciliation is not None:
-                for column in RECONCILIATION_CONTEXT_COLUMNS:
-                    row[column] = reconciliation[column]
-            rows.append(row)
     columns = list(BASE_CONTRAST_COLUMNS)
     if reconciliation_by_id is not None:
         columns = (
