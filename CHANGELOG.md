@@ -26,6 +26,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   likelihood domain and in small parameter units.
 - Fit shared MV-OU attraction in normalized time units so the initialization
   and search remain finite under extreme branch-length rescaling.
+- Refine scalar likelihoods in normalized parameter units, prioritizing the
+  strongest grid minima and reporting convergence for the selected fit.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
   affect an informative tip observation.
 - Mk mixture marginals average only categories with positive posterior mass.

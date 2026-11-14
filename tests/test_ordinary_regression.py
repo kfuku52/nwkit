@@ -53,6 +53,29 @@ def test_global_scalar_search_checks_multiple_likelihood_basins():
     assert result.fun == pytest.approx(0.0, abs=1e-10)
 
 
+@pytest.mark.parametrize("offset, width", [(0.0, 1e-20), (1e10, 1.0), (-1e308, 1e308)])
+def test_global_scalar_search_refines_in_relative_parameter_units(offset, width):
+    bounds = (offset, offset + width)
+
+    def objective(value):
+        return ((value - offset) / width - 0.43) ** 2
+
+    result = _global_bounded_scalar_minimize(objective, bounds)
+    assert result.success
+    assert (result.x - offset) / width == pytest.approx(0.43, abs=3e-6)
+    assert result.fun < 1e-10
+
+
+def test_global_scalar_search_prioritizes_promising_basins():
+    def objective(value):
+        shallow = min(1.0 + (value - center) ** 2 for center in (1, 3, 5, 7, 9))
+        return min(shallow, (value - 11.25) ** 2)
+
+    result = _global_bounded_scalar_minimize(objective, (0.0, 16.0))
+    assert result.success
+    assert result.x == pytest.approx(11.25, abs=1e-7)
+
+
 def test_marginal_evolution_parameter_estimation_uses_trait_only_ml():
     diagnostics = estimate_marginal_evolution_parameter(
         _tree(),

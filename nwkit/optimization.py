@@ -59,6 +59,11 @@ class ScalarFitCache:
 
 
 def _bounded_scalar_minimize(function, bounds):
+    lower, upper = bounds
+
+    def decode(fraction):
+        return (1.0 - fraction) * lower + fraction * upper
+
     with warnings.catch_warnings():
         warnings.filterwarnings(
             "ignore",
@@ -66,12 +71,14 @@ def _bounded_scalar_minimize(function, bounds):
             category=RuntimeWarning,
             module=r"scipy\.optimize\._optimize",
         )
-        return minimize_scalar(
-            function,
-            bounds=bounds,
+        result = minimize_scalar(
+            lambda fraction: function(decode(fraction)),
+            bounds=(0.0, 1.0),
             method="bounded",
             options={"xatol": 1e-7, "maxiter": 500},
         )
+    result.x = decode(float(result.x))
+    return result
 
 
 def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
@@ -82,12 +89,13 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
         raise ValueError("Scalar optimizer bounds must be increasing and finite.")
     if grid_size < 3:
         raise ValueError("A global scalar search requires at least three grid points.")
-    grid = np.linspace(lower, upper, grid_size)
+    fractions = np.linspace(0.0, 1.0, grid_size)
+    grid = (1.0 - fractions) * lower + fractions * upper
     grid_values = np.asarray([float(function(value)) for value in grid], dtype=float)
     finite_indices = np.flatnonzero(np.isfinite(grid_values))
     if not len(finite_indices):
         return SimpleNamespace(
-            x=(lower + upper) / 2.0,
+            x=0.5 * lower + 0.5 * upper,
             fun=float("inf"),
             success=False,
             message="global grid search found no finite objective",
@@ -109,7 +117,7 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
         key=lambda index: grid_values[index],
     )
     refinement_indices = []
-    for index in local_indices + ranked_indices:
+    for index in sorted(local_indices, key=grid_values.__getitem__) + ranked_indices:
         if index not in refinement_indices:
             refinement_indices.append(index)
         if len(refinement_indices) == 4:
@@ -133,14 +141,14 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
         if math.isfinite(float(refined.fun)):
             candidates.append(refined)
             successful_refinements += int(bool(refined.success))
-    best = min(candidates, key=lambda candidate: float(candidate.fun))
-    best_is_boundary = math.isclose(float(best.x), lower) or math.isclose(
-        float(best.x), upper
+    best = min(
+        candidates,
+        key=lambda candidate: (float(candidate.fun), not bool(candidate.success)),
     )
     return SimpleNamespace(
         x=float(best.x),
         fun=float(best.fun),
-        success=bool(best_is_boundary or successful_refinements),
+        success=bool(best.success),
         message=(
             "global grid search ({} points; {} successful local refinement(s))"
         ).format(grid_size, successful_refinements),
