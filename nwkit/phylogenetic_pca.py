@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.linalg import cho_solve, solve_triangular
+from scipy.linalg import cho_solve, eigh, solve_triangular
 
 from nwkit.optimization import global_bounded_scalar_minimize
 
@@ -51,6 +51,11 @@ def _profile_likelihood(covariance, values):
 
 def _likelihood_from_white(factor, whitened, n, p):
     """Profile the ML trait covariance without repeating tree whitening."""
+    logdet_tree = float(2 * np.log(np.diag(factor)).sum())
+    return _matrix_normal_likelihood(logdet_tree, whitened, n, p)
+
+
+def _matrix_normal_likelihood(logdet_tree, whitened, n, p):
     units = np.max(np.abs(whitened), axis=0)
     if np.any(units == 0):
         raise ValueError("Constant traits have no full-rank Gaussian likelihood.")
@@ -63,8 +68,37 @@ def _likelihood_from_white(factor, whitened, n, p):
     logdet_trait = float(
         2 * np.log(singular).sum() + 2 * np.log(units).sum() - p * np.log(n)
     )
-    logdet_tree = float(2 * np.log(np.diag(factor)).sum())
     return -0.5 * (n * p * (np.log(2 * np.pi) + 1) + p * logdet_tree + n * logdet_trait)
+
+
+def _spectral_lambda_profile(covariance, diagonal, values):
+    """Reuse the covariance spectrum throughout a well-conditioned search."""
+    if np.any(diagonal <= 0):
+        return None
+    sd = np.sqrt(diagonal)
+    correlation = np.empty(covariance.shape, dtype=float, order="F")
+    np.divide(covariance, sd[:, None], out=correlation)
+    correlation /= sd[None, :]
+    eigenvalues, vectors = eigh(correlation, driver="evd", overwrite_a=True)
+    n, p = values.shape
+    # Near singularity retain Cholesky, whose rounding is more accurate.
+    accuracy_floor = np.sqrt(np.finfo(float).eps) * n * eigenvalues[-1]
+    if eigenvalues[0] <= accuracy_floor:
+        return None
+    projected_one = vectors.T @ (1 / sd)
+    projected_y = vectors.T @ (values / sd[:, None])
+    diagonal_logdet = float(2 * np.log(sd).sum())
+
+    def profile(lam):
+        variance = (1 - lam) + lam * eigenvalues
+        root = np.sqrt(variance)
+        design = projected_one / root
+        whitened = projected_y / root[:, None]
+        whitened -= np.outer(design, (design @ whitened) / (design @ design))
+        logdet = diagonal_logdet + float(np.log(variance).sum())
+        return -_matrix_normal_likelihood(logdet, whitened, n, p)
+
+    return profile
 
 
 def _check_singular_lambda_limit(covariance, diagonal, values):
@@ -107,9 +141,7 @@ def _lambda(covariance, values, model, fixed):
     if model == "BM" or fixed is not None:
         return 1.0 if model == "BM" else float(fixed), False
     diagonal = np.diag(covariance)
-    trial = covariance.copy()
-    np.fill_diagonal(trial, 0.0)
-    if not np.any(trial):
+    if np.count_nonzero(covariance) == np.count_nonzero(diagonal):
         raise ValueError(
             "Lambda is unidentifiable on this tree; use BM or fix --lambda-value."
         )
@@ -118,9 +150,12 @@ def _lambda(covariance, values, model, fixed):
     differences = _finite(values - values[0], "Trait range")
     scaled = differences / np.max(np.abs(differences), axis=0)
     singular_endpoint = False
+    trial = None
 
-    def objective(value):
-        nonlocal singular_endpoint
+    def cholesky_profile(value):
+        nonlocal singular_endpoint, trial
+        if trial is None:
+            trial = np.empty_like(covariance)
         np.multiply(covariance, value, out=trial)
         np.fill_diagonal(trial, diagonal)
         try:
@@ -131,6 +166,10 @@ def _lambda(covariance, values, model, fixed):
             singular_endpoint |= value == 1
             return float("inf")
 
+    spectral_profile = None
+    if len(values) >= 64:
+        spectral_profile = _spectral_lambda_profile(covariance, diagonal, scaled)
+    objective = spectral_profile or cholesky_profile
     fit = global_bounded_scalar_minimize(objective, (0, 1))
     if not fit.success or not np.isfinite(fit.fun):
         raise ValueError("PCA lambda optimization failed.")

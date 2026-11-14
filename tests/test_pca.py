@@ -122,6 +122,20 @@ def test_correlation_pca_and_lambda_are_invariant_to_units():
     assert np.abs(second.scores) == pytest.approx(np.abs(first.scores), abs=1e-5)
 
 
+def test_spectral_lambda_profile_agrees_with_cholesky():
+    matrix = np.kron(np.eye(9), covariance())
+    rng = np.random.default_rng(256)
+    values = rng.normal(size=(len(matrix), 4))
+    values -= values[0].copy()
+    profile = phylogenetic_pca._spectral_lambda_profile(
+        matrix, matrix.diagonal(), values
+    )
+    assert profile is not None
+    for lam in (0.0, 0.3, 0.8, 1.0):
+        fixed = fit_pca(matrix, values, model="LAMBDA", lambda_value=lam)
+        assert -profile(lam) == pytest.approx(fixed.log_likelihood, abs=1e-10)
+
+
 @pytest.mark.parametrize("tip_difference", [0.15, 1e-5])
 def test_free_lambda_can_fit_with_a_singular_brownian_endpoint(tip_difference):
     tree = read_tree("[&R]((A:0,B:0):1,C:1,D:1,E:1,F:1);", 0, False)
