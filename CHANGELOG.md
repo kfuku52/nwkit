@@ -4,6 +4,12 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+### Fixed
+
+- Mk transition matrices preserve rare multi-step changes on short branches
+  and remain stochastic on very long branches. Asymmetric generators retain
+  their directionality under reciprocal changes of rate and branch-length units.
+
 ## [0.43.6] - 2026-09-08
 
 ### Fixed

@@ -1330,17 +1330,9 @@ def _transition_matrices_for_tree(tree, rate_matrix):
     """Build each unique branch-length transition once for one generator."""
 
     lengths = sorted({float(node.dist) for node in tree.traverse() if not node.is_root})
-    # Preserve the closed-form ER path: it is both cheaper and more accurate
-    # than a generic eigendecomposition for equal-rates generators.
-    by_length = (
-        None
-        if _get_er_rate_from_matrix(rate_matrix) is not None
-        else _symmetric_transition_matrices(rate_matrix, lengths)
-    )
-    if by_length is None:
-        by_length = {
-            length: _transition_matrix(rate_matrix, length) for length in lengths
-        }
+    # An eigenvector expansion cancels small transition probabilities on short
+    # branches and amplifies roundoff in the zero eigenvalue on long branches.
+    by_length = {length: _transition_matrix(rate_matrix, length) for length in lengths}
     by_node = {}
     for node in tree.traverse(strategy="preorder"):
         if node.is_root:
@@ -1348,40 +1340,6 @@ def _transition_matrices_for_tree(tree, rate_matrix):
         length = float(node.dist)
         by_node[node] = by_length[length]
     return by_node
-
-
-def _symmetric_transition_matrices(rate_matrix, lengths):
-    """Exponentiate an exactly reversible symmetric generator once per Q."""
-
-    matrix = np.asarray(rate_matrix, dtype=float)
-    scale = float(np.max(np.abs(matrix), initial=0.0))
-    tolerance = np.finfo(float).eps * max(1.0, scale) * max(100, len(matrix))
-    if not np.allclose(matrix, matrix.T, rtol=0.0, atol=tolerance):
-        return None
-    eigenvalues, eigenvectors = np.linalg.eigh((matrix + matrix.T) / 2.0)
-    if float(np.max(eigenvalues)) > tolerance:
-        return None
-    eigenvalues = np.minimum(eigenvalues, 0.0)
-    row_norm = float(np.max(np.sum(np.abs(matrix), axis=1), initial=0.0))
-    result = {}
-    for raw_length in lengths:
-        length = _validated_branch_length(raw_length)
-        if length == 0.0:
-            result[length] = np.eye(len(matrix), dtype=float)
-            continue
-        with np.errstate(over="ignore", under="ignore"):
-            transition = (eigenvectors * np.exp(eigenvalues * length)) @ eigenvectors.T
-        if row_norm == 0.0:
-            exponent_norm = 0.0
-        else:
-            log_exponent_norm = math.log(row_norm) + math.log(length)
-            exponent_norm = (
-                math.exp(log_exponent_norm)
-                if log_exponent_norm <= math.log(np.finfo(float).max)
-                else math.inf
-            )
-        result[length] = _validated_transition_matrix(transition, exponent_norm)
-    return result
 
 
 def _discrete_gamma_category_rates(shape, categories):

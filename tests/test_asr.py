@@ -106,7 +106,7 @@ def test_tiny_asymmetric_rates_are_not_misclassified_as_er():
     )
 
 
-def test_symmetric_generator_batch_matches_independent_matrix_exponential():
+def test_tree_transitions_match_independent_matrix_exponential():
     tree = Tree("((A:0.2,B:0.7):0.4,C:1.3);", parser=1)
     off_diagonal = np.asarray([[0.0, 0.3, 0.8], [0.3, 0.0, 0.5], [0.8, 0.5, 0.0]])
     matrix = off_diagonal.copy()
@@ -114,6 +114,39 @@ def test_symmetric_generator_batch_matches_independent_matrix_exponential():
     transitions = asr._transition_matrices_for_tree(tree, matrix)
     for node, transition in transitions.items():
         assert transition == pytest.approx(expm(matrix * float(node.dist)), abs=2e-15)
+
+
+def test_tree_transitions_preserve_asymmetric_rates_in_reciprocal_units():
+    tree = Tree("(A:1e18,B:1e18);", parser=1)
+    matrix = np.array([[-1.0, 1.0], [2.0, -2.0]])
+    expected = expm(matrix)
+    for transition in asr._transition_matrices_for_tree(tree, matrix * 1e-18).values():
+        np.testing.assert_allclose(transition, expected, rtol=1e-14)
+
+
+def test_symmetric_tree_transitions_reach_equilibrium_on_extreme_branches():
+    tree = Tree("(A:1e200,B:1e200);", parser=1)
+    matrix = np.array([[-2.2, 0.8, 1.4], [0.8, -1.7, 0.9], [1.4, 0.9, -2.3]])
+    expected = np.full((3, 3), 1.0 / 3.0)
+    for transition in asr._transition_matrices_for_tree(tree, matrix).values():
+        np.testing.assert_allclose(transition, expected, rtol=1e-14)
+
+
+def test_short_ordered_mk_branch_keeps_two_step_changes_possible():
+    length = 1e-10
+    tree = Tree(f"(A:0,B:{length});", parser=1)
+    matrix = np.array([[-1.0, 1.0, 0.0], [1.0, -3.0, 2.0], [0.0, 2.0, -2.0]])
+    posterior, fit = asr.compute_mk_marginals(
+        tree,
+        ["x", "y", "z"],
+        {"A": "x", "B": "z"},
+        {"A": np.array([1.0, 0.0, 0.0]), "B": np.array([0.0, 0.0, 1.0])},
+        model="CUSTOM",
+        fixed_rate_matrix=matrix,
+    )
+    # First nonzero term of exp(Qt)[x, z] is Q[x, y] * Q[y, z] * t² / 2.
+    assert fit["log_likelihood"] == pytest.approx(math.log(length**2 / 3.0), abs=1e-9)
+    np.testing.assert_array_equal(posterior[tree], [1.0, 0.0, 0.0])
 
 
 def test_rsc_origin_mapping_preserves_a_fixed_process_across_time_units(monkeypatch):
