@@ -576,8 +576,12 @@ def gaussian_process_parameter_rank(
         )
     jacobian = np.column_stack(derivatives)
     row_scales = np.max(np.abs(jacobian), axis=1)
-    global_scale = float(np.max(row_scales, initial=0.0))
-    informative = row_scales > max(np.finfo(float).tiny, global_scale * 1e-10)
+    informative = np.concatenate(
+        (
+            _informative_rank_rows(row_scales[: len(observed_nodes)]),
+            _informative_rank_rows(row_scales[len(observed_nodes) :]),
+        )
+    )
     if not np.any(informative):
         return 0
     normalized = jacobian[informative] / row_scales[informative, None]
@@ -587,6 +591,13 @@ def gaussian_process_parameter_rank(
         return 0
     normalized[:, nonzero] /= column_scales[nonzero]
     return _relative_parameter_rank(normalized[:, nonzero])
+
+
+def _informative_rank_rows(scales):
+    # Means and covariances have different dimensions. Apply the numerical
+    # threshold within each block so a change of units cannot erase one block.
+    largest = float(np.max(scales, initial=0.0))
+    return scales > largest * 1e-10
 
 
 def _relative_parameter_rank(normalized):

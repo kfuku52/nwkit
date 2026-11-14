@@ -7,6 +7,7 @@ from nwkit.compiled_tree import CompiledTree
 from nwkit.evolution import build_evolutionary_process
 from nwkit.gaussian_inference import (
     condition_gaussian_tree,
+    gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
     sample_gaussian_posterior,
     simulate_gaussian_process,
@@ -21,6 +22,31 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+@pytest.mark.parametrize("scale", [2.0**-400, 2.0**400])
+def test_parameter_rank_keeps_mean_and_covariance_information_across_units(scale):
+    tree = tree_from("(A:1,B:2)R;")
+    observed = tuple(tree.leaves())
+
+    def process(parameters):
+        mean, log_rate = parameters
+        return GaussianTreeProcess(
+            tree,
+            {
+                tip: GaussianTransition(1.0, 0.0, scale**2 * math.exp(log_rate))
+                for tip in observed
+            },
+            GaussianRootPrior("fixed", scale * mean),
+            "brownian",
+        )
+
+    assert (
+        gaussian_process_parameter_rank(
+            process, [0.0, 0.0], observed, [(None, None), (-3.0, 3.0)]
+        )
+        == 2
+    )
 
 
 def dense_condition(process, values, errors):
