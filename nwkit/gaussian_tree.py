@@ -588,7 +588,13 @@ def ou_transition(
         raise ValueError("OU transition parameters must be finite.")
     if alpha <= 0.0 or variance_rate < 0.0:
         raise ValueError("OU requires non-negative variance and positive alpha.")
-    root_variance = variance_rate / (2.0 * alpha)
+    # Divide by alpha before halving when doubling alpha would overflow.
+    denominator = 2.0 * alpha
+    root_variance = (
+        variance_rate / denominator
+        if math.isfinite(denominator)
+        else 0.5 * (variance_rate / alpha)
+    )
     if not math.isfinite(root_variance):
         raise ValueError("The stationary OU variance exceeds floating-point range.")
     return (
@@ -618,10 +624,8 @@ def ou_transition_from_root_variance(
             "OU requires non-negative lengths and root variance, and positive alpha."
         )
     exponent = alpha * length
-    if not math.isfinite(exponent):
-        raise ValueError(
-            "OU alpha multiplied by a branch length exceeds floating-point range."
-        )
+    # An overflowing positive exponent is already past the stationary limit
+    # in floating point. exp and expm1 give the limiting transition at infinity.
     decay = math.exp(-exponent)
     innovation = root_variance * (-math.expm1(-2.0 * exponent))
     if root_variance > 0.0 and length > 0.0 and innovation <= 0.0:

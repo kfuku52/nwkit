@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 
 from nwkit.continuous_asr import compute_bm_marginals
+from nwkit.continuous_asr_process import fitted_scalar_process
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_evolutionary_process,
@@ -15,6 +16,7 @@ from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
+    ou_transition,
 )
 from nwkit.nonstationary_continuous_asr import compute_eb_marginals
 from nwkit.ordinary_regression import _fit_ordinary_gaussian
@@ -24,6 +26,24 @@ from nwkit.util import read_tree
 
 def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
+
+
+def test_ou_transition_preserves_finite_stationary_variance_at_extreme_alpha():
+    transition, variance = ou_transition(2.0, 1e308, 1e308, 3.0)
+    assert variance == 0.5
+    assert transition == GaussianTransition(0.0, 3.0, 0.5)
+
+
+def test_reconstructed_stationary_ou_uses_fitted_variance():
+    tree = tree_from("(A:1,B:2,C:3)R;")
+    _, fit = compute_ou_marginals(
+        tree, {"A": 0.5, "B": 0.6, "C": 0.2}, alpha=0.2, sigma2=1.4, theta=0.3
+    )
+    process = fitted_scalar_process(tree, "OU", fit)
+    assert process.root.variance == fit.root_variance
+    for leaf in tree.leaves():
+        expected = fit.root_variance * -math.expm1(-2.0 * fit.alpha * leaf.dist)
+        assert process.transitions[leaf].variance == expected
 
 
 def test_brownian_asr_and_intercept_only_regression_share_reml_fit():

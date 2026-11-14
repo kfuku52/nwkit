@@ -28,6 +28,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   to avoid overflowing statistics that are finite in the original units.
 - Fit shared MV-OU attraction in normalized time units so the initialization
   and search remain finite under extreme branch-length rescaling.
+- Retain finite OU stationary variances at extreme attraction rates and
+  reconstruct diagnostics with the root variance recorded by the fit.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the
   strongest grid minima and reporting convergence for the selected fit.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
