@@ -10,6 +10,7 @@ from nwkit.gaussian_inference import (
     _Factor,
     _normal_log_density,
     _posterior_draw_parameters,
+    _push_up,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -44,6 +45,20 @@ def test_gaussian_overlap_stays_finite_when_variance_sum_overflows():
 
 def test_gaussian_log_density_halves_quadratic_before_overflow():
     assert _normal_log_density(1.7e154, 0.0, 1.0) == pytest.approx(-1.445e308)
+
+
+def test_gaussian_pruning_keeps_large_child_variance_after_scaling_to_parent():
+    child = _Factor(2.0, 1.6e308)
+    parent = _push_up(child, -2.0, 0.5, 1.6e308)
+    assert parent.mean == -0.75
+    assert parent.variance == 8e307
+    assert parent.log_weight == -math.log(2.0)
+    constant = _push_up(child, 0.0, 0.5, 1.6e308)
+    assert constant.mean is None
+    assert constant.density_rank == 1
+    assert constant.log_weight == pytest.approx(
+        -0.5 * (math.log(math.tau) + math.log(2.0) + math.log(1.6e308))
+    )
 
 
 @pytest.mark.parametrize("scale", [2.0**-400, 2.0**400])

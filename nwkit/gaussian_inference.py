@@ -124,10 +124,18 @@ def _normal_log_density(value: float, mean: float, variance: float) -> float:
 def _normal_log_overlap(first, second, variance_sum):
     if math.isfinite(variance_sum):
         return _normal_log_density(first.mean, second.mean, variance_sum)
-    largest = max(first.variance, second.variance)
-    relative_sum = 1.0 + min(first.variance, second.variance) / largest
+    return _normal_log_density_with_large_variance(
+        first.mean, second.mean, first.variance, second.variance
+    )
+
+
+def _normal_log_density_with_large_variance(
+    value, mean, first_variance, second_variance
+):
+    largest = max(first_variance, second_variance)
+    relative_sum = 1.0 + min(first_variance, second_variance) / largest
     standard_deviation = math.sqrt(largest) * math.sqrt(relative_sum)
-    standardized = first.mean / standard_deviation - second.mean / standard_deviation
+    standardized = value / standard_deviation - mean / standard_deviation
     log_variance = math.log(largest) + math.log(relative_sum)
     return -0.5 * (_LOG_2PI + log_variance) - (0.5 * standardized) * standardized
 
@@ -188,8 +196,8 @@ def _push_up(
     if factor.mean is None:
         return factor
     total = factor.variance + innovation
-    if not math.isfinite(total) or total < 0.0:
-        raise ValueError("A Gaussian pruning variance is invalid or non-finite.")
+    if not math.isfinite(total):
+        return _push_up_large_variance(factor, slope, intercept, innovation)
     absolute_slope = abs(slope)
     if absolute_slope == 0.0:
         if total == 0.0:
@@ -236,6 +244,38 @@ def _push_up(
         parent_variance,
         factor.log_weight - math.log(absolute_slope),
         factor.density_rank,
+    )
+
+
+def _push_up_large_variance(factor, slope, intercept, innovation):
+    absolute_slope = abs(slope)
+    if absolute_slope > 1.0:
+        parent_variance = (factor.variance / absolute_slope) / absolute_slope
+        parent_variance += (innovation / absolute_slope) / absolute_slope
+        if math.isfinite(parent_variance):
+            difference = factor.mean - intercept
+            parent_mean = (
+                difference / slope
+                if math.isfinite(difference)
+                else factor.mean / slope - intercept / slope
+            )
+            return _Factor(
+                parent_mean,
+                parent_variance,
+                factor.log_weight - math.log(absolute_slope),
+                factor.density_rank,
+            )
+    if absolute_slope != 0.0:
+        raise ValueError("A Gaussian pruning variance is invalid or non-finite.")
+    log_density = _normal_log_density_with_large_variance(
+        factor.mean, intercept, factor.variance, innovation
+    )
+    if not math.isfinite(log_density):
+        raise ValueError("Observed values have zero Gaussian likelihood.")
+    return _Factor(
+        None,
+        log_weight=factor.log_weight + log_density,
+        density_rank=factor.density_rank + 1,
     )
 
 
