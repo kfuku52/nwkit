@@ -20,7 +20,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   row sums, and retain GTR frequencies when unnormalized weights sum to
   more than the floating-point range.
 - Threshold ASR samples disjoint ordinal intervals by their log probability
-  mass, including when all allowed intervals lie in the extreme tails.
+  mass and preserves the width of narrow intervals after centering.
 - Threshold ASR scales conditional precisions so positive subnormal branch
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
@@ -55,9 +55,13 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   latent predictor posterior uncertainty in Gaussian regression.
 - Fit multivariate PGLS in normalized response units and keep sparse latent
   precision well scaled near a zero trait variance.
+- Fit Gaussian regression in normalized units for extreme responses and
+  restore the coefficients, variances, and likelihood to the input units.
 - Preserve tail likelihoods in ordinal, multinomial, count and interval-censored
   GLMMs. Keep positive count draws on the support of the truncated distribution
   when bootstrapping hurdle models.
+- Preserve negative-binomial likelihoods and bootstrap draws near the Poisson
+  limit.
 - Check mean and covariance information separately when determining whether
   Gaussian tree parameters are identifiable.
 - Compute OU contrast branch variances directly so short branches and weak
@@ -120,8 +124,11 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
 - Build posterior sample table metadata once per node and repeat it across draws.
 - Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.
-- Reuse fixed regime parameters from the original fit and skip Brownian
-  smoothing when bootstrap refits only return parameter estimates.
+- Reuse fixed regime parameters from the original fit and skip ancestral
+  smoothing when Brownian, OU, and regime-model bootstrap refits only return
+  parameter estimates.
+- Skip ancestral reconstruction during continuous and discrete ASR model
+  comparison.
 - Reuse multivariate ASR branch distances across observations at the same node.
 - Batch common-ancestor lookups when building dense Gaussian covariances.
 - Reuse the same Gaussian interval quantile throughout ancestral output tables.
@@ -147,8 +154,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   observations load the same latent state.
 - Index comparison groups once when assigning counts in ASR comparison tables.
 - Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
-  Batch multinomial curvature calculations and build sparse sampling
-  factors only when bootstrapping.
+  Reuse accepted sparse-mode evaluations, batch multinomial curvature
+  calculations, and build sparse sampling factors only when bootstrapping.
 - Reduce covariance copies and reuse sparse tree components in multivariate
   PGLS. Whiten the dense design and response in one triangular solve.
 - Use scalar branch updates for single Gaussian tree simulations.
