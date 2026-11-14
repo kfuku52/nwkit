@@ -120,13 +120,16 @@ def profile_likelihood_interval(
 
 
 def _summary_statistics(values):
-    values = np.asarray(values, dtype=float)
-    centered = values - float(np.mean(values))
+    """Summarize observation vectors along a contiguous final axis."""
+
+    means = np.mean(values, axis=-1)
+    lower = np.min(values, axis=-1)
+    upper = np.max(values, axis=-1)
     return {
-        "mean": float(np.mean(values)),
-        "variance": float(np.var(values, ddof=1)) if len(values) > 1 else 0.0,
-        "range": float(np.ptp(values)),
-        "max_abs_centered": float(np.max(np.abs(centered))),
+        "mean": means,
+        "variance": np.var(values, axis=-1, ddof=1),
+        "range": upper - lower,
+        "max_abs_centered": np.maximum(upper - means, means - lower),
     }
 
 
@@ -175,19 +178,15 @@ def gaussian_posterior_predictive(
         compiled_tree=compiled,
     ).values
     indices = np.asarray([record[0] for record in records], dtype=int)
-    replicated = simulations[:, indices]
+    replicated = np.ascontiguousarray(simulations[:, indices])
+    del simulations
     errors = np.asarray([record[2] for record in records], dtype=float)
     if np.any(errors > 0.0):
         error_rng = np.random.default_rng(error_seed)
         replicated += error_rng.normal(0.0, errors, replicated.shape)
     observed = np.asarray([record[1] for record in records], dtype=float)
     observed_statistics = _summary_statistics(observed)
-    replicate_statistics = {
-        key: np.asarray(
-            [_summary_statistics(row)[key] for row in replicated], dtype=float
-        )
-        for key in observed_statistics
-    }
+    replicate_statistics = _summary_statistics(replicated)
     rows = []
     for statistic, observed_value in observed_statistics.items():
         values = replicate_statistics[statistic]

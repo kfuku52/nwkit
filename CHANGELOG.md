@@ -16,6 +16,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 - Reuse equal-rates detection across branches and reduce small-state Mk
   likelihood messages with NumPy in log space.
+- Compute Gaussian posterior predictive statistics for all replicates in
+  one pass per statistic.
 
 ## [0.43.6] - 2026-09-08
 
