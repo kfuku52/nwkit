@@ -143,7 +143,10 @@ def tree_depths(
 
 
 def _tree_height(tree, depths: dict[Any, float]) -> float:
-    height = max(depths[leaf] for leaf in tree.leaves())
+    return _positive_tree_height(max(depths[leaf] for leaf in tree.leaves()))
+
+
+def _positive_tree_height(height: float) -> float:
     if not math.isfinite(height) or height <= 0.0:
         raise ValueError("The evolutionary-model tree must have positive depth.")
     return float(height)
@@ -151,9 +154,7 @@ def _tree_height(tree, depths: dict[Any, float]) -> float:
 
 def _require_ultrametric(tree, depths: dict[Any, float], model: str) -> float:
     tip_depths = np.asarray([depths[leaf] for leaf in tree.leaves()], dtype=float)
-    height = float(tip_depths.max())
-    if not math.isfinite(height) or height <= 0.0:
-        raise ValueError("The evolutionary-model tree must have positive depth.")
+    height = _positive_tree_height(float(tip_depths.max()))
     tolerance = max(1e-8, np.finfo(float).eps * max(100, len(tip_depths)))
     if (height - float(tip_depths.min())) / height > tolerance:
         raise ValueError(
@@ -680,5 +681,21 @@ def parameter_near_boundary(
         tree, model, branch_length, allow_zero, parameter_bounds
     )
     encoded = encoded_evolution_parameter(model, parameter)
+    if model in {"eb", "acdc"}:
+        return _near_rate_change_boundary(encoded, bounds)
+    return _near_encoded_boundary(encoded, bounds)
+
+
+def _near_rate_change_boundary(encoded, bounds):
+    # Rate-change parameters have units of inverse time. Compare relative
+    # distances so a change of branch-length units preserves the warning.
+    lower, upper = bounds
+    if not math.isfinite(upper - lower):
+        lower, upper, encoded = lower / 2.0, upper / 2.0, encoded / 2.0
+    fraction = (encoded - lower) / (upper - lower)
+    return fraction <= 1e-5 or fraction >= 1.0 - 1e-5
+
+
+def _near_encoded_boundary(encoded, bounds):
     tolerance = max(1e-5, (bounds[1] - bounds[0]) * 1e-5)
     return encoded <= bounds[0] + tolerance or encoded >= bounds[1] - tolerance

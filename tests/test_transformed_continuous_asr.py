@@ -93,6 +93,26 @@ def test_eb_rejects_acceleration_but_acdc_accepts_it():
     assert fit.evolution_parameter == 0.2
 
 
+@pytest.mark.parametrize("time_scale", [1e-180, 1e180])
+def test_acdc_boundary_status_and_fit_are_invariant_to_time_units(time_scale):
+    values = {"A": 0.3, "B": 2.1, "C": 2.3, "D": 8.0}
+    tree = tree_from("(A:1,B:2,C:3,D:4)R;")
+    _, expected = compute_transformed_bm_marginals(tree, values, model="acdc", sigma2=1)
+    for node in tree.traverse():
+        if not node.is_root:
+            node.dist *= time_scale
+    _, fit = compute_transformed_bm_marginals(
+        tree, values, model="acdc", sigma2=1 / time_scale
+    )
+    assert fit.fit_status == expected.fit_status == "ok"
+    assert fit.evolution_parameter * time_scale == pytest.approx(
+        expected.evolution_parameter, rel=2e-7
+    )
+    assert fit.restricted_log_likelihood == pytest.approx(
+        expected.restricted_log_likelihood, abs=1e-10
+    )
+
+
 def test_kappa_zero_keeps_exact_zero_length_tip_constraint():
     tree = tree_from("((A:0,B:1)I:1,C:2)R;")
     posterior, _ = compute_transformed_bm_marginals(
