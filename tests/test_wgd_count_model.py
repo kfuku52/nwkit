@@ -792,6 +792,13 @@ def test_missing_subtree_is_marginalized_per_family_not_per_tip():
     assert logs[1] < -20
 
 
+def test_scaled_pruning_leaves_impossible_rows_at_negative_infinity():
+    model = CountLikelihood(tree(), np.array([[1.0, 1.0], [0.0, 1.0], [np.nan, 1.0]]))
+    rates, bound = [[0.0, 0.0]], 8
+    scaled = model.family_log_likelihoods(rates, 1.0, bound)
+    np.testing.assert_array_equal(scaled, [0.0, -np.inf, 0.0])
+
+
 @pytest.mark.parametrize("node", [0, -1, True, 1.5])
 def test_invalid_event_node_is_not_silently_ignored(node):
     with pytest.raises(ValueError, match="positive integer"):

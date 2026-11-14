@@ -609,6 +609,9 @@ class CountLikelihood:
                     [self.subtree_missing[child] for child in self.children[node]],
                     axis=0,
                 )
+        self._subtree_has_missing = tuple(
+            bool(self.subtree_missing[node].any()) for node in range(len(tree.parents))
+        )
         self._transition_cache: OrderedDict[
             tuple[bool, float, float, float, int], np.ndarray
         ] = OrderedDict()
@@ -706,16 +709,20 @@ class CountLikelihood:
                         contribution = likelihoods[child] @ matrices[child].T
                     # An unobserved subtree integrates to one over the unbounded
                     # process, not to the truncated transition's row sum.
-                    missing = self.subtree_missing[child]
-                    contribution[missing] = 1.0
+                    has_missing = self._subtree_has_missing[child]
+                    if has_missing:
+                        contribution[self.subtree_missing[child]] = 1.0
                     value *= contribution
                     if (child_scale := scales[child]) is not None:
-                        child_scale[missing] = 0.0
+                        if has_missing:
+                            child_scale[self.subtree_missing[child]] = 0.0
                         scale += child_scale
                     likelihoods[child] = scales[child] = None
                     normalizer = value.max(axis=1)
                     positive = normalizer > 0
-                    value[positive] /= normalizer[positive, None]
+                    np.divide(
+                        value, normalizer[:, None], where=positive[:, None], out=value
+                    )
                     scale += np.log(normalizer)
                 likelihoods[node], scales[node] = value, scale
             return np.log(likelihoods[0] @ prior) + scales[0]
@@ -786,7 +793,8 @@ class CountLikelihood:
                     contribution = _log_pruning_contribution(
                         matrices[child], likelihoods.pop(child)
                     )
-                contribution[self.subtree_missing[child][rows]] = 0.0
+                if self._subtree_has_missing[child]:
+                    contribution[self.subtree_missing[child][rows]] = 0.0
                 value += contribution
             likelihoods[node] = value
         return logsumexp(likelihoods[0] + prior[None, :], axis=1)
