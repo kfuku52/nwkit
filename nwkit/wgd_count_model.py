@@ -746,6 +746,9 @@ class CountLikelihood:
         return logsumexp(likelihoods[0] + prior[None, :], axis=1)
 
     def _selection_logs(self, rates, scale, root_mean, event):
+        rates = np.asarray(rates, dtype=float)
+        if len(self.patterns) == 1:
+            return self._single_pattern_selection(rates, scale, root_mean, event)
         survivals = {
             node: np.where(self.patterns[:, column], 0.0, self.detection[column])
             for column, node in enumerate(self.tree.tip_nodes)
@@ -769,7 +772,6 @@ class CountLikelihood:
                 where=survival > 0,
             )
 
-        rates = np.asarray(rates, dtype=float)
         for node in range(len(self.tree.parents) - 1, 0, -1):
             if node not in survivals:
                 survivals[node] = _union_survival(
@@ -793,22 +795,68 @@ class CountLikelihood:
             [survivals[child] for child in self.children[0]]
         )
 
-        def condition(probabilities):
-            if self.ascertainment == "root-clades":
-                return _root_clade_log_survival(probabilities, root_mean)
-            survival = _union_survival(probabilities)
-            with np.errstate(divide="ignore"):
-                return np.log(survival) - np.log(
-                    1 / root_mean + (1 - 1 / root_mean) * survival
-                )
-
         if not np.any(rare):
-            return condition(root_children)
+            return self._condition_selection(root_children, root_mean)
         result = np.empty(len(rare))
         result[rare] = self._rare_selection_logs(rates, scale, root_mean, event, rare)
         if not np.all(rare):
-            result[~rare] = condition(root_children[~rare])
+            result[~rare] = self._condition_selection(root_children[~rare], root_mean)
         return result
+
+    def _condition_selection(self, probabilities, root_mean):
+        if self.ascertainment == "root-clades":
+            return _root_clade_log_survival(probabilities, root_mean)
+        survival = _union_survival(probabilities)
+        with np.errstate(divide="ignore"):
+            return np.log(survival) - np.log(
+                1 / root_mean + (1 - 1 / root_mean) * survival
+            )
+
+    def _single_pattern_selection(self, rates, scale, root_mean, event):
+        # A shared missingness mask needs only one survival probability per node.
+        values = [0.0] * len(self.tree.parents)
+        for column, node in enumerate(self.tree.tip_nodes):
+            if not self.patterns[0, column]:
+                values[node] = float(self.detection[column])
+        rare = False
+
+        def propagate(survival, duplication, loss, time):
+            nonlocal rare
+            if survival == 0:
+                return 0.0
+            _, _, survives, success = _birth_death_probabilities(
+                duplication, loss, time
+            )
+            numerator = survives * survival
+            rare |= numerator < _SELECTION_PROBABILITY_FLOOR
+            return numerator / (success * (1.0 - survival) + survival)
+
+        scaled_rates = rates * scale
+        pulse = event.node if event is not None and event.retention != 0 else -1
+        for node in range(len(values) - 1, 0, -1):
+            survival = values[node]
+            for child in self.children[node]:
+                survival += (1.0 - survival) * values[child]
+            duplication, loss = scaled_rates[self.branch_groups[node]]
+            time = self.tree.lengths[node]
+            if node == pulse:
+                survival = propagate(
+                    survival, duplication, loss, time * (1 - event.fraction)
+                )
+                with np.errstate(divide="ignore"):
+                    extra = -np.expm1(
+                        (event.multiplicity - 1) * np.log1p(-event.retention * survival)
+                    )
+                survival += (1 - survival) * extra
+                time *= event.fraction
+            values[node] = propagate(survival, duplication, loss, time)
+        if rare:
+            return self._rare_selection_logs(
+                rates, scale, root_mean, event, np.array([True])
+            )
+        return self._condition_selection(
+            np.array([[values[child] for child in self.children[0]]]), root_mean
+        )
 
     def _rare_selection_logs(self, rates, scale, root_mean, event, rare):
         survivals = {

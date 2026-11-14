@@ -116,6 +116,42 @@ def test_deterministic_tip_indices_match_dense_emissions(detection, retention):
     )
 
 
+@pytest.mark.parametrize("ascertainment", ["observed", "root-clades"])
+@pytest.mark.parametrize("detection", [[1, 0.93, 0.8], [1e-180, 1e-190, 1e-170]])
+@pytest.mark.parametrize("loss", [0.15, 1700])
+def test_shared_missingness_selection_matches_batched_path(
+    ascertainment, detection, loss
+):
+    design = CountTree(
+        (-1, 0, 1, 1, 0),
+        (0.0, 0.1, 0.4, 0.5, 0.6),
+        (2, 3, 4),
+        ("A", "B", "C"),
+        (0, 1, 2, 3, 4),
+        ("ABC", "AB", "A", "B", "C"),
+    )
+    observations = [[np.nan, 1.0, 1.0], [np.nan, 2.0, 1.0]]
+    scalar = CountLikelihood(
+        design, observations, detection=detection, ascertainment=ascertainment
+    )
+    batched = CountLikelihood(
+        design,
+        [*observations, [1.0, 2.0, 1.0]],
+        detection=detection,
+        ascertainment=ascertainment,
+    )
+    which = batched.pattern_index[0]
+    for event in (
+        None,
+        MultiplicationEvent(1, 0.4, 0.25, 3),
+        MultiplicationEvent(3, 1.0, 0, 2),
+    ):
+        args = (np.array([[0.05, loss]]), 1.8, 1.2, event)
+        np.testing.assert_array_equal(
+            scalar._selection_logs(*args), batched._selection_logs(*args)[[which]]
+        )
+
+
 @pytest.mark.parametrize("budget", [1, 1024**2])
 @pytest.mark.parametrize("families", [1, 67])
 def test_log_pruning_tiles_preserve_impossible_states_and_reduction_order(
