@@ -619,14 +619,14 @@ def _weighted_dense_hessian(precision, weights):
 
 def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
     n_blocks, dimension, _ = weights.shape
-    block_offsets = np.arange(n_blocks, dtype=int) * dimension
-    local_rows = np.repeat(np.arange(dimension, dtype=int), dimension)
-    local_columns = np.tile(np.arange(dimension, dtype=int), dimension)
-    rows = (block_offsets[:, None] + local_rows[None, :]).reshape(-1)
-    columns = (block_offsets[:, None] + local_columns[None, :]).reshape(-1)
+    size = n_blocks * dimension
+    index_type = np.int32 if weights.size <= np.iinfo(np.int32).max else np.int64
+    block_columns = np.arange(size, dtype=index_type).reshape(n_blocks, 1, dimension)
+    columns = np.broadcast_to(block_columns, weights.shape).flatten()
+    row_starts = np.arange(size + 1, dtype=index_type) * dimension
     matrix = sparse.csr_matrix(
-        (weights.reshape(-1), (rows, columns)),
-        shape=(n_blocks * dimension, n_blocks * dimension),
+        (np.array(weights, order="C", copy=True).reshape(-1), columns, row_starts),
+        shape=(size, size),
     )
     matrix.eliminate_zeros()
     return matrix
