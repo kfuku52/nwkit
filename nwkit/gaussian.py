@@ -128,6 +128,7 @@ class SparseDiagonalLowRankFactor:
 
     diagonal: np.ndarray
     low_rank: sparse.csr_matrix
+    weighted_loading: sparse.csr_matrix
     woodbury_factor: SuperLU
     logdet: float
 
@@ -152,6 +153,7 @@ class DiagonalSparsePrecisionFactor:
 
     diagonal: np.ndarray
     loading: sparse.csr_matrix
+    weighted_loading: sparse.csr_matrix | None
     prior_precision: sparse.csc_matrix
     prior_precision_factor: sparse.csr_matrix
     posterior_factor: SuperLU
@@ -494,7 +496,7 @@ def factor_diagonal_sparse_low_rank(
         )
         logdet = _sparse_lu_logdet(solver, "Sparse covariance matrix", pivots)
         return SparseCovarianceFactor(diagonal, loading, solver, logdet)
-    weighted = loading.multiply((1.0 / diagonal)[:, None])
+    weighted = _inverse_diagonal_sparse_loading(loading, diagonal)
     woodbury = (
         sparse.eye(loading.shape[1], format="csc") + loading.T @ weighted
     ).tocsc()
@@ -502,7 +504,27 @@ def factor_diagonal_sparse_low_rank(
     logdet = float(np.log(diagonal).sum()) + _sparse_lu_logdet(
         solver, "Sparse Woodbury matrix", pivots
     )
-    return SparseDiagonalLowRankFactor(diagonal, loading, solver, logdet)
+    return SparseDiagonalLowRankFactor(diagonal, loading, weighted, solver, logdet)
+
+
+def _inverse_diagonal_sparse_loading(loading, diagonal):
+    # Dividing each stored entry directly avoids an overflowing reciprocal
+    # of a subnormal variance when the weighted loading is still finite.
+    rows = np.repeat(np.arange(loading.shape[0]), np.diff(loading.indptr))
+    row_variance = diagonal[rows]
+    with np.errstate(over="ignore"):
+        inverse = 1.0 / row_variance
+        finite = np.isfinite(inverse)
+        data = np.empty_like(loading.data)
+        np.multiply(loading.data, inverse, out=data, where=finite)
+        np.divide(loading.data, row_variance, out=data, where=~finite)
+    return sparse.csr_matrix(
+        (data, loading.indices, loading.indptr), shape=loading.shape
+    )
+
+
+def _subnormal_weighted_loading(loading, diagonal):
+    return loading if np.min(diagonal) < np.finfo(float).tiny else None
 
 
 def factor_diagonal_sparse_precision_updates(
@@ -535,11 +557,8 @@ def factor_diagonal_sparse_precision_updates(
     prior_factor, prior_pivots = _factor_sparse_lu_with_pivots(
         prior_precision, "Sparse prior precision"
     )
-    inverse_diagonal = 1.0 / diagonal
-    posterior_precision = (
-        prior_precision
-        + loading.T @ sparse.diags(inverse_diagonal, format="csc") @ loading
-    ).tocsc()
+    weighted_loading = _inverse_diagonal_sparse_loading(loading, diagonal)
+    posterior_precision = (prior_precision + loading.T @ weighted_loading).tocsc()
     posterior_factor, posterior_pivots = _factor_sparse_lu_with_pivots(
         posterior_precision, "Sparse posterior precision"
     )
@@ -553,6 +572,7 @@ def factor_diagonal_sparse_precision_updates(
     return DiagonalSparsePrecisionFactor(
         diagonal=diagonal,
         loading=loading,
+        weighted_loading=_subnormal_weighted_loading(weighted_loading, diagonal),
         prior_precision=prior_precision,
         prior_precision_factor=prior_precision_factor,
         posterior_factor=posterior_factor,
@@ -839,8 +859,7 @@ def solve_factor(
             else values / factor.diagonal[:, None]
         )
         correction = factor.woodbury_factor.solve(factor.low_rank.T @ inverse_values)
-        weighted_loading = factor.low_rank.multiply((1.0 / factor.diagonal)[:, None])
-        return inverse_values - np.asarray(weighted_loading @ correction)
+        return inverse_values - np.asarray(factor.weighted_loading @ correction)
     if isinstance(factor, SparseCovarianceFactor):
         return np.asarray(
             factor.covariance_factor.solve(np.asarray(values, dtype=float))
@@ -861,18 +880,13 @@ def solve_factor(
 
 def _solve_sparse_precision_factor(factor, values):
     values = np.asarray(values, dtype=float)
-    inverse_values = (
-        values / factor.diagonal
-        if values.ndim == 1
-        else values / factor.diagonal[:, None]
-    )
+    scale = factor.diagonal.reshape((-1,) + (1,) * (values.ndim - 1))
+    inverse_values = values / scale
     correction = factor.posterior_factor.solve(factor.loading.T @ inverse_values)
+    if factor.weighted_loading is not None:
+        return inverse_values - np.asarray(factor.weighted_loading @ correction)
     projected = np.asarray(factor.loading @ correction)
-    return inverse_values - (
-        projected / factor.diagonal
-        if projected.ndim == 1
-        else projected / factor.diagonal[:, None]
-    )
+    return inverse_values - projected / scale
 
 
 def _solve_diagonal_cholesky(factor, values):

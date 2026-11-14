@@ -1,5 +1,7 @@
 """Numerical error contracts shared by dense and sparse Gaussian factors."""
 
+import math
+
 import numpy as np
 import pytest
 from scipy import sparse
@@ -109,6 +111,40 @@ def test_sparse_singular_prior_precision_uses_the_same_error_contract():
                 )
             ],
         )
+
+
+@pytest.mark.parametrize("precision_update", [False, True])
+def test_sparse_covariance_solve_and_determinant_at_subnormal_variances(
+    precision_update,
+):
+    exponent = -1060
+    relative_diagonal = np.array([1.0, 2.0, 4.0, 8.0])
+    relative_loading = np.array([0.25, -0.5, 0.0, 0.5])
+    diagonal = np.ldexp(relative_diagonal, exponent)
+    loading = sparse.csr_matrix(np.ldexp(relative_loading[:, None], exponent // 2))
+    precision = sparse.eye(1, format="csc")
+    base_covariance = np.diag(relative_diagonal) + np.outer(
+        relative_loading, relative_loading
+    )
+    expected = np.linspace(-1.0, 2.0, len(diagonal))
+    base_rhs = np.stack([base_covariance @ expected, relative_diagonal], axis=1)
+    rhs = np.ldexp(base_rhs, exponent)
+    independent_solution = np.linalg.solve(base_covariance, np.ldexp(rhs, -exponent))
+    expected_logdet = np.linalg.slogdet(base_covariance)[1] + len(
+        diagonal
+    ) * exponent * math.log(2.0)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        if precision_update:
+            factor = gaussian.factor_diagonal_sparse_precision_updates(
+                diagonal, [(loading, precision, precision.tocsr())]
+            )
+        else:
+            factor = gaussian.factor_diagonal_sparse_low_rank(diagonal, loading)
+        observed = gaussian.solve_factor(factor, rhs)
+    np.testing.assert_allclose(observed, independent_solution, rtol=2e-14, atol=2e-14)
+    assert gaussian.factor_logdet(factor) == pytest.approx(
+        expected_logdet, rel=0.0, abs=1e-12
+    )
 
 
 def test_sparse_roundoff_cannot_turn_rank_deficiency_into_an_indefinite_factor():
