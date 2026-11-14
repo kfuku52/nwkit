@@ -123,6 +123,28 @@ def test_explicit_simulation_scales_optima_before_unrepresentable_subtraction():
     assert np.isfinite(latent).all()
 
 
+def test_short_branch_mean_changes_accumulate_before_restoring_background():
+    tree = fixture_data().tree
+    node = tree.compiled.children[0][0]
+    baseline = float(2**53)
+    spec = explicit_simulation(
+        tree,
+        {
+            "trait_names": ["x"],
+            "alpha": 0,
+            "shift_branch_ids": [tree.branch_ids[node]],
+            "scaled_regime_coefficients": [[baseline], [1.5]],
+            "process_tip_covariance": [[0.0]],
+        },
+    )
+    values, latent = simulate_shift(spec)
+    first, last = tree.tip_intervals[node]
+    expected = np.full(len(tree.leaf_names), baseline)
+    expected[first:last] += 2.0
+    np.testing.assert_array_equal(values[0, :, 0], expected)
+    np.testing.assert_array_equal(latent[0, tree.compiled.leaf_indices, 0], expected)
+
+
 @pytest.mark.parametrize("joint", [False, True])
 def test_fitted_simulation_restores_representable_extreme_covariance(joint):
     data = fixture_data()

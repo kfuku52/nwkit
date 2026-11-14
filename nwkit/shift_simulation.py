@@ -133,13 +133,15 @@ def simulate_shift(spec, replicates=1, *, seed=1):
     transitions = {
         node: VectorTransition(
             np.diag(slopes[i]),
-            (1 - slopes[i]) * baseline + weights[i] * offsets[groups[i]],
+            weights[i] * offsets[groups[i]],
             innovations[i],
         )
         for i, node in enumerate(spec.tree.compiled.nodes)
         if i
     }
-    process = VectorProcess(spec.tree.compiled.tree, p, transitions, baseline, root)
+    # Propagate deviations from the background optimum so small changes can
+    # accumulate over several branches before returning to original units.
+    process = VectorProcess(spec.tree.compiled.tree, p, transitions, np.zeros(p), root)
     _, latent = simulate_vector_process(
         process,
         replicates,
@@ -153,6 +155,8 @@ def simulate_shift(spec, replicates=1, *, seed=1):
         values[:, i] += rng.multivariate_normal(
             np.zeros(p), covariance, size=replicates, check_valid="raise"
         )
+    latent += baseline
+    values += baseline
     values[:, spec.missing] = np.nan
     return values, latent
 
