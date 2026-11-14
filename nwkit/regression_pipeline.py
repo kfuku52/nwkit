@@ -2,6 +2,7 @@
 
 import math
 import os
+from collections import defaultdict
 from dataclasses import dataclass
 from functools import partial
 from types import SimpleNamespace
@@ -2348,11 +2349,11 @@ def _categorical_group_random_rows(
     if "group" not in fit.component_random_modes:
         return []
     modes = fit.component_random_modes["group"]
+    members_by_species: defaultdict[str, list[int]] = defaultdict(list)
+    for index, species in enumerate(gene_species):
+        members_by_species[species].append(index)
     rows = []
-    for species in sorted(set(gene_species)):
-        members = [
-            index for index, value in enumerate(gene_species) if value == species
-        ]
+    for species, members in sorted(members_by_species.items()):
         for level_index, level in enumerate(level_names):
             rows.append(
                 _categorical_random_row(
