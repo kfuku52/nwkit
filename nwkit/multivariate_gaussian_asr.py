@@ -17,12 +17,33 @@ _MAX_DENSE_OBSERVATIONS = 1000
 _MAX_POSTERIOR_BYTES = 256 * 1024**2
 
 
-def _stationary_diagonal_ou_covariance(covariance, log_alpha):
+def _stationary_diagonal_ou_covariance(covariance, log_alpha, alpha):
     # Diffusion Cholesky rows are expressed relative to sqrt(2 * alpha_i).
     # The stationary covariance then needs only the bounded ratio
     # 2 * sqrt(alpha_i * alpha_j) / (alpha_i + alpha_j).
     half_gap = 0.5 * np.abs(log_alpha[:, None] - log_alpha[None, :])
-    return covariance * (2.0 * np.exp(-half_gap) / (1.0 + np.exp(-2.0 * half_gap)))
+    with np.errstate(under="ignore"):
+        result = covariance * (
+            2.0 * np.exp(-half_gap) / (1.0 + np.exp(-2.0 * half_gap))
+        )
+    first, second = np.where(half_gap > 700.0)
+    if len(first):
+        result[first, second] = _recover_stationary_ou_covariance(
+            covariance[first, second], alpha[first], alpha[second]
+        )
+    return result
+
+
+def _recover_stationary_ou_covariance(covariance, first_alpha, second_alpha):
+    # The denominator rounds to one in this regime. Apply the tiny decay
+    # jointly with the covariance so it does not round before multiplication.
+    small, small_exponent = np.frexp(np.minimum(first_alpha, second_alpha))
+    large, large_exponent = np.frexp(np.maximum(first_alpha, second_alpha))
+    gap = small_exponent - large_exponent
+    ratio = np.sqrt(np.ldexp(small / large, gap % 2))
+    mantissa, covariance_exponent = np.frexp(covariance)
+    with np.errstate(under="ignore"):
+        return np.ldexp(mantissa * ratio, covariance_exponent + gap // 2 + 1)
 
 
 def _diagonal_ou_decay(first_rate, first_path, second_rate, second_path):
@@ -1363,7 +1384,7 @@ def fit_dense_mvou_diag(
             parameters, dimension, offset
         )
         stationary_sigma = _stationary_diagonal_ou_covariance(
-            correlation_scaled_diffusion, log_decay
+            correlation_scaled_diffusion, log_decay, beta
         )
         decay = fixed_decay
         if decay is None:

@@ -11,6 +11,7 @@ from nwkit.multivariate_gaussian_asr import (
     _prepare_observations,
     _restore_diagonal_ou_diffusion,
     _restore_sigma,
+    _stationary_diagonal_ou_covariance,
     fit_dense_mvbm,
     fit_dense_mvou,
     fit_dense_mvou_diag,
@@ -53,6 +54,20 @@ def test_diagonal_ou_diffusion_combines_reciprocal_trait_and_attraction_units():
     np.testing.assert_allclose(restored, 4.0 * covariance, rtol=3e-16, atol=0.0)
     np.testing.assert_array_equal(np.diag(restored), 4.0 * np.diag(covariance))
     np.testing.assert_array_equal(restored, restored.T)
+
+
+def test_diagonal_ou_preserves_representable_far_apart_rate_covariance():
+    covariance = np.full((2, 2), 2.0**54)
+    alpha = np.array([2.0**-1074, 2.0**1023])
+    # The stationary correlation factor is subnormal, although the scaled
+    # covariance is normal. Combining exponents gives sqrt(2) * 2**-994.
+    expected = math.ldexp(math.sqrt(2.0), -994)
+    with np.errstate(under="raise"):
+        stationary = _stationary_diagonal_ou_covariance(
+            covariance, np.log(alpha), alpha
+        )
+    assert stationary[0, 1] == expected
+    np.testing.assert_array_equal(stationary, stationary.T)
 
 
 @pytest.mark.parametrize("time_scale", [2.0**-1023, 3.0 * 2.0**-1024])
