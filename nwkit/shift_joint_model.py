@@ -22,10 +22,17 @@ def integral_decay(rate, duration):
     rate, duration = np.broadcast_arrays(
         np.asarray(rate, float), np.asarray(duration, float)
     )
-    result = np.empty_like(rate)
-    zero = rate == 0
-    result[zero] = duration[zero]
-    result[~zero] = -np.expm1(-rate[~zero] * duration[~zero]) / rate[~zero]
+    exponent = np.zeros_like(rate)
+    np.multiply(-rate, duration, out=exponent, where=rate != 0)
+    # The correction rounds away at subnormal exponents. Dividing a rounded
+    # subnormal product by its rate can lose a representable duration.
+    result = duration.copy()
+    np.divide(
+        -np.expm1(exponent),
+        rate,
+        out=result,
+        where=~(np.abs(exponent) < np.finfo(float).tiny),
+    )
     return result
 
 

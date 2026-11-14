@@ -7,12 +7,19 @@ from ete4 import Tree
 from nwkit.shift_joint_model import (
     evaluate_joint,
     evaluate_separable,
+    integral_decay,
     joint_covariance_geometry,
     joint_design,
 )
 from nwkit.shift_native_fit import NativeFitOptions, fit_native_layout
 from nwkit.shift_native_ic import native_information_criterion
 from nwkit.shift_native_model import ShiftData, ShiftLayout, evaluate_trait
+
+
+def test_decay_integral_preserves_duration_for_subnormal_exponents():
+    rate = np.array([0.0, 1e-170, 1e-150, 1e-310])
+    duration = np.array([0.3, 1e-160, 1e-170, 1e-4])
+    np.testing.assert_array_equal(integral_decay(rate, duration), duration)
 
 
 def fixture_data(noise=0.0, missing=False):
