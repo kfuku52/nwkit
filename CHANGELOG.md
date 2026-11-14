@@ -16,6 +16,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Compute stationary Mk root probabilities without cancellation when
   transitions between groups of states are much slower than transitions
   within each group.
+- Validate large labelled Mk generators without overflowing intermediate
+  row sums, and retain GTR frequencies when unnormalized weights sum to
+  more than the floating-point range.
 - Threshold ASR samples disjoint ordinal intervals by their log probability
   mass, including when all allowed intervals lie in the extreme tails.
 - Threshold ASR scales conditional precisions so positive subnormal branch

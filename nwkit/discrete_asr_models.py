@@ -316,6 +316,14 @@ def initial_parameters(model, states, initial_rate, graph=None, rate_design=None
     )
 
 
+def _rate_matrix_diagonal(off_diagonal):
+    with np.errstate(over="ignore"):
+        totals = off_diagonal.sum(axis=1)
+    if np.any(~np.isfinite(totals)):
+        raise ValueError("Rate-matrix row totals exceed floating-point range.")
+    return -totals
+
+
 def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
     if model == "MK-DESIGN":
         labels = parameter_labels(model, states, graph, rate_design)
@@ -330,7 +338,7 @@ def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
         matrix = np.zeros((len(states), len(states)), dtype=float)
         for class_index, rate in enumerate(rates):
             matrix[rate_design.class_by_edge == class_index] = rate
-        np.fill_diagonal(matrix, -matrix.sum(axis=1))
+        np.fill_diagonal(matrix, _rate_matrix_diagonal(matrix))
         return matrix
     graph = (
         complete_transition_graph(len(states))
@@ -366,8 +374,9 @@ def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
         frequency_weights = np.concatenate(
             (np.ones(1, dtype=float), rates[num_exchangeabilities:])
         )
-        if not np.any(frequency_weights > 0.0):
-            raise ValueError("GTR stationary-frequency weights cannot all be zero.")
+        # The reference state contributes a strictly positive weight of one.
+        if np.max(frequency_weights) > np.finfo(float).max / len(frequency_weights):
+            frequency_weights /= np.max(frequency_weights)
         frequencies = frequency_weights / frequency_weights.sum()
         parameter_index = 0
         for i in range(len(states)):
@@ -378,7 +387,7 @@ def build_rate_matrix(model, states, rates, graph=None, rate_design=None):
                 parameter_index += 1
     elif model != "CUSTOM":
         raise ValueError(f"Unsupported '--model': {model}")
-    np.fill_diagonal(matrix, -matrix.sum(axis=1))
+    np.fill_diagonal(matrix, _rate_matrix_diagonal(matrix))
     return matrix
 
 
@@ -412,21 +421,17 @@ def read_rate_matrix(path):
     np.fill_diagonal(off_diagonal, 0.0)
     if np.any(off_diagonal < 0.0):
         raise ValueError("'--rate-matrix' off-diagonal rates must be non-negative.")
-    expected_diagonal = -off_diagonal.sum(axis=1)
     diagonal = np.diag(matrix)
     if np.all(diagonal == 0.0):
         matrix = off_diagonal
-        np.fill_diagonal(matrix, expected_diagonal)
-    else:
-        diagonal_scale = np.abs(diagonal) + np.abs(expected_diagonal)
-        valid_diagonal = _roundoff_close(diagonal - expected_diagonal, diagonal_scale)
-        if np.all(valid_diagonal):
-            return states, validate_rate_matrix(matrix)
+        np.fill_diagonal(matrix, _rate_matrix_diagonal(matrix))
+    try:
+        return states, validate_rate_matrix(matrix)
+    except ValueError as exc:
         raise ValueError(
             "'--rate-matrix' diagonals must be zero (to derive them) or the "
             "negative row sums of off-diagonal rates."
-        )
-    return states, validate_rate_matrix(matrix)
+        ) from exc
 
 
 def validate_rate_matrix(rate_matrix, *, num_states=None):

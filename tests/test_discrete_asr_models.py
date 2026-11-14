@@ -301,6 +301,26 @@ def test_labelled_rate_matrix_derives_or_validates_diagonal(tmp_path):
         validate_rate_matrix([[-0.1, 0.2], [0.4, -0.4]])
 
 
+def test_labelled_generator_checks_large_row_totals_without_overflow(tmp_path):
+    matrix = tmp_path / "rates.tsv"
+    matrix.write_text("state\ta\tb\na\t-1e308\t1e308\nb\t0\t0\n")
+    with np.errstate(over="raise", invalid="raise"):
+        _, valid = read_rate_matrix(matrix)
+        np.testing.assert_array_equal(valid, [[-1e308, 1e308], [0.0, 0.0]])
+        matrix.write_text("state\ta\tb\na\t-1e308\t8e307\nb\t0\t0\n")
+        with pytest.raises(ValueError, match="negative row sums"):
+            read_rate_matrix(matrix)
+
+
+def test_gtr_retains_frequencies_when_the_raw_weight_sum_overflows():
+    with np.errstate(over="raise", invalid="raise"):
+        matrix = build_rate_matrix("GTR", ["a", "b", "c"], [1, 1, 1, 1e308, 1e308])
+        stationary = stationary_distribution(matrix)
+
+    np.testing.assert_allclose(stationary[1:], [0.5, 0.5])
+    assert stationary[0] == pytest.approx(5e-309, abs=0.0, rel=1e-12)
+
+
 def test_generator_validation_is_relative_to_the_rate_scale():
     invalid = np.array([[-2e-15, 1e-15], [3e-15, -3e-15]])
     with pytest.raises(ValueError, match="rows must sum to zero"):
