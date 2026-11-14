@@ -30,6 +30,7 @@ from nwkit.phylogenetic_glmm import (
     _multinomial_terms,
     _ordinal_terms,
     _profile_endpoint,
+    _project_predictor_uncertainty,
     fit_phylogenetic_glmm,
 )
 from nwkit.sparse_laplace import (
@@ -45,6 +46,21 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree():
     return Tree(TREE_TEXT, parser=1)
+
+
+def test_projection_of_joint_dense_predictor_uncertainty_matches_latent_loading():
+    rng = np.random.default_rng(502)
+    predictors, observations, responses = 3, 4, 2
+    slopes = rng.normal(size=(predictors, responses))
+    loadings = rng.normal(size=(predictors, observations, 5))
+    covariance = np.einsum("pit,qjt->pqij", loadings, loadings)
+    projected_loading = np.einsum("pr,pit->irt", slopes, loadings).reshape(
+        observations * responses, -1
+    )
+    observed = _project_predictor_uncertainty(
+        slopes, [covariance], [(0, 1, 2)], observations
+    )
+    np.testing.assert_allclose(observed, projected_loading @ projected_loading.T)
 
 
 @pytest.mark.parametrize(

@@ -903,10 +903,9 @@ def _project_predictor_uncertainty(
         selected = tuple(selected_columns)
         slopes = coefficients[np.asarray(selected, dtype=int), :]
         if covariance.shape == (n_observations, len(selected), len(selected)):
-            for observation in range(n_observations):
-                block = slopes.T @ covariance[observation] @ slopes
-                start = observation * dimension
-                projected[start : start + dimension, start : start + dimension] += block
+            blocks = (slopes.T @ covariance) @ slopes
+            indices = np.arange(n_observations * dimension).reshape(-1, dimension)
+            projected[indices[:, :, None], indices[:, None, :]] += blocks
             continue
         expected = (
             len(selected),
@@ -916,16 +915,23 @@ def _project_predictor_uncertainty(
         )
         if covariance.shape != expected:
             raise ValueError("Grouped predictor uncertainty has wrong dimensions.")
-        for first in range(n_observations):
-            first_start = first * dimension
-            for second in range(n_observations):
-                second_start = second * dimension
-                block = slopes.T @ covariance[:, :, first, second] @ slopes
-                projected[
-                    first_start : first_start + dimension,
-                    second_start : second_start + dimension,
-                ] += block
+        _add_joint_dense_predictor_covariance(projected, slopes, covariance)
     return (projected + projected.T) / 2.0
+
+
+def _add_joint_dense_predictor_covariance(projected, slopes, covariance):
+    n_observations = covariance.shape[2]
+    dimension = slopes.shape[1]
+    # Batch over source observations to bound temporary covariance blocks.
+    row_size = n_observations * dimension * max(slopes.shape)
+    batch = max(1, 262_144 // max(1, row_size))
+    for start in range(0, n_observations, batch):
+        stop = min(start + batch, n_observations)
+        source = covariance[:, :, start:stop, :].transpose(2, 3, 0, 1)
+        blocks = (slopes.T @ source) @ slopes
+        projected[start * dimension : stop * dimension] += blocks.transpose(
+            0, 2, 1, 3
+        ).reshape((stop - start) * dimension, -1)
 
 
 def _structured_predictor_loading(uncertainty, selected_columns, coefficients):
