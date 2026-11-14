@@ -5,12 +5,12 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from nwkit.continuous_asr import compute_bm_marginals
+from nwkit.continuous_asr import _fit_brownian_edges
 from nwkit.evolution import (
-    build_evolutionary_process,
     encoded_evolution_parameter,
     optimization_parameterization,
     parameter_near_boundary,
+    transformed_edge_variances,
     validate_evolution_parameter,
 )
 from nwkit.model_specs import evolution_model_spec
@@ -85,14 +85,16 @@ def parse_parameter_bounds(value, tree, model):
     return lower, upper
 
 
-def _process(tree, model, parameter):
-    return build_evolutionary_process(
+def _edge_variances(tree, model, parameter):
+    variances = transformed_edge_variances(
         tree,
         model=model,
         parameter=parameter,
-        root_mode="flat",
         allow_zero=True,
     )
+    if not all(math.isfinite(value) and value >= 0.0 for value in variances.values()):
+        raise ValueError("Transformed edge variances must be non-negative and finite.")
+    return variances
 
 
 def compute_transformed_bm_marginals(
@@ -127,15 +129,15 @@ def compute_transformed_bm_marginals(
     validate_evolution_parameter(model, bounds[1])
 
     def fit_at(parameter, *, compute_posterior=True):
-        process = _process(tree, model, parameter)
-        return compute_bm_marginals(
+        variances = _edge_variances(tree, model, parameter)
+        return _fit_brownian_edges(
             tree,
             values_by_leaf,
-            sigma2=sigma2,
-            standard_errors=standard_errors,
-            _tree_validated=_tree_validated,
-            _process=process,
-            _compute_posterior=compute_posterior,
+            sigma2,
+            standard_errors,
+            edge_length=variances.__getitem__,
+            tree_validated=_tree_validated,
+            compute_posterior=compute_posterior,
         )
 
     if evolution_parameter is not None:
@@ -153,7 +155,7 @@ def compute_transformed_bm_marginals(
             # Ultrametricity is a structural DELTA requirement, not an invalid
             # optimizer candidate.  Probe once so the useful model-level error
             # is not converted into an all-nonfinite search failure.
-            _process(tree, model, 1.0)
+            _edge_variances(tree, model, 1.0)
         encoded_bounds = (
             encoded_evolution_parameter(model, bounds[0]),
             encoded_evolution_parameter(model, bounds[1]),

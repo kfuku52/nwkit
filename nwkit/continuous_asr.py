@@ -166,12 +166,11 @@ def _brownian_group_edge_length(tree, process):
     return edge_length
 
 
-def _tree_groups(tree, *, validated=False, process=None):
+def _tree_groups(tree, *, validated=False, edge_length=_raw_brownian_edge_length):
     """Contract only exactly zero-length edges, without modifying the tree."""
     if not validated:
         validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
         require_rooted(tree, "ASR requires a rooted tree.")
-    edge_length = _brownian_group_edge_length(tree, process)
     node_groups = {tree: 0}
     parents, lengths = [-1], [0.0]
     for node in tree.traverse(strategy="preorder"):
@@ -260,10 +259,10 @@ def _prepare_data(
     *,
     trait_exponent_ceiling=None,
     tree_validated=False,
-    process=None,
+    edge_length=_raw_brownian_edge_length,
 ):
     node_groups, parents, lengths = _tree_groups(
-        tree, validated=tree_validated, process=process
+        tree, validated=tree_validated, edge_length=edge_length
     )
     grouped, count, exact_values = _observations_by_group(
         tree, node_groups, values_by_leaf, standard_errors
@@ -562,12 +561,30 @@ def compute_bm_marginals(
     boundary has no ordinary residual density, reported as None, not a
     regular finite likelihood on a different-dimensional support.
     """
+    return _fit_brownian_edges(
+        tree,
+        values_by_leaf,
+        sigma2,
+        standard_errors,
+        edge_length=_brownian_group_edge_length(tree, _process),
+        tree_validated=_tree_validated,
+        compute_posterior=_compute_posterior,
+    )
+
+
+def _fit_brownian_edges(
+    tree,
+    values_by_leaf,
+    sigma2,
+    standard_errors,
+    *,
+    edge_length,
+    tree_validated,
+    compute_posterior,
+):
     if sigma2 is not None:
         sigma2 = _finite_number(sigma2, "--sigma2", nonnegative=True)
     trait_exponent_ceiling = None
-    # The private fast path is used only by the CLI after its shared ASR tree
-    # validation; direct library calls always validate here.
-    tree_validated = _tree_validated
     while True:
         data = _prepare_data(
             tree,
@@ -576,7 +593,7 @@ def compute_bm_marginals(
             sigma2,
             trait_exponent_ceiling=trait_exponent_ceiling,
             tree_validated=tree_validated,
-            process=_process,
+            edge_length=edge_length,
         )
         tree_validated = True
         rate = (
@@ -608,7 +625,7 @@ def compute_bm_marginals(
         # exponent, so genuinely unrepresentable final models still reach the
         # explicit error in `_prune` below.
         original_underflow = _brownian_has_underflowing_edge(
-            tree, _process, fitted_sigma2
+            tree, edge_length, fitted_sigma2
         )
         if original_underflow:
             break
@@ -630,9 +647,9 @@ def compute_bm_marginals(
         ):
             break
         trait_exponent_ceiling = candidate_exponent
-    upward = _prune(data, rate, collect_inside=_compute_posterior)
+    upward = _prune(data, rate, collect_inside=compute_posterior)
     posterior = (
-        _brownian_marginals(data, rate, upward.inside) if _compute_posterior else {}
+        _brownian_marginals(data, rate, upward.inside) if compute_posterior else {}
     )
     residual_df = data.num_effective - 1
     singular = upward.residual_df < residual_df
@@ -661,8 +678,7 @@ def compute_bm_marginals(
     return posterior, fit
 
 
-def _brownian_has_underflowing_edge(tree, process, rate):
-    edge_length = _brownian_group_edge_length(tree, process)
+def _brownian_has_underflowing_edge(tree, edge_length, rate):
     for node in tree.traverse():
         if not node.is_root:
             length = edge_length(node)
