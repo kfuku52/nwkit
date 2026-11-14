@@ -181,6 +181,16 @@ def _simulation_envelope(simulations, tail):
     return median, limits[0], limits[2]
 
 
+def _null_mdi_areas(times, simulations, median, interval):
+    # Bound the temporary difference and integration arrays by row batch.
+    batch_size = max(1, 16_384 // len(times))
+    areas = np.empty(len(simulations))
+    for start in range(0, len(simulations), batch_size):
+        rows = slice(start, start + batch_size)
+        areas[rows] = curve_area(times, simulations[rows] - median, interval)
+    return areas
+
+
 def _result_tables(tree, design, values, simulations, height, interval, args):
     disparities, counts = clade_disparities(design, values)
     relative = disparities / disparities[0]
@@ -225,7 +235,7 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
         table["bm_mean"] = simulations.mean(axis=0)
         table["bm_median"] = median
         table["bm_lower"], table["bm_upper"] = lower, upper
-        null_mdi = curve_area(design.times, simulations - median, interval)
+        null_mdi = _null_mdi_areas(design.times, simulations, median, interval)
         summary.update(
             bm_median_area=float(curve_area(design.times, median, interval)),
             mdi=float(curve_area(design.times, observed - median, interval)),
