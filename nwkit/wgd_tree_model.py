@@ -459,11 +459,18 @@ class TopologyLikelihood:
             )
         else:
             left, right = self.children[0]
+            with np.errstate(divide="ignore"):
+                log_r = np.log(r)
+            # Keep 1 + 2*r + r**2 * P(either clade) in range even when r**2
+            # overflows or the single-copy survival underflows.
+            log_factor = np.logaddexp(
+                math.log1p(r), log_r + np.logaddexp(0, log_r + log_survivors[0])
+            )
             selection_log = (
                 math.log(root_mean)
                 + log_survivors[left]
                 + log_survivors[right]
-                + math.log1p(2 * r + r * r * root_survival)
+                + log_factor
                 - math.log1p(r * survivors[left])
                 - math.log1p(r * survivors[right])
                 - math.log1p(r * root_survival)

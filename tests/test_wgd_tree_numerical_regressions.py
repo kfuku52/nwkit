@@ -78,6 +78,22 @@ def test_root_clade_selection_stays_in_log_space_when_joint_survival_underflows(
     assert result.log_likelihood == pytest.approx(reference, abs=1e-7)
 
 
+@pytest.mark.parametrize("loss", [0.0, 1000.0])
+def test_root_clade_selection_with_very_large_geometric_mean(loss):
+    root_mean = 1e308
+    model = TopologyLikelihood(
+        species(),
+        gene(("node", ("tip", "A"), ("tip", "B"))),
+        ascertainment="root-clades",
+    )
+    actual = model.evaluate([[0.0, loss]], root_mean)
+    # With no loss, this topology occurs exactly when the geometric root has
+    # one copy. At loss 1000, even the large root almost never contributes more
+    # than one surviving copy per clade. Both tips then determine the topology.
+    expected = -math.log(root_mean) if loss == 0 else 0.0
+    assert actual.log_likelihood == pytest.approx(expected, abs=1e-10)
+
+
 @pytest.mark.parametrize("tip_count", [32, 64, 128])
 def test_comb_matches_exact_yule_colored_topology_probability(tip_count):
     tip = ("tip", "A")
