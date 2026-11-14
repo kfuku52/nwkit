@@ -77,6 +77,21 @@ def test_projection_of_joint_dense_predictor_uncertainty_matches_latent_loading(
     np.testing.assert_allclose(observed, projected_loading @ projected_loading.T)
 
 
+def test_glmm_projection_preserves_sparse_predictor_row_scales():
+    model = evolutionary_covariance_factory(_tree(), LEAF_NAMES).sparse_model(None)
+    indices = np.array([4, 1, 1, 0])
+    scales = np.array([1.2, -0.4, 0.0, 0.75])
+    slopes = np.array([[0.4, -0.3]])
+    uncertainty = GmrfPredictorUncertainty(model, indices, scales)
+    observed = _project_predictor_uncertainty(slopes, [uncertainty], [0], len(indices))
+    covariance = model.materialize()[np.ix_(indices, indices)] * np.outer(
+        scales, scales
+    )
+    np.testing.assert_allclose(
+        observed, np.kron(covariance, slopes.T @ slopes), atol=1e-15
+    )
+
+
 @pytest.mark.parametrize(
     "family,dispersion",
     [("hurdle-poisson", None), ("hurdle-negative-binomial", 0.2)],

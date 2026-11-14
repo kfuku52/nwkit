@@ -495,7 +495,17 @@ def gmrf_predictor_loading(
     ):
         raise ValueError("GMRF predictor indices are malformed.")
     selected = uncertainty.model.tip_loading[indices]
+    selected = _scale_gmrf_predictor_rows(selected, uncertainty.row_scale)
     return sparse.kron(selected, sparse.csr_matrix(slopes[:, None]), format="csr")
+
+
+def _scale_gmrf_predictor_rows(loading, row_scale):
+    if row_scale is None:
+        return loading
+    row_scale = np.asarray(row_scale, dtype=float)
+    if row_scale.shape != (loading.shape[0],) or not np.isfinite(row_scale).all():
+        raise ValueError("GMRF predictor row scale is malformed.")
+    return loading.multiply(row_scale[:, None]).tocsr()
 
 
 def condition_sparse_tip_model(
