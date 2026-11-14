@@ -2,6 +2,7 @@
 
 import re
 from dataclasses import dataclass
+from functools import lru_cache
 from itertools import product
 from typing import Any
 
@@ -202,12 +203,16 @@ class Cell:
 
 
 _CONSUMED_STATE: dict[int, Cell] = {}
+_LCA_CACHE_SIZE = 4096
 
 
 class _SpeciesIndex:
     def __init__(self, species):
         validate_binary(species, "MUL-tree", unique=False)
         self.lca = LcaIndex(species)
+        self.common_ancestor_indices = lru_cache(maxsize=_LCA_CACHE_SIZE)(
+            self.lca.common_ancestor_indices
+        )
         self.labels = tuple(node.name for node in self.lca.nodes)
         occurrences: dict[str, list[int]] = {}
         for index, node in enumerate(self.lca.nodes):
@@ -257,7 +262,7 @@ def _score_indexed_genes(genes, species, max_state_pairs):
         if species_index is None:
             species_index = _SpeciesIndex(species)
         depth = species_index.lca.depth
-        lca = species_index.lca.common_ancestor_indices
+        lca = species_index.common_ancestor_indices
         states = []
         state_pairs = 0
         for node, children in zip(gene.nodes, gene.children, strict=True):
@@ -357,7 +362,7 @@ class Reconciliation:
     def _combine(self, left, right, keep_choices):
         result: dict[int, Cell] = {}
         for first, second in product(left, right):
-            parent = self.lca.common_ancestor_indices(first, second)
+            parent = self._species_index.common_ancestor_indices(first, second)
             duplication, losses = self.local_cost(parent, first, second)
             score = left[first].score + right[second].score + duplication + losses
             count = left[first].count * right[second].count
