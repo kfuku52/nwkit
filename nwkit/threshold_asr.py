@@ -210,9 +210,40 @@ def _interval_draw(lower, upper, a, b, mean, sd, rng):
     narrow_mass = _narrow_interval_log_mass(lower, upper, a, b, sd)
     if narrow_mass is not None:
         return lower + float(rng.random()) * (upper - lower)
+    if a >= 1e5:
+        return _tail_interval_draw(lower, upper, a, mean, sd, rng)
+    if b <= -1e5:
+        return -_tail_interval_draw(-upper, -lower, -b, -mean, sd, rng)
     if not a < b:
         raise ValueError("Could not resolve the allowed ordinal liability interval.")
     return mean + sd * _truncated_quantile(a, b, rng)
+
+
+def _tail_interval_draw(lower, upper, standardized_lower, mean, sd, rng):
+    # Shift the tail to the truncation boundary before drawing the excess.
+    # An exponential proposal with rate a for standardized excess z accepts
+    # with probability exp(-z**2/2), including for finite upper truncation.
+    width = upper - lower
+    reciprocal = 1.0 / standardized_lower
+    if math.isinf(standardized_lower):
+        distance = lower - mean
+        reciprocal = (
+            sd / distance
+            if math.isfinite(distance)
+            else ((0.5 * sd) / (0.5 * lower - 0.5 * mean))
+        )
+    scale = sd * reciprocal
+    if scale == 0.0:
+        return lower
+    ratio = width / scale
+    mass = -math.expm1(-ratio)
+    while True:
+        uniform = float(rng.random())
+        proposal = -math.log1p(-uniform * mass)
+        standardized_excess = proposal * reciprocal
+        if float(rng.random()) < math.exp(-0.5 * standardized_excess**2):
+            excess = width * uniform if ratio < 1e-12 else scale * proposal
+            return lower + excess
 
 
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
@@ -238,11 +269,12 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
     a, b = intervals[index]
     lower, upper = bounds[index]
     location = _interval_draw(lower, upper, a, b, mean, sd, rng)
-    if not math.isfinite(location):
-        raise ValueError("A sampled ordinal liability exceeds floating-point range.")
     # Ordinal categories use (lower, upper]. A continuous tail draw can
     # round onto its excluded endpoint when projected back into trait units.
-    return min(upper, max(location, math.nextafter(lower, math.inf)))
+    first_allowed = math.nextafter(lower, math.inf)
+    if not math.isfinite(location) or not math.isfinite(first_allowed):
+        raise ValueError("A sampled ordinal liability exceeds floating-point range.")
+    return min(upper, max(location, first_allowed))
 
 
 def _liability_conditionals(compiled, process):

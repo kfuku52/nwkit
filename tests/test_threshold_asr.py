@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -75,12 +77,37 @@ def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
     assert 0.4 < np.mean(draws > 0.0) < 0.6
 
 
-def test_threshold_draw_reports_unrepresentable_tail_without_nonfinite_samples():
+def test_threshold_draw_rounds_to_first_allowed_value_in_extreme_tail():
+    rng = np.random.default_rng(5)
+    result = _truncated_draw(0.0, 1.0, np.array([1]), np.array([1e200]), rng)
+    assert result == np.nextafter(1e200, np.inf)
+
+
+def test_threshold_draw_reports_tail_with_no_finite_allowed_value():
     rng = np.random.default_rng(5)
     with pytest.raises(
         ValueError, match="ordinal liability exceeds floating-point range"
     ):
-        _truncated_draw(0.0, 1.0, np.array([1]), np.array([1e200]), rng)
+        _truncated_draw(0.0, 1.0, np.array([1]), np.array([np.finfo(float).max]), rng)
+
+
+@pytest.mark.parametrize("sign", [-1.0, 1.0])
+def test_threshold_draw_resolves_tail_excess_after_centering(sign):
+    rng = np.random.default_rng(331)
+    category = np.array([int(sign > 0.0)])
+    draws = (
+        np.array(
+            [
+                _truncated_draw(-sign * 1e16, 1.0, category, np.array([0.0]), rng)
+                for _ in range(1500)
+            ]
+        )
+        * sign
+        * 1e16
+    )
+    assert np.all(draws > 0.0)
+    assert np.mean(draws) == pytest.approx(1.0, abs=0.07)
+    assert np.median(draws) == pytest.approx(math.log(2.0), abs=0.07)
 
 
 @pytest.mark.parametrize("mean", [-1.0, 0.0])
