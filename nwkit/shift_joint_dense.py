@@ -11,9 +11,10 @@ from scipy.linalg import cho_solve, cholesky, solve_triangular
 
 from nwkit.shift_joint_model import (
     NativeJointFit,
+    _joint_observed_design,
+    _joint_predictions,
     integral_decay,
     joint_covariance_geometry,
-    joint_design,
 )
 from nwkit.vector_whitening import vector_gls
 
@@ -180,8 +181,8 @@ class DenseJointContext:
         factor, tip, diffusion, kernel, alpha_rows = self.covariance(
             alpha, covariance, noise, gradient=gradient
         )
-        design = joint_design(self.data, layout, alpha)
-        x, y = design[self.mask], self.data.values[self.mask]
+        x, designs = _joint_observed_design(self.data, layout, alpha, self.mask)
+        y = self.data.values[self.mask]
         beta, ll, quadratic, beta_covariance = vector_gls(factor, y, x)
         fit = NativeJointFit(
             alpha,
@@ -191,7 +192,7 @@ class DenseJointContext:
             noise,
             beta.reshape(p, len(layout.groups)).T,
             beta_covariance,
-            np.einsum("ijk,k->ij", design, beta),
+            _joint_predictions(designs, beta),
             ll,
             quadratic,
             len(y),

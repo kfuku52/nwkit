@@ -147,16 +147,47 @@ class NativeJointFit:
     engine: str
 
 
+def _trait_designs(data, layout, alpha):
+    node_groups = layout.node_groups(data.tree)
+    by_rate: dict[float, np.ndarray] = {}
+    designs = []
+    for trait in range(len(data.trait_names)):
+        rate = float(alpha[trait])
+        if rate not in by_rate:
+            by_rate[rate] = layout.design(data.tree, rate, node_groups=node_groups)
+        designs.append(by_rate[rate])
+    return designs
+
+
 def joint_design(data, layout, alpha):
     """Trait-major coefficients and tip-major observed coordinates."""
-    p, q = len(data.trait_names), len(layout.groups)
-    matrix = np.zeros((len(data.values), p, p * q))
-    node_groups = layout.node_groups(data.tree)
-    for trait in range(p):
-        matrix[:, trait, trait * q : (trait + 1) * q] = layout.design(
-            data.tree, float(alpha[trait]), node_groups=node_groups
-        )
+    designs = _trait_designs(data, layout, alpha)
+    p, n, q = len(designs), len(data.values), len(layout.groups)
+    matrix = np.zeros((n, p, p * q))
+    for trait, design in enumerate(designs):
+        matrix[:, trait, trait * q : (trait + 1) * q] = design
     return matrix
+
+
+def _joint_observed_design(data, layout, alpha, observed):
+    designs = _trait_designs(data, layout, alpha)
+    p, q = len(designs), len(layout.groups)
+    tips, traits = np.nonzero(observed)
+    matrix = np.zeros((len(tips), p * q))
+    for trait, design in enumerate(designs):
+        rows = traits == trait
+        matrix[rows, trait * q : (trait + 1) * q] = design[tips[rows]]
+    return matrix, designs
+
+
+def _joint_predictions(designs, coefficients):
+    by_trait = coefficients.reshape(len(designs), -1)
+    return np.column_stack(
+        [
+            np.einsum("ij,j->i", design, beta)
+            for design, beta in zip(designs, by_trait, strict=True)
+        ]
+    )
 
 
 def joint_factor(data, alpha, covariance, noise, *, root_model, plan=None):
@@ -192,10 +223,10 @@ def evaluate_joint(
     factor, tip, diffusion = joint_factor(
         data, alpha, covariance, noise, root_model=root_model, plan=_plan
     )
-    design = joint_design(data, layout, alpha)
     observed = np.isfinite(data.values)
+    design, trait_designs = _joint_observed_design(data, layout, alpha, observed)
     coefficients, loglik, quadratic, coefficient_covariance = vector_gls(
-        factor, data.values[observed], design[observed]
+        factor, data.values[observed], design
     )
     p, q = len(alpha), len(layout.groups)
     return NativeJointFit(
@@ -206,7 +237,7 @@ def evaluate_joint(
         noise,
         coefficients.reshape(p, q).T,
         coefficient_covariance,
-        np.einsum("ijk,k->ij", design, coefficients),
+        _joint_predictions(trait_designs, coefficients),
         loglik,
         quadratic,
         int(observed.sum()),
