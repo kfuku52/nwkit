@@ -148,7 +148,7 @@ def simulate_shift(spec, replicates=1, *, seed=1):
         seed=int(process_seed.generate_state(1)[0]),
         compiled_tree=spec.tree.compiled,
     )
-    values = latent[:, spec.tree.compiled.leaf_indices, :].copy()
+    values = np.take(latent, spec.tree.compiled.leaf_indices, axis=1)
     if np.any(spec.measurement_covariance) or np.any(spec.sampling_variances):
         rng = np.random.default_rng(error_seed)
         zero = np.zeros(p)
