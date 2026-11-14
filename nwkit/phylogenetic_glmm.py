@@ -2373,9 +2373,41 @@ def _draw_mixture_count(rng, linear, family, dispersion, zero_probability, offse
 
 
 def _draw_gamma(rng, linear, dispersion):
-    assert dispersion is not None
-    means = np.exp(np.clip(linear, -30.0, 30.0))
-    return rng.gamma(dispersion, means / dispersion)
+    with np.errstate(over="ignore", under="ignore"):
+        scale = np.exp(linear) / dispersion
+    if _gamma_draw_uses_finite_scale(dispersion, scale):
+        values = rng.gamma(dispersion, scale)
+    else:
+        values = _draw_gamma_in_log_units(rng, linear, dispersion)
+    return _check_gamma_draw_range(values)
+
+
+def _gamma_draw_uses_finite_scale(shape, scale):
+    return (
+        shape >= 0.1
+        and np.isfinite(scale).all()
+        and np.all(scale >= np.finfo(float).tiny)
+    )
+
+
+def _draw_gamma_in_log_units(rng, linear, shape):
+    log_scale = linear - math.log(shape)
+    with np.errstate(over="ignore", under="ignore", divide="ignore"):
+        if shape < 1.0:
+            # Gamma(shape) = Gamma(shape + 1) * U ** (1 / shape).
+            unit_log = np.log(rng.standard_gamma(shape + 1.0, size=linear.shape))
+            unit_log += np.log(rng.random(linear.shape)) / shape
+        else:
+            unit_log = np.log(rng.standard_gamma(shape, size=linear.shape))
+        return np.exp(log_scale + unit_log)
+
+
+def _check_gamma_draw_range(values):
+    if not np.isfinite(values).all() or np.any(values <= 0.0):
+        raise RuntimeError(
+            "Gamma bootstrap draw exceeds the positive floating-point range."
+        )
+    return values
 
 
 def _draw_lognormal(rng, linear, dispersion):

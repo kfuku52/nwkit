@@ -28,6 +28,7 @@ from nwkit.phylogenetic_glmm import (
     _beta_family_terms,
     _censored_gaussian_log_likelihood,
     _draw_count,
+    _draw_gamma,
     _draw_zero_truncated_count,
     _multinomial_terms,
     _ordinal_terms,
@@ -107,6 +108,21 @@ def test_continuous_beta_fit_keeps_finite_likelihood_at_subnormal_precision():
             inference="parametric-bootstrap",
             bootstrap_replicates=2,
         )
+
+
+@pytest.mark.parametrize("log_mean", [-710.0, -100.0, 100.0])
+def test_gamma_bootstrap_draws_preserve_response_units(log_mean):
+    linear = np.full(5, log_mean)
+    expected = _draw_gamma(np.random.default_rng(412), np.zeros_like(linear), 2.0)
+    observed = _draw_gamma(np.random.default_rng(412), linear, 2.0)
+    assert np.all(observed > 0.0)
+    np.testing.assert_allclose(observed / np.exp(log_mean), expected, rtol=2e-13)
+
+
+def test_gamma_bootstrap_reports_unrepresentable_positive_draws():
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        with pytest.raises(RuntimeError, match="positive floating-point range"):
+            _draw_gamma(np.random.default_rng(9), np.zeros(5), 1e-310)
 
 
 def test_projection_of_joint_dense_predictor_uncertainty_matches_latent_loading():
