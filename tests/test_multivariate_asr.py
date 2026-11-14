@@ -42,6 +42,35 @@ def test_missing_tip_has_joint_predictive_covariance():
     )
 
 
+def test_mvbm_preserves_exact_tips_on_short_branches_with_mixed_trait_scales():
+    tree = tree_from("(A:1,B:1e-310,C:1e-310,D:1,E:1)R;")
+    values = {
+        "A": (1.0, 1.0),
+        "B": (0.0, 0.0),
+        "C": (1e-155, 2e-155),
+        "D": (-0.5, 0.3),
+        "E": (0.1, -0.3),
+    }
+    posterior, fit = compute_mvbm_marginals(tree, values, ("x", "y"))
+    assert fit.sigma_rank == 2
+    np.testing.assert_allclose(posterior[tree].mean, [5e-156, 1e-155], atol=0.0)
+    np.testing.assert_allclose(posterior[tree].covariance / 5e-311, fit.sigma)
+    np.testing.assert_array_equal(posterior[tree["C"]].mean, values["C"])
+
+
+def test_mvbm_preserves_tied_nodes_and_predicts_unobserved_siblings():
+    tree = tree_from("((A:0,B:0,C:1)X:1,D:2,E:2)R;")
+    values = {"A": (1.0, 2.0), "B": (1.0, 2.0), "D": (0.0, 1.0), "E": (3.0, 0.0)}
+    posterior, fit = compute_mvbm_marginals(tree, values, ("x", "y"))
+    assert tuple(posterior) == tuple(tree.traverse())
+    assert fit.num_effective_observations == 3
+    for name in ("A", "B", "X", "C"):
+        np.testing.assert_array_equal(posterior[tree[name]].mean, values["A"])
+    np.testing.assert_array_equal(posterior[tree["X"]].covariance, np.zeros((2, 2)))
+    np.testing.assert_allclose(posterior[tree["C"]].covariance, fit.sigma)
+    assert not np.shares_memory(posterior[tree["A"]].mean, posterior[tree["B"]].mean)
+
+
 def test_mvbm_covariance_and_flat_root_likelihood_match_dense_gls():
     tree = tree_from("((A:0.4,B:1.2):0.7,(C:0.6,D:1.1):0.5,E:1.8)R;")
     values = {

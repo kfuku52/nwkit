@@ -12,7 +12,6 @@ from nwkit.continuous_asr import (
     GaussianMarginal,
     _finite_number,
     _tree_groups,
-    compute_bm_marginals,
 )
 from nwkit.continuous_asr_io import (
     _asr_node_metadata,
@@ -43,6 +42,21 @@ class MultivariateBrownianFit:
     num_effective_observations: int
     residual_df: int
     fit_status: str
+
+
+@dataclass(frozen=True)
+class _BrownianContrastPass:
+    contrasts: np.ndarray
+    log_variance: float
+    num_observed: int
+    num_effective: int
+    time_exponent: int
+    node_groups: dict
+    parents: list[int]
+    lengths: list[float]
+    inside_mean: list[np.ndarray | None]
+    inside_variance: list[float | None]
+    exact: dict[int, np.ndarray]
 
 
 def _validated_vectors(values_by_leaf, trait_names):
@@ -81,28 +95,31 @@ def _validated_vectors(values_by_leaf, trait_names):
 
 
 def _scaled_vectors(vectors, trait_names):
-    observed = [value for value in vectors.values() if value is not None]
-    center = observed[0].copy()
-    differences = [value - center for value in observed]
-    if any(np.any(~np.isfinite(value)) for value in differences):
-        raise ValueError(
-            "MV-BM trait ranges exceed floating-point range; rescale units."
+    names = [name for name, value in vectors.items() if value is not None]
+    observed = np.stack([vectors[name] for name in names])
+    # Pick an observed center close to zero for each trait. A large offset
+    # could erase the separation of small exact observations.
+    center = observed[np.argmin(np.abs(observed), axis=0), np.arange(len(trait_names))]
+    with np.errstate(over="ignore"):
+        differences = observed - center
+    overflowing = np.any(~np.isfinite(differences), axis=0)
+    if np.any(overflowing):
+        columns = observed[:, overflowing]
+        center[overflowing] = (
+            np.min(columns, axis=0) / 2.0 + np.max(columns, axis=0) / 2.0
         )
-    exponents = []
-    for trait_index in range(len(trait_names)):
-        size = max(abs(value[trait_index]) for value in differences)
-        exponents.append(math.frexp(size)[1] - 1 if size > 0.0 else 0)
-    scales = np.asarray([math.ldexp(1.0, exponent) for exponent in exponents])
-    return {
-        name: None if value is None else (value - center) / scales
-        for name, value in vectors.items()
-    }, np.asarray(exponents, dtype=int)
+        differences[:, overflowing] = columns - center[overflowing]
+    size = np.max(np.abs(differences), axis=0)
+    exponents = np.where(size > 0.0, np.frexp(size)[1] - 1, 0)
+    scaled = np.ldexp(differences, -exponents)
+    return dict(zip(names, scaled, strict=True)), center, exponents
 
 
-def _independent_contrasts(tree, vectors, *, tree_validated=False):
+def _independent_contrasts(tree, vectors, scaled, *, tree_validated=False):
     node_groups, parents, lengths = _tree_groups(tree, validated=tree_validated)
     dimension = len(next(value for value in vectors.values() if value is not None))
     local = [None] * len(parents)
+    exact = {}
     num_observed = 0
     longest = max(lengths)
     time_exponent = math.frexp(longest)[1] - 1 if longest else 0
@@ -115,18 +132,20 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
     else:
         lengths = scaled_lengths
     for leaf in tree.leaves():
-        value = vectors.get(str(leaf.name))
+        name = str(leaf.name)
+        value = vectors.get(name)
         if value is None:
             continue
         num_observed += 1
         group = node_groups[leaf]
-        if local[group] is not None:
-            if not np.array_equal(local[group], value):
+        if group in exact:
+            if not np.array_equal(exact[group], value):
                 raise ValueError(
                     "Conflicting exact multivariate observations are connected by zero-length branches."
                 )
             continue
-        local[group] = value
+        exact[group] = value
+        local[group] = scaled[name]
     children: list[list[int]] = [[] for _ in parents]
     for child, parent in enumerate(parents):
         if parent >= 0:
@@ -170,12 +189,18 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
         matrix = np.vstack(contrasts)
     else:
         matrix = np.empty((0, dimension), dtype=float)
-    return (
-        matrix,
-        math.fsum(log_variances),
-        num_observed,
-        sum(value is not None for value in local),
-        time_exponent,
+    return _BrownianContrastPass(
+        contrasts=matrix,
+        log_variance=math.fsum(log_variances),
+        num_observed=num_observed,
+        num_effective=len(exact),
+        time_exponent=time_exponent,
+        node_groups=node_groups,
+        parents=parents,
+        lengths=lengths,
+        inside_mean=inside_mean,
+        inside_variance=inside_variance,
+        exact=exact,
     )
 
 
@@ -269,10 +294,11 @@ def compute_mvbm_marginals(
             _geometry_cache=_geometry_cache,
         )
     vectors = _validated_vectors(values_by_leaf, trait_names)
-    scaled, exponents = _scaled_vectors(vectors, trait_names)
-    contrasts, log_variance, num_observed, num_effective, time_exponent = (
-        _independent_contrasts(tree, scaled, tree_validated=_tree_validated)
+    scaled, center, exponents = _scaled_vectors(vectors, trait_names)
+    upward = _independent_contrasts(
+        tree, vectors, scaled, tree_validated=_tree_validated
     )
+    contrasts = upward.contrasts
     residual_df = len(contrasts)
     if residual_df == 0:
         raise ValueError(
@@ -281,7 +307,7 @@ def compute_mvbm_marginals(
     sigma_scaled = contrasts.T @ contrasts / residual_df
     sigma_scaled = (sigma_scaled + sigma_scaled.T) / 2.0
     sigma = np.ldexp(
-        sigma_scaled, exponents[:, None] + exponents[None, :] - time_exponent
+        sigma_scaled, exponents[:, None] + exponents[None, :] - upward.time_exponent
     )
     if np.any(~np.isfinite(sigma)):
         raise ValueError(
@@ -303,7 +329,7 @@ def compute_mvbm_marginals(
         quadratic = float(np.einsum("ni,ij,nj->", contrasts, inverse, contrasts))
         scaled_log_likelihood = -0.5 * (
             residual_df * len(trait_names) * _LOG_2PI
-            + len(trait_names) * log_variance
+            + len(trait_names) * upward.log_variance
             + residual_df * float(log_determinant)
             + quadratic
         )
@@ -312,7 +338,9 @@ def compute_mvbm_marginals(
         )
         fit_status = "ok"
     posterior = (
-        _mvbm_posterior(tree, vectors, trait_names, sigma) if compute_posterior else {}
+        _mvbm_posterior(tree, upward, center, exponents, sigma_scaled)
+        if compute_posterior
+        else {}
     )
     fit = MultivariateBrownianFit(
         trait_names=trait_names,
@@ -320,32 +348,62 @@ def compute_mvbm_marginals(
         sigma_rank=rank,
         sigma_estimated=True,
         restricted_log_likelihood=log_likelihood,
-        num_observed=num_observed,
-        num_effective_observations=num_effective,
+        num_observed=upward.num_observed,
+        num_effective_observations=upward.num_effective,
         residual_df=residual_df,
         fit_status=fit_status,
     )
     return posterior, fit
 
 
-def _mvbm_posterior(tree, vectors, trait_names, sigma):
-    scalar_results = []
-    for trait_index in range(len(trait_names)):
-        scalar_values = {
-            name: None if value is None else float(value[trait_index])
-            for name, value in vectors.items()
-        }
-        posterior, _ = compute_bm_marginals(
-            tree, scalar_values, sigma2=1.0, _tree_validated=True
-        )
-        scalar_results.append(posterior)
+def _mvbm_posterior(tree, upward, center, exponents, sigma_scaled):
+    means, variances = list(upward.inside_mean), list(upward.inside_variance)
+    # Each subtree has the same scalar precision weight for every trait:
+    # its Gaussian covariance is a branch-length factor times Sigma.
+    for group in range(1, len(upward.parents)):
+        parent = upward.parents[group]
+        innovation, inside = upward.lengths[group], variances[group]
+        if inside is None:
+            means[group] = means[parent]
+            variances[group] = variances[parent] + innovation
+        elif inside > 0.0:
+            scale = max(inside, innovation)
+            child = inside / scale
+            edge = innovation / scale
+            total = child + edge
+            gain = child / total
+            means[group] = (edge / total) * means[group] + gain * means[parent]
+            variances[group] = min(inside, innovation) / total + (
+                gain * (gain * variances[parent])
+            )
+    covariance_exponents = exponents[:, None] + exponents[None, :]
+    marginals = []
+    for group, (mean, variance) in enumerate(zip(means, variances, strict=True)):
+        exact = upward.exact.get(group)
+        mantissa, exponent = math.frexp(variance)
+        with np.errstate(over="ignore"):
+            restored_mean = (
+                np.ldexp(mean, exponents) + center if exact is None else exact
+            )
+            covariance = np.ldexp(
+                mantissa * sigma_scaled, exponent + covariance_exponents
+            )
+        if not np.isfinite(restored_mean).all() or not np.isfinite(covariance).all():
+            raise ValueError(
+                "An MV-BM ancestral marginal exceeds floating-point range."
+            )
+        marginals.append(MultivariateGaussianMarginal(restored_mean, covariance))
     posterior = {}
+    assigned = set()
     for node in tree.traverse():
-        mean = np.asarray([result[node].mean for result in scalar_results], dtype=float)
-        variance_factor = scalar_results[0][node].variance
-        posterior[node] = MultivariateGaussianMarginal(
-            mean=mean, covariance=variance_factor * sigma
-        )
+        group = upward.node_groups[node]
+        marginal = marginals[group]
+        if group in assigned:
+            marginal = MultivariateGaussianMarginal(
+                marginal.mean.copy(), marginal.covariance.copy()
+            )
+        assigned.add(group)
+        posterior[node] = marginal
     return posterior
 
 
