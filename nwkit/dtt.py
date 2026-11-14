@@ -12,6 +12,7 @@ from nwkit.disparity import (
     clade_disparities,
     curve_area,
     fit_brownian,
+    fit_brownian_tree,
     make_design,
     simulate_curves,
     transform_traits,
@@ -305,10 +306,7 @@ def dtt_main(args):
     simulations = np.empty((0, len(design.times)))
     rate = bm_center = None
     if args.n_sim:
-        covariance = build_evolutionary_process(tree, allow_zero=True).tip_covariance(
-            names
-        )
-        bm_center, rate, factor = fit_brownian(covariance, values)
+        bm_center, rate, factor = _fit_brownian_reference(tree, design, names, values)
         simulations = simulate_curves(
             design, factor, args.n_sim, args.seed, args.threads
         )
@@ -384,3 +382,12 @@ def dtt_main(args):
     sys.stderr.write(
         f"DTT: {len(names)} tips, {len(columns)} traits, {args.n_sim} BM simulations; singleton lineages excluded.\n"
     )
+
+
+def _fit_brownian_reference(tree, design, names, values):
+    # Lengths are already in units of crown height. On very short edges, a
+    # covariance assembled from shared depths can lose the independent changes.
+    if np.min(design.lengths[1:]) < np.sqrt(np.finfo(float).eps):
+        return fit_brownian_tree(design, values)
+    covariance = build_evolutionary_process(tree, allow_zero=True).tip_covariance(names)
+    return fit_brownian(covariance, values)

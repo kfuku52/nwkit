@@ -143,6 +143,27 @@ def test_parallel_seed_and_empirical_curve_reference():
     assert (serial[:, -2:] == 0).all()
 
 
+def test_bm_rate_retains_short_sister_branches(tmp_path):
+    model = tmp_path / "rate.json"
+    data = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.0], [0.0, 0.0]])
+    tree = "[&R](((A:1e-24,B:1e-24):1,C:1):1,D:2);"
+    main(command(tmp_path, ["--columns", "x", "--model-out", str(model)], data, tree))
+    result = json.loads(model.read_text())
+    # Relative crown time halves both terminal branches. The A-B contrast has
+    # unit trait difference and variance 1e-24 under unit diffusion.
+    assert result["bm_rate_covariance_transformed"][0][0] == pytest.approx(
+        1 / (3e-24), rel=1e-14
+    )
+    assert result["bm_center_transformed"] == pytest.approx([2 / 7])
+
+
+def test_bm_rate_rejects_zero_length_sister_branches(tmp_path):
+    data = np.array([[0.0, 0.0], [1.0, 0.0], [0.5, 0.0], [0.0, 0.0]])
+    tree = "[&R](((A:0,B:0):1,C:1):1,D:2);"
+    with pytest.raises(ValueError, match="nonsingular tip covariance"):
+        main(command(tmp_path, ["--columns", "x"], data, tree))
+
+
 def test_zero_simulations_do_not_inspect_unused_model_inputs():
     np.testing.assert_array_equal(simulate_curves(None, None, 0), np.empty(0))
 

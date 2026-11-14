@@ -1,5 +1,6 @@
 """Squared-distance disparity, crown-time DTT and a fitted Brownian null."""
 
+import math
 import multiprocessing
 from concurrent.futures import ProcessPoolExecutor
 from dataclasses import dataclass
@@ -173,21 +174,64 @@ def transform_traits(values, scale):
     return transformed, center, scales
 
 
-def fit_brownian(covariance, values):
+def _check_brownian_dimensions(values):
     n, p = values.shape
     if n <= p:
         raise ValueError(
             "BM simulations require more tips than traits; use fewer columns or --n-sim 0."
         )
+
+
+_SINGULAR_BROWNIAN = "BM simulations require nonsingular tip covariance; check zero-length terminal branches."
+
+
+def fit_brownian(covariance, values):
+    _check_brownian_dimensions(values)
     try:
         factor = np.linalg.cholesky(covariance)
     except np.linalg.LinAlgError as exc:
-        raise ValueError(
-            "BM simulations require nonsingular tip covariance; check zero-length terminal branches."
-        ) from exc
-    weight = cho_solve((factor, True), np.ones(n))
+        raise ValueError(_SINGULAR_BROWNIAN) from exc
+    weight = cho_solve((factor, True), np.ones(len(values)))
     center = weight @ values / weight.sum()
     white = solve_triangular(factor, values - center, lower=True)
+    return _brownian_rate(center, white, len(values))
+
+
+def fit_brownian_tree(design, values):
+    """Fit by independent contrasts, retaining branches below depth precision."""
+    _check_brownian_dimensions(values)
+    n, traits = values.shape
+    means = np.empty((len(design.parents), traits))
+    deviations = np.sqrt(design.lengths)
+    contrasts = np.empty((n - 1, traits))
+    written = 0
+    for node in range(len(design.parents) - 1, -1, -1):
+        row = design.tip_rows[node]
+        if row >= 0:
+            means[node] = values[row]
+            continue
+        first, *remaining = design.children[node]
+        mean = means[first]
+        deviation = deviations[first]
+        for child in remaining:
+            other = deviations[child]
+            total = math.hypot(deviation, other)
+            if total == 0.0:
+                raise ValueError(_SINGULAR_BROWNIAN)
+            contrasts[written] = (mean - means[child]) / total
+            written += 1
+            left, right = other / total, deviation / total
+            mean = left**2 * mean + right**2 * means[child]
+            deviation = min(deviation, other) * (max(deviation, other) / total)
+        means[node] = mean
+        deviations[node] = math.hypot(deviations[node], deviation)
+    if deviations[0] == 0.0:
+        raise ValueError(_SINGULAR_BROWNIAN)
+    return _brownian_rate(means[0], contrasts, n)
+
+
+def _brownian_rate(center, white, n):
+    p = white.shape[1]
     units = np.max(np.abs(white), axis=0)
     if not np.isfinite(white).all() or np.any(units <= 0):
         raise ValueError(
