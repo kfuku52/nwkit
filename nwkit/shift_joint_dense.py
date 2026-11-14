@@ -125,7 +125,7 @@ class DenseJointContext:
         # Retain the reference geometry's parameter validation and reported
         # diffusion/tip coordinates, including stationary-root restrictions.
         _, _, _, tip, diffusion = joint_covariance_geometry(
-            self.data.tree, alpha, covariance, self.root_model
+            self.data.tree, alpha, covariance, self.root_model, _include_branches=False
         )
         if not np.isfinite(noise).all() or np.any(noise < 0):
             raise ValueError(

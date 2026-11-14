@@ -36,8 +36,13 @@ def integral_decay(rate, duration):
     return result
 
 
-def joint_covariance_geometry(tree, alpha, covariance, root_model):
-    """Return diagonal slopes, innovations, root, tip, and diffusion covariance."""
+def joint_covariance_geometry(
+    tree, alpha, covariance, root_model, *, _include_branches=True
+):
+    """Return diagonal slopes, innovations, root, tip, and diffusion covariance.
+
+    Callers using their own tree factor can omit the branch arrays.
+    """
     alpha = np.asarray(alpha, float)
     covariance = np.asarray(covariance, float)
     p = len(alpha)
@@ -77,6 +82,8 @@ def joint_covariance_geometry(tree, alpha, covariance, root_model):
             raise ValueError(
                 "Joint covariance does not define mixed finite/infinite alpha limits."
             )
+        if not _include_branches:
+            return None, None, None, covariance.copy(), None
         innovations = np.broadcast_to(covariance, (len(tree.times), p, p)).copy()
         root = covariance.copy() if root_model == "OUrandomRoot" else np.zeros((p, p))
         return (
@@ -96,14 +103,16 @@ def joint_covariance_geometry(tree, alpha, covariance, root_model):
     scale = np.sqrt(marginal_integrals)
     diffusion = covariance / scale[:, None] / scale[None, :]
     sums = alpha[:, None] + alpha[None, :]
-    innovations = diffusion[None] * integral_decay(
-        sums[None], tree.times[:, None, None]
-    )
     root = diffusion / sums if root_model == "OUrandomRoot" else np.zeros((p, p))
     tip = (
         root.copy()
         if root_model == "OUrandomRoot"
         else diffusion * integral_decay(sums, 1.0)
+    )
+    if not _include_branches:
+        return None, None, root, tip, diffusion
+    innovations = diffusion[None] * integral_decay(
+        sums[None], tree.times[:, None, None]
     )
     slopes = np.exp(-tree.times[:, None] * alpha[None])
     return slopes, innovations, root, tip, diffusion
@@ -254,7 +263,7 @@ def evaluate_separable(
     )
     alphas = np.full(p, alpha)
     _, _, _, tip, diffusion = joint_covariance_geometry(
-        data.tree, alphas, covariance, root_model
+        data.tree, alphas, covariance, root_model, _include_branches=False
     )
     return NativeJointFit(
         alphas,
