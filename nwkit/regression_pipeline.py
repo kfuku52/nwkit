@@ -16,6 +16,7 @@ from scipy.stats import norm, t
 from nwkit.clade_index import CladeIndex
 from nwkit.contrast import (
     _orient_children,
+    _prepare_contrast_branches,
     _read_mixed_replicate_traits,
     _read_typed_traits,
     _validate_replicate_options,
@@ -34,7 +35,6 @@ from nwkit.evolution import (
     evolutionary_covariance_factory,
     optimization_parameterization,
     parameter_near_boundary,
-    transformed_edge_variances,
 )
 from nwkit.gaussian import (
     DiagonalLowRankCovariance,
@@ -759,7 +759,7 @@ def _estimate_gene_response_parameter(
     predictor_sampling_covariance: pd.DataFrame | None,
     predictors: list[str],
     predictor_group_uncertainties,
-) -> tuple[pd.DataFrame, pd.DataFrame | None, dict[str, Any]]:
+) -> tuple[pd.DataFrame, pd.DataFrame | None, dict[str, Any], pd.DataFrame]:
     bounds, decode = optimization_parameterization(
         gene_tree,
         args.gene_evolution_model,
@@ -832,7 +832,12 @@ def _estimate_gene_response_parameter(
             branch_length=args.gene_branch_length,
         ),
     }
-    return selected["contrasts"], selected["covariance"], diagnostics
+    return (
+        selected["contrasts"],
+        selected["covariance"],
+        diagnostics,
+        selected["result"],
+    )
 
 
 def _build_gene_contrasts(
@@ -872,7 +877,7 @@ def _build_gene_contrasts(
     diagnostics_by_response = {}
     for response in responses:
         if auto_parameter:
-            contrasts, covariance, diagnostics = _estimate_gene_response_parameter(
+            contrasts, covariance, diagnostics, _ = _estimate_gene_response_parameter(
                 args,
                 gene_tree,
                 reconciliation_by_id,
@@ -1528,36 +1533,14 @@ def _prepare_response_tip_simulator(
     reconciliation_by_id = {
         str(row["gene_clade_id"]): row for row in reconciliation.to_dict("records")
     }
-    orientation = _orient_children(gene_tree, clades, reconciliation_by_id)
     leaf_names = [str(leaf.name) for leaf in gene_tree.leaves()]
-    edge_variances = transformed_edge_variances(
+    branches = _prepare_contrast_branches(
         gene_tree,
-        model=args.gene_evolution_model,
-        parameter=parameter,
-        branch_length=args.gene_branch_length,
+        args.gene_branch_length,
+        args.gene_evolution_model,
+        parameter,
+        _orient_children(gene_tree, clades, reconciliation_by_id),
     )
-    variance_by_node = {}
-    weights_by_node = {}
-    for node in gene_tree.traverse(strategy="postorder"):
-        if node.is_leaf:
-            variance_by_node[node] = float(edge_variances[node])
-            continue
-        numerator, denominator = orientation[node]
-        numerator_variance = variance_by_node[numerator]
-        denominator_variance = variance_by_node[denominator]
-        scale = max(numerator_variance, denominator_variance)
-        scaled_numerator = numerator_variance / scale
-        scaled_denominator = denominator_variance / scale
-        total = scaled_numerator + scaled_denominator
-        weights_by_node[node] = (
-            scaled_denominator / total,
-            scaled_numerator / total,
-        )
-        smaller = min(numerator_variance, denominator_variance)
-        larger = max(numerator_variance, denominator_variance)
-        variance_by_node[node] = smaller / (1.0 + smaller / larger) + float(
-            edge_variances[node]
-        )
     node_by_id = {
         clades.clade_id_for_node(node): node
         for node in gene_tree.traverse()
@@ -1625,9 +1608,10 @@ def _prepare_response_tip_simulator(
                 )
     return {
         "leaf_names": leaf_names,
-        "orientation": orientation,
-        "weights": weights_by_node,
+        "leaves": tuple(gene_tree.leaves()),
+        "branches": branches,
         "selected_nodes": selected_nodes,
+        "reconciliation_by_id": reconciliation_by_id,
         "evolutionary_model": evolutionary_model,
         "sampling_factor": sampling_factor,
     }
@@ -1637,6 +1621,7 @@ def _simulate_response_tip_values(
     gene_tree,
     fit_state: dict[str, Any],
     simulator: dict[str, Any],
+    contrast_mean: np.ndarray,
     rng: np.random.Generator,
 ) -> dict[str, float]:
     leaf_names = simulator["leaf_names"]
@@ -1657,22 +1642,16 @@ def _simulate_response_tip_values(
         else:
             base += sampling_factor @ rng.standard_normal(sampling_factor.shape[1])
 
-    leaves = list(gene_tree.leaves())
+    leaves = simulator["leaves"]
     estimate_by_node = {leaf: float(base[index]) for index, leaf in enumerate(leaves)}
     contrast_by_node = {}
-    orientation = simulator["orientation"]
-    weights = simulator["weights"]
-    for node in gene_tree.traverse(strategy="postorder"):
-        if node.is_leaf:
-            continue
-        numerator, denominator = orientation[node]
+    branches = simulator["branches"]
+    for node, numerator, denominator, _, first_weight, second_weight in branches:
         first = estimate_by_node[numerator]
         second = estimate_by_node[denominator]
         contrast_by_node[node] = first - second
-        first_weight, second_weight = weights[node]
         estimate_by_node[node] = first_weight * first + second_weight * second
 
-    contrast_mean = fit_state["design"] @ fit_state["beta"]
     contrast_error = draw_from_factor(
         fit_state["fitted_covariance_factor"],
         rng.standard_normal(len(contrast_mean)),
@@ -1683,11 +1662,9 @@ def _simulate_response_tip_values(
         contrast_by_node[node] = float(value)
 
     reconstructed = {gene_tree: estimate_by_node[gene_tree]}
-    for node in gene_tree.traverse(strategy="preorder"):
-        if node.is_leaf:
-            continue
-        numerator, denominator = orientation[node]
-        first_weight, second_weight = weights[node]
+    for node, numerator, denominator, _, first_weight, second_weight in reversed(
+        branches
+    ):
         contrast = contrast_by_node[node]
         reconstructed[numerator] = reconstructed[node] + second_weight * contrast
         reconstructed[denominator] = reconstructed[node] - first_weight * contrast
@@ -1718,9 +1695,8 @@ def _bootstrap_shape_refitted_coefficients(
         parameter,
         fit_state["contrast_ids"],
     )
-    reconciliation_by_id = {
-        str(row["gene_clade_id"]): row for row in reconciliation.to_dict("records")
-    }
+    reconciliation_by_id = simulator["reconciliation_by_id"]
+    contrast_mean = fit_state["design"] @ fit_state["beta"]
     rng = np.random.default_rng(seed)
     coefficients: list[np.ndarray] = []
     maximum_attempts = max(
@@ -1733,6 +1709,7 @@ def _bootstrap_shape_refitted_coefficients(
             gene_tree,
             fit_state,
             simulator,
+            contrast_mean,
             rng,
         )
         simulated_inputs = _GeneResponseInputs(
@@ -1745,7 +1722,7 @@ def _bootstrap_shape_refitted_coefficients(
             tip_summary=response_inputs.tip_summary,
         )
         try:
-            contrasts, covariance, _ = _estimate_gene_response_parameter(
+            _, _, _, bootstrap_result = _estimate_gene_response_parameter(
                 args,
                 gene_tree,
                 reconciliation_by_id,
@@ -1756,16 +1733,7 @@ def _bootstrap_shape_refitted_coefficients(
                 predictors,
                 predictor_group_uncertainties,
             )
-            bootstrap_result = _fit_candidate_reconciled_model(
-                args,
-                contrasts,
-                species_contrasts,
-                response,
-                predictors,
-                covariance,
-                predictor_sampling_covariance,
-                predictor_group_uncertainties,
-            ).set_index("term")
+            bootstrap_result = bootstrap_result.set_index("term")
         except ValueError:
             continue
         if (bootstrap_result["optimizer_converged"] != "yes").any():
