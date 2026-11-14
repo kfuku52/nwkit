@@ -383,6 +383,63 @@ def _finite_loading_factors(squares, factors, variances):
     )
 
 
+def _gaussian_covariance_paths(lca, transitions, root_variance):
+    variances = [root_variance]
+    loadings = [1.0]
+    unit_loadings = True
+    direct_loadings = True
+    for index, node in enumerate(lca.nodes[1:], start=1):
+        parent = lca.ancestors[0][index]
+        transition = transitions[node]
+        slope = transition.slope
+        variance = _scaled_gaussian_variance(slope, variances[parent])
+        variances.append(variance + transition.variance)
+        loading = loadings[parent] * slope
+        loadings.append(loading)
+        unit_loadings = unit_loadings and slope == 1.0
+        direct_loadings = direct_loadings and loading != 0.0 and math.isfinite(loading)
+    values = np.asarray(variances)
+    if not np.isfinite(values).all():
+        raise ValueError("Gaussian tree moments exceed floating-point range.")
+    return values, np.asarray(loadings), unit_loadings, direct_loadings
+
+
+def _log_covariance_paths(lca, transitions):
+    log_abs = np.zeros(len(lca.nodes), dtype=float)
+    zero_count = np.zeros(len(lca.nodes), dtype=np.int64)
+    negative_parity = np.zeros(len(lca.nodes), dtype=bool)
+    for index, node in enumerate(lca.nodes[1:], start=1):
+        parent = lca.ancestors[0][index]
+        slope = transitions[node].slope
+        log_abs[index] = log_abs[parent]
+        zero_count[index] = zero_count[parent]
+        negative_parity[index] = negative_parity[parent]
+        if slope == 0.0:
+            zero_count[index] += 1
+        else:
+            log_abs[index] += math.log(abs(slope))
+            negative_parity[index] ^= slope < 0.0
+    return log_abs, zero_count, negative_parity
+
+
+def _fill_affine_covariance(covariance, requested, lca, factors, loadings, variances):
+    if len(requested) >= 8:
+        return _fill_direct_covariance(
+            covariance, np.asarray(requested), lca, factors, loadings, variances
+        )
+    for row, first in enumerate(requested):
+        covariance[row, row] = variances[first]
+        for column in range(row + 1, len(requested)):
+            second = requested[column]
+            ancestor = lca.common_ancestor_indices(first, second)
+            factor = float(factors[ancestor])
+            value = float(loadings[first]) * float(loadings[second]) * factor
+            if not math.isfinite(value) or (value == 0.0 and factor > 0.0):
+                return False
+            covariance[row, column] = covariance[column, row] = value
+    return True
+
+
 def _fill_log_covariance(
     covariance, requested, lca, variances, log_loadings, zeros, negative
 ):
@@ -498,60 +555,9 @@ class GaussianTreeProcess:
             )
         requested = [lca.index_by_node[node] for node in nodes]
         assert self.root.variance is not None
-        variances = np.empty(len(lca.nodes), dtype=float)
-        cumulative_loading = np.ones(len(lca.nodes), dtype=float)
-        path_log_abs = np.zeros(len(lca.nodes), dtype=float)
-        path_zero_count = np.zeros(len(lca.nodes), dtype=np.int64)
-        path_negative_parity = np.zeros(len(lca.nodes), dtype=bool)
-        variances[0] = self.root.variance
-        unit_loadings = True
-        direct_loadings = True
-        for index, node in enumerate(lca.nodes[1:], start=1):
-            parent = lca.ancestors[0][index]
-            transition = self.transitions[node]
-            slope = transition.slope
-            variances[index] = (
-                _scaled_gaussian_variance(slope, float(variances[parent]))
-                + transition.variance
-            )
-            cumulative_loading[index] = cumulative_loading[parent] * slope
-            unit_loadings = unit_loadings and slope == 1.0
-            direct_loadings = direct_loadings and (
-                cumulative_loading[index] != 0.0
-                and math.isfinite(float(cumulative_loading[index]))
-            )
-            path_log_abs[index] = path_log_abs[parent]
-            path_zero_count[index] = path_zero_count[parent]
-            path_negative_parity[index] = path_negative_parity[parent]
-            if slope == 0.0:
-                path_zero_count[index] += 1
-            else:
-                path_log_abs[index] += math.log(abs(slope))
-                path_negative_parity[index] ^= slope < 0.0
-        if not np.isfinite(variances).all():
-            raise ValueError("Gaussian tree moments exceed floating-point range.")
-
-        def stable_covariance(first, second, ancestor):
-            ancestor_variance = float(variances[ancestor])
-            if ancestor_variance == 0.0:
-                return 0.0
-            if (
-                path_zero_count[first] > path_zero_count[ancestor]
-                or path_zero_count[second] > path_zero_count[ancestor]
-            ):
-                return 0.0
-            log_value = (
-                math.log(ancestor_variance)
-                + path_log_abs[first]
-                + path_log_abs[second]
-                - 2.0 * path_log_abs[ancestor]
-            )
-            try:
-                value = math.exp(log_value)
-            except OverflowError:
-                return math.inf
-            negative = path_negative_parity[first] ^ path_negative_parity[second]
-            return -value if negative else value
+        variances, cumulative_loading, unit_loadings, direct_loadings = (
+            _gaussian_covariance_paths(lca, self.transitions, self.root.variance)
+        )
 
         covariance = np.empty((len(nodes), len(nodes)), dtype=float)
         common_ancestor = lca.common_ancestor_indices
@@ -575,10 +581,10 @@ class GaussianTreeProcess:
             direct_loadings = _finite_loading_factors(
                 loading_squares, ancestor_factor, variances
             )
-            if direct_loadings and len(requested) >= 32:
-                if _fill_direct_covariance(
+            if direct_loadings and requested:
+                if _fill_affine_covariance(
                     covariance,
-                    np.asarray(requested),
+                    requested,
                     lca,
                     ancestor_factor,
                     cumulative_loading,
@@ -586,46 +592,14 @@ class GaussianTreeProcess:
                 ):
                     return covariance
                 direct_loadings = False
-            if direct_loadings:
-                for first, first_index in enumerate(requested):
-                    covariance[first, first] = variances[first_index]
-                    first_loading = cumulative_loading[first_index]
-                    for second in range(first + 1, len(nodes)):
-                        second_index = requested[second]
-                        ancestor = common_ancestor(first_index, second_index)
-                        value = (
-                            first_loading
-                            * cumulative_loading[second_index]
-                            * ancestor_factor[ancestor]
-                        )
-                        if not math.isfinite(float(value)) or (
-                            value == 0.0 and variances[ancestor] > 0.0
-                        ):
-                            value = stable_covariance(
-                                first_index, second_index, ancestor
-                            )
-                        covariance[first, second] = value
-                        covariance[second, first] = value
-        if not unit_loadings and not direct_loadings:
-            if len(requested) >= 32:
-                _fill_log_covariance(
-                    covariance,
-                    np.asarray(requested),
-                    lca,
-                    variances,
-                    path_log_abs,
-                    path_zero_count,
-                    path_negative_parity,
-                )
-            else:
-                for first, first_index in enumerate(requested):
-                    covariance[first, first] = variances[first_index]
-                    for second in range(first + 1, len(nodes)):
-                        second_index = requested[second]
-                        ancestor = common_ancestor(first_index, second_index)
-                        value = stable_covariance(first_index, second_index, ancestor)
-                        covariance[first, second] = value
-                        covariance[second, first] = value
+        if requested and not unit_loadings and not direct_loadings:
+            _fill_log_covariance(
+                covariance,
+                np.asarray(requested, dtype=int),
+                lca,
+                variances,
+                *_log_covariance_paths(lca, self.transitions),
+            )
         if not np.isfinite(covariance).all():
             raise ValueError("Gaussian tree covariance exceeds floating-point range.")
         return covariance
