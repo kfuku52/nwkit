@@ -36,6 +36,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Compute Gaussian posterior predictive statistics for all replicates in
   one pass per statistic.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
+- Build posterior sample table metadata once per node and repeat it across draws.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
 - Read singleton likelihood-group variances directly from the dense

@@ -38,22 +38,29 @@ def posterior_samples_table(tree, samples, trait):
         raise ValueError("Posterior samples do not follow the input tree order.")
     ids = assign_branch_ids(tree)
     num_samples, num_nodes = samples.values.shape
-    node_indices = np.tile(np.arange(num_nodes), num_samples)
-    sample_indices = np.repeat(np.arange(num_samples), num_nodes)
     nodes = compiled.nodes
     return pd.DataFrame(
         {
-            "sample": sample_indices,
-            "branch_id": [ids[nodes[index]] for index in node_indices],
-            "parent": [
-                -1 if nodes[index].is_root else ids[nodes[index].up]
-                for index in node_indices
-            ],
-            "node_class": [get_node_class(nodes[index]) for index in node_indices],
-            "name": [
-                "" if nodes[index].name in (None, "") else str(nodes[index].name)
-                for index in node_indices
-            ],
+            "sample": np.repeat(np.arange(num_samples), num_nodes),
+            "branch_id": np.tile([ids[node] for node in nodes], num_samples),
+            "parent": np.tile(
+                [-1 if node.is_root else ids[node.up] for node in nodes],
+                num_samples,
+            ),
+            "node_class": np.tile(
+                np.asarray([get_node_class(node) for node in nodes], dtype=object),
+                num_samples,
+            ),
+            "name": np.tile(
+                np.asarray(
+                    [
+                        "" if node.name in (None, "") else str(node.name)
+                        for node in nodes
+                    ],
+                    dtype=object,
+                ),
+                num_samples,
+            ),
             "trait": trait,
             "value": samples.values.reshape(-1),
         }
