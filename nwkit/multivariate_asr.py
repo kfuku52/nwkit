@@ -407,44 +407,65 @@ def multivariate_output_table(
 
 def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
     ids = assign_branch_ids(tree)
-    rows = []
-    for node in selected_nodes:
-        covariance = posterior[node].covariance
-        diagonal = np.sqrt(np.maximum(np.diag(covariance), 0.0))
-        for first in range(len(trait_names)):
-            for second in range(first, len(trait_names)):
-                denominator = diagonal[first] * diagonal[second]
-                correlation: str | float
-                if denominator == 0.0:
-                    correlation = ""
-                else:
-                    raw_correlation = float(covariance[first, second] / denominator)
-                    correlation = min(1.0, max(-1.0, raw_correlation))
-                rows.append(
-                    {
-                        "branch_id": ids[node],
-                        "parent": -1 if node.is_root else ids[node.up],
-                        "node_class": get_node_class(node),
-                        "name": "" if node.name in (None, "") else str(node.name),
-                        "trait_1": trait_names[first],
-                        "trait_2": trait_names[second],
-                        "covariance": float(covariance[first, second]),
-                        "correlation": correlation,
-                    }
-                )
+    selected_nodes = tuple(selected_nodes)
+    traits = np.asarray(trait_names, dtype=object)
+    first, second = np.triu_indices(len(traits))
+    pair_count = len(first)
+    node_count = len(selected_nodes)
+    metadata = _multivariate_covariance_metadata(selected_nodes, ids)
+    covariance = np.empty((node_count, pair_count), dtype=float)
+    correlation = np.empty((node_count, pair_count), dtype=object)
+    for index, node in enumerate(selected_nodes):
+        matrix = posterior[node].covariance
+        covariance[index] = matrix[first, second]
+        correlation[index] = _upper_triangle_correlations(
+            matrix, covariance[index], first, second
+        )
+    covariance_column = covariance.ravel()
+    correlation_column = correlation.ravel()
+    if not covariance_column.size:
+        covariance_column = covariance_column.astype(object)
+        metadata = {name: values.astype(object) for name, values in metadata.items()}
+    elif not np.any(correlation_column == ""):
+        correlation_column = correlation_column.astype(float)
     return pd.DataFrame(
-        rows,
-        columns=[
-            "branch_id",
-            "parent",
-            "node_class",
-            "name",
-            "trait_1",
-            "trait_2",
-            "covariance",
-            "correlation",
-        ],
+        {
+            **{
+                name: np.repeat(values, pair_count) for name, values in metadata.items()
+            },
+            "trait_1": np.tile(traits[first], node_count),
+            "trait_2": np.tile(traits[second], node_count),
+            "covariance": covariance_column,
+            "correlation": correlation_column,
+        }
     )
+
+
+def _multivariate_covariance_metadata(nodes, ids):
+    return {
+        "branch_id": np.asarray([ids[node] for node in nodes], dtype=int),
+        "parent": np.asarray(
+            [-1 if node.is_root else ids[node.up] for node in nodes], dtype=int
+        ),
+        "node_class": np.asarray(
+            [get_node_class(node) for node in nodes], dtype=object
+        ),
+        "name": np.asarray(
+            ["" if node.name in (None, "") else str(node.name) for node in nodes],
+            dtype=object,
+        ),
+    }
+
+
+def _upper_triangle_correlations(matrix, covariance, first, second):
+    sd = np.sqrt(np.maximum(np.diag(matrix), 0.0))
+    denominator = sd[first] * sd[second]
+    defined = denominator != 0.0
+    correlation = np.full(len(first), "", dtype=object)
+    correlation[defined] = np.clip(
+        covariance[defined] / denominator[defined], -1.0, 1.0
+    )
+    return correlation
 
 
 def multivariate_model_table(fit, args, ci_level):
