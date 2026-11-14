@@ -333,7 +333,9 @@ def test_fixed_root_is_exact_across_identity_edges():
     samples = sample_gaussian_posterior(process, {"A": -1.0}, num_samples=8, seed=7)
     for node in (tree, tree["I"]):
         assert result.marginals[node].mean == value
-        np.testing.assert_array_equal(samples.values[:, samples.nodes.index(node)], value)
+        np.testing.assert_array_equal(
+            samples.values[:, samples.nodes.index(node)], value
+        )
 
 
 def test_observed_position_count_contracts_deterministic_identity_edges():
