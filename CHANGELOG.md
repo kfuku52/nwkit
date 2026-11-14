@@ -101,6 +101,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Compute transformed and directional-drift Brownian likelihoods without
   reconstructing every node during parameter searches and confidence-interval
   profiling.
+- Contract raw zero-length branches without allocating a separate Brownian
+  process first.
 - Share order statistics between MCMCtree posterior medians and credible
   intervals.
 - Draw threshold liabilities with scalar log-space normal quantiles when

@@ -14,11 +14,6 @@ import numpy as np
 from scipy.optimize import minimize_scalar
 
 from nwkit.continuous_asr_optimize import minimize_brownian_rate
-from nwkit.gaussian_tree import (
-    GaussianRootPrior,
-    GaussianTreeProcess,
-    brownian_transition,
-)
 from nwkit.rooting_state import require_rooted
 from nwkit.util import validate_unique_named_leaves
 
@@ -146,49 +141,43 @@ def _merge(first, second_mean, second_variance):
     )
 
 
-def _tree_groups(tree, *, validated=False, process=None):
-    """Contract only exactly zero-length edges, without modifying the tree."""
-    if not validated:
-        validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
-        require_rooted(tree, "ASR requires a rooted tree.")
-    raw_lengths = {}
+def _raw_brownian_edge_length(node):
+    if node.dist is None:
+        raise ValueError("ASR requires branch lengths for all non-root nodes.")
+    return _finite_number(node.dist, "Branch lengths", nonnegative=True)
+
+
+def _brownian_group_edge_length(tree, process):
     if process is None:
-        for node in tree.traverse(strategy="preorder"):
-            if node.is_root:
-                continue
-            if validated:
-                length = float(node.dist)
-            else:
-                if node.dist is None:
-                    raise ValueError(
-                        "ASR requires branch lengths for all non-root nodes."
-                    )
-                length = _finite_number(node.dist, "Branch lengths", nonnegative=True)
-            raw_lengths[node] = length
-        process = GaussianTreeProcess(
-            tree=tree,
-            transitions={
-                node: brownian_transition(length)
-                for node, length in raw_lengths.items()
-            },
-            root=GaussianRootPrior("flat", 0.0, None),
-            model="brownian",
-        )
+        return _raw_brownian_edge_length
     if process.tree is not tree:
         raise ValueError("The Gaussian ASR process must use the input tree.")
     if process.root.mode != "flat":
         raise ValueError("Brownian ASR requires a flat-root Gaussian process.")
-    node_groups = {tree: 0}
-    parents, lengths = [-1], [0.0]
-    for node in tree.traverse(strategy="preorder"):
-        if node.is_root:
-            continue
+
+    def edge_length(node):
         transition = process.transitions[node]
         if transition.slope != 1.0 or transition.intercept != 0.0:
             raise ValueError(
                 "Brownian ASR requires unit-slope zero-intercept branches."
             )
-        length = transition.variance
+        return transition.variance
+
+    return edge_length
+
+
+def _tree_groups(tree, *, validated=False, process=None):
+    """Contract only exactly zero-length edges, without modifying the tree."""
+    if not validated:
+        validate_unique_named_leaves(tree, option_name="--infile", context=" for 'asr'")
+        require_rooted(tree, "ASR requires a rooted tree.")
+    edge_length = _brownian_group_edge_length(tree, process)
+    node_groups = {tree: 0}
+    parents, lengths = [-1], [0.0]
+    for node in tree.traverse(strategy="preorder"):
+        if node.is_root:
+            continue
+        length = edge_length(node)
         parent = node_groups[node.up]
         if length == 0.0:
             node_groups[node] = parent
