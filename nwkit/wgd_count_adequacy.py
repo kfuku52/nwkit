@@ -3,36 +3,46 @@
 import numpy as np
 
 
+def _subtree_totals(values, node_count, tip_nodes, parents, *, dtype=None):
+    totals = np.zeros(
+        (node_count, len(values)), dtype=values.dtype if dtype is None else dtype
+    )
+    totals[tip_nodes] = values.T
+    for node in range(node_count - 1, 0, -1):
+        totals[parents[node]] += totals[node]
+    return totals
+
+
 def _statistics(model):
     tree = model.tree
     observed = ~np.isnan(model.counts)
     tip_labels = [
         (i, name) for i, name in enumerate(tree.tip_names) if observed[:, i].any()
     ]
-    clades: list[set[int]] = [set() for _ in tree.parents]
-    for column, node in enumerate(tree.tip_nodes):
-        clades[node].add(column)
-    for node in range(len(tree.parents) - 1, 0, -1):
-        clades[tree.parents[node]].update(clades[node])
+    node_count = len(tree.parents)
+    tip_nodes = np.array(tree.tip_nodes)
+    observed_totals = _subtree_totals(
+        observed, node_count, tip_nodes, tree.parents, dtype=np.intp
+    )
     contrasts = []
-    for node in sorted(range(1, len(clades)), key=tree.branch_ids.__getitem__):
-        inside = sorted(clades[node])
-        outside = sorted(clades[0] - clades[node])
-        n_inside = observed[:, inside].sum(axis=1)
-        n_outside = observed[:, outside].sum(axis=1)
+    count_dtype = np.int32 if len(tip_nodes) <= np.iinfo(np.int32).max else np.intp
+    for node in sorted(range(1, node_count), key=tree.branch_ids.__getitem__):
+        n_inside = observed_totals[node]
+        n_outside = observed_totals[0] - n_inside
         paired = np.flatnonzero((n_inside > 0) & (n_outside > 0))
         if len(paired):
             contrasts.append(
                 (
                     tree.branch_ids[node],
-                    np.ix_(paired, inside),
-                    np.ix_(paired, outside),
-                    n_inside[paired],
-                    n_outside[paired],
+                    node,
+                    paired,
+                    n_inside[paired].astype(count_dtype, copy=False),
+                    n_outside[paired].astype(count_dtype, copy=False),
                 )
             )
     columns = [i for i, _ in tip_labels]
     n_observed = observed[:, columns].sum(axis=0)
+    del observed_totals
     tip_names = [name for _, name in tip_labels]
     labels = {
         "tip_mean": tip_names,
@@ -46,11 +56,30 @@ def _statistics(model):
         yield from np.nansum(tips, axis=0) / n_observed
         yield from (tips == 0).sum(axis=0) / n_observed
         yield from (tips >= 2).sum(axis=0) / n_observed
-        for _, inside, outside, ni, no in contrasts:
-            yield np.mean(
-                np.nansum(counts[inside], axis=1) / ni
-                - np.nansum(counts[outside], axis=1) / no
+        # Counts are nonnegative integers. Below 2**53 their sums and the
+        # complement subtraction are exact for every subtree and family.
+        # For larger counts, sum the original tip selections independently.
+        integer_sums_are_exact = np.nanmax(counts) <= 2.0**53 / len(tip_nodes)
+        if integer_sums_are_exact:
+            totals = _subtree_totals(
+                np.where(observed, counts, 0.0), node_count, tip_nodes, tree.parents
             )
+        else:
+            clades: list[set[int]] = [set() for _ in tree.parents]
+            for column, node in enumerate(tree.tip_nodes):
+                clades[node].add(column)
+            for node in range(node_count - 1, 0, -1):
+                clades[tree.parents[node]].update(clades[node])
+        for _, node, paired, ni, no in contrasts:
+            if integer_sums_are_exact:
+                inside = totals[node, paired]
+                outside = totals[0, paired] - inside
+            else:
+                inside = np.nansum(counts[np.ix_(paired, sorted(clades[node]))], axis=1)
+                outside = np.nansum(
+                    counts[np.ix_(paired, sorted(clades[0] - clades[node]))], axis=1
+                )
+            yield np.mean(inside / ni - outside / no)
 
     return evaluate, labels
 
