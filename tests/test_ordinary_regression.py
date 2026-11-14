@@ -17,6 +17,7 @@ from nwkit.model_matrix import CategoricalObservation, encode_predictors
 from nwkit.multivariate_pgls import fit_multivariate_pgls
 from nwkit.ordinary_regression import (
     _global_bounded_scalar_minimize,
+    _ordinary_covariance_builder,
     _prepare_latent_ordinary_predictors,
     build_phylogenetic_covariance,
     estimate_marginal_evolution_parameter,
@@ -51,6 +52,22 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree():
     return Tree(TREE_TEXT, parser=1)
+
+
+def test_profiled_lambda_reuses_fixed_diagonal_covariance_on_a_star_tree():
+    tree = Tree("(A:1,B:2,C:3);", parser=1)
+    covariance_at = _ordinary_covariance_builder(
+        tree,
+        ["C", "A", "B"],
+        evolution_model="lambda",
+        evolution_parameter=None,
+        branch_length="original",
+        custom_covariance=None,
+    )
+    covariance = covariance_at(0.0)
+    assert covariance_at(0.42) is covariance
+    assert covariance_at(1.0) is covariance
+    np.testing.assert_array_equal(covariance, np.diag([3.0, 1.0, 2.0]))
 
 
 @pytest.mark.parametrize("intercept", [True, False])

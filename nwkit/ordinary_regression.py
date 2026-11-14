@@ -269,7 +269,17 @@ def _ordinary_covariance_builder(
     # Pagel's lambda leaves tip variances unchanged and scales every shared
     # depth by lambda. Build and validate the tree covariance once, after the
     # caller's size preflight, instead of repeating all pairwise LCA queries.
-    brownian = build(1.0)
+    return _pagel_lambda_covariance_builder(build(1.0))
+
+
+def _pagel_lambda_covariance_builder(brownian):
+    if is_diagonal(brownian):
+        # Lambda cannot change a covariance with no shared tip paths.
+        def diagonal_covariance(parameter):
+            validate_evolution_parameter("lambda", parameter)
+            return brownian
+
+        return diagonal_covariance
     diagonal = np.diag(brownian).copy()
 
     def lambda_covariance(parameter):
