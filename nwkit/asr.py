@@ -215,18 +215,17 @@ def _read_tip_states(
     observed_state_by_leaf_input: dict[str, str | None] = {}
     state_set_by_leaf: dict[str, tuple[str, ...] | None] = {}
     observed_state_sets: list[list[str]] = []
-    for _, row in trait_df.iterrows():
-        leaf_name = str(row["leaf_name"])
-        raw_state = row[state_column]
+    separator = "" if ambiguous_separator in ["", None] else str(ambiguous_separator)
+    for leaf_name, raw_state in zip(
+        trait_df["leaf_name"], trait_df[state_column], strict=True
+    ):
+        leaf_name = str(leaf_name)
         if _is_missing_trait_value(raw_state, missing_values):
             observed_state_by_leaf_input[leaf_name] = None
             state_set_by_leaf[leaf_name] = None
             continue
         state_set = _split_state_value(raw_state, ambiguous_separator)
         state_set_by_leaf[leaf_name] = tuple(state_set)
-        separator = (
-            "" if ambiguous_separator in ["", None] else str(ambiguous_separator)
-        )
         observed_state_by_leaf_input[leaf_name] = separator.join(state_set)
         observed_state_sets.append(state_set)
 

@@ -76,6 +76,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reuse equal-rates detection across branches and reduce small-state Mk
   likelihood messages with NumPy in log space.
 - Batch Mk mixture likelihoods across characters and reuse fixed root priors.
+- Read ASR trait and standard-error values from their selected table columns
+  without creating a pandas Series for each tip.
 - Release child likelihood messages after they have contributed to a
   likelihood-only Mk tree traversal.
 - Reuse prepared stochastic mapping contexts without copying branch rate
