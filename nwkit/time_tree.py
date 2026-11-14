@@ -352,18 +352,21 @@ def _hpd_interval(values, level, *, presorted=False):
     return float(ordered[start]), float(ordered[start + index_width])
 
 
+def _equal_tail_indices(count, level):
+    tail = (1.0 - float(level)) / 2.0
+    return (
+        min(count - 1, int(count * tail + 1e-12)),
+        min(count - 1, int(count * (1.0 - tail) + 1e-12)),
+    )
+
+
 def _credible_interval(values, level, kind, *, presorted=False):
     kind = str(kind).strip().lower()
     if kind == "hpd":
         return _hpd_interval(values, level, presorted=presorted)
     if kind == "equal-tail":
-        tail = (1.0 - float(level)) / 2.0
         ordered = values if presorted else np.sort(np.asarray(values, dtype=float))
-        low_index = min(len(ordered) - 1, int(len(ordered) * tail + 1e-12))
-        high_index = min(
-            len(ordered) - 1,
-            int(len(ordered) * (1.0 - tail) + 1e-12),
-        )
+        low_index, high_index = _equal_tail_indices(len(ordered), level)
         return float(ordered[low_index]), float(ordered[high_index])
     raise ValueError("'--posterior-ci' must be hpd or equal-tail.")
 
@@ -397,13 +400,17 @@ def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=
             and values.size
             and np.min(values) > 0.0
         ):
-            # Positive ages avoid signed-zero ties when reusing the sorted sample.
-            ordered = np.sort(values)
-            middle = len(ordered) // 2
-            median = float(np.mean(ordered[(len(ordered) - 1) // 2 : middle + 1]))
-            low, high = _credible_interval(
-                ordered, level=level, kind=ci, presorted=True
-            )
+            # Positive ages avoid signed-zero ties when selecting order statistics.
+            count = len(values)
+            left, right = (count - 1) // 2, count // 2
+            if ci == "equal-tail":
+                low_index, high_index = _equal_tail_indices(count, level)
+                ordered = np.partition(values, (low_index, left, right, high_index))
+                low, high = float(ordered[low_index]), float(ordered[high_index])
+            else:
+                ordered = np.sort(values)
+                low, high = _hpd_interval(ordered, level=level, presorted=True)
+            median = float(np.mean(ordered[left : right + 1]))
             del ordered
         else:
             median = float(np.median(values))
