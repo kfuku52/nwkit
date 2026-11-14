@@ -21,29 +21,24 @@ def _screen_block_width(factor):
     return min(4096, max(_SCREEN_BLOCK_COLUMNS, traversal_width))
 
 
-def _descendant_intervals(tree):
-    ranges = {node: (i, i + 1) for i, node in enumerate(tree.compiled.leaf_indices)}
-    for index in tree.compiled.postorder:
-        children = tree.compiled.children[index]
-        if children:
-            ranges[index] = (ranges[children[0]][0], ranges[children[-1]][1])
-    return {tree.branch_ids[index]: interval for index, interval in ranges.items()}
-
-
 def descendant_design(tree, branches=None):
     """Construct only requested columns using contiguous descendant intervals."""
     branches = tuple(
         sorted(set(tree.branch_ids) - {0}) if branches is None else branches
     )
-    return _interval_design(
-        len(tree.leaf_names), _descendant_intervals(tree), branches
-    ), branches
+    return _interval_design(tree, branches), branches
 
 
-def _interval_design(tips, intervals, branches):
-    matrix = np.zeros((tips, len(branches)))
+def _interval_design(tree, branches):
+    matrix = np.zeros((len(tree.compiled.leaf_indices), len(branches)))
     for column, branch in enumerate(branches):
-        first, last = intervals[branch]
+        try:
+            index = int(branch)
+        except (TypeError, ValueError, OverflowError) as exc:
+            raise KeyError(branch) from exc
+        if index != branch or not 0 <= index < len(tree.indices_by_branch):
+            raise KeyError(branch)
+        first, last = tree.tip_intervals[tree.indices_by_branch[index]]
         matrix[first:last, column] = 1
     return matrix
 
@@ -87,7 +82,6 @@ def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False
             f"Group-lasso screening needs approximately {estimated} bytes; increase --search-memory-mb or reduce the input."
         )
     branches = tuple(sorted(set(data.tree.branch_ids) - {0}))
-    intervals = _descendant_intervals(data.tree)
     matrices, responses = [], []
     for trait, fit in enumerate(null_fit["fits"]):
         mask = np.isfinite(data.values[:, trait])
@@ -112,7 +106,7 @@ def _whitened_matrices(data, null_fit, memory_limit, *, optimum_increments=False
         block_width = _screen_block_width(factor)
         for first in range(0, len(branches), block_width):
             selected = branches[first : first + block_width]
-            design = _interval_design(n, intervals, selected)
+            design = _interval_design(data.tree, selected)
             if optimum_increments:
                 design = _effect_design(data.tree, design, fit.alpha_height, selected)
             if first == 0:
