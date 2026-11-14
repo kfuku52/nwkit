@@ -93,6 +93,23 @@ def test_pair_and_group_medians_are_stable_at_float_extremes(value):
     assert grouped_corrections(trios, np.array([-1e308, 1e308]))[("A", "AB")] == 0
 
 
+def test_pair_and_group_medians_round_adjacent_subnormal_values():
+    tiny = float(np.nextafter(0.0, 1.0))
+    pairs = PairKs(
+        [
+            KsObservation("A", "B", "first", tiny),
+            KsObservation("A", "B", "second", 2 * tiny),
+        ],
+        "AB",
+    )
+    assert pairs.estimates()[("A", "B")] == 2 * tiny
+    trios = [KsTrio("A", "B", "C", "AB", 1)] * 2
+    assert (
+        grouped_corrections(trios, np.array([-3 * tiny, -2 * tiny]))[("A", "AB")]
+        == -2 * tiny
+    )
+
+
 @pytest.mark.parametrize("focal_sister", [1e308, 1.0])
 def test_simultaneous_endpoints_keep_finite_cancellation(focal_sister):
     pairs = PairKs(

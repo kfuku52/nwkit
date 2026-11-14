@@ -1,5 +1,6 @@
 """Family-aware focal-lineage Ks correction on a rooted species tree."""
 
+import math
 from dataclasses import dataclass
 from functools import lru_cache
 
@@ -44,7 +45,10 @@ def _ks_difference(first, second, third):
 
 def _midpoint(low, high):
     low, high = float(low), float(high)
-    return (low + high) / 2 if low < 0 < high else low + (high - low) / 2
+    total = low + high
+    # Sum before halving to round adjacent subnormals correctly. If the sum
+    # overflows, both terms are large enough to halve without losing precision.
+    return total / 2 if math.isfinite(total) else low / 2 + high / 2
 
 
 def _stable_median(values):
