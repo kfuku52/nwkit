@@ -615,8 +615,6 @@ def _weighted_dense_hessian(precision, weights):
 
 
 def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
-    if weights.ndim == 1:
-        return sparse.diags(weights, format="csr")
     n_blocks, dimension, _ = weights.shape
     block_offsets = np.arange(n_blocks, dtype=int) * dimension
     local_rows = np.repeat(np.arange(dimension, dtype=int), dimension)
@@ -629,6 +627,14 @@ def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
     )
     matrix.eliminate_zeros()
     return matrix
+
+
+def _weighted_sparse_hessian(loading, loading_transpose, weights):
+    if weights.ndim == 1:
+        weighted = loading.multiply(weights[:, None]).tocsr()
+        weighted.eliminate_zeros()
+        return loading_transpose @ weighted
+    return loading_transpose @ _sparse_weight_matrix(weights) @ loading
 
 
 def _sparse_glmm_latent_model(
@@ -701,8 +707,9 @@ def _sparse_latent_mode(
         return value, gradient, weights
 
     def factor_hessian(weights):
-        weight_matrix = _sparse_weight_matrix(weights)
-        hessian = precision + loading_transpose @ weight_matrix @ loading
+        hessian = precision + _weighted_sparse_hessian(
+            loading, loading_transpose, weights
+        )
         return factor_sparse_positive_definite(hessian)
 
     state = evaluate(mode)
