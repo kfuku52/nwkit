@@ -25,6 +25,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
   accumulate posterior variances without subtracting large squares.
+- Preserve fixed ordinal thresholds exactly in posterior summaries.
 - Report unrepresentable liability draws before they contaminate MCMC
   summaries.
 - Estimate threshold-model ESS from a positive monotone sequence of
@@ -62,6 +63,15 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   when bootstrapping hurdle models.
 - Preserve negative-binomial likelihoods and bootstrap draws near the Poisson
   limit.
+- Evaluate large-count Poisson log probabilities without subtracting the
+  large terms shared by the power and factorial of the count.
+- Preserve likelihoods at extreme Gamma shapes and very small beta and
+  beta-binomial precisions. Simulate Gamma and count bootstrap responses in
+  the fitted units without clipping their means.
+- Use analytic score and curvature for exact and censored Gaussian responses,
+  including when interval bounds are close together or in the tail.
+- Apply observation-specific scales when projecting sparse predictor uncertainty
+  into a phylogenetic GLMM.
 - Check mean and covariance information separately when determining whether
   Gaussian tree parameters are identifiable.
 - Compute OU contrast branch variances directly so short branches and weak
@@ -156,6 +166,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reuse tree covariance and Cholesky factors across phylogenetic GLMM trials.
   Reuse accepted sparse-mode evaluations, batch multinomial curvature
   calculations, and build sparse sampling factors only when bootstrapping.
+- Reuse fixed predictor covariance projections in dense regression fits and
+  evaluate only coefficient point estimates during GLMM bootstrap refits.
 - Reduce covariance copies and reuse sparse tree components in multivariate
   PGLS. Whiten the dense design and response in one triangular solve.
 - Use scalar branch updates for single Gaussian tree simulations.
