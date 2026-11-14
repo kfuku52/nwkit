@@ -374,6 +374,15 @@ def _age_order_statistics(values, level, kind):
     return median, low, high
 
 
+def _mean_age(values):
+    with np.errstate(over="ignore"):
+        mean = float(np.mean(values))
+    if math.isinf(mean):
+        max_age = float(np.max(values))
+        return max_age * float(np.mean(values / max_age))
+    return mean
+
+
 def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=0.95):
     """Attach posterior node ages and convert them to dated branch lengths."""
 
@@ -396,11 +405,7 @@ def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=
             node.props["age"] = 0.0
             continue
         values = posterior.values[:, column_by_id[node_id]]
-        with np.errstate(over="ignore"):
-            mean = float(np.mean(values))
-        if math.isinf(mean):
-            max_age = float(np.max(values))
-            mean = max_age * float(np.mean(values / max_age))
+        mean = _mean_age(values)
         median, low, high = _age_order_statistics(values, level, ci)
         selected = mean if point == "mean" else median
         age_by_node[node] = selected
