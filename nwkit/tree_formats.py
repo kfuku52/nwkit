@@ -16,7 +16,13 @@ TREE_ASSIGNMENT = re.compile(
 )
 MCMCTREE_MARKER = re.compile(r"^\s*Species tree for FigTree\b[^\n]*$", re.MULTILINE)
 CI_KEY = re.compile(rf"(?:height_)?({NUMBER})%(?:_?(HPD))?", re.IGNORECASE)
-_UNQUOTED_TOKEN_TAIL = re.compile(r"""[^\s(),'"\[\]:;]*""")
+_UNQUOTED_CHARACTER = r"""[^\s(),'"\[\]:;]"""
+_UNQUOTED_TOKEN_TAIL = re.compile(rf"{_UNQUOTED_CHARACTER}*")
+# Lookaheads make each token atomic on Python 3.10 as well.
+_PLAIN_NAME = rf"(?=({_UNQUOTED_CHARACTER}+))\1"
+_PLAIN_LENGTH = rf"(?=({_UNQUOTED_CHARACTER}+))\2"
+_PLAIN_SUFFIX = rf"(?:{_PLAIN_NAME})?(?::{_PLAIN_LENGTH})?"
+_COMPACT_PLAIN_SUFFIXES = re.compile(rf"(?:{_PLAIN_SUFFIX}(?:[(),;]|\Z))*")
 AGE_FIELDS = frozenset({"age", "age_mean", "age_median", "age_ci_low", "age_ci_high"})
 CI_FIELDS = frozenset({"age_ci_low", "age_ci_high", "age_ci_kind", "age_ci_level"})
 HEIGHT_FIELDS = {
@@ -446,6 +452,10 @@ def transform_annotations(
         and "]" not in text
     ):
         # Plain suffixes need validation but have no annotations to normalize.
+        # A compact unquoted tree already has exactly the spelling produced by
+        # the lexer; validate the same suffix grammar without token objects.
+        if _COMPACT_PLAIN_SUFFIXES.fullmatch(text):
+            return text
         return _normalize_plain_suffixes(text)
     result: list[str] = []
     suffix: list[Token] = []
