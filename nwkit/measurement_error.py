@@ -1428,11 +1428,15 @@ def _dense_fixed_predictor_covariance(uncertainty, column, size):
             ContinuousPredictorUncertainty,
             GroupedPredictorUncertainty,
             JointPredictorUncertainty,
-            GmrfPredictorUncertainty,
         ),
     ):
         return None
-    covariance = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
+    if isinstance(uncertainty, GmrfPredictorUncertainty):
+        covariance = _predictor_error_covariance(np.ones(1), uncertainty, 0, size)
+    else:
+        covariance = _positive_semidefinite(
+            uncertainty, "Predictor posterior covariance"
+        )
     if covariance.shape != (size, size):
         raise ValueError("Predictor posterior covariance has the wrong dimensions.")
     return covariance
