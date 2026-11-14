@@ -493,6 +493,7 @@ def _message_pass_prepared(
 def _prune_gaussian_messages(process, compiled, inside, *, likelihood_only):
     empty = _Factor()
     upward = inside if likelihood_only else [empty] * len(compiled.nodes)
+    contracting = None
     for index in compiled.postorder:
         factor = inside[index]
         for child in compiled.children[index]:
@@ -501,24 +502,28 @@ def _prune_gaussian_messages(process, compiled, inside, *, likelihood_only):
         parent = compiled.parents[index]
         if parent >= 0:
             transition = process.transitions[compiled.nodes[index]]
-            upward[index] = _prune_branch_message(process, transition, factor)
+            slope = transition.slope
+            if process.root.is_proper and _unrepresentable_parent_variance(
+                slope, factor.variance, transition.variance
+            ):
+                if contracting is None:
+                    contracting = all(
+                        abs(item.slope) <= 1.0 for item in process.transitions.values()
+                    )
+                if contracting:
+                    slope = 0.0
+            upward[index] = _push_up(
+                factor, slope, transition.intercept, transition.variance
+            )
     return upward
 
 
-def _prune_branch_message(process, transition, factor):
-    slope = transition.slope
+def _unrepresentable_parent_variance(slope, factor_variance, innovation):
     # For a proper root and contracting transitions, this weak a branch
     # contributes its child density alone at working precision.
-    if (
-        process.root.is_proper
-        and 0.0 < abs(slope) < _MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE
-    ):
-        variance = factor.variance + transition.variance
-        if (variance / slope) / slope == math.inf and all(
-            abs(item.slope) <= 1.0 for item in process.transitions.values()
-        ):
-            slope = 0.0
-    return _push_up(factor, slope, transition.intercept, transition.variance)
+    if 0.0 < abs(slope) < _MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE:
+        return ((factor_variance + innovation) / slope) / slope == math.inf
+    return False
 
 
 def condition_gaussian_tree(
