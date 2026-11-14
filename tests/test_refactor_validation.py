@@ -1,6 +1,7 @@
 """Independent numerical checks for refactored tree-distance statistics."""
 
 import random
+from statistics import mean, pvariance
 
 import pytest
 from ete4 import Tree
@@ -18,24 +19,31 @@ def make_random_binary_tree(num_leaves, rng, leaf_prefix="L"):
     return Tree(nodes[0] + ";", parser=1)
 
 
-def test_collect_leaf_distance_stats_matches_bruteforce():
+def test_collect_leaf_distance_moments_matches_bruteforce():
     """The optimized accumulator must agree with an independent oracle."""
     rng = random.Random(53)
     for _ in range(30):
         tree = make_random_binary_tree(
             num_leaves=rng.randint(5, 10), rng=rng, leaf_prefix="R"
         )
-        subtree_stats, all_stats = root._collect_leaf_distance_stats(tree)
+        inside, outside = root._collect_leaf_distance_moments(tree)
         all_leaves = list(tree.leaves())
         for node in tree.traverse():
-            sub_leaves = list(node.leaves())
+            sub_leaves = set(node.leaves())
             sub_dists = [tree.get_distance(node, leaf) for leaf in sub_leaves]
-            s_count, s_sum, s_sumsq = subtree_stats[node]
-            assert s_count == len(sub_dists)
-            assert s_sum == pytest.approx(sum(sub_dists), abs=1e-9)
-            assert s_sumsq == pytest.approx(sum(d * d for d in sub_dists), abs=1e-9)
-            all_dists = [tree.get_distance(node, leaf) for leaf in all_leaves]
-            a_count, a_sum, a_sumsq = all_stats[node]
-            assert a_count == len(all_dists)
-            assert a_sum == pytest.approx(sum(all_dists), abs=1e-9)
-            assert a_sumsq == pytest.approx(sum(d * d for d in all_dists), abs=1e-9)
+            count, average, ss = inside[node]
+            assert count == len(sub_dists)
+            assert average == pytest.approx(mean(sub_dists), abs=1e-9)
+            assert ss == pytest.approx(count * pvariance(sub_dists), abs=1e-9)
+            if node.is_root:
+                assert outside[node][0] == 0
+                continue
+            other_dists = [
+                tree.get_distance(node.up, leaf)
+                for leaf in all_leaves
+                if leaf not in sub_leaves
+            ]
+            count, average, ss = outside[node]
+            assert count == len(other_dists)
+            assert average == pytest.approx(mean(other_dists), abs=1e-9)
+            assert ss == pytest.approx(count * pvariance(other_dists), abs=1e-9)

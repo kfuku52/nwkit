@@ -521,6 +521,27 @@ class TestMvRooting:
         dists = [safe_get_distance(rooted, rooted, leaf) for leaf in rooted.leaves()]
         assert np.var(dists) < 1e-10
 
+    def test_small_variance_relative_to_root_to_tip_distances(self):
+        newick = "(A:10000000000,B:10000000001,C:10000000002,D:10000000003);"
+        rooted = mv_rooting(Tree(newick, parser=1))
+        distances = {
+            tip.name: safe_get_distance(rooted, rooted, tip) for tip in rooted.leaves()
+        }
+        assert distances == pytest.approx(
+            {"A": 10000000001, "B": 10000000002, "C": 10000000003, "D": 10000000002},
+            rel=0.0,
+            abs=1e-5,
+        )
+
+        _, evaluation = mv_rooting(Tree(newick, parser=1), _return_evaluation=True)
+        scores = {
+            next(iter(candidate.split[0])): candidate.score
+            for candidate in evaluation.candidates
+        }
+        assert scores == pytest.approx(
+            {"A": 1.25, "B": 1.25, "C": 7 / 6, "D": 0.5}, abs=1e-6
+        )
+
     def test_asymmetric_branch_lengths(self):
         tree = Tree("((A:10,B:1):1,(C:1,D:1):1);", parser=1)
         rooted = mv_rooting(tree)

@@ -852,7 +852,7 @@ def transfer_root_with_taxon_mode(
     return tree_to
 
 
-def _normalize_reroot_branch_lengths(tree, method_name):
+def _normalize_reroot_branch_lengths(tree, method_name, *, power_of_two=False):
     """Validate and scale non-root branches for numerically stable rooting."""
     branch_lengths = []
     branch_length_scale = 0.0
@@ -882,9 +882,14 @@ def _normalize_reroot_branch_lengths(tree, method_name):
 
     if branch_length_scale == 0.0:
         branch_length_scale = 1.0
+    max_length = branch_length_scale
+    if power_of_two:
+        # A binary scale avoids rounding away differences between nearby lengths.
+        exponent = math.frexp(max_length)[1] - 1
+        branch_length_scale = math.ldexp(1.0, exponent)
     for node, length in branch_lengths:
         node.dist = length / branch_length_scale
-    return branch_length_scale
+    return branch_length_scale, max_length / branch_length_scale
 
 
 def _restore_reroot_branch_length_scale(tree, branch_length_scale):
@@ -938,7 +943,7 @@ def midpoint_rooting(tree, _return_evaluation=False):
         context=" for midpoint rooting",
     )
     annotation_backup = _prepare_annotations_for_reroot(tree)
-    branch_length_scale = _normalize_reroot_branch_lengths(tree, "Midpoint")
+    branch_length_scale, _ = _normalize_reroot_branch_lengths(tree, "Midpoint")
     _normalize_root_distance_for_reroot(tree)
     outgroup_node = tree.get_midpoint_outgroup()
     if outgroup_node.is_root:
@@ -1580,56 +1585,63 @@ def mad_rooting(tree, _return_evaluation=False):
     return rooted, evaluation
 
 
-def _collect_leaf_distance_stats(tree):
-    # For each node, store (leaf_count, sum_dist_to_leaves, sumsq_dist_to_leaves).
-    subtree_stats = dict()
+_EMPTY_DISTANCE_MOMENTS = (0, 0.0, 0.0)
+
+
+def _merge_distance_moments(a, b):
+    """Pool two (count, mean, sum of squared deviations) triples."""
+    a_count, a_mean, a_ss = a
+    b_count, b_mean, b_ss = b
+    if not a_count:
+        return b
+    if not b_count:
+        return a
+    count = a_count + b_count
+    delta = b_mean - a_mean
+    return (
+        count,
+        a_mean + delta * (b_count / count),
+        a_ss + b_ss + delta * delta * (a_count * b_count / count),
+    )
+
+
+def _shift_distance_moments(moments, length):
+    count, mean, ss = moments
+    return count, mean + length, ss
+
+
+def _collect_leaf_distance_moments(tree):
+    """Summarize each side of every edge from its own endpoint."""
+    inside = {}
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
-            subtree_stats[node] = (1, 0.0, 0.0)
+            inside[node] = (1, 0.0, 0.0)
             continue
-        leaf_count = 0
-        sum_dist = 0.0
-        sumsq_dist = 0.0
-        for child in node.get_children():
-            child_count, child_sum, child_sumsq = subtree_stats[child]
-            edge_length = float(child.dist) if (child.dist is not None) else 0.0
-            leaf_count += child_count
-            sum_dist += child_sum + (child_count * edge_length)
-            sumsq_dist += (
-                child_sumsq
-                + (2.0 * edge_length * child_sum)
-                + (child_count * edge_length * edge_length)
-            )
-        subtree_stats[node] = (leaf_count, sum_dist, sumsq_dist)
-    all_stats = {tree: subtree_stats[tree]}
+        moments = _EMPTY_DISTANCE_MOMENTS
+        for child in node.children:
+            shifted = _shift_distance_moments(inside[child], child.dist or 0.0)
+            moments = _merge_distance_moments(moments, shifted)
+        inside[node] = moments
+
+    outside = {tree: _EMPTY_DISTANCE_MOMENTS}
     for node in tree.traverse(strategy="preorder"):
-        parent_count, parent_sum, parent_sumsq = all_stats[node]
-        for child in node.get_children():
-            child_count, child_sum, child_sumsq = subtree_stats[child]
-            edge_length = float(child.dist) if (child.dist is not None) else 0.0
-            child_sum_from_parent = child_sum + (child_count * edge_length)
-            child_sumsq_from_parent = (
-                child_sumsq
-                + (2.0 * edge_length * child_sum)
-                + (child_count * edge_length * edge_length)
-            )
-            outside_count = parent_count - child_count
-            outside_sum_from_parent = parent_sum - child_sum_from_parent
-            outside_sumsq_from_parent = parent_sumsq - child_sumsq_from_parent
-            outside_sum_from_child = outside_sum_from_parent + (
-                outside_count * edge_length
-            )
-            outside_sumsq_from_child = (
-                outside_sumsq_from_parent
-                + (2.0 * edge_length * outside_sum_from_parent)
-                + (outside_count * edge_length * edge_length)
-            )
-            all_stats[child] = (
-                parent_count,
-                child_sum + outside_sum_from_child,
-                child_sumsq + outside_sumsq_from_child,
-            )
-    return subtree_stats, all_stats
+        if node.is_leaf:
+            continue
+        children = node.children
+        prefix = [_shift_distance_moments(outside[node], node.dist or 0.0)]
+        shifted_children = [
+            _shift_distance_moments(inside[child], child.dist or 0.0)
+            for child in children
+        ]
+        # Combine the siblings on either side without subtracting moments.
+        for index in range(len(children) - 1):
+            prefix.append(_merge_distance_moments(prefix[-1], shifted_children[index]))
+        outside[children[-1]] = prefix[-1]
+        suffix = shifted_children[-1]
+        for index in range(len(children) - 2, -1, -1):
+            outside[children[index]] = _merge_distance_moments(prefix[index], suffix)
+            suffix = _merge_distance_moments(shifted_children[index], suffix)
+    return inside, outside
 
 
 def _mv_reported_variance(variance, branch_length_scale):
@@ -1707,7 +1719,9 @@ def mv_rooting(tree, _return_evaluation=False):
         context=" for MV rooting",
     )
     annotation_backup = _prepare_annotations_for_reroot(tree)
-    branch_length_scale = _normalize_reroot_branch_lengths(tree, "MV")
+    branch_length_scale, normalized_max = _normalize_reroot_branch_lengths(
+        tree, "MV", power_of_two=True
+    )
     # ete4.set_outgroup requires root.dist to be 0/None.
     if tree.dist is not None:
         tree.dist = 0.0
@@ -1733,42 +1747,34 @@ def mv_rooting(tree, _return_evaluation=False):
             for gc in list(to_dissolve.get_children()):
                 tree.add_child(gc)
             tree.remove_child(to_dissolve)
-    subtree_stats, all_stats = _collect_leaf_distance_stats(tree)
-    total_leaf_count = subtree_stats[tree][0]
+    inside, outside = _collect_leaf_distance_moments(tree)
+    total_leaf_count = inside[tree][0]
     candidate_records = []
     best_record = None
     evaluated_edges = 0
     for node in tree.traverse():
         if node.is_root:
             continue
-        L = float(node.dist) if (node.dist is not None) else 0.0
-        subtree_leaf_count, subtree_sum, subtree_sumsq = subtree_stats[node]
-        all_leaf_count, all_sum, all_sumsq = all_stats[node]
-        other_leaf_count = all_leaf_count - subtree_leaf_count
-        if (subtree_leaf_count == 0) or (other_leaf_count == 0):
+        length = node.dist or 0.0
+        count_a, mean_a, ss_a = inside[node]
+        count_b, mean_b, ss_b = outside[node]
+        if not count_a or not count_b:
             continue
-        other_sum = all_sum - subtree_sum
-        other_sumsq = all_sumsq - subtree_sumsq
-        mean_a = subtree_sum / subtree_leaf_count
-        mean_b = (other_sum / other_leaf_count) - L
-        # Optimal root position x from node toward parent, constrained to [0, L]
-        x = (L + mean_b - mean_a) / 2.0
-        x = max(0.0, min(float(L), x))
-        # Root-to-tip distance variance at this x (computed from sums and sums of squares).
-        total_sum = all_sum + ((subtree_leaf_count - other_leaf_count) * x)
-        total_sumsq = (
-            subtree_sumsq
-            + (2.0 * x * subtree_sum)
-            + (subtree_leaf_count * x * x)
-            + other_sumsq
-            - (2.0 * x * other_sum)
-            + (other_leaf_count * x * x)
+        # Moving toward the parent raises mean A and lowers mean B equally.
+        # The within-side variance stays fixed, and the means can coincide
+        # exactly when their difference fits within the edge length.
+        delta = mean_a - mean_b
+        x = (length - delta) / 2.0
+        residual = max(0.0, abs(delta) - length)
+        x = max(0.0, min(length, x))
+        var = (ss_a + ss_b) / total_leaf_count
+        var += (
+            residual
+            * residual
+            * (count_a / total_leaf_count)
+            * (count_b / total_leaf_count)
         )
-        mean = total_sum / total_leaf_count
-        var = (total_sumsq / total_leaf_count) - (mean * mean)
-        if (var < 0) and (abs(var) < 10**-12):
-            var = 0.0
-        record = (var, node, x, L)
+        record = (var, node, x, length)
         evaluated_edges += 1
         if _return_evaluation:
             candidate_records.append(record)
@@ -1810,7 +1816,7 @@ def mv_rooting(tree, _return_evaluation=False):
                 record[0],
                 minimum_variance,
                 rel_tol=10**-12,
-                abs_tol=10**-15,
+                abs_tol=10**-15 * normalized_max**2,
             )
         )
         best_candidates = [completed_candidate(record) for record in tied_records]
