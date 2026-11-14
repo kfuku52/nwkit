@@ -4,6 +4,30 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 ## [Unreleased]
 
+## [0.46.6] - 2026-11-14
+
+### Added
+
+- Support resumable WGD count bootstraps, supplied background genome doublings,
+  and diagnostics for the fitted count background.
+
+### Fixed
+
+- Preserve rare WGD transition and ascertainment probabilities in log space.
+- Preserve short branches in Brownian, OU, and SHIFT calculations and keep
+  estimates stable at extreme trait scales in DTT, phylogenetic signal, and PCA.
+- Preserve small differences in Ks corrections and weighted tree distances,
+  and stabilize minimum-variance rooting and MCMC diagnostics.
+
+### Performance
+
+- Reuse WGD transitions and prune unrepresented species from gene-topology
+  likelihood calculations. Share tree indexing across MUL hypotheses.
+- Reduce Gaussian fitting and simulation work in ASR and SHIFT, and solve
+  fixed-covariance multivariate OU optima directly with GLS.
+- Reduce work and memory for Ks summaries, phylogenetic signal permutations,
+  DTT simulation and drawing, and path distances between large trees.
+
 ## [0.46.5] - 2026-11-13
 
 ### Added
