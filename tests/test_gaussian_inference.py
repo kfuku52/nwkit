@@ -61,6 +61,36 @@ def test_gaussian_pruning_keeps_large_child_variance_after_scaling_to_parent():
     )
 
 
+def test_gaussian_pruning_checks_transformed_variance_instead_of_its_log():
+    variance = np.finfo(float).max
+    parent = _push_up(_Factor(1.0, float(variance)), 1.0, 0.0, 0.0)
+    assert parent.mean == 1.0
+    assert parent.variance == variance
+    parent = _push_up(_Factor(1e308, 0.0), 2.0, -1e308, 0.0)
+    assert parent.mean == 1e308
+    with pytest.raises(ValueError, match="pruning message exceeds"):
+        _push_up(_Factor(1.0, 1.0), 1e-200, 0.0, 0.0)
+
+
+def test_gaussian_pruning_preserves_proper_root_likelihood_for_a_very_weak_branch():
+    tree = tree_from("(A:1,B:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["A"]: GaussianTransition(1e-200, 0.0, 1.0),
+            tree["B"]: GaussianTransition(1.0, 0.0, 1.0),
+        },
+        GaussianRootPrior("gaussian", 0.0, 1.0),
+        "test",
+    )
+    result = condition_gaussian_tree(process, {"A": 1.0, "B": 2.0})
+    assert result.log_likelihood == pytest.approx(
+        _normal_log_density(1.0, 0.0, 1.0) + _normal_log_density(2.0, 0.0, 2.0)
+    )
+    assert result.marginals[tree].mean == 1.0
+    assert result.marginals[tree].variance == 0.5
+
+
 @pytest.mark.parametrize("scale", [2.0**-400, 2.0**400])
 def test_parameter_rank_keeps_mean_and_covariance_information_across_units(scale):
     tree = tree_from("(A:1,B:2)R;")

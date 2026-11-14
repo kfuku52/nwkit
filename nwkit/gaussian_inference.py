@@ -17,7 +17,7 @@ from nwkit.gaussian_tree import GaussianTreeProcess, _scaled_gaussian_variance
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
-_LOG_MAX = math.log(np.finfo(float).max)
+_MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE = math.sqrt(np.finfo(float).tiny)
 
 
 @dataclass(frozen=True, slots=True)
@@ -201,45 +201,13 @@ def _push_up(
         return _push_up_large_variance(factor, slope, intercept, innovation)
     absolute_slope = abs(slope)
     if absolute_slope == 0.0:
-        if total == 0.0:
-            if factor.mean != intercept:
-                raise ValueError(
-                    "An exact deterministic branch conflicts with an observation."
-                )
-            return _Factor(
-                None,
-                log_weight=factor.log_weight,
-                density_rank=factor.density_rank,
-            )
-        log_density = _normal_log_density(factor.mean, intercept, total)
-        if not math.isfinite(log_density):
-            raise ValueError("Observed values have zero Gaussian likelihood.")
-        return _Factor(
-            None,
-            log_weight=factor.log_weight + log_density,
-            density_rank=factor.density_rank + 1,
-        )
-    if total == 0.0:
-        return _Factor(
-            (factor.mean - intercept) / slope,
-            0.0,
-            factor.log_weight - math.log(absolute_slope),
-            factor.density_rank,
-        )
-    log_parent_variance = math.log(total) - 2.0 * math.log(absolute_slope)
-    if log_parent_variance >= _LOG_MAX:
-        log_density = _normal_log_density(factor.mean, intercept, total)
-        if not math.isfinite(log_density):
-            raise ValueError("Observed values have zero Gaussian likelihood.")
-        return _Factor(
-            None,
-            log_weight=factor.log_weight + log_density,
-            density_rank=factor.density_rank + 1,
-        )
-    parent_mean = (factor.mean - intercept) / slope
+        return _independent_branch_likelihood(factor, intercept, total)
+    parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
     parent_variance = total / slope / slope
     if not math.isfinite(parent_mean) or not math.isfinite(parent_variance):
         raise ValueError("A Gaussian pruning message exceeds floating-point range.")
+    if total > 0.0 and parent_variance == 0.0:
+        raise ValueError("A positive Gaussian variance underflowed during pruning.")
     return _Factor(
         parent_mean,
         parent_variance,
@@ -248,18 +216,43 @@ def _push_up(
     )
 
 
+def _independent_branch_likelihood(factor, intercept, variance):
+    if variance == 0.0:
+        if factor.mean != intercept:
+            raise ValueError(
+                "An exact deterministic branch conflicts with an observation."
+            )
+        return _Factor(
+            None, log_weight=factor.log_weight, density_rank=factor.density_rank
+        )
+    log_density = _normal_log_density(factor.mean, intercept, variance)
+    if not math.isfinite(log_density):
+        raise ValueError("Observed values have zero Gaussian likelihood.")
+    return _Factor(
+        None,
+        log_weight=factor.log_weight + log_density,
+        density_rank=factor.density_rank + 1,
+    )
+
+
+def _inverse_affine_mean(value, intercept, slope):
+    difference = value - intercept
+    if math.isfinite(difference):
+        return difference / slope
+    return value / slope - intercept / slope
+
+
 def _push_up_large_variance(factor, slope, intercept, innovation):
     absolute_slope = abs(slope)
     if absolute_slope > 1.0:
         parent_variance = (factor.variance / absolute_slope) / absolute_slope
         parent_variance += (innovation / absolute_slope) / absolute_slope
         if math.isfinite(parent_variance):
-            difference = factor.mean - intercept
-            parent_mean = (
-                difference / slope
-                if math.isfinite(difference)
-                else factor.mean / slope - intercept / slope
-            )
+            parent_mean = _inverse_affine_mean(factor.mean, intercept, slope)
+            if not math.isfinite(parent_mean):
+                raise ValueError(
+                    "A Gaussian pruning message exceeds floating-point range."
+                )
             return _Factor(
                 parent_mean,
                 parent_variance,
@@ -505,13 +498,24 @@ def _prune_gaussian_messages(process, compiled, inside, *, likelihood_only):
         parent = compiled.parents[index]
         if parent >= 0:
             transition = process.transitions[compiled.nodes[index]]
-            upward[index] = _push_up(
-                factor,
-                transition.slope,
-                transition.intercept,
-                transition.variance,
-            )
+            upward[index] = _prune_branch_message(process, transition, factor)
     return upward
+
+
+def _prune_branch_message(process, transition, factor):
+    slope = transition.slope
+    # For a proper root and contracting transitions, this weak a branch
+    # contributes its child density alone at working precision.
+    if (
+        process.root.is_proper
+        and 0.0 < abs(slope) < _MIN_SLOPE_FOR_FINITE_NORMALIZED_VARIANCE
+    ):
+        variance = factor.variance + transition.variance
+        if (variance / slope) / slope == math.inf and all(
+            abs(item.slope) <= 1.0 for item in process.transitions.values()
+        ):
+            slope = 0.0
+    return _push_up(factor, slope, transition.intercept, transition.variance)
 
 
 def condition_gaussian_tree(
