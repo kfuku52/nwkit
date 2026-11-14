@@ -53,6 +53,31 @@ def test_nonstationary_root_parameters_can_be_estimated():
     assert fit.log_likelihood is not None
 
 
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_nonstationary_ou_initialization_handles_extreme_time_units(scale):
+    source = "(((A:0.3,B:0.4)I:0.2,C:0.8)K:0.5,(D:0.4,E:0.7)J:0.3)R;"
+    values = {"A": -0.2, "B": 0.1, "C": 0.7, "D": 1.1, "E": 1.3}
+    fits = []
+    for time_scale in (1.0, scale):
+        tree = tree_from(source)
+        for node in tree.traverse():
+            if not node.is_root:
+                node.dist *= time_scale
+        _, fit = compute_general_ou_marginals(
+            tree,
+            values,
+            root_prior="gaussian",
+            root_mean=0.0,
+            root_variance=1.0,
+            alpha_bounds=(0.05 / time_scale, 5.0 / time_scale),
+        )
+        fits.append(fit)
+    reference, scaled = fits
+    assert scaled.alpha * scale == pytest.approx(reference.alpha, rel=1e-5)
+    assert scaled.sigma2 * scale == pytest.approx(reference.sigma2, rel=1e-5)
+    assert scaled.log_likelihood == pytest.approx(reference.log_likelihood, abs=1e-9)
+
+
 def test_fixed_root_star_rejects_joint_alpha_sigma_confounding():
     tree = tree_from("(A:1,B:1,C:1,D:1,E:1,F:1)R;")
     with pytest.raises(ValueError, match="not jointly identifiable"):

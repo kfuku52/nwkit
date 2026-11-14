@@ -319,7 +319,9 @@ def _regime_ou_scales(tree, observed, alpha_bounds):
         if not node.is_root and float(node.dist) > 0.0
     ]
     mean_length = float(np.mean(positive_lengths)) if positive_lengths else 1.0
-    initial_alpha = math.sqrt(alpha_bounds[0] * alpha_bounds[1])
+    initial_alpha = math.exp(
+        0.5 * (math.log(alpha_bounds[0]) + math.log(alpha_bounds[1]))
+    )
     initial_sigma = max(
         2.0 * initial_alpha * trait_scale * trait_scale, np.finfo(float).tiny
     )

@@ -128,9 +128,6 @@ def compute_general_ou_marginals(
         float(np.ptp(observed)) ** 2 / max(1, len(observed)),
         np.finfo(float).eps * max(1.0, abs(float(np.mean(observed)))) ** 2,
     )
-    initial_alpha = (
-        fixed_alpha if fixed_alpha is not None else math.sqrt(bounds[0] * bounds[1])
-    )
     initial_sigma2 = max(observed_variance / time_scale, np.finfo(float).tiny)
     initial_theta = float(np.mean(observed))
 
@@ -139,8 +136,9 @@ def compute_general_ou_marginals(
     parameter_bounds: list[tuple[float | None, float | None]] = []
     if fixed_alpha is None:
         names.append("log_alpha")
-        initial.append(math.log(initial_alpha))
-        parameter_bounds.append((math.log(bounds[0]), math.log(bounds[1])))
+        log_alpha_bounds = (math.log(bounds[0]), math.log(bounds[1]))
+        initial.append(0.5 * sum(log_alpha_bounds))
+        parameter_bounds.append(log_alpha_bounds)
     if fixed_sigma2 is None:
         names.append("log_sigma2")
         initial.append(math.log(initial_sigma2))
