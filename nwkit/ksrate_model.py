@@ -132,7 +132,9 @@ class PairKs:
 
     def estimates(self, family_weights=None):
         if family_weights is None:
-            family_weights = np.ones(len(self.families), dtype=int)
+            return {
+                pair: _stable_median(values) for pair, (values, _) in self.pairs.items()
+            }
         weights = np.asarray(family_weights)
         if (
             weights.shape != (len(self.families),)
