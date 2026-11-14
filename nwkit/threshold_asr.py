@@ -187,29 +187,33 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
     return float(truncnorm.rvs(a, b, loc=mean, scale=sd, random_state=rng))
 
 
-def _conditional_parameters(index, values, compiled, process):
-    node = compiled.nodes[index]
-    if index == 0:
-        assert process.root.variance is not None
-        precision = 1.0 / process.root.variance
-        numerator = process.root.mean / process.root.variance
-    else:
-        transition = process.transitions[node]
-        parent = compiled.parents[index]
-        precision = 1.0 / transition.variance
-        numerator = (
-            transition.slope * values[parent] + transition.intercept
-        ) / transition.variance
-    for child in compiled.children[index]:
-        transition = process.transitions[compiled.nodes[child]]
-        precision += transition.slope * transition.slope / transition.variance
-        numerator += (
-            transition.slope
-            * (values[child] - transition.intercept)
-            / transition.variance
+def _liability_conditionals(compiled, process):
+    """Cache unit-Brownian conditional weights and standard deviations."""
+
+    assert process.root.variance is not None
+    variances = (process.root.variance,) + tuple(
+        process.transitions[node].variance for node in compiled.nodes[1:]
+    )
+    conditionals = []
+    for index, parent in enumerate(compiled.parents):
+        neighbors = (parent, *compiled.children[index])
+        edge_variances = (
+            variances[index],
+            *(variances[child] for child in compiled.children[index]),
         )
-    variance = 1.0 / precision
-    return numerator * variance, math.sqrt(variance)
+        smallest = min(edge_variances)
+        precisions = tuple(smallest / variance for variance in edge_variances)
+        total = math.fsum(precisions)
+        standard_deviation = math.sqrt(smallest) / math.sqrt(total)
+        weights = tuple(weight / total for weight in precisions)
+        # The identified Brownian root has mean zero and no parent value.
+        if index == 0:
+            neighbors = neighbors[1:]
+            weights = weights[1:]
+        conditionals.append(
+            (tuple(zip(neighbors, weights, strict=True)), standard_deviation)
+        )
+    return conditionals
 
 
 def _initialize_values(compiled, constraints, thresholds):
@@ -362,6 +366,7 @@ def compute_threshold_marginals(
     )
     estimate_thresholds = fixed_thresholds is None and len(states) > 2
     process = build_threshold_process(tree)
+    conditionals = _liability_conditionals(compiled, process)
     constrained_indices = np.asarray(tuple(constraints), dtype=int)
     allowed_by_constraint = tuple(constraints[index] for index in constraints)
     seed_sequences = np.random.SeedSequence(seed).spawn(chains)
@@ -380,8 +385,9 @@ def compute_threshold_marginals(
         retained = 0
         for sweep in range(total_sweeps):
             for node_index in rng.permutation(len(compiled.nodes)):
-                mean, sd = _conditional_parameters(
-                    int(node_index), values, compiled, process
+                neighbors, sd = conditionals[node_index]
+                mean = math.fsum(
+                    float(values[neighbor]) * weight for neighbor, weight in neighbors
                 )
                 allowed = constraints.get(int(node_index))
                 values[node_index] = (

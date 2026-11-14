@@ -13,6 +13,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   probabilities for endpoints separated by many jumps.
 - Threshold ASR samples disjoint ordinal intervals by their log probability
   mass, including when all allowed intervals lie in the extreme tails.
+- Threshold ASR scales conditional precisions so positive subnormal branch
+  lengths retain nonzero innovation standard deviations.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain and in small parameter units.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can

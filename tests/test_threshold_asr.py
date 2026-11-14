@@ -58,6 +58,26 @@ def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
     assert 0.4 < np.mean(draws > 0.0) < 0.6
 
 
+def test_liability_sampling_accepts_a_positive_subnormal_branch_length():
+    tree = tree_from("(A:1e-310,B:1,C:2)R;")
+    states = ("low", "high")
+    observed = {"A": "low", "B": "high", "C": None}
+    with np.errstate(over="raise", divide="raise", invalid="raise"):
+        posterior, fit = compute_threshold_marginals(
+            tree,
+            states,
+            observed,
+            likelihoods(tree, states, observed),
+            num_samples=20,
+            burnin=5,
+            chains=1,
+            seed=7,
+        )
+    np.testing.assert_array_equal(posterior[tree["A"]], [1.0, 0.0])
+    np.testing.assert_array_equal(posterior[tree["B"]], [0.0, 1.0])
+    assert all(np.isfinite(entry.mean) for entry in fit.liability_marginals.values())
+
+
 def test_binary_threshold_samples_probabilities_and_liabilities():
     tree = tree_from("((A:1,B:1):1,(C:1,D:1):1)R;")
     states = ("low", "high")
