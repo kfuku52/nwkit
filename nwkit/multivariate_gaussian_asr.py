@@ -49,13 +49,27 @@ def _multivariate_alpha_bounds(bounds, time_scale, model):
     return lower, upper
 
 
-def _restore_diagonal_ou_diffusion(data, covariance, log_alpha):
-    log_scale = np.log(data.scales) + 0.5 * (math.log(2.0) + log_alpha)
-    with np.errstate(divide="ignore", over="ignore"):
-        log_values = (
-            np.log(np.abs(covariance)) + log_scale[:, None] + log_scale[None, :]
+def _restore_diagonal_ou_diffusion(data, covariance, alpha):
+    # The diffusion rescales each row by sqrt(2*alpha). Combine powers of
+    # two before applying either row scale to preserve reciprocity and avoid
+    # cancellation between large logarithms.
+    rate_mantissa, rate_exponent = np.frexp(alpha)
+    trait_exponent = np.frexp(data.scales)[1] - 1
+    row_mantissa = np.sqrt(np.ldexp(rate_mantissa, rate_exponent % 2))
+    row_exponent = trait_exponent + rate_exponent // 2
+    cov_mantissa, cov_exponent = np.frexp(covariance)
+    with np.errstate(over="ignore", under="ignore"):
+        restored = np.ldexp(
+            cov_mantissa * (row_mantissa[:, None] * row_mantissa[None, :]),
+            cov_exponent + row_exponent[:, None] + row_exponent[None, :] + 1,
         )
-        restored = np.copysign(np.exp(log_values), covariance)
+        # Diagonal entries have an exact alpha multiplier, with no square
+        # roots and their associated rounding of the squared mantissa.
+        diagonal = np.diag_indices_from(covariance)
+        restored[diagonal] = np.ldexp(
+            cov_mantissa[diagonal] * rate_mantissa,
+            cov_exponent[diagonal] + 2 * trait_exponent + rate_exponent + 1,
+        )
     if np.any(~np.isfinite(restored)):
         raise ValueError(
             "MV-OU-DIAG diffusion covariance exceeds floating-point range."
@@ -1401,7 +1415,7 @@ def fit_dense_mvou_diag(
     sigma = _restore_sigma(data, sigma_scaled)
     fitted_alpha = beta / time_scale if free_alpha else beta
     diffusion_sigma = _restore_diagonal_ou_diffusion(
-        data, normalized_diffusion, np.log(fitted_alpha)
+        data, normalized_diffusion, fitted_alpha
     )
     theta = data.centers + data.scales * theta_scaled
     likelihood -= _likelihood_scale_adjustment(data, reml=False)

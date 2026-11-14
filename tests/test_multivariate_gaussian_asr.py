@@ -9,6 +9,7 @@ from nwkit.multivariate_gaussian_asr import (
     _clip_roundoff_covariances,
     _geometry,
     _prepare_observations,
+    _restore_diagonal_ou_diffusion,
     _restore_sigma,
     fit_dense_mvbm,
     fit_dense_mvou,
@@ -40,6 +41,18 @@ def test_covariance_unit_restoration_preserves_mixed_scale_symmetry():
     sigma = np.array([[1.0, 2.0**-500], [2.0**-500, 1.0]])
     restored = _restore_sigma(data, sigma)
     assert restored[0, 1] == restored[1, 0] == 2.0**-600
+
+
+def test_diagonal_ou_diffusion_combines_reciprocal_trait_and_attraction_units():
+    data = SimpleNamespace(scales=np.array([2.0**-500, 2.0**500]))
+    alpha = np.array([2.0**1001, 2.0**-999])
+    covariance = np.array([[0.75, -0.25], [-0.25, 0.5]])
+    # Each row factor simplifies to two, even though multiplying either
+    # unnormalized variance factor first would lose the opposing scale.
+    restored = _restore_diagonal_ou_diffusion(data, covariance, alpha)
+    np.testing.assert_allclose(restored, 4.0 * covariance, rtol=3e-16, atol=0.0)
+    np.testing.assert_array_equal(np.diag(restored), 4.0 * np.diag(covariance))
+    np.testing.assert_array_equal(restored, restored.T)
 
 
 @pytest.mark.parametrize("time_scale", [2.0**-1023, 3.0 * 2.0**-1024])
