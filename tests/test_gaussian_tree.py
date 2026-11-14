@@ -17,6 +17,8 @@ from nwkit.gaussian_tree import (
     GaussianTransition,
     GaussianTreeProcess,
     exponential_rate_edge_variance,
+    ou_transition,
+    ou_transition_from_root_variance,
 )
 from nwkit.nonstationary_continuous_asr import compute_eb_marginals
 from nwkit.ordinary_regression import _fit_ordinary_gaussian
@@ -47,6 +49,32 @@ def test_rate_change_branch_variance_avoids_unrepresentable_intermediates(
     assert exponential_rate_edge_variance(start, length, rate) == pytest.approx(
         expected, rel=3e-13, abs=0
     )
+
+
+@pytest.mark.parametrize(
+    "length,alpha,stationary,optimum",
+    [(1e-200, 1e-150, 1e250, -1e200), (1e200, 1e150, 3.0, 2.0)],
+)
+def test_ou_stationary_variance_transition_keeps_extreme_products(
+    length, alpha, stationary, optimum
+):
+    with localcontext() as context:
+        context.prec = 420
+        t, a, s, theta = map(Decimal.from_float, (length, alpha, stationary, optimum))
+        decay = (-a * t).exp()
+        expected = [float(decay), float((1 - decay) * theta), float(s * (1 - decay**2))]
+    result = ou_transition_from_root_variance(length, alpha, stationary, optimum)
+    np.testing.assert_allclose(
+        [result.slope, result.intercept, result.variance], expected, rtol=2e-15, atol=0
+    )
+
+
+def test_ou_diffusion_preserves_stationary_variance_with_large_attraction():
+    transition, stationary = ou_transition(1e-306, 1e308, 1e308, 2.0)
+    assert stationary == 0.5
+    assert transition.variance == 0.5
+    assert transition.intercept == 2.0
+    assert transition.slope == pytest.approx(math.exp(-100), rel=2e-14, abs=0)
 
 
 def test_brownian_asr_and_intercept_only_regression_share_reml_fit():

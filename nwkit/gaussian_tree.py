@@ -677,6 +677,22 @@ def brownian_transition(variance: float) -> GaussianTransition:
     return GaussianTransition(1.0, 0.0, variance)
 
 
+def _product_ratio(*factors: float, denominator: float = 1.0) -> float:
+    """Multiply finite nonnegative factors without intermediate range loss."""
+    if any(value == 0.0 for value in factors):
+        return 0.0
+    mantissa, exponent = 1.0, 0
+    for value in factors:
+        part, power = math.frexp(value)
+        mantissa *= part
+        exponent += power
+    divisor, power = math.frexp(denominator)
+    try:
+        return math.ldexp(mantissa / divisor, exponent - power)
+    except OverflowError as exc:
+        raise ValueError("Gaussian transition overflows floating-point range.") from exc
+
+
 def ou_transition(
     length: float,
     alpha: float,
@@ -691,11 +707,18 @@ def ou_transition(
         raise ValueError("OU transition parameters must be finite.")
     if alpha <= 0.0 or variance_rate < 0.0:
         raise ValueError("OU requires non-negative variance and positive alpha.")
-    root_variance = variance_rate / (2.0 * alpha)
+    divisor = 2.0 * alpha
+    root_variance = (
+        variance_rate / divisor
+        if math.isfinite(divisor)
+        else (variance_rate / alpha) / 2
+    )
     if not math.isfinite(root_variance):
         raise ValueError("The stationary OU variance exceeds floating-point range.")
     return (
-        ou_transition_from_root_variance(length, alpha, root_variance, optimum),
+        _ou_transition_from_root_variance(
+            length, alpha, root_variance, optimum, variance_rate
+        ),
         root_variance,
     )
 
@@ -707,7 +730,12 @@ def ou_transition_from_root_variance(
     optimum: float = 0.0,
 ) -> GaussianTransition:
     """Return an OU transition parameterized by stationary state variance."""
+    return _ou_transition_from_root_variance(length, alpha, root_variance, optimum)
 
+
+def _ou_transition_from_root_variance(
+    length, alpha, root_variance, optimum, variance_rate=None
+):
     length = float(length)
     alpha = float(alpha)
     root_variance = float(root_variance)
@@ -721,15 +749,25 @@ def ou_transition_from_root_variance(
             "OU requires non-negative lengths and root variance, and positive alpha."
         )
     exponent = alpha * length
-    if not math.isfinite(exponent):
-        raise ValueError(
-            "OU alpha multiplied by a branch length exceeds floating-point range."
-        )
     decay = math.exp(-exponent)
-    innovation = root_variance * (-math.expm1(-2.0 * exponent))
-    if root_variance > 0.0 and length > 0.0 and innovation <= 0.0:
+    fraction = -math.expm1(-2.0 * exponent)
+    attenuation = -math.expm1(-exponent)
+    innovation = root_variance * fraction
+    intercept = attenuation * optimum
+    if 0.0 < length and exponent < float_info.min:
+        innovation = (
+            _product_ratio(2.0, alpha, length, root_variance)
+            if variance_rate is None
+            else _product_ratio(length, variance_rate)
+        )
+        intercept = math.copysign(_product_ratio(alpha, length, abs(optimum)), optimum)
+    elif root_variance < float_info.min and variance_rate is not None:
+        innovation = _product_ratio(variance_rate, 0.5, fraction, denominator=alpha)
+    has_diffusion = (
+        root_variance > 0.0 if variance_rate is None else variance_rate > 0.0
+    )
+    if has_diffusion and length > 0.0 and innovation <= 0.0:
         raise ValueError("A positive OU branch variance underflowed.")
-    intercept = (-math.expm1(-exponent)) * optimum
     return GaussianTransition(decay, intercept, innovation)
 
 
