@@ -27,7 +27,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Preserve finite MCMCtree posterior means and medians when intermediate sums
   overflow.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
-  likelihood domain and in small parameter units.
+  likelihood domain, across extreme parameter ranges, and when the maximum
+  log likelihood is large relative to the cutoff drop.
 - Scale extreme Gaussian posterior predictive values before computing moments
   to avoid overflowing statistics that are finite in the original units.
 - Fit shared MV-OU attraction in normalized time units so the initialization

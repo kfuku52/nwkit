@@ -35,6 +35,27 @@ def test_profile_likelihood_interval_resolves_small_parameter_units():
     assert interval.upper / scale == pytest.approx(1.95996398454)
 
 
+def test_profile_likelihood_interval_works_across_an_overflowing_grid_width():
+    def profile(value):
+        assert -1e308 <= value <= 1.7e308
+        return -(((value / 2e307) - 5.0) ** 2)
+
+    with np.errstate(over="raise", invalid="raise"):
+        interval = profile_likelihood_interval(profile, 1e308, (-1e308, 1.7e308))
+
+    assert interval.lower / 1e308 == pytest.approx(0.7228192351300646)
+    assert interval.upper / 1e308 == pytest.approx(1.2771807648699354)
+    assert not interval.lower_boundary_limited
+    assert not interval.upper_boundary_limited
+
+
+def test_constant_profile_with_large_log_likelihood_reaches_bounds():
+    interval = profile_likelihood_interval(lambda _: -1e100, 0.0, (-1.0, 1.0))
+    assert (interval.lower, interval.upper) == (-1.0, 1.0)
+    assert interval.lower_boundary_limited
+    assert interval.upper_boundary_limited
+
+
 @pytest.mark.parametrize("mle", [0.0, 4.0])
 def test_profile_likelihood_interval_marks_boundary_mle(mle):
     interval = profile_likelihood_interval(

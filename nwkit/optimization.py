@@ -65,6 +65,13 @@ def _interpolate_scalar_bounds(lower, upper, fraction):
     return (1.0 - fraction) * lower + fraction * upper
 
 
+def _bounded_scalar_grid(lower, upper, grid_size):
+    fractions = np.linspace(0.0, 1.0, grid_size)
+    grid = np.clip(_interpolate_scalar_bounds(lower, upper, fractions), lower, upper)
+    grid[0], grid[-1] = lower, upper
+    return grid
+
+
 def _bounded_scalar_minimize(function, bounds):
     lower, upper = bounds
 
@@ -98,9 +105,7 @@ def global_bounded_scalar_minimize(function, bounds, *, grid_size=17):
         raise ValueError("Scalar optimizer bounds must be increasing and finite.")
     if grid_size < 3:
         raise ValueError("A global scalar search requires at least three grid points.")
-    fractions = np.linspace(0.0, 1.0, grid_size)
-    grid = np.clip(_interpolate_scalar_bounds(lower, upper, fractions), lower, upper)
-    grid[0], grid[-1] = lower, upper
+    grid = _bounded_scalar_grid(lower, upper, grid_size)
     grid_values = np.asarray([float(function(value)) for value in grid], dtype=float)
     finite_indices = np.flatnonzero(np.isfinite(grid_values))
     if not len(finite_indices):

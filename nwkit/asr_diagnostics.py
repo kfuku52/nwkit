@@ -12,6 +12,7 @@ from nwkit.gaussian_inference import (
     condition_gaussian_tree,
     simulate_gaussian_process,
 )
+from nwkit.optimization import _bounded_scalar_grid
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,17 +55,17 @@ def profile_likelihood_interval(
     maximum = float(log_likelihood(mle))
     if not math.isfinite(maximum):
         raise ValueError("The profile likelihood is not finite at the MLE.")
-    cutoff = maximum - 0.5 * float(chi2.ppf(level, 1))
+    drop = 0.5 * float(chi2.ppf(level, 1))
 
     def difference(value):
         try:
             likelihood = float(log_likelihood(float(value)))
         except (ValueError, ArithmeticError, OverflowError):
             return -math.inf
-        return likelihood - cutoff if math.isfinite(likelihood) else -math.inf
+        return (likelihood - maximum) + drop if math.isfinite(likelihood) else -math.inf
 
-    left_grid = np.linspace(lower, mle, grid_size)
-    right_grid = np.linspace(mle, upper, grid_size)
+    left_grid = _bounded_scalar_grid(lower, mle, grid_size)
+    right_grid = _bounded_scalar_grid(mle, upper, grid_size)
 
     lower_value, lower_limited = (
         (lower, True)
