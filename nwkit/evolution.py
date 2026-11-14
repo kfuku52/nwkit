@@ -663,15 +663,31 @@ def optimization_parameterization(
     if model == "kappa":
         return (0.0, 3.0), float
     if model == "eb":
-        return (-50.0 / height, 0.0), float
+        return (-_finite_rate_bound(50.0, height), 0.0), float
     if model == "acdc":
-        return (-50.0 / height, 50.0 / height), float
+        limit = _finite_rate_bound(50.0, height)
+        return (-limit, limit), float
     if model == "ou":
-        bounds = (math.log(1e-6 / height), math.log(1e3 / height))
-        return bounds, lambda value: math.exp(float(value))
+        return _ou_rate_parameterization(height)
     if model == "delta":
         return (math.log(1e-4), math.log(1e4)), lambda value: math.exp(float(value))
     raise ValueError("No optimizer parameterization for model '{}'.".format(model))
+
+
+def _finite_rate_bound(numerator, height):
+    return min(
+        float(np.finfo(float).max), max(math.ulp(0.0), float(numerator) / height)
+    )
+
+
+def _ou_rate_parameterization(height):
+    bounds = (
+        math.log(_finite_rate_bound(1e-6, height)),
+        math.log(_finite_rate_bound(1e3, height)),
+    )
+    if bounds[0] >= bounds[1]:
+        raise ValueError("The OU rate bounds exceed floating-point range.")
+    return bounds, lambda value: math.exp(float(value))
 
 
 def encoded_evolution_parameter(model: str, parameter: float) -> float:

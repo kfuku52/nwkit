@@ -9,6 +9,7 @@ from nwkit.contrast import calculate_contrasts
 from nwkit.evolution import (
     build_evolutionary_covariance,
     build_sparse_evolutionary_model,
+    optimization_parameterization,
     parameter_near_boundary,
     read_custom_covariance,
     transformed_edge_variances,
@@ -28,6 +29,17 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree(text=TREE_TEXT):
     return Tree(text, parser=1)
+
+
+@pytest.mark.parametrize("model", ["ou", "eb", "acdc"])
+def test_default_rate_bounds_are_finite_on_short_trees(model):
+    tree = _tree("(A:1e-310,B:1e-310);")
+    bounds, decode = optimization_parameterization(tree, model)
+    assert np.all(np.isfinite(bounds))
+    lower, upper = (decode(value) for value in bounds)
+    assert math.isfinite(lower) and math.isfinite(upper)
+    assert lower < upper
+    assert upper > 0.0 if model != "eb" else upper == 0.0
 
 
 def _values(values):
