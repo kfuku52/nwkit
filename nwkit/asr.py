@@ -586,7 +586,12 @@ def _compute_inside_likelihoods(
 
 
 def _compute_log_inside_likelihoods(
-    tree, likelihood_by_leaf, rate_matrix, *, fixed_transition_matrices=None
+    tree,
+    likelihood_by_leaf,
+    rate_matrix,
+    *,
+    fixed_transition_matrices=None,
+    collect_marginal_inputs=True,
 ):
     if isinstance(rate_matrix, dict):
         sample_matrix = next(iter(rate_matrix.values()))
@@ -610,7 +615,8 @@ def _compute_log_inside_likelihoods(
 
         likelihood = np.zeros(num_states, dtype=float)
         log_scale = 0.0
-        child_terms[node] = dict()
+        if collect_marginal_inputs:
+            child_terms[node] = dict()
         for child in node.get_children():
             branch_length = float(child.dist)
             child_rate_matrix = (
@@ -628,11 +634,17 @@ def _compute_log_inside_likelihoods(
                         _log_probabilities(matrix),
                     )
                 matrix, log_matrix = transition_matrix_cache[cache_key]
-            transition_matrices[child] = matrix
-            term = _edge_logsumexp(log_matrix + inside[child][None, :])
-            child_terms[node][child] = term
+            child_inside = (
+                inside[child] if collect_marginal_inputs else inside.pop(child)
+            )
+            term = _edge_logsumexp(log_matrix + child_inside[None, :])
+            if collect_marginal_inputs:
+                transition_matrices[child] = matrix
+                child_terms[node][child] = term
             likelihood += term
-            log_scale += log_scales[child]
+            log_scale += (
+                log_scales[child] if collect_marginal_inputs else log_scales.pop(child)
+            )
         scale = float(np.max(likelihood))
         if not math.isfinite(scale):
             inside[node] = likelihood
@@ -651,12 +663,12 @@ def _log_likelihood(
     *,
     fixed_transition_matrices=None,
 ):
-    inside, log_scales, _, _ = _compute_inside_likelihoods(
+    inside, log_scales, _, _ = _compute_log_inside_likelihoods(
         tree=tree,
         likelihood_by_leaf=likelihood_by_leaf,
         rate_matrix=rate_matrix,
-        log_space=True,
         fixed_transition_matrices=fixed_transition_matrices,
+        collect_marginal_inputs=False,
     )
     root_term = float(logsumexp(_log_probabilities(root_prior) + inside[tree]))
     return log_scales[tree] + root_term
