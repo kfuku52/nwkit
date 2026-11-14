@@ -28,13 +28,17 @@ def corrected_ks(focal_sister, focal_outgroup, sister_outgroup):
     values = np.asarray([focal_sister, focal_outgroup, sister_outgroup], dtype=float)
     if np.any(~np.isfinite(values)) or np.any(values < 0):
         raise ValueError("Pairwise Ks distances must be finite and nonnegative.")
-    first, second, third = (float(value) for value in values)
-    correction = (
-        (first - third) + second if first >= third else second - (third - first)
-    )
+    with np.errstate(over="ignore"):
+        correction = float(_ks_difference(*values))
     if not np.isfinite(correction):
         raise ValueError("Corrected Ks must be representable as a finite float.")
     return correction
+
+
+def _ks_difference(first, second, third):
+    # Subtract from the larger distance first. If the outgroup distances
+    # cancel, this retains a small focal/sister distance through the subtraction.
+    return (np.maximum(first, second) - third) + np.minimum(first, second)
 
 
 def _midpoint(low, high):
@@ -203,10 +207,8 @@ def bootstrap_corrections(pairs, trios, draws, seed):
         for position, values, families in prepared:
             pair_values[position] = _ordered_weighted_median(values, weights[families])
         first, second, third = pair_values[trio_rows].T
-        # Subtract first to keep the intermediate in range for finite,
-        # nonnegative pair medians. A missing pair makes the trio unavailable.
         with np.errstate(over="ignore"):
-            corrected = (first - third) + second
+            corrected = _ks_difference(first, second, third)
         if np.any(np.isinf(corrected)):
             raise ValueError("Corrected Ks must be representable as a finite float.")
         for key, indices in groups.items():
