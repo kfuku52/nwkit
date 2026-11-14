@@ -721,18 +721,7 @@ def _sparse_latent_mode(
     value, gradient, weights = state
     if not np.isfinite(value) or float(np.max(np.abs(gradient))) >= 1e-5:
         raise RuntimeError("{} random-effect mode did not converge.".format(label))
-    return mode, value, weights, factor_hessian(weights)
-
-
-def _sparse_marginal_coefficient_covariance(design, weights, loading, posterior_factor):
-    weight_matrix = _sparse_weight_matrix(weights)
-    weighted_design = weight_matrix @ design
-    joint_fixed = design.T @ weighted_design
-    fixed_random = np.asarray(design.T @ weight_matrix @ loading)
-    adjustment = fixed_random @ posterior_factor.solve(fixed_random.T)
-    information = np.asarray(joint_fixed - adjustment, dtype=float)
-    information = (information + information.T) / 2.0
-    return np.linalg.pinv(information, hermitian=True)
+    return mode, value, factor_hessian(weights)
 
 
 def _sparse_component_modes(
@@ -758,7 +747,7 @@ def _random_mode(
     family: str,
     thresholds: np.ndarray,
     initial: np.ndarray | None = None,
-) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, float, np.ndarray]:
     mode = (
         np.zeros(precision.shape[0], dtype=float)
         if initial is None
@@ -846,7 +835,7 @@ def _random_mode(
     )
     if not np.isfinite(objective):
         raise RuntimeError("Categorical random-effect mode is non-finite.")
-    return mode, objective, weights, posterior_factor
+    return mode, objective, posterior_factor
 
 
 def _initial_coefficients(
@@ -1829,36 +1818,12 @@ def _glmm_initial_parameters(
     return initial, bounds
 
 
-def _marginal_coefficient_covariance(
-    design: np.ndarray,
-    random_dimension: int,
-    weights: np.ndarray,
-    precision: np.ndarray,
-) -> np.ndarray:
-    expanded_design = np.kron(design, np.eye(random_dimension))
-    weight_matrix = _dense_weight_matrix(weights)
-    joint_fixed = expanded_design.T @ weight_matrix @ expanded_design
-    fixed_random = expanded_design.T @ weight_matrix
-    posterior_cholesky = _positive_definite_cholesky(weight_matrix + precision)
-    adjustment = fixed_random @ cho_solve(
-        (posterior_cholesky, True), fixed_random.T, check_finite=False
-    )
-    information = joint_fixed - adjustment
-    information = (information + information.T) / 2.0
-    return np.linalg.pinv(information, hermitian=True)
-
-
 def _fixed_parameter_covariances(
     objective: Callable[[np.ndarray], float],
     optimized_parameters: np.ndarray,
     coefficient_count: int,
     threshold_count: int,
-    coefficient_covariance: np.ndarray,
-    *,
-    numerical: bool,
 ) -> tuple[np.ndarray, np.ndarray, str]:
-    if not numerical:
-        return coefficient_covariance, np.empty((0, 0), dtype=float), "conditional"
     full_hessian = _finite_difference_hessian(objective, optimized_parameters)
     full_hessian = (full_hessian + full_hessian.T) / 2.0
     if not np.isfinite(full_hessian).all():
@@ -2478,7 +2443,7 @@ def _scalar_random_mode(
     trials: np.ndarray | None,
     censor_lower: np.ndarray | None,
     censor_upper: np.ndarray | None,
-) -> tuple[np.ndarray, float, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, float, np.ndarray]:
     mode = np.zeros(len(precision), dtype=float)
 
     def terms(candidate: np.ndarray):
@@ -2581,35 +2546,7 @@ def _scalar_random_mode(
     posterior_factor = _positive_definite_cholesky(np.diag(mapped_weights) + precision)
     if not np.isfinite(objective):
         raise RuntimeError("Scalar random-effect mode is non-finite.")
-    return mode, objective, weights, posterior_factor
-
-
-def _marginal_scalar_coefficient_covariance(
-    design: np.ndarray,
-    observation_to_tip: np.ndarray,
-    weights: np.ndarray,
-    precision: np.ndarray,
-) -> np.ndarray:
-    diagonal_weights = weights
-    weighted_design = diagonal_weights[:, None] * design
-    joint_fixed = design.T @ weighted_design
-    fixed_random = np.zeros((design.shape[1], len(precision)), dtype=float)
-    for observation, tip_index in enumerate(observation_to_tip):
-        fixed_random[:, tip_index] += weighted_design[observation]
-    mapped_weights = np.bincount(
-        observation_to_tip,
-        weights=diagonal_weights,
-        minlength=len(precision),
-    )
-    posterior_cholesky = _positive_definite_cholesky(
-        np.diag(mapped_weights) + precision
-    )
-    adjustment = fixed_random @ cho_solve(
-        (posterior_cholesky, True), fixed_random.T, check_finite=False
-    )
-    information = joint_fixed - adjustment
-    information = (information + information.T) / 2.0
-    return np.linalg.pinv(information, hermitian=True)
+    return mode, objective, posterior_factor
 
 
 def _scalar_initial_coefficient(
@@ -2842,7 +2779,7 @@ def _fit_scalar_phylogenetic_glmm(
                     censor_upper=upper,
                 )
 
-            mode, posterior_objective, weights, posterior_factor = _sparse_latent_mode(
+            mode, posterior_objective, posterior_factor = _sparse_latent_mode(
                 (design @ coefficients)[:, 0],
                 observation_loading,
                 latent.precision,
@@ -2857,14 +2794,7 @@ def _fit_scalar_phylogenetic_glmm(
                     coefficients, coefficient_penalty, coefficient_prior_sd
                 )
             )
-            return (
-                objective_value,
-                mode,
-                weights,
-                latent,
-                observation_loading,
-                posterior_factor,
-            )
+            return objective_value, mode, latent, None
         phylo_base = dense_phylogenetic(decoded)
         random_covariance = math.exp(float(log_variances[0])) * phylo_base
         if group_base is not None:
@@ -2879,7 +2809,7 @@ def _fit_scalar_phylogenetic_glmm(
         precision = cho_solve(
             (covariance_cholesky, True), np.eye(n_tips), check_finite=False
         )
-        mode, posterior_objective, weights, hessian_cholesky = _scalar_random_mode(
+        mode, posterior_objective, hessian_cholesky = _scalar_random_mode(
             values,
             (design @ coefficients)[:, 0],
             precision,
@@ -2902,7 +2832,7 @@ def _fit_scalar_phylogenetic_glmm(
                 coefficients, coefficient_penalty, coefficient_prior_sd
             )
         )
-        return objective, mode, weights, precision, phylo_base, None
+        return objective, mode, precision, phylo_base
 
     def objective(parameters: np.ndarray) -> float:
         try:
@@ -2930,28 +2860,16 @@ def _fit_scalar_phylogenetic_glmm(
     coefficients, fitted_dispersion, fitted_zero, log_variances, decoded = unpack(
         result.x
     )
-    fitted_state = state(result.x)
-    fitted_objective, mode, weights = fitted_state[:3]
-    if use_sparse:
-        latent, observation_loading, posterior_factor = fitted_state[3:]
-        approximate_covariance = _sparse_marginal_coefficient_covariance(
-            design, weights, observation_loading, posterior_factor
-        )
-    else:
-        precision, _phylo_base, _unused = fitted_state[3:]
-        approximate_covariance = _marginal_scalar_coefficient_covariance(
-            design, observation_to_tip, weights, precision
-        )
+    fitted_objective, mode, random_effect_state, phylo_base = state(result.x)
     coefficient_covariance, _unused, covariance_status = _fixed_parameter_covariances(
         objective,
         result.x,
         coefficient_count,
         0,
-        approximate_covariance,
-        numerical=True,
     )
     components = dict(zip(component_names, np.exp(log_variances), strict=True))
     if use_sparse:
+        latent = random_effect_state
         tip_mode = np.asarray(latent.loading @ mode).reshape(n_tips, 1)
         component_modes = _sparse_component_modes(
             latent, mode, n_tips, 1, component_names
@@ -2959,7 +2877,7 @@ def _fit_scalar_phylogenetic_glmm(
     else:
         tip_mode = mode.reshape(n_tips, 1)
         component_modes = _glmm_component_modes(
-            components, _phylo_base, group_base, precision, mode, 1
+            components, phylo_base, group_base, random_effect_state, mode, 1
         )
     condition = (
         float(np.linalg.cond(coefficient_covariance))
@@ -3477,11 +3395,6 @@ def fit_phylogenetic_glmm(
             if latent is None:
                 raise ValueError("Sparse phylogenetic covariance is unavailable.")
             fixed_linear = design @ coefficients
-            expanded_design = (
-                design
-                if family == "ordinal"
-                else np.kron(design, np.eye(random_dimension))
-            )
 
             def likelihood_terms(linear):
                 if family == "ordinal":
@@ -3490,7 +3403,7 @@ def fit_phylogenetic_glmm(
                     counts, linear.reshape(len(design), random_dimension)
                 )
 
-            mode, posterior_objective, weights, posterior_factor = _sparse_latent_mode(
+            mode, posterior_objective, posterior_factor = _sparse_latent_mode(
                 fixed_linear.reshape(-1),
                 latent.loading,
                 latent.precision,
@@ -3505,14 +3418,7 @@ def fit_phylogenetic_glmm(
                     coefficients, coefficient_penalty, coefficient_prior_sd
                 )
             )
-            return (
-                objective_value,
-                mode,
-                weights,
-                latent,
-                expanded_design,
-                posterior_factor,
-            )
+            return objective_value, mode, latent, None
         phylo_base = dense_phylogenetic(decoded_parameter)
         random_covariance = np.exp(log_variances[0]) * phylo_base
         if group_base is not None:
@@ -3536,7 +3442,7 @@ def fit_phylogenetic_glmm(
         fixed_linear = design @ coefficients
         if family == "ordinal":
             fixed_linear = fixed_linear[:, 0]
-        mode, posterior_objective, weights, hessian_cholesky = _random_mode(
+        mode, posterior_objective, hessian_cholesky = _random_mode(
             counts,
             fixed_linear,
             precision,
@@ -3553,7 +3459,7 @@ def fit_phylogenetic_glmm(
                 coefficients, coefficient_penalty, coefficient_prior_sd
             )
         )
-        return objective, mode, weights, precision, random_covariance, None
+        return objective, mode, precision, phylo_base
 
     def objective(parameters: np.ndarray) -> float:
         try:
@@ -3577,18 +3483,7 @@ def fit_phylogenetic_glmm(
         label="Categorical phylogenetic GLMM",
     )
     coefficients, thresholds, log_variances, decoded_parameter = unpack(result.x)
-    fitted_state = state(result.x)
-    fitted_objective, mode, weights = fitted_state[:3]
-    if use_sparse:
-        latent, expanded_design, posterior_factor = fitted_state[3:]
-        coefficient_covariance = _sparse_marginal_coefficient_covariance(
-            expanded_design, weights, latent.loading, posterior_factor
-        )
-    else:
-        precision, _random_covariance, _unused = fitted_state[3:]
-        coefficient_covariance = _marginal_coefficient_covariance(
-            design, random_dimension, weights, precision
-        )
+    fitted_objective, mode, random_effect_state, phylo_base = state(result.x)
     (
         coefficient_covariance,
         threshold_covariance,
@@ -3598,12 +3493,11 @@ def fit_phylogenetic_glmm(
         result.x,
         coefficient_count,
         threshold_count,
-        coefficient_covariance,
-        numerical=True,
     )
     variance_values = np.exp(log_variances)
     components = dict(zip(component_names, variance_values, strict=True))
     if use_sparse:
+        latent = random_effect_state
         tip_mode = np.asarray(latent.loading @ mode).reshape(
             len(design), random_dimension
         )
@@ -3612,12 +3506,11 @@ def fit_phylogenetic_glmm(
         )
     else:
         tip_mode = mode.reshape(len(design), random_dimension)
-        fitted_phylogenetic = dense_phylogenetic(decoded_parameter)
         component_random_modes = _glmm_component_modes(
             components,
-            fitted_phylogenetic,
+            phylo_base,
             group_base,
-            precision,
+            random_effect_state,
             mode,
             random_dimension,
         )
