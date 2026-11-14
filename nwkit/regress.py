@@ -1167,6 +1167,15 @@ def _append_predictor_omnibus_rows(
         rows.append(template)
 
 
+def _clustered_score_crossproduct(design, weighted_residual, inverse, n_events):
+    scores = np.empty((n_events, design.shape[1]), dtype=float)
+    for column, values in enumerate(design.T):
+        scores[:, column] = np.bincount(
+            inverse, weights=values * weighted_residual, minlength=n_events
+        )
+    return scores.T @ scores
+
+
 def _fit_model(
     dataframe,
     predictors,
@@ -1233,11 +1242,7 @@ def _fit_model(
         float("nan") if weighted_total == 0.0 else 1.0 - weighted_rss / weighted_total
     )
     bread = np.linalg.inv(gram)
-    meat = np.zeros((num_parameters, num_parameters), dtype=float)
-    for event_index in range(n_events):
-        selected = inverse == event_index
-        score = design[selected].T @ (weights[selected] * residual[selected])
-        meat += np.outer(score, score)
+    meat = _clustered_score_crossproduct(design, weights * residual, inverse, n_events)
     degrees_of_freedom = n_events - num_parameters
     covariance = (n_events / degrees_of_freedom) * (bread @ meat @ bread)
     covariance = (covariance + covariance.T) / 2.0
