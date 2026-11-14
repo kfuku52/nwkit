@@ -565,16 +565,13 @@ def _prepare_annotations_for_reroot(tree):
         "root_dist": tree.dist,
         "tree_format": tree.props.get(TREE_FORMAT_PROP),
         "missing_branch_lengths": _snapshot_missing_branch_lengths(tree),
-        "leaves_by_identity": {
-            id(leaf): _snapshot_node_annotation(leaf, include_name=False)
-            for leaf in tree.leaves()
-        },
+        "leaves_by_identity": {},
         "leaves_by_name": defaultdict(list),
     }
     for leaf in tree.leaves():
-        snapshot["leaves_by_name"][str(leaf.name)].append(
-            _snapshot_node_annotation(leaf, include_name=False)
-        )
+        annotation = _snapshot_node_annotation(leaf, include_name=False)
+        snapshot["leaves_by_identity"][id(leaf)] = annotation
+        snapshot["leaves_by_name"][str(leaf.name)].append(annotation)
     for node in tree.traverse():
         node.support = None
     return snapshot
@@ -1788,26 +1785,26 @@ def mv_rooting(tree, _return_evaluation=False):
         if _return_evaluation:
             raise ValueError("MV rooting could not identify a candidate root edge.")
         return tree
-    all_taxa = frozenset(str(name) for name in tree.leaf_names())
-
-    def completed_candidate(record):
-        variance, node, root_distance, edge_length = record
-        side_names = frozenset(str(name) for name in node.leaf_names())
-        split = canonical_split(side_names, all_taxa - side_names)
-        return {
-            "node": node,
-            "root_distance": root_distance,
-            "edge_length": edge_length,
-            "variance": variance,
-            "side_names": side_names,
-            "split": split,
-            "key": (
-                tuple(sorted(split[0])),
-                tuple(sorted(split[1])),
-            ),
-        }
-
     if _return_evaluation:
+        all_taxa = frozenset(str(name) for name in tree.leaf_names())
+
+        def completed_candidate(record):
+            variance, node, root_distance, edge_length = record
+            side_names = frozenset(str(name) for name in node.leaf_names())
+            split = canonical_split(side_names, all_taxa - side_names)
+            return {
+                "node": node,
+                "root_distance": root_distance,
+                "edge_length": edge_length,
+                "variance": variance,
+                "side_names": side_names,
+                "split": split,
+                "key": (
+                    tuple(sorted(split[0])),
+                    tuple(sorted(split[1])),
+                ),
+            }
+
         minimum_variance = min(record[0] for record in candidate_records)
         tied_records = (
             record
@@ -1821,24 +1818,21 @@ def mv_rooting(tree, _return_evaluation=False):
         )
         best_candidates = [completed_candidate(record) for record in tied_records]
         best_candidates.sort(key=lambda candidate: candidate["key"])
-    else:
-        assert best_record is not None
-        best_candidates = [completed_candidate(best_record)]
-    best = best_candidates[0]
-    reported_var = _mv_reported_variance(best["variance"], branch_length_scale)
+        best = best_candidates[0]
+        best_record = (
+            best["variance"],
+            best["node"],
+            best["root_distance"],
+            best["edge_length"],
+        )
+    assert best_record is not None
+    variance, outgroup, root_distance, _ = best_record
+    reported_var = _mv_reported_variance(variance, branch_length_scale)
     if reported_var is None:
         sys.stderr.write("MV rooting variance exceeds the finite output range.\n")
     else:
         sys.stderr.write("MV rooting variance: {:.6g}\n".format(reported_var))
-    tree.set_outgroup(best["node"])
-    # Adjust branch lengths at root: best_x from root to best_node, (L - best_x) to sibling
-    best_subtree_leaves = set(best["node"].leaf_names())
-    root_leaf_sets = get_subtree_leaf_name_sets(tree)
-    for child in tree.get_children():
-        if root_leaf_sets[child] == best_subtree_leaves:
-            child.dist = best["root_distance"]
-        else:
-            child.dist = best["edge_length"] - best["root_distance"]
+    tree.set_outgroup(outgroup, dist=root_distance)
     _restore_reroot_branch_length_scale(tree, branch_length_scale)
     _finish_annotations_after_reroot(tree, annotation_backup)
     if not _return_evaluation:
