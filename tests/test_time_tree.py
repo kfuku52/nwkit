@@ -5,6 +5,7 @@ from ete4 import Tree
 from nwkit.time_tree import (
     _age_order_statistics,
     annotate_mcmctree_calibrations,
+    infer_node_ages_from_branch_lengths,
     paml_node_mapping,
     parse_mcmctree_calibration,
     posterior_sample_tree,
@@ -133,6 +134,22 @@ def test_posterior_rejects_chronologically_invalid_sample(tmp_path):
 
     with pytest.raises(ValueError, match="older than its parent"):
         read_mcmctree_posterior(path, tree)
+
+
+@pytest.mark.parametrize("scale", [1e-180, 1e180])
+def test_posterior_age_order_validation_does_not_depend_on_units(scale):
+    tree = Tree("((A,B),C);", parser=1)
+    with pytest.raises(ValueError, match="older than its parent"):
+        read_mcmctree_posterior(f"Gen t_n4 t_n5\n1 {scale} {2 * scale}\n", tree)
+    posterior = read_mcmctree_posterior(f"Gen t_n4 t_n5\n1 {2 * scale} {scale}\n", tree)
+    summarize_mcmctree_posterior(tree, posterior)
+    assert tree["A"].dist / scale == pytest.approx(1.0)
+
+
+def test_inferred_dated_ages_avoid_overflow_in_child_path_average():
+    tree = Tree("(A:1.7e308,B:1.7e308);", parser=1)
+    infer_node_ages_from_branch_lengths(tree)
+    assert tree.props["age"] == 1.7e308
 
 
 def test_posterior_rejects_nonbinary_topology(tmp_path):

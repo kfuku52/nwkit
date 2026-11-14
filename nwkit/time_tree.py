@@ -259,6 +259,30 @@ def _read_mcmctree_dataframe(source):
     return dataframe
 
 
+def _validate_age_order(tree, values, mapping, internal_ids, burnin, thin):
+    id_to_column = {node_id: index for index, node_id in enumerate(internal_ids)}
+    node_to_id = {node: node_id for node_id, node in mapping.items()}
+    for child in tree.traverse():
+        if child.is_root or child.is_leaf:
+            continue
+        parent = child.up
+        parent_ages = values[:, id_to_column[node_to_id[parent]]]
+        child_ages = values[:, id_to_column[node_to_id[child]]]
+        excess = child_ages - parent_ages
+        roundoff = np.maximum(
+            np.maximum(parent_ages, child_ages) * 1e-12, math.ulp(0.0)
+        )
+        invalid = np.flatnonzero(excess > roundoff)
+        if invalid.size:
+            raise ValueError(
+                "MCMCtree sample {} makes child node {} older than its parent {}.".format(
+                    burnin + (int(invalid[0]) * thin) + 1,
+                    node_to_id[child],
+                    node_to_id[parent],
+                )
+            )
+
+
 def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
     """Read and validate MCMCtree ``mcmc.txt`` node-age samples."""
 
@@ -301,27 +325,7 @@ def read_mcmctree_posterior(source, tree, burnin=0, thin=1):
         raise ValueError("MCMCtree node-age samples must be finite.")
     if (values < 0.0).any():
         raise ValueError("MCMCtree node-age samples must be non-negative.")
-    id_to_column = {node_id: index for index, node_id in enumerate(internal_ids)}
-    node_to_id = {node: node_id for node_id, node in mapping.items()}
-    for child in tree.traverse():
-        if child.is_root:
-            continue
-        parent = child.up
-        parent_ages = values[:, id_to_column[node_to_id[parent]]]
-        child_ages = (
-            np.zeros(values.shape[0], dtype=float)
-            if child.is_leaf
-            else values[:, id_to_column[node_to_id[child]]]
-        )
-        invalid = np.flatnonzero(parent_ages + 1e-12 < child_ages)
-        if invalid.size:
-            raise ValueError(
-                "MCMCtree sample {} makes child node {} older than its parent {}.".format(
-                    burnin + (int(invalid[0]) * thin) + 1,
-                    node_to_id[child],
-                    node_to_id[parent],
-                )
-            )
+    _validate_age_order(tree, values, mapping, internal_ids, burnin, thin)
     generations = None
     if "Gen" in retained.columns:
         try:
@@ -424,8 +428,9 @@ def summarize_mcmctree_posterior(tree, posterior, point="mean", ci="hpd", level=
         if node.is_root:
             node.dist = None
             continue
-        distance = age_by_node[node.up] - age_by_node[node]
-        if distance < -1e-10:
+        parent_age, child_age = age_by_node[node.up], age_by_node[node]
+        distance = parent_age - child_age
+        if distance < -max(1e-12 * max(parent_age, child_age), math.ulp(0.0)):
             raise ValueError(
                 "Posterior point estimates produce a negative dated branch length."
             )
@@ -455,6 +460,17 @@ def posterior_sample_tree(tree, posterior, sample_index):
     return copied
 
 
+def _dated_age_from_child_paths(child_ages, tolerance):
+    largest = max(child_ages)
+    if not math.isfinite(largest) or largest - min(child_ages) > max(
+        math.ulp(0.0), tolerance * largest
+    ):
+        raise ValueError(
+            "Dated-tree branch lengths are not ultrametric at an internal node."
+        )
+    return _mean_age(np.asarray(child_ages))
+
+
 def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
     """Annotate an ultrametric dated tree with ages measured back from tips."""
 
@@ -468,13 +484,7 @@ def infer_node_ages_from_branch_lengths(tree, tolerance=1e-5):
             age_by_node[child] + (0.0 if child.dist is None else float(child.dist))
             for child in node.get_children()
         ]
-        if max(child_ages) - min(child_ages) > max(
-            tolerance, tolerance * max(child_ages)
-        ):
-            raise ValueError(
-                "Dated-tree branch lengths are not ultrametric at an internal node."
-            )
-        age = float(sum(child_ages) / len(child_ages))
+        age = _dated_age_from_child_paths(child_ages, tolerance)
         age_by_node[node] = age
         node.props.setdefault("age", age)
         if "age_ci_low" in node.props and "age_mean" not in node.props:
