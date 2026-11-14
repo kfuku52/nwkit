@@ -123,37 +123,55 @@ def _drift_design_rank(observed_leaves, exposures, varying):
             np.vstack([exposures[leaf] for leaf in observed_leaves])[:, varying],
         )
     )
-    scales = np.linalg.norm(matrix, axis=0)
-    if np.any(scales == 0.0):
-        return int(np.sum(scales > 0.0))
-    return int(np.linalg.matrix_rank(matrix / scales))
+    return _regime_design_rank(matrix)
 
 
-def _sigma_design_rank(observed_leaves, exposures, varying):
-    if not len(varying):
+def _regime_design_rank(matrix):
+    scales = np.max(np.abs(matrix), axis=0, initial=0.0)
+    nonzero = scales > 0.0
+    if not np.any(nonzero):
         return 0
-    rows = []
-    for first_index, first in enumerate(observed_leaves):
-        first_path = {}
-        node = first
-        while node is not None:
-            first_path[node] = exposures[first] - exposures[node]
-            node = node.up
-        for second in observed_leaves[:first_index]:
-            node = second
-            while node not in first_path:
-                node = node.up
-            path = (exposures[first] - exposures[node]) + (
-                exposures[second] - exposures[node]
-            )
-            rows.append(path[varying])
-    if not rows:
-        return 0
-    matrix = np.vstack(rows)
-    scales = np.linalg.norm(matrix, axis=0)
-    if np.any(scales == 0.0):
-        return int(np.sum(scales > 0.0))
-    return int(np.linalg.matrix_rank(matrix / scales))
+    normalized = matrix[:, nonzero] / scales[nonzero]
+    return int(np.linalg.matrix_rank(normalized / np.linalg.norm(normalized, axis=0)))
+
+
+def _observed_split_regime_lengths(tree, observed_leaves, assignment):
+    """Sum branch lengths by the bipartition they induce on observed tips."""
+    regime_index = {regime: index for index, regime in enumerate(assignment.regimes)}
+    observed = set(observed_leaves)
+    num_observed = len(observed)
+    # Observed tips in depth-first order form a contiguous interval per clade.
+    descendant_counts = {}
+    rows = {}
+    seen = 0
+    for node in tree.traverse(strategy="postorder"):
+        local = int(node in observed)
+        seen += local
+        count = local + sum(descendant_counts.pop(child) for child in node.children)
+        descendant_counts[node] = count
+        if node.is_root or count in {0, num_observed}:
+            continue
+        # Orient each split away from the first observed tip. The complement
+        # of any interval that contains the first tip is also contiguous.
+        start = seen - count
+        if start == 0:
+            split = (seen, num_observed)
+        else:
+            split = (start, seen)
+        row = rows.get(split)
+        if row is None:
+            row = np.zeros(len(regime_index), dtype=float)
+            rows[split] = row
+        row[regime_index[assignment.by_node[node]]] += float(node.dist)
+    return np.asarray(list(rows.values())).reshape(-1, len(regime_index))
+
+
+def _sigma_design_rank(tree, observed_leaves, assignment):
+    # The pairwise distance vector determines the lengths of all distinct
+    # splits of the observed subtree, so both designs have the same nullspace.
+    return _regime_design_rank(
+        _observed_split_regime_lengths(tree, observed_leaves, assignment)
+    )
 
 
 def compute_regime_drift_marginals(
@@ -214,18 +232,16 @@ def compute_regime_drift_marginals(
     )
     if len(observed_values) < 2 or np.any(~np.isfinite(observed_values)):
         raise ValueError("BMS-DRIFT requires at least two finite observed tips.")
-    exposures = _path_exposures(tree, regime_assignment)
     varying = np.arange(len(regimes), dtype=int)
-    if (
-        fixed_drift is None
-        and _drift_design_rank(observed_leaves, exposures, varying) < len(regimes) + 1
-    ):
-        raise ValueError(
-            "BMS-DRIFT regime drifts are not identifiable from the observed "
-            "root-to-tip regime-time design; fix drifts or revise the regime map."
-        )
+    if fixed_drift is None:
+        exposures = _path_exposures(tree, regime_assignment)
+        if _drift_design_rank(observed_leaves, exposures, varying) < len(regimes) + 1:
+            raise ValueError(
+                "BMS-DRIFT regime drifts are not identifiable from the observed "
+                "root-to-tip regime-time design; fix drifts or revise the regime map."
+            )
     if fixed_sigma is None and _sigma_design_rank(
-        observed_leaves, exposures, varying
+        tree, observed_leaves, regime_assignment
     ) < len(regimes):
         raise ValueError(
             "BMS-DRIFT regime rates are not identifiable from observed pairwise "

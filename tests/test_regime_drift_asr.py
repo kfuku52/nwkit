@@ -1,5 +1,7 @@
 import math
+from itertools import combinations
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -7,6 +9,7 @@ from nwkit.asr_regimes import RegimeAssignment
 from nwkit.cli import main
 from nwkit.nonstationary_continuous_asr import compute_bm_drift_marginals
 from nwkit.regime_drift_asr import (
+    _sigma_design_rank,
     build_regime_drift_process,
     compute_regime_drift_marginals,
 )
@@ -79,6 +82,32 @@ def test_regime_drifts_reject_rank_deficient_tip_design():
             regimes,
             sigma2=1.0,
         )
+
+
+@pytest.mark.parametrize("observed_names", ["A", "AB", "ABC", "ACD", "ABCD", "ABCDE"])
+def test_regime_split_rank_matches_full_pairwise_distances(observed_names):
+    tree = tree_from("(((A:2,B:1)J:2)I:1,(C:1,(D:0,E:1)K:1)L:3)R;")
+    warm = {"I", "J", "A", "D"}
+    regimes = assignment(
+        tree,
+        [
+            "root" if node.is_root else "warm" if node.name in warm else "cold"
+            for node in tree.traverse()
+        ],
+    )
+    tips = [tree[name] for name in observed_names]
+    rows = []
+    for first, second in combinations(tips, 2):
+        ancestor = tree.common_ancestor([first, second])
+        row = np.zeros(len(regimes.regimes))
+        for node in (first, second):
+            while node is not ancestor:
+                row[regimes.regimes.index(regimes.by_node[node])] += node.dist
+                node = node.up
+        rows.append(row)
+
+    expected = int(np.linalg.matrix_rank(rows)) if rows else 0
+    assert _sigma_design_rank(tree, tips, regimes) == expected
 
 
 @pytest.mark.integration
