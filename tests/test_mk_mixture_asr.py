@@ -128,6 +128,27 @@ def test_mk_mixture_rejects_unidentifiable_zero_fixed_base_rate():
         )
 
 
+def test_mk_mixture_averages_only_categories_with_posterior_mass():
+    tree = tree_from("(A:1,B:1)R;")
+    states = ["0", "1"]
+    observed = {"first": {"A": "0", "B": "1"}, "second": {"A": "1", "B": "0"}}
+    likelihoods = {
+        character: {name: np.eye(2)[int(value)] for name, value in values.items()}
+        for character, values in observed.items()
+    }
+    posterior, fit = compute_mk_mixture_marginals(
+        tree, states, observed, likelihoods, rate=np.nextafter(0.0, 1.0)
+    )
+    assert np.isfinite(fit["log_likelihood"])
+    for character, values in posterior.items():
+        probabilities = fit["category_posterior_by_character"][character]
+        assert np.any(probabilities == 0.0)
+        assert probabilities.sum() == pytest.approx(1.0)
+        np.testing.assert_allclose(values[tree], [0.5, 0.5])
+        np.testing.assert_allclose(values[tree["A"]], likelihoods[character]["A"])
+        np.testing.assert_allclose(values[tree["B"]], likelihoods[character]["B"])
+
+
 @pytest.mark.parametrize("informative_zero_edges", [False, True])
 def test_mk_mixture_rejects_data_without_an_informative_positive_branch(
     informative_zero_edges,

@@ -17,6 +17,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   likelihood domain and in small parameter units.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
   affect an informative tip observation.
+- Mk mixture marginals average only categories with positive posterior mass.
 
 ### Performance
 

@@ -1611,7 +1611,9 @@ def compute_mk_mixture_marginals(
             return 1e100
         return -likelihood if math.isfinite(likelihood) else 1e100
 
-    optimized = deterministic_multistart(objective, initial, bounds, maxiter=1500)
+    optimized = deterministic_multistart(
+        objective, initial, bounds, maxiter=1500, minimizer=_minimize_mk
+    )
     base, matrix, category_rates, weights, shape = unpack(optimized.x)
     root_prior = prior_for(matrix)
     log_likelihood, scores, transition_matrices_by_category = character_scores(
@@ -1624,27 +1626,15 @@ def compute_mk_mixture_marginals(
             scores[character] - logsumexp(scores[character])
         )
         category_posterior_by_character[character] = category_probabilities
-        category_posteriors = [
-            _posterior_for_rate_matrix(
-                tree,
-                likelihood_by_leaf,
-                root_prior,
-                matrix * category_rate,
-                fixed_transition_matrices=transition_matrices,
-            )
-            for category_rate, transition_matrices in zip(
-                category_rates, transition_matrices_by_category, strict=True
-            )
-        ]
-        posterior_by_character[character] = {
-            node: sum(
-                probability * posterior[node]
-                for probability, posterior in zip(
-                    category_probabilities, category_posteriors, strict=True
-                )
-            )
-            for node in tree.traverse()
-        }
+        posterior_by_character[character] = _average_mk_category_posteriors(
+            tree,
+            likelihood_by_leaf,
+            root_prior,
+            matrix,
+            category_rates,
+            category_probabilities,
+            transition_matrices_by_category,
+        )
 
     tolerance = 1e-5
     statuses = []
@@ -1710,6 +1700,25 @@ def compute_mk_mixture_marginals(
     }
     fit.update(base_boundary)
     return posterior_by_character, fit
+
+
+def _average_mk_category_posteriors(
+    tree, likelihoods, prior, matrix, rates, probabilities, transitions
+):
+    average = {node: np.zeros_like(prior) for node in tree.traverse()}
+    for rate, weight, transition in zip(rates, probabilities, transitions, strict=True):
+        if weight == 0.0:
+            continue
+        posterior = _posterior_for_rate_matrix(
+            tree,
+            likelihoods,
+            prior,
+            matrix * rate,
+            fixed_transition_matrices=transition,
+        )
+        for node, values in posterior.items():
+            average[node] += weight * values
+    return average
 
 
 def compute_hrm_marginals(
