@@ -260,7 +260,24 @@ def _simulate_one(design, factor, seed):
         values[node] = (
             values[design.parents[node]] + np.sqrt(design.lengths[node]) * values[node]
         )
-    return dtt_curve(design, _tip_states(design, values))
+    return design.weights @ _relative_simulated_disparity(
+        design, _tip_states(design, values)
+    )
+
+
+def _relative_simulated_disparity(design, tips):
+    # All clades share the same scaling in the ratio. Compute it even when
+    # the unnormalized disparity would be outside the floating-point range.
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        disparities, _ = _clade_moments(design, tips)
+        if not np.isfinite(disparities).all() or disparities[0] < np.finfo(float).tiny:
+            exponent = np.frexp(np.max(np.abs(tips)))[1]
+            disparities, _ = _clade_moments(design, np.ldexp(tips, -exponent))
+    if not np.isfinite(disparities).all() or disparities[0] <= 0:
+        raise ValueError(
+            "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        )
+    return disparities / disparities[0]
 
 
 def _tip_states(design, values):
@@ -287,16 +304,17 @@ def _row_squared_norms(delta):
     return np.asarray(output)
 
 
-def _batched_disparities(design, means, counts):
+def _batched_relative_disparities(design, means, counts):
     """Replace simulated states with their clade means after propagation."""
     with np.errstate(over="ignore", invalid="ignore", under="ignore"):
         disparities = _batched_clade_moments(design, means, counts)
     affected = ~np.isfinite(disparities).all(axis=0)
     affected |= disparities[0] < np.finfo(float).tiny
+    np.divide(disparities, disparities[0], out=disparities, where=~affected[None, :])
     for replica in np.flatnonzero(affected):
         # The in-place reduction changes only internal states. The original
         # tips let the single-curve path recover extreme but finite disparities.
-        disparities[:, replica], _ = clade_disparities(
+        disparities[:, replica] = _relative_simulated_disparity(
             design, _tip_states(design, means[:, replica])
         )
     return disparities
@@ -363,12 +381,10 @@ def _simulate_chunk(payload):
             values[node] = (
                 values[design.parents[node]] + square_roots[node] * values[node]
             )
-        disparities = _batched_disparities(design, values, counts)
+        disparities = _batched_relative_disparities(design, values, counts)
         del values
         for column in range(replicas):
-            curves[start + column] = design.weights @ (
-                disparities[:, column] / disparities[0, column]
-            )
+            curves[start + column] = design.weights @ disparities[:, column]
         del disparities
     return curves
 

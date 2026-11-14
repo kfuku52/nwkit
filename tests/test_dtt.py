@@ -164,6 +164,19 @@ def test_bm_rate_rejects_zero_length_sister_branches(tmp_path):
         main(command(tmp_path, ["--columns", "x"], data, tree))
 
 
+@pytest.mark.parametrize("scale", [2.0**-550, 2.0**520])
+def test_dtt_simulation_ratio_remains_finite_beyond_disparity_range(scale):
+    _, design = design_for()
+    factor = np.array([[1.0]])
+    expected = simulate_curves(design, factor, 35, seed=17)
+    scaled = factor * scale
+    actual = simulate_curves(design, scaled, 35, seed=17)
+    np.testing.assert_array_equal(actual, expected)
+    np.testing.assert_array_equal(
+        simulate_curves(design, scaled, 1, seed=17), expected[:1]
+    )
+
+
 def test_zero_simulations_do_not_inspect_unused_model_inputs():
     np.testing.assert_array_equal(simulate_curves(None, None, 0), np.empty(0))
 
