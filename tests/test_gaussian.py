@@ -106,6 +106,16 @@ def test_sparse_precision_helpers_reject_indefinite_matrices_before_solving():
         gaussian.sparse_precision_update_diagonal(sparse.eye(2), precision)
 
 
+def test_sparse_precision_diagonal_reuses_states_with_distinct_observation_loadings():
+    precision = np.array([[2.0, -0.3], [-0.3, 1.5]])
+    loading = np.array([[0.0, 2.0], [0.5, 0.0], [0.0, 0.0], [0.0, -1.5]])
+    expected = np.diag(loading @ np.linalg.solve(precision, loading.T))
+    observed = gaussian.sparse_precision_update_diagonal(
+        sparse.csr_matrix(loading), sparse.csc_matrix(precision)
+    )
+    np.testing.assert_allclose(observed, expected)
+
+
 @pytest.mark.parametrize("blocks", [1, 2])
 def test_sparse_inertia_check_rejects_zero_diagonal_pivoting(blocks):
     # This positive-diagonal matrix develops a zero Schur pivot. SuperLU can

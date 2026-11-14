@@ -849,9 +849,42 @@ def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.n
         if solver is None
         else solver
     )
-    n_rows = loading.shape[0]
-    if n_rows == 0:
+    if loading.shape[0] == 0:
         return np.empty(0, dtype=float)
+    if np.all(np.diff(loading.indptr) <= 1):
+        diagonal = _single_state_loading_diagonal(loading, solver)
+    else:
+        diagonal = _blocked_loading_diagonal(loading, solver)
+    scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
+    tolerance = np.finfo(float).eps * scale * max(1, loading.shape[1]) * 100.0
+    if np.any(diagonal < -tolerance):
+        raise np.linalg.LinAlgError(
+            "Sparse precision covariance has a negative marginal variance."
+        )
+    diagonal[diagonal < 0.0] = 0.0
+    return diagonal
+
+
+def _single_state_loading_diagonal(loading, solver):
+    # Observations that load the same latent state need the same precision solve.
+    states, inverse = np.unique(loading.indices, return_inverse=True)
+    if len(states) == loading.nnz:
+        return _blocked_loading_diagonal(loading, solver)
+    selectors = sparse.csr_matrix(
+        (np.ones(len(states)), (np.arange(len(states)), states)),
+        shape=(len(states), loading.shape[1]),
+    )
+    state_variances = _blocked_loading_diagonal(selectors, solver)
+    diagonal = np.zeros(loading.shape[0], dtype=float)
+    # Apply each observation's own loading to the shared state variance.
+    diagonal[np.diff(loading.indptr) == 1] = (
+        loading.data * state_variances[inverse] * loading.data
+    )
+    return diagonal
+
+
+def _blocked_loading_diagonal(loading, solver):
+    n_rows = loading.shape[0]
     # A 100k-element dense RHS/output block is under 1 MiB in float64.  Sparse
     # direct solvers need additional work arrays, so this conservative block
     # size keeps 5,000-tip exact diagonals well below dense-covariance memory.
@@ -868,13 +901,6 @@ def sparse_precision_update_diagonal(loading, precision, *, solver=None) -> np.n
         diagonal[start:stop] = np.asarray(
             block.multiply(np.asarray(solved).T).sum(axis=1)
         ).reshape(-1)
-    scale = max(1.0, float(np.max(np.abs(diagonal), initial=0.0)))
-    tolerance = np.finfo(float).eps * scale * max(1, loading.shape[1]) * 100.0
-    if np.any(diagonal < -tolerance):
-        raise np.linalg.LinAlgError(
-            "Sparse precision covariance has a negative marginal variance."
-        )
-    diagonal[diagonal < 0.0] = 0.0
     return diagonal
 
 
