@@ -126,6 +126,14 @@ Use `--scan-workers` to run candidate-branch fits on the observed counts
 concurrently after the common background fit. The observed scan and null
 bootstrap run in sequence, so their worker pools do not multiply each other.
 
+For long scans, `--bootstrap-checkpoint /path/to/bootstrap.json` saves each
+completed null refit. Rerun with the same file inputs, search settings, seed,
+number of draws and implementation to fill missing draws; worker counts may
+change. The observed fit is recomputed and checked before reuse. The original
+draw order is preserved even after out-of-order worker completions. This file
+is separate from the final TSV and model JSON and cannot replace an input or
+another output. Do not edit or share checkpoints between distinct analyses.
+
 Each candidate also has an independently fitted branch-burst alternative:
 the branch gets its own continuous DL rates without a genome pulse. The
 `burst_minus_event_aic` comparison is a conditional diagnostic, not a calibrated

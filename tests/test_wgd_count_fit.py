@@ -185,6 +185,49 @@ def test_bootstrap_refills_while_earlier_draw_is_pending(monkeypatch):
     assert progress == [1, 2, 3, 4]
 
 
+def test_parallel_bootstrap_only_refits_missing_checkpoints(monkeypatch):
+    from concurrent.futures import Future
+
+    import nwkit.wgd_count_fit as fitting
+
+    submitted, simulated, saved = [], [], []
+
+    class Pool:
+        def __init__(self, **_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, fn, i):
+            assert fn is fitting._bootstrap_scan_statistic
+            submitted.append(i)
+            future = Future()
+            future.set_result(i + 0.5)
+            return future
+
+    def draw():
+        i = len(simulated)
+        simulated.append(i)
+        return (i,)
+
+    monkeypatch.setattr(fitting, "ProcessPoolExecutor", Pool)
+    assert fitting._parallel_bootstrap(
+        draw,
+        6,
+        2,
+        None,
+        statistics=[None, 1.5, 2.5, None, 4.5, 5.5],
+        save=lambda x: saved.append(x.copy()),
+    ) == [0.5, 1.5, 2.5, 3.5, 4.5, 5.5]
+    assert submitted == [0, 3]
+    assert simulated == [0, 1, 2, 3]
+    assert [sum(v is not None for v in x) for x in saved] == [5, 6]
+
+
 def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
     data = model([[1, 1, 1]])
     with pytest.raises(ValueError, match="twice"):

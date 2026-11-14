@@ -20,6 +20,11 @@ from nwkit.util import (
     validate_outputs_do_not_replace_inputs,
     validate_unique_named_leaves,
 )
+from nwkit.wgd_count_checkpoint import (
+    checkpoint_identity,
+    checkpoint_inputs,
+    open_checkpoint,
+)
 from nwkit.wgd_count_fit import _burst_model, calibrate_scan, scan_counts
 from nwkit.wgd_count_model import CountLikelihood, CountTree, rate_categories
 
@@ -173,9 +178,16 @@ def _paths(args):
         if path not in (None, "-"):
             paths[role] = path
     validate_outputs_do_not_replace_inputs(
-        inputs, [(role, path) for role, path in paths.items()]
+        inputs,
+        [(role, path) for role, path in paths.items()]
+        + [("--bootstrap-checkpoint", getattr(args, "bootstrap_checkpoint", None))],
     )
-    validate_output_targets(paths.values())
+    checkpoint = getattr(args, "bootstrap_checkpoint", None)
+    if checkpoint in ("", "-"):
+        raise ValueError("--bootstrap-checkpoint requires a nonempty file path.")
+    validate_output_targets(
+        [*paths.values(), *([checkpoint] if checkpoint is not None else [])]
+    )
     return paths
 
 
@@ -200,6 +212,10 @@ def wgd_count_main(args):
         raise ValueError("--alpha must be in (0, 1).")
     if args.multiplicity < 2:
         raise ValueError("--multiplicity must be >= 2.")
+    checkpoint_path = getattr(args, "bootstrap_checkpoint", None)
+    if checkpoint_path is not None and not args.bootstrap:
+        raise ValueError("--bootstrap-checkpoint requires positive --bootstrap.")
+    checkpoint_source = checkpoint_inputs(args) if checkpoint_path is not None else None
     fractions = tuple(float(value) for value in args.event_fractions.split(","))
     shape = (
         None if args.family_gamma_shape == "none" else float(args.family_gamma_shape)
@@ -242,15 +258,22 @@ def wgd_count_main(args):
         def progress(done, total):
             print(f"WGM count bootstrap: {done}/{total}", file=sys.stderr)
 
-        result = calibrate_scan(
-            model,
-            result,
-            args.bootstrap,
-            args.seed,
-            progress=progress,
-            workers=workers,
-            **options,
+        identity = (
+            checkpoint_identity(args, result, checkpoint_source)
+            if checkpoint_path is not None
+            else None
         )
+        with open_checkpoint(checkpoint_path, identity, args.bootstrap) as checkpoint:
+            result = calibrate_scan(
+                model,
+                result,
+                args.bootstrap,
+                args.seed,
+                progress=progress,
+                workers=workers,
+                checkpoint=checkpoint,
+                **options,
+            )
     rows = []
     for rank, candidate in enumerate(result.candidates, 1):
         fit = candidate.event_fit

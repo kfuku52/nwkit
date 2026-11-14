@@ -489,31 +489,43 @@ def _bootstrap_scan_statistic(
     return max(candidate.improvement for candidate in result.candidates)
 
 
-def _parallel_bootstrap(draw_args, draws, workers, progress):
+def _parallel_bootstrap(
+    draw_args, draws, workers, progress, *, statistics=None, save=None
+):
     # Simulate in draw order, but refill each completed worker immediately.
     # The output order is independent of which fit is the slowest.
-    statistics = [0.0] * draws
+    statistics = [None] * draws if statistics is None else statistics
+    done = sum(value is not None for value in statistics)
+    last_missing = max(
+        (i for i, value in enumerate(statistics) if value is None), default=-1
+    )
+    remaining = ((i, draw_args()) for i in range(last_missing + 1))
+    remaining = ((i, args) for i, args in remaining if statistics[i] is None)
+    workers = min(workers, draws - done)
+    if not workers:
+        return statistics
     with ProcessPoolExecutor(
         max_workers=workers, mp_context=get_context("spawn")
     ) as pool:
         pending = {
-            pool.submit(_bootstrap_scan_statistic, *draw_args()): i
-            for i in range(workers)
+            pool.submit(_bootstrap_scan_statistic, *args): i
+            for i, args in (next(remaining) for _ in range(workers))
         }
-        next_draw, done = workers, 0
         try:
             while pending:
                 finished, _ = wait(pending, return_when=FIRST_COMPLETED)
                 for future in finished:
                     statistics[pending.pop(future)] = future.result()
                     done += 1
+                    if save is not None:
+                        save(statistics)
                     if progress is not None:
                         progress(done, draws)
-                    if next_draw < draws:
-                        pending[
-                            pool.submit(_bootstrap_scan_statistic, *draw_args())
-                        ] = next_draw
-                        next_draw += 1
+                for _ in finished:
+                    item = next(remaining, None)
+                    if item is not None:
+                        i, args = item
+                        pending[pool.submit(_bootstrap_scan_statistic, *args)] = i
         finally:
             for future in pending:
                 future.cancel()
@@ -533,6 +545,7 @@ def calibrate_scan(
     max_iterations: int = 200,
     progress=None,
     workers: int = 1,
+    checkpoint=None,
 ) -> CountScan:
     """Plug-in null bootstrap of the maximum statistic across searched branches.
 
@@ -579,19 +592,35 @@ def calibrate_scan(
             options,
         )
 
-    statistics: list[float] = []
-
-    def record(value):
-        statistics.append(value)
-        if progress is not None:
-            progress(len(statistics), draws)
+    statistics = [None] * draws if checkpoint is None else checkpoint.statistics
+    if len(statistics) != draws:
+        raise ValueError("Bootstrap checkpoint has the wrong number of draws.")
+    done = sum(value is not None for value in statistics)
+    if done and progress is not None:
+        progress(done, draws)
 
     workers = min(workers, draws)
     if workers == 1:
-        for _ in range(draws):
-            record(_bootstrap_scan_statistic(*draw_args()))
+        if done < draws:
+            last_missing = max(i for i, value in enumerate(statistics) if value is None)
+            for i in range(last_missing + 1):
+                args = draw_args()
+                if statistics[i] is None:
+                    statistics[i] = _bootstrap_scan_statistic(*args)
+                    if checkpoint is not None:
+                        checkpoint.save(statistics)
+                    done += 1
+                    if progress is not None:
+                        progress(done, draws)
     else:
-        statistics = _parallel_bootstrap(draw_args, draws, workers, progress)
+        statistics = _parallel_bootstrap(
+            draw_args,
+            draws,
+            workers,
+            progress,
+            statistics=statistics,
+            save=None if checkpoint is None else checkpoint.save,
+        )
     candidates = []
     for candidate in observed.candidates:
         exceedances = sum(value >= candidate.improvement - 1e-9 for value in statistics)

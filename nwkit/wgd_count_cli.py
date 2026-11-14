@@ -81,6 +81,12 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "Concurrent null refits; use one BLAS thread per worker (default 1).",
         ),
         (
+            "bootstrap-checkpoint",
+            None,
+            str,
+            "Atomically save completed null refits and resume with identical inputs and settings.",
+        ),
+        (
             "alpha",
             0.05,
             float,

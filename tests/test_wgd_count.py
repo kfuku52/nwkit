@@ -154,6 +154,70 @@ def test_real_bootstrap_cli_respects_seed_and_search(tmp_path):
     assert table.count_support.iloc[0] == "background_compatible"
 
 
+def test_real_bootstrap_checkpoint_resumes_holes_and_matches_outputs(
+    tmp_path, monkeypatch
+):
+    import nwkit.wgd_count_fit as fitting
+    from nwkit.wgd_count_checkpoint import _statistics_digest
+
+    tree, counts = inputs(tmp_path)
+    checkpoint = tmp_path / "bootstrap.json"
+    first, second = tmp_path / "first.tsv", tmp_path / "second.tsv"
+    first_model, second_model = tmp_path / "first.json", tmp_path / "second.json"
+    args = command(tree, counts) + ["--bootstrap", "3", "--seed", "815"]
+    options = ["--bootstrap-checkpoint", str(checkpoint)]
+    main(args + options + ["-o", str(first), "--model-out", str(first_model)])
+    previous = json.loads(checkpoint.read_text())
+    expected = list(previous["statistics"])
+    assert len(expected) == 3 and all(value is not None for value in expected)
+    previous["statistics"][1] = None
+    previous["statistics_sha256"] = _statistics_digest(previous["statistics"])
+    checkpoint.write_text(json.dumps(previous))
+    calls = []
+    refit = fitting._bootstrap_scan_statistic
+
+    def record(*args):
+        calls.append(args[1])
+        return refit(*args)
+
+    monkeypatch.setattr(fitting, "_bootstrap_scan_statistic", record)
+    main(args + options + ["-o", str(second), "--model-out", str(second_model)])
+    assert len(calls) == 1
+    assert json.loads(checkpoint.read_text())["statistics"] == expected
+    assert first.read_bytes() == second.read_bytes()
+    assert first_model.read_bytes() == second_model.read_bytes()
+    corrupted = json.loads(checkpoint.read_text())
+    corrupted["statistics"][0] += 1
+    checkpoint.write_text(json.dumps(corrupted))
+    with pytest.raises(ValueError, match="checksum does not match"):
+        main(args + options + ["-o", str(second)])
+    previous["statistics"][0] = -1
+    checkpoint.write_text(json.dumps(previous))
+    with pytest.raises(ValueError, match="invalid statistics"):
+        main(args + options + ["-o", str(second)])
+    with pytest.raises(ValueError, match="does not match"):
+        main(command(tree, counts) + ["--bootstrap", "3", "--seed", "816", *options])
+
+
+def test_bootstrap_checkpoint_has_distinct_file_inputs_and_outputs(tmp_path):
+    tree, counts = inputs(tmp_path)
+    with pytest.raises(ValueError, match="positive --bootstrap"):
+        main(
+            command(tree, counts) + ["--bootstrap-checkpoint", str(tmp_path / "b.json")]
+        )
+    with pytest.raises(ValueError, match="not STDIN"):
+        main(
+            command(tree, "-")
+            + ["--bootstrap", "1", "--bootstrap-checkpoint", str(tmp_path / "b.json")]
+        )
+    for path in (tree, counts):
+        with pytest.raises(ValueError):
+            main(
+                command(tree, counts)
+                + ["--bootstrap", "1", "--bootstrap-checkpoint", str(path)]
+            )
+
+
 def test_tip_and_family_labels_remain_literal_and_missing_is_explicit(tmp_path):
     path = tmp_path / "counts.tsv"
     path.write_text(
