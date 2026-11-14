@@ -40,6 +40,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   to avoid overflowing statistics that are finite in the original units.
 - Fit shared MV-OU attraction in normalized time units so the initialization
   and search remain finite under extreme branch-length rescaling.
+- Normalize branch times when computing complete-case MV-BM contrasts so
+  branch rescaling preserves the likelihood and ancestral marginals.
 - Fit diagonal MV-OU with row-scaled diffusion so the stationary covariance
   and representable diffusion remain finite at extreme attraction rates.
 - Fit shared and regime-specific Brownian directional drift in normalized

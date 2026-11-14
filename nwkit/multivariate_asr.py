@@ -99,6 +99,16 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
     dimension = len(next(value for value in vectors.values() if value is not None))
     local = [None] * len(parents)
     num_observed = 0
+    longest = max(lengths)
+    time_exponent = math.frexp(longest)[1] - 1 if longest else 0
+    scaled_lengths = [math.ldexp(length, -time_exponent) for length in lengths]
+    if any(
+        scaled_length == 0.0 < length
+        for scaled_length, length in zip(scaled_lengths, lengths, strict=True)
+    ):
+        time_exponent = 0
+    else:
+        lengths = scaled_lengths
     for leaf in tree.leaves():
         value = vectors.get(str(leaf.name))
         if value is None:
@@ -145,7 +155,9 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
             left_weight = child_variance / total
             right_weight = variance / total
             mean = left_weight * mean + right_weight * child_mean
-            variance = variance * child_variance / total
+            variance = min(variance, child_variance) * (
+                max(variance, child_variance) / total
+            )
         inside_mean[group], inside_variance[group] = mean, variance
     if inside_mean[0] is None:
         raise ValueError("MV-BM flat root prior requires observed tips.")
@@ -158,6 +170,7 @@ def _independent_contrasts(tree, vectors, *, tree_validated=False):
         math.fsum(log_variances),
         num_observed,
         sum(value is not None for value in local),
+        time_exponent,
     )
 
 
@@ -252,8 +265,8 @@ def compute_mvbm_marginals(
         )
     vectors = _validated_vectors(values_by_leaf, trait_names)
     scaled, exponents = _scaled_vectors(vectors, trait_names)
-    contrasts, log_variance, num_observed, num_effective = _independent_contrasts(
-        tree, scaled, tree_validated=_tree_validated
+    contrasts, log_variance, num_observed, num_effective, time_exponent = (
+        _independent_contrasts(tree, scaled, tree_validated=_tree_validated)
     )
     residual_df = len(contrasts)
     if residual_df == 0:
@@ -262,8 +275,9 @@ def compute_mvbm_marginals(
         )
     sigma_scaled = contrasts.T @ contrasts / residual_df
     sigma_scaled = (sigma_scaled + sigma_scaled.T) / 2.0
-    scales = np.asarray([math.ldexp(1.0, int(value)) for value in exponents])
-    sigma = sigma_scaled * scales[:, None] * scales[None, :]
+    sigma = np.ldexp(
+        sigma_scaled, exponents[:, None] + exponents[None, :] - time_exponent
+    )
     if np.any(~np.isfinite(sigma)):
         raise ValueError(
             "MV-BM covariance exceeds floating-point range; rescale units."

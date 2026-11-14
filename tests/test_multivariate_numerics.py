@@ -224,19 +224,27 @@ def test_diagonal_ou_with_extreme_fixed_attraction_has_finite_diffusion():
     )
 
 
-def test_fast_bm_rank_and_likelihood_are_time_unit_invariant():
-    fits = []
-    for scale in (1.0, 1e16):
-        current = tree()
-        for node in current.traverse():
-            if not node.is_root:
-                node.dist *= scale
-        _, fit = compute_mvbm_marginals(current, VALUES, ("x", "y"))
-        assert fit.sigma_rank == 2
-        fits.append(fit)
-    assert fits[0].restricted_log_likelihood == pytest.approx(
-        fits[1].restricted_log_likelihood, abs=1e-9
+@pytest.mark.parametrize("scale", [1e-180, 1e16, 1e180])
+def test_fast_bm_rank_and_likelihood_are_time_unit_invariant(scale):
+    current = tree()
+    expected, baseline = compute_mvbm_marginals(current, VALUES, ("x", "y"))
+    for node in current.traverse():
+        if not node.is_root:
+            node.dist *= scale
+    with np.errstate(over="raise", invalid="raise"):
+        posterior, fit = compute_mvbm_marginals(current, VALUES, ("x", "y"))
+    assert fit.sigma_rank == baseline.sigma_rank == 2
+    assert fit.restricted_log_likelihood == pytest.approx(
+        baseline.restricted_log_likelihood, abs=1e-9
     )
+    np.testing.assert_allclose(fit.sigma * scale, baseline.sigma)
+    for node in current.traverse():
+        np.testing.assert_allclose(
+            posterior[node].mean, expected[node].mean, atol=1e-12
+        )
+        np.testing.assert_allclose(
+            posterior[node].covariance, expected[node].covariance
+        )
 
 
 @pytest.mark.parametrize("model", ["MV-BM", "MV-OU", "MV-OU-DIAG"])
