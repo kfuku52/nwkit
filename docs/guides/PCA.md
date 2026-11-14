@@ -39,7 +39,9 @@ Rooted polytomies and non-ultrametric trees are supported under the shared
 `--input-rooted` policy. All original non-root branches must have finite,
 nonnegative lengths. The retained tree starts at the complete tips' MRCA,
 excluding any common stem. Tip covariance must be positive definite under the
-selected model; singular matrices are not repaired with jitter.
+selected model. Free-lambda fits exclude singular trial covariances, including
+the BM endpoint when zero-length terminal branches make it singular. If the
+profile likelihood diverges at that endpoint, there is no finite optimum.
 
 This command treats complete tip observations as exact. Sampling SEs, unknown
 within-species covariance, multiple imputation and uncertainty in estimated

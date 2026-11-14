@@ -67,6 +67,36 @@ def _likelihood_from_white(factor, whitened, n, p):
     return -0.5 * (n * p * (np.log(2 * np.pi) + 1) + p * logdet_tree + n * logdet_trait)
 
 
+def _check_singular_lambda_limit(covariance, diagonal, values):
+    """Reject a likelihood that diverges as lambda approaches one."""
+    sd = np.sqrt(diagonal)
+    correlation = covariance / sd[:, None] / sd[None, :]
+    eigenvalues, eigenvectors = np.linalg.eigh(correlation)
+    n, p = values.shape
+    epsilon = np.finfo(float).eps * n
+    tolerance = epsilon * eigenvalues[-1]
+    if eigenvalues[0] < -tolerance:
+        raise ValueError("PCA Brownian covariance must be positive semidefinite.")
+    null = eigenvectors[:, eigenvalues <= tolerance]
+    if not null.shape[1]:
+        return
+    # In null directions, C(lambda) has eigenvalues proportional to 1-lambda.
+    # Only independent trait residuals in those directions inflate the profiled
+    # trait determinant. The mean can absorb the projected intercept direction.
+    whitened = values / sd[:, None]
+    contrasts = null.T @ whitened
+    inverse_sd = 1 / sd
+    intercept = null.T @ inverse_sd
+    length = np.linalg.norm(intercept)
+    if length > epsilon * np.linalg.norm(inverse_sd):
+        direction = intercept / length
+        contrasts -= np.outer(direction, direction @ contrasts)
+    singular = np.linalg.svd(contrasts, compute_uv=False)
+    rank = np.count_nonzero(singular > epsilon * np.linalg.norm(whitened))
+    if n * rank < p * null.shape[1]:
+        raise ValueError("PCA lambda likelihood is unbounded near singular lambda=1.")
+
+
 def _lambda(covariance, values, model, fixed):
     if model not in {"BM", "LAMBDA"}:
         raise ValueError("PCA model must be BM or LAMBDA.")
@@ -87,15 +117,37 @@ def _lambda(covariance, values, model, fixed):
     # different measurement units as numerical rank loss in its likelihood.
     differences = _finite(values - values[0], "Trait range")
     scaled = differences / np.max(np.abs(differences), axis=0)
+    singular_endpoint = False
 
     def objective(value):
+        nonlocal singular_endpoint
         np.multiply(covariance, value, out=trial)
         np.fill_diagonal(trial, diagonal)
-        return -_profile_likelihood(trial, scaled)
+        try:
+            return -_profile_likelihood(trial, scaled)
+        except np.linalg.LinAlgError:
+            # A zero-length terminal split can make the BM endpoint singular
+            # while the diagonal contribution keeps interior fits well defined.
+            singular_endpoint |= value == 1
+            return float("inf")
 
     fit = global_bounded_scalar_minimize(objective, (0, 1))
     if not fit.success or not np.isfinite(fit.fun):
         raise ValueError("PCA lambda optimization failed.")
+    if singular_endpoint:
+        _check_singular_lambda_limit(covariance, diagonal, scaled)
+
+        # Search the endpoint on a log distance scale so a finite optimum
+        # closer to one than the linear search tolerance can still be found.
+        def endpoint_objective(log_distance):
+            return objective(-np.expm1(log_distance))
+
+        near_one = np.nextafter(1.0, 0.0)
+        endpoint = global_bounded_scalar_minimize(
+            endpoint_objective, (np.log(1 - near_one), np.log(1 / 16))
+        )
+        if endpoint.success and endpoint.fun < fit.fun:
+            return float(-np.expm1(endpoint.x)), True
     return fit.x, True
 
 
