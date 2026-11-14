@@ -209,12 +209,12 @@ def fit_brownian(covariance, values):
 
 def _simulate_one(design, factor, seed):
     rng = np.random.default_rng(seed)
-    values = np.zeros((len(design.parents), factor.shape[0]))
-    innovations = rng.standard_normal((len(values) - 1, factor.shape[0])) @ factor.T
+    values = np.empty((len(design.parents), factor.shape[0]))
+    values[0] = 0.0
+    values[1:] = rng.standard_normal((len(values) - 1, factor.shape[0])) @ factor.T
     for node in range(1, len(values)):
         values[node] = (
-            values[design.parents[node]]
-            + np.sqrt(design.lengths[node]) * innovations[node - 1]
+            values[design.parents[node]] + np.sqrt(design.lengths[node]) * values[node]
         )
     return dtt_curve(design, _tip_states(design, values))
 
@@ -291,7 +291,7 @@ def _simulate_chunk(payload):
         (len(seeds), len(design.times)),
         dtype=np.result_type(design.weights.dtype, np.float64),
     )
-    # Include products, moment/denominator arrays and temporary curve storage.
+    # Include simulation products, moment arrays and temporary curves.
     # Large trees/trait dimensions retain the single-replica workspace.
     replica_bytes = 8 * (nodes * (3 * traits + 6) + 2 * len(design.times))
     batch = max(1, min(32, _SIMULATION_WORKSPACE_BYTES // max(1, replica_bytes)))
@@ -310,19 +310,15 @@ def _simulate_chunk(payload):
     for start in range(0, len(seeds), batch):
         selected = seeds[start : start + batch]
         replicas = len(selected)
-        innovations = np.empty((nodes - 1, replicas, traits))
+        values = np.empty((nodes, replicas, traits))
+        values[0] = 0.0
         for column, seed in enumerate(selected):
             rng = np.random.default_rng(seed)
-            innovations[:, column, :] = (
-                rng.standard_normal((nodes - 1, traits)) @ factor.T
-            )
-        values = np.zeros((nodes, replicas, traits))
+            values[1:, column, :] = rng.standard_normal((nodes - 1, traits)) @ factor.T
         for node in range(1, nodes):
             values[node] = (
-                values[design.parents[node]]
-                + square_roots[node] * innovations[node - 1]
+                values[design.parents[node]] + square_roots[node] * values[node]
             )
-        del innovations
         disparities = _batched_disparities(design, values, counts)
         del values
         for column in range(replicas):
