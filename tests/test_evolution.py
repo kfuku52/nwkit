@@ -169,6 +169,27 @@ def test_rate_change_covariance_integrates_exponential_rate(model, rate_change):
 
 
 @pytest.mark.parametrize(
+    ("model", "tree_text", "rate", "expected"),
+    [
+        ("acdc", "(A:7.2e-298,B:1e-299)R;", 1e300, math.exp(720 - math.log(1e300))),
+        (
+            "eb",
+            "((A:1e300,B:1e300)I:7.4e302,C:1e300)R;",
+            -1e-300,
+            math.exp(-740 - math.log(1e-300)) * -math.expm1(-1.0),
+        ),
+        ("acdc", "(A:1e-300,B:2e-300)R;", 1e-300, 1e-300),
+    ],
+)
+def test_rate_change_retains_finite_branch_variance_at_extreme_scales(
+    model, tree_text, rate, expected
+):
+    tree = _tree(tree_text)
+    edges = transformed_edge_variances(tree, model=model, parameter=rate)
+    assert edges[tree["A"]] == pytest.approx(expected, rel=2e-13, abs=0.0)
+
+
+@pytest.mark.parametrize(
     "model,parameter",
     [
         ("lambda", 1.0),

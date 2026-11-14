@@ -651,12 +651,37 @@ def exponential_rate_edge_variance(start: float, length: float, rate: float) -> 
         return length
     start_exponent = rate * start
     edge_exponent = rate * length
-    if not math.isfinite(start_exponent) or not math.isfinite(edge_exponent):
-        raise ValueError(
-            "Rate change multiplied by tree depth exceeds floating-point range."
+    # Use the direct integral while its numerator is comfortably representable.
+    # On extreme scales the numerator can round to zero or infinity even when
+    # dividing by the rate would give a normal branch variance.
+    if abs(start_exponent) <= 700.0 and 1e-8 <= abs(edge_exponent) <= 700.0:
+        numerator = math.exp(start_exponent) * math.expm1(edge_exponent)
+        if math.isfinite(numerator) and abs(numerator) >= 2.0**-1022:
+            variance = numerator / rate
+            if math.isfinite(variance) and variance > 0.0:
+                return variance
+    if abs(edge_exponent) < 1e-8:
+        factor = 1.0 + 0.5 * edge_exponent
+        if abs(start_exponent) <= 700.0:
+            variance = (length * factor) * math.exp(start_exponent)
+            if math.isfinite(variance) and variance > 0.0:
+                return variance
+        log_variance = start_exponent + math.log(length) + math.log(factor)
+    elif edge_exponent > 1.0:
+        log_variance = (
+            start_exponent
+            + edge_exponent
+            + math.log1p(-math.exp(-edge_exponent))
+            - math.log(rate)
+        )
+    else:
+        log_variance = (
+            start_exponent
+            + math.log(abs(math.expm1(edge_exponent)))
+            - math.log(abs(rate))
         )
     try:
-        variance = math.exp(start_exponent) * math.expm1(edge_exponent) / rate
+        variance = math.exp(log_variance)
     except OverflowError as exc:
         raise ValueError(
             "A rate-change branch variance exceeds floating-point range."

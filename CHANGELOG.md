@@ -36,6 +36,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   branch-length units.
 - Compute OU contrast branch variances directly so short branches and weak
   attraction retain their Brownian-limit behavior.
+- Keep EB and ACDC branch variances finite when an intermediate exponential
+  overflows or underflows at an otherwise representable rate and tree scale.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.
