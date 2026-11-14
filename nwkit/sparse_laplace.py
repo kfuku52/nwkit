@@ -212,16 +212,26 @@ def factor_sparse_nonsingular(
     return SparsePositiveDefiniteFactor(factor, logdet)
 
 
+def _expand_sparse_component(matrix, identity, *, format, copy=False):
+    if identity.shape == (1, 1):
+        return matrix.asformat(format, copy=copy)
+    return sparse.kron(matrix, identity, format=format)
+
+
+def _combine_sparse_blocks(blocks, combine, *, format):
+    return blocks[0] if len(blocks) == 1 else combine(blocks, format=format)
+
+
 def _combine_sampling_factors(components, identity, include_sampling_factor):
     if not include_sampling_factor:
         return None
     factors = [
-        sparse.kron(
+        _expand_sparse_component(
             model.precision_factor() / np.sqrt(variance), identity, format="csr"
         )
         for variance, model in components.values()
     ]
-    return sparse.block_diag(factors, format="csr")
+    return _combine_sparse_blocks(factors, sparse.block_diag, format="csr")
 
 
 def combine_sparse_covariance_models(
@@ -241,8 +251,12 @@ def combine_sparse_covariance_models(
     for name, (variance, model) in components.items():
         if not np.isfinite(variance) or variance <= 0.0:
             raise ValueError("Sparse covariance-component variances must be positive.")
-        precision = sparse.kron(model.precision / variance, identity, format="csc")
-        loading = sparse.kron(model.tip_loading, identity, format="csr")
+        precision = _expand_sparse_component(
+            model.precision / variance, identity, format="csc"
+        )
+        loading = _expand_sparse_component(
+            model.tip_loading, identity, format="csr", copy=True
+        )
         width = precision.shape[0]
         component_slices[name] = slice(position, position + width)
         component_loadings[name] = loading
@@ -255,8 +269,8 @@ def combine_sparse_covariance_models(
     if not precisions:
         raise ValueError("At least one sparse covariance component is required.")
     return SparseLatentModel(
-        precision=sparse.block_diag(precisions, format="csc"),
-        loading=sparse.hstack(loadings, format="csr"),
+        precision=_combine_sparse_blocks(precisions, sparse.block_diag, format="csc"),
+        loading=_combine_sparse_blocks(loadings, sparse.hstack, format="csr"),
         sampling_precision_factor=_combine_sampling_factors(
             components, identity, include_sampling_factor
         ),
