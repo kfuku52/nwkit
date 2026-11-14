@@ -12,7 +12,11 @@ from nwkit.gaussian_inference import (
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
 )
-from nwkit.gaussian_tree import GaussianRootPrior, GaussianTreeProcess, ou_transition
+from nwkit.gaussian_tree import (
+    GaussianRootPrior,
+    GaussianTreeProcess,
+    ou_branch_transition,
+)
 from nwkit.optimization import MultistartResult, deterministic_multistart
 from nwkit.ou_asr import default_alpha_bounds
 
@@ -59,7 +63,7 @@ def _finite(value, label, *, positive=False):
 
 def _ou_process(tree, alpha, sigma2, theta, root_prior, root_mean, root_variance):
     transitions = {
-        node: ou_transition(float(node.dist), alpha, sigma2, theta)[0]
+        node: ou_branch_transition(float(node.dist), alpha, sigma2, theta)
         for node in tree.traverse()
         if not node.is_root
     }

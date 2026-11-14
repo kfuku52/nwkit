@@ -22,8 +22,8 @@ from nwkit.gaussian_inference import (
 from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTreeProcess,
+    ou_branch_transition,
     ou_stationary_variance,
-    ou_transition,
 )
 from nwkit.optimization import MultistartResult, deterministic_multistart
 from nwkit.ou_asr import compute_ou_marginals, default_alpha_bounds
@@ -169,13 +169,12 @@ def build_regime_ou_process(
             raise ValueError(
                 "OU regime branch lengths must be non-negative and finite."
             )
-        transition, _ = ou_transition(
+        transitions[node] = ou_branch_transition(
             length,
             alpha_values[regime],
             sigma_values[regime],
             theta_values[regime],
         )
-        transitions[node] = transition
     root_regime = regime_assignment.root_regime
     root_variance = ou_stationary_variance(
         alpha_values[root_regime], sigma_values[root_regime]

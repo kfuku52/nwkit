@@ -61,6 +61,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.
 - Preserve OU branch innovations and mean shifts when attraction times length
   underflows before multiplication by the stationary variance or optimum.
+- Compute finite OU branch innovations without a representable stationary
+  variance when the fitted root convention supplies its own variance.
 - Preserve representable affine-Gaussian branch variances when squaring a
   transition coefficient alone would overflow or underflow.
 - Initialize nonstationary and regime OU attraction from the midpoint of

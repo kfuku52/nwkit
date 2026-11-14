@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 
+from nwkit.continuous_asr_process import fitted_scalar_process
+from nwkit.gaussian_inference import condition_gaussian_tree
 from nwkit.general_ou_asr import compute_general_ou_marginals
 from nwkit.util import read_tree
 
@@ -51,6 +53,27 @@ def test_nonstationary_root_parameters_can_be_estimated():
     assert fit.sigma2_estimated
     assert fit.theta_estimated
     assert fit.log_likelihood is not None
+
+
+def test_fixed_root_ou_has_finite_brownian_limit_without_stationary_variance():
+    tree = tree_from("((A:0.5,B:1.1)I:0.4,C:1.2,D:1.7)R;")
+    values = {"A": -1.0, "B": 0.4, "C": 0.7, "D": 1.6}
+    posterior, fit = compute_general_ou_marginals(
+        tree,
+        values,
+        root_prior="fixed",
+        root_mean=0.0,
+        alpha=1e-310,
+        sigma2=0.8,
+        theta=0.1,
+    )
+    process = fitted_scalar_process(tree, "OU", fit)
+    reconstructed = condition_gaussian_tree(process, values)
+    for node in tree.traverse():
+        assert reconstructed.marginals[node] == posterior[node]
+        if not node.is_root:
+            assert process.transitions[node].variance == pytest.approx(0.8 * node.dist)
+    assert fit.log_likelihood == reconstructed.log_likelihood
 
 
 @pytest.mark.parametrize("scale", [1e-200, 1e200])

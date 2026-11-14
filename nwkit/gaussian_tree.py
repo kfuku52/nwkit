@@ -659,6 +659,45 @@ def ou_transition(
     )
 
 
+def ou_branch_transition(
+    length: float, alpha: float, variance_rate: float = 1.0, optimum: float = 0.0
+) -> GaussianTransition:
+    """Return the OU transition without requiring a representable stationary root."""
+
+    if not all(
+        math.isfinite(value) for value in (length, alpha, variance_rate, optimum)
+    ):
+        raise ValueError("OU transition parameters must be finite.")
+    if length < 0.0 or alpha <= 0.0 or variance_rate < 0.0:
+        raise ValueError(
+            "OU requires non-negative lengths and diffusion, and positive alpha."
+        )
+    root_variance = ou_stationary_variance(alpha, variance_rate)
+    if 0.0 < root_variance < math.inf or variance_rate == 0.0:
+        return ou_transition_from_root_variance(length, alpha, root_variance, optimum)
+    if length == 0.0:
+        return GaussianTransition(1.0, 0.0, 0.0)
+    exponent = alpha * length
+    doubled = 2.0 * exponent
+    # expm1(-x)/(-x) tends to one as x approaches zero. Compute the finite
+    # interval innovation directly before considering a stationary limit.
+    if math.isfinite(doubled):
+        correction = -math.expm1(-doubled) / doubled if doubled else 1.0
+        innovation = variance_rate * (length * correction)
+    else:
+        innovation = root_variance
+    if not math.isfinite(innovation):
+        raise ValueError("The OU branch variance exceeds floating-point range.")
+    if innovation == 0.0:
+        raise ValueError("A positive OU branch variance underflowed.")
+    intercept = (
+        (-math.expm1(-exponent)) * optimum
+        if exponent >= 2.0**-1022
+        else _small_ou_increment(optimum, alpha, length, 0)
+    )
+    return GaussianTransition(math.exp(-exponent), intercept, innovation)
+
+
 def ou_transition_from_root_variance(
     length: float,
     alpha: float,
