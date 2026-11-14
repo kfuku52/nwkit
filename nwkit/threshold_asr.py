@@ -249,14 +249,16 @@ def _initialize_values(compiled, constraints, thresholds):
         for category in allowed:
             lower, upper = _category_interval(int(category), thresholds)
             if math.isfinite(lower) and math.isfinite(upper):
-                candidate = (lower + upper) / 2.0
+                candidate = 0.5 * lower + 0.5 * upper
             elif math.isfinite(lower):
                 candidate = lower + 1.0
             elif math.isfinite(upper):
                 candidate = upper - 1.0
             else:
                 candidate = 0.0
-            candidates.append(candidate)
+            candidates.append(
+                min(upper, max(candidate, math.nextafter(lower, math.inf)))
+            )
         values[index] = min(candidates, key=abs)
     return values
 

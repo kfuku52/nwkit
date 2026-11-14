@@ -4,7 +4,9 @@ import pytest
 from scipy.stats import truncnorm
 
 from nwkit.cli import main
+from nwkit.compiled_tree import CompiledTree
 from nwkit.threshold_asr import (
+    _initialize_values,
     _rhat_and_ess,
     _truncated_draw,
     _truncated_quantile,
@@ -48,6 +50,18 @@ def test_threshold_process_is_identified_unit_brownian():
     assert process.root.variance == 1.0
     assert process.transitions[tree["A"]].variance == 1.0
     assert process.transitions[tree["B"]].variance == 2.0
+
+
+def test_liability_initialization_stays_inside_extreme_finite_thresholds():
+    tree = tree_from("(A:1,B:2)R;")
+    compiled = CompiledTree.from_tree(tree)
+    index = compiled.index_by_node[tree["A"]]
+    smallest_positive = np.nextafter(0.0, 1.0)
+    for lower, upper in ((1e308, 1.7e308), (0.0, smallest_positive)):
+        values = _initialize_values(
+            compiled, {index: np.array([1])}, np.array([lower, upper])
+        )
+        assert lower < values[index] <= upper
 
 
 def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
