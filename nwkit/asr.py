@@ -357,11 +357,7 @@ def _transition_matrix(rate_matrix, branch_length):
     branch_length = _validated_branch_length(branch_length)
     if branch_length == 0.0:
         return np.eye(rate_matrix.shape[0], dtype=float)
-    er_rate = _get_er_rate_from_matrix(rate_matrix)
-    if er_rate is not None:
-        return _er_transition_matrix(branch_length, er_rate, rate_matrix.shape[0])
-    prepared = _prepare_generator_exponential(rate_matrix)
-    return _transition_from_generator(rate_matrix, branch_length, prepared)
+    return _mk_transition_evaluator(rate_matrix)(branch_length)
 
 
 def _validated_branch_length(branch_length):
@@ -656,7 +652,7 @@ def _compute_log_inside_likelihoods(
     log_scales = dict()
     child_terms: dict[Any, Any] = {}
     transition_matrices = dict()
-    transition_matrix_cache = dict()
+    prepared_generators = {}
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             inside[node] = (
@@ -672,22 +668,13 @@ def _compute_log_inside_likelihoods(
         if collect_marginal_inputs:
             child_terms[node] = dict()
         for child in node.get_children():
-            branch_length = float(child.dist)
-            child_rate_matrix = (
-                rate_matrix[child] if isinstance(rate_matrix, dict) else rate_matrix
-            )
             if fixed_transition_matrices is not None:
                 matrix = fixed_transition_matrices[child]
                 log_matrix = _log_probabilities(matrix)
             else:
-                cache_key = (id(child_rate_matrix), branch_length)
-                if cache_key not in transition_matrix_cache:
-                    matrix = _transition_matrix(child_rate_matrix, branch_length)
-                    transition_matrix_cache[cache_key] = (
-                        matrix,
-                        _log_probabilities(matrix),
-                    )
-                matrix, log_matrix = transition_matrix_cache[cache_key]
+                matrix, log_matrix = _mk_regime_edge_transition(
+                    rate_matrix[child], child.dist, prepared_generators
+                )
             child_inside = (
                 inside[child] if collect_marginal_inputs else inside.pop(child)
             )
@@ -707,6 +694,20 @@ def _compute_log_inside_likelihoods(
         inside[node] = likelihood - scale
         log_scales[node] = log_scale + scale
     return inside, log_scales, child_terms, transition_matrices
+
+
+def _mk_regime_edge_transition(matrix, edge_length, prepared_generators):
+    key = id(matrix)
+    if key not in prepared_generators:
+        prepared_generators[key] = (_mk_transition_evaluator(matrix), {})
+    transition_for_length, transitions = prepared_generators[key]
+    length = _validated_branch_length(edge_length)
+    if length not in transitions:
+        transition = (
+            np.eye(matrix.shape[0]) if length == 0.0 else transition_for_length(length)
+        )
+        transitions[length] = (transition, _log_probabilities(transition))
+    return transitions[length]
 
 
 def _log_likelihood(
@@ -729,6 +730,13 @@ def _log_likelihood(
         prepared_branches=prepared_branches,
     )
     return _mk_root_log_likelihood(root_prior, inside[tree], log_scales[tree])
+
+
+def _mk_log_tip_probabilities(tree, likelihood_by_leaf):
+    return {
+        node: _log_probabilities(likelihood_by_leaf[node.name].astype(float))
+        for node in tree.leaves()
+    }
 
 
 def _mk_root_log_likelihood(root_prior, inside, log_scale):
@@ -1047,10 +1055,7 @@ def _fit_parametric_rate_matrix(
         rate_design,
         prior_for,
     )
-    prepared_leaves = {
-        node: _log_probabilities(likelihood_by_leaf[node.name].astype(float))
-        for node in tree.leaves()
-    }
+    prepared_leaves = _mk_log_tip_probabilities(tree, likelihood_by_leaf)
     prepared_branches = _mk_branch_lengths(tree)
 
     def objective(log_rates):
@@ -1273,6 +1278,12 @@ def _fit_regime_rate_matrices(
     ]
     lower_logs = np.log([item[0] for item in bounds])
     upper_logs = np.log([item[1] for item in bounds])
+    prepared_leaves = _mk_log_tip_probabilities(tree, likelihood_by_leaf)
+    edge_regimes = tuple(
+        (node, regime_assignment.by_node[node])
+        for node in tree.traverse()
+        if not node.is_root
+    )
 
     def matrices_for(parameters):
         by_regime = {}
@@ -1284,11 +1295,7 @@ def _fit_regime_rate_matrices(
                 parameters[start : start + per_regime],
                 transition_graph,
             )
-        by_node = {
-            node: by_regime[regime_assignment.by_node[node]]
-            for node in tree.traverse()
-            if not node.is_root
-        }
+        by_node = {node: by_regime[regime] for node, regime in edge_regimes}
         return by_regime, by_node
 
     def prior_for(by_regime):
@@ -1305,7 +1312,11 @@ def _fit_regime_rate_matrices(
             by_regime, by_node = matrices_for(parameters)
             current_prior = prior_for(by_regime)
             likelihood = _log_likelihood(
-                tree, likelihood_by_leaf, current_prior, by_node
+                tree,
+                likelihood_by_leaf,
+                current_prior,
+                by_node,
+                prepared_leaves=prepared_leaves,
             )
         except (ValueError, ArithmeticError):
             return 1e100
@@ -1540,36 +1551,43 @@ def _transition_matrices_for_tree(
 ):
     """Build each unique branch-length transition once for one generator."""
 
-    num_states = rate_matrix.shape[0]
-    er_rate = _get_er_rate_from_matrix(rate_matrix)
-    prepared = _prepare_generator_exponential(rate_matrix) if er_rate is None else None
+    transition_for_length = _mk_transition_evaluator(rate_matrix, time_multiplier)
     branches = (
         _mk_branch_lengths(tree) if prepared_branches is None else prepared_branches
     )
-    by_length = {0.0: np.eye(num_states, dtype=float)}
+    by_length = {0.0: np.eye(rate_matrix.shape[0], dtype=float)}
     by_node = {}
     for node, length in branches:
         if length not in by_length:
-            if er_rate is None:
-                by_length[length] = _transition_from_generator(
-                    rate_matrix, length, prepared, time_multiplier
-                )
-            elif time_multiplier == 1.0:
-                by_length[length] = _er_transition_matrix(length, er_rate, num_states)
-            else:
-                time, time_exponent = _mk_scaled_time(length, time_multiplier)
-                rate, rate_exponent = math.frexp(er_rate)
-                try:
-                    elapsed_rate = math.ldexp(
-                        time * rate, time_exponent + rate_exponent
-                    )
-                except OverflowError:
-                    elapsed_rate = math.inf
-                by_length[length] = _er_transition_from_elapsed_rate(
-                    elapsed_rate, num_states
-                )
+            by_length[length] = transition_for_length(length)
         by_node[node] = by_length[length]
     return by_node
+
+
+def _mk_transition_evaluator(matrix, time_multiplier=1.0):
+    num_states = matrix.shape[0]
+    er_rate = _get_er_rate_from_matrix(matrix)
+    if er_rate is None:
+        prepared = _prepare_generator_exponential(matrix)
+
+        def transition(length):
+            return _transition_from_generator(matrix, length, prepared, time_multiplier)
+
+        return transition
+    if time_multiplier == 1.0:
+        return lambda length: _er_transition_matrix(length, er_rate, num_states)
+
+    rate, rate_exponent = math.frexp(er_rate)
+
+    def scaled_transition(length):
+        time, time_exponent = _mk_scaled_time(length, time_multiplier)
+        try:
+            elapsed_rate = math.ldexp(time * rate, time_exponent + rate_exponent)
+        except OverflowError:
+            elapsed_rate = math.inf
+        return _er_transition_from_elapsed_rate(elapsed_rate, num_states)
+
+    return scaled_transition
 
 
 def _mixture_category_transitions(tree, matrix, rate, branches):
@@ -2296,13 +2314,23 @@ def compute_covarion_marginals(
             effective_rate_bounds=rate_bounds,
         )
 
+    prepared_leaves = _mk_log_tip_probabilities(tree, expanded_likelihoods)
+    prepared_branches = _mk_branch_lengths(tree)
+
     def objective(parameters):
         try:
             matrix, _ = matrix_for(parameters)
             prior = (
                 root_prior if root_prior_factory is None else root_prior_factory(matrix)
             )
-            likelihood = _log_likelihood(tree, expanded_likelihoods, prior, matrix)
+            likelihood = _log_likelihood(
+                tree,
+                expanded_likelihoods,
+                prior,
+                matrix,
+                prepared_leaves=prepared_leaves,
+                prepared_branches=prepared_branches,
+            )
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
         return -likelihood if math.isfinite(likelihood) else 1e100
