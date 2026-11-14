@@ -15,7 +15,12 @@ from nwkit.continuous_asr import (
     _observations_by_group,
     _tree_groups,
 )
-from nwkit.gaussian_tree import _mean_at_tiny_variance_ratio, ou_transition
+from nwkit.gaussian_tree import (
+    _mean_at_tiny_variance_ratio,
+    _propagated_variance,
+    _stationary_ou_variance,
+    ou_transition,
+)
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -398,7 +403,7 @@ def _profile_theta(data, alpha, sigma2, theta_reference):
                 theta_reference,
                 data.lengths[group],
             )
-    root_variance = sigma2 / (2.0 * alpha)
+    root_variance = _stationary_ou_variance(alpha, sigma2)
     result = _combine_affine(
         _AffineFactor(theta_reference, 1.0, root_variance), inside[0]
     )
@@ -422,7 +427,7 @@ def _predict_down(factor, alpha, sigma2, theta, length):
         return factor
     marginal = factor.marginal
     mean = decay * marginal.mean + intercept
-    variance = decay * decay * marginal.variance + innovation
+    variance = _propagated_variance(decay, marginal.variance, innovation)
     if not math.isfinite(mean) or not math.isfinite(variance) or variance <= 0.0:
         raise ValueError("An OU smoothing message is not finite and positive.")
     return _Factor(GaussianMarginal(mean, variance), factor.log_weight)
@@ -440,7 +445,7 @@ def _prune(data, alpha, sigma2, theta):
             upward[group] = _propagate_up(
                 factor, alpha, sigma2, theta, data.lengths[group]
             )
-    root_variance = sigma2 / (2.0 * alpha)
+    root_variance = _stationary_ou_variance(alpha, sigma2)
     posterior_root = _combine(
         _Factor(GaussianMarginal(theta, root_variance)), inside[0]
     )
@@ -450,7 +455,7 @@ def _prune(data, alpha, sigma2, theta):
 
 
 def _smooth(data, alpha, sigma2, theta, inside, upward):
-    root_variance = sigma2 / (2.0 * alpha)
+    root_variance = _stationary_ou_variance(alpha, sigma2)
     outside = [_Factor(None) for _ in data.parents]
     outside[0] = _Factor(GaussianMarginal(theta, root_variance))
     posterior = [None for _ in data.parents]

@@ -21,6 +21,17 @@ from nwkit.sparse_laplace import SparseCovarianceModel
 _COVARIANCE_WORKSPACE_BYTES = 4 * 1024**2
 
 
+def _propagated_variance(slope, variance, innovation):
+    squared = slope * slope
+    if squared < float_info.min or not math.isfinite(squared):
+        # Applying the slope to the variance first keeps the intermediate
+        # between the starting and ending magnitudes.
+        if variance == 0.0:
+            return innovation
+        return slope * (slope * variance) + innovation
+    return squared * variance + innovation
+
+
 def _fill_covariance_blocks(
     covariance, lca, requested, variances, loading, factors, stable
 ):
@@ -225,9 +236,8 @@ def _initial_sparse_state(process, required):
         transition = process.transitions[node]
         parent_state = state.state_by_node[node.up]
         parent_scale = state.state_scale_by_node[node.up]
-        state.marginal_variance[node] = (
-            transition.slope * transition.slope * state.marginal_variance[node.up]
-            + transition.variance
+        state.marginal_variance[node] = _propagated_variance(
+            transition.slope, state.marginal_variance[node.up], transition.variance
         )
         if transition.variance == 0.0:
             state.state_by_node[node] = parent_state
@@ -462,9 +472,8 @@ class GaussianTreeProcess:
                 continue
             transition = self.transitions[node]
             means[node] = transition.slope * means[node.up] + transition.intercept
-            variances[node] = (
-                transition.slope * transition.slope * variances[node.up]
-                + transition.variance
+            variances[node] = _propagated_variance(
+                transition.slope, variances[node.up], transition.variance
             )
             if not math.isfinite(means[node]) or not math.isfinite(variances[node]):
                 raise ValueError("Gaussian tree moments exceed floating-point range.")
@@ -496,10 +505,13 @@ class GaussianTreeProcess:
             parent = lca.ancestors[0][index]
             transition = self.transitions[node]
             slope = transition.slope
-            variances[index] = slope * slope * variances[parent] + transition.variance
             if unit_loadings:
+                variances[index] = variances[parent] + transition.variance
                 continue
-            cumulative_loading[index] = cumulative_loading[parent] * slope
+            variances[index] = _propagated_variance(
+                slope, float(variances[parent]), transition.variance
+            )
+            cumulative_loading[index] = float(cumulative_loading[parent]) * slope
             direct_loadings = direct_loadings and (
                 cumulative_loading[index] != 0.0
                 and math.isfinite(float(cumulative_loading[index]))
@@ -569,14 +581,14 @@ class GaussianTreeProcess:
                 assert ancestor_factor is not None
                 for first, first_index in enumerate(requested):
                     covariance[first, first] = variances[first_index]
-                    first_loading = cumulative_loading[first_index]
+                    first_loading = float(cumulative_loading[first_index])
                     for second in range(first + 1, len(nodes)):
                         second_index = requested[second]
                         ancestor = common_ancestor(first_index, second_index)
                         value = (
                             first_loading
-                            * cumulative_loading[second_index]
-                            * ancestor_factor[ancestor]
+                            * float(cumulative_loading[second_index])
+                            * float(ancestor_factor[ancestor])
                         )
                         if not math.isfinite(float(value)) or (
                             value == 0.0 and variances[ancestor] > 0.0
@@ -702,6 +714,13 @@ def _mean_at_tiny_variance_ratio(mean1, mean2, variance1, variance2):
     return mean1 + math.copysign(contribution, mean2)
 
 
+def _stationary_ou_variance(alpha, variance_rate):
+    divisor = 2.0 * alpha
+    if math.isfinite(divisor):
+        return variance_rate / divisor
+    return (variance_rate / alpha) / 2
+
+
 def ou_transition(
     length: float,
     alpha: float,
@@ -716,12 +735,7 @@ def ou_transition(
         raise ValueError("OU transition parameters must be finite.")
     if alpha <= 0.0 or variance_rate < 0.0:
         raise ValueError("OU requires non-negative variance and positive alpha.")
-    divisor = 2.0 * alpha
-    root_variance = (
-        variance_rate / divisor
-        if math.isfinite(divisor)
-        else (variance_rate / alpha) / 2
-    )
+    root_variance = _stationary_ou_variance(alpha, variance_rate)
     if not math.isfinite(root_variance):
         raise ValueError("The stationary OU variance exceeds floating-point range.")
     return (

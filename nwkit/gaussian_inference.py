@@ -14,7 +14,11 @@ from typing import Any, Mapping
 import numpy as np
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.gaussian_tree import GaussianTreeProcess, _mean_at_tiny_variance_ratio
+from nwkit.gaussian_tree import (
+    GaussianTreeProcess,
+    _mean_at_tiny_variance_ratio,
+    _propagated_variance,
+)
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -243,7 +247,7 @@ def _push_down(
         if slope != 0.0:
             return factor
         return _Factor(intercept, innovation, factor.log_weight, factor.density_rank)
-    variance = slope * slope * factor.variance + innovation
+    variance = _propagated_variance(slope, factor.variance, innovation)
     mean = slope * factor.mean + intercept
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A Gaussian smoothing message exceeds floating-point range.")

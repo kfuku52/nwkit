@@ -77,6 +77,23 @@ def test_ou_diffusion_preserves_stationary_variance_with_large_attraction():
     assert transition.slope == pytest.approx(math.exp(-100), rel=2e-14, abs=0)
 
 
+@pytest.mark.parametrize("slope,root_variance", [(1e-200, 1e300), (1e200, 1e-300)])
+def test_tree_moments_and_covariance_keep_representable_variance(slope, root_variance):
+    tree = tree_from("(A:1,B:1);")
+    process = GaussianTreeProcess(
+        tree,
+        {node: GaussianTransition(slope, 0.0, 0.0) for node in tree.leaves()},
+        GaussianRootPrior("gaussian", 0.0, root_variance),
+        "test",
+    )
+    expected = float(Decimal.from_float(root_variance) * Decimal.from_float(slope) ** 2)
+    _, variances = process.marginal_moments()
+    assert variances[tree["A"]] == pytest.approx(expected, rel=2e-15, abs=0)
+    np.testing.assert_allclose(
+        process.tip_covariance(["A", "B"]), expected, rtol=2e-13, atol=0
+    )
+
+
 def test_brownian_asr_and_intercept_only_regression_share_reml_fit():
     tree = tree_from("((A:1,B:2)I:0.5,(C:3,D:0.25)J:0.4)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": 1.3}

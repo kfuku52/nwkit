@@ -17,6 +17,7 @@ from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTransition,
     GaussianTreeProcess,
+    _propagated_variance,
     brownian_transition,
     ou_transition_from_root_variance,
 )
@@ -129,8 +130,8 @@ def _predict_down(factor, transition):
         return factor
     marginal = factor.marginal
     mean = transition.slope * marginal.mean + transition.intercept
-    variance = (
-        transition.slope * transition.slope * marginal.variance + transition.variance
+    variance = _propagated_variance(
+        transition.slope, marginal.variance, transition.variance
     )
     if not math.isfinite(mean) or not math.isfinite(variance) or variance < 0.0:
         raise ValueError("A regime-model smoothing message is not finite.")
