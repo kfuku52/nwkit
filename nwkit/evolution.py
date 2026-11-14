@@ -13,8 +13,8 @@ from nwkit.gaussian_tree import (
     GaussianTreeProcess,
     brownian_transition,
     exponential_rate_edge_variance,
+    ou_branch_transition,
     ou_stationary_variance,
-    ou_transition,
 )
 from nwkit.model_specs import (
     CONTRAST_EVOLUTION_MODELS as CONTRAST_EVOLUTION_MODELS,
@@ -444,16 +444,16 @@ def build_evolutionary_process(
         assert parameter is not None
         lengths = _base_edge_lengths(tree, branch_length, allow_zero=allow_zero)
         transitions = {}
-        stationary_variance = None
-        for node in tree.traverse():
-            if node.is_root:
-                continue
-            transition, stationary_variance = ou_transition(
-                lengths[node], parameter, 1.0, root_mean
-            )
-            transitions[node] = transition
-        if stationary_variance is None:
-            stationary_variance = 1.0 / (2.0 * parameter)
+        stationary_variance = (
+            ou_stationary_variance(parameter, 1.0)
+            if root_mode == "stationary"
+            else None
+        )
+        for node, length in lengths.items():
+            if not node.is_root:
+                transitions[node] = ou_branch_transition(
+                    length, parameter, 1.0, root_mean
+                )
     else:
         edge_variances = transformed_edge_variances(
             tree,

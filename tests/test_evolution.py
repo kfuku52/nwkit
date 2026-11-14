@@ -213,6 +213,14 @@ def test_ou_tends_to_brownian_as_alpha_approaches_zero():
     np.testing.assert_allclose(ou, brownian, rtol=1e-7, atol=1e-7)
 
 
+def test_fixed_root_ou_covariance_retains_brownian_limit_at_subnormal_alpha():
+    brownian = build_evolutionary_covariance(_tree(), LEAF_NAMES)
+    ou = build_evolutionary_covariance(
+        _tree(), LEAF_NAMES, model="ou", parameter=1e-310
+    )
+    np.testing.assert_array_equal(ou, brownian)
+
+
 @pytest.mark.parametrize("alpha", [1e-18, 1e-300, 1e-323])
 def test_ou_contrasts_preserve_brownian_limit_below_absolute_roundoff(alpha):
     tree = _tree()
