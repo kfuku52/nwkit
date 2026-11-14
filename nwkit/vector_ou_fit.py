@@ -89,10 +89,11 @@ def _process(data, rates, covariance, theta):
         time = float(node.dist)
         transition = by_time.get(time)
         if transition is None:
-            attenuation = np.exp(-rates * time)
+            exponent = -rates * time
+            attenuation = np.exp(exponent)
             innovation = covariance * -np.expm1(-rate_sums * time)
             transition = VectorTransition(
-                np.diag(attenuation), theta * (1 - attenuation), innovation
+                np.diag(attenuation), theta * -np.expm1(exponent), innovation
             )
             by_time[time] = transition
         transitions[node] = transition
