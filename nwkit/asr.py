@@ -1477,34 +1477,6 @@ def _mk_marginals_from_fit(tree, likelihood_by_leaf, fit):
     return posterior_by_node
 
 
-def _posterior_for_rate_matrix(
-    tree,
-    likelihood_by_leaf,
-    root_prior,
-    rate_matrix,
-    *,
-    fixed_transition_matrices=None,
-):
-    inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
-        tree=tree,
-        likelihood_by_leaf=likelihood_by_leaf,
-        rate_matrix=rate_matrix,
-        log_space=True,
-        fixed_transition_matrices=fixed_transition_matrices,
-    )
-    outside = _compute_outside_likelihoods(
-        tree=tree,
-        child_terms=child_terms,
-        transition_matrices=transition_matrices,
-        root_prior=root_prior,
-        log_space=True,
-    )
-    return {
-        node: _probabilities_from_logs(inside[node] + outside[node])
-        for node in tree.traverse()
-    }
-
-
 def _mk_branch_lengths(tree):
     return tuple(
         (node, _validated_branch_length(node.dist))
@@ -1606,6 +1578,81 @@ def _mixture_log_likelihoods(compiled, tips, log_prior, log_transitions):
         inside[index] = likelihood - np.where(np.isfinite(scale), scale, 0.0)[:, None]
         log_scales += scale
     return log_scales + logsumexp(log_prior + inside[0], axis=1)
+
+
+def _mixture_posterior_batch(compiled, tips, log_prior, log_transitions):
+    inside = tips.copy()
+    child_terms = [None] * len(compiled.nodes)
+    tip_shape = next(iter(tips.values())).shape
+    for index in compiled.postorder:
+        children = compiled.children[index]
+        if not children:
+            continue
+        likelihood = np.zeros(tip_shape)
+        for child in children:
+            term = _edge_logsumexp(
+                log_transitions[child][None] + inside[child][:, None, :]
+            )
+            child_terms[child] = term
+            likelihood += term
+        inside[index] = _normalize_mk_log_rows(likelihood, by_sum=False)
+
+    outside = {0: log_prior[None]}
+    for index, children in enumerate(compiled.children):
+        if children:
+            _mixture_outside_children(
+                outside, index, children, child_terms, log_transitions
+            )
+        inside[index] = inside[index] + outside.pop(index)
+    return inside
+
+
+def _normalize_mk_log_rows(values, *, by_sum):
+    scales = _edge_logsumexp(values) if by_sum else np.max(values, axis=1)
+    return values - np.where(np.isfinite(scales), scales, 0.0)[:, None]
+
+
+def _mixture_outside_children(outside, index, children, child_terms, log_transitions):
+    prefix = [np.zeros_like(outside[index])]
+    for child in children:
+        prefix.append(prefix[-1] + child_terms[child])
+    suffix = np.zeros_like(outside[index])
+    for position in range(len(children) - 1, -1, -1):
+        child = children[position]
+        parent = outside[index] + (prefix[position] + suffix)
+        next_outside = _edge_logsumexp(
+            log_transitions[child].T[None] + parent[:, None, :]
+        )
+        outside[child] = _normalize_mk_log_rows(next_outside, by_sum=True)
+        suffix = suffix + child_terms[child]
+
+
+def _mixture_posteriors(compiled, tip_batches, log_prior, transitions, probabilities):
+    nodes = compiled.nodes
+    result = np.zeros((len(probabilities), len(nodes), len(log_prior)))
+    for category, transition in enumerate(transitions):
+        weights = probabilities[:, category]
+        log_transitions = _mixture_log_transitions(compiled, transition)
+        start = 0
+        for tips in tip_batches:
+            count = len(next(iter(tips.values())))
+            batch_weights = weights[start : start + count]
+            active = np.flatnonzero(batch_weights > 0.0)
+            if len(active):
+                selected = (
+                    tips
+                    if len(active) == count
+                    else {index: values[active] for index, values in tips.items()}
+                )
+                log_posterior = _mixture_posterior_batch(
+                    compiled, selected, log_prior, log_transitions
+                )
+                for index, values in log_posterior.items():
+                    result[start + active, index] += batch_weights[
+                        active, None
+                    ] * np.exp(_normalize_mk_log_rows(values, by_sum=True))
+            start += count
+    return result
 
 
 def _mixture_root_prior(mode, states, observed_by_character, likelihoods_by_character):
@@ -1814,23 +1861,27 @@ def compute_mk_mixture_marginals(
     log_likelihood, scores, transition_matrices_by_category = character_scores(
         matrix, category_rates, weights, root_prior
     )
-    posterior_by_character = {}
-    category_posterior_by_character = {}
-    for (character, likelihood_by_leaf), log_scores in zip(
-        likelihoods_by_character.items(), scores, strict=True
-    ):
-        category_probabilities = np.exp(log_scores - logsumexp(log_scores))
-        category_posterior_by_character[character] = category_probabilities
-        if _compute_posterior:
-            posterior_by_character[character] = _average_mk_category_posteriors(
-                tree,
-                likelihood_by_leaf,
-                root_prior,
-                matrix,
-                category_rates,
-                category_probabilities,
-                transition_matrices_by_category,
-            )
+    if not math.isfinite(log_likelihood):
+        raise ValueError(
+            "The observed characters have zero likelihood under MK-MIXTURE."
+        )
+    category_probabilities = np.exp(scores - logsumexp(scores, axis=1)[:, None])
+    category_posterior_by_character = dict(
+        zip(likelihoods_by_character, category_probabilities, strict=True)
+    )
+    posterior_by_character = (
+        _batched_mixture_marginals(
+            tree,
+            compiled,
+            likelihoods_by_character,
+            log_tip_batches,
+            root_prior,
+            transition_matrices_by_category,
+            category_probabilities,
+        )
+        if _compute_posterior
+        else {}
+    )
 
     tolerance = 1e-5
     statuses = []
@@ -1898,23 +1949,17 @@ def compute_mk_mixture_marginals(
     return posterior_by_character, fit
 
 
-def _average_mk_category_posteriors(
-    tree, likelihoods, prior, matrix, rates, probabilities, transitions
+def _batched_mixture_marginals(
+    tree, compiled, likelihoods, tips, prior, transitions, probabilities
 ):
-    average = {node: np.zeros_like(prior) for node in tree.traverse()}
-    for rate, weight, transition in zip(rates, probabilities, transitions, strict=True):
-        if weight == 0.0:
-            continue
-        posterior = _posterior_for_rate_matrix(
-            tree,
-            likelihoods,
-            prior,
-            matrix * rate,
-            fixed_transition_matrices=transition,
-        )
-        for node, values in posterior.items():
-            average[node] += weight * values
-    return average
+    marginals = _mixture_posteriors(
+        compiled, tips, _log_probabilities(prior), transitions, probabilities
+    )
+    order = tuple((node, compiled.index_by_node[node]) for node in tree.traverse())
+    return {
+        character: {node: values[index] for node, index in order}
+        for character, values in zip(likelihoods, marginals, strict=True)
+    }
 
 
 def compute_hrm_marginals(

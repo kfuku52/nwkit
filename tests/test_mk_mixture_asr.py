@@ -1,3 +1,5 @@
+from types import SimpleNamespace
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -151,6 +153,26 @@ def test_mk_mixture_averages_only_categories_with_posterior_mass():
         np.testing.assert_allclose(values[tree["B"]], likelihoods[character]["B"])
 
 
+def test_mk_mixture_rejects_a_character_with_no_feasible_category(monkeypatch):
+    tree = tree_from("(A:0,B:0,C:1)R;")
+    states = ["0", "1"]
+    observed = {
+        "first": {"A": "0", "B": "1", "C": "0"},
+        "second": {"A": "1", "B": "1", "C": "0"},
+    }
+    likelihoods = {
+        character: {name: np.eye(2)[int(value)] for name, value in values.items()}
+        for character, values in observed.items()
+    }
+    monkeypatch.setattr(
+        asr,
+        "deterministic_multistart",
+        lambda _objective, initial, *_args, **_kwargs: SimpleNamespace(x=initial),
+    )
+    with pytest.raises(ValueError, match="zero likelihood under MK-MIXTURE"):
+        compute_mk_mixture_marginals(tree, states, observed, likelihoods, rate=0.6)
+
+
 def test_batched_mk_mixture_matches_independent_character_likelihoods(monkeypatch):
     tree = tree_from("((A:0.7,B:0.2,C:0.4):0.9,D:0.3,E:0.1,F:0.8)R;")
     states, observed, likelihoods = character_data(
@@ -159,7 +181,7 @@ def test_batched_mk_mixture_matches_independent_character_likelihoods(monkeypatc
     observed["second"]["A"] = None
     likelihoods["second"]["A"] = np.ones(2)
     monkeypatch.setattr(asr, "_MAX_MIXTURE_EDGE_VALUES", 8)
-    _, fit = compute_mk_mixture_marginals(
+    posterior, fit = compute_mk_mixture_marginals(
         tree, states, observed, likelihoods, rate=0.6, root_prior_mode="empirical"
     )
     expected_total = 0.0
@@ -180,6 +202,26 @@ def test_batched_mk_mixture_matches_independent_character_likelihoods(monkeypatc
             np.exp(terms - score),
             atol=1e-13,
         )
+        expected = {node: np.zeros(len(states)) for node in tree.traverse()}
+        for rate, weight in zip(
+            fit["mixture_category_rates"], np.exp(terms - score), strict=True
+        ):
+            if weight == 0.0:
+                continue
+            inside, _, child_terms, matrices = asr._compute_inside_likelihoods(
+                tree, tips, fit["rate_matrix"] * rate, log_space=True
+            )
+            outside = asr._compute_outside_likelihoods(
+                tree, child_terms, matrices, fit["root_prior"], log_space=True
+            )
+            for node in expected:
+                expected[node] += weight * asr._probabilities_from_logs(
+                    inside[node] + outside[node]
+                )
+        for node in expected:
+            np.testing.assert_allclose(
+                posterior[character][node], expected[node], atol=1e-13
+            )
     assert fit["log_likelihood"] == pytest.approx(expected_total, abs=1e-12)
 
 
