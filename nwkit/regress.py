@@ -30,6 +30,7 @@ from nwkit.gaussian import (
     is_diagonal,
     materialize_covariance,
     materialize_low_rank_covariance,
+    regression_total_quadratic,
     rescale_gaussian_covariance,
     residual_variance_scale,
     restore_gaussian_response_units,
@@ -3130,8 +3131,7 @@ def _fit_covariance_model(
         raise ValueError("Unsupported inference method: {}.".format(inference))
     degrees_of_freedom = n_events - num_parameters
     critical = float(student_t.ppf(0.5 + confidence_level / 2.0, degrees_of_freedom))
-    inverse_y = _solve_positive_definite(fit["cholesky"], response_values)
-    total_quadratic = float(response_values @ inverse_y)
+    total_quadratic = regression_total_quadratic(fit["cholesky"], response_values)
     r_squared = (
         float("nan")
         if total_quadratic == 0.0

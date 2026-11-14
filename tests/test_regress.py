@@ -743,6 +743,28 @@ def test_pgls_fits_each_tree_and_response_separately():
     assert set(result["model_id"]) == {"OG1:expression", "OG2:expression"}
 
 
+def test_reconciled_pgls_reports_scale_invariant_uncentered_fit():
+    predictors = _predictor_table(values=(1.0, 2.0, 3.0, 4.0))
+
+    def fit(scale):
+        rows = [
+            _response_row(index, value * scale)
+            for index, value in enumerate((0.8, 2.3, 2.7, 4.4), start=1)
+        ]
+        return fit_reconciled_pgls(
+            pd.DataFrame(rows), predictors, ["expression"], ["body_size"]
+        ).iloc[0]
+
+    expected = fit(1.0)
+    scale = 1e-158
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = fit(scale)
+    assert actual["coefficient"] / scale == pytest.approx(expected["coefficient"])
+    assert actual["r_squared_uncentered"] == pytest.approx(
+        expected["r_squared_uncentered"], abs=1e-14
+    )
+
+
 def test_pgls_supports_multiple_predictors():
     predictor = _predictor_table(values=(1.0, 2.0, 3.0, 4.0))
     second = predictor.copy()

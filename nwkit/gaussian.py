@@ -228,6 +228,22 @@ class ScaledCovarianceFactor:
     dimension: int
 
 
+def regression_total_quadratic(factor, response, *, intercept=False):
+    """Compute a GLS null-model quadratic in the covariance's working units."""
+    if isinstance(factor, ScaledCovarianceFactor):
+        response = np.ldexp(response, -factor.exponent)
+        factor = factor.factor
+    if intercept:
+        null_design = np.ones((len(response), 1))
+        inverse_null = solve_factor(factor, null_design)
+        null_beta = np.linalg.solve(
+            null_design.T @ inverse_null,
+            null_design.T @ solve_factor(factor, response),
+        )
+        response = response - null_design @ null_beta
+    return float(response @ solve_factor(factor, response))
+
+
 def _rescale_covariance_loading(loading, exponent):
     if sparse.issparse(loading):
         result = loading.copy()

@@ -53,6 +53,36 @@ def _tree():
     return Tree(TREE_TEXT, parser=1)
 
 
+@pytest.mark.parametrize("intercept", [True, False])
+def test_ordinary_pgls_null_model_stays_in_working_units_for_tiny_responses(intercept):
+    tree = _tree()
+    x = dict(zip(LEAF_NAMES, [0.0, 1.0, 2.0, 3.0, 4.0], strict=True))
+    response = dict(zip(LEAF_NAMES, [0.7, 1.1, 2.5, 2.9, 4.3], strict=True))
+
+    def fit(scale):
+        return fit_ordinary_regression(
+            tree,
+            {"y": {name: value * scale for name, value in response.items()}},
+            {"x": x},
+            ["y"],
+            ["x"],
+            intercept=intercept,
+        )
+
+    expected = fit(1.0)
+    scale = 1e-158
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = fit(scale)
+    np.testing.assert_allclose(actual["coefficient"] / scale, expected["coefficient"])
+    np.testing.assert_allclose(actual["r_squared"], expected["r_squared"], atol=1e-14)
+    expected_log_jacobian = (len(LEAF_NAMES) - len(expected)) * math.log(scale)
+    np.testing.assert_allclose(
+        actual["log_likelihood"] + expected_log_jacobian,
+        expected["log_likelihood"],
+        atol=1e-10,
+    )
+
+
 @pytest.mark.parametrize("dispersion", [1e-20, 1e-310])
 def test_near_poisson_negative_binomial_bootstrap_draws_keep_count_mean(dispersion):
     rng = np.random.default_rng(18)

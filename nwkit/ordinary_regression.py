@@ -35,6 +35,7 @@ from nwkit.gaussian import (
     draw_from_factor,
     finite_mean,
     is_diagonal,
+    regression_total_quadratic,
 )
 from nwkit.measurement_error import (
     fit_conditional_eiv_gaussian,
@@ -67,7 +68,6 @@ from nwkit.phylogenetic_glmm import (
 )
 from nwkit.regress import (
     _profile_covariance_fit,
-    _solve_positive_definite,
     validate_dense_gaussian_size,
 )
 from nwkit.replicates import TIP_SUMMARY_COLUMNS
@@ -870,18 +870,8 @@ def _ordinary_inference_samples(
 
 
 def _ordinary_response_statistics(y, fit, fixed_covariance, *, intercept):
-    if intercept:
-        null_design = np.ones((len(y), 1))
-        inverse_null = _solve_positive_definite(fit["cholesky"], null_design)
-        null_beta = np.linalg.solve(
-            null_design.T @ inverse_null,
-            null_design.T @ _solve_positive_definite(fit["cholesky"], y),
-        )
-        null_residual = y - null_design @ null_beta
-    else:
-        null_residual = y
-    total_quadratic = float(
-        null_residual @ _solve_positive_definite(fit["cholesky"], null_residual)
+    total_quadratic = regression_total_quadratic(
+        fit["cholesky"], y, intercept=intercept
     )
     r_squared = (
         float("nan")
