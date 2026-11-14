@@ -76,6 +76,18 @@ def test_global_scalar_search_prioritizes_promising_basins():
     assert result.x == pytest.approx(11.25, abs=1e-7)
 
 
+def test_global_scalar_search_keeps_trials_in_ultranarrow_bounds():
+    lower, upper = -2.3425749488735213e50, -2.342574948873521e50
+
+    def objective(value):
+        assert lower <= value <= upper
+        return float(value != upper)
+
+    result = _global_bounded_scalar_minimize(objective, (lower, upper), grid_size=25)
+    assert result.success
+    assert result.x == upper
+
+
 def test_marginal_evolution_parameter_estimation_uses_trait_only_ml():
     diagnostics = estimate_marginal_evolution_parameter(
         _tree(),

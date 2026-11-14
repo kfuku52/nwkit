@@ -51,6 +51,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   the log bounds so multiplying extreme bounds cannot overflow or underflow.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the
   strongest grid minima and reporting convergence for the selected fit.
+- Keep scalar likelihood evaluations inside bounds that differ by a single
+  floating-point step.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
   affect an informative tip observation.
 - Mk mixture marginals average only categories with positive posterior mass.
