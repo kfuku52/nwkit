@@ -149,6 +149,42 @@ def test_parallel_scan_matches_serial_fit_results():
         assert _fit_json(first.burst_fit) == _fit_json(second.burst_fit)
 
 
+def test_bootstrap_refills_while_earlier_draw_is_pending(monkeypatch):
+    from concurrent.futures import Future
+
+    import nwkit.wgd_count_fit as fitting
+
+    submitted = []
+
+    class Pool:
+        def __init__(self, **_):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def submit(self, fn, i):
+            assert fn is fitting._bootstrap_scan_statistic
+            future = Future()
+            submitted.append(future)
+            if i > 0:
+                future.set_result(i + 0.25)
+            if i == 3:
+                submitted[0].set_result(0.25)
+            return future
+
+    draws = iter(range(4))
+    progress = []
+    monkeypatch.setattr(fitting, "ProcessPoolExecutor", Pool)
+    assert fitting._parallel_bootstrap(
+        lambda: (next(draws),), 4, 2, lambda n, _: progress.append(n)
+    ) == [0.25, 1.25, 2.25, 3.25]
+    assert progress == [1, 2, 3, 4]
+
+
 def test_invalid_scan_and_bound_fail_instead_of_returning_unverified_fit():
     data = model([[1, 1, 1]])
     with pytest.raises(ValueError, match="twice"):

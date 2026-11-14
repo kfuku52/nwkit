@@ -1,7 +1,6 @@
 """Candidate scanning and plug-in, search-wide parametric bootstrap for counts."""
 
-from collections import deque
-from concurrent.futures import ProcessPoolExecutor
+from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
 from dataclasses import dataclass, replace
 from multiprocessing import get_context
 from typing import Any
@@ -473,6 +472,37 @@ def _bootstrap_scan_statistic(
     return max(candidate.improvement for candidate in result.candidates)
 
 
+def _parallel_bootstrap(draw_args, draws, workers, progress):
+    # Simulate in draw order, but refill each completed worker immediately.
+    # The output order is independent of which fit is the slowest.
+    statistics = [0.0] * draws
+    with ProcessPoolExecutor(
+        max_workers=workers, mp_context=get_context("spawn")
+    ) as pool:
+        pending = {
+            pool.submit(_bootstrap_scan_statistic, *draw_args()): i
+            for i in range(workers)
+        }
+        next_draw, done = workers, 0
+        try:
+            while pending:
+                finished, _ = wait(pending, return_when=FIRST_COMPLETED)
+                for future in finished:
+                    statistics[pending.pop(future)] = future.result()
+                    done += 1
+                    if progress is not None:
+                        progress(done, draws)
+                    if next_draw < draws:
+                        pending[
+                            pool.submit(_bootstrap_scan_statistic, *draw_args())
+                        ] = next_draw
+                        next_draw += 1
+        finally:
+            for future in pending:
+                future.cancel()
+    return statistics
+
+
 def calibrate_scan(
     model: CountLikelihood,
     observed: CountScan,
@@ -544,18 +574,7 @@ def calibrate_scan(
         for _ in range(draws):
             record(_bootstrap_scan_statistic(*draw_args()))
     else:
-        # Generate in the parent and consume in order to preserve the original RNG stream.
-        with ProcessPoolExecutor(
-            max_workers=workers, mp_context=get_context("spawn")
-        ) as pool:
-            pending = deque(
-                pool.submit(_bootstrap_scan_statistic, *draw_args())
-                for _ in range(workers)
-            )
-            for draw in range(draws):
-                record(pending.popleft().result())
-                if draw + workers < draws:
-                    pending.append(pool.submit(_bootstrap_scan_statistic, *draw_args()))
+        statistics = _parallel_bootstrap(draw_args, draws, workers, progress)
     candidates = []
     for candidate in observed.candidates:
         exceedances = sum(value >= candidate.improvement - 1e-9 for value in statistics)
