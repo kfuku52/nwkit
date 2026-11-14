@@ -296,6 +296,46 @@ def test_zero_variance_identity_branch_enforces_exact_state():
     assert result.marginals[tree["A"]].variance == 0.0
 
 
+def test_affine_conditioning_and_draws_preserve_exact_identity_states():
+    tree = tree_from("((B:0,C:1)I:1,A:1)R;")
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="flat", allow_zero=True
+    )
+    value = math.nextafter(1.0, math.inf)
+    observations = {"A": -1.0, "B": value}
+    result = condition_gaussian_tree(process, observations)
+    samples = sample_gaussian_posterior(process, observations, num_samples=10, seed=4)
+    for node in (tree["B"], tree["I"]):
+        assert result.marginals[node].mean == value
+        assert result.marginals[node].variance == 0.0
+        np.testing.assert_array_equal(
+            samples.values[:, samples.nodes.index(node)], value
+        )
+
+
+def test_adjacent_exact_values_conflict_on_a_zero_variance_identity_path():
+    tree = tree_from("((B:0,C:0)I:1,A:1)R;")
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="flat", allow_zero=True
+    )
+    observations = {"A": -1.0, "B": 1.0, "C": math.nextafter(1.0, math.inf)}
+    with pytest.raises(ValueError, match="Conflicting exact observations"):
+        gaussian_tree_likelihood(process, observations)
+
+
+def test_fixed_root_is_exact_across_identity_edges():
+    tree = tree_from("((A:1,B:1)I:0)R;")
+    value = math.nextafter(1.0, math.inf)
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="fixed", root_mean=value, allow_zero=True
+    )
+    result = condition_gaussian_tree(process, {"A": -1.0})
+    samples = sample_gaussian_posterior(process, {"A": -1.0}, num_samples=8, seed=7)
+    for node in (tree, tree["I"]):
+        assert result.marginals[node].mean == value
+        np.testing.assert_array_equal(samples.values[:, samples.nodes.index(node)], value)
+
+
 def test_observed_position_count_contracts_deterministic_identity_edges():
     tree = tree_from("((A:0,B:0)I:0,C:1)R;")
     process = build_evolutionary_process(

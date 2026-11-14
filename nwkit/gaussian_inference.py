@@ -106,6 +106,7 @@ class _MessagePass:
     upward: tuple[_Factor, ...]
     root_posterior: _Factor
     observed_positions: int
+    exact_nodes: tuple[tuple[int, float], ...]
 
 
 def _normal_log_density(value: float, mean: float, variance: float) -> float:
@@ -452,12 +453,33 @@ def _message_pass_prepared(
         ):
             latent_positions[index] = latent_positions[compiled.parents[index]]
     observed_positions = set()
-    for index, value, error in records:
+    exact_by_position = {0: process.root.mean} if process.root.mode == "fixed" else {}
+    for (index, value, error), (_, original, _) in zip(
+        records, prepared.records, strict=True
+    ):
         variance = error * error
         if error > 0.0 and variance == 0.0:
             raise ValueError("A positive observation variance underflowed.")
         local[index] = _Factor(value, variance)
-        observed_positions.add(latent_positions[index])
+        position = latent_positions[index]
+        observed_positions.add(position)
+        if (
+            error == 0.0
+            and exact_by_position.setdefault(position, original) != original
+        ):
+            raise ValueError(
+                "Conflicting exact observations have zero likelihood under the "
+                "Gaussian tree process."
+            )
+    exact_nodes = (
+        tuple(
+            (index, exact_by_position[position])
+            for index, position in enumerate(latent_positions)
+            if position in exact_by_position
+        )
+        if exact_by_position and not likelihood_only
+        else ()
+    )
     inside = local if likelihood_only else list(local)
     upward = _prune_gaussian_messages(
         scaled_process, compiled, inside, likelihood_only=likelihood_only
@@ -487,6 +509,7 @@ def _message_pass_prepared(
         tuple(upward) if not likelihood_only else (),
         root_posterior,
         len(observed_positions),
+        exact_nodes,
     )
 
 
@@ -601,8 +624,11 @@ def condition_gaussian_tree(
             )
         return result
 
+    exact_by_node = dict(messages.exact_nodes)
     marginals = {
-        node: GaussianMarginal(
+        node: GaussianMarginal(exact_by_node[index], 0.0)
+        if index in exact_by_node
+        else GaussianMarginal(
             restore_mean(final_posterior[index].mean),
             restore_variance(final_posterior[index].variance),
         )
@@ -832,6 +858,9 @@ def sample_gaussian_posterior(
     )
     draws = _draw_gaussian_messages(messages, num_samples, np.random.default_rng(seed))
     _restore_gaussian_draw_means(draws, messages.exponent, messages.center)
+    if messages.exact_nodes:
+        indices, exact = zip(*messages.exact_nodes, strict=True)
+        draws[:, indices] = exact
     if np.any(~np.isfinite(draws)):
         raise ValueError("A posterior Gaussian sample exceeds floating-point range.")
     return GaussianSamples(messages.compiled.nodes, draws)
