@@ -80,6 +80,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   likelihood-only Mk tree traversal.
 - Reuse prepared stochastic mapping contexts without copying branch rate
   matrices into each worker specification.
+- Precompute child-state conditional probabilities before sampling
+  stochastic maps.
 - Compute Gaussian posterior predictive statistics for all replicates in
   one pass per statistic.
 - Retain only observed-tip draws and active parent states during Gaussian

@@ -2682,6 +2682,16 @@ def _simulation_seed_sequence(seed, num_simulations):
     return seed_sequence.spawn(num_simulations)
 
 
+def _map_conditional_probabilities(transition_matrices, inside):
+    log_weights = _log_probabilities(transition_matrices)
+    log_weights += inside[:, None, :]
+    normalizers = logsumexp(log_weights, axis=-1, keepdims=True)
+    # Some parent states are impossible given observations on this branch.
+    # They have zero mass and are never drawn from the joint posterior.
+    log_weights -= np.where(np.isfinite(normalizers), normalizers, 0.0)
+    return np.exp(log_weights, out=log_weights)
+
+
 def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_contexts):
     nodes = list(tree.traverse(strategy="preorder"))
     node_to_index = {node: index for index, node in enumerate(nodes)}
@@ -2708,8 +2718,9 @@ def _build_stochastic_map_spec(tree, fit, node_to_branch_id, uniformization_cont
         "children_by_index": children_by_index,
         "parent_indices": parent_indices,
         "branch_ids": branch_ids,
-        "log_inside": inside,
-        "log_transition_matrices": _log_probabilities(transition_matrices),
+        "conditional_probabilities": _map_conditional_probabilities(
+            transition_matrices, inside
+        ),
         "root_posterior": fit["posterior_by_node"][tree],
         "uniformization_contexts": contexts,
         "num_states": fit["rate_matrix"].shape[0],
@@ -2727,14 +2738,11 @@ def _sample_node_states_from_spec(spec, rng):
     sampled_states = np.zeros(len(spec["parent_indices"]), dtype=int)
     num_states = spec["num_states"]
     sampled_states[0] = int(rng.choice(num_states, p=spec["root_posterior"]))
+    conditionals = spec["conditional_probabilities"]
     for parent_index, child_indices in enumerate(spec["children_by_index"]):
         parent_state = sampled_states[parent_index]
         for child_index in child_indices:
-            transition_matrix = spec["log_transition_matrices"][child_index]
-            weights = (
-                transition_matrix[parent_state, :] + spec["log_inside"][child_index]
-            )
-            probabilities = _probabilities_from_logs(weights)
+            probabilities = conditionals[child_index, parent_state]
             sampled_states[child_index] = int(rng.choice(num_states, p=probabilities))
     return sampled_states
 
