@@ -504,6 +504,11 @@ class MultiplicationEvent:
         _validate_multiplication(self.retention, self.multiplicity)
 
 
+@lru_cache(maxsize=8)
+def _fixed_pulse_transition(retention, multiplicity, max_count):
+    return multiplication_transition(retention, multiplicity, max_count)
+
+
 class CountLikelihood:
     """Pruning likelihood conditional on >=1 observed copy per family.
 
@@ -521,8 +526,24 @@ class CountLikelihood:
         rate_scales: np.ndarray | None = None,
         branch_groups: tuple[int, ...] | None = None,
         ascertainment: str = "observed",
+        fixed_events: tuple[MultiplicationEvent, ...] = (),
     ):
         self.tree = tree
+        self.fixed_events = tuple(fixed_events)
+        if any(
+            not isinstance(event, MultiplicationEvent) for event in self.fixed_events
+        ):
+            raise ValueError("Fixed genome events must be MultiplicationEvent objects.")
+        self._fixed_by_node = {event.node: event for event in self.fixed_events}
+        if len(self._fixed_by_node) != len(self.fixed_events) or any(
+            not 1 <= event.node < len(tree.parents)
+            or tree.lengths[event.node] <= 0
+            or event.retention <= 0
+            for event in self.fixed_events
+        ):
+            raise ValueError(
+                "Fixed genome events need distinct positive-length branches and positive retention."
+            )
         self.counts = np.asarray(counts, dtype=float)
         if self.counts.ndim != 2 or self.counts.shape[1] != len(tree.tip_names):
             raise ValueError("Counts need one column per ordered species-tree tip.")
@@ -663,32 +684,51 @@ class CountLikelihood:
             )
         if event is not None and (not 1 <= event.node < len(self.tree.parents)):
             raise ValueError("Multiplication event must identify a non-root branch.")
+        if event is not None and event.node in self._fixed_by_node:
+            raise ValueError("A candidate event cannot overlap a fixed genome event.")
         kernel = birth_death_transition if _kernel is None else _kernel
         matrices = {}
         cache = {}
         for node, time in enumerate(self.tree.lengths[1:], 1):
             duplication, loss = rates[self.branch_groups[node]] * scale
             key = (float(duplication), float(loss), time)
-            if (
-                event is None
-                or event.node != node
-                or (event.retention == 0 and not _split_zero_event)
+            pulse_event = (
+                event
+                if event is not None and event.node == node
+                else self._fixed_by_node.get(node)
+            )
+            if pulse_event is None or (
+                pulse_event.retention == 0 and not _split_zero_event
             ):
                 if key not in cache:
                     cache[key] = kernel(duplication, loss, time, max_count)
                 matrices[node] = cache[key]
             else:
-                before = kernel(duplication, loss, time * event.fraction, max_count)
-                after = kernel(
-                    duplication, loss, time * (1 - event.fraction), max_count
+                before = kernel(
+                    duplication, loss, time * pulse_event.fraction, max_count
                 )
-                pulse = _pulse
+                after = kernel(
+                    duplication, loss, time * (1 - pulse_event.fraction), max_count
+                )
+                pulse = (
+                    _pulse
+                    if pulse_event is event
+                    else self._fixed_pulse(pulse_event, max_count)
+                )
                 if pulse is None:
                     pulse = multiplication_transition(
-                        event.retention, event.multiplicity, max_count
+                        pulse_event.retention, pulse_event.multiplicity, max_count
                     )
                 matrices[node] = before @ pulse @ after
         return matrices
+
+    def _fixed_pulse(self, event, max_count):
+        kernel = (
+            _fixed_pulse_transition
+            if (max_count + 1) ** 2 * 8 <= _TRANSITION_CACHE_BYTES // 8
+            else multiplication_transition
+        )
+        return kernel(event.retention, event.multiplicity, max_count)
 
     def _prune(self, emissions, matrices, prior):
         size = len(self.tree.parents)
@@ -734,10 +774,13 @@ class CountLikelihood:
         for node, time in enumerate(self.tree.lengths[1:], 1):
             duplication, loss = np.asarray(rates)[self.branch_groups[node]] * scale
             key = (float(duplication), float(loss), time)
-            if (
-                event is None
-                or event.node != node
-                or (event.retention == 0 and not _split_zero_event)
+            pulse_event = (
+                event
+                if event is not None and event.node == node
+                else self._fixed_by_node.get(node)
+            )
+            if pulse_event is None or (
+                pulse_event.retention == 0 and not _split_zero_event
             ):
                 if key not in cache:
                     cache[key] = self._cached_transition(
@@ -746,12 +789,16 @@ class CountLikelihood:
                 matrices[node] = cache[key]
                 continue
             before = self._cached_transition(
-                duplication, loss, time * event.fraction, max_count, log=True
+                duplication, loss, time * pulse_event.fraction, max_count, log=True
             )
             after = self._cached_transition(
-                duplication, loss, time * (1 - event.fraction), max_count, log=True
+                duplication,
+                loss,
+                time * (1 - pulse_event.fraction),
+                max_count,
+                log=True,
             )
-            matrices[node] = _log_pulse_transition(before, after, event)
+            matrices[node] = _log_pulse_transition(before, after, pulse_event)
         return matrices
 
     def _prune_log(self, matrices, root_mean, max_count, rows):
@@ -834,16 +881,21 @@ class CountLikelihood:
             duplication, loss = rates[self.branch_groups[node]] * scale
             time = self.tree.lengths[node]
             survival = survivals[node]
-            if event is not None and event.node == node and event.retention != 0:
+            pulse = (
+                event
+                if event is not None and event.node == node
+                else self._fixed_by_node.get(node)
+            )
+            if pulse is not None and pulse.retention != 0:
                 survival = propagate(
-                    survival, duplication, loss, time * (1 - event.fraction)
+                    survival, duplication, loss, time * (1 - pulse.fraction)
                 )
                 with np.errstate(divide="ignore"):
                     extra = -np.expm1(
-                        (event.multiplicity - 1) * np.log1p(-event.retention * survival)
+                        (pulse.multiplicity - 1) * np.log1p(-pulse.retention * survival)
                     )
                 survival += (1 - survival) * extra
-                time *= event.fraction
+                time *= pulse.fraction
             survivals[node] = propagate(survival, duplication, loss, time)
         root_children = np.column_stack(
             [survivals[child] for child in self.children[0]]
@@ -886,23 +938,26 @@ class CountLikelihood:
             return numerator / (success * (1.0 - survival) + survival)
 
         scaled_rates = rates * scale
-        pulse = event.node if event is not None and event.retention != 0 else -1
+        candidate_node = (
+            event.node if event is not None and event.retention != 0 else -1
+        )
         for node in range(len(values) - 1, 0, -1):
             survival = values[node]
             for child in self.children[node]:
                 survival += (1.0 - survival) * values[child]
             duplication, loss = scaled_rates[self.branch_groups[node]]
             time = self.tree.lengths[node]
-            if node == pulse:
+            pulse = event if node == candidate_node else self._fixed_by_node.get(node)
+            if pulse is not None:
                 survival = propagate(
-                    survival, duplication, loss, time * (1 - event.fraction)
+                    survival, duplication, loss, time * (1 - pulse.fraction)
                 )
                 with np.errstate(divide="ignore"):
                     extra = -np.expm1(
-                        (event.multiplicity - 1) * np.log1p(-event.retention * survival)
+                        (pulse.multiplicity - 1) * np.log1p(-pulse.retention * survival)
                     )
                 survival += (1 - survival) * extra
-                time *= event.fraction
+                time *= pulse.fraction
             values[node] = propagate(survival, duplication, loss, time)
         if rare:
             return self._rare_selection_logs(
@@ -940,12 +995,17 @@ class CountLikelihood:
             duplication, loss = rates[self.branch_groups[node]] * scale
             time = self.tree.lengths[node]
             survival = survivals[node]
-            if event is not None and event.node == node and event.retention != 0:
+            pulse = (
+                event
+                if event is not None and event.node == node
+                else self._fixed_by_node.get(node)
+            )
+            if pulse is not None and pulse.retention != 0:
                 survival = propagate(
-                    survival, duplication, loss, time * (1 - event.fraction)
+                    survival, duplication, loss, time * (1 - pulse.fraction)
                 )
-                survival = _log_pulse_survival(survival, event)
-                time *= event.fraction
+                survival = _log_pulse_survival(survival, pulse)
+                time *= pulse.fraction
             survivals[node] = propagate(survival, duplication, loss, time)
         root_children = np.column_stack(
             [survivals[child] for child in self.children[0]]
@@ -1098,17 +1158,22 @@ class CountLikelihood:
                 for node, time in enumerate(self.tree.lengths[1:], 1):
                     duplication, loss = rates[self.branch_groups[node]] * scale
                     count = latent[self.tree.parents[node]]
-                    if event is not None and event.node == node:
+                    pulse = (
+                        event
+                        if event is not None and event.node == node
+                        else self._fixed_by_node.get(node)
+                    )
+                    if pulse is not None:
                         count = _simulate_edge(
-                            count, duplication, loss, time * event.fraction, rng
+                            count, duplication, loss, time * pulse.fraction, rng
                         )
                         count += int(
                             rng.binomial(
-                                count * (event.multiplicity - 1), event.retention
+                                count * (pulse.multiplicity - 1), pulse.retention
                             )
                         )
                         count = _simulate_edge(
-                            count, duplication, loss, time * (1 - event.fraction), rng
+                            count, duplication, loss, time * (1 - pulse.fraction), rng
                         )
                     else:
                         count = _simulate_edge(count, duplication, loss, time, rng)

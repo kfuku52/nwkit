@@ -117,6 +117,16 @@ not a simultaneous multiple-event search and does not produce dated-event
 confidence intervals. `--candidate-branches` restricts the search; bootstrap
 calibration repeats that exact branch set and fraction grid.
 
+`--fixed-events-tsv` can condition the search on prespecified events at
+distinct positive-length branches. Columns are `branch_id`, `retention`
+in `(0,1]`, `event_fraction` in `[0,1]` measured from the parent, and
+integer `multiplicity` of at least two. Those branches are excluded from the
+search. Their pulses remain fixed in the background, candidate, branch-burst,
+and simulated-null models; JSON records them in `fixed_background_events`.
+This is a conditional sensitivity analysis, not joint event inference or
+calibration over the selection of background events. `wgd-tree` rejects these
+count models because its topology likelihood does not yet include fixed pulses.
+
 The statistic is twice the event-versus-background log-likelihood improvement.
 The bootstrap simulates from the fitted null, preserves tip detection and each
 family's missingness mask, conditions on observation, refits the null, and

@@ -39,6 +39,10 @@ def gene_topology(tree, parser):
 
 
 def model_mapping(metadata, design):
+    if metadata.get("fixed_background_events"):
+        raise ValueError(
+            "Fixed-topology likelihood does not support fixed background genome events in the count model."
+        )
     expected = metadata.get("species_tree")
     if expected is None:
         raise ValueError(

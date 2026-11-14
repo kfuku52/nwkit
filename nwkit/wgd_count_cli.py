@@ -32,6 +32,12 @@ def register_wgd_count(subparsers, tree_input, table_output, table_policy):
             "Optional branch_id,regime TSV covering all non-root input branches.",
         ),
         (
+            "fixed-events-tsv",
+            None,
+            str,
+            "Condition on fixed branch_id,retention,event_fraction,multiplicity rows; scan other branches.",
+        ),
+        (
             "candidate-branches",
             None,
             str,

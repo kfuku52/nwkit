@@ -86,6 +86,53 @@ def test_state_bound_failure_names_the_family_and_tip(tmp_path):
     assert not out.exists()
 
 
+def test_fixed_event_cli_conditions_null_and_excludes_fixed_branch(tmp_path):
+    from nwkit.wgd_tree import model_mapping
+
+    tree, counts = inputs(tmp_path)
+    fixed = tmp_path / "fixed.tsv"
+    fixed.write_text(
+        "branch_id\tretention\tevent_fraction\tmultiplicity\n1\t0.8\t0.5\t2\n"
+    )
+    output, model, checkpoint = (
+        tmp_path / name for name in ("output.tsv", "model.json", "checkpoint.json")
+    )
+    base = command(tree, counts)
+    option = base.index("--candidate-branches")
+    with pytest.raises(ValueError, match="without fixed events"):
+        main(base + ["--fixed-events-tsv", str(fixed), "-o", str(output)])
+    assert not output.exists()
+    del base[option : option + 2]
+    main(
+        base
+        + [
+            "--fixed-events-tsv",
+            str(fixed),
+            "--bootstrap",
+            "2",
+            "--scan-workers",
+            "2",
+            "--bootstrap-workers",
+            "2",
+            "--bootstrap-checkpoint",
+            str(checkpoint),
+            "-o",
+            str(output),
+            "--model-out",
+            str(model),
+        ]
+    )
+    data = json.loads(model.read_text())
+    assert [row["branch_id"] for row in data["fixed_background_events"]] == [1]
+    assert {row["branch_id"] for row in data["candidates"]} == {2, 3, 4}
+    assert len(data["bootstrap_max_statistics"]) == 2
+    assert (
+        "fixed_events_tsv" in json.loads(checkpoint.read_text())["identity"]["inputs"]
+    )
+    with pytest.raises(ValueError, match="does not support fixed background"):
+        model_mapping(data, None)
+
+
 @pytest.mark.parametrize(
     "event_bound,background_bound,burst_bound", list(product((False, True), repeat=3))
 )

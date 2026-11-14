@@ -33,7 +33,12 @@ from nwkit.wgd_count_fit import (
     initial_count_bound,
     scan_counts,
 )
-from nwkit.wgd_count_model import CountLikelihood, CountTree, rate_categories
+from nwkit.wgd_count_model import (
+    CountLikelihood,
+    CountTree,
+    MultiplicationEvent,
+    rate_categories,
+)
 
 
 def read_counts(path, names, missing_values):
@@ -144,6 +149,36 @@ def _groups(args, design):
     ), unique
 
 
+def _fixed_events(path, design):
+    if not path:
+        return ()
+    fields = ["branch_id", "retention", "event_fraction", "multiplicity"]
+    header, rows = read_gene_family_table(path, fields)
+    if set(header) != set(fields) or not rows:
+        raise ValueError(
+            "Fixed events TSV needs exactly branch_id, retention, event_fraction and multiplicity, and at least one row."
+        )
+    nodes = {
+        branch: node
+        for node, branch in enumerate(design.branch_ids)
+        if node and design.lengths[node] > 0
+    }
+    events = {}
+    for row in rows:
+        branch = int(row["branch_id"])
+        if branch not in nodes or branch in events:
+            raise ValueError(
+                "Fixed events TSV requires distinct positive-length non-root branch IDs."
+            )
+        events[branch] = MultiplicationEvent(
+            nodes[branch],
+            float(row["retention"]),
+            float(row["event_fraction"]),
+            int(row["multiplicity"]),
+        )
+    return tuple(events[branch] for branch in sorted(events))
+
+
 def _fit_json(fit):
     return {
         "rates": fit.rates.tolist(),
@@ -214,6 +249,7 @@ def _paths(args):
         ("--counts", args.counts),
         ("--detection-tsv", args.detection_tsv),
         ("--rate-groups-tsv", args.rate_groups_tsv),
+        ("--fixed-events-tsv", getattr(args, "fixed_events_tsv", None)),
     ]
     paths = {}
     for role in ("outfile", "model_out"):
@@ -281,6 +317,7 @@ def wgd_count_main(args):
         rate_scales=scales,
         branch_groups=groups,
         ascertainment=args.ascertainment,
+        fixed_events=_fixed_events(getattr(args, "fixed_events_tsv", None), design),
     )
     maximum = np.nanmax(counts)
     bound = initial_count_bound(maximum)
@@ -427,6 +464,20 @@ def wgd_count_main(args):
             "Rates have numerical bounds exp(-16)..20 per median positive branch length; root mean upper bound is max(10, twice maximum observed count). Inspect nuisance_bound_reached.",
         ],
     }
+    if model.fixed_events:
+        metadata["fixed_background_events"] = [
+            {
+                "branch_id": design.branch_ids[event.node],
+                "species_event_id": design.clade_ids[event.node],
+                "retention": event.retention,
+                "event_fraction": event.fraction,
+                "multiplicity": event.multiplicity,
+            }
+            for event in model.fixed_events
+        ]
+        metadata["limitations"].append(
+            "Supplied background events are treated as exact and retained in every fit and null draw; their selection and uncertainty are not calibrated."
+        )
     model_text = (
         json.dumps(metadata, indent=2, ensure_ascii=False, allow_nan=False) + "\n"
     )

@@ -799,6 +799,46 @@ def test_scaled_pruning_leaves_impossible_rows_at_negative_infinity():
     np.testing.assert_array_equal(scaled, [0.0, -np.inf, 0.0])
 
 
+def test_fixed_pulses_with_an_additional_event_keep_the_exact_count_law():
+    fixed = MultiplicationEvent(1, 0.7, 0.25, 3)
+    candidate = MultiplicationEvent(2, 0.4, 0.75)
+    data = np.array([[3.0, 1.0], [2.0, np.nan], [np.nan, 2.0], [1.0, 2.0]])
+    base = CountLikelihood(tree(), data)
+    model = CountLikelihood(tree(), data, fixed_events=(fixed,))
+    rates, bound = [[0.0, 0.0]], 8
+    np.testing.assert_array_equal(
+        model.family_log_likelihoods(rates, 1.0, bound),
+        base.family_log_likelihoods(rates, 1.0, bound, fixed),
+    )
+    # No SSD, loss or sampling error: each observed tip is one plus its independent binomial extras.
+    expected = np.log([0.7**2 * 0.6, 2 * 0.7 * 0.3, 0.4, 0.3**2 * 0.4])
+    np.testing.assert_allclose(
+        model.family_log_likelihoods(rates, 1.0, bound, candidate), expected, atol=1e-14
+    )
+    for i in range(10):
+        a = model.simulate(rates, 1.0, np.random.default_rng(i), candidate)
+        assert np.array_equal(np.isnan(a), np.isnan(data))
+        assert np.nanmin(a) >= 1 and np.nanmax(a[:, 0]) <= 3 and np.nanmax(a[:, 1]) <= 2
+    with pytest.raises(ValueError, match="overlap"):
+        model.family_log_likelihoods(rates, 1.0, bound, fixed)
+    with pytest.raises(ValueError, match="distinct positive-length"):
+        CountLikelihood(tree(), data, fixed_events=(fixed, fixed))
+
+
+@pytest.mark.parametrize("partial", [False, True])
+def test_fixed_pulses_match_single_candidate_under_rare_detection(partial):
+    data = np.array([[1.0, 1.0], [1.0, np.nan if partial else 1.0]])
+    pulse = MultiplicationEvent(1, 0.8, 0.43)
+    parameters = dict(detection=np.array([1e-200, 1e-200]))
+    base = CountLikelihood(tree(), data, **parameters)
+    fixed = CountLikelihood(tree(), data, **parameters, fixed_events=(pulse,))
+    rates = [[0.1, 600.0]]
+    np.testing.assert_array_equal(
+        fixed.family_log_likelihoods(rates, 1.1, 8),
+        base.family_log_likelihoods(rates, 1.1, 8, pulse),
+    )
+
+
 @pytest.mark.parametrize("node", [0, -1, True, 1.5])
 def test_invalid_event_node_is_not_silently_ignored(node):
     with pytest.raises(ValueError, match="positive integer"):

@@ -292,6 +292,7 @@ def _burst_model(model, node):
         rate_scales=model.rate_scales,
         branch_groups=assignments,
         ascertainment=model.ascertainment,
+        fixed_events=model.fixed_events,
     )
 
 
@@ -410,7 +411,9 @@ def scan_counts(
         raise ValueError("Event fractions need a nonempty finite grid in [0, 1].")
     if nodes is None:
         nodes = tuple(
-            node for node, time in enumerate(model.tree.lengths[1:], 1) if time > 0
+            node
+            for node, time in enumerate(model.tree.lengths[1:], 1)
+            if time > 0 and node not in model._fixed_by_node
         )
     if (
         not nodes
@@ -420,11 +423,12 @@ def scan_counts(
             or not isinstance(node, int)
             or not 1 <= node < len(model.tree.parents)
             or model.tree.lengths[node] <= 0
+            or node in model._fixed_by_node
             for node in nodes
         )
     ):
         raise ValueError(
-            "Candidate nodes must uniquely identify positive-length non-root branches."
+            "Candidate nodes must uniquely identify positive-length non-root branches without fixed events."
         )
     options: dict[str, Any] = dict(
         max_states=max_states,
@@ -454,6 +458,7 @@ def scan_counts(
             model.rate_scales,
             model.branch_groups,
             model.ascertainment,
+            model.fixed_events,
         )
         with ProcessPoolExecutor(
             max_workers=workers,
@@ -483,7 +488,9 @@ def scan_counts(
     )
 
 
-def _model_from_data(tree, counts, detection, rate_scales, groups, ascertainment):
+def _model_from_data(
+    tree, counts, detection, rate_scales, groups, ascertainment, fixed_events=()
+):
     return CountLikelihood(
         tree,
         counts,
@@ -491,14 +498,22 @@ def _model_from_data(tree, counts, detection, rate_scales, groups, ascertainment
         rate_scales=rate_scales,
         branch_groups=groups,
         ascertainment=ascertainment,
+        fixed_events=fixed_events,
     )
 
 
 def _bootstrap_scan_statistic(
-    tree, counts, detection, rate_scales, groups, ascertainment, options
+    tree,
+    counts,
+    detection,
+    rate_scales,
+    groups,
+    ascertainment,
+    options,
+    fixed_events=(),
 ):
     simulated = _model_from_data(
-        tree, counts, detection, rate_scales, groups, ascertainment
+        tree, counts, detection, rate_scales, groups, ascertainment, fixed_events
     )
     result = scan_counts(simulated, **options)
     return max(candidate.improvement for candidate in result.candidates)
@@ -612,6 +627,7 @@ def calibrate_scan(
             model.branch_groups,
             model.ascertainment,
             options,
+            *([model.fixed_events] if model.fixed_events else []),
         )
 
     statistics = [None] * draws if checkpoint is None else checkpoint.statistics
