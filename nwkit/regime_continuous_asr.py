@@ -1,7 +1,7 @@
 """Linear-Gaussian ancestral reconstruction for branch-regime BM and OU."""
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 import numpy as np
@@ -221,6 +221,26 @@ def _rate_scale(data):
     return max(variance / mean_length, floor / mean_length)
 
 
+def _reported_bms_rate_bound(value, exponent):
+    try:
+        return max(math.ulp(0.0), math.ldexp(float(value), exponent))
+    except OverflowError:
+        return np.finfo(float).max
+
+
+def _normalized_bms_times(data):
+    _, exponent = math.frexp(max(data.lengths))
+    lengths = tuple(math.ldexp(length, -exponent) for length in data.lengths)
+    # A tree can contain enough distinct scales that uniform normalization
+    # would conflate a positive branch and an exact equality.
+    if any(
+        length == 0.0 < original
+        for length, original in zip(lengths, data.lengths, strict=True)
+    ):
+        return data, 0
+    return replace(data, lengths=lengths), exponent
+
+
 def _bms_regime_design_rank(tree, data, regime_assignment):
     observed_groups = {
         group for group, local in enumerate(data.local) if local.marginal is not None
@@ -438,10 +458,16 @@ def compute_bms_marginals(
             "BMS regime rates are not separately identifiable from the "
             "observed branch-regime covariance design; fix rates or revise the regime map."
         )
+    data, time_exponent = _normalized_bms_times(data)
+    rate_exponent = 2 * data.trait_exponent - time_exponent
     scale = _rate_scale(data)
-    lower = np.full(len(regime_assignment.regimes), scale * 1e-8)
-    upper = np.full(len(regime_assignment.regimes), scale * 1e8)
-    initial = np.full(len(regime_assignment.regimes), scale)
+    minimum = _reported_bms_rate_bound(math.ulp(0.0), -rate_exponent)
+    maximum = _reported_bms_rate_bound(np.finfo(float).max, -rate_exponent)
+    lower = np.full(len(regime_assignment.regimes), max(minimum, scale * 1e-8))
+    upper = np.full(len(regime_assignment.regimes), min(maximum, scale * 1e8))
+    if np.any(lower >= upper):
+        raise ValueError("BMS diffusion bounds exceed floating-point range.")
+    initial = np.clip(np.full(len(regime_assignment.regimes), scale), lower, upper)
 
     def objective(log_rates):
         try:
@@ -459,13 +485,13 @@ def compute_bms_marginals(
     scaled_rates = dict(zip(regime_assignment.regimes, values, strict=True))
     _, upward, log_likelihood = _prune(data, transitions_for(scaled_rates), None)
     fitted = {
-        regime: _ldexp(value, 2 * data.trait_exponent, "Fitted BMS sigma2")
+        regime: _ldexp(value, rate_exponent, "Fitted BMS sigma2")
         for regime, value in scaled_rates.items()
     }
     bounds_by_regime = {
         regime: (
-            _ldexp(lower[index], 2 * data.trait_exponent, "BMS sigma2 bound"),
-            _ldexp(upper[index], 2 * data.trait_exponent, "BMS sigma2 bound"),
+            _reported_bms_rate_bound(lower[index], rate_exponent),
+            _reported_bms_rate_bound(upper[index], rate_exponent),
         )
         for index, regime in enumerate(regime_assignment.regimes)
     }

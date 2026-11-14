@@ -52,6 +52,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   API so its fitted rate is stable across time units.
 - Check BMS rate identifiability from observed tree splits so a regime remains
   estimable when its informative branches are much shorter than other branches.
+- Search for BMS diffusion rates in normalized time units and keep reported
+  bounds representable in the input units.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.

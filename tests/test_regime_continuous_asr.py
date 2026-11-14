@@ -205,6 +205,29 @@ def test_bms_fits_separately_identifiable_rate_on_short_branches():
     assert posterior[tree].mean == pytest.approx(expected_root, abs=1e-12)
 
 
+@pytest.mark.parametrize("scale", [1e-302, 1e302])
+def test_bms_normalizes_diffusion_search_across_extreme_time_units(scale):
+    tree = tree_from("(A:1,B:1,C:1,D:1)R;")
+    regimes = assignment(tree, ["cold", "cold", "cold", "warm", "warm"])
+    values = {"A": -1.0, "B": 1.0, "C": 0.1, "D": 0.4}
+    expected, expected_fit = compute_bms_marginals(tree, values, regimes)
+    for leaf in tree.leaves():
+        leaf.dist *= scale
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        posterior, fit = compute_bms_marginals(tree, values, regimes)
+    for regime in regimes.regimes:
+        rate = fit.sigma2_by_regime[regime]
+        assert rate * scale == pytest.approx(
+            expected_fit.sigma2_by_regime[regime], rel=1e-5
+        )
+        lower, upper = fit.sigma2_bounds_by_regime[regime]
+        assert 0 < lower <= rate <= upper < np.inf
+    assert fit.restricted_log_likelihood == pytest.approx(
+        expected_fit.restricted_log_likelihood, abs=1e-9
+    )
+    assert posterior[tree].variance == pytest.approx(expected[tree].variance, rel=1e-5)
+
+
 def test_equal_optimum_oum_matches_single_optimum_ou():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
