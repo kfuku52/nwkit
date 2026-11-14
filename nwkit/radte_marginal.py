@@ -14,7 +14,7 @@ import numpy as np
 from scipy import sparse
 from scipy.linalg import cho_factor, cho_solve
 from scipy.optimize import Bounds, LinearConstraint
-from scipy.special import logsumexp, roots_hermitenorm
+from scipy.special import exprel, logsumexp, roots_hermitenorm
 
 from nwkit.radte_model import DatingProblem
 
@@ -78,6 +78,42 @@ def _normal_quadrature(points):
     nodes.setflags(write=False)
     log_weights.setflags(write=False)
     return nodes, log_weights
+
+
+def _root_contrast_variance_score(z, sd, root_weight, slope, root, v, inverse, weights):
+    """Differentiate the finite quadrature using symmetric node pairs."""
+    half = len(z) // 2
+    positive, negative = slice(-half, None), slice(half - 1, None, -1)
+    gap = 2 * z[positive]
+    root_plus, root_minus = root_weight[positive], root_weight[negative]
+    v_plus, v_minus = v[positive], v[negative]
+
+    # The ratio of the root lengths is 1 + w(-z) * expm1(2z).
+    root_log_slope = np.log1p(root_minus * np.expm1(gap)) / gap
+    root_weight_slope = root_plus * (1 - root_minus) * exprel(-gap)
+
+    # Each slope below is a divided difference across the pair. The
+    # conditional residual changes only along the base and root directions.
+    base_inverse = inverse @ slope
+    root_inverse = inverse[root]
+    base_delta = slope @ base_inverse + root_log_slope * base_inverse[root]
+    root_delta = root_inverse @ slope + root_log_slope * root_inverse[root]
+    score_delta = (
+        base_delta + root_plus * root_delta + v_minus[:, root] * root_weight_slope
+    )
+    score_minus = v_minus @ slope + root_minus * v_minus[:, root]
+
+    v_sum = v_plus + v_minus
+    log_kernel_slope = -0.5 * (v_sum @ slope + root_log_slope * v_sum[:, root])
+    w_plus, w_minus = weights[positive], weights[negative]
+    # For a pair with log weight ratio g, w(+) - w(-) is
+    # max(w(+), w(-)) * sign(g) * -expm1(-abs(g)).
+    weight_slope = (
+        np.maximum(w_plus, w_minus)
+        * exprel(-abs(gap * log_kernel_slope))
+        * log_kernel_slope
+    )
+    return (z[positive] / sd) ** 2 @ (w_plus * score_delta + weight_slope * score_minus)
 
 
 class MarginalDatingProblem(DatingProblem):
@@ -265,30 +301,36 @@ class MarginalDatingProblem(DatingProblem):
         if self.fixed_sd is None:
             assert inverse is not None
             covariance_derivative = self.projected_covariance
+            slope = self.conditional_slope[self.rows_to_edges]
             covariance_score = 0.5 * (
                 np.einsum("ij,ji->", inverse, covariance_derivative)
                 - np.einsum("ki,ki->k", v @ covariance_derivative, v)
             )
-            if sd == 0:
+            if len(z) == 1:
+                # A single quadrature node lies at zero for every variance.
+                variance_score = covariance_score[0]
+            elif sd == 0:
                 # d E[f(sqrt(k*tau)*Z)] / d tau at zero = k*f''(0)/2.
                 # This right derivative includes the root log-sum curvature;
                 # dividing the log-SD score by tau would lose it at zero.
-                slope = self.conditional_slope[self.rows_to_edges].copy()
                 slope[root] += root_weight[0]
                 second = root_weight[0] * (1 - root_weight[0])
                 score = slope @ v[0]
                 variance_score = covariance_score[0] + 0.5 * self.contrast_variance * (
                     slope @ inverse @ slope + second * v[0, root] - score**2
                 )
-                return float(value), np.append(gradient, variance_score)
-            mean_derivative = (
-                z[:, None] * self.conditional_slope[self.rows_to_edges][None, :]
-            )
-            mean_derivative[:, root] += z * root_weight
-            sigma_score = covariance_score + np.sum(v * mean_derivative, axis=1) / (
-                2 * sd**2
-            )
-            gradient = np.append(gradient, weights @ sigma_score)
+            elif z[-1] < 1e-3:
+                # The two sides of the normal integral nearly cancel before
+                # division by the rate variance.
+                contrast_score = _root_contrast_variance_score(
+                    z, sd, root_weight, slope, root, v, inverse, weights
+                )
+                variance_score = weights @ covariance_score + contrast_score
+            else:
+                score = v @ slope + root_weight * v[:, root]
+                contrast_score = weights @ (z * score) / (2 * sd**2)
+                variance_score = weights @ covariance_score + contrast_score
+            gradient = np.append(gradient, variance_score)
         return float(value), np.asarray(gradient)
 
     def initial_parameters(self, initial_ages=None):

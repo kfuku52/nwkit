@@ -148,7 +148,10 @@ The optimization coordinate for an estimated rate variance is now
 `tau = sigma² >= 0`; the upper numerical protection remains `tau <= exp(4)`.
 This includes the exact strict-clock boundary instead of the former
 `log(sigma) >= -9` floor. For positive tau the variance score is obtained by
-the chain rule. At zero, write the conditional mean derivatives with respect
+the chain rule. When the scaled quadrature nodes are close to zero, the
+implementation pairs the positive and negative nodes and uses divided
+differences to evaluate the variance score without cancellation. At zero,
+write the conditional mean derivatives with respect
 to root contrast z as `b=m'(0)` and `h=m''(0)`, with `h_root=w(1-w)` and other
 entries zero. With `v=V^-1(m(0)-y)`, `P=M K_c M^T`, and `k=Var(z)/tau`, the
 right derivative of the negative log likelihood is

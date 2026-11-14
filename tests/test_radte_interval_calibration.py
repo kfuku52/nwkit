@@ -36,6 +36,23 @@ def test_zero_variance_right_derivative_and_continuity(rho):
         assert p.value_gradient(plus)[1][-1] == pytest.approx(
             gradient[-1], rel=2e-3, abs=2e-3
         )
+    for variance in (1e-20, 1e-40, np.finfo(float).smallest_subnormal):
+        x[-1] = variance
+        _, tiny_gradient = p.value_gradient(x)
+        assert tiny_gradient[-1] == pytest.approx(gradient[-1], rel=1e-10)
+
+
+def test_single_node_quadrature_has_a_continuous_variance_score():
+    c = small_chronology()
+    p = MarginalDatingProblem(
+        c, likelihood=quadratic_likelihood(c), quadrature_points=1
+    )
+    x = p.initial_parameters()
+    x[-1] = 0
+    _, zero_gradient = p.value_gradient(x)
+    x[-1] = 1e-30
+    _, tiny_gradient = p.value_gradient(x)
+    assert tiny_gradient[-1] == pytest.approx(zero_gradient[-1], rel=1e-12)
 
 
 def test_estimated_marginal_variance_can_reach_the_true_zero_boundary():
