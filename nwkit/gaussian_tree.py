@@ -18,10 +18,12 @@ from scipy import sparse
 from nwkit.clade_index import LcaIndex
 from nwkit.sparse_laplace import SparseCovarianceModel
 
+_MIN_NORMAL = float(np.finfo(float).tiny)
+
 
 def _scaled_gaussian_variance(slope, variance):
     squared = slope * slope
-    if 2.0**-1022 <= squared < math.inf:
+    if _MIN_NORMAL <= squared < math.inf:
         return squared * variance
     return slope * (slope * variance)
 
@@ -370,6 +372,17 @@ def _fill_direct_covariance(
     return True
 
 
+def _finite_loading_factors(squares, factors, variances):
+    # Squared loadings and their reciprocally scaled variances are only
+    # intermediates. Subnormal intermediates can corrupt normal covariances.
+    return bool(
+        np.isfinite(factors).all()
+        and np.isfinite(squares).all()
+        and np.all(squares >= _MIN_NORMAL)
+        and np.all((factors >= _MIN_NORMAL) | (variances == 0.0))
+    )
+
+
 def _fill_log_covariance(
     covariance, requested, lca, variances, log_loadings, zeros, negative
 ):
@@ -557,8 +570,11 @@ class GaussianTreeProcess:
                     covariance[second, first] = value
         elif direct_loadings:
             with np.errstate(over="ignore", under="ignore", divide="ignore"):
-                ancestor_factor = variances / (cumulative_loading * cumulative_loading)
-            direct_loadings = bool(np.isfinite(ancestor_factor).all())
+                loading_squares = cumulative_loading * cumulative_loading
+                ancestor_factor = variances / loading_squares
+            direct_loadings = _finite_loading_factors(
+                loading_squares, ancestor_factor, variances
+            )
             if direct_loadings and len(requested) >= 32:
                 if _fill_direct_covariance(
                     covariance,
@@ -569,6 +585,7 @@ class GaussianTreeProcess:
                     variances,
                 ):
                     return covariance
+                direct_loadings = False
             if direct_loadings:
                 for first, first_index in enumerate(requested):
                     covariance[first, first] = variances[first_index]

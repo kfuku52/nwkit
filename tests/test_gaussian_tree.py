@@ -221,6 +221,25 @@ def test_gaussian_moments_keep_finite_variances_with_extreme_affine_slopes(
     assert covariance[0, 1] == pytest.approx(expected_covariance, rel=1e-12, abs=0.0)
 
 
+@pytest.mark.parametrize("count", [2, 32])
+def test_covariance_does_not_round_subnormal_products_of_cumulative_loadings(count):
+    tree = tree_from("((A:1,B:1)I:1,C:1)R;")
+    process = GaussianTreeProcess(
+        tree,
+        {
+            tree["I"]: GaussianTransition(1e-150, 0.0, 1e-30),
+            tree["A"]: GaussianTransition(3e-12, 0.0, 1e-30),
+            tree["B"]: GaussianTransition(3e-12, 0.0, 1e-30),
+            tree["C"]: GaussianTransition(1.0, 0.0, 0.0),
+        },
+        GaussianRootPrior("fixed", 0.0, 0.0),
+        "test",
+    )
+    covariance = process.covariance([tree["A"], tree["B"]] + [tree["C"]] * (count - 2))
+    assert covariance[0, 1] == pytest.approx(9e-54, rel=1e-12, abs=0.0)
+    assert covariance[1, 0] == covariance[0, 1]
+
+
 def test_positive_asr_eb_uses_the_shared_acdc_branch_process():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
