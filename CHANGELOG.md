@@ -61,7 +61,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   trait and time units so branch rescaling preserves the fitted trends.
 - Apply the same ultrametricity tolerance to delta and OU contrasts across
   branch-length units.
-- Preserve short positive branches under the delta time transformation.
+- Preserve short positive branches under the delta time transformation,
+  including branches shorter than one ULP of their parent depth at large delta.
 - Validate custom covariance on relative scales so overflow and tiny input
   units cannot hide invalid entries.
 - Preserve small sampling covariances and avoid cancellation when computing

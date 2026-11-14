@@ -351,11 +351,69 @@ def _delta_edge_variance(parent_depth, length, height, parameter):
     )
 
 
+def _scaled_delta_relative_length(length, depth, parameter):
+    fraction = length / depth
+    if fraction >= 2.0**-1022:
+        separation = (
+            math.log1p(fraction)
+            if math.isfinite(fraction)
+            else math.log(length) - math.log(depth)
+        )
+        return parameter * separation
+    # log1p(x) is x to relative precision here. Retain its product with
+    # delta before the relative branch length is rounded to a subnormal.
+    mantissa, exponent = math.frexp(length)
+    scale, scale_exponent = math.frexp(parameter)
+    base, base_exponent = math.frexp(depth)
+    return math.ldexp(
+        mantissa * scale / base, exponent + scale_exponent - base_exponent
+    )
+
+
+def _large_delta_edge_variance(parent, length, height, parameter):
+    child = parent + length
+    if not math.isfinite(child):
+        raise ValueError("A delta branch depth exceeds floating-point range.")
+    if child >= 0.5 * height:
+        # Subtract the parent before the branch length. This preserves a
+        # difference below one ULP of the child depth before multiplying by delta.
+        depth_offset = (parent - height) + length
+        power = (
+            -_scaled_delta_relative_length(-depth_offset, child, parameter)
+            if depth_offset < 0.0
+            else _scaled_delta_relative_length(depth_offset, height, parameter)
+        )
+    else:
+        ratio = child / height
+        power = parameter * (
+            math.log(ratio) if ratio > 0.0 else math.log(child) - math.log(height)
+        )
+    scaled_separation = (
+        math.inf
+        if parent == 0.0
+        else _scaled_delta_relative_length(length, parent, parameter)
+    )
+    fraction = -math.expm1(-scaled_separation)
+    if fraction == 0.0:
+        log_fraction = math.log(length) + math.log(parameter) - math.log(parent)
+        return math.exp(math.log(height) + power + log_fraction)
+    if abs(power) <= 700.0 and fraction >= 2.0**-1022:
+        transformed_depth = height * math.exp(power)
+        if math.isfinite(transformed_depth):
+            return transformed_depth * fraction
+    return math.exp(math.log(height) + power + math.log(fraction))
+
+
 def _delta_edge_variances(parameter, base_depths, base_edges, height):
+    # Above this scale a single ULP of depth changes the exponent by more
+    # than roughly 2e-10. Keep the short edge in the calculation explicitly.
+    edge_variance = (
+        _large_delta_edge_variance if parameter > 2.0**20 else _delta_edge_variance
+    )
     return {
         node: 0.0
-        if node.is_root
-        else _delta_edge_variance(base_depths[node.up], length, height, parameter)
+        if node.is_root or length == 0.0
+        else edge_variance(base_depths[node.up], length, height, parameter)
         for node, length in base_edges.items()
     }
 

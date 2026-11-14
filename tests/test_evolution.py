@@ -181,6 +181,27 @@ def test_delta_preserves_positive_short_branches_at_large_parent_depth(length):
     assert edges[tree["A"]] == pytest.approx(2 * length, rel=1e-14, abs=0.0)
 
 
+def test_large_delta_retains_child_depth_below_one_ulp_before_exponentiation():
+    tree = _tree(
+        "((A:8.673617379884035e-19,B:1.1102230246251565e-16)I:1,C:1.0000000000000002)R;"
+    )
+    # For a parent at 1 and height 1 + 2**-52, use the ratio of
+    # (1 + 2**-60) to the height without rounding either short edge away.
+    delta = 1e16
+    rise = -math.expm1(-delta * math.log1p(2.0**-60))
+    decay = math.exp(-delta * math.log1p((2.0**-52 - 2.0**-60) / (1.0 + 2.0**-60)))
+    expected = (1.0 + 2.0**-52) * decay * rise
+    actual = transformed_edge_variances(tree, model="delta", parameter=delta)
+    assert actual[tree["A"]] == pytest.approx(expected, rel=2e-15, abs=0.0)
+
+
+def test_large_delta_restores_subnormal_relative_branch_length_before_exponentiation():
+    tree = _tree("((A:1e-10,B:1e-10)I:1e308,C:1e308)R;")
+    actual = transformed_edge_variances(tree, model="delta", parameter=1e308)
+    expected = 1e308 * math.expm1(1e-10)
+    assert actual[tree["A"]] == pytest.approx(expected, rel=2e-15, abs=0.0)
+
+
 @pytest.mark.parametrize("model,rate_change", [("eb", -0.4), ("acdc", 0.2)])
 def test_rate_change_covariance_integrates_exponential_rate(model, rate_change):
     covariance = build_evolutionary_covariance(
