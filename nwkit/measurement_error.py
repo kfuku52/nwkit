@@ -734,6 +734,8 @@ def _sparse_predictor_observation_solver(
         ],
         format="csc",
     )
+    system = (prior + coupling).tocsc()
+    prior_indices = _augmented_prior_entries(system, prior)
 
     response = (
         np.column_stack((observed, np.ones_like(observed)))
@@ -745,7 +747,10 @@ def _sparse_predictor_observation_solver(
     def solve(variance):
         # Schur complement is -(R + L Q^-1 L.T). The augmented solve
         # keeps inverse-observation scores free of Woodbury cancellation.
-        factor = factor_sparse_nonsingular(prior / variance + coupling)
+        system.data[prior_indices] = prior.data * (1.0 / variance)
+        # The matrix is owned by this synchronous optimizer. Every call
+        # replaces all variable entries before factoring the current trial.
+        factor = factor_sparse_nonsingular(system)
         solved = factor.solve(right)
         logdet = (
             factor.logdet
@@ -755,6 +760,21 @@ def _sparse_predictor_observation_solver(
         return solved[:latent_count], -solved[latent_count:], logdet
 
     return solve
+
+
+def _augmented_prior_entries(system, prior):
+    # Prior coordinates occupy the top left block and are disjoint from
+    # sampling and observation terms. Locate them once in the CSC structure.
+    def entries(matrix):
+        columns = np.repeat(
+            np.arange(matrix.shape[1], dtype=np.int64), np.diff(matrix.indptr)
+        )
+        return columns * matrix.shape[0] + matrix.indices
+
+    system.sort_indices()
+    prior.sum_duplicates()
+    prior.eliminate_zeros()
+    return np.searchsorted(entries(system), entries(prior))
 
 
 def _sparse_predictor_reported_rate(variance, covariance_scale, trait_exponent):
