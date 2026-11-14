@@ -411,19 +411,31 @@ def _robust_minimize(
     return min(candidates, key=lambda candidate: float(candidate.fun))
 
 
-def _normalize_covariance(
-    matrix: np.ndarray, size: int, label: str, *, allow_semidefinite: bool = False
-) -> np.ndarray:
+def _scale_covariance_by_mean_variance(matrix, size, label):
     matrix = np.asarray(matrix, dtype=float)
-    if matrix.shape != (size, size) or not np.isfinite(matrix).all():
+    if not size or matrix.shape != (size, size) or not np.isfinite(matrix).all():
         raise ValueError(
             "{} covariance has invalid dimensions or values.".format(label)
         )
-    matrix = (matrix + matrix.T) / 2.0
+    _, exponent = math.frexp(float(np.max(np.abs(matrix))))
+    scaled = np.ldexp(matrix, -exponent)
+    matrix = (scaled + scaled.T) / 2.0
     diagonal_mean = float(np.mean(np.diag(matrix)))
     if diagonal_mean <= 0.0:
         raise ValueError("{} covariance needs a positive diagonal.".format(label))
-    normalized = matrix / diagonal_mean
+    with np.errstate(over="ignore"):
+        normalized = matrix / diagonal_mean
+    if not np.isfinite(normalized).all():
+        raise ValueError(
+            "{} covariance has non-finite normalized values.".format(label)
+        )
+    return normalized
+
+
+def _normalize_covariance(
+    matrix: np.ndarray, size: int, label: str, *, allow_semidefinite: bool = False
+) -> np.ndarray:
+    normalized = _scale_covariance_by_mean_variance(matrix, size, label)
     if allow_semidefinite:
         eigenvalues = np.linalg.eigvalsh(normalized)
         if float(np.min(eigenvalues)) < -1e-9 * max(1.0, float(np.max(eigenvalues))):

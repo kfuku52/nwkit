@@ -1675,6 +1675,23 @@ def test_sparse_poisson_glmm_matches_dense_fit(monkeypatch):
     assert sparse.log_likelihood == pytest.approx(dense.log_likelihood, rel=2e-5)
 
 
+@pytest.mark.parametrize("scale", [2.0**-1060, 2.0**1023])
+def test_glmm_normalizes_covariance_independently_of_input_units(scale):
+    values = np.array([1.0, 2.0, 3.0, 2.0, 5.0])
+    design = np.column_stack([np.ones(5), np.linspace(-1.0, 1.0, 5)])
+    covariance = 0.75 * np.eye(5) + 0.25
+    nominal = fit_phylogenetic_glmm(
+        values, design, lambda _: covariance, family="poisson"
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        scaled = fit_phylogenetic_glmm(
+            values, design, lambda _: scale * covariance, family="poisson"
+        )
+    np.testing.assert_array_equal(scaled.coefficients, nominal.coefficients)
+    np.testing.assert_array_equal(scaled.random_modes, nominal.random_modes)
+    assert scaled.log_likelihood == nominal.log_likelihood
+
+
 @pytest.mark.parametrize(
     ("family", "values", "options", "tolerance"),
     [
