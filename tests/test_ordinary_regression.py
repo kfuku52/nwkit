@@ -1,6 +1,7 @@
 import hashlib
 import io
 import json
+import math
 import sys
 
 import numpy as np
@@ -1513,6 +1514,36 @@ def test_censored_gaussian_interval_probability_is_stable_in_both_tails():
             np.asarray([1.0]),
         )[0]
         assert np.isfinite(value)
+
+
+@pytest.mark.parametrize("linear", [-40.0, 0.0, 40.0])
+def test_censored_gaussian_retains_subnormal_interval_width(linear):
+    width = np.nextafter(0.0, 1.0)
+    dispersion = 2.0
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        value = _censored_gaussian_log_likelihood(
+            np.array([np.nan]),
+            np.array([linear]),
+            dispersion,
+            np.array([0.0]),
+            np.array([width]),
+        )[0]
+
+    expected = np.log(width) - np.log(dispersion)
+    expected -= 0.5 * ((linear / dispersion) ** 2 + np.log(2.0 * np.pi))
+    assert value == pytest.approx(expected, abs=1e-12)
+
+
+def test_censored_gaussian_interval_scales_before_overflowing_subtraction():
+    actual = _censored_gaussian_log_likelihood(
+        np.array([np.nan]),
+        np.array([1e308]),
+        1e308,
+        np.array([-1e308]),
+        np.array([-9e307]),
+    )[0]
+    expected = np.log(0.5 * (math.erfc(1.9 / np.sqrt(2)) - math.erfc(2 / np.sqrt(2))))
+    assert actual == pytest.approx(expected, abs=1e-12)
 
 
 def test_censored_gaussian_never_reports_a_nonfinite_successful_fit():

@@ -1072,6 +1072,47 @@ def _beta_binomial_log_likelihood(values, linear, dispersion, trials):
     )
 
 
+def _standardized_censor_bounds(bounds, center, dispersion):
+    difference = bounds - center
+    result = difference / dispersion
+    if dispersion > 1.0:
+        overflowing = np.isinf(difference)
+        result[overflowing] = bounds[overflowing] / dispersion - (
+            center[overflowing] / dispersion
+        )
+    return result
+
+
+def _normal_censor_interval_log_mass(lower, upper, center, dispersion):
+    with np.errstate(over="ignore", under="ignore", invalid="ignore", divide="ignore"):
+        standardized_lower = _standardized_censor_bounds(lower, center, dispersion)
+        standardized_upper = _standardized_censor_bounds(upper, center, dispersion)
+        reflect = standardized_lower >= 0.0
+        upper_cdf = log_ndtr(np.where(reflect, -standardized_lower, standardized_upper))
+        lower_cdf = log_ndtr(np.where(reflect, -standardized_upper, standardized_lower))
+        difference = np.minimum(lower_cdf - upper_cdf, 0.0)
+        log_mass = upper_cdf + np.log(-np.expm1(difference))
+
+        width = upper - lower
+        log_width = np.log(width) - math.log(dispersion)
+        midpoint = 0.5 * standardized_lower + 0.5 * standardized_upper
+        # Integrate the quadratic expansion of the density for short intervals.
+        # The original endpoints preserve width after centering and scaling.
+        small_interval = log_width + np.log1p(np.abs(midpoint)) < math.log(1e-3)
+        standardized_width = np.exp(np.where(small_interval, log_width, -np.inf))
+        scaled_midpoint = np.where(small_interval, midpoint, 0.0) * standardized_width
+        correction = np.log1p((scaled_midpoint**2 - standardized_width**2) / 24.0)
+        log_density = -(0.5 * midpoint) * midpoint - 0.5 * math.log(math.tau)
+        midpoint_mass = log_width + log_density
+        both_outside_range = np.isneginf(upper_cdf)
+        log_mass[both_outside_range] = -np.inf
+        return np.where(
+            small_interval | ((lower_cdf == upper_cdf) & ~both_outside_range),
+            midpoint_mass + correction,
+            log_mass,
+        )
+
+
 def _censored_gaussian_log_likelihood(
     values, linear, dispersion, censor_lower, censor_upper
 ):
@@ -1085,41 +1126,18 @@ def _censored_gaussian_log_likelihood(
     interval = ~np.isnan(lower) & ~np.isnan(upper)
     result = np.empty(len(values), dtype=float)
     standardized = (values - linear) / dispersion
+    standardized_exact = standardized[exact]
     result[exact] = (
-        -0.5 * standardized[exact] ** 2
+        (-0.5 * standardized_exact) * standardized_exact
         - math.log(dispersion)
-        - 0.5 * math.log(2.0 * math.pi)
+        - 0.5 * math.log(math.tau)
     )
     result[left] = log_ndtr((upper[left] - linear[left]) / dispersion)
     result[right] = log_ndtr((linear[right] - lower[right]) / dispersion)
     if np.any(interval):
-        standardized_lower = (lower[interval] - linear[interval]) / dispersion
-        standardized_upper = (upper[interval] - linear[interval]) / dispersion
-        interval_result = np.empty(len(standardized_lower), dtype=float)
-        negative = standardized_upper <= 0.0
-        positive = standardized_lower >= 0.0
-        central = ~(negative | positive)
-
-        def log_difference(larger: np.ndarray, smaller: np.ndarray) -> np.ndarray:
-            ratio = np.exp(np.minimum(smaller - larger, 0.0))
-            return larger + np.log1p(-ratio)
-
-        if np.any(negative):
-            interval_result[negative] = log_difference(
-                log_ndtr(standardized_upper[negative]),
-                log_ndtr(standardized_lower[negative]),
-            )
-        if np.any(positive):
-            interval_result[positive] = log_difference(
-                log_ndtr(-standardized_lower[positive]),
-                log_ndtr(-standardized_upper[positive]),
-            )
-        if np.any(central):
-            interval_result[central] = log_difference(
-                log_ndtr(standardized_upper[central]),
-                log_ndtr(standardized_lower[central]),
-            )
-        result[interval] = interval_result
+        result[interval] = _normal_censor_interval_log_mass(
+            lower[interval], upper[interval], linear[interval], dispersion
+        )
     return result
 
 
