@@ -41,6 +41,7 @@ from nwkit.gaussian import (
     draw_from_factor,
     finite_mean,
     is_diagonal,
+    sample_standard_errors,
 )
 from nwkit.measurement_error import fit_latent_predictor, fit_sparse_latent_predictor
 from nwkit.model_matrix import (
@@ -1817,6 +1818,10 @@ def _apply_shape_refitted_bootstrap(
             fit_state,
             args.seed + response_index,
         )
+        standard_errors = sample_standard_errors(bootstrap)
+        lower_bounds, upper_bounds = np.quantile(
+            bootstrap, [alpha, 1.0 - alpha], axis=0
+        )
         for predictor_index, predictor in enumerate(predictors):
             selected = (updated["response"] == response) & (
                 updated["term"] == predictor
@@ -1824,11 +1829,14 @@ def _apply_shape_refitted_bootstrap(
             row_index = updated.index[selected].item()
             coefficient = float(updated.loc[row_index, "coefficient"])
             samples = bootstrap[:, predictor_index]
-            standard_error = float(np.std(samples, ddof=1))
-            lower, upper = np.quantile(samples, [alpha, 1.0 - alpha])
+            standard_error = float(standard_errors[predictor_index])
             updated.loc[row_index, "standard_error"] = standard_error
-            updated.loc[row_index, "confidence_interval_lower"] = float(lower)
-            updated.loc[row_index, "confidence_interval_upper"] = float(upper)
+            updated.loc[row_index, "confidence_interval_lower"] = float(
+                lower_bounds[predictor_index]
+            )
+            updated.loc[row_index, "confidence_interval_upper"] = float(
+                upper_bounds[predictor_index]
+            )
             updated.loc[row_index, "inference_method"] = "parametric-bootstrap"
             updated.loc[row_index, "response_evolution_parameter_bootstrap_refit"] = (
                 "yes"
