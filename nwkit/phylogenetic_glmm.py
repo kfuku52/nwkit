@@ -435,13 +435,17 @@ def _normalize_covariance(
     return normalized
 
 
+def _reuse_tree_covariance(factory, covariance):
+    if type(factory) is EvolutionaryCovarianceFactory:
+        return lru_cache(maxsize=1)(covariance)
+    return covariance
+
+
 def _prepare_dense_phylogenetic_covariance(factory, n_tips):
     def covariance(parameter):
         return _normalize_covariance(factory(parameter), n_tips, "Phylogenetic")
 
-    if type(factory) is EvolutionaryCovarianceFactory:
-        return lru_cache(maxsize=1)(covariance)
-    return covariance
+    return _reuse_tree_covariance(factory, covariance)
 
 
 def _multinomial_terms(
@@ -543,14 +547,8 @@ def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
     return matrix
 
 
-def _sparse_covariance_from_factory(factory, parameter):
-    builder = getattr(factory, "sparse_model", None)
-    return None if not callable(builder) else builder(parameter)
-
-
 def _sparse_glmm_latent_model(
-    phylogenetic_covariance,
-    parameter,
+    phylogenetic,
     component_variances,
     group_covariance,
     random_dimension,
@@ -558,7 +556,6 @@ def _sparse_glmm_latent_model(
     predictor_columns=(),
     coefficients=None,
 ):
-    phylogenetic = _sparse_covariance_from_factory(phylogenetic_covariance, parameter)
     if phylogenetic is None:
         return None
     components = {"phylogenetic": (component_variances["phylogenetic"], phylogenetic)}
@@ -2488,6 +2485,9 @@ def _fit_scalar_phylogenetic_glmm(
     dense_phylogenetic = _prepare_dense_phylogenetic_covariance(
         phylogenetic_covariance, n_tips
     )
+    sparse_phylogenetic = _reuse_tree_covariance(
+        phylogenetic_covariance, sparse_builder
+    )
     if n_tips != len(tip_design):
         raise ValueError("Response and design lengths differ.")
     (
@@ -2599,8 +2599,7 @@ def _fit_scalar_phylogenetic_glmm(
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
         if use_sparse:
             latent = _sparse_glmm_latent_model(
-                phylogenetic_covariance,
-                decoded,
+                sparse_phylogenetic(decoded),
                 components,
                 group_covariance,
                 1,
@@ -2992,20 +2991,18 @@ def _fit_parametric_bootstrap_glmm(
     )
     design_array = np.asarray(design, dtype=float)
     sparse_builder = getattr(phylogenetic_covariance, "sparse_model", None)
-    sparse_capable = (
-        callable(sparse_builder)
-        and (
-            options.group_covariance is None
-            or isinstance(options.group_covariance, SparseCovarianceModel)
-        )
-        and _sparse_predictor_uncertainties(options.predictor_uncertainties)
+    sparse_group = options.group_covariance is None or isinstance(
+        options.group_covariance, SparseCovarianceModel
     )
     sparse_sampler = None
     random_cholesky = None
-    if sparse_capable:
+    if (
+        callable(sparse_builder)
+        and sparse_group
+        and _sparse_predictor_uncertainties(options.predictor_uncertainties)
+    ):
         latent_model = _sparse_glmm_latent_model(
-            phylogenetic_covariance,
-            fit.evolution_parameter,
+            sparse_builder(fit.evolution_parameter),
             fit.component_variances,
             options.group_covariance,
             fit.coefficients.shape[1],
@@ -3181,6 +3178,9 @@ def fit_phylogenetic_glmm(
     dense_phylogenetic = _prepare_dense_phylogenetic_covariance(
         phylogenetic_covariance, len(design)
     )
+    sparse_phylogenetic = _reuse_tree_covariance(
+        phylogenetic_covariance, sparse_builder
+    )
     if (
         use_sparse
         and len(design) * random_dimension > MAX_SPARSE_GLMM_LINEAR_PREDICTORS
@@ -3255,8 +3255,7 @@ def fit_phylogenetic_glmm(
         components = dict(zip(component_names, np.exp(log_variances), strict=True))
         if use_sparse:
             latent = _sparse_glmm_latent_model(
-                phylogenetic_covariance,
-                decoded_parameter,
+                sparse_phylogenetic(decoded_parameter),
                 components,
                 group_covariance,
                 random_dimension,
