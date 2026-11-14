@@ -84,6 +84,23 @@ def make_design(tree, names, depths):
 
 def clade_disparities(design, values):
     """Mean pairwise squared Euclidean distance via stable subtree moments."""
+    with np.errstate(over="ignore", invalid="ignore", under="ignore"):
+        disparities, counts = _clade_moments(design, values)
+        affected = ~np.isfinite(disparities)
+        if disparities[0] < np.finfo(float).tiny:
+            affected |= disparities < np.finfo(float).tiny
+        if affected.any():
+            exponent = np.frexp(np.max(np.abs(values)))[1]
+            scaled, _ = _clade_moments(design, np.ldexp(values, -exponent))
+            disparities[affected] = np.ldexp(scaled[affected], 2 * int(exponent))
+    if not np.isfinite(disparities).all() or disparities[0] <= 0:
+        raise ValueError(
+            "DTT requires finite, positive total disparity; rescale nonconstant traits."
+        )
+    return disparities, counts
+
+
+def _clade_moments(design, values):
     p = values.shape[1]
     counts = np.zeros(len(design.parents), dtype=int)
     means = np.zeros((len(counts), p))
@@ -111,10 +128,6 @@ def clade_disparities(design, values):
     disparities = np.divide(
         2 * sums, counts - 1, out=np.zeros_like(sums), where=counts > 1
     )
-    if not np.isfinite(disparities).all() or disparities[0] <= 0:
-        raise ValueError(
-            "DTT requires finite, positive total disparity; rescale nonconstant traits."
-        )
     return disparities, counts
 
 

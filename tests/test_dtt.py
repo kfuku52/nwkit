@@ -99,6 +99,16 @@ def test_disparity_handles_large_common_trait_offsets():
     assert disparities[0] == 2 * step * step
 
 
+def test_disparity_stays_finite_when_a_moment_product_overflows():
+    _, design = design_for("(A:1,B:1,C:1);")
+    step = 2.0**511
+    values = np.array([[-step], [0.0], [step]])
+    with np.errstate(over="raise", invalid="raise"):
+        disparities, _ = clade_disparities(design, values)
+    # The pairwise squared differences are step², 4 step² and step².
+    assert disparities[0] == 2.0**1023
+
+
 def test_bm_rate_geiger_and_gls_oracle():
     tree, _ = design_for()
     covariance = build_evolutionary_process(tree).tip_covariance(list("ABCDEFGH"))
