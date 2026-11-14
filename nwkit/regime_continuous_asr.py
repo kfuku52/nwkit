@@ -139,27 +139,29 @@ def _predict_down(factor, transition):
 
 
 def _prune(data, transitions, root_prior):
-    inside = list(data.local)
-    upward = [_Factor(None) for _ in data.parents]
+    upward = list(data.local)
     for group in range(len(data.parents) - 1, -1, -1):
-        factor = inside[group]
+        factor = upward[group]
         for child in data.children[group]:
             factor = _combine(factor, upward[child])
-        inside[group] = factor
-        if data.parents[group] >= 0:
-            upward[group] = _propagate_up(factor, transitions[group])
+        upward[group] = (
+            _propagate_up(factor, transitions[group])
+            if data.parents[group] >= 0
+            else factor
+        )
+    root_factor = upward[0]
     if root_prior is None:
-        if inside[0].marginal is None:
+        if root_factor.marginal is None:
             raise ValueError("A flat root prior requires informative observations.")
-        log_likelihood = inside[0].log_weight
+        log_likelihood = root_factor.log_weight
     else:
-        posterior_root = _combine(_Factor(root_prior), inside[0])
+        posterior_root = _combine(_Factor(root_prior), root_factor)
         log_likelihood = posterior_root.log_weight
     if not math.isfinite(log_likelihood):
         raise ValueError(
             "The observations have zero likelihood under the regime model."
         )
-    return tuple(inside), tuple(upward), log_likelihood
+    return upward, log_likelihood
 
 
 def _smooth(data, transitions, root_prior, upward):
@@ -327,7 +329,13 @@ def _positive_multistart(objective, initial, lower, upper):
 
 
 def _fixed_bms_marginals(
-    tree, values_by_leaf, regime_assignment, sigma2_by_regime, standard_errors
+    tree,
+    values_by_leaf,
+    regime_assignment,
+    sigma2_by_regime,
+    standard_errors,
+    *,
+    compute_posterior,
 ):
     transitions = {}
     for node in tree.traverse(strategy="preorder"):
@@ -354,6 +362,7 @@ def _fixed_bms_marginals(
         standard_errors=standard_errors,
         _tree_validated=True,
         _process=process,
+        _compute_posterior=compute_posterior,
     )
     return posterior, bm_fit
 
@@ -368,6 +377,7 @@ def compute_bms_marginals(
     regime_parameters_source=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Return flat-root marginals under regime-specific Brownian rates."""
 
@@ -410,6 +420,7 @@ def compute_bms_marginals(
             regime_assignment,
             sigma2_by_regime,
             standard_errors,
+            compute_posterior=_compute_posterior,
         )
         singular_support = (
             bm_fit.num_effective_observations < data.num_effective_observations
@@ -473,7 +484,7 @@ def compute_bms_marginals(
         try:
             values = np.exp(log_rates)
             rates = dict(zip(regime_assignment.regimes, values, strict=True))
-            return -_prune(data, transitions_for(rates), None)[2]
+            return -_prune(data, transitions_for(rates), None)[1]
         except (ValueError, ArithmeticError):
             return 1e100
 
@@ -483,7 +494,8 @@ def compute_bms_marginals(
     del objective_value
     values = np.exp(selected.x)
     scaled_rates = dict(zip(regime_assignment.regimes, values, strict=True))
-    _, upward, log_likelihood = _prune(data, transitions_for(scaled_rates), None)
+    transitions = transitions_for(scaled_rates)
+    upward, log_likelihood = _prune(data, transitions, None)
     fitted = {
         regime: _ldexp(value, rate_exponent, "Fitted BMS sigma2")
         for regime, value in scaled_rates.items()
@@ -508,9 +520,11 @@ def compute_bms_marginals(
     optimizer_message = (
         f"deterministic multistart: {converged}/{starts} starts converged; {message}"
     )
-    transitions = transitions_for(scaled_rates)
-    smoothed = _smooth(data, transitions, None, upward)
-    posterior = _restore_posterior(data, smoothed)
+    posterior = (
+        _restore_posterior(data, _smooth(data, transitions, None, upward))
+        if _compute_posterior
+        else {}
+    )
     residual_df = data.num_effective_observations - 1
     restored_log_likelihood = (
         log_likelihood - residual_df * data.trait_exponent * _LOG_2

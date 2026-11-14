@@ -10,6 +10,7 @@ from nwkit.asr_regimes import _observed_split_regime_lengths, _regime_design_ran
 from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
+    GaussianConditioningResult,
     condition_gaussian_tree,
     gaussian_tree_likelihood,
 )
@@ -165,6 +166,7 @@ def compute_regime_drift_marginals(
     regime_parameters_source=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Fit and condition regime-specific Brownian rates and drifts."""
 
@@ -311,7 +313,10 @@ def compute_regime_drift_marginals(
         optimized = MultistartResult(
             fixed_parameters, 0.0, True, "all parameters fixed", 0, 0, 0
         )
-    conditioned = condition_gaussian_tree(
+    evaluate = (
+        condition_gaussian_tree if _compute_posterior else gaussian_tree_likelihood
+    )
+    conditioned = evaluate(
         process_for(optimized.x),
         values_by_leaf,
         standard_errors=standard_errors,
@@ -361,4 +366,9 @@ def compute_regime_drift_marginals(
             None if fixed_sigma is not None else dict.fromkeys(regimes, sigma_bounds)
         ),
     )
-    return conditioned.marginals, fit
+    posterior = (
+        conditioned.marginals
+        if isinstance(conditioned, GaussianConditioningResult)
+        else {}
+    )
+    return posterior, fit

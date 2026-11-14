@@ -127,6 +127,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             else original_fit.sigma2_by_regime,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model == "BMS-DRIFT":
         from nwkit.regime_drift_asr import compute_regime_drift_marginals
@@ -152,6 +153,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             regime_parameters_source=original_fit.regime_parameters_source,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     if model in {"LAMBDA", "KAPPA", "DELTA", "EB", "ACDC"}:
         from nwkit.transformed_continuous_asr import compute_transformed_bm_marginals
@@ -252,6 +254,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             alpha_bounds=original_fit.alpha_bounds,
             standard_errors=errors,
             _tree_validated=True,
+            _compute_posterior=False,
         )[1]
     raise ValueError(f"Parametric bootstrap is unavailable for --model {model}.")
 

@@ -15,6 +15,7 @@ import numpy as np
 from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
+    GaussianConditioningResult,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -632,6 +633,7 @@ def _single_regime_ou_reduction(
     *,
     regime_parameters_source,
     standard_errors,
+    compute_posterior,
 ):
     """Use the canonical OU1 fitter when every regime parameter is shared."""
 
@@ -649,6 +651,7 @@ def _single_regime_ou_reduction(
         alpha_bounds=setup.alpha_bounds,
         standard_errors=standard_errors,
         _tree_validated=True,
+        _compute_posterior=compute_posterior,
     )
     alpha_by_regime = {regime: ordinary.alpha}
     sigma_by_regime = {regime: ordinary.sigma2}
@@ -699,6 +702,7 @@ def compute_regime_ou_marginals(
     alpha_bounds=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Fit and condition OUM, OUMA, OUMV, or OUMVA."""
 
@@ -722,6 +726,7 @@ def compute_regime_ou_marginals(
             setup,
             regime_parameters_source=regime_parameters_source,
             standard_errors=standard_errors,
+            compute_posterior=_compute_posterior,
         )
     names, initial, parameter_bounds = _regime_ou_parameter_vectors(
         tree, values_by_leaf, regime_assignment, setup
@@ -784,6 +789,9 @@ def compute_regime_ou_marginals(
         except (ValueError, ArithmeticError, OverflowError):
             return 1e100
 
+    evaluate = (
+        condition_gaussian_tree if _compute_posterior else gaussian_tree_likelihood
+    )
     if names:
         optimized = deterministic_multistart(
             objective,
@@ -792,7 +800,7 @@ def compute_regime_ou_marginals(
             maxiter=1200,
         )
         process = process_for(optimized.x)
-        conditioned = condition_gaussian_tree(
+        conditioned = evaluate(
             process,
             values_by_leaf,
             standard_errors=standard_errors,
@@ -801,7 +809,7 @@ def compute_regime_ou_marginals(
     else:
         fixed_parameters = np.asarray(initial, dtype=float)
         process = process_for(fixed_parameters)
-        conditioned = condition_gaussian_tree(
+        conditioned = evaluate(
             process,
             values_by_leaf,
             standard_errors=standard_errors,
@@ -859,4 +867,9 @@ def compute_regime_ou_marginals(
             else None
         ),
     )
-    return conditioned.marginals, fit
+    posterior = (
+        conditioned.marginals
+        if isinstance(conditioned, GaussianConditioningResult)
+        else {}
+    )
+    return posterior, fit
