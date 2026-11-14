@@ -78,6 +78,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   matrices into each worker specification.
 - Compute Gaussian posterior predictive statistics for all replicates in
   one pass per statistic.
+- Retain only observed-tip draws and active parent states during Gaussian
+  posterior predictive simulation.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
 - Build posterior sample table metadata once per node and repeat it across draws.
 - Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.

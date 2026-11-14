@@ -199,16 +199,14 @@ def gaussian_posterior_predictive(
         if root.variance == 0.0
         else root_rng.normal(root.mean, math.sqrt(root.variance), num_simulations)
     )
-    simulations = simulate_gaussian_process(
+    replicated = simulate_gaussian_process(
         process,
         num_samples=num_simulations,
         seed=int(process_seed.generate_state(1)[0]),
         root_values=root_values,
         compiled_tree=compiled,
+        _output_indices=tuple(record[0] for record in records),
     ).values
-    indices = np.asarray([record[0] for record in records], dtype=int)
-    replicated = np.ascontiguousarray(simulations[:, indices])
-    del simulations
     errors = np.asarray([record[2] for record in records], dtype=float)
     if np.any(errors > 0.0):
         error_rng = np.random.default_rng(error_seed)

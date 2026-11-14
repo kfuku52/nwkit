@@ -268,3 +268,17 @@ def test_prior_process_simulation_matches_affine_moments():
         assert np.var(samples.values[:, index]) == pytest.approx(
             expected_variances[node], abs=0.03
         )
+
+
+def test_selected_gaussian_process_draws_match_full_preorder_stream():
+    tree = tree_from("((A:0.5,B:0)I:0.4,C:1.1)R;")
+    compiled = CompiledTree.from_tree(tree)
+    process = build_evolutionary_process(
+        tree, model="ou", parameter=0.8, root_mode="stationary", allow_zero=True
+    )
+    indices = tuple(compiled.index_by_node[tree[name]] for name in ("C", "I", "B"))
+    options = dict(num_samples=80, seed=91, compiled_tree=compiled)
+    full = simulate_gaussian_process(process, **options)
+    selected = simulate_gaussian_process(process, **options, _output_indices=indices)
+    assert selected.nodes == tuple(compiled.nodes[index] for index in indices)
+    np.testing.assert_array_equal(selected.values, full.values[:, indices])

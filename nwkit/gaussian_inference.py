@@ -694,6 +694,7 @@ def simulate_gaussian_process(
     seed: int | None = None,
     root_values=None,
     compiled_tree: CompiledTree | None = None,
+    _output_indices: tuple[int, ...] | None = None,
 ) -> GaussianSamples:
     """Simulate joint process realizations in original trait units."""
 
@@ -707,35 +708,74 @@ def simulate_gaussian_process(
     )
     compiled.require_tree(process.tree)
     rng = np.random.default_rng(seed)
+    root_draws = _simulation_root_draws(process, root_values, num_samples, rng)
+    if _output_indices is not None:
+        return _simulate_selected_nodes(
+            process, compiled, root_draws, rng, _output_indices
+        )
     draws = np.empty((num_samples, len(compiled.nodes)), dtype=float)
+    draws[:, 0] = root_draws
+    for node_index in range(1, len(compiled.nodes)):
+        parent = compiled.parents[node_index]
+        transition = process.transitions[compiled.nodes[node_index]]
+        _simulate_branch(transition, draws[:, parent], draws[:, node_index], rng)
+    if np.any(~np.isfinite(draws)):
+        raise ValueError("A Gaussian process simulation exceeds floating-point range.")
+    return GaussianSamples(compiled.nodes, draws)
+
+
+def _simulation_root_draws(process, root_values, num_samples, rng):
     if root_values is None:
         if process.root.mode == "flat":
             raise ValueError("A flat-root process simulation requires root_values.")
         assert process.root.variance is not None
         if process.root.variance == 0.0:
-            draws[:, 0] = process.root.mean
-        else:
-            draws[:, 0] = rng.normal(
-                process.root.mean, math.sqrt(process.root.variance), num_samples
-            )
-    else:
-        values = np.asarray(root_values, dtype=float)
-        if values.ndim == 0:
-            draws[:, 0] = float(values)
-        elif values.shape == (num_samples,):
-            draws[:, 0] = values
-        else:
-            raise ValueError("root_values must be scalar or have num_samples values.")
-    for node_index in range(1, len(compiled.nodes)):
-        parent = compiled.parents[node_index]
-        transition = process.transitions[compiled.nodes[node_index]]
-        draws[:, node_index] = (
-            transition.slope * draws[:, parent] + transition.intercept
+            return np.full(num_samples, process.root.mean)
+        return rng.normal(
+            process.root.mean, math.sqrt(process.root.variance), num_samples
         )
-        if transition.variance > 0.0:
-            draws[:, node_index] += rng.normal(
-                0.0, math.sqrt(transition.variance), num_samples
-            )
-    if np.any(~np.isfinite(draws)):
+    values = np.asarray(root_values, dtype=float)
+    if values.ndim == 0:
+        return np.full(num_samples, float(values))
+    if values.shape == (num_samples,):
+        return values
+    raise ValueError("root_values must be scalar or have num_samples values.")
+
+
+def _simulate_branch(transition, parent_draws, child_draws, rng):
+    child_draws[:] = transition.slope * parent_draws + transition.intercept
+    if transition.variance > 0.0:
+        child_draws += rng.normal(0.0, math.sqrt(transition.variance), len(child_draws))
+
+
+def _simulate_selected_nodes(process, compiled, root, rng, output_indices):
+    outputs = np.empty((len(root), len(output_indices)), dtype=float)
+    output_rows = {index: row for row, index in enumerate(output_indices)}
+    if len(output_rows) != len(output_indices) or any(
+        not 0 <= index < len(compiled.nodes) for index in output_rows
+    ):
+        raise ValueError("Gaussian simulation node indices must be distinct and valid.")
+    remaining = [len(children) for children in compiled.children]
+    # Keep a parent's draws until its last child, and fill selected tip rows
+    # directly. Traversal and random-number consumption match the full draws.
+    active = {0: root}
+    if 0 in output_rows:
+        outputs[:, output_rows[0]] = root
+    finite = bool(np.isfinite(root).all())
+    for index, parent in enumerate(compiled.parents[1:], start=1):
+        selected = output_rows.get(index)
+        draws = np.empty_like(root) if selected is None else outputs[:, selected]
+        _simulate_branch(
+            process.transitions[compiled.nodes[index]], active[parent], draws, rng
+        )
+        finite &= bool(np.isfinite(draws).all())
+        remaining[parent] -= 1
+        if remaining[parent] == 0:
+            del active[parent]
+        if remaining[index]:
+            active[index] = draws
+    if not finite:
         raise ValueError("A Gaussian process simulation exceeds floating-point range.")
-    return GaussianSamples(compiled.nodes, draws)
+    return GaussianSamples(
+        tuple(compiled.nodes[index] for index in output_indices), outputs
+    )
