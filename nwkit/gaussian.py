@@ -700,18 +700,38 @@ def _merge_compatible_grouped_updates(updates: list[np.ndarray]) -> list[np.ndar
             if np.any(group_loading == 0.0):
                 candidate_index += 1
                 continue
-            ratios = candidate_loading / group_loading
-            group_ratios = ratios[first_by_group][group_index]
-            if not np.allclose(ratios, group_ratios, rtol=1e-12, atol=1e-14):
+            replacement = _combined_group_loadings(
+                group_loading, candidate_loading, first_by_group[group_index]
+            )
+            if replacement is None:
                 candidate_index += 1
                 continue
-            group_loading = group_loading * np.sqrt(1.0 + np.square(group_ratios))
+            group_loading = replacement
             combined = merged[reference_index].copy()
             combined[np.arange(len(combined)), group_index] = group_loading
             merged[reference_index] = combined
             del merged[candidate_index]
         reference_index += 1
     return merged
+
+
+def _combined_group_loadings(reference, candidate, anchors):
+    # The direct ratio preserves the ordinary computation and its relative
+    # proportionality check until squaring the ratio approaches overflow.
+    if np.all(np.abs(candidate) * 2.0**-500 <= np.abs(reference)):
+        ratios = candidate / reference
+        if np.allclose(ratios, ratios[anchors], rtol=1e-12, atol=1e-14):
+            return reference * np.sqrt(1.0 + np.square(ratios[anchors]))
+        return None
+    # Normalize both columns by the larger entry in each row. Proportional
+    # columns have the same signed direction throughout the group.
+    scale = np.maximum(np.abs(reference), np.abs(candidate))
+    first, second = reference / scale, candidate / scale
+    cross_left = first * second[anchors]
+    cross_right = second * first[anchors]
+    if not np.allclose(cross_left, cross_right, rtol=1e-12, atol=0.0):
+        return None
+    return np.copysign(np.hypot(reference, candidate), reference)
 
 
 def _factor_sparse_updates(diagonal, updates):

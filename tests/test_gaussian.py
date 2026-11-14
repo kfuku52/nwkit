@@ -28,6 +28,30 @@ def test_grouped_dense_covariance_keeps_large_finite_mean_variance():
     np.testing.assert_allclose(observed, [1.1e308], rtol=1e-15)
 
 
+@pytest.mark.parametrize("collinear", [True, False])
+@pytest.mark.parametrize("reverse", [False, True])
+def test_grouped_loadings_keep_finite_covariance_at_extreme_scale_ratios(
+    collinear, reverse
+):
+    diagonal = np.array([0.4, 0.8, 0.7, 1.2])
+    anchor = np.array([[0.2, 0.0], [-0.2, 0.0], [0.0, 0.3], [0.0, 0.3]])
+    first = anchor * 1e-200
+    second = anchor.copy()
+    if not collinear:
+        second[1, 0] *= -2.0
+        second[3, 1] /= 2.0
+    factors = [first, second] if not reverse else [second, first]
+    covariance = np.diag(diagonal) + first @ first.T + second @ second.T
+    expected = np.linalg.solve(covariance, diagonal)
+    with np.errstate(over="raise", invalid="raise"):
+        factor = gaussian.factor_diagonal_low_rank_updates(diagonal, factors)
+        actual = gaussian.solve_factor(factor, diagonal)
+    np.testing.assert_allclose(actual, expected, rtol=2e-15)
+    assert gaussian.factor_logdet(factor) == pytest.approx(
+        np.linalg.slogdet(covariance)[1], abs=2e-15
+    )
+
+
 @pytest.mark.parametrize("columns", [None, 2])
 def test_diagonal_cholesky_solve_keeps_finite_results_at_subnormal_variance(columns):
     diagonal = np.ldexp(np.array([1.0, 2.0, 4.0]), -1060)
