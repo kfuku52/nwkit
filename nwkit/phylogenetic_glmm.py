@@ -3,6 +3,7 @@
 import math
 import warnings
 from dataclasses import dataclass, replace
+from functools import lru_cache
 from typing import Callable, Mapping, Sequence
 
 import numpy as np
@@ -22,6 +23,7 @@ from scipy.stats import chi2
 from scipy.stats import nbinom as nbinom_distribution
 from scipy.stats import poisson as poisson_distribution
 
+from nwkit.evolution import EvolutionaryCovarianceFactory
 from nwkit.measurement_error import _finite_difference_hessian
 from nwkit.model_matrix import CategoricalObservation, ReplicatedObservation
 from nwkit.sparse_laplace import (
@@ -431,6 +433,15 @@ def _normalize_covariance(
     else:
         _positive_definite_cholesky(normalized)
     return normalized
+
+
+def _prepare_dense_phylogenetic_covariance(factory, n_tips):
+    def covariance(parameter):
+        return _normalize_covariance(factory(parameter), n_tips, "Phylogenetic")
+
+    if type(factory) is EvolutionaryCovarianceFactory:
+        return lru_cache(maxsize=1)(covariance)
+    return covariance
 
 
 def _multinomial_terms(
@@ -2474,6 +2485,9 @@ def _fit_scalar_phylogenetic_glmm(
     use_sparse = _select_sparse_glmm_backend(
         n_tips, 1, sparse_capable, allow_large_dense
     )
+    dense_phylogenetic = _prepare_dense_phylogenetic_covariance(
+        phylogenetic_covariance, n_tips
+    )
     if n_tips != len(tip_design):
         raise ValueError("Response and design lengths differ.")
     (
@@ -2634,9 +2648,7 @@ def _fit_scalar_phylogenetic_glmm(
                 observation_loading,
                 posterior_factor,
             )
-        phylo_base = _normalize_covariance(
-            phylogenetic_covariance(decoded), n_tips, "Phylogenetic"
-        )
+        phylo_base = dense_phylogenetic(decoded)
         random_covariance = math.exp(float(log_variances[0])) * phylo_base
         if group_base is not None:
             random_covariance += math.exp(float(log_variances[1])) * group_base
@@ -3166,6 +3178,9 @@ def fit_phylogenetic_glmm(
     use_sparse = _select_sparse_glmm_backend(
         len(design), random_dimension, sparse_capable, allow_large_dense
     )
+    dense_phylogenetic = _prepare_dense_phylogenetic_covariance(
+        phylogenetic_covariance, len(design)
+    )
     if (
         use_sparse
         and len(design) * random_dimension > MAX_SPARSE_GLMM_LINEAR_PREDICTORS
@@ -3288,11 +3303,7 @@ def fit_phylogenetic_glmm(
                 expanded_design,
                 posterior_factor,
             )
-        phylo_base = _normalize_covariance(
-            phylogenetic_covariance(decoded_parameter),
-            len(design),
-            "Phylogenetic",
-        )
+        phylo_base = dense_phylogenetic(decoded_parameter)
         random_covariance = np.exp(log_variances[0]) * phylo_base
         if group_base is not None:
             random_covariance = (
@@ -3393,11 +3404,7 @@ def fit_phylogenetic_glmm(
         )
     else:
         tip_mode = mode.reshape(len(design), random_dimension)
-        fitted_phylogenetic = _normalize_covariance(
-            phylogenetic_covariance(decoded_parameter),
-            len(design),
-            "Phylogenetic",
-        )
+        fitted_phylogenetic = dense_phylogenetic(decoded_parameter)
         component_random_modes = _glmm_component_modes(
             components,
             fitted_phylogenetic,
