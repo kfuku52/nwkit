@@ -1381,6 +1381,8 @@ def compute_mk_marginals(
     fixed_rate_matrix=None,
     regime_assignment=None,
     regime_model="ER",
+    *,
+    _compute_posterior=True,
 ):
     _require_multiple_discrete_states(states)
     root_prior, root_prior_factory = _root_prior_configuration(
@@ -1406,7 +1408,15 @@ def compute_mk_marginals(
         raise ValueError(
             "The observed tip states have zero likelihood under the Mk model."
         )
+    fit["root_prior"] = root_prior
+    fit["sample_size"] = _informative_tip_likelihood_count(likelihood_by_leaf)
+    _add_rate_design_fit_metadata(fit, rate_design)
+    if not _compute_posterior:
+        return {}, fit
+    return _mk_marginals_from_fit(tree, likelihood_by_leaf, fit), fit
 
+
+def _mk_marginals_from_fit(tree, likelihood_by_leaf, fit):
     inside, _, child_terms, transition_matrices = _compute_inside_likelihoods(
         tree=tree,
         likelihood_by_leaf=likelihood_by_leaf,
@@ -1417,24 +1427,22 @@ def compute_mk_marginals(
         tree=tree,
         child_terms=child_terms,
         transition_matrices=transition_matrices,
-        root_prior=root_prior,
+        root_prior=fit["root_prior"],
         log_space=True,
     )
-    posterior_by_node = dict()
-    for node in tree.traverse():
-        posterior_by_node[node] = _probabilities_from_logs(inside[node] + outside[node])
+    posterior_by_node = {
+        node: _probabilities_from_logs(inside[node] + outside[node])
+        for node in tree.traverse()
+    }
     fit.update(
         {
-            "root_prior": root_prior,
-            "sample_size": _informative_tip_likelihood_count(likelihood_by_leaf),
             "inside": {node: np.exp(values) for node, values in inside.items()},
             "log_inside": inside,
             "transition_matrices": transition_matrices,
             "posterior_by_node": posterior_by_node,
         }
     )
-    _add_rate_design_fit_metadata(fit, rate_design)
-    return posterior_by_node, fit
+    return posterior_by_node
 
 
 def _posterior_for_rate_matrix(
@@ -1582,6 +1590,7 @@ def compute_mk_mixture_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    _compute_posterior=True,
 ):
     """Jointly fit several Mk characters with gamma or ordered free rates."""
 
@@ -1759,15 +1768,16 @@ def compute_mk_mixture_marginals(
     ):
         category_probabilities = np.exp(log_scores - logsumexp(log_scores))
         category_posterior_by_character[character] = category_probabilities
-        posterior_by_character[character] = _average_mk_category_posteriors(
-            tree,
-            likelihood_by_leaf,
-            root_prior,
-            matrix,
-            category_rates,
-            category_probabilities,
-            transition_matrices_by_category,
-        )
+        if _compute_posterior:
+            posterior_by_character[character] = _average_mk_category_posteriors(
+                tree,
+                likelihood_by_leaf,
+                root_prior,
+                matrix,
+                category_rates,
+                category_probabilities,
+                transition_matrices_by_category,
+            )
 
     tolerance = 1e-5
     statuses = []
@@ -1865,6 +1875,7 @@ def compute_hrm_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    _compute_posterior=True,
 ):
     """Fit a fully parameterized hidden-rates CTMC and marginalize classes."""
 
@@ -1915,6 +1926,7 @@ def compute_hrm_marginals(
         root_prior_mode=root_prior_mode,
         rate_bounds=rate_bounds,
         transition_graph=expanded_graph,
+        _compute_posterior=_compute_posterior,
     )
     projection = state_projection(len(states), hidden_categories)
     posterior = {
@@ -2022,6 +2034,7 @@ def compute_covarion_marginals(
     root_prior_mode="equal",
     rate_bounds=None,
     transition_graph=None,
+    _compute_posterior=True,
 ):
     """Fit a parsimonious ordered hidden-rate covarion CTMC."""
 
@@ -2119,6 +2132,7 @@ def compute_covarion_marginals(
         model="CUSTOM",
         root_prior_mode=root_prior_mode,
         fixed_rate_matrix=matrix,
+        _compute_posterior=_compute_posterior,
     )
     posterior = {
         node: aggregate_probabilities(probabilities, len(states), hidden_categories)

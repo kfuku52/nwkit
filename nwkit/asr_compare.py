@@ -768,6 +768,7 @@ def _fit_single_discrete(context, candidate):
         "root_prior_mode": candidate.root_prior,
         "rate_bounds": rate_bounds,
         "transition_graph": graph,
+        "_compute_posterior": False,
     }
     if candidate.model == "HRM":
         return compute_hrm_marginals(
@@ -872,6 +873,7 @@ def _fit_mk_mixture(context, candidate):
         root_prior_mode=candidate.root_prior,
         rate_bounds=_parse_rate_bounds(getattr(candidate_args, "rate_bounds", None)),
         transition_graph=graph,
+        _compute_posterior=False,
     )[1]
 
 
@@ -907,6 +909,7 @@ def _fit_pagel(context, candidate):
         rate=getattr(candidate_args, "rate", None),
         root_prior_mode=candidate.root_prior,
         rate_bounds=_parse_rate_bounds(getattr(candidate_args, "rate_bounds", None)),
+        _compute_posterior=False,
     )[1]
 
 
