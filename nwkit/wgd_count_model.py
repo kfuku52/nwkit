@@ -640,7 +640,7 @@ class CountLikelihood:
         size = len(self.tree.parents)
         likelihoods = [None] * size
         scales = [None] * size
-        rows = next(iter(emissions.values())).shape[0]
+        rows = len(self.counts)
         with np.errstate(divide="ignore"):
             for node in range(size - 1, -1, -1):
                 if node in emissions:
@@ -649,7 +649,10 @@ class CountLikelihood:
                 value = np.ones((rows, len(prior)))
                 scale = np.zeros(rows)
                 for child in self.children[node]:
-                    contribution = likelihoods[child] @ matrices[child].T
+                    if (tip := emissions.get(child)) is not None and tip.ndim == 1:
+                        contribution = matrices[child].T[tip]
+                    else:
+                        contribution = likelihoods[child] @ matrices[child].T
                     # An unobserved subtree integrates to one over the unbounded
                     # process, not to the truncated transition's row sum.
                     missing = self.subtree_missing[child]
@@ -861,13 +864,13 @@ class CountLikelihood:
             missing = np.isnan(values)
             probability = self.detection[column]
             if probability == 1:
-                matrix = (values[:, None] == states[None, :]).astype(float)
-            else:
-                # Families with the same observed count have identical emissions.
-                counts, inverse = np.unique(np.nan_to_num(values), return_inverse=True)
-                matrix = binom.pmf(counts[:, None], states[None, :], probability)[
-                    inverse
-                ]
+                # Exact tip counts select a transition column. The placeholder
+                # index for missing counts is replaced by one during pruning.
+                emissions[node] = np.where(missing, 0, values).astype(np.intp)
+                continue
+            # Families with the same observed count have identical emissions.
+            counts, inverse = np.unique(np.nan_to_num(values), return_inverse=True)
+            matrix = binom.pmf(counts[:, None], states[None, :], probability)[inverse]
             matrix[missing] = 1.0
             emissions[node] = matrix
         return emissions

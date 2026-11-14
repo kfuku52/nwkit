@@ -80,12 +80,40 @@ def test_emissions_reuse_one_bound_and_refresh_on_observation_changes(monkeypatc
     updated = model._emissions(8)
     assert updated is not second
     assert np.any(updated[1] != second[1])
-    assert np.any(updated[2] != second[2])
+    np.testing.assert_array_equal(second[2], [2, 1])
+    assert updated[2].shape == (2, 9)
+    assert np.all(updated[2][np.arange(2), second[2]] < 1)
     monkeypatch.setattr(wgd_count_model, "_EMISSION_CACHE_BYTES", 0)
     uncached = model._emissions(8)
     assert model._emission_cache is None
     for node in model.tree.tip_nodes:
         np.testing.assert_array_equal(uncached[node], updated[node])
+
+
+@pytest.mark.parametrize("detection", [[1, 1], [0.82, 1], [1, 0.9]])
+@pytest.mark.parametrize("retention", [0.0, 0.3])
+def test_deterministic_tip_indices_match_dense_emissions(detection, retention):
+    counts = np.array([[0, 1], [3, 0], [np.nan, 2], [2, np.nan], [1, 3]])
+    model = CountLikelihood(tree(), counts, detection=np.array(detection))
+    bound = 8
+    rates = np.array([[0.12, 0.2]])
+    event = MultiplicationEvent(2, retention, 0.5, 2)
+    transitions = model.transitions(rates, 1, bound, event)
+    emissions = model._emissions(bound)
+    assert [emissions[i].ndim for i in tree().tip_nodes] == [
+        1 if p == 1 else 2 for p in detection
+    ]
+    dense = {}
+    for column, node in enumerate(tree().tip_nodes):
+        observed_counts = counts[:, column]
+        emission = (observed_counts[:, None] == np.arange(bound + 1)).astype(float)
+        emission[np.isnan(observed_counts)] = 1
+        dense[node] = emission if detection[column] == 1 else emissions[node]
+    prior = root_probabilities(1.3, bound)
+    np.testing.assert_array_equal(
+        model._prune(emissions, transitions, prior),
+        model._prune(dense, transitions, prior),
+    )
 
 
 @pytest.mark.parametrize("budget", [1, 1024**2])
