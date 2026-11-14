@@ -52,6 +52,40 @@ def test_grouped_loadings_keep_finite_covariance_at_extreme_scale_ratios(
     )
 
 
+@pytest.mark.parametrize(
+    "variance,loading",
+    [(1e-100, 1e125), (1e-250, 1e50), (1e-100, 1e50), (1e-310, 1e154)],
+)
+def test_grouped_inverse_preserves_the_small_loading_aligned_solution(
+    variance, loading
+):
+    diagonal = np.full(5, variance)
+    groups = np.array([0, 0, 0, 1, 1])
+    design = np.eye(2)[groups] * loading
+    values = np.column_stack(
+        [np.ones(5), np.full(5, loading), np.array([1.0, -1.0, 0.0, -1.0, 1.0])]
+    )
+    group_size = np.bincount(groups)
+    log_eigenvalues = np.logaddexp(
+        math.log(variance), 2.0 * math.log(loading) + np.log(group_size)
+    )
+    expected_logdet = 3 * math.log(variance) + log_eigenvalues.sum()
+    expected = values.copy()
+    expected[:, :2] = (expected[:, :2] / loading) / loading / group_size[groups, None]
+    with np.errstate(over="raise", invalid="raise"):
+        factor = gaussian.factor_diagonal_low_rank_updates(diagonal, [design])
+        rhs = values.copy()
+        rhs[:, 2] *= variance
+        actual = gaussian.solve_factor(factor, rhs)
+        vector = gaussian.solve_factor(factor, values[:, 0])
+    np.testing.assert_allclose(actual[:, :2], expected[:, :2], rtol=2e-14, atol=0.0)
+    np.testing.assert_allclose(actual[:, 2], expected[:, 2], rtol=2e-14, atol=2e-15)
+    np.testing.assert_allclose(vector, expected[:, 0], rtol=2e-14, atol=0.0)
+    assert gaussian.factor_logdet(factor) == pytest.approx(
+        expected_logdet, rel=0.0, abs=3e-13
+    )
+
+
 @pytest.mark.parametrize("columns", [None, 2])
 def test_diagonal_cholesky_solve_keeps_finite_results_at_subnormal_variance(columns):
     diagonal = np.ldexp(np.array([1.0, 2.0, 4.0]), -1060)

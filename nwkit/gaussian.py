@@ -98,6 +98,9 @@ class GroupedDiagonalLowRankFactor:
     group_index: np.ndarray
     group_loading: np.ndarray
     group_denominator: np.ndarray
+    group_exponents: np.ndarray | None
+    group_inverse_loading: np.ndarray | None
+    group_anchor: np.ndarray | None
     low_rank: np.ndarray
     base_inverse_low_rank: np.ndarray
     woodbury_cholesky: np.ndarray
@@ -621,6 +624,12 @@ def _group_base_solve(
     factor: GroupedDiagonalLowRankFactor, values: np.ndarray
 ) -> np.ndarray:
     values = np.asarray(values, dtype=float)
+    if factor.group_anchor is not None:
+        return _scaled_group_base_solve(factor, values)
+    return _ordinary_group_base_solve(factor, values)
+
+
+def _ordinary_group_base_solve(factor, values):
     if values.ndim == 1:
         inverse_values = values / factor.diagonal
         group_rhs = np.bincount(
@@ -649,6 +658,47 @@ def _group_base_solve(
             * (group_rhs / factor.group_denominator[:, None])[factor.group_index]
         )
     return inverse_values - correction
+
+
+def _scaled_group_base_solve(factor, values):
+    # Remove a shared loading-aligned component before solving. Its inverse
+    # has a direct expression even when subtracting Woodbury terms would
+    # erase the result along that direction.
+    vector = values.ndim == 1
+    matrix = values.reshape(len(factor.diagonal), -1)
+    index = factor.group_index
+    anchors = factor.group_anchor
+    assert anchors is not None
+    loading_ratio = factor.group_loading / factor.group_loading[anchors][index]
+    residual = matrix - loading_ratio[:, None] * matrix[anchors][index]
+    inverse = residual / factor.diagonal[:, None]
+    weighted = factor.group_inverse_loading
+    assert weighted is not None and factor.group_exponents is not None
+    group_rhs = np.zeros((len(anchors), matrix.shape[1]), dtype=float)
+    np.add.at(group_rhs, index, weighted[:, None] * residual)
+    inverse -= (
+        weighted[:, None] * (group_rhs / factor.group_denominator[:, None])[index]
+    )
+    inverse += _aligned_group_inverse(
+        weighted,
+        matrix[anchors][index],
+        factor.group_loading[anchors][index],
+        factor.group_exponents[index],
+        factor.group_denominator[index],
+    )
+    return inverse[:, 0] if vector else inverse
+
+
+def _aligned_group_inverse(weighted, values, anchor, scale_exp, denominator):
+    # Combine binary exponents before division so a tiny aligned component
+    # survives when the final inverse is representable.
+    weight, weight_exp = np.frexp(weighted)
+    value, value_exp = np.frexp(values)
+    anchor_value, anchor_exp = np.frexp(anchor)
+    mantissa = (weight[:, None] * value) / ((anchor_value * denominator)[:, None])
+    return np.ldexp(
+        mantissa, value_exp + (weight_exp - anchor_exp - scale_exp)[:, None]
+    )
 
 
 def _disjoint_column_groups(factor: np.ndarray) -> tuple[np.ndarray, np.ndarray] | None:
@@ -792,17 +842,18 @@ def _factor_dense_updates(diagonal, updates):
         if low_rank_updates
         else np.zeros((len(diagonal), 0), dtype=float)
     )
-    inverse_group_weight = np.square(group_loading) / diagonal
-    group_denominator = 1.0 + np.bincount(
-        group_index,
-        weights=inverse_group_weight,
-        minlength=normalized[grouped_index].shape[1],
+    group_count = normalized[grouped_index].shape[1]
+    group_denominator, group_exponents, inverse_loading, anchor = (
+        _group_base_parameters(diagonal, group_index, group_loading, group_count)
     )
     provisional = GroupedDiagonalLowRankFactor(
         diagonal=diagonal,
         group_index=group_index,
         group_loading=group_loading,
         group_denominator=group_denominator,
+        group_exponents=group_exponents,
+        group_inverse_loading=inverse_loading,
+        group_anchor=anchor,
         low_rank=low_rank,
         base_inverse_low_rank=np.empty_like(low_rank),
         woodbury_cholesky=np.empty((0, 0), dtype=float),
@@ -814,10 +865,50 @@ def _factor_dense_updates(diagonal, updates):
         group_index=group_index,
         group_loading=group_loading,
         group_denominator=group_denominator,
+        group_exponents=group_exponents,
+        group_inverse_loading=inverse_loading,
+        group_anchor=anchor,
         low_rank=low_rank,
         base_inverse_low_rank=base_inverse_low_rank,
         woodbury_cholesky=np.linalg.cholesky(woodbury),
     )
+
+
+def _group_base_parameters(diagonal, index, loading, count):
+    with np.errstate(over="ignore", under="ignore"):
+        inverse_group_weight = np.square(loading) / diagonal
+        denominator = 1.0 + np.bincount(
+            index, weights=inverse_group_weight, minlength=count
+        )
+    if np.all(denominator < 1e12) and np.min(np.abs(loading)) >= math.sqrt(
+        np.finfo(float).tiny
+    ):
+        return denominator, None, None, None
+
+    # Separate the exponent of |L| / sqrt(D) so the quotient itself can
+    # exceed binary64 range without losing the signed normalized entries.
+    roots = np.sqrt(diagonal)
+    load_mantissa, load_exponent = np.frexp(loading)
+    root_mantissa, root_exponent = np.frexp(roots)
+    load_exponent -= root_exponent
+    group_exponents = np.zeros(count, dtype=int)
+    np.maximum.at(group_exponents, index, load_exponent)
+    scaled_loading = np.ldexp(
+        load_mantissa / root_mantissa, load_exponent - group_exponents[index]
+    )
+    denominator = np.ldexp(np.ones(count), -2 * group_exponents) + np.bincount(
+        index, weights=scaled_loading**2, minlength=count
+    )
+    rows = np.arange(len(index))
+    max_loading = np.zeros(count, dtype=float)
+    np.maximum.at(max_loading, index, np.abs(loading))
+    anchors = np.full(count, len(index), dtype=int)
+    np.minimum.at(
+        anchors,
+        index,
+        np.where(np.abs(loading) == max_loading[index], rows, len(index)),
+    )
+    return denominator, group_exponents, scaled_loading / roots, anchors
 
 
 def factor_diagonal_low_rank_updates(
@@ -943,6 +1034,7 @@ def _native_factor_logdet(factor):
         return (
             float(np.log(factor.diagonal).sum())
             + float(np.log(factor.group_denominator).sum())
+            + _group_scale_logdet(factor)
             + 2.0 * float(np.log(np.diag(factor.woodbury_cholesky)).sum())
         )
     if isinstance(
@@ -961,6 +1053,14 @@ def _native_factor_logdet(factor):
     factor = np.asarray(factor, dtype=float)
     diagonal = factor if factor.ndim == 1 else np.diag(factor)
     return 2.0 * float(np.log(diagonal).sum())
+
+
+def _group_scale_logdet(factor):
+    return (
+        0.0
+        if factor.group_exponents is None
+        else 2.0 * math.log(2.0) * float(factor.group_exponents.sum())
+    )
 
 
 def draw_from_factor(
