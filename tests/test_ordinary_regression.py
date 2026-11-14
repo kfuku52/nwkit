@@ -27,6 +27,7 @@ from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
     _beta_family_terms,
     _censored_gaussian_log_likelihood,
+    _censored_gaussian_scalar_terms,
     _draw_count,
     _draw_gamma,
     _draw_mixture_count,
@@ -1738,6 +1739,55 @@ def test_censored_gaussian_interval_probability_is_stable_in_both_tails():
             np.asarray([1.0]),
         )[0]
         assert np.isfinite(value)
+
+
+@pytest.mark.parametrize("sign", [-1.0, 1.0])
+@pytest.mark.parametrize(
+    "distance,width,expected",
+    [
+        (8.0, 0.000125125, (-41.90563631439225, 8.000062552062408, 0.9999999986953113)),
+        (10.0, 0.0001001, (-60.12877986476732, 10.00005004164995, 0.9999999991649992)),
+        (20.0, 0.03, (-204.71066924694435, 20.01350786279471, 0.9999263350600519)),
+        (2.0, 0.2, (-4.727712530306537, 2.093029745061223, 0.9967001938461197)),
+    ],
+)
+def test_censored_gaussian_narrow_band_matches_high_precision_integrals(
+    sign, distance, width, expected
+):
+    # The reference integrates the unnormalized normal density and its
+    # first two moments at 80 decimal digits, relative to the near endpoint.
+    lower, upper = sorted((0.0, sign * width))
+    likelihood, score, curvature = _censored_gaussian_scalar_terms(
+        np.array([np.nan]),
+        np.array([-sign * distance]),
+        1.0,
+        np.array([lower]),
+        np.array([upper]),
+    )
+    np.testing.assert_allclose(
+        [likelihood, -sign * score[0], curvature[0]], expected, rtol=0.0, atol=4e-14
+    )
+
+
+@pytest.mark.parametrize("sign", [-1.0, 1.0])
+def test_censored_gaussian_keeps_finite_tail_mass_when_centering_collapses_endpoints(
+    sign,
+):
+    distance = 1e154
+    # Two exponential tail widths. Both centered endpoints round to the
+    # same value, but the integral has a finite representable logarithm.
+    width = 2.0 / distance
+    lower, upper = sorted((0.0, sign * width))
+    actual, score, curvature = _censored_gaussian_scalar_terms(
+        np.array([np.nan]),
+        np.array([-sign * distance]),
+        1.0,
+        np.array([lower]),
+        np.array([upper]),
+    )
+    assert actual == pytest.approx(-(0.5 * distance) * distance, rel=4e-16)
+    assert score[0] == -sign * distance
+    assert curvature[0] == 1.0
 
 
 @pytest.mark.parametrize("linear", [-40.0, 0.0, 40.0])

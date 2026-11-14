@@ -135,6 +135,9 @@ _EXPONENTIAL_DEVIANCE_SERIES = tuple(
     1.0 / math.factorial(order) for order in range(2, 11)
 )
 _LOG1P_REMAINDER_SERIES = tuple((-1.0) ** (order + 1) / order for order in range(2, 15))
+_INTERVAL_NODES, _INTERVAL_WEIGHTS = (
+    values * 0.5 for values in np.polynomial.legendre.leggauss(8)
+)
 
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
@@ -1831,6 +1834,25 @@ def _standardized_censor_bounds(bounds, center, dispersion):
     return result
 
 
+def _narrow_normal_interval(log_width, width, midpoint, *, derivatives):
+    # Integrate around the midpoint without differencing nearly equal CDFs.
+    # Here the log density changes by at most one across the interval.
+    offset = width[:, None] * _INTERVAL_NODES
+    weights = _INTERVAL_WEIGHTS * np.exp(-offset * (midpoint[:, None] + 0.5 * offset))
+    relative_mass = weights.sum(axis=1)
+    log_mass = (
+        -((0.5 * midpoint) * midpoint)
+        - 0.5 * math.log(math.tau)
+        + (log_width + np.log(relative_mass))
+    )
+    if not derivatives:
+        return log_mass, None, None
+    shift = np.sum(weights * offset, axis=1) / relative_mass
+    centered = offset - shift[:, None]
+    variance = np.sum(weights * centered**2, axis=1) / relative_mass
+    return log_mass, -(midpoint + shift), 1.0 - variance
+
+
 def _normal_censor_interval_terms(lower, upper, center, dispersion, *, derivatives):
     with np.errstate(over="ignore", under="ignore", invalid="ignore", divide="ignore"):
         standardized_lower = _standardized_censor_bounds(lower, center, dispersion)
@@ -1841,42 +1863,75 @@ def _normal_censor_interval_terms(lower, upper, center, dispersion, *, derivativ
         difference = np.minimum(lower_cdf - upper_cdf, 0.0)
         log_mass = upper_cdf + np.log(-np.expm1(difference))
 
-        width = upper - lower
-        log_width = np.log(width) - math.log(dispersion)
-        midpoint = 0.5 * standardized_lower + 0.5 * standardized_upper
-        # Integrate the quadratic expansion of the density for short intervals.
-        # The original endpoints preserve width after centering and scaling.
-        small_interval = log_width + np.log1p(np.abs(midpoint)) < math.log(1e-3)
-        standardized_width = np.exp(np.where(small_interval, log_width, -np.inf))
-        scaled_midpoint = np.where(small_interval, midpoint, 0.0) * standardized_width
-        correction = np.log1p((scaled_midpoint**2 - standardized_width**2) / 24.0)
-        log_density = -(0.5 * midpoint) * midpoint - 0.5 * math.log(math.tau)
-        midpoint_mass = log_width + log_density
-        both_outside_range = np.isneginf(upper_cdf)
-        log_mass[both_outside_range] = -np.inf
-        midpoint_rule = small_interval | (
-            (lower_cdf == upper_cdf) & ~both_outside_range
+        raw_width = upper - lower
+        width = _standardized_censor_bounds(upper, lower, dispersion)
+        log_width = np.where(
+            (width > 0.0) & np.isfinite(width),
+            np.log(width),
+            np.log(raw_width) - math.log(dispersion),
         )
-        log_mass = np.where(midpoint_rule, midpoint_mass + correction, log_mass)
-        if not derivatives:
-            return log_mass, None, None
-        gradient, curvature = _normal_interval_derivatives(
+        midpoint = 0.5 * standardized_lower + 0.5 * standardized_upper
+        narrow = (log_width + np.log1p(np.abs(midpoint)) < 0.0) & np.isfinite(midpoint)
+        log_mass[np.isneginf(upper_cdf)] = -np.inf
+        lost_tail = np.isneginf(log_mass) & ~narrow & np.isfinite(upper_cdf)
+        _restore_normal_interval_tail_mass(
+            log_mass, lost_tail, standardized_lower, standardized_upper, width
+        )
+        return _merge_normal_interval_terms(
+            log_mass,
             standardized_lower,
             standardized_upper,
-            log_mass,
-            midpoint_rule,
+            narrow,
+            width,
+            log_width,
             midpoint,
-            standardized_width,
+            derivatives=derivatives,
+        )
+
+
+def _restore_normal_interval_tail_mass(log_mass, lost, lower, upper, width):
+    if not np.any(lost):
+        return
+    near = np.maximum(lower[lost], -upper[lost])
+    size = width[lost]
+    far = near + size
+    log_ratio = (
+        -size * (near + 0.5 * size)
+        + np.log(erfcx(far / math.sqrt(2.0)))
+        - np.log(erfcx(near / math.sqrt(2.0)))
+    )
+    log_mass[lost] = log_ndtr(-near) + np.log(-np.expm1(log_ratio))
+
+
+def _merge_normal_interval_terms(
+    log_mass, lower, upper, narrow, width, log_width, midpoint, *, derivatives
+):
+    narrow_gradient = narrow_curvature = None
+    if np.any(narrow):
+        log_mass[narrow], narrow_gradient, narrow_curvature = _narrow_normal_interval(
+            log_width[narrow], width[narrow], midpoint[narrow], derivatives=derivatives
+        )
+    if not derivatives:
+        return log_mass, None, None
+    if narrow_gradient is None:
+        gradient, curvature = _normal_interval_derivatives(
+            lower, upper, log_mass, width
         )
         return log_mass, gradient, curvature
+    remaining = ~narrow
+    gradient = np.empty_like(log_mass)
+    curvature = np.empty_like(log_mass)
+    gradient[narrow], curvature[narrow] = narrow_gradient, narrow_curvature
+    gradient[remaining], curvature[remaining] = _normal_interval_derivatives(
+        lower[remaining], upper[remaining], log_mass[remaining], width[remaining]
+    )
+    return log_mass, gradient, curvature
 
 
-def _normal_interval_derivatives(
-    lower, upper, log_mass, midpoint_rule, midpoint, width
-):
-    upper_tail = (lower > 8.0) & np.isfinite(lower) & ~midpoint_rule
-    lower_tail = (upper < -8.0) & np.isfinite(upper) & ~midpoint_rule
-    regular = ~(midpoint_rule | upper_tail | lower_tail)
+def _normal_interval_derivatives(lower, upper, log_mass, width):
+    upper_tail = (lower > 8.0) & np.isfinite(lower)
+    lower_tail = (upper < -8.0) & np.isfinite(upper)
+    regular = ~(upper_tail | lower_tail)
     a, b, log_p = lower[regular], upper[regular], log_mass[regular]
     log_a = -(0.5 * a) * a - 0.5 * math.log(math.tau)
     log_b = -(0.5 * b) * b - 0.5 * math.log(math.tau)
@@ -1893,20 +1948,18 @@ def _normal_interval_derivatives(
         mean**2 - finite_a * ratio_a + finite_b * ratio_b, 0.0, 1.0
     )
     mean, curvature[upper_tail] = _normal_interval_tail_moments(
-        lower[upper_tail], upper[upper_tail]
+        lower[upper_tail], upper[upper_tail], width[upper_tail]
     )
     gradient[upper_tail] = -mean
     mean, curvature[lower_tail] = _normal_interval_tail_moments(
-        -upper[lower_tail], -lower[lower_tail]
+        -upper[lower_tail], -lower[lower_tail], width[lower_tail]
     )
     gradient[lower_tail] = mean
-    _set_small_interval_derivatives(gradient, curvature, midpoint_rule, midpoint, width)
     return gradient, curvature
 
 
-def _normal_interval_tail_moments(lower, upper):
+def _normal_interval_tail_moments(lower, upper, width):
     """Standard normal mean and one minus variance in a right-tail interval."""
-    width = upper - lower
     log_density_ratio = -width * (lower + 0.5 * width)
     density_ratio = np.exp(log_density_ratio)
     mills_lower = math.sqrt(math.pi / 2.0) * erfcx(lower / math.sqrt(2.0))
@@ -1931,15 +1984,6 @@ def _normal_interval_tail_moments(lower, upper):
         + adjustment**2
     )
     return mean, np.clip(curvature, 0.0, 1.0)
-
-
-def _set_small_interval_derivatives(gradient, curvature, mask, midpoint, width):
-    m, w = midpoint[mask], width[mask]
-    # Differentiate the same midpoint log mass used for the likelihood.
-    normalizer = 1.0 + ((m * w) ** 2 - w**2) / 24.0
-    adjustment = (w**2 / 12.0) / normalizer
-    gradient[mask] = -(m - m * adjustment)
-    curvature[mask] = 1.0 - adjustment + (m * adjustment) ** 2
 
 
 def _censor_observations(size, lower, upper):
