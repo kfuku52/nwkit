@@ -785,7 +785,7 @@ def _prepare_sampling_covariance(
 
 
 def _validate_covariance_matrix(matrix, label):
-    return validate_psd_covariance(matrix, label, zero_roundoff=True)
+    return validate_psd_covariance(matrix, label, clip_negative_diagonal=True)
 
 
 def _validate_factor_covariance(covariance, size, label):

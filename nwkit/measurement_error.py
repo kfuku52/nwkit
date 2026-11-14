@@ -83,7 +83,7 @@ class SparseLatentPredictorPosterior:
 
 
 def _positive_semidefinite(matrix, label):
-    return validate_psd_covariance(matrix, label, zero_roundoff=True)
+    return validate_psd_covariance(matrix, label, clip_negative_diagonal=True)
 
 
 def _solve(cholesky, values):

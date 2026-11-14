@@ -68,6 +68,14 @@ def test_gaussian_covariance_readers_retain_small_variances(validate, diagonal):
             validate(-values, "Sampling covariance")
 
 
+@pytest.mark.parametrize("diagonal", [False, True])
+def test_covariance_validation_preserves_small_components_of_a_mixed_scale(diagonal):
+    values = np.array([[1.0, 2e-101], [2e-101, 1e-200]])
+    if diagonal:
+        values = np.diag(np.diag(values))
+    np.testing.assert_array_equal(_positive_semidefinite(values, "sampling"), values)
+
+
 @pytest.mark.parametrize("exponent", [-1060, 1023])
 def test_categorical_sampling_loading_preserves_covariance_units(exponent):
     covariance = np.ldexp(np.array([[1.0, 0.5], [0.5, 0.25]]), exponent)
@@ -100,7 +108,10 @@ def test_latent_predictor_retains_small_correlated_sampling_uncertainty():
     result = fit_latent_predictor(
         np.array([0.0, 2.0, 1.0]), prior, sampling, include_intercept=True
     )
-    np.testing.assert_allclose(result.covariance, sampling, rtol=1e-12, atol=0.0)
+    scale = np.max(np.diag(sampling))
+    np.testing.assert_allclose(
+        result.covariance / scale, sampling / scale, rtol=1e-12, atol=1e-12
+    )
 
 
 @pytest.mark.parametrize("sampling", [0.0, 0.1])

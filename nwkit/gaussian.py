@@ -385,7 +385,7 @@ def is_diagonal(matrix: np.ndarray) -> bool:
     return True
 
 
-def validate_psd_covariance(matrix, label, *, zero_roundoff=False):
+def validate_psd_covariance(matrix, label, *, clip_negative_diagonal=False):
     """Validate symmetry and nonnegative eigenvalues in covariance units."""
     matrix = np.asarray(matrix, dtype=float)
     if matrix.ndim != 2 or matrix.shape[0] != matrix.shape[1]:
@@ -400,10 +400,8 @@ def validate_psd_covariance(matrix, label, *, zero_roundoff=False):
         scaled_diagonal = np.ldexp(diagonal, -exponent)
         if float(np.min(scaled_diagonal, initial=0.0)) < -relative_tolerance:
             raise ValueError("{} must be positive semidefinite.".format(label))
-        if zero_roundoff:
-            return np.diag(
-                np.where(np.abs(scaled_diagonal) < relative_tolerance, 0.0, diagonal)
-            )
+        if clip_negative_diagonal:
+            return np.diag(np.maximum(diagonal, 0.0))
         return matrix.copy()
     _, exponent = math.frexp(float(np.max(np.abs(matrix))))
     scaled = np.ldexp(matrix, -exponent)
@@ -413,8 +411,9 @@ def validate_psd_covariance(matrix, label, *, zero_roundoff=False):
     if float(np.min(np.linalg.eigvalsh(symmetric))) < -relative_tolerance:
         raise ValueError("{} must be positive semidefinite.".format(label))
     restored = np.where(matrix == matrix.T, matrix, np.ldexp(symmetric, exponent))
-    if zero_roundoff:
-        restored[np.abs(symmetric) < relative_tolerance] = 0.0
+    if clip_negative_diagonal:
+        diagonal_indices = np.diag_indices(len(restored))
+        restored[diagonal_indices] = np.maximum(restored[diagonal_indices], 0.0)
     return restored
 
 
