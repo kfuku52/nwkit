@@ -19,6 +19,7 @@ CLI_ARGUMENTS = {
     "help": ["--help"],
     "regress-help": ["regress", "--help"],
 }
+NUMERIC_CASES = ("gaussian", "asr-mixture")
 
 
 def gaussian_workload(tips):
@@ -75,6 +76,47 @@ def gaussian_workload(tips):
     }
 
 
+def asr_mixture_workload(tips):
+    import numpy as np
+    from benchmark_asr_models import _inputs
+
+    from nwkit.asr import compute_mk_mixture_marginals
+
+    tree, _, _ = _inputs(tips)
+    names = list(tree.leaf_names())
+    states = ["0", "1", "2"]
+    rng = np.random.default_rng(725)
+    indicators = np.eye(len(states))
+    observed = {}
+    likelihoods = {}
+    for character in range(16):
+        values = rng.integers(0, len(states), size=tips)
+        observed[character] = {
+            name: states[index] for name, index in zip(names, values, strict=True)
+        }
+        likelihoods[character] = {
+            name: indicators[index] for name, index in zip(names, values, strict=True)
+        }
+    start = time.perf_counter()
+    posterior, fit = compute_mk_mixture_marginals(
+        tree, states, observed, likelihoods, rate=0.6, categories=4
+    )
+    return time.perf_counter() - start, {
+        "log_likelihood": fit["log_likelihood"],
+        "gamma_shape": fit["gamma_shape"],
+        "rates": fit["mixture_category_rates"].tolist(),
+        "category_probabilities": [
+            values.tolist()
+            for values in fit["category_posterior_by_character"].values()
+        ],
+        "node_probabilities": [
+            [values.tolist() for values in character.values()]
+            for character in posterior.values()
+        ],
+        "optimizer_converged": bool(fit["optimizer_success"]),
+    }
+
+
 def peak_rss_bytes():
     try:
         import resource
@@ -88,6 +130,8 @@ def worker(args):
     sys.path.insert(0, str(args.checkout))
     if args.case == "gaussian":
         elapsed, result = gaussian_workload(args.tips)
+    elif args.case == "asr-mixture":
+        elapsed, result = asr_mixture_workload(args.tips)
     else:
         stream = io.StringIO()
         sys.argv = ["nwkit", *CLI_ARGUMENTS[args.case]]
@@ -133,7 +177,7 @@ def equivalent(first, second):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
-        "--case", choices=[*CLI_ARGUMENTS, "gaussian"], default="version"
+        "--case", choices=[*CLI_ARGUMENTS, *NUMERIC_CASES], default="version"
     )
     parser.add_argument("--checkout", type=Path, default=PROJECT_ROOT)
     parser.add_argument("--baseline", type=Path)
@@ -193,7 +237,7 @@ def main(argv=None):
         json.dumps(
             {
                 "case": args.case,
-                "tips": args.tips if args.case == "gaussian" else None,
+                "tips": args.tips if args.case in NUMERIC_CASES else None,
                 "equivalent": matched,
                 "records": records,
             },

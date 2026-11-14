@@ -111,6 +111,7 @@ python tools/benchmark.py --case version --baseline /path/to/old/source
 python tools/benchmark.py --case help --baseline /path/to/old/source
 python tools/benchmark.py --case regress-help --baseline /path/to/old/source
 python tools/benchmark.py --case gaussian --tips 512 --repeat 3 --baseline /path/to/old/source
+python tools/benchmark.py --case asr-mixture --tips 128 --repeat 3 --baseline /path/to/old/source
 ```
 
 JSON output includes wall time, process peak RSS, and comparable outputs. CLI
@@ -126,6 +127,10 @@ and convergence status are compared (`rtol=1e-4`, `atol=1e-6` for numbers); a
 mismatch fails the command. Inspect actual numerical differences as well as
 the pass/fail result. Do not run other numerical jobs during timing, and report
 the environment, repetitions and output-equivalence check with any speed claim.
+
+The ASR mixture case fits four gamma rate categories to 16 seeded three-state
+characters with a fixed ER base rate. It compares the fitted likelihood, shape,
+category rates, all category and node posterior probabilities, and convergence.
 
 Scalar likelihood searches retain all objective values but at most two complete
 fits, releasing cached arrays after selecting the winner. Ordinary automatic
