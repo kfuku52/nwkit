@@ -256,14 +256,17 @@ class VectorTreeWhitening:
         return output[:, 0] if vector else output
 
 
-def _mean_design_qr(design):
+def _mean_design_qr(design, *, observation_count=None):
     normalized, norms = _normalize_mean_design(design)
     q, r = np.linalg.qr(normalized, mode="reduced")
     # R has the singular values of the original normalized design. Use the
     # original dimensions when setting the rank tolerance.
     if design.shape[1]:
         singular_values = np.linalg.svd(r, compute_uv=False)
-        tolerance = singular_values[0] * max(design.shape) * np.finfo(r.dtype).eps
+        rows = design.shape[0] if observation_count is None else observation_count
+        tolerance = (
+            singular_values[0] * max(rows, design.shape[1]) * np.finfo(r.dtype).eps
+        )
         if np.count_nonzero(singular_values > tolerance) < design.shape[1]:
             raise ValueError("The observed mean design is rank deficient.")
     return q, r, norms

@@ -11,6 +11,7 @@ import numpy as np
 
 from nwkit.shift_joint_model import joint_factor
 from nwkit.shift_native_screen import _effect_design, descendant_design
+from nwkit.vector_whitening import _mean_design_qr
 
 
 def joint_screen_matrix(
@@ -183,12 +184,20 @@ class JointQuickProfile:
         self.columns = {b: i for i, b in enumerate(branches)}
         self.evaluations = 0
         observed = np.isfinite(data.values)
+        self.observation_count = int(observed.sum())
         self.constant = -0.5 * (
-            int(observed.sum()) * math.log(2 * math.pi) + logdet
+            self.observation_count * math.log(2 * math.pi) + logdet
         ) - sum(
             int(observed[:, j].sum()) * math.log(data.scales[j])
             for j in range(len(data.trait_names))
         )
+        if len(self.response) > self.matrix.shape[1] + 1:
+            # Keep the response in the orthogonal reduction so the residual
+            # outside the candidate span remains part of the likelihood.
+            reduced = np.linalg.qr(
+                np.column_stack((self.response, self.matrix)), mode="r"
+            )
+            self.response, self.matrix = reduced[:, 0], reduced[:, 1:]
 
     def score(self, layout):
         self.evaluations += 1
@@ -207,9 +216,9 @@ class JointQuickProfile:
             ):
                 if group:
                     x[:, (group - 1) :: q] += sign * block
-        norms = np.linalg.norm(x, axis=0)
-        if np.any(norms == 0) or np.linalg.matrix_rank(x / norms) < x.shape[1]:
+        try:
+            basis, _, _ = _mean_design_qr(x, observation_count=self.observation_count)
+        except ValueError:
             return -math.inf
-        basis, _ = np.linalg.qr(x / norms, mode="reduced")
         residual = self.response - basis @ (basis.T @ self.response)
         return self.constant - 0.5 * float(residual @ residual)
