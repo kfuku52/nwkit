@@ -1542,7 +1542,22 @@ def _mixture_character_batches(likelihoods_by_character, num_states):
     ]
 
 
-def _mixture_log_likelihoods(compiled, tips, log_prior, transitions):
+def _mixture_log_transitions(compiled, transitions):
+    # A single pass per category serves all character batches. Keep the
+    # log matrices only while evaluating that category.
+    by_matrix = {}
+    by_index = [None] * len(compiled.nodes)
+    with np.errstate(divide="ignore"):
+        for index, node in enumerate(compiled.nodes[1:], start=1):
+            matrix = transitions[node]
+            key = id(matrix)
+            if key not in by_matrix:
+                by_matrix[key] = np.log(matrix)
+            by_index[index] = by_matrix[key]
+    return by_index
+
+
+def _mixture_log_likelihoods(compiled, tips, log_prior, log_transitions):
     """Prune one rate category for all characters together."""
 
     inside = tips.copy()
@@ -1553,7 +1568,7 @@ def _mixture_log_likelihoods(compiled, tips, log_prior, transitions):
             continue
         likelihood = np.zeros((len(log_scales), len(log_prior)))
         for child in children:
-            matrix = _log_probabilities(transitions[compiled.nodes[child]])
+            matrix = log_transitions[child]
             likelihood += _edge_logsumexp(matrix[None] + inside.pop(child)[:, None, :])
         scale = np.max(likelihood, axis=1)
         inside[index] = likelihood - np.where(np.isfinite(scale), scale, 0.0)[:, None]
@@ -1708,6 +1723,7 @@ def compute_mk_mixture_marginals(
         return base, matrix, category_rates, weights, shape
 
     compiled = CompiledTree.from_tree(tree)
+    prepared_branches = _mk_branch_lengths(tree)
     log_tip_batches = [
         _mixture_log_tip_likelihoods(compiled, batch)
         for batch in _mixture_character_batches(likelihoods_by_character, len(states))
@@ -1726,21 +1742,26 @@ def compute_mk_mixture_marginals(
     def character_scores(matrix, category_rates, weights, root_prior):
         log_prior = _log_probabilities(root_prior)
         transitions = [
-            _transition_matrices_for_tree(tree, matrix * rate)
+            _transition_matrices_for_tree(
+                tree, matrix * rate, prepared_branches=prepared_branches
+            )
             for rate in category_rates
         ]
-        scores = np.column_stack(
-            [
+        columns = []
+        for weight, transition in zip(weights, transitions, strict=True):
+            log_transitions = _mixture_log_transitions(compiled, transition)
+            columns.append(
                 math.log(weight)
                 + np.concatenate(
                     [
-                        _mixture_log_likelihoods(compiled, tips, log_prior, transition)
+                        _mixture_log_likelihoods(
+                            compiled, tips, log_prior, log_transitions
+                        )
                         for tips in log_tip_batches
                     ]
                 )
-                for weight, transition in zip(weights, transitions, strict=True)
-            ]
-        )
+            )
+        scores = np.column_stack(columns)
         return sum(map(float, logsumexp(scores, axis=1))), scores, transitions
 
     def objective(parameters):
