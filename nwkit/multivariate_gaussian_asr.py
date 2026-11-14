@@ -508,7 +508,8 @@ def _observation_covariance(data, scalar_covariance, sigma):
     )
     covariance = np.asarray(covariance, dtype=float)
     covariance[np.diag_indices_from(covariance)] += data.errors * data.errors
-    return (covariance + covariance.T) / 2.0
+    # The scalar kernel and trait covariance are both symmetric.
+    return covariance
 
 
 def _factor_covariance(covariance):
@@ -811,19 +812,19 @@ def _exact_posterior_entries(data, start, size):
     ]
 
 
-def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
+def _diagonal_ou_observation_decay(data, geometry, beta):
     left = geometry.observed_left
     right = geometry.observed_right
     observed_beta = beta[data.trait_indices]
-    decay = _diagonal_ou_decay(
+    return _diagonal_ou_decay(
         observed_beta[:, None], left, observed_beta[None, :], right
     )
-    covariance = (
-        decay
-        * stationary_sigma[data.trait_indices[:, None], data.trait_indices[None, :]]
-    )
-    covariance[np.diag_indices_from(covariance)] += data.errors * data.errors
-    return (covariance + covariance.T) / 2.0
+
+
+def _fixed_diagonal_ou_decay(data, geometry, beta):
+    if beta is None:
+        return None
+    return _diagonal_ou_observation_decay(data, geometry, beta)
 
 
 def _diagonal_ou_posterior(
@@ -1036,9 +1037,12 @@ def fit_dense_mvou(
     if fixed_alpha is not None and fixed_alpha <= 0.0:
         raise ValueError("MV-OU alpha must be positive.")
     observed_distance = geometry.observed_distance
+    fixed_covariance = None
     if fixed_alpha is None:
         observed_distance = observed_distance / time_scale
         _validate_mvou_alpha_design(data, observed_distance)
+    else:
+        fixed_covariance = _diagonal_ou_decay(fixed_alpha, observed_distance, 0.0, 0.0)
     covariance_parameters = dimension * (dimension + 1) // 2
     free_parameters = dimension + covariance_parameters + int(fixed_alpha is None)
     if len(data.values) < free_parameters:
@@ -1063,7 +1067,11 @@ def fit_dense_mvou(
             decay_rate = math.exp(float(parameters[0]))
             offset = 1
         sigma, _ = _decode_cholesky(parameters, dimension, offset)
-        scalar = np.exp(-decay_rate * observed_distance)
+        scalar = (
+            np.exp(-decay_rate * observed_distance)
+            if fixed_covariance is None
+            else fixed_covariance
+        )
         covariance = _observation_covariance(data, scalar, sigma)
         return (
             decay_rate,
@@ -1231,6 +1239,7 @@ def fit_dense_mvou_diag(
     initial.extend(diffusion_initial)
     bounds.extend(diffusion_bounds)
     mean_profile = _prepare_mean_profile(data)
+    fixed_decay = _fixed_diagonal_ou_decay(data, analysis_geometry, fixed_alpha)
 
     def evaluate(parameters, *, return_residual=True):
         offset = 0
@@ -1248,9 +1257,10 @@ def fit_dense_mvou_diag(
         stationary_sigma = _stationary_diagonal_ou_covariance(
             correlation_scaled_diffusion, log_decay
         )
-        covariance = _diagonal_ou_observation_covariance(
-            data, analysis_geometry, beta, stationary_sigma
-        )
+        decay = fixed_decay
+        if decay is None:
+            decay = _diagonal_ou_observation_decay(data, analysis_geometry, beta)
+        covariance = _observation_covariance(data, decay, stationary_sigma)
         return (
             beta,
             correlation_scaled_diffusion,
