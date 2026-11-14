@@ -108,6 +108,21 @@ def test_singular_covariance_is_not_given_artificial_noise():
         )
 
 
+@pytest.mark.parametrize("scale", [2.0**-1060, 2.0**1023])
+def test_pgls_validates_covariance_in_its_own_units(scale):
+    valid = scale * np.array([[1.0, 0.5], [0.5, 1.0]])
+    asymmetric = scale * np.array([[1.0, 0.25], [0.5, 1.0]])
+    indefinite = scale * np.array([[1.0, 1.5], [1.5, 1.0]])
+    with np.errstate(over="raise", invalid="raise"):
+        np.testing.assert_array_equal(
+            pgls._validate_psd_covariance(valid, 2, "Test covariance"), valid
+        )
+        with pytest.raises(ValueError, match="must be symmetric"):
+            pgls._validate_psd_covariance(asymmetric, 2, "Test covariance")
+        with pytest.raises(ValueError, match="must be positive semidefinite"):
+            pgls._validate_psd_covariance(indefinite, 2, "Test covariance")
+
+
 def test_pgls_likelihood_matches_reported_covariance():
     responses = np.array(list(VALUES.values()))
     design = np.ones((6, 1))
