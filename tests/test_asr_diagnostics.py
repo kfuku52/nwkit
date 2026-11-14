@@ -24,6 +24,17 @@ def test_profile_likelihood_interval_recovers_normal_quadratic():
     assert interval.upper == pytest.approx(2.0 + 1.9599639845 * 0.5, abs=1e-8)
 
 
+def test_profile_likelihood_interval_resolves_small_parameter_units():
+    scale = 1e-18
+    interval = profile_likelihood_interval(
+        lambda value: -0.5 * (value / scale) ** 2,
+        0.0,
+        (-4.0 * scale, 4.0 * scale),
+    )
+    assert interval.lower / scale == pytest.approx(-1.95996398454)
+    assert interval.upper / scale == pytest.approx(1.95996398454)
+
+
 @pytest.mark.parametrize("mle", [0.0, 4.0])
 def test_profile_likelihood_interval_marks_boundary_mle(mle):
     interval = profile_likelihood_interval(
@@ -48,8 +59,22 @@ def test_profile_likelihood_marks_invalid_search_region_as_limited():
         return -0.5 * (value - 2.0) ** 2
 
     interval = profile_likelihood_interval(profile, 2.0, (-2.0, 6.0))
-    assert interval.upper <= 3.0
+    assert interval.upper == pytest.approx(3.0)
     assert interval.upper_boundary_limited
+
+
+@pytest.mark.parametrize("side", [-1.0, 1.0])
+def test_profile_likelihood_finds_crossing_before_invalid_grid_point(side):
+    def profile(value):
+        if side * value >= 4.0:
+            return -np.inf
+        return -0.125 * value**2
+
+    interval = profile_likelihood_interval(profile, 0.0, (-100.0, 100.0), grid_size=3)
+    assert interval.lower == pytest.approx(-3.91992796908)
+    assert interval.upper == pytest.approx(3.91992796908)
+    assert not interval.lower_boundary_limited
+    assert not interval.upper_boundary_limited
 
 
 def test_gaussian_posterior_predictive_is_reproducible():

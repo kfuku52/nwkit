@@ -66,49 +66,15 @@ def profile_likelihood_interval(
     left_grid = np.linspace(lower, mle, grid_size)
     right_grid = np.linspace(mle, upper, grid_size)
 
-    def crossing(grid, reverse):
-        values = [difference(value) for value in grid]
-        pairs = tuple(range(len(grid) - 1))
-        if reverse:
-            pairs = pairs[::-1]
-        for index in pairs:
-            first, second = values[index], values[index + 1]
-            if not (math.isfinite(first) and math.isfinite(second)):
-                finite_index = None
-                if math.isfinite(first) and first > 0.0:
-                    finite_index = index
-                elif math.isfinite(second) and second > 0.0:
-                    finite_index = index + 1
-                if finite_index is not None:
-                    return float(grid[finite_index]), True
-                continue
-            if first == 0.0:
-                return float(grid[index]), False
-            if second == 0.0:
-                return float(grid[index + 1]), False
-            if (first < 0.0 < second) or (second < 0.0 < first):
-                return float(
-                    brentq(
-                        difference,
-                        float(grid[index]),
-                        float(grid[index + 1]),
-                        xtol=1e-10,
-                    )
-                ), False
-        finite_indices = [
-            index for index, value in enumerate(values) if math.isfinite(value)
-        ]
-        if not finite_indices:
-            raise ValueError("The profile likelihood is finite only at the MLE.")
-        boundary_index = finite_indices[0] if reverse else finite_indices[-1]
-        boundary = float(grid[boundary_index])
-        return boundary, True
-
     lower_value, lower_limited = (
-        (lower, True) if mle == lower else crossing(left_grid, True)
+        (lower, True)
+        if mle == lower
+        else _profile_crossing(difference, left_grid[-2::-1], mle)
     )
     upper_value, upper_limited = (
-        (upper, True) if mle == upper else crossing(right_grid, False)
+        (upper, True)
+        if mle == upper
+        else _profile_crossing(difference, right_grid[1:], mle)
     )
     return ProfileLikelihoodInterval(
         lower_value,
@@ -117,6 +83,40 @@ def profile_likelihood_interval(
         lower_limited,
         upper_limited,
     )
+
+
+def _profile_crossing(difference, points, mle):
+    inside = mle
+    for point in points:
+        outside = float(point)
+        value = difference(outside)
+        if value > 0.0:
+            inside = outside
+            continue
+        # Refine at a nonfinite profile value to distinguish a likelihood
+        # crossing from exhaustion of the finite parameter domain.
+        while not math.isfinite(value):
+            middle = 0.5 * inside + 0.5 * outside
+            if middle == inside or middle == outside:
+                return inside, True
+            midpoint_value = difference(middle)
+            if midpoint_value > 0.0:
+                inside = middle
+            else:
+                outside = middle
+                value = midpoint_value
+        if value == 0.0:
+            return outside, False
+        return float(
+            brentq(
+                difference,
+                min(inside, outside),
+                max(inside, outside),
+                xtol=math.ulp(0.0),
+                maxiter=200,
+            )
+        ), False
+    return inside, True
 
 
 def _summary_statistics(values):
