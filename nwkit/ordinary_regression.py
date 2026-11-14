@@ -3,6 +3,7 @@
 import math
 import os
 from dataclasses import dataclass
+from functools import lru_cache
 from types import SimpleNamespace
 
 import numpy as np
@@ -2956,60 +2957,74 @@ def _response_auxiliary_mapping(column_by_response, values_by_column):
 
 
 def _sampling_covariance_table(covariance_by_trait, leaf_names):
-    rows = []
-    for trait, covariance in covariance_by_trait.items():
-        if isinstance(covariance, DiagonalLowRankCovariance):
-            diagonal = np.asarray(covariance.diagonal, dtype=float)
-            loading = sparse.hstack(
-                [
-                    sparse.diags(np.sqrt(diagonal), format="csr"),
-                    sparse.csr_matrix(covariance.low_rank),
-                ],
-                format="csr",
-            ).tocoo()
-            latent_names = ["latent:tip:{}".format(name) for name in leaf_names] + [
-                "latent:low-rank:{}".format(index)
+    names = np.asarray(leaf_names, dtype=object)
+
+    @lru_cache(maxsize=1)
+    def upper_indices():
+        return np.triu_indices(len(names))
+
+    parts = [
+        _trait_sampling_covariance_table(
+            trait, covariance, leaf_names, names, upper_indices
+        )
+        for trait, covariance in covariance_by_trait.items()
+    ]
+    nonempty = [part for part in parts if not part.empty]
+    if not nonempty:
+        return pd.DataFrame(columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)
+    return pd.concat(nonempty, ignore_index=True)
+
+
+def _trait_sampling_covariance_table(
+    trait, covariance, leaf_names, names, upper_indices
+):
+    representation = "covariance"
+    if isinstance(covariance, DiagonalLowRankCovariance):
+        diagonal = np.asarray(covariance.diagonal, dtype=float)
+        loading = sparse.hstack(
+            [
+                sparse.diags(np.sqrt(diagonal), format="csr"),
+                sparse.csr_matrix(covariance.low_rank, dtype=float),
+            ],
+            format="csr",
+        ).tocoo()
+        latent_names = np.asarray(
+            [f"latent:tip:{name}" for name in leaf_names]
+            + [
+                f"latent:low-rank:{index}"
                 for index in range(covariance.low_rank.shape[1])
-            ]
-            for row, column, value in zip(
-                loading.row, loading.col, loading.data, strict=True
-            ):
-                rows.append(
-                    {
-                        "tree_id": "species",
-                        "trait": trait,
-                        "leaf_name_1": leaf_names[row],
-                        "leaf_name_2": latent_names[column],
-                        "sampling_covariance": float(value),
-                        "covariance_representation": "factor-loading",
-                    }
-                )
-            continue
+            ],
+            dtype=object,
+        )
+        first, second, values = (
+            names[loading.row],
+            latent_names[loading.col],
+            loading.data,
+        )
+        representation = "factor-loading"
+    else:
         matrix = (
             covariance.loc[leaf_names, leaf_names].to_numpy(dtype=float)
             if isinstance(covariance, pd.DataFrame)
             else np.asarray(covariance, dtype=float)
         )
-        for first, first_name in enumerate(leaf_names):
-            second_indices = (
-                range(first, first + 1)
-                if matrix.ndim == 1
-                else range(first, len(leaf_names))
-            )
-            for second in second_indices:
-                rows.append(
-                    {
-                        "tree_id": "species",
-                        "trait": trait,
-                        "leaf_name_1": first_name,
-                        "leaf_name_2": leaf_names[second],
-                        "sampling_covariance": (
-                            matrix[first] if matrix.ndim == 1 else matrix[first, second]
-                        ),
-                        "covariance_representation": "covariance",
-                    }
-                )
-    return pd.DataFrame(rows, columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS)
+        if matrix.ndim == 1:
+            first = second = names
+            values = matrix[: len(names)]
+        else:
+            rows, columns = upper_indices()
+            first, second, values = names[rows], names[columns], matrix[rows, columns]
+    return pd.DataFrame(
+        {
+            "tree_id": "species",
+            "trait": trait,
+            "leaf_name_1": first,
+            "leaf_name_2": second,
+            "sampling_covariance": values,
+            "covariance_representation": representation,
+        },
+        columns=ORDINARY_SAMPLING_COVARIANCE_COLUMNS,
+    )
 
 
 def build_ordinary_regression(
