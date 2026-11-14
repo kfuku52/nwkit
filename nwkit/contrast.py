@@ -936,14 +936,20 @@ def _read_reconciliation(path, clades):
 
 
 def _orient_children(tree, clades, reconciliation_by_id):
-    node_by_clade_id = {
-        clades.clade_id_for_node(node): node for node in tree.traverse()
-    }
+    if reconciliation_by_id is not None:
+        node_by_clade_id = {
+            clades.clade_id_for_node(node): node for node in tree.traverse()
+        }
+    first_tip = {}
     orientation_by_node = dict()
-    for node in tree.traverse():
+    for node in tree.traverse("postorder"):
         if node.is_leaf:
+            first_tip[node] = str(node.name)
             continue
-        children = sorted(node.children, key=clades.names_for_node)
+        # Sibling clades have disjoint tip names. Their smallest names
+        # determine the lexicographic order of the complete name lists.
+        children = sorted(node.children, key=first_tip.__getitem__)
+        first_tip[node] = first_tip[children[0]]
         if reconciliation_by_id is not None:
             record = reconciliation_by_id[clades.clade_id_for_node(node)]
             numerator_id = record["contrast_numerator_gene_clade_id"]
@@ -1010,11 +1016,6 @@ def _require_finite(value, label):
     return value
 
 
-def _stable_ancestral_estimate(value1, variance1, value2, variance2):
-    weight1, weight2 = _stable_ancestral_weights(variance1, variance2)
-    return value1 * weight1 + value2 * weight2
-
-
 def _stable_ancestral_weights(variance1, variance2):
     scale = max(variance1, variance2)
     scaled1 = variance1 / scale
@@ -1054,14 +1055,15 @@ def calculate_contrasts(
     )
     values_by_leaf = _validated_leaf_values(tree, values_by_leaf)
     if orientation_by_node is None:
-        clades = CladeIndex(tree)
-        orientation_by_node = _orient_children(tree, clades, reconciliation_by_id=None)
+        orientation_by_node = _orient_children(tree, None, reconciliation_by_id=None)
     estimate_by_node = dict()
     variance_by_node = dict()
     contrast_by_node = dict()
     coefficient_by_node = dict()
     contrast_coefficient_by_node = dict()
-    leaf_names = [str(leaf.name) for leaf in tree.leaves()]
+    leaf_names = (
+        [str(leaf.name) for leaf in tree.leaves()] if return_coefficients else []
+    )
     leaf_index = {name: index for index, name in enumerate(leaf_names)}
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
@@ -1092,17 +1094,12 @@ def calculate_contrasts(
         raw_contrast = _require_finite(
             numerator_estimate - denominator_estimate, "raw contrast"
         )
-        ancestral_estimate = _require_finite(
-            _stable_ancestral_estimate(
-                numerator_estimate,
-                numerator_variance,
-                denominator_estimate,
-                denominator_variance,
-            ),
-            "ancestral estimate",
-        )
         weight1, weight2 = _stable_ancestral_weights(
             numerator_variance, denominator_variance
+        )
+        ancestral_estimate = _require_finite(
+            numerator_estimate * weight1 + denominator_estimate * weight2,
+            "ancestral estimate",
         )
         if return_coefficients:
             contrast_coefficients = (
