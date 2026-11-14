@@ -4,12 +4,15 @@ Independent implementation of Blomberg's K and Pagel's lambda. Covariances
 are relative to the retained tips' MRCA; the root mean is profiled by GLS.
 """
 
+import math
 from functools import cache
 
 import numpy as np
 from scipy.linalg import cho_solve, eigh, solve_triangular
 from scipy.optimize import brentq, minimize_scalar
 from scipy.stats import chi2
+
+_MAX_GAUSSIAN_RATE_PRODUCT = float(np.finfo(float).max) / (2 * math.pi)
 
 
 def _prepare_gls(covariance, count):
@@ -62,14 +65,20 @@ def _zero_error_rate(gls_result, count):
     rate = quadratic / count
     if rate <= 0:
         raise ValueError("Zero residual variance has no finite Gaussian density.")
-    likelihood = -0.5 * (count * (1 + np.log(2 * np.pi * rate)) + logdet)
+    likelihood = -0.5 * (count * (1 + _log_gaussian_variance(rate)) + logdet)
     return float(likelihood), float(rate), mean
+
+
+def _log_gaussian_variance(rate):
+    if rate > _MAX_GAUSSIAN_RATE_PRODUCT:
+        return math.log(2 * math.pi) + math.log(rate)
+    return np.log(2 * np.pi * rate)
 
 
 def rate_fit(covariance, values, errors):
     """Profile the root mean and ML diffusion rate, retaining rate=0."""
     if not np.any(errors):
-        return _zero_error_rate(gls(covariance, values), len(values))
+        return _exact_rate_fit(_prepare_gls(covariance, len(values)), values)
     evaluate, lower, upper = _error_rate_profile(covariance, values, errors)
     if upper <= 0:
         return evaluate(0.0)
@@ -82,6 +91,22 @@ def rate_fit(covariance, values, errors):
     )
     _, fit = _best_scalar(lambda z: evaluate(np.exp(z)), logs)
     return max([fit, evaluate(0.0)], key=lambda item: item[0])
+
+
+def _exact_rate_fit(prepared, values):
+    # If the residual sum overflows, its mean square can still be finite.
+    with np.errstate(over="ignore", invalid="ignore"):
+        fitted = _gls_from_preparation(prepared, values)
+    if math.isfinite(fitted[1]):
+        return _zero_error_rate(fitted, len(values))
+    exponent = math.frexp(float(np.max(np.abs(values))))[1]
+    centered_units = np.ldexp(values, -exponent)
+    mean, quadratic, logdet, _ = _gls_from_preparation(prepared, centered_units)
+    rate = math.ldexp(quadratic / len(values), 2 * exponent)
+    if rate <= 0 or not math.isfinite(rate):
+        raise ValueError("Diffusion rate is outside floating-point range.")
+    likelihood = -0.5 * (len(values) * (1 + _log_gaussian_variance(rate)) + logdet)
+    return float(likelihood), rate, math.ldexp(mean, exponent)
 
 
 def _error_rate_profile(covariance, values, errors):
@@ -274,7 +299,7 @@ def _zero_error_lambda_profile(
         rate = float(residual @ residual / len(values))
         if rate <= 0:
             raise ValueError("Zero residual variance has no finite Gaussian density.")
-        likelihood = -0.5 * (len(values) * (1 + np.log(2 * np.pi * rate)) + logdet)
+        likelihood = -0.5 * (len(values) * (1 + _log_gaussian_variance(rate)) + logdet)
         return float(likelihood), rate, float(mean + reference)
 
     return profile
@@ -393,14 +418,9 @@ def lambda_parametric_bootstrap(
             spectrum = prepare_spectrum()
             cache_endpoints = spectrum is not None
             return boundary, spectrum
-        count = len(diagonal)
         boundary = {
-            0.0: _zero_error_rate(
-                _gls_from_preparation(prepare_null(), simulated), count
-            ),
-            1.0: _zero_error_rate(
-                _gls_from_preparation(prepare_bm(), simulated), count
-            ),
+            0.0: _exact_rate_fit(prepare_null(), simulated),
+            1.0: _exact_rate_fit(prepare_bm(), simulated),
         }
         return boundary, prepare_spectrum()
 

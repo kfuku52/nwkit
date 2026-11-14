@@ -570,6 +570,21 @@ def test_rate_units_avoid_intermediate_square_overflow():
     assert result["sigma2"] == pytest.approx(0.5e-200, rel=1e-15, abs=0)
 
 
+@pytest.mark.parametrize("magnitude", [8e153, 1e154])
+def test_exact_diffusion_likelihood_retains_large_finite_rate(magnitude):
+    import math
+
+    values = np.array([-magnitude, 0.0, magnitude, 0.0])
+    expected = (magnitude * 0.5) * magnitude
+    with np.errstate(over="raise", invalid="raise"):
+        likelihood, rate, mean = rate_fit(np.eye(4), values, np.zeros(4))
+    assert rate == pytest.approx(expected)
+    assert mean == 0
+    assert likelihood == pytest.approx(
+        -2 * (1 + math.log(2 * math.pi) + math.log(expected))
+    )
+
+
 @pytest.mark.parametrize("seed", range(4))
 def test_error_rate_stress_against_direct_covariance(seed):
     from scipy.linalg import cho_solve
