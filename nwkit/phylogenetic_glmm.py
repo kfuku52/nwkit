@@ -124,6 +124,8 @@ _NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
     (-1.0) ** (order + 1) / (order * (order + 1)) for order in range(1, 9)
 )
 _SMALL_BETA_PRECISION = 1e-20
+_LARGE_GAMMA_SHAPE = 128.0
+_GAMMA_DEVIANCE_SERIES = tuple(1.0 / math.factorial(order) for order in range(2, 11))
 
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
@@ -1121,15 +1123,42 @@ def _gamma_log_likelihood(values, linear, dispersion):
         raise ValueError("Gamma shape must be positive.")
     log_values = np.log(values)
     log_ratio = log_values - linear
+    return _gamma_log_density(log_values, log_ratio, dispersion)
+
+
+def _gamma_log_density(log_values, log_ratio, shape):
+    if shape >= _LARGE_GAMMA_SHAPE:
+        return _large_shape_gamma_log_density(log_values, log_ratio, shape)
+    log_shape = math.log(shape)
+    log_gamma = gammaln(1.0 + shape) - log_shape if shape < 1.0 else gammaln(shape)
     with np.errstate(over="ignore"):
-        shape_scaled_ratio = np.exp(math.log(dispersion) + log_ratio)
+        shape_scaled_ratio = np.exp(log_shape + log_ratio)
     return (
-        dispersion * math.log(dispersion)
-        - gammaln(dispersion)
+        shape * log_shape
+        - log_gamma
         - log_values
-        + dispersion * log_ratio
+        + shape * log_ratio
         - shape_scaled_ratio
     )
+
+
+def _large_shape_gamma_log_density(log_values, log_ratio, shape):
+    inverse = 1.0 / shape
+    inverse_squared = inverse * inverse
+    # Stirling's expansion for log Gamma(shape), after canceling its
+    # shape-sized terms from the log density. See DLMF 5.11.1.
+    correction = inverse * (1.0 / 12.0 - inverse_squared * (1.0 / 360.0))
+    normalization = 0.5 * (math.log(shape) - math.log(math.tau)) - correction
+    close = np.abs(log_ratio) < 0.1
+    relative = log_ratio[close]
+    deviance = np.empty_like(log_ratio)
+    deviance[close] = (
+        (shape * relative) * relative
+    ) * np.polynomial.polynomial.polyval(relative, _GAMMA_DEVIANCE_SERIES)
+    relative = log_ratio[~close]
+    with np.errstate(over="ignore"):
+        deviance[~close] = shape * (np.expm1(relative) - relative)
+    return normalization - log_values - deviance
 
 
 def _lognormal_log_likelihood(values, linear, dispersion):

@@ -583,6 +583,28 @@ def test_gamma_likelihood_and_derivatives_scale_with_response_units():
     np.testing.assert_allclose(after_terms, before_terms, atol=3e-12)
 
 
+@pytest.mark.parametrize("shape", [1e-310, math.ulp(0.0)])
+def test_gamma_likelihood_remains_finite_for_subnormal_shape(shape):
+    values = np.array([0.5, 2.0])
+    log_density = _gamma_log_likelihood(values, np.zeros(2), shape)
+    np.testing.assert_allclose(
+        log_density, math.log(shape) - np.log(values), atol=1e-13
+    )
+
+
+@pytest.mark.parametrize("shape", [1e18, 1e200, 1e308])
+def test_high_shape_gamma_log_density_resolves_variation_near_its_mean(shape):
+    # In log-response units the high-shape limit has variance 1 / shape.
+    standardized = np.array([0.0, -0.25, 1.0, 3.0])
+    linear = -standardized / math.sqrt(shape)
+    with np.errstate(over="raise", invalid="raise"):
+        result = _gamma_log_likelihood(np.ones(len(linear)), linear, shape)
+    normal_limit = 0.5 * (math.log(shape) - math.log(math.tau)) - (
+        0.5 * standardized**2
+    )
+    np.testing.assert_allclose(result, normal_limit, rtol=0.0, atol=5e-9)
+
+
 def test_lognormal_score_avoids_overflow_in_squared_dispersion():
     gradient, curvature = _lognormal_scalar_terms(
         np.ones(2), np.array([1e308, -1e308]), 1e155
