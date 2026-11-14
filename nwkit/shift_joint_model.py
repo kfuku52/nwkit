@@ -126,7 +126,8 @@ def original_diffusion_coordinate(tree, alpha, diffusion, root_model):
         if root_model == "OUrandomRoot"
         else integral_decay(2 * np.asarray(alpha), 1.0)
     )
-    return diffusion * np.sqrt(integral[:, None] * integral[None])
+    scales = np.sqrt(integral)
+    return diffusion * (scales[:, None] * scales[None])
 
 
 @dataclass(frozen=True)
