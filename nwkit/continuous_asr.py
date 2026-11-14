@@ -607,10 +607,8 @@ def compute_bm_marginals(
         # The retry changes no mathematical units and strictly lowers the
         # exponent, so genuinely unrepresentable final models still reach the
         # explicit error in `_prune` below.
-        original_underflow = any(
-            node.dist > 0.0 and fitted_sigma2 * node.dist == 0.0
-            for node in tree.traverse()
-            if not node.is_root
+        original_underflow = _brownian_has_underflowing_edge(
+            tree, _process, fitted_sigma2
         )
         if original_underflow:
             break
@@ -661,3 +659,13 @@ def compute_bm_marginals(
         else "ok",
     )
     return posterior, fit
+
+
+def _brownian_has_underflowing_edge(tree, process, rate):
+    edge_length = _brownian_group_edge_length(tree, process)
+    for node in tree.traverse():
+        if not node.is_root:
+            length = edge_length(node)
+            if length > 0.0 and rate * length == 0.0:
+                return True
+    return False

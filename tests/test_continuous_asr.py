@@ -9,6 +9,11 @@ from scipy.optimize import brentq, minimize_scalar
 
 import nwkit.continuous_asr as continuous
 from nwkit.continuous_asr import compute_bm_marginals
+from nwkit.gaussian_tree import (
+    GaussianRootPrior,
+    GaussianTreeProcess,
+    brownian_transition,
+)
 from nwkit.util import read_tree
 from tests.helpers import make_deep_ladder_tree
 
@@ -391,6 +396,28 @@ def test_unrepresentable_variance_in_the_final_fixed_model_is_still_rejected():
             {"A": 0.0, "B": 1.0, "C": 2.0},
             sigma2=1e-20,
         )
+
+
+def test_brownian_rescaling_uses_transformed_branch_variances():
+    raw = tree_from("(A:4e-323,B:64,C:1)R;")
+    transformed = tree_from("(A:1,B:64,C:1e-310)R;")
+    process = GaussianTreeProcess(
+        raw,
+        {
+            leaf: brownian_transition(transformed[leaf.name].dist)
+            for leaf in raw.leaves()
+        },
+        GaussianRootPrior("flat", 0.0, None),
+        "transformed",
+    )
+    values = {"A": 0.0, "B": 1e9, "C": 2e9}
+    _, expected = compute_bm_marginals(
+        transformed, values, sigma2=0.01, _compute_posterior=False
+    )
+    _, result = compute_bm_marginals(
+        raw, values, sigma2=0.01, _process=process, _compute_posterior=False
+    )
+    assert result == expected
 
 
 @pytest.mark.parametrize("size", [1e20, 1e100, 1e150])
