@@ -82,6 +82,8 @@ class _ObservationData:
     count_by_trait: np.ndarray
     num_observed_tips: int
     num_effective_positions: int
+    contracted_positions: np.ndarray
+    exact_by_position: dict[int, dict[int, float]]
 
 
 @dataclass(frozen=True)
@@ -168,7 +170,7 @@ def _prepare_observations(
     compiled = CompiledTree.from_tree(tree)
     contracted_positions = _contracted_positions(compiled)
     raw_records = []
-    exact_by_position: dict[tuple[int, int], float] = {}
+    exact_by_position: dict[int, dict[int, float]] = {}
     observed_tips = set()
     observed_positions = set()
     for name, node_index in compiled.leaf_index_by_name.items():
@@ -194,8 +196,10 @@ def _prepare_observations(
                 nonnegative=True,
             )
             if error == 0.0:
-                key = (int(contracted_positions[node_index]), trait_index)
-                previous = exact_by_position.get(key)
+                exact = exact_by_position.setdefault(
+                    int(contracted_positions[node_index]), {}
+                )
+                previous = exact.get(trait_index)
                 if previous is not None:
                     if previous != value:
                         raise ValueError(
@@ -204,7 +208,7 @@ def _prepare_observations(
                         )
                     observed_tips.add(name)
                     continue
-                exact_by_position[key] = value
+                exact[trait_index] = value
             raw_records.append((node_index, trait_index, value, error))
             observed_tips.add(name)
             observed_positions.add(int(contracted_positions[node_index]))
@@ -262,6 +266,8 @@ def _prepare_observations(
         count_by_trait,
         len(observed_tips),
         len(observed_positions),
+        contracted_positions,
+        exact_by_position,
     )
 
 
@@ -622,8 +628,9 @@ def _likelihood_scale_adjustment(data, *, reml):
 
 
 def _mvbm_analysis_data(data):
-    positions = _contracted_positions(data.compiled)
-    root_exact = (positions[data.node_indices] == 0) & (data.errors == 0.0)
+    root_exact = (data.contracted_positions[data.node_indices] == 0) & (
+        data.errors == 0.0
+    )
     fixed_mean = np.full(len(data.trait_names), np.nan, dtype=float)
     fixed_mean[data.trait_indices[root_exact]] = data.values[root_exact]
     if not np.any(root_exact):
@@ -695,7 +702,9 @@ def _posterior(
             adjustment = adjustment_base - cross @ solved_design
             covariance += adjustment @ mean_covariance @ adjustment.swapaxes(1, 2)
         means = mean + cross @ solved_residual
-        posterior.update(_restored_posterior_marginals(data, nodes, means, covariance))
+        posterior.update(
+            _restored_posterior_marginals(data, start, nodes, means, covariance)
+        )
     return posterior
 
 
@@ -731,8 +740,14 @@ def _posterior_covariance_batches(
         )
 
 
-def _restored_posterior_marginals(data, nodes, means, covariance):
+def _restored_posterior_marginals(data, start, nodes, means, covariance):
     covariance = (covariance + covariance.swapaxes(1, 2)) / 2.0
+    # An exact observation fixes the same coordinate at every node connected
+    # by zero-length branches. Remove subtraction roundoff before PSD checks.
+    fixed = _exact_posterior_entries(data, start, len(nodes))
+    for row, trait, _ in fixed:
+        covariance[row, trait, :] = 0.0
+        covariance[row, :, trait] = 0.0
     eigenvalues, eigenvectors = np.linalg.eigh(covariance)
     tolerance = (
         np.finfo(float).eps
@@ -746,15 +761,30 @@ def _restored_posterior_marginals(data, nodes, means, covariance):
     covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)[:, None, :]) @ (
         eigenvectors.swapaxes(1, 2)
     )
+    means = data.centers + data.scales * means
+    for row, trait, value in fixed:
+        means[row, trait] = value
+        covariance[row, trait, :] = 0.0
+        covariance[row, :, trait] = 0.0
     return {
         node: MultivariateGaussianMarginal(
-            data.centers + data.scales * node_mean,
+            node_mean,
             _restore_sigma(data, node_covariance),
         )
         for node, node_mean, node_covariance in zip(
             nodes, means, covariance, strict=True
         )
     }
+
+
+def _exact_posterior_entries(data, start, size):
+    if not data.exact_by_position:
+        return ()
+    return [
+        (row, trait, value)
+        for row, position in enumerate(data.contracted_positions[start : start + size])
+        for trait, value in data.exact_by_position.get(int(position), {}).items()
+    ]
 
 
 def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
@@ -792,12 +822,13 @@ def _diagonal_ou_posterior(
         )
         return decay * trait_covariance
 
-    for _, nodes, cross, conditional_covariance in _posterior_covariance_batches(
+    for start, nodes, cross, conditional_covariance in _posterior_covariance_batches(
         data, geometry, factor, cross_covariance
     ):
         posterior.update(
             _restored_posterior_marginals(
                 data,
+                start,
                 nodes,
                 mean + cross @ solved_residual,
                 stationary_sigma - conditional_covariance,

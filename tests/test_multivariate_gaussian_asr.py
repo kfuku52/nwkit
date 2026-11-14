@@ -254,10 +254,26 @@ def test_dense_multivariate_models_contract_duplicate_exact_zero_length_tips(fit
     posterior, fit = fitter(tree, values, ("x", "y"), **options)
     assert fit.num_observed == 5
     assert fit.num_effective_observations == 4
-    assert posterior[tree["A"]].mean == pytest.approx(posterior[tree["B"]].mean)
-    assert posterior[tree["A"]].covariance == pytest.approx(
-        posterior[tree["B"]].covariance
-    )
+    for name in ("A", "B", "I"):
+        np.testing.assert_array_equal(posterior[tree[name]].mean, values["A"])
+        np.testing.assert_array_equal(
+            posterior[tree[name]].covariance, np.zeros((2, 2))
+        )
+
+
+@pytest.mark.parametrize(
+    "fitter", [fit_dense_mvbm, fit_dense_mvou, fit_dense_mvou_diag]
+)
+def test_dense_multivariate_models_preserve_exact_coordinates_of_partial_tips(fitter):
+    tree = tree_from("((A:0,B:0)I:1,C:1,D:1,E:1)R;")
+    values = {"A": (-0.751, None), "C": (2.1, 1.0), "D": (-0.2, 0.0), "E": (0.9, -1.0)}
+    options = {"alpha": 0.7} if fitter is not fit_dense_mvbm else {}
+    posterior, _ = fitter(tree, values, ("x", "y"), **options)
+    for name in ("A", "B", "I"):
+        marginal = posterior[tree[name]]
+        assert marginal.mean[0] == values["A"][0]
+        np.testing.assert_array_equal(marginal.covariance[0], [0.0, 0.0])
+        assert marginal.covariance[1, 1] > 0.0
 
 
 def test_dense_multivariate_model_rejects_conflicting_exact_zero_length_tips():
