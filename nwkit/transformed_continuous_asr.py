@@ -125,7 +125,7 @@ def compute_transformed_bm_marginals(
     validate_evolution_parameter(model, bounds[0])
     validate_evolution_parameter(model, bounds[1])
 
-    def fit_at(parameter):
+    def fit_at(parameter, *, compute_posterior=True):
         process = _process(tree, model, parameter)
         return compute_bm_marginals(
             tree,
@@ -134,6 +134,7 @@ def compute_transformed_bm_marginals(
             standard_errors=standard_errors,
             _tree_validated=_tree_validated,
             _process=process,
+            _compute_posterior=compute_posterior,
         )
 
     if evolution_parameter is not None:
@@ -160,7 +161,7 @@ def compute_transformed_bm_marginals(
         evaluated = {}
 
         def candidate(parameter):
-            result = fit_at(parameter)
+            result = fit_at(parameter, compute_posterior=False)
             likelihood = result[1].restricted_log_likelihood
             if likelihood is None or not math.isfinite(likelihood):
                 raise ValueError("The transformed process has no ordinary likelihood.")
@@ -224,7 +225,9 @@ def compute_transformed_bm_marginals(
         from nwkit.asr_diagnostics import profile_likelihood_interval
 
         def profile(parameter):
-            result = fit_at(float(parameter))[1].restricted_log_likelihood
+            result = fit_at(float(parameter), compute_posterior=False)[
+                1
+            ].restricted_log_likelihood
             return -math.inf if result is None else float(result)
 
         profile_interval = profile_likelihood_interval(

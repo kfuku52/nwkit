@@ -77,7 +77,16 @@ def parse_eb_rate_bounds(value, tree):
     return lower, upper
 
 
-def _run_eb(tree, values_by_leaf, rate, sigma2, standard_errors, tree_validated):
+def _run_eb(
+    tree,
+    values_by_leaf,
+    rate,
+    sigma2,
+    standard_errors,
+    tree_validated,
+    *,
+    compute_posterior=True,
+):
     # The ASR command historically calls the two-sided exponential rate-change
     # model EB.  Internally it is the same process that regression calls ACDC,
     # including positive acceleration parameters.
@@ -95,6 +104,7 @@ def _run_eb(tree, values_by_leaf, rate, sigma2, standard_errors, tree_validated)
         standard_errors=standard_errors,
         _tree_validated=tree_validated,
         _process=process,
+        _compute_posterior=compute_posterior,
     )
     return posterior, fit
 
@@ -145,6 +155,7 @@ def compute_eb_marginals(
                         fixed_sigma2,
                         standard_errors,
                         _tree_validated,
+                        compute_posterior=False,
                     )
                 except (ValueError, ArithmeticError):
                     cache[key] = None
