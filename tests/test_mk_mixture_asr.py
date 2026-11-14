@@ -128,6 +128,26 @@ def test_mk_mixture_rejects_unidentifiable_zero_fixed_base_rate():
         )
 
 
+@pytest.mark.parametrize("informative_zero_edges", [False, True])
+def test_mk_mixture_rejects_data_without_an_informative_positive_branch(
+    informative_zero_edges,
+):
+    tree = tree_from("((A:0)I:0,B:1)R;")
+    observed = {
+        character: {"A": "0" if informative_zero_edges else None, "B": None}
+        for character in ("first", "second")
+    }
+    likelihoods = {
+        character: {
+            "A": np.array([1.0, 0.0]) if informative_zero_edges else np.ones(2),
+            "B": np.ones(2),
+        }
+        for character in observed
+    }
+    with pytest.raises(ValueError, match="positive-length branch ancestral"):
+        compute_mk_mixture_marginals(tree, ["0", "1"], observed, likelihoods, rate=0.4)
+
+
 def test_mk_mixture_rejects_fractional_category_count():
     tree = tree_from("(((A:1,B:1):1,C:1):1,((D:1,E:1):1,F:1):1)R;")
     states, observed, likelihoods = character_data(

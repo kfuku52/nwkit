@@ -94,6 +94,18 @@ def test_covarion_fixed_rate_must_leave_room_for_hidden_spread():
         )
 
 
+def test_covarion_rejects_data_without_an_informative_positive_branch():
+    tree = tree_from("((A:0)I:0,B:1)R;")
+    with pytest.raises(ValueError, match="positive-length branch ancestral"):
+        compute_covarion_marginals(
+            tree,
+            ["0", "1"],
+            {"A": "0", "B": None},
+            {"A": np.array([1.0, 0.0]), "B": np.ones(2)},
+            rate=0.4,
+        )
+
+
 def test_covarion_rejects_fractional_or_excessive_hidden_state_spaces():
     tree = tree_from("(((A:1,B:1):1,C:1):1,((D:1,E:1):1,F:1):1)R;")
     states = ["0", "1"]

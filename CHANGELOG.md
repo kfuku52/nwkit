@@ -15,6 +15,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   mass, including when all allowed intervals lie in the extreme tails.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain and in small parameter units.
+- Reject COVARION and MK-MIXTURE fits when no positive-length branch can
+  affect an informative tip observation.
 
 ### Performance
 

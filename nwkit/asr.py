@@ -630,6 +630,14 @@ def _informative_descendants(tree, likelihood_by_leaf):
     return informative
 
 
+def _has_informative_mk_branch(tree, likelihood_by_leaf):
+    informative = _informative_descendants(tree, likelihood_by_leaf)
+    return any(
+        not node.is_root and informative[node] and float(node.dist) > 0.0
+        for node in informative
+    )
+
+
 def _initial_rate_value(tree, rate, rate_bounds):
     if rate is not None:
         value = float(rate)
@@ -1421,8 +1429,6 @@ def compute_mk_mixture_marginals(
 ):
     """Jointly fit several Mk characters with gamma or ordered free rates."""
 
-    from nwkit.optimization import deterministic_multistart
-
     _require_multiple_discrete_states(states)
     if base_model not in {"ER", "SYM", "ARD", "F81", "GTR"}:
         raise ValueError("MK-MIXTURE base model must be ER, SYM, ARD, F81, or GTR.")
@@ -1433,6 +1439,14 @@ def compute_mk_mixture_marginals(
         raise ValueError("--rate-categories must be between 2 and 8.")
     if len(likelihoods_by_character) < 2:
         raise ValueError("MK-MIXTURE requires at least two character columns.")
+    if not any(
+        _has_informative_mk_branch(tree, likelihood_by_leaf)
+        for likelihood_by_leaf in likelihoods_by_character.values()
+    ):
+        raise ValueError(
+            "MK-MIXTURE requires a positive-length branch ancestral to an "
+            "informative tip observation."
+        )
     rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
     labels = _rate_parameter_labels(base_model, states, transition_graph)
     if len(labels) > _MAX_FREE_TRANSITION_PARAMETERS:
@@ -1876,7 +1890,6 @@ def compute_covarion_marginals(
         expanded_state_labels,
         state_projection,
     )
-    from nwkit.optimization import deterministic_multistart
 
     _require_multiple_discrete_states(states)
     hidden_categories = _integer_option(hidden_categories, "--hidden-categories")
@@ -1897,6 +1910,11 @@ def compute_covarion_marginals(
     np.fill_diagonal(observed_graph, False)
     if not np.any(observed_graph):
         raise ValueError("COVARION requires at least one observed-state transition.")
+    if not _has_informative_mk_branch(tree, likelihood_by_leaf):
+        raise ValueError(
+            "COVARION requires a positive-length branch ancestral to an "
+            "informative tip observation."
+        )
     rate_bounds = DEFAULT_RATE_BOUNDS if rate_bounds is None else rate_bounds
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
     fixed_rate = None
