@@ -101,6 +101,43 @@ def test_latent_predictor_rejects_indefinite_sampling_covariance():
         )
 
 
+@pytest.mark.parametrize("factor_path", [False, True])
+@pytest.mark.parametrize("exponent", [-1023, 1023])
+def test_latent_predictor_normalizes_extreme_evolutionary_covariances(
+    factor_path, exponent
+):
+    observed = np.array([0.4, -0.5, 0.6, 0.0, -0.25, 0.56])
+    variances = np.array([0.75, 0.75, 0.5, 0.5, 0.75, 0.5])
+    if factor_path:
+        fit = fit_factor_latent_predictor
+        evolutionary = variances
+        sampling = DiagonalLowRankCovariance(
+            np.zeros(len(observed)), sparse.eye(len(observed), format="csr") * 0.07
+        )
+    else:
+        fit = fit_latent_predictor
+        distance = np.abs(np.arange(len(observed))[:, None] - np.arange(len(observed)))
+        evolutionary = 0.5 * 0.25**distance + np.diag(variances - 0.5)
+        sampling = np.full(len(observed), 0.005)
+    reference = fit(observed, evolutionary, sampling, include_intercept=True)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        scaled = fit(
+            observed, np.ldexp(evolutionary, exponent), sampling, include_intercept=True
+        )
+    assert np.ldexp(scaled.evolutionary_rate, exponent) == pytest.approx(
+        reference.evolutionary_rate
+    )
+    assert scaled.log_likelihood == reference.log_likelihood
+    np.testing.assert_array_equal(scaled.mean, reference.mean)
+    if factor_path:
+        np.testing.assert_array_equal(
+            scaled.covariance_model.materialize(),
+            reference.covariance_model.materialize(),
+        )
+    else:
+        np.testing.assert_array_equal(scaled.covariance, reference.covariance)
+
+
 def test_sparse_latent_predictor_matches_dense_conditioning():
     tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
     names = ["A", "B", "C", "D", "E"]

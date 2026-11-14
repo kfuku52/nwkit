@@ -122,6 +122,20 @@ def _restore_sparse_predictor_covariance(model, exponent):
     return replace(model, tip_loading=loading)
 
 
+def _restore_predictor_rate(rate, exponent):
+    try:
+        restored = math.ldexp(rate, exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "The fitted predictor evolutionary rate exceeds floating-point range."
+        ) from exc
+    if restored == 0.0:
+        raise ValueError(
+            "The fitted predictor evolutionary rate is below floating-point range."
+        )
+    return restored
+
+
 def _latent_predictor_likelihood(
     observed,
     evolutionary_covariance,
@@ -208,6 +222,9 @@ def fit_latent_predictor(
     evolutionary_diagonal = np.diag(evolutionary_covariance)
     if not np.any(evolutionary_diagonal > 0.0):
         raise ValueError("Predictor evolutionary covariance has zero diagonal.")
+    _, covariance_exponent = math.frexp(float(np.max(evolutionary_diagonal)))
+    evolutionary_covariance = np.ldexp(evolutionary_covariance, -covariance_exponent)
+    evolutionary_diagonal = np.diag(evolutionary_covariance)
     observed_offset = float(np.mean(observed)) if include_intercept else 0.0
     observed = observed - observed_offset
     observed_scale = max(
@@ -215,9 +232,7 @@ def fit_latent_predictor(
         float(np.mean(np.diag(sampling_covariance))),
         np.finfo(float).tiny,
     )
-    evolutionary_scale = float(
-        np.mean(evolutionary_diagonal[evolutionary_diagonal > 0])
-    )
+    evolutionary_scale = finite_mean(evolutionary_diagonal[evolutionary_diagonal > 0])
     rate_scale = observed_scale / evolutionary_scale
     lower_rate = max(rate_scale * 1e-12, np.finfo(float).tiny)
     upper_rate = max(rate_scale * 1e6, lower_rate * 1e6)
@@ -295,7 +310,9 @@ def fit_latent_predictor(
         mean=np.ldexp(posterior_mean + observed_offset, trait_exponent),
         covariance=np.ldexp(posterior_covariance, 2 * trait_exponent),
         prior_mean=math.ldexp(prior_mean + observed_offset, trait_exponent),
-        evolutionary_rate=math.ldexp(rate, 2 * trait_exponent),
+        evolutionary_rate=_restore_predictor_rate(
+            rate, 2 * trait_exponent - covariance_exponent
+        ),
         log_likelihood=-float(objective_value)
         - len(observed) * trait_exponent * math.log(2.0),
         optimizer_converged=bool(optimized.success),
@@ -355,7 +372,9 @@ def fit_factor_latent_predictor(
         float(np.mean(sampling_variance)),
         np.finfo(float).tiny,
     )
-    evolutionary_scale = float(np.mean(evolutionary_variance))
+    _, covariance_exponent = math.frexp(float(np.max(evolutionary_variance)))
+    evolutionary_variance = np.ldexp(evolutionary_variance, -covariance_exponent)
+    evolutionary_scale = finite_mean(evolutionary_variance)
     rate_scale = observed_scale / evolutionary_scale
     lower_rate = max(rate_scale * 1e-12, np.finfo(float).tiny)
     upper_rate = max(rate_scale * 1e6, lower_rate * 1e6)
@@ -456,7 +475,9 @@ def fit_factor_latent_predictor(
         ),
         mean_posterior_variance=math.ldexp(mean_posterior_variance, 2 * trait_exponent),
         prior_mean=math.ldexp(prior_mean + observed_offset, trait_exponent),
-        evolutionary_rate=math.ldexp(rate, 2 * trait_exponent),
+        evolutionary_rate=_restore_predictor_rate(
+            rate, 2 * trait_exponent - covariance_exponent
+        ),
         log_likelihood=-float(objective_value)
         - len(observed) * trait_exponent * math.log(2.0),
         optimizer_converged=bool(optimized.success),
