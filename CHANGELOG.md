@@ -48,6 +48,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   one pass per statistic.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.
 - Build posterior sample table metadata once per node and repeat it across draws.
+- Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.
 - Reuse multivariate ASR branch distances across observations at the same node.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.

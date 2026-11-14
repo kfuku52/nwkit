@@ -67,35 +67,39 @@ def posterior_samples_table(tree, samples, trait):
     )
 
 
-def _simulated_tip_data(process, observed, errors, seed):
-    seed_sequence = np.random.SeedSequence(seed)
-    process_seed, error_seed = seed_sequence.spawn(2)
-    conditioned = condition_gaussian_tree(process, observed, standard_errors=errors)
-    root_values = (
-        conditioned.marginals[process.tree].mean
-        if process.root.mode == "flat"
-        else None
-    )
-    simulated = simulate_gaussian_process(
-        process,
-        num_samples=1,
-        seed=int(process_seed.generate_state(1)[0]),
-        root_values=root_values,
-        compiled_tree=conditioned.compiled_tree,
-    )
-    node_index = {node: index for index, node in enumerate(simulated.nodes)}
-    error_rng = np.random.default_rng(error_seed)
-    result = dict.fromkeys(observed)
-    for leaf in process.tree.leaves():
-        name = str(leaf.name)
-        if observed.get(name) is None:
-            continue
-        value = float(simulated.values[0, node_index[leaf]])
-        error = 0.0 if errors is None else float(errors[name])
-        if error > 0.0:
-            value += float(error_rng.normal(0.0, error))
-        result[name] = value
-    return result
+def _tip_bootstrap_simulator(process, observed, errors):
+    compiled = CompiledTree.from_tree(process.tree)
+    root_values = None
+    if process.root.mode == "flat":
+        conditioned = condition_gaussian_tree(
+            process, observed, standard_errors=errors, compiled_tree=compiled
+        )
+        root_values = conditioned.marginals[process.tree].mean
+    records = [
+        (name, index, 0.0 if errors is None else float(errors[name]))
+        for name, index in compiled.leaf_index_by_name.items()
+        if observed.get(name) is not None
+    ]
+
+    def simulate(seed):
+        process_seed, error_seed = np.random.SeedSequence(seed).spawn(2)
+        simulated = simulate_gaussian_process(
+            process,
+            num_samples=1,
+            seed=int(process_seed.generate_state(1)[0]),
+            root_values=root_values,
+            compiled_tree=compiled,
+        )
+        error_rng = np.random.default_rng(error_seed)
+        result = dict.fromkeys(observed)
+        for name, index, error in records:
+            value = float(simulated.values[0, index])
+            if error > 0.0:
+                value += float(error_rng.normal(0.0, error))
+            result[name] = value
+        return result
+
+    return simulate
 
 
 def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignment):
@@ -321,9 +325,7 @@ def write_continuous_diagnostics(
             100,
         )
         rows, failures = parametric_bootstrap(
-            lambda replicate_seed: _simulated_tip_data(
-                process, observed, errors, replicate_seed
-            ),
+            _tip_bootstrap_simulator(process, observed, errors),
             lambda values: _refit(
                 tree,
                 values,
