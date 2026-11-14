@@ -44,6 +44,54 @@ def gene(shape):
     )
 
 
+@pytest.mark.parametrize("retention", [None, 0, 0.1, 0.7, 1.0])
+def test_likelihood_only_agrees_with_full_node_origin_calculation(retention):
+    a, b = ("tip", "A"), ("tip", "B")
+    topology = gene(("node", ("node", a, a), ("node", a, b)))
+    model = TopologyLikelihood(
+        species(),
+        topology,
+        detection=[0.8, 0.9],
+        rate_scales=[0.2, 1.8],
+        ascertainment="root-clades",
+    )
+    event = None if retention is None else MultiplicationEvent(1, retention, 0.25)
+    args = [[0.12, 0.16]], 1.4, event
+    all_nodes = model.evaluate(*args)
+    only = model.evaluate(*args, origins=False)
+    assert only.log_likelihood == all_nodes.log_likelihood
+    assert only.log_likelihood_error == all_nodes.log_likelihood_error
+    assert only.origin_node_ids == () and len(only.origin_probabilities) == 0
+    assert only.origin_probability_error == 0
+
+
+def test_one_ancestral_copy_rejects_crossed_root_before_numerical_evaluation(
+    monkeypatch,
+):
+    a, b = ("tip", "A"), ("tip", "B")
+    crossed = TopologyLikelihood(
+        species(),
+        gene(("node", ("node", a, b), ("node", a, b))),
+        ascertainment="root-clades",
+    )
+    compatible = TopologyLikelihood(
+        species(),
+        gene(("node", ("node", a, a), ("node", b, b))),
+        ascertainment="root-clades",
+    )
+    assert crossed.requires_multiple_root_copies
+    assert not compatible.requires_multiple_root_copies
+    assert np.isfinite(crossed.evaluate([[0.2, 0.3]], 1.2).log_likelihood)
+    assert np.isfinite(compatible.evaluate([[0.2, 0.3]], 1.0).log_likelihood)
+
+    def error(*args, **kwargs):
+        pytest.fail("An impossible topology should not enter the pruning calculation")
+
+    monkeypatch.setattr(crossed, "_evaluate", error)
+    with pytest.raises(ValueError, match="impossible with one ancestral root copy"):
+        crossed.evaluate([[0.2, 0.3]], 1.0)
+
+
 @pytest.mark.parametrize("n", [1, 2, 3, 4, 5])
 def test_small_colored_topology_sum_matches_independent_count_probability(n):
     duplication, loss = 0.35, 0.2

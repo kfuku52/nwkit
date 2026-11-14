@@ -200,8 +200,42 @@ class TopologyLikelihood:
             or np.any(self.scales <= 0)
         ):
             raise ValueError("Family-rate scales must be finite and positive.")
-        self._validate_ascertainment(ascertainment, tips)
+        root_side = [0] * len(self.tree.parents)
+        for node, parent in enumerate(self.tree.parents[1:], 1):
+            root_side[node] = (
+                (1 if node == self.children[0][0] else 2)
+                if parent == 0
+                else root_side[parent]
+            )
+        species_side = dict(
+            zip(
+                self.tree.tip_names,
+                (root_side[node] for node in self.tree.tip_nodes),
+                strict=True,
+            )
+        )
+        both_root_clades = len({species_side[tip] for tip in tips}) == 2
+        if ascertainment not in {"observed", "root-clades"}:
+            raise ValueError("Unknown topology ascertainment rule.")
+        if ascertainment == "root-clades" and not both_root_clades:
+            raise ValueError(
+                "Topology does not satisfy root-clade observation selection."
+            )
         self.ascertainment = ascertainment
+        self.requires_multiple_root_copies = False
+        if both_root_clades:
+            masks = []
+            for name, children in zip(
+                gene_tree.species, gene_tree.children, strict=True
+            ):
+                masks.append(
+                    (masks[children[0]] | masks[children[1]])
+                    if children
+                    else species_side[name]
+                )
+            self.requires_multiple_root_copies = sorted(
+                masks[child] for child in gene_tree.children[-1]
+            ) != [1, 2]
         signatures = gene_tree.signatures
         self.coefficients = np.array(
             [
@@ -221,26 +255,6 @@ class TopologyLikelihood:
             self.tip_counts.append(
                 1 if not children else sum(self.tip_counts[child] for child in children)
             )
-
-    def _validate_ascertainment(self, ascertainment, tips):
-        if ascertainment not in {"observed", "root-clades"}:
-            raise ValueError("Unknown topology ascertainment rule.")
-        if ascertainment == "root-clades":
-            descendant_species: list[set[str]] = [set() for _ in self.tree.parents]
-            for node, name in zip(
-                self.tree.tip_nodes, self.tree.tip_names, strict=True
-            ):
-                descendant_species[node].add(name)
-            for node in reversed(range(len(self.tree.parents))):
-                for child in self.children[node]:
-                    descendant_species[node].update(descendant_species[child])
-            if any(
-                not (descendant_species[child] & set(tips))
-                for child in self.children[0]
-            ):
-                raise ValueError(
-                    "Topology does not satisfy root-clade observation selection."
-                )
 
     def _edge(self, survival, logs, duplication, loss, length, dtype, log_survival):
         if not length:
@@ -275,13 +289,14 @@ class TopologyLikelihood:
                         coefficients[power, 0] = np.logaddexp(
                             coefficients[power, 0], factor + left[i, 0] + right[j, 0]
                         )
-                        coefficients[power, 1:] = np.logaddexp(
-                            coefficients[power, 1:],
-                            factor
-                            + np.logaddexp(
-                                left[i, 1:] + right[j, 0], left[i, 0] + right[j, 1:]
-                            ),
-                        )
+                        if columns > 1:
+                            coefficients[power, 1:] = np.logaddexp(
+                                coefficients[power, 1:],
+                                factor
+                                + np.logaddexp(
+                                    left[i, 1:] + right[j, 0], left[i, 0] + right[j, 1:]
+                                ),
+                            )
             polynomials[node] = coefficients
             powers = np.arange(len(coefficients), dtype=dtype) * dtype(log_z)
             powers[0] = 0
@@ -307,6 +322,8 @@ class TopologyLikelihood:
             factor = math.log(q * self.coefficients[node])
             split = factor + logs[left, 0] + logs[right, 0]
             result[node, 0] = np.logaddexp(result[node, 0], split)
+            if logs.shape[1] == 1:
+                continue
             terms = np.column_stack(
                 (
                     result[node, 1:],
@@ -320,12 +337,12 @@ class TopologyLikelihood:
             result[node, 1:] = markers
         return survival * (1 + q - q * survival), result
 
-    def _category(self, rates, root_mean, event, scale, dtype):
+    def _category(self, rates, root_mean, event, scale, dtype, *, origins=True):
         nodes = len(self.tree.parents)
         survivors = np.zeros(nodes)
         log_survivors = np.full(nodes, -np.inf)
         log_extinctions = np.zeros(nodes)
-        columns = 1 + len(self.targets) if event is not None else 1
+        columns = 1 + len(self.targets) if event is not None and origins else 1
         probabilities: dict[int, np.ndarray] = {}
         tips = dict(
             zip(self.tree.tip_nodes, range(len(self.tree.tip_nodes)), strict=True)
@@ -370,13 +387,14 @@ class TopologyLikelihood:
                             probabilities[node][gene, 0],
                             a_logs[first, 0] + b_logs[second, 0],
                         )
-                        probabilities[node][gene, 1:] = np.logaddexp(
-                            probabilities[node][gene, 1:],
-                            np.logaddexp(
-                                a_logs[first, 1:] + b_logs[second, 0],
-                                a_logs[first, 0] + b_logs[second, 1:],
-                            ),
-                        )
+                        if columns > 1:
+                            probabilities[node][gene, 1:] = np.logaddexp(
+                                probabilities[node][gene, 1:],
+                                np.logaddexp(
+                                    a_logs[first, 1:] + b_logs[second, 0],
+                                    a_logs[first, 0] + b_logs[second, 1:],
+                                ),
+                            )
                 del probabilities[left], probabilities[right]
             if node:
                 duplication, loss = rates[self.groups[node]] * scale
@@ -466,9 +484,9 @@ class TopologyLikelihood:
         )
         return root[-1], selection_log
 
-    def _evaluate(self, rates, root_mean, event, dtype):
+    def _evaluate(self, rates, root_mean, event, dtype, *, origins=True):
         categories = [
-            self._category(rates, root_mean, event, scale, dtype)
+            self._category(rates, root_mean, event, scale, dtype, origins=origins)
             for scale in self.scales
         ]
         likelihoods = np.array([item[0][0] for item in categories])
@@ -480,8 +498,8 @@ class TopologyLikelihood:
             )
         likelihood = float(raw - logsumexp(selections))
         probabilities = (
-            np.zeros(len(self.targets))
-            if event is None
+            np.zeros(len(self.targets) if origins else 0)
+            if event is None or not origins
             else np.exp(
                 logsumexp(np.array([item[0][1:] for item in categories]), axis=0) - raw
             )
@@ -500,7 +518,9 @@ class TopologyLikelihood:
         *,
         tolerance=1e-6,
         origin_tolerance=1e-5,
+        origins=True,
     ):
+        """Evaluate one fixed topology, optionally omitting all origin markers."""
         rates = np.asarray(rates, dtype=float)
         if (
             rates.shape != (self.num_groups, 2)
@@ -512,6 +532,10 @@ class TopologyLikelihood:
             )
         if not np.isfinite(root_mean) or root_mean < 1:
             raise ValueError("Topology root mean must be finite and >=1.")
+        if root_mean == 1 and self.requires_multiple_root_copies:
+            raise ValueError(
+                "Topology crosses the species-root split and is impossible with one ancestral root copy."
+            )
         if event is not None and (
             event.multiplicity != 2 or not 0 < event.node < len(self.tree.parents)
         ):
@@ -525,12 +549,10 @@ class TopologyLikelihood:
             raise ValueError(
                 "Topology numerical tolerances must be finite and positive."
             )
-        first = self._evaluate(rates, root_mean, event, np.float64)
-        second = self._evaluate(rates, root_mean, event, np.longdouble)
+        first = self._evaluate(rates, root_mean, event, np.float64, origins=origins)
+        second = self._evaluate(rates, root_mean, event, np.longdouble, origins=origins)
         error = abs(second[0] - first[0])
-        origin_error = (
-            float(np.max(abs(second[1] - first[1]))) if len(self.targets) else 0
-        )
+        origin_error = float(np.max(abs(second[1] - first[1]))) if len(second[1]) else 0
         if error > tolerance or origin_error > origin_tolerance:
             raise ValueError(
                 "Fixed-topology likelihood or origin assignment failed arithmetic precision check."
@@ -538,7 +560,7 @@ class TopologyLikelihood:
         return TopologyResult(
             second[0],
             np.asarray(second[1], dtype=float),
-            tuple(self.gene.node_ids[node] for node in self.targets),
+            tuple(self.gene.node_ids[node] for node in self.targets) if origins else (),
             np.finfo(np.longdouble).nmant + 1,
             error,
             origin_error,

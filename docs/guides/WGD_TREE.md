@@ -31,6 +31,10 @@ prior match the native count model. A unit-length Yule root stem with rate
 `log(root_mean)` defines ancestral topology probabilities; family-rate
 categories do not rescale this root prior. Colored unordered child topologies
 use their appropriate orientation multiplicity.
+With a fitted root mean of exactly one, only one ancestral copy enters the
+species root. A family observed in both root lineages must then separate those
+lineages at its gene-tree root. An incompatible topology has zero probability
+under that fit and is reported explicitly rather than assigned a probability.
 
 Node-specific markers propagate the WGD split contribution through this
 likelihood. Mixture assignments are ratios of weighted likelihood sums, not
@@ -39,6 +43,10 @@ after averaging categories. `--ascertainment observed` requires at least one
 observed gene; `root-clades` additionally requires genes in each immediate
 species-root child clade. This is gene-tree selection, not arbitrary count
 filter correction.
+
+For Python callers that need only the fixed-topology likelihood,
+`TopologyLikelihood.evaluate(..., origins=False)` skips the per-node markers
+while retaining the same likelihood and dual-precision check.
 
 Branch flow is analytic. With extinction parameter `a`, positive-count
 geometric parameter `b`, survival `s`, geometric success `d`, and downstream
