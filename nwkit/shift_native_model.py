@@ -199,13 +199,18 @@ class ShiftLayout:
 
 
 def mean_geometry(tree, alpha_height):
-    alpha_height = float(alpha_height)
-    if math.isnan(alpha_height) or alpha_height < 0:
-        raise ValueError("Alpha times tree height must be nonnegative.")
+    alpha_height = _nonnegative_alpha(alpha_height)
     if math.isinf(alpha_height):
         return np.zeros(len(tree.times)), np.ones(len(tree.times))
     slopes = np.exp(-alpha_height * tree.times)
     return slopes, _normalized_ou_duration(alpha_height, tree.times)
+
+
+def _nonnegative_alpha(alpha_height):
+    alpha_height = float(alpha_height)
+    if math.isnan(alpha_height) or alpha_height < 0:
+        raise ValueError("Alpha times tree height must be nonnegative.")
+    return alpha_height
 
 
 def _normalized_ou_duration(rate, times):
@@ -227,25 +232,29 @@ def covariance_geometry(tree, alpha_height, process_variance, root_model):
     process_variance = float(process_variance)
     if not math.isfinite(process_variance) or process_variance < 0:
         raise ValueError("Process tip variance must be finite and nonnegative.")
-    slopes, _ = mean_geometry(tree, alpha_height)
+    alpha_height = _nonnegative_alpha(alpha_height)
     if alpha_height == 0:
         if root_model == "OUrandomRoot":
             raise ValueError("Stationary-root OU is undefined at alpha zero.")
-        return slopes, process_variance * tree.times, 0.0
-    double_rate = 2 * float(alpha_height)
+        return np.ones(len(tree.times)), process_variance * tree.times, 0.0
+    double_rate = 2 * alpha_height
     if math.isinf(alpha_height):
+        slopes = np.zeros(len(tree.times))
         innovations = np.full(len(tree.times), process_variance)
-    elif root_model == "OUfixedRoot" and math.isfinite(double_rate):
-        innovations = process_variance * _normalized_ou_duration(
-            double_rate, tree.times
-        )
     else:
-        exponent = (
-            -double_rate * tree.times
-            if math.isfinite(double_rate)
-            else -2 * (alpha_height * tree.times)
-        )
-        innovations = process_variance * -np.expm1(exponent)
+        exponent = -alpha_height * tree.times
+        slopes = np.exp(exponent)
+        if root_model == "OUfixedRoot" and math.isfinite(double_rate):
+            innovations = process_variance * _normalized_ou_duration(
+                double_rate, tree.times
+            )
+        else:
+            exponent = (
+                -double_rate * tree.times
+                if math.isfinite(double_rate)
+                else 2 * exponent
+            )
+            innovations = process_variance * -np.expm1(exponent)
     root_variance = process_variance if root_model == "OUrandomRoot" else 0.0
     return slopes, innovations, root_variance
 
