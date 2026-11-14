@@ -613,6 +613,36 @@ def test_lognormal_score_avoids_overflow_in_squared_dispersion():
     np.testing.assert_allclose(curvature, [1e-310, 1e-310], atol=0.0)
 
 
+def test_gaussian_censoring_scores_keep_tails_and_small_curvature():
+    values = np.array([1.0, np.nan, np.nan, np.nan, np.nan])
+    linear = np.array([101.0, 100.0, -22.0, 8e6, -800.0])
+    lower = np.array([np.nan, np.nan, 100.0, np.nan, np.nan])
+    upper = np.array([np.nan, -22.0, np.nan, 0.0, 0.0])
+    sd = 4.0
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        likelihood, score, weight = _scalar_terms(
+            values,
+            linear,
+            family="censored-gaussian",
+            dispersion=sd,
+            zero_probability=None,
+            offset=np.zeros_like(values),
+            trials=None,
+            censor_lower=lower,
+            censor_upper=upper,
+        )
+    assert np.isfinite(likelihood)
+    assert score[0] == 100 / sd**2
+    assert weight[0] == 1 / sd**2
+    assert score[1] == -score[2]
+    assert score[1] == pytest.approx(7.6331791926650395, rel=1e-12)
+    assert weight[1] == pytest.approx(0.06243324326357813, rel=1e-12)
+    assert weight[1] == weight[2]
+    assert score[3] == pytest.approx(8e6 / sd**2, rel=1e-12)
+    assert weight[3] == pytest.approx(1 / sd**2, rel=1e-12)
+    assert score[4] == weight[4] == 0.0
+
+
 def test_count_intercept_initialization_uses_log_exposure():
     with np.errstate(over="raise", divide="raise"):
         coefficients = _scalar_initial_coefficient(

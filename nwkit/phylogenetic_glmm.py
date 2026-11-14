@@ -14,6 +14,7 @@ from scipy.special import (
     betainc,
     betaln,
     digamma,
+    erfcx,
     expit,
     gammaln,
     log_ndtr,
@@ -1298,17 +1299,36 @@ def _normal_censor_interval_log_mass(lower, upper, center, dispersion):
         )
 
 
+def _censor_observations(size, lower, upper):
+    lower = np.full(size, np.nan) if lower is None else lower
+    upper = np.full(size, np.nan) if upper is None else upper
+    lower_missing, upper_missing = np.isnan(lower), np.isnan(upper)
+    return (
+        lower,
+        upper,
+        lower_missing & upper_missing,
+        lower_missing & ~upper_missing,
+        ~lower_missing & upper_missing,
+        ~lower_missing & ~upper_missing,
+    )
+
+
 def _censored_gaussian_log_likelihood(
     values, linear, dispersion, censor_lower, censor_upper
 ):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("Censored-Gaussian SD must be positive.")
-    lower = np.full(len(values), np.nan) if censor_lower is None else censor_lower
-    upper = np.full(len(values), np.nan) if censor_upper is None else censor_upper
-    exact = np.isnan(lower) & np.isnan(upper)
-    left = np.isnan(lower) & ~np.isnan(upper)
-    right = ~np.isnan(lower) & np.isnan(upper)
-    interval = ~np.isnan(lower) & ~np.isnan(upper)
+    lower, upper, exact, left, right, interval = _censor_observations(
+        len(values), censor_lower, censor_upper
+    )
+    return _censored_gaussian_log_contributions(
+        values, linear, dispersion, lower, upper, exact, left, right, interval
+    )
+
+
+def _censored_gaussian_log_contributions(
+    values, linear, dispersion, lower, upper, exact, left, right, interval
+):
     result = np.empty(len(values), dtype=float)
     with np.errstate(over="ignore"):
         standardized_exact = _standardized_censor_bounds(
@@ -1340,9 +1360,6 @@ def _scalar_log_likelihood_contributions(
     dispersion: float | None,
     zero_probability: float | None,
     offset: np.ndarray,
-    trials: np.ndarray | None,
-    censor_lower: np.ndarray | None,
-    censor_upper: np.ndarray | None,
 ) -> np.ndarray:
     if family in {
         "poisson",
@@ -1359,10 +1376,6 @@ def _scalar_log_likelihood_contributions(
         return _gamma_log_likelihood(values, linear, dispersion)
     if family == "lognormal":
         return _lognormal_log_likelihood(values, linear, dispersion)
-    if family == "censored-gaussian":
-        return _censored_gaussian_log_likelihood(
-            values, linear, dispersion, censor_lower, censor_upper
-        )
     raise ValueError("Unsupported scalar response family: {}.".format(family))
 
 
@@ -1619,6 +1632,88 @@ def _numerical_scalar_terms(contributions, current, linear):
     return gradient, curvature
 
 
+def _normal_one_sided_score_and_curvature(standardized):
+    """Location terms in units of SD for the event Z >= standardized."""
+    lower_mask = standardized < 0.0
+    far_mask = standardized > 8.0
+    center = ~(lower_mask | far_mask)
+    lower = standardized[lower_mask]
+    middle = standardized[center]
+    with np.errstate(over="ignore", under="ignore"):
+        lower_ratio = np.exp(
+            -(0.5 * lower) * lower - 0.5 * math.log(math.tau) - log_ndtr(-lower)
+        )
+    middle_ratio = math.sqrt(2.0 / math.pi) / erfcx(middle / math.sqrt(2.0))
+    # Evaluate the inverse Mills ratio's excess over z directly in the far
+    # tail to avoid cancellation in the Hessian (DLMF 7.9.1).
+    far = standardized[far_mask]
+    nested = _inverse_mills_fraction(far)
+    excess = 1.0 / (far + nested)
+    ratio = np.empty_like(standardized)
+    curvature = np.empty_like(standardized)
+    ratio[lower_mask] = lower_ratio
+    ratio[center] = middle_ratio
+    ratio[far_mask] = far + excess
+    with np.errstate(invalid="ignore"):
+        curvature[lower_mask] = lower_ratio * (lower_ratio - lower)
+    curvature[center] = middle_ratio * (middle_ratio - middle)
+    curvature[far_mask] = 1.0 + excess * (excess - nested)
+    curvature[np.isneginf(standardized)] = 0.0
+    return ratio, curvature
+
+
+def _inverse_mills_fraction(standardized):
+    fraction = np.zeros_like(standardized)
+    for numerator in range(16, 1, -1):
+        fraction = numerator / (standardized + fraction)
+    return fraction
+
+
+def _censored_gaussian_scalar_terms(values, linear, dispersion, lower, upper):
+    if dispersion is None or dispersion <= 0.0:
+        raise ValueError("Censored-Gaussian SD must be positive.")
+    lower, upper, exact, left, right, interval = _censor_observations(
+        len(values), lower, upper
+    )
+    current = _censored_gaussian_log_contributions(
+        values, linear, dispersion, lower, upper, exact, left, right, interval
+    )
+    gradient = np.empty_like(current)
+    curvature = np.empty_like(current)
+    with np.errstate(over="ignore", divide="ignore"):
+        gradient[exact] = (
+            _standardized_censor_bounds(linear[exact], values[exact], dispersion)
+            / dispersion
+        )
+        curvature[exact] = np.divide(1.0, dispersion) / dispersion
+        _set_one_sided_censor_terms(
+            gradient, curvature, linear, dispersion, upper, left, 1.0
+        )
+        _set_one_sided_censor_terms(
+            gradient, curvature, linear, dispersion, lower, right, -1.0
+        )
+    if np.any(interval):
+        gradient[interval], curvature[interval] = _numerical_scalar_terms(
+            lambda candidate: _normal_censor_interval_log_mass(
+                lower[interval], upper[interval], candidate, dispersion
+            ),
+            current[interval],
+            linear[interval],
+        )
+    return float(np.sum(current)), gradient, curvature
+
+
+def _set_one_sided_censor_terms(
+    gradient, curvature, linear, dispersion, bounds, mask, sign
+):
+    standardized = sign * _standardized_censor_bounds(
+        linear[mask], bounds[mask], dispersion
+    )
+    ratio, weight = _normal_one_sided_score_and_curvature(standardized)
+    gradient[mask] = (sign * ratio) / dispersion
+    curvature[mask] = (weight / dispersion) / dispersion
+
+
 def _beta_family_terms(values, linear, dispersion, trials, family):
     if family == "beta":
         if dispersion is not None and 0.0 < dispersion < _SMALL_BETA_PRECISION:
@@ -1651,21 +1746,19 @@ def _scalar_terms(
 ) -> tuple[float, np.ndarray, np.ndarray]:
     if family in {"beta", "beta-binomial"}:
         return _beta_family_terms(values, linear, dispersion, trials, family)
-
-    def contributions(candidate: np.ndarray) -> np.ndarray:
-        return _scalar_log_likelihood_contributions(
-            values,
-            candidate,
-            family=family,
-            dispersion=dispersion,
-            zero_probability=zero_probability,
-            offset=offset,
-            trials=trials,
-            censor_lower=censor_lower,
-            censor_upper=censor_upper,
+    if family == "censored-gaussian":
+        return _censored_gaussian_scalar_terms(
+            values, linear, dispersion, censor_lower, censor_upper
         )
 
-    current = contributions(linear)
+    current = _scalar_log_likelihood_contributions(
+        values,
+        linear,
+        family=family,
+        dispersion=dispersion,
+        zero_probability=zero_probability,
+        offset=offset,
+    )
     if family == "poisson":
         derivative = _poisson_scalar_terms(values, linear, offset)
     elif family == "negative-binomial":
@@ -1681,10 +1774,8 @@ def _scalar_terms(
         )
     elif family == "gamma":
         derivative = _gamma_scalar_terms(values, linear, dispersion)
-    elif family == "lognormal":
-        derivative = _lognormal_scalar_terms(values, linear, dispersion)
     else:
-        derivative = _numerical_scalar_terms(contributions, current, linear)
+        derivative = _lognormal_scalar_terms(values, linear, dispersion)
     gradient, curvature = derivative
     return float(np.sum(current)), gradient, curvature
 
