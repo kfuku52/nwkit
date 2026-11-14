@@ -168,6 +168,30 @@ def test_zero_k_permutations_do_not_factor_invalid_covariance():
     assert permutation_test(None, None, None, None, 0, None) == 1
 
 
+def test_k_permutation_p_value_matches_refits_for_larger_covariance():
+    from nwkit.signal_stats import permutation_test
+
+    generator = np.random.default_rng(385)
+    n = 48
+    effects = generator.normal(size=(n, 5))
+    matrix = effects @ effects.T + np.diag(np.linspace(0.3, 1.7, n))
+    values = generator.normal(size=n)
+    errors = np.zeros(n)
+    observed = k_statistic(matrix, values)
+    reference = np.random.default_rng(601)
+    actual = np.random.default_rng(601)
+    limit = observed - 1e-12 * max(1.0, abs(observed))
+    exceedances = sum(
+        k_statistic(matrix, values[reference.permutation(n)]) >= limit
+        for _ in range(47)
+    )
+    assert 0 < exceedances < 47
+    assert permutation_test(matrix, values, errors, observed, 47, actual) == (
+        (1 + exceedances) / 48
+    )
+    assert actual.bit_generator.state == reference.bit_generator.state
+
+
 @pytest.mark.parametrize("singular", [False, True])
 def test_failed_k_permutation_retains_the_consumed_random_draw(singular):
     from nwkit.signal_stats import permutation_test

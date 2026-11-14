@@ -162,11 +162,23 @@ def _prepared_k_statistic(covariance, count):
     weights = cho_solve((factor, True), np.ones(count))
     precision = float(weights.sum())
     expected = (np.trace(covariance) - count / precision) / (count - 1)
+    # At small sizes the LAPACK solve costs less than a separate residual check.
+    use_whitening = count >= 32
 
     def statistic(values):
         mean = float(weights @ values / precision)
         residual = values - mean
-        quadratic = float(residual @ cho_solve((factor, True), residual))
+        if use_whitening:
+            if not np.all(np.isfinite(residual)):
+                raise ValueError("K permutation residuals must be finite.")
+            # The GLS quadratic is the squared norm after one triangular solve.
+            # The initial weight solve has already checked the fixed factor.
+            whitened = solve_triangular(
+                factor, residual, lower=True, check_finite=False
+            )
+            quadratic = float(whitened @ whitened)
+        else:
+            quadratic = float(residual @ cho_solve((factor, True), residual))
         if quadratic <= 0 or expected <= 0:
             raise ValueError(
                 "K is undefined for constant traits or degenerate covariance."
