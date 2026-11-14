@@ -96,11 +96,23 @@ def _correlation_parameters(covariance):
 
 def _initial_covariance(data, layout, alpha):
     residual = np.zeros_like(data.values)
-    for j in range(len(data.trait_names)):
-        mask = np.isfinite(data.values[:, j])
-        design = layout.design(data.tree, float(alpha[j]))[mask]
-        beta = np.linalg.lstsq(design, data.values[mask, j], rcond=None)[0]
-        residual[mask, j] = data.values[mask, j] - design @ beta
+    traits_by_alpha: dict[float, list[int]] = {}
+    for j, rate in enumerate(alpha):
+        traits_by_alpha.setdefault(float(rate), []).append(j)
+    node_groups = layout.node_groups(data.tree)
+    for rate, traits in traits_by_alpha.items():
+        full_design = layout.design(data.tree, rate, node_groups=node_groups)
+        traits_by_mask: dict[bytes, list[int]] = {}
+        for j in traits:
+            mask = np.isfinite(data.values[:, j])
+            traits_by_mask.setdefault(mask.tobytes(), []).append(j)
+        for matching in traits_by_mask.values():
+            mask = np.isfinite(data.values[:, matching[0]])
+            selection = np.ix_(mask, matching)
+            design = full_design[mask]
+            values = data.values[selection]
+            beta = np.linalg.lstsq(design, values, rcond=None)[0]
+            residual[selection] = values - design @ beta
     covariance = residual.T @ residual / len(residual)
     # Regularization is used only to provide an interior starting point, never
     # in the objective or reported estimate.
@@ -295,13 +307,19 @@ def _general_fit(
 
     function = objective_score if dense is not None else objective
     starts, accepted = [], []
+    initial_covariances: dict[tuple[float, ...], np.ndarray] = {}
     for index in range(options.optimizer_starts):
         seed_alpha = (
             np.full(p, (0.3, 1.0, 3.0)[index % 3])
             if fixed_alpha is None
             else fixed_alpha
         )
-        initial = _initial_covariance(data, layout, seed_alpha)
+        seed_key = tuple(map(float, seed_alpha))
+        if seed_key not in initial_covariances:
+            initial_covariances[seed_key] = _initial_covariance(
+                data, layout, seed_alpha
+            )
+        initial = initial_covariances[seed_key]
         noise_fraction = (0.0, 0.25, 0.65)[index % 3] if noise_count else 0.0
         x = []
         if alpha_count:
