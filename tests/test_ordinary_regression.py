@@ -26,6 +26,7 @@ from nwkit.ordinary_regression import (
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
     _censored_gaussian_log_likelihood,
+    _multinomial_terms,
     _ordinal_terms,
     _profile_endpoint,
     fit_phylogenetic_glmm,
@@ -43,6 +44,19 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree():
     return Tree(TREE_TEXT, parser=1)
+
+
+def test_multinomial_likelihood_retains_tail_curvature_of_dominant_category():
+    counts = np.array([[1.0, 0.0, 0.0]])
+    linear = np.array([[50.0, 0.0]])
+    likelihood, gradient, curvature = _multinomial_terms(counts, linear)
+    tail = np.exp(-50.0)
+
+    assert likelihood == pytest.approx(-2.0 * tail, abs=0.0, rel=1e-14)
+    np.testing.assert_allclose(gradient, [-2.0 * tail, tail], atol=0.0)
+    np.testing.assert_allclose(
+        curvature[0], tail * np.array([[2.0, -1.0], [-1.0, 1.0]]), atol=0.0
+    )
 
 
 def test_ordinal_likelihood_keeps_logistic_tail_mass_and_gradient():

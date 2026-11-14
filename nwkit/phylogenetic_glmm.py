@@ -463,22 +463,44 @@ def _prepare_dense_phylogenetic_covariance(factory, n_tips):
 def _multinomial_terms(
     counts: np.ndarray, linear: np.ndarray
 ) -> tuple[float, np.ndarray, np.ndarray]:
-    zeros = np.zeros((len(linear), 1), dtype=float)
-    all_linear = np.column_stack([linear, zeros])
-    normalizer = logsumexp(all_linear, axis=1)
-    probabilities = np.exp(all_linear - normalizer[:, None])
+    log_probabilities = _multinomial_log_probabilities(linear)
+    probabilities = np.exp(log_probabilities)
     totals = counts.sum(axis=1)
     log_likelihood = float(
-        np.sum(counts[:, :-1] * linear) - np.sum(totals * normalizer)
+        np.sum(
+            np.multiply(
+                counts,
+                log_probabilities,
+                out=np.zeros_like(log_probabilities),
+                where=counts != 0.0,
+            )
+        )
     )
-    gradient = totals[:, None] * probabilities[:, :-1] - counts[:, :-1]
-    dimension = linear.shape[1]
     nonreference = probabilities[:, :-1]
+    # Obtain the complement without subtracting a probability rounded to one.
+    remaining = _multinomial_competing_sum(probabilities)
+    competing_counts = _multinomial_competing_sum(counts)
+    gradient = competing_counts * nonreference
+    gradient -= counts[:, :-1] * remaining
     weights = -nonreference[:, :, None] * nonreference[:, None, :]
-    diagonal = np.arange(dimension)
-    weights[:, diagonal, diagonal] += nonreference
+    diagonal = np.arange(linear.shape[1])
+    weights[:, diagonal, diagonal] = nonreference * remaining
     weights *= totals[:, None, None]
     return log_likelihood, gradient.reshape(-1), weights
+
+
+def _multinomial_log_probabilities(linear):
+    logits = np.column_stack([linear, np.zeros(len(linear), dtype=float)])
+    with np.errstate(over="ignore"):
+        logits -= np.max(logits, axis=1, keepdims=True)
+    logits -= np.logaddexp.reduce(logits, axis=1, keepdims=True)
+    return logits
+
+
+def _multinomial_competing_sum(values):
+    remaining = np.cumsum(values[:, :0:-1], axis=1)[:, ::-1].copy()
+    remaining[:, 1:] += np.cumsum(values[:, :-2], axis=1)
+    return remaining
 
 
 def _ordinal_thresholds(parameters: np.ndarray) -> np.ndarray:
@@ -2048,8 +2070,7 @@ def _draw_categorical_responses(
         probabilities = np.exp(_ordinal_log_probabilities(centered, fit.thresholds))
     else:
         linear = fixed + latent.reshape(fixed.shape)
-        logits = np.column_stack([linear, np.zeros(len(design), dtype=float)])
-        probabilities = np.exp(logits - logsumexp(logits, axis=1)[:, None])
+        probabilities = np.exp(_multinomial_log_probabilities(linear))
     simulated = []
     for total, probability in zip(totals, probabilities, strict=True):
         probability = np.maximum(probability, 0.0)
