@@ -6,6 +6,7 @@ space. Callers must check convergence as the maximum count is increased.
 
 from collections import OrderedDict
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from scipy.special import logsumexp
@@ -15,6 +16,7 @@ _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
 _PULSE_BATCH_ENTRIES = 4096
 _TRANSITION_CACHE_BYTES = 8 * 1024**2
 _TRANSITION_CACHE_ENTRIES = 4096
+_EDGE_PROBABILITY_CACHE_ENTRIES = 4096
 _EMISSION_CACHE_BYTES = 16 * 1024**2
 _SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 _GEOMETRIC_RECURRENCE_MIN_COUNT = 256
@@ -65,11 +67,9 @@ def birth_death_parameters(duplication: float, loss: float, time: float):
     return a, b
 
 
-def _birth_death_probabilities(duplication, loss, time):
+@lru_cache(maxsize=_EDGE_PROBABILITY_CACHE_ENTRIES)
+def _edge_probabilities(duplication, loss, time):
     """Compute both probabilities and their small complements directly."""
-    duplication = _nonnegative(duplication, "Duplication rate")
-    loss = _nonnegative(loss, "Loss rate")
-    time = _nonnegative(time, "Time")
     if time == 0 or duplication == loss == 0:
         return 0.0, 0.0, 1.0, 1.0
     if duplication == loss:
@@ -90,6 +90,16 @@ def _birth_death_probabilities(duplication, loss, time):
         duplication * change / denominator,
         survival,
         geometric_success,
+    )
+
+
+def _birth_death_probabilities(duplication, loss, time):
+    # Matrix construction and selection pruning request the same exact edge
+    # probabilities. Only validated finite scalar inputs enter the cache.
+    return _edge_probabilities(
+        _nonnegative(duplication, "Duplication rate"),
+        _nonnegative(loss, "Loss rate"),
+        _nonnegative(time, "Time"),
     )
 
 

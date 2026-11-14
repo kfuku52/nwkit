@@ -93,6 +93,26 @@ def test_multiplication_event_validates_without_allocating_a_transition(monkeypa
         MultiplicationEvent(1, 0.5, multiplicity=True)
 
 
+def test_edge_probability_cache_has_exact_keys_and_excludes_invalid_values():
+    cached = wgd_count_model._edge_probabilities
+    cached.cache_clear()
+    try:
+        first = birth_death_parameters(0.25, 0.2, 0.5)
+        assert birth_death_parameters(np.float64(0.25), 0.2, 0.5) == first
+        assert cached.cache_info().hits == 1
+        other = birth_death_parameters(0.25, 0.2, np.nextafter(0.5, np.inf))
+        assert all(value >= prior for value, prior in zip(other, first, strict=True))
+        assert cached.cache_info().currsize == 2
+        with pytest.raises(ValueError, match="finite"):
+            birth_death_parameters(0.25, 0.2, float("nan"))
+        assert cached.cache_info().currsize == 2
+        for i in range(cached.cache_info().maxsize + 4):
+            birth_death_parameters(0.25, 0.2, float(i))
+        assert cached.cache_info().currsize == cached.cache_info().maxsize
+    finally:
+        cached.cache_clear()
+
+
 def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
     model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
     rates = np.array([[0.12, 0.17]])
