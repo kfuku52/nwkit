@@ -341,22 +341,23 @@ def _update_thresholds(values, allowed_categories, thresholds, rng):
         )
         lower = previous + epsilon
         upper = following - epsilon
-        for value, allowed in zip(values, allowed_categories, strict=True):
-            value = float(value)
-            if value <= previous or value > following:
-                continue
-            lower_category_allowed = threshold_index in allowed
-            upper_category_allowed = threshold_index + 1 in allowed
-            if lower_category_allowed and not upper_category_allowed:
-                lower = max(lower, value)
-            elif upper_category_allowed and not lower_category_allowed:
-                upper = min(upper, value)
-            elif not lower_category_allowed and not upper_category_allowed:
-                raise ValueError(
-                    "Ordinal threshold constraints are internally inconsistent."
-                )
-        if threshold_index + 1 < len(thresholds):
-            upper = min(upper, float(thresholds[threshold_index + 1]) - epsilon)
+        relevant = (values > previous) & (values <= following)
+        allowed_lower = allowed_categories[threshold_index]
+        allowed_upper = allowed_categories[threshold_index + 1]
+        if np.any(relevant & ~allowed_lower & ~allowed_upper):
+            raise ValueError(
+                "Ordinal threshold constraints are internally inconsistent."
+            )
+        lower = float(
+            np.max(
+                values, where=relevant & allowed_lower & ~allowed_upper, initial=lower
+            )
+        )
+        upper = float(
+            np.min(
+                values, where=relevant & allowed_upper & ~allowed_lower, initial=upper
+            )
+        )
         if not lower < upper:
             raise ValueError(
                 "Ordinal threshold update collapsed; increase MCMC burn-in or fix --thresholds."
@@ -422,6 +423,13 @@ def _rhat_and_ess(traces):
 def _accumulate_threshold_mean(mean, thresholds, draw_count, estimated):
     if estimated:
         mean += (thresholds - mean) / draw_count
+
+
+def _allowed_categories_by_constraint(constraints, states):
+    allowed = np.zeros((states, len(constraints)), dtype=bool)
+    for index, categories in enumerate(constraints.values()):
+        allowed[categories, index] = True
+    return allowed
 
 
 def compute_threshold_marginals(
@@ -492,7 +500,7 @@ def compute_threshold_marginals(
     process = build_threshold_process(tree)
     conditionals = _liability_conditionals(compiled, process)
     constrained_indices = np.asarray(tuple(constraints), dtype=int)
-    allowed_by_constraint = tuple(constraints[index] for index in constraints)
+    allowed_by_constraint = _allowed_categories_by_constraint(constraints, len(states))
     seed_sequences = np.random.SeedSequence(seed).spawn(chains)
     probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
     liability_mean = np.zeros(len(compiled.nodes), dtype=float)
