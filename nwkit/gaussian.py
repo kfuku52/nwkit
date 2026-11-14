@@ -524,6 +524,8 @@ def _merge_compatible_grouped_updates(updates: list[np.ndarray]) -> list[np.ndar
             reference_index += 1
             continue
         group_index, group_loading = reference_groups
+        first_by_group = np.full(merged[reference_index].shape[1], len(group_index))
+        np.minimum.at(first_by_group, group_index, np.arange(len(group_index)))
         candidate_index = reference_index + 1
         while candidate_index < len(merged):
             candidate_groups = _disjoint_column_groups(merged[candidate_index])
@@ -537,25 +539,11 @@ def _merge_compatible_grouped_updates(updates: list[np.ndarray]) -> list[np.ndar
                 candidate_index += 1
                 continue
             ratios = candidate_loading / group_loading
-            ratio_by_group = np.zeros(merged[reference_index].shape[1], dtype=float)
-            compatible = True
-            for group in range(len(ratio_by_group)):
-                selected = ratios[group_index == group]
-                ratio_by_group[group] = float(selected[0])
-                if not np.allclose(
-                    selected,
-                    ratio_by_group[group],
-                    rtol=1e-12,
-                    atol=1e-14,
-                ):
-                    compatible = False
-                    break
-            if not compatible:
+            group_ratios = ratios[first_by_group][group_index]
+            if not np.allclose(ratios, group_ratios, rtol=1e-12, atol=1e-14):
                 candidate_index += 1
                 continue
-            group_loading = group_loading * np.sqrt(
-                1.0 + np.square(ratio_by_group[group_index])
-            )
+            group_loading = group_loading * np.sqrt(1.0 + np.square(group_ratios))
             combined = merged[reference_index].copy()
             combined[np.arange(len(combined)), group_index] = group_loading
             merged[reference_index] = combined
