@@ -187,6 +187,24 @@ def _integration_factors(tip_count):
     return np.stack((-log_power, math.log(2) - log_power))
 
 
+def _gene_splits(gene, targets):
+    nodes = np.asarray(targets, dtype=np.intp)
+    children = np.asarray([gene.children[node] for node in nodes], dtype=np.intp)
+    return nodes, children.reshape(-1, 2).T
+
+
+def _add_species_split(result, left, right, nodes, first, second):
+    result[nodes, 0] = np.logaddexp(result[nodes, 0], left[first, 0] + right[second, 0])
+    if result.shape[1] > 1:
+        result[nodes, 1:] = np.logaddexp(
+            result[nodes, 1:],
+            np.logaddexp(
+                left[first, 1:] + right[second, 0, None],
+                left[first, 0, None] + right[second, 1:],
+            ),
+        )
+
+
 class TopologyLikelihood:
     def __init__(
         self,
@@ -275,6 +293,7 @@ class TopologyLikelihood:
         self.targets = tuple(
             node for node, children in enumerate(gene_tree.children) if children
         )
+        self.split_nodes, self.split_children = _gene_splits(gene_tree, self.targets)
         self.tip_counts: list[int] = []
         for children in gene_tree.children:
             self.tip_counts.append(
@@ -332,25 +351,29 @@ class TopologyLikelihood:
         )
         if np.isfinite(log_carry):
             result = logs + log_carry
-        for origin_index, node in enumerate(self.targets):
-            left, right = self.gene.children[node]
-            factor = math.log(q * self.coefficients[node])
-            split = factor + logs[left, 0] + logs[right, 0]
-            result[node, 0] = np.logaddexp(result[node, 0], split)
-            if logs.shape[1] == 1:
-                continue
-            terms = np.column_stack(
+        nodes = self.split_nodes
+        left, right = self.split_children
+        factor_by_multiplicity = np.array([math.log(q), math.log(2 * q)])
+        factor = factor_by_multiplicity[self.coefficients[nodes] - 1]
+        split = factor + logs[left, 0] + logs[right, 0]
+        result[nodes, 0] = np.logaddexp(result[nodes, 0], split)
+        if logs.shape[1] > 1:
+            terms = np.stack(
                 (
-                    result[node, 1:],
-                    factor + logs[left, 1:] + logs[right, 0],
-                    factor + logs[left, 0] + logs[right, 1:],
-                )
+                    result[nodes, 1:],
+                    factor[:, None] + logs[left, 1:] + logs[right, 0, None],
+                    factor[:, None] + logs[left, 0, None] + logs[right, 1:],
+                ),
+                axis=-1,
             )
-            markers = logsumexp(terms, axis=1)
+            markers = logsumexp(terms, axis=-1)
             # Only the marker for this node gains a new origin at the pulse.
             if mark:
-                markers[origin_index] = logsumexp([*terms[origin_index], split])
-            result[node, 1:] = markers
+                diagonal = np.arange(len(nodes))
+                markers[diagonal, diagonal] = logsumexp(
+                    np.column_stack((terms[diagonal, diagonal], split)), axis=1
+                )
+            result[nodes, 1:] = markers
         return survival * (1 + q - q * survival), result
 
     def _category(self, rates, root_mean, event, scale, dtype, *, origins=True):
@@ -390,27 +413,16 @@ class TopologyLikelihood:
                     probabilities[left] + log_extinctions[right],
                     probabilities[right] + log_extinctions[left],
                 )
-                for gene, children in enumerate(self.gene.children):
-                    if not children:
-                        continue
-                    first, second = children
-                    for a_species, b_species in ((left, right), (right, left)):
-                        a_logs, b_logs = (
-                            probabilities[a_species],
-                            probabilities[b_species],
-                        )
-                        probabilities[node][gene, 0] = np.logaddexp(
-                            probabilities[node][gene, 0],
-                            a_logs[first, 0] + b_logs[second, 0],
-                        )
-                        if columns > 1:
-                            probabilities[node][gene, 1:] = np.logaddexp(
-                                probabilities[node][gene, 1:],
-                                np.logaddexp(
-                                    a_logs[first, 1:] + b_logs[second, 0],
-                                    a_logs[first, 0] + b_logs[second, 1:],
-                                ),
-                            )
+                first, second = self.split_children
+                for a_species, b_species in ((left, right), (right, left)):
+                    _add_species_split(
+                        probabilities[node],
+                        probabilities[a_species],
+                        probabilities[b_species],
+                        self.split_nodes,
+                        first,
+                        second,
+                    )
                 del probabilities[left], probabilities[right]
             if node:
                 duplication, loss = rates[self.groups[node]] * scale
