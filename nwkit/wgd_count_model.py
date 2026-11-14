@@ -4,6 +4,7 @@ Finite matrices retain, rather than renormalize, probability outside the state
 space. Callers must check convergence as the maximum count is increased.
 """
 
+from collections import OrderedDict
 from dataclasses import dataclass
 
 import numpy as np
@@ -12,6 +13,8 @@ from scipy.stats import binom, gamma
 
 _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
 _PULSE_BATCH_ENTRIES = 4096
+_TRANSITION_CACHE_BYTES = 8 * 1024**2
+_TRANSITION_CACHE_ENTRIES = 4096
 
 
 def _log_pruning_contribution(matrix, values):
@@ -459,9 +462,39 @@ class CountLikelihood:
                     [self.subtree_missing[child] for child in self.children[node]],
                     axis=0,
                 )
+        self._transition_cache = OrderedDict()
+        self._transition_cache_bytes = 0
+
+    def _cached_transition(self, duplication, loss, time, max_count, *, log=False):
+        # Optimizer perturbations leave many branch groups unchanged. Cache
+        # exact keys only, with bounds on both matrix payload and entry count.
+        key = (log, float(duplication), float(loss), time, max_count)
+        cached = self._transition_cache.get(key)
+        if cached is not None:
+            self._transition_cache.move_to_end(key)
+            return cached
+        kernel = _birth_death_log_transition if log else birth_death_transition
+        matrix = kernel(duplication, loss, time, max_count)
+        if matrix.nbytes <= _TRANSITION_CACHE_BYTES and _TRANSITION_CACHE_ENTRIES > 0:
+            while (
+                self._transition_cache_bytes + matrix.nbytes > _TRANSITION_CACHE_BYTES
+                or len(self._transition_cache) >= _TRANSITION_CACHE_ENTRIES
+            ):
+                _, discarded = self._transition_cache.popitem(last=False)
+                self._transition_cache_bytes -= discarded.nbytes
+            self._transition_cache[key] = matrix
+            self._transition_cache_bytes += matrix.nbytes
+        return matrix
 
     def transitions(
-        self, rates, scale, max_count, event=None, *, _split_zero_event=False
+        self,
+        rates,
+        scale,
+        max_count,
+        event=None,
+        *,
+        _split_zero_event=False,
+        _kernel=None,
     ):
         rates = np.asarray(rates, dtype=float)
         if (
@@ -474,6 +507,7 @@ class CountLikelihood:
             )
         if event is not None and (not 1 <= event.node < len(self.tree.parents)):
             raise ValueError("Multiplication event must identify a non-root branch.")
+        kernel = birth_death_transition if _kernel is None else _kernel
         matrices = {}
         cache = {}
         for node, time in enumerate(self.tree.lengths[1:], 1):
@@ -485,15 +519,11 @@ class CountLikelihood:
                 or (event.retention == 0 and not _split_zero_event)
             ):
                 if key not in cache:
-                    cache[key] = birth_death_transition(
-                        duplication, loss, time, max_count
-                    )
+                    cache[key] = kernel(duplication, loss, time, max_count)
                 matrices[node] = cache[key]
             else:
-                before = birth_death_transition(
-                    duplication, loss, time * event.fraction, max_count
-                )
-                after = birth_death_transition(
+                before = kernel(duplication, loss, time * event.fraction, max_count)
+                after = kernel(
                     duplication, loss, time * (1 - event.fraction), max_count
                 )
                 matrices[node] = (
@@ -542,22 +572,22 @@ class CountLikelihood:
         for node, time in enumerate(self.tree.lengths[1:], 1):
             duplication, loss = np.asarray(rates)[self.branch_groups[node]] * scale
             key = (float(duplication), float(loss), time)
-            if key not in cache:
-                cache[key] = _birth_death_log_transition(
-                    duplication, loss, time, max_count
-                )
             if (
                 event is None
                 or event.node != node
                 or (event.retention == 0 and not _split_zero_event)
             ):
+                if key not in cache:
+                    cache[key] = self._cached_transition(
+                        duplication, loss, time, max_count, log=True
+                    )
                 matrices[node] = cache[key]
                 continue
-            before = _birth_death_log_transition(
-                duplication, loss, time * event.fraction, max_count
+            before = self._cached_transition(
+                duplication, loss, time * event.fraction, max_count, log=True
             )
-            after = _birth_death_log_transition(
-                duplication, loss, time * (1 - event.fraction), max_count
+            after = self._cached_transition(
+                duplication, loss, time * (1 - event.fraction), max_count, log=True
             )
             pulse = np.full_like(before, -np.inf)
             for count in range(max_count + 1):
@@ -678,7 +708,12 @@ class CountLikelihood:
         observed_logs, selection_logs = [], []
         for scale in self.rate_scales:
             transitions = self.transitions(
-                rates, scale, max_count, event, _split_zero_event=_split_zero_event
+                rates,
+                scale,
+                max_count,
+                event,
+                _split_zero_event=_split_zero_event,
+                _kernel=self._cached_transition,
             )
             logs = self._prune(emissions, transitions, prior)
             # Scaling cannot recover a transition or latent-state contribution

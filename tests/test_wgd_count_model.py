@@ -26,6 +26,45 @@ def tree():
     )
 
 
+def test_likelihood_transition_cache_is_bounded_and_preserves_results(monkeypatch):
+    model = CountLikelihood(tree(), np.array([[2.0, 3.0], [1.0, np.nan]]))
+    rates = np.array([[0.12, 0.17]])
+    event = MultiplicationEvent(1, 0.3, 0.5, 2)
+    bound = 8
+    matrix_bytes = (bound + 1) ** 2 * np.dtype(float).itemsize
+    monkeypatch.setattr(wgd_count_model, "_TRANSITION_CACHE_BYTES", 0)
+    expected = model.family_log_likelihoods(rates, 1.4, bound, event)
+    assert not model._transition_cache
+    monkeypatch.setattr(wgd_count_model, "_TRANSITION_CACHE_BYTES", 2 * matrix_bytes)
+    np.testing.assert_array_equal(
+        model.family_log_likelihoods(rates, 1.4, bound, event), expected
+    )
+    assert len(model._transition_cache) == 2
+    assert model._transition_cache_bytes == 2 * matrix_bytes
+    # Public kernels remain independent mutable arrays, even on a cache hit.
+    matrix = model.transitions(rates, 1.0, bound)[2]
+    matrix[:] = np.nan
+    np.testing.assert_array_equal(
+        model.family_log_likelihoods(rates, 1.4, bound, event), expected
+    )
+    # Oversized entries do not displace the cached working set.
+    model._cached_transition(*rates[0], 0.7, 20)
+    assert model._transition_cache_bytes == 2 * matrix_bytes
+
+
+def test_transition_cache_separates_log_kernels_and_count_bounds(monkeypatch):
+    model = CountLikelihood(tree(), np.array([[1.0, 1.0]]))
+    monkeypatch.setattr(wgd_count_model, "_TRANSITION_CACHE_ENTRIES", 2)
+    probability = model._cached_transition(0.2, 0.3, 0.5, 8)
+    log = model._cached_transition(0.2, 0.3, 0.5, 8, log=True)
+    np.testing.assert_allclose(np.exp(log), probability, rtol=1e-12, atol=1e-14)
+    assert model._cached_transition(0.2, 0.3, 0.5, 8) is probability
+    larger = model._cached_transition(0.2, 0.3, 0.5, 16)
+    assert larger.shape == (17, 17)
+    assert list(model._transition_cache.values())[0] is probability
+    assert model._transition_cache_bytes == probability.nbytes + larger.nbytes
+
+
 @pytest.mark.parametrize("budget", [1, 1024**2])
 @pytest.mark.parametrize("families", [1, 67])
 def test_log_pruning_tiles_preserve_impossible_states_and_reduction_order(
