@@ -22,6 +22,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   lengths retain nonzero innovation standard deviations.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain and in small parameter units.
+- Fit shared MV-OU attraction in normalized time units so the initialization
+  and search remain finite under extreme branch-length rescaling.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
   affect an informative tip observation.
 - Mk mixture marginals average only categories with positive posterior mass.

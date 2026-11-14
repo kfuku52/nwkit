@@ -847,8 +847,10 @@ def fit_dense_mvou(
     fixed_alpha = None if alpha is None else _finite(alpha, "--alpha")
     if fixed_alpha is not None and fixed_alpha <= 0.0:
         raise ValueError("MV-OU alpha must be positive.")
+    observed_distance = geometry.observed_distance
     if fixed_alpha is None:
-        _validate_mvou_alpha_design(data, geometry.observed_distance)
+        observed_distance = observed_distance / time_scale
+        _validate_mvou_alpha_design(data, observed_distance)
     covariance_parameters = dimension * (dimension + 1) // 2
     free_parameters = dimension + covariance_parameters + int(fixed_alpha is None)
     if len(data.values) < free_parameters:
@@ -858,20 +860,24 @@ def fit_dense_mvou(
         )
     initial, bounds = _initial_cholesky(dimension)
     if fixed_alpha is None:
-        initial.insert(0, math.log(math.sqrt(bounds_alpha[0] * bounds_alpha[1])))
-        bounds.insert(0, (math.log(bounds_alpha[0]), math.log(bounds_alpha[1])))
+        log_beta_bounds = (
+            math.log(bounds_alpha[0]) + math.log(time_scale),
+            math.log(bounds_alpha[1]) + math.log(time_scale),
+        )
+        initial.insert(0, 0.5 * sum(log_beta_bounds))
+        bounds.insert(0, log_beta_bounds)
 
     def evaluate(parameters):
         offset = 0
-        current_alpha = fixed_alpha
-        if current_alpha is None:
-            current_alpha = math.exp(float(parameters[0]))
+        decay_rate = fixed_alpha
+        if decay_rate is None:
+            decay_rate = math.exp(float(parameters[0]))
             offset = 1
         sigma, _ = _decode_cholesky(parameters, dimension, offset)
-        scalar = np.exp(-current_alpha * geometry.observed_distance)
+        scalar = np.exp(-decay_rate * observed_distance)
         covariance = _observation_covariance(data, scalar, sigma)
         return (
-            current_alpha,
+            decay_rate,
             sigma,
             covariance,
             _profile_mean(data, covariance, reml=False),
@@ -884,7 +890,8 @@ def fit_dense_mvou(
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1500)
-    fitted_alpha, sigma_scaled, covariance, profile = evaluate(optimized.x)
+    fitted_decay, sigma_scaled, covariance, profile = evaluate(optimized.x)
+    fitted_alpha = fixed_alpha if fixed_alpha is not None else fitted_decay / time_scale
     (
         likelihood,
         theta_scaled,
@@ -1020,14 +1027,11 @@ def fit_dense_mvou_diag(
         )
 
     if free_alpha:
-        initial_beta = np.full(
-            dimension, math.sqrt(beta_bounds[0] * beta_bounds[1]), dtype=float
-        )
-        initial = [math.log(value) for value in initial_beta]
-        bounds = [
-            (math.log(beta_bounds[0]), math.log(beta_bounds[1]))
-            for _ in range(dimension)
-        ]
+        log_beta_bounds = (math.log(beta_bounds[0]), math.log(beta_bounds[1]))
+        log_initial_beta = 0.5 * sum(log_beta_bounds)
+        initial_beta = np.full(dimension, math.exp(log_initial_beta), dtype=float)
+        initial = [log_initial_beta] * dimension
+        bounds = [log_beta_bounds] * dimension
     else:
         assert fixed_alpha is not None
         initial_beta = fixed_alpha * time_scale

@@ -188,6 +188,23 @@ def test_multivariate_time_units_preserve_fits_and_posteriors(fitter, scale):
     )
 
 
+@pytest.mark.parametrize("scale", [1e-200, 1e200])
+def test_free_mvou_attraction_fit_is_invariant_to_extreme_time_units(scale):
+    original = tree()
+    scaled = tree()
+    for node in scaled.traverse():
+        if not node.is_root:
+            node.dist *= scale
+    errors = {name: (0.05, 0.08) for name in VALUES}
+    _, first = dense.fit_dense_mvou(
+        original, VALUES, ("x", "y"), standard_errors=errors
+    )
+    _, second = dense.fit_dense_mvou(scaled, VALUES, ("x", "y"), standard_errors=errors)
+    assert second.alpha * scale == pytest.approx(first.alpha, rel=2e-5)
+    assert second.log_likelihood == pytest.approx(first.log_likelihood, abs=1e-9)
+    assert second.fit_status == first.fit_status
+
+
 def test_fast_bm_rank_and_likelihood_are_time_unit_invariant():
     fits = []
     for scale in (1.0, 1e16):
