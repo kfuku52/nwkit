@@ -69,8 +69,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   the log bounds so multiplying extreme bounds cannot overflow or underflow.
 - Normalize nonstationary and regime OU optima and identifiability calculations
   so estimated diffusion and trait means remain consistent across trait units.
-- Condition latent Gaussian predictors in normalized trait units and retain
-  small posterior variances on diagonal covariances.
+- Condition dense and sparse latent Gaussian predictors in normalized trait
+  units and retain small posterior variances on diagonal covariances.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the
   strongest grid minima and reporting convergence for the selected fit.
 - Keep scalar likelihood evaluations inside bounds that differ by a single

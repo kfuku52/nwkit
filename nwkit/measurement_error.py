@@ -2,7 +2,7 @@
 
 import math
 import warnings
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 import numpy as np
 from scipy import sparse
@@ -108,6 +108,31 @@ def _latent_predictor_units(observed, sampling_covariance):
     scaled = np.ldexp(observed, -exponent)
     sampling = np.ldexp(sampling_covariance, -2 * exponent)
     return scaled, sampling, exponent
+
+
+def _sparse_predictor_units(observed, sampling, loading):
+    largest = max(
+        float(np.max(np.abs(observed), initial=0.0)),
+        math.sqrt(float(np.max(sampling, initial=0.0))),
+        float(np.max(np.abs(loading.data), initial=0.0)),
+    )
+    _, exponent = math.frexp(largest)
+    loading = loading.copy()
+    loading.data = np.ldexp(loading.data, -exponent)
+    return (
+        np.ldexp(observed, -exponent),
+        np.ldexp(sampling, -2 * exponent),
+        loading,
+        exponent,
+    )
+
+
+def _restore_sparse_predictor_covariance(model, exponent):
+    if exponent == 0:
+        return model
+    loading = model.tip_loading.copy()
+    loading.data = np.ldexp(loading.data, exponent)
+    return replace(model, tip_loading=loading)
 
 
 def _latent_predictor_likelihood(
@@ -317,6 +342,9 @@ def fit_factor_latent_predictor(
     if loading.shape[1]:
         nonzero_columns = np.asarray(loading.getnnz(axis=0)).reshape(-1) > 0
         loading = loading[:, nonzero_columns]
+    observed, _, loading, trait_exponent = _sparse_predictor_units(
+        observed, sampling_diagonal, loading
+    )
     observed_offset = float(np.mean(observed)) if include_intercept else 0.0
     observed = observed - observed_offset
     sampling_variance = np.asarray(loading.multiply(loading).sum(axis=1)).reshape(-1)
@@ -420,12 +448,15 @@ def fit_factor_latent_predictor(
     mean_posterior_variance = float(np.mean(posterior_marginal_variance))
     boundary = bool(rate <= lower_rate * 10.0 or rate >= upper_rate / 10.0)
     return SparseLatentPredictorPosterior(
-        mean=np.asarray(posterior_mean + observed_offset, dtype=float),
-        covariance_model=posterior_model,
-        mean_posterior_variance=mean_posterior_variance,
-        prior_mean=float(prior_mean + observed_offset),
-        evolutionary_rate=float(rate),
-        log_likelihood=-float(objective_value),
+        mean=np.ldexp(posterior_mean + observed_offset, trait_exponent),
+        covariance_model=_restore_sparse_predictor_covariance(
+            posterior_model, trait_exponent
+        ),
+        mean_posterior_variance=math.ldexp(mean_posterior_variance, 2 * trait_exponent),
+        prior_mean=math.ldexp(prior_mean + observed_offset, trait_exponent),
+        evolutionary_rate=math.ldexp(rate, 2 * trait_exponent),
+        log_likelihood=-float(objective_value)
+        - len(observed) * trait_exponent * math.log(2.0),
         optimizer_converged=bool(optimized.success),
         optimizer_message=message,
         boundary_warning=boundary,
@@ -539,6 +570,9 @@ def fit_sparse_latent_predictor(
     observed = np.asarray(observed, dtype=float)
     sampling, sampling_loading = _sparse_sampling_parts(
         observed, evolutionary_model, sampling_variance
+    )
+    observed, sampling, sampling_loading, trait_exponent = _sparse_predictor_units(
+        observed, sampling, sampling_loading
     )
     loading = evolutionary_model.tip_loading
     nuisance_count = sampling_loading.shape[1]
@@ -659,12 +693,17 @@ def fit_sparse_latent_predictor(
         or latent_variance >= upper_variance / 10.0
     )
     return SparseLatentPredictorPosterior(
-        mean=np.asarray(posterior_mean + observed_offset, dtype=float),
-        covariance_model=covariance_model,
-        mean_posterior_variance=mean_posterior_variance,
-        prior_mean=float(prior_mean + observed_offset),
-        evolutionary_rate=float(latent_variance / evolutionary_model.covariance_scale),
-        log_likelihood=-float(objective_value),
+        mean=np.ldexp(posterior_mean + observed_offset, trait_exponent),
+        covariance_model=_restore_sparse_predictor_covariance(
+            covariance_model, trait_exponent
+        ),
+        mean_posterior_variance=math.ldexp(mean_posterior_variance, 2 * trait_exponent),
+        prior_mean=math.ldexp(prior_mean + observed_offset, trait_exponent),
+        evolutionary_rate=math.ldexp(
+            latent_variance / evolutionary_model.covariance_scale, 2 * trait_exponent
+        ),
+        log_likelihood=-float(objective_value)
+        - len(observed) * trait_exponent * math.log(2.0),
         optimizer_converged=bool(optimized.success),
         optimizer_message=message,
         boundary_warning=boundary,

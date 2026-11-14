@@ -131,7 +131,8 @@ def test_sparse_latent_predictor_matches_dense_conditioning():
     )
 
 
-def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance():
+@pytest.mark.parametrize("scale", [1.0, 1e-150, 1e150])
+def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance(scale):
     tree = Tree("(((A:1,B:1):1,C:2):1,(D:1,E:1):2);", parser=1)
     names = ["A", "B", "C", "D", "E"]
     observed = np.asarray([1.0, 1.2, 2.0, 3.0, 3.3])
@@ -145,27 +146,38 @@ def test_sparse_latent_predictor_supports_low_rank_batch_sampling_covariance():
         materialize_covariance(sampling),
         include_intercept=True,
     )
-    sparse_fit = fit_sparse_latent_predictor(
-        observed,
-        build_sparse_evolutionary_model(tree, names),
-        sampling,
-        include_intercept=True,
+    scaled_sampling = DiagonalLowRankCovariance(
+        sampling.diagonal * scale**2, sampling.low_rank * scale
     )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        sparse_fit = fit_sparse_latent_predictor(
+            observed * scale,
+            build_sparse_evolutionary_model(tree, names),
+            scaled_sampling,
+            include_intercept=True,
+        )
 
-    assert sparse_fit.evolutionary_rate == pytest.approx(
-        dense.evolutionary_rate, rel=1e-6
+    assert sparse_fit.evolutionary_rate / scale**2 == pytest.approx(
+        dense.evolutionary_rate, rel=2e-6
     )
-    assert sparse_fit.log_likelihood == pytest.approx(dense.log_likelihood, rel=1e-8)
-    np.testing.assert_allclose(sparse_fit.mean, dense.mean, rtol=1e-6, atol=1e-7)
+    assert sparse_fit.log_likelihood + len(observed) * np.log(scale) == pytest.approx(
+        dense.log_likelihood, rel=1e-8
+    )
     np.testing.assert_allclose(
-        sparse_fit.covariance_model.materialize(),
+        sparse_fit.mean / scale, dense.mean, rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(
+        sparse_fit.covariance_model.materialize() / scale**2,
         dense.covariance,
         rtol=1e-6,
         atol=1e-7,
     )
 
 
-def test_factor_latent_predictor_matches_dense_conditioning_without_materializing():
+@pytest.mark.parametrize("scale", [1.0, 1e-150, 1e150])
+def test_factor_latent_predictor_matches_dense_conditioning_without_materializing(
+    scale,
+):
     observed = np.asarray([1.0, 1.2, 2.0, 3.0, 3.3])
     evolutionary = np.asarray([1.0, 1.5, 0.8, 2.0, 1.2])
     loading = sparse.csr_matrix(
@@ -186,20 +198,26 @@ def test_factor_latent_predictor_matches_dense_conditioning_without_materializin
         materialize_covariance(sampling),
         include_intercept=False,
     )
-    structured = fit_factor_latent_predictor(
-        observed,
-        evolutionary,
-        sampling,
-        include_intercept=False,
-    )
+    scaled_sampling = DiagonalLowRankCovariance(sampling.diagonal, loading * scale)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        structured = fit_factor_latent_predictor(
+            observed * scale,
+            evolutionary,
+            scaled_sampling,
+            include_intercept=False,
+        )
 
-    assert structured.evolutionary_rate == pytest.approx(
+    assert structured.evolutionary_rate / scale**2 == pytest.approx(
         dense.evolutionary_rate, rel=2e-6
     )
-    assert structured.log_likelihood == pytest.approx(dense.log_likelihood, rel=1e-8)
-    np.testing.assert_allclose(structured.mean, dense.mean, rtol=1e-6, atol=1e-7)
+    assert structured.log_likelihood + len(observed) * np.log(scale) == pytest.approx(
+        dense.log_likelihood, rel=1e-8
+    )
     np.testing.assert_allclose(
-        structured.covariance_model.materialize(),
+        structured.mean / scale, dense.mean, rtol=1e-6, atol=1e-7
+    )
+    np.testing.assert_allclose(
+        structured.covariance_model.materialize() / scale**2,
         dense.covariance,
         rtol=1e-6,
         atol=1e-7,
