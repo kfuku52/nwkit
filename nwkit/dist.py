@@ -270,32 +270,50 @@ def _path_matrix_is_safe(tree1, tree2, num_taxa):
     return (max_length / min_length) <= PATH_MATRIX_MAX_DYNAMIC_RANGE
 
 
-def _ordered_distance_matrix(tree, leaf_names):
+def _packed_path_distances(tree, leaf_names):
+    """Pack the upper triangle in the requested tip order."""
     import numpy as np
 
-    leaves = list(tree.leaves())
-    matrix = np.asarray(tree.distance_matrix(squared=True), dtype=float)
-    index_by_name = {str(leaf.name): index for index, leaf in enumerate(leaves)}
-    order = np.asarray([index_by_name[str(name)] for name in leaf_names])
-    return matrix[np.ix_(order, order)]
+    index_by_name = {str(leaf.name): index for index, leaf in enumerate(tree.leaves())}
+    order = np.asarray([index_by_name[str(name)] for name in leaf_names], dtype=np.intp)
+    total = len(index_by_name)
+    packed = np.fromiter(
+        chain.from_iterable(tree.distance_matrix()),
+        dtype=float,
+        count=total * (total - 1) // 2,
+    )
+    if total == len(order) and np.all(order[:-1] < order[1:]):
+        return packed
+    upper = np.empty(len(order) * (len(order) - 1) // 2)
+    # The entry for tips i < j is row_start[i] + j - i - 1.
+    rows = np.arange(total, dtype=np.intp)
+    row_start = rows * (2 * total - rows - 1) // 2
+    offset = 0
+    for row, left in enumerate(order[:-1]):
+        right = order[row + 1 :]
+        first = np.minimum(left, right)
+        last = np.maximum(left, right)
+        upper[offset : offset + len(right)] = packed[
+            row_start[first] + last - first - 1
+        ]
+        offset += len(right)
+    return upper
 
 
 def _path_distance_matrix(tree1, tree2, leaf_names):
     import numpy as np
 
-    matrix1 = _ordered_distance_matrix(tree1, leaf_names)
-    matrix2 = _ordered_distance_matrix(tree2, leaf_names)
-    upper = (matrix1 - matrix2)[np.triu_indices(len(leaf_names), 1)]
+    upper = _packed_path_distances(tree1, leaf_names)
+    second = _packed_path_distances(tree2, leaf_names)
     if upper.size == 0:
         return 0.0
+    matrix_scale = max(float(np.max(upper)), float(np.max(second)))
+    upper -= second
+    del second
     scale = float(np.max(np.abs(upper)))
     if scale == 0.0:
         # Rounded path sums can agree even when a branch length changed.
         return None
-    matrix_scale = max(
-        float(np.max(matrix1)),
-        float(np.max(matrix2)),
-    )
     # Subtracting independently accumulated path sums is ill-conditioned when
     # the trees are nearly identical. Fall back before roundoff can dominate
     # the actual path differences.
