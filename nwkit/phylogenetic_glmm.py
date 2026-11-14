@@ -629,12 +629,20 @@ def _sparse_weight_matrix(weights: np.ndarray) -> sparse.csr_matrix:
     return matrix
 
 
-def _weighted_sparse_hessian(loading, loading_transpose, weights):
+def _weighted_sparse_hessian(loading, loading_transpose, weights, entry_rows):
     if weights.ndim == 1:
-        weighted = loading.multiply(weights[:, None]).tocsr()
-        weighted.eliminate_zeros()
+        weighted = sparse.csr_matrix(
+            (loading.data * weights[entry_rows], loading.indices, loading.indptr),
+            shape=loading.shape,
+        )
         return loading_transpose @ weighted
     return loading_transpose @ _sparse_weight_matrix(weights) @ loading
+
+
+def _scalar_sparse_entry_rows(loading, weights):
+    if weights.ndim == 1:
+        return np.repeat(np.arange(loading.shape[0]), np.diff(loading.indptr))
+    return None
 
 
 def _sparse_glmm_latent_model(
@@ -717,11 +725,12 @@ def _sparse_latent_mode(
 
     def factor_hessian(weights):
         hessian = precision + _weighted_sparse_hessian(
-            loading, loading_transpose, weights
+            loading, loading_transpose, weights, entry_rows
         )
         return factor_sparse_positive_definite(hessian)
 
     state = evaluate(mode)
+    entry_rows = _scalar_sparse_entry_rows(loading, state[2])
     converged = False
     for _iteration in range(80):
         value, gradient, weights = state
