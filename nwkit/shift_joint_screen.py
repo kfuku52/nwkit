@@ -18,12 +18,13 @@ def joint_screen_matrix(
     data, fitted, branches=None, *, normalize=True, memory_limit=512 * 1024**2
 ):
     joint = fitted["joint_fit"]
-    n, p = data.values.shape
+    p = len(data.trait_names)
     branches = tuple(
         sorted(set(data.tree.branch_ids) - {0}) if branches is None else branches
     )
     mask = np.isfinite(data.values)
-    observed = int(mask.sum())
+    tips, traits = np.nonzero(mask)
+    observed = len(tips)
     estimated = 8 * (
         3 * observed * len(branches) * p
         + 4 * observed * (p + 1)
@@ -40,21 +41,25 @@ def joint_screen_matrix(
         joint.measurement_variance,
         root_model=joint.root_model,
     )
-    intercept = np.broadcast_to(np.eye(p), (n, p, p))[mask]
+    intercept = np.eye(p)[traits]
     white = factor.apply(np.column_stack((data.values[mask], intercept)))
     baseline, _ = np.linalg.qr(white[:, 1:], mode="reduced")
     response = white[:, 0] - baseline @ (baseline.T @ white[:, 0])
     matrix = np.empty((observed, len(branches) * p))
+    rows_by_trait = tuple(np.flatnonzero(traits == trait) for trait in range(p))
     for first in range(0, len(branches), 16):
         selected = branches[first : first + 16]
         descendant, _ = descendant_design(data.tree, selected)
-        raw = np.zeros((n, p, len(selected) * p))
-        for trait in range(p):
-            values = _effect_design(
-                data.tree, descendant, float(joint.alpha_height[trait]), selected
-            )
-            raw[:, trait, trait::p] = values
-        block = factor.apply(raw[mask])
+        raw = np.zeros((observed, len(selected) * p))
+        effects_by_rate: dict[float, np.ndarray] = {}
+        for trait, rows in enumerate(rows_by_trait):
+            rate = float(joint.alpha_height[trait])
+            if rate not in effects_by_rate:
+                effects_by_rate[rate] = _effect_design(
+                    data.tree, descendant, rate, selected
+                )
+            raw[rows, trait::p] = effects_by_rate[rate][tips[rows]]
+        block = factor.apply(raw)
         block -= baseline @ (baseline.T @ block)
         matrix[:, first * p : (first + len(selected)) * p] = block
     if normalize:
