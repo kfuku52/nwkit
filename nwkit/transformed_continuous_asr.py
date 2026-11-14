@@ -188,8 +188,8 @@ def compute_transformed_bm_marginals(
         if not math.isfinite(float(optimized.fun)):
             raise ValueError(f"Failed to find a finite {model.upper()} likelihood.")
         fitted_parameter = float(decode(float(optimized.x)))
-        posterior, brownian_fit = fit_at(
-            fitted_parameter, compute_posterior=_compute_posterior
+        posterior, brownian_fit = _selected_transformed_fit(
+            fit_at, fitted_parameter, cache, compute_posterior=_compute_posterior
         )
         finite_objectives = np.asarray(
             [value for value in evaluated.values() if math.isfinite(value)], dtype=float
@@ -230,10 +230,7 @@ def compute_transformed_bm_marginals(
         from nwkit.asr_diagnostics import profile_likelihood_interval
 
         def profile(parameter):
-            result = fit_at(float(parameter), compute_posterior=False)[
-                1
-            ].restricted_log_likelihood
-            return -math.inf if result is None else float(result)
+            return -cache.objective(float(parameter))
 
         profile_interval = profile_likelihood_interval(
             profile,
@@ -276,3 +273,12 @@ def compute_transformed_bm_marginals(
         ),
     )
     return posterior, fit
+
+
+def _selected_transformed_fit(fit_at, parameter, cache, *, compute_posterior):
+    if compute_posterior:
+        return fit_at(parameter)
+    selected = cache.candidate(parameter)
+    if selected is None:
+        raise ValueError("The selected transformed process has no finite likelihood.")
+    return selected
