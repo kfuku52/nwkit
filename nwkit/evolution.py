@@ -150,12 +150,11 @@ def _tree_height(tree, depths: dict[Any, float]) -> float:
 
 def _require_ultrametric(tree, depths: dict[Any, float], model: str) -> float:
     tip_depths = np.asarray([depths[leaf] for leaf in tree.leaves()], dtype=float)
-    height = float(np.max(tip_depths))
-    tolerance = max(
-        1e-8 * max(1.0, height),
-        np.finfo(float).eps * max(1.0, height) * max(100, len(tip_depths)),
-    )
-    if float(np.max(tip_depths) - np.min(tip_depths)) > tolerance:
+    height = float(tip_depths.max())
+    if not math.isfinite(height) or height <= 0.0:
+        raise ValueError("The evolutionary-model tree must have positive depth.")
+    tolerance = max(1e-8, np.finfo(float).eps * max(100, len(tip_depths)))
+    if (height - float(tip_depths.min())) / height > tolerance:
         raise ValueError(
             "Evolutionary model '{}' requires an ultrametric tree.".format(model)
         )

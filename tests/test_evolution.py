@@ -267,8 +267,12 @@ def test_supported_contrast_transform_whitens_its_tip_covariance(model, paramete
     )
 
 
-def test_delta_and_contrast_ou_reject_non_ultrametric_trees():
+@pytest.mark.parametrize("time_scale", [1.0, 1e-20, 1e20])
+def test_delta_and_contrast_ou_reject_non_ultrametric_trees(time_scale):
     tree = _tree(TREE_TEXT.replace("C:2", "C:1"))
+    for node in tree.traverse():
+        if not node.is_root:
+            node.dist *= time_scale
     with pytest.raises(ValueError, match="ultrametric"):
         build_evolutionary_covariance(tree, LEAF_NAMES, model="delta", parameter=1.2)
     with pytest.raises(ValueError, match="ultrametric"):

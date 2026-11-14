@@ -32,6 +32,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   and search remain finite under extreme branch-length rescaling.
 - Initialize and fit Brownian directional drift in normalized trait and time
   units so rescaling branches preserves the fitted trend and likelihood.
+- Apply the same ultrametricity tolerance to delta and OU contrasts across
+  branch-length units.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.
