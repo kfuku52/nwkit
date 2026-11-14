@@ -25,6 +25,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   lengths retain nonzero innovation standard deviations.
 - Keep rounded threshold liabilities inside their observed categories and
   accumulate posterior variances without subtracting large squares.
+- Report unrepresentable liability draws before they contaminate MCMC
+  summaries.
 - Estimate threshold-model ESS from a positive monotone sequence of
   autocorrelations across lags and account for disagreement between chains.
 - Preserve finite MCMCtree posterior means and medians when intermediate sums

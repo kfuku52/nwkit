@@ -185,6 +185,8 @@ def _truncated_quantile(lower, upper, rng):
 
 
 def _truncated_draw(mean, sd, allowed, thresholds, rng):
+    if not math.isfinite(mean):
+        raise ValueError("An ordinal liability conditional mean is not finite.")
     bounds = _allowed_intervals(allowed, thresholds)
     intervals = [((lower - mean) / sd, (upper - mean) / sd) for lower, upper in bounds]
     index = 0
@@ -201,7 +203,11 @@ def _truncated_draw(mean, sd, allowed, thresholds, rng):
         index = int(rng.choice(len(intervals), p=weights / weights.sum()))
     a, b = intervals[index]
     lower, upper = bounds[index]
+    if not a < b:
+        raise ValueError("Could not resolve the allowed ordinal liability interval.")
     location = mean + sd * _truncated_quantile(a, b, rng)
+    if not math.isfinite(location):
+        raise ValueError("A sampled ordinal liability exceeds floating-point range.")
     # Ordinal categories use (lower, upper]. A continuous tail draw can
     # round onto its excluded endpoint when projected back into trait units.
     return min(upper, max(location, math.nextafter(lower, math.inf)))

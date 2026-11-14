@@ -61,6 +61,14 @@ def test_disjoint_ordinal_intervals_keep_equal_mass_in_both_far_tails():
     assert 0.4 < np.mean(draws > 0.0) < 0.6
 
 
+def test_threshold_draw_reports_unrepresentable_tail_without_nonfinite_samples():
+    rng = np.random.default_rng(5)
+    with pytest.raises(
+        ValueError, match="ordinal liability exceeds floating-point range"
+    ):
+        _truncated_draw(0.0, 1.0, np.array([1]), np.array([1e200]), rng)
+
+
 @pytest.mark.parametrize(
     ("lower", "upper"),
     [(-np.inf, -40.0), (40.0, 40.01), (-2.0, 3.0), (0.0, np.inf)],
