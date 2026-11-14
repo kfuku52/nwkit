@@ -52,9 +52,14 @@ def _midpoint(low, high):
 
 
 def _stable_median(values):
-    values = np.sort(np.asarray(values, dtype=float))
+    values = np.array(values, dtype=float, copy=True)
     if not len(values) or np.any(np.isnan(values)):
         return float("nan")
+    return _median_in_place(values)
+
+
+def _median_in_place(values):
+    values.sort()
     return _midpoint(values[(len(values) - 1) // 2], values[len(values) // 2])
 
 
@@ -194,6 +199,7 @@ def bootstrap_corrections(pairs, trios, draws, seed):
     if not draws or not results:
         return results
 
+    group_rows = [(np.asarray(rows), results[key]) for key, rows in groups.items()]
     pair_values = np.full(len(positions), np.nan)
     trio_rows = np.asarray(trio_rows, dtype=int)
     prepared = []
@@ -216,11 +222,11 @@ def bootstrap_corrections(pairs, trios, draws, seed):
             corrected = _ks_difference(first, second, third)
         if np.any(np.isinf(corrected)):
             raise ValueError("Corrected Ks must be representable as a finite float.")
-        for key, indices in groups.items():
+        for indices, output in group_rows:
             selected_values = corrected[indices]
-            results[key][draw] = _stable_median(
-                selected_values[np.isfinite(selected_values)]
-            )
+            available = selected_values[~np.isnan(selected_values)]
+            if len(available):
+                output[draw] = _median_in_place(available)
     return results
 
 
