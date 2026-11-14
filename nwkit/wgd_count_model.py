@@ -1026,9 +1026,13 @@ class CountLikelihood:
             observed_logs.append(logs)
             selection_logs.append(self._selection_logs(rates, scale, root_mean, event))
         scale_log = np.log(len(self.rate_scales))
-        observed_log = _logsum_probabilities(np.stack(observed_logs), axis=0) - scale_log
+        observed_log = (
+            _logsum_probabilities(np.stack(observed_logs), axis=0) - scale_log
+        )
         # Ascertainment is conditioned after mixing, not separately per category.
-        survival_log = _logsum_probabilities(np.stack(selection_logs), axis=0) - scale_log
+        survival_log = (
+            _logsum_probabilities(np.stack(selection_logs), axis=0) - scale_log
+        )
         result = observed_log - survival_log[self.pattern_index]
         if np.any(np.isnan(result)) or np.any(result > 1e-8):
             raise ValueError(
