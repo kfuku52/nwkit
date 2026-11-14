@@ -3,7 +3,7 @@
 import warnings
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Callable, Mapping
+from typing import Callable, Mapping, cast
 
 import numpy as np
 from scipy import sparse
@@ -70,6 +70,16 @@ def _positive_cholesky(matrix: np.ndarray) -> np.ndarray:
     # A diagonal nugget changes the statistical model and can be exploited by
     # the variance optimizer. Singular exact observations must not acquire noise.
     return np.linalg.cholesky(symmetric)
+
+
+def _coefficient_covariance(information_factor, compute):
+    if not compute:
+        return None
+    return cho_solve(
+        (information_factor, True),
+        np.eye(len(information_factor)),
+        check_finite=False,
+    )
 
 
 def _trait_cholesky(parameters: np.ndarray, dimension: int) -> np.ndarray:
@@ -348,7 +358,10 @@ def _sparse_multivariate_state(
     observed_indices,
     observed_design,
     observed_response,
+    observed_rhs,
     reml,
+    *,
+    compute_covariance,
 ):
     precision, loading, prior_logdet = _sparse_multivariate_latent_model(
         component_model,
@@ -378,13 +391,15 @@ def _sparse_multivariate_state(
         result = -solved[n_states:]
         return result[:, 0] if vector else result
 
-    inverse_design = inverse(observed_design)
+    inverse_rhs = inverse(observed_rhs)
+    inverse_design = inverse_rhs[:, :-1]
     information = observed_design.T @ inverse_design
     information_factor = _positive_cholesky(information)
-    beta_covariance = cho_solve(
-        (information_factor, True), np.eye(len(information)), check_finite=False
+    coefficients = cho_solve(
+        (information_factor, True),
+        observed_design.T @ inverse_rhs[:, -1],
+        check_finite=False,
     )
-    coefficients = beta_covariance @ (observed_design.T @ inverse(observed_response))
     residual = observed_response - observed_design @ coefficients
     quadratic = float(residual @ inverse(residual))
     logdet_covariance = factor.logdet + prior_logdet
@@ -398,12 +413,8 @@ def _sparse_multivariate_state(
         quadratic + logdet_covariance + normalizing_count * np.log(2.0 * np.pi)
     )
     if reml:
-        information_sign, information_logdet = np.linalg.slogdet(information)
-        if information_sign <= 0.0:
-            raise np.linalg.LinAlgError(
-                "Multivariate fixed-effect information is singular."
-            )
-        objective += 0.5 * information_logdet
+        objective += float(np.sum(np.log(np.diag(information_factor))))
+    beta_covariance = _coefficient_covariance(information_factor, compute_covariance)
     return (
         objective,
         coefficients,
@@ -613,7 +624,7 @@ def fit_multivariate_pgls(
         )
         return component_covariances, decoded
 
-    def state(parameters: np.ndarray):
+    def state(parameters: np.ndarray, *, compute_covariance: bool):
         trait_covariances, decoded = unpack(parameters)
         if use_sparse:
             return _sparse_multivariate_state(
@@ -625,7 +636,9 @@ def fit_multivariate_pgls(
                 observed_indices,
                 observed_design,
                 observed_response,
+                observed_rhs,
                 reml,
+                compute_covariance=compute_covariance,
             )
         full_covariance = np.zeros((n_tips * n_traits,) * 2, dtype=float)
         for name, component in covariance_components.items():
@@ -646,9 +659,7 @@ def fit_multivariate_pgls(
         whitened_response = whitened[:, -1]
         information = whitened_design.T @ whitened_design
         information_factor = _positive_cholesky(information)
-        beta_covariance = cho_solve(
-            (information_factor, True), np.eye(len(information)), check_finite=False
-        )
+        beta_covariance = _coefficient_covariance(information_factor, compute_covariance)
         coefficients = cho_solve(
             (information_factor, True),
             whitened_design.T @ whitened_response,
@@ -672,7 +683,7 @@ def fit_multivariate_pgls(
 
     def objective(parameters: np.ndarray) -> float:
         try:
-            value = float(state(parameters)[0])
+            value = float(state(parameters, compute_covariance=False)[0])
         except (ValueError, np.linalg.LinAlgError, FloatingPointError, OverflowError):
             return 1e100
         return value if np.isfinite(value) else 1e100
@@ -700,7 +711,7 @@ def fit_multivariate_pgls(
             "Multivariate PGLS optimization failed: {}".format(result.message)
         )
     fitted_objective, coefficients, coefficient_covariance, fitted_covariance = state(
-        result.x
+        result.x, compute_covariance=True
     )
     component_trait_covariances, decoded = unpack(result.x)
     shape_boundary = False
@@ -722,7 +733,7 @@ def fit_multivariate_pgls(
         component_trait_covariances,
     ) = _restore_multivariate_response_units(
         coefficients.reshape(n_traits, design.shape[1]),
-        coefficient_covariance,
+        cast(np.ndarray, coefficient_covariance),
         fitted_covariance,
         component_trait_covariances,
         trait_exponents,
