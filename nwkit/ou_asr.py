@@ -429,27 +429,26 @@ def _predict_down(factor, alpha, sigma2, theta, length):
 
 
 def _prune(data, alpha, sigma2, theta):
-    inside = list(data.local)
-    upward = [_Factor(None) for _ in data.parents]
+    upward = list(data.local)
     for group in range(len(data.parents) - 1, -1, -1):
-        factor = inside[group]
+        factor = upward[group]
         for child in data.children[group]:
             factor = _combine(factor, upward[child])
-        inside[group] = factor
-        if data.parents[group] >= 0:
-            upward[group] = _propagate_up(
-                factor, alpha, sigma2, theta, data.lengths[group]
-            )
+        upward[group] = (
+            _propagate_up(factor, alpha, sigma2, theta, data.lengths[group])
+            if data.parents[group] >= 0
+            else factor
+        )
     root_variance = ou_stationary_variance(alpha, sigma2)
     posterior_root = _combine(
-        _Factor(GaussianMarginal(theta, root_variance)), inside[0]
+        _Factor(GaussianMarginal(theta, root_variance)), upward[0]
     )
     if not math.isfinite(posterior_root.log_weight):
         raise ValueError("The observed values have zero likelihood under the OU model.")
-    return tuple(inside), tuple(upward), posterior_root.log_weight
+    return upward, posterior_root.log_weight
 
 
-def _smooth(data, alpha, sigma2, theta, inside, upward):
+def _smooth(data, alpha, sigma2, theta, upward):
     root_variance = ou_stationary_variance(alpha, sigma2)
     outside = [_Factor(None) for _ in data.parents]
     outside[0] = _Factor(GaussianMarginal(theta, root_variance))
@@ -820,7 +819,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
                 current_theta = float(theta)
                 negative_log_likelihood = -_prune(
                     data, current_alpha, current_sigma2, current_theta
-                )[2]
+                )[1]
             current = (current_alpha, current_sigma2, current_theta)
             if not math.isfinite(negative_log_likelihood):
                 raise ValueError("non-finite likelihood")
@@ -897,7 +896,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
         )
         for candidate_index in verification_indices:
             candidate = candidates[candidate_index]
-            candidate["objective"] = -_prune(data, *candidate["current"])[2]
+            candidate["objective"] = -_prune(data, *candidate["current"])[1]
         candidates = [
             candidates[candidate_index]
             for candidate_index in sorted(verification_indices)
@@ -916,7 +915,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
     )
     fitted = selected["current"]
     fitted_alpha, fitted_sigma2, fitted_theta = fitted
-    _, _, log_likelihood = _prune(data, *fitted)
+    log_likelihood = -selected["objective"]
     tolerance = 1e-5
     statuses = []
     if alpha_estimated:
@@ -962,6 +961,37 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
     )
 
 
+def _ou_posterior(data, fit):
+    upward, _ = _prune(data, fit.alpha, fit.sigma2, fit.theta)
+    smoothed = _smooth(data, fit.alpha, fit.sigma2, fit.theta, upward)
+    restored = tuple(
+        GaussianMarginal(
+            data.trait_center
+            + _ldexp(item.mean, data.trait_exponent, "OU ancestral mean"),
+            _ldexp(
+                item.variance,
+                2 * data.trait_exponent,
+                "OU ancestral variance",
+            ),
+        )
+        for item in smoothed
+    )
+    posterior = {
+        node: GaussianMarginal(data.exact_values[group], 0.0)
+        if group in data.exact_values
+        else restored[group]
+        for node, group in data.node_groups.items()
+    }
+    if any(
+        not math.isfinite(item.mean)
+        or not math.isfinite(item.variance)
+        or item.variance < 0.0
+        for item in posterior.values()
+    ):
+        raise ValueError("An OU ancestral marginal is outside floating-point range.")
+    return posterior
+
+
 def compute_ou_marginals(
     tree,
     values_by_leaf,
@@ -972,6 +1002,7 @@ def compute_ou_marginals(
     alpha_bounds=None,
     standard_errors=None,
     _tree_validated=False,
+    _compute_posterior=True,
 ):
     """Return all-node conditional marginals under stationary-root OU1."""
 
@@ -1026,33 +1057,7 @@ def compute_ou_marginals(
             raise ValueError("--theta minus the observed trait center is not finite.")
         scaled_theta = _ldexp(centered_theta, -data.trait_exponent, "OU centered theta")
     fit = _fit_parameters(data, fixed_alpha, scaled_sigma2, scaled_theta, bounds)
-    inside, upward, _ = _prune(data, fit.alpha, fit.sigma2, fit.theta)
-    smoothed = _smooth(data, fit.alpha, fit.sigma2, fit.theta, inside, upward)
-    restored = tuple(
-        GaussianMarginal(
-            data.trait_center
-            + _ldexp(item.mean, data.trait_exponent, "OU ancestral mean"),
-            _ldexp(
-                item.variance,
-                2 * data.trait_exponent,
-                "OU ancestral variance",
-            ),
-        )
-        for item in smoothed
-    )
-    posterior = {
-        node: GaussianMarginal(data.exact_values[group], 0.0)
-        if group in data.exact_values
-        else restored[group]
-        for node, group in data.node_groups.items()
-    }
-    if any(
-        not math.isfinite(item.mean)
-        or not math.isfinite(item.variance)
-        or item.variance < 0.0
-        for item in posterior.values()
-    ):
-        raise ValueError("An OU ancestral marginal is outside floating-point range.")
+    posterior = _ou_posterior(data, fit) if _compute_posterior else {}
     restored_theta = data.trait_center + _ldexp(
         fit.theta, data.trait_exponent, "Fitted theta"
     )

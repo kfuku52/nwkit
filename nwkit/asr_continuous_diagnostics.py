@@ -196,6 +196,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
                 alpha_bounds=original_fit.alpha_bounds,
                 standard_errors=errors,
                 _tree_validated=True,
+                _compute_posterior=False,
             )[1]
         from nwkit.general_ou_asr import compute_general_ou_marginals
 
@@ -214,6 +215,7 @@ def _refit(tree, simulated, errors, args, settings, original_fit, regime_assignm
             theta=None if original_fit.theta_estimated else original_fit.theta,
             alpha_bounds=original_fit.alpha_bounds,
             standard_errors=errors,
+            _compute_posterior=False,
         )[1]
     if model in {"OUM", "OUMA", "OUMV", "OUMVA"}:
         from nwkit.regime_gaussian_asr import (

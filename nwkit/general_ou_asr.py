@@ -8,6 +8,7 @@ import numpy as np
 from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr import _ldexp
 from nwkit.gaussian_inference import (
+    GaussianConditioningResult,
     condition_gaussian_tree,
     gaussian_process_parameter_rank,
     gaussian_tree_likelihood,
@@ -87,6 +88,7 @@ def compute_general_ou_marginals(
     theta=None,
     alpha_bounds=None,
     standard_errors=None,
+    _compute_posterior=True,
 ):
     """Condition OU1 under a fixed or user-specified Gaussian root prior."""
 
@@ -243,7 +245,10 @@ def compute_general_ou_marginals(
             fixed_parameters, 0.0, True, "all parameters fixed", 0, 0, 0
         )
     fitted_alpha, fitted_sigma2, fitted_theta = unpack(optimized.x)
-    result = condition_gaussian_tree(
+    evaluate = (
+        condition_gaussian_tree if _compute_posterior else gaussian_tree_likelihood
+    )
+    result = evaluate(
         process_for(optimized.x),
         values_by_leaf,
         standard_errors=standard_errors,
@@ -285,4 +290,7 @@ def compute_general_ou_marginals(
         optimizer_grid_evaluations=0,
         alpha_bounds=bounds,
     )
-    return result.marginals, fit
+    posterior = (
+        result.marginals if isinstance(result, GaussianConditioningResult) else {}
+    )
+    return posterior, fit
