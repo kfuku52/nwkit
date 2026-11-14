@@ -13,6 +13,7 @@ from nwkit.threshold_asr import (
     _rhat_and_ess,
     _truncated_draw,
     _truncated_quantile,
+    _update_thresholds,
     build_threshold_process,
     compute_threshold_marginals,
     parse_thresholds,
@@ -320,6 +321,19 @@ def test_threshold_liability_variance_stays_finite_when_sum_of_squares_overflows
         assert marginal.variance / variance == pytest.approx(
             1.0 - 2.0 / math.pi, abs=0.06
         )
+
+
+def test_ordinal_cut_update_preserves_the_only_representable_valid_cut():
+    first = math.ulp(0.0)
+    second = math.nextafter(first, math.inf)
+    values = np.array([first, second, 1e100])
+    allowed = np.eye(3, dtype=bool)[:, [1, 2, 2]]
+    thresholds = np.array([0.0, first])
+    _update_thresholds(values, allowed, thresholds, np.random.default_rng(9))
+    np.testing.assert_array_equal(thresholds, [0.0, first])
+    np.testing.assert_array_equal(
+        np.searchsorted(thresholds, values, side="left"), [1, 2, 2]
+    )
 
 
 def test_ordinal_thresholds_are_sampled_in_identified_order():

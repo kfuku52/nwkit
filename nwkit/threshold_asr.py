@@ -388,8 +388,6 @@ def _initialize_values(compiled, constraints, thresholds):
 def _update_thresholds(values, allowed_categories, thresholds, rng):
     if len(thresholds) <= 1:
         return
-    scale = max(1.0, float(np.max(np.abs(values))))
-    epsilon = np.finfo(float).eps * scale * 16.0
     for threshold_index in range(1, len(thresholds)):
         previous = float(thresholds[threshold_index - 1])
         following = (
@@ -397,8 +395,8 @@ def _update_thresholds(values, allowed_categories, thresholds, rng):
             if threshold_index + 1 < len(thresholds)
             else math.inf
         )
-        lower = previous + epsilon
-        upper = following - epsilon
+        # Categories are (lower, upper]. Preserve every representable
+        # admissible cut, including a singleton between adjacent floats.
         relevant = (values > previous) & (values <= following)
         allowed_lower = allowed_categories[threshold_index]
         allowed_upper = allowed_categories[threshold_index + 1]
@@ -408,15 +406,22 @@ def _update_thresholds(values, allowed_categories, thresholds, rng):
             )
         lower = float(
             np.max(
-                values, where=relevant & allowed_lower & ~allowed_upper, initial=lower
+                values,
+                where=relevant & allowed_lower & ~allowed_upper,
+                initial=previous,
             )
         )
         upper = float(
             np.min(
-                values, where=relevant & allowed_upper & ~allowed_lower, initial=upper
+                values,
+                where=relevant & allowed_upper & ~allowed_lower,
+                initial=following,
             )
         )
-        if not lower < upper:
+        if math.isfinite(upper):
+            upper = math.nextafter(upper, -math.inf)
+        lower = max(lower, math.nextafter(previous, math.inf))
+        if lower > upper:
             raise ValueError(
                 "Ordinal threshold update collapsed; increase MCMC burn-in or fix --thresholds."
             )
