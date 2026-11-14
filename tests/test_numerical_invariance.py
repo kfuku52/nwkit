@@ -23,6 +23,10 @@ from nwkit.measurement_error import (
 from nwkit.optimization import FitResourceError, ScalarFitCache
 from nwkit.phylogenetic_glmm import (
     _count_log_likelihood,
+    _gamma_log_likelihood,
+    _gamma_scalar_terms,
+    _lognormal_scalar_terms,
+    _scalar_initial_coefficient,
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
 )
@@ -352,6 +356,44 @@ def test_hurdle_likelihood_retains_small_mean_limit(dispersion):
         np.log(0.8),
     ]
     np.testing.assert_allclose(log_likelihood, expected, rtol=0.0, atol=1e-12)
+
+
+def test_gamma_likelihood_and_derivatives_scale_with_response_units():
+    values = np.array([0.75, 2.0, 3.0])
+    linear = np.array([0.3, -0.2, 0.6])
+    dispersion = 2.0
+    scale = 1e-310
+    with np.errstate(over="raise", invalid="raise"):
+        before = _gamma_log_likelihood(values, linear, dispersion)
+        after = _gamma_log_likelihood(
+            values * scale, linear + np.log(scale), dispersion
+        )
+        before_terms = _gamma_scalar_terms(values, linear, dispersion)
+        after_terms = _gamma_scalar_terms(
+            values * scale, linear + np.log(scale), dispersion
+        )
+    np.testing.assert_allclose(after + np.log(scale), before, atol=3e-12)
+    np.testing.assert_allclose(after_terms, before_terms, atol=3e-12)
+
+
+def test_lognormal_score_avoids_overflow_in_squared_dispersion():
+    gradient, curvature = _lognormal_scalar_terms(
+        np.ones(2), np.array([1e308, -1e308]), 1e155
+    )
+    np.testing.assert_allclose(gradient, [0.01, -0.01])
+    np.testing.assert_allclose(curvature, [1e-310, 1e-310], atol=0.0)
+
+
+def test_count_intercept_initialization_uses_log_exposure():
+    with np.errstate(over="raise", divide="raise"):
+        coefficients = _scalar_initial_coefficient(
+            np.array([1.0, 0.0, 4.0]),
+            np.ones((3, 1)),
+            "poisson",
+            np.full(3, -1000.0),
+            None,
+        )
+    assert coefficients[0, 0] == pytest.approx(1000.0 + np.log(5.0 / 3.0))
 
 
 @pytest.mark.parametrize("dispersion", [None, 0.2])

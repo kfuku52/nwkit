@@ -1020,15 +1020,17 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
 def _gamma_log_likelihood(values, linear, dispersion):
     if dispersion is None or dispersion <= 0.0:
         raise ValueError("Gamma shape must be positive.")
-    with np.errstate(over="ignore", invalid="ignore"):
-        inverse_means = np.exp(-linear)
-        return (
-            dispersion * np.log(dispersion)
-            - gammaln(dispersion)
-            + (dispersion - 1.0) * np.log(values)
-            - dispersion * linear
-            - dispersion * values * inverse_means
-        )
+    log_values = np.log(values)
+    log_ratio = log_values - linear
+    with np.errstate(over="ignore"):
+        shape_scaled_ratio = np.exp(math.log(dispersion) + log_ratio)
+    return (
+        dispersion * math.log(dispersion)
+        - gammaln(dispersion)
+        - log_values
+        + dispersion * log_ratio
+        - shape_scaled_ratio
+    )
 
 
 def _lognormal_log_likelihood(values, linear, dispersion):
@@ -1336,15 +1338,24 @@ def _zero_component_count_scalar_terms(
 
 def _gamma_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
+    log_ratio = np.log(values) - linear
     with np.errstate(over="ignore"):
-        scaled = values * np.exp(-linear)
-    return dispersion * (1.0 - scaled), dispersion * scaled
+        curvature = np.exp(math.log(dispersion) + log_ratio)
+        gradient = np.where(
+            np.abs(log_ratio) < 0.5,
+            -dispersion * np.expm1(log_ratio),
+            dispersion - curvature,
+        )
+    return gradient, curvature
 
 
 def _lognormal_scalar_terms(values, linear, dispersion):
     assert dispersion is not None
-    variance = dispersion**2
-    return (linear - np.log(values)) / variance, np.full(len(values), 1.0 / variance)
+    difference = linear - np.log(values)
+    with np.errstate(over="ignore"):
+        gradient = (difference / dispersion) / dispersion
+        curvature = np.full(len(values), np.divide(1.0, dispersion) / dispersion)
+    return gradient, curvature
 
 
 def _beta_scalar_terms(values, linear, dispersion):
@@ -2428,8 +2439,9 @@ def _scalar_initial_coefficient(
         "hurdle-poisson",
         "hurdle-negative-binomial",
     }:
-        mean = float(np.mean(values / np.exp(offset)))
-        coefficients[0, 0] = math.log(max(mean, 1e-3))
+        with np.errstate(divide="ignore"):
+            log_mean = logsumexp(np.log(values) - offset) - math.log(len(values))
+        coefficients[0, 0] = max(log_mean, math.log(1e-3))
     elif family in {"gamma", "lognormal"}:
         coefficients[0, 0] = float(np.mean(np.log(values)))
     elif family == "beta":
