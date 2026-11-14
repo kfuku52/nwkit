@@ -200,7 +200,7 @@ def _null_mdi_areas(times, simulations, median, interval):
     return areas
 
 
-def _result_tables(tree, design, values, simulations, height, interval, args):
+def _result_tables(design, values, simulations, height, interval, args):
     disparities, counts = clade_disparities(design, values)
     relative = disparities / disparities[0]
     observed = np.asarray(design.weights @ relative)
@@ -255,7 +255,11 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
         for column in ("bm_mean", "bm_median", "bm_lower", "bm_upper"):
             table[column] = ""
     table["num_simulations"] = len(simulations)
-    clades = pd.DataFrame(
+    return table, pd.DataFrame([summary]), relative, counts, null_mdi
+
+
+def _clade_table(tree, relative, counts):
+    return pd.DataFrame(
         [
             {
                 "branch_id": node.props[_ID],
@@ -268,7 +272,6 @@ def _result_tables(tree, design, values, simulations, height, interval, args):
             for i, node in enumerate(tree.traverse("preorder"))
         ]
     )
-    return table, pd.DataFrame([summary]), clades, null_mdi
 
 
 def _write_simulation_table(handle, times, simulations):
@@ -309,10 +312,14 @@ def dtt_main(args):
         simulations = simulate_curves(
             design, factor, args.n_sim, args.seed, args.threads
         )
-    curve, summary, clades, null_mdi = _result_tables(
-        tree, design, values, simulations, height, interval, args
+    curve, summary, relative, counts, null_mdi = _result_tables(
+        design, values, simulations, height, interval, args
     )
-    tables = {"outfile": curve, "summary_out": summary, "clades_out": clades}
+    tables = {"outfile": curve}
+    if "summary_out" in paths:
+        tables["summary_out"] = summary
+    if "clades_out" in paths:
+        tables["clades_out"] = _clade_table(tree, relative, counts)
     metadata = {
         "schema_version": 1,
         "nwkit_version": __version__,
