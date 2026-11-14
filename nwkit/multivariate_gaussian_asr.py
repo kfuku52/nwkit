@@ -394,6 +394,48 @@ def _cached_geometry(data, cache):
     return cache[key]
 
 
+def _mvbm_stem_geometry(geometry, fixed_mean, *, compute_posterior):
+    if not np.all(np.isnan(fixed_mean)):
+        return geometry, None
+    observed = geometry.unique_observed_nodes
+    lca = geometry.lca
+    origin = lca.common_ancestor_indices(int(observed[0]), int(observed[-1]))
+    if geometry.depths[origin] == 0.0:
+        return geometry, None
+
+    # With a flat root, the observed clade's ancestor also has a flat prior.
+    # Evaluate shared paths from that node so a long stem cannot erase them.
+    lookup = lca.indexed_ancestors()
+    paths = _prepare_indexed_path_lengths(lca, geometry.jump_lengths)
+    nodes = np.arange(len(geometry.depths))
+    ancestors = lookup(nodes, origin)
+    inside = ancestors == origin
+    depths = np.zeros_like(geometry.depths)
+    depths[inside] = paths(nodes[inside], origin)
+    shared = np.empty((len(observed), len(observed)))
+    batch_size = max(1, 32_768 // len(observed))
+    for start in range(0, len(observed), batch_size):
+        stop = min(start + batch_size, len(observed))
+        shared[start:stop] = depths[lookup(observed[start:stop, None], observed)]
+    inverse = geometry.observed_node_inverse
+
+    extension = None
+    if compute_posterior:
+        extension = np.zeros_like(depths)
+        outside = ~inside
+        extension[outside] = paths(origin, ancestors[outside]) + paths(
+            nodes[outside], ancestors[outside]
+        )
+    return (
+        replace(
+            geometry,
+            depths=depths,
+            observed_shared_depth=shared[np.ix_(inverse, inverse)],
+        ),
+        extension,
+    )
+
+
 def _validate_posterior_size(data, compute_posterior):
     dimension = len(data.trait_names)
     estimated_bytes = len(data.compiled.nodes) * (256 + 8 * (dimension + dimension**2))
@@ -639,14 +681,21 @@ def _initial_cholesky(dimension):
     return values, bounds
 
 
-def _restore_sigma(data, sigma, *, time_scale=1.0):
+def _restore_sigma(data, sigma, *, time_scale=1.0, branch_lengths=None):
     # Merge powers before rescaling so a small first trait scale cannot
     # round an off-diagonal entry away before the other scale is applied.
     trait_exponents = np.frexp(data.scales)[1] - 1
     exponents = trait_exponents[:, None] + trait_exponents[None, :]
     time_mantissa, time_exponent = math.frexp(time_scale)
     with np.errstate(over="ignore"):
-        if time_mantissa == 0.5:
+        if branch_lengths is not None:
+            length_mantissa, length_exponent = np.frexp(branch_lengths[:, None, None])
+            mantissa, covariance_exponents = np.frexp(sigma)
+            restored = np.ldexp(
+                mantissa * length_mantissa / time_mantissa,
+                covariance_exponents + exponents + length_exponent - time_exponent,
+            )
+        elif time_mantissa == 0.5:
             restored = np.ldexp(sigma, exponents + 1 - time_exponent)
         else:
             mantissa, covariance_exponents = np.frexp(sigma)
@@ -704,6 +753,7 @@ def _posterior(
     *,
     flat_root,
     alpha=None,
+    root_extension=None,
 ):
     dimension = len(data.trait_names)
     design = _design(data)[:, free_mean_indices]
@@ -741,8 +791,17 @@ def _posterior(
             adjustment = adjustment_base - cross @ solved_design
             covariance += adjustment @ mean_covariance @ adjustment.swapaxes(1, 2)
         means = mean + cross @ solved_residual
+        additional_covariance = None
+        if root_extension is not None:
+            lengths = root_extension[start : start + len(nodes)]
+            if np.any(lengths):
+                additional_covariance = _restore_sigma(
+                    data, sigma, time_scale=geometry.time_scale, branch_lengths=lengths
+                )
         posterior.update(
-            _restored_posterior_marginals(data, start, nodes, means, covariance)
+            _restored_posterior_marginals(
+                data, start, nodes, means, covariance, additional_covariance
+            )
         )
     return posterior
 
@@ -779,7 +838,9 @@ def _posterior_covariance_batches(
         )
 
 
-def _restored_posterior_marginals(data, start, nodes, means, covariance):
+def _restored_posterior_marginals(
+    data, start, nodes, means, covariance, additional_covariance=None
+):
     covariance = (covariance + covariance.swapaxes(1, 2)) / 2.0
     # An exact observation fixes the same coordinate at every node connected
     # by zero-length branches. Remove subtraction roundoff before PSD checks.
@@ -794,6 +855,11 @@ def _restored_posterior_marginals(data, start, nodes, means, covariance):
         covariance[row, trait, :] = 0.0
         covariance[row, :, trait] = 0.0
     covariance = _restore_sigma(data, covariance)
+    if additional_covariance is not None:
+        with np.errstate(over="ignore"):
+            covariance += additional_covariance
+        if np.any(~np.isfinite(covariance)):
+            raise ValueError("Multivariate covariance exceeds floating-point range.")
     return {
         node: MultivariateGaussianMarginal(node_mean, node_covariance)
         for node, node_mean, node_covariance in zip(
@@ -943,6 +1009,9 @@ def fit_dense_mvbm(
         )
     analysis_data, fixed_mean = _mvbm_analysis_data(data)
     geometry = _cached_geometry(analysis_data, _geometry_cache)
+    geometry, root_extension = _mvbm_stem_geometry(
+        geometry, fixed_mean, compute_posterior=compute_posterior
+    )
     time_scale = float(np.max(geometry.observed_shared_depth)) or 1.0
     geometry = geometry.rescaled(time_scale)
     _validate_mvbm_covariance_design(
@@ -988,6 +1057,7 @@ def fit_dense_mvbm(
             mean_factor,
             free_mean_indices,
             flat_root=True,
+            root_extension=root_extension,
         )
         if compute_posterior
         else {}

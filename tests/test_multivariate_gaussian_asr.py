@@ -80,6 +80,61 @@ def test_dense_mvbm_accepts_partial_vectors_and_errors():
     assert posterior[tree["D"]].covariance[0, 0] > 0.0
 
 
+@pytest.mark.parametrize(
+    "tip_time, trait_scale, stem", [(1.0, 1.0, 1e16), (1e-300, 1e-20, 1e20)]
+)
+def test_dense_mvbm_preserves_missing_trait_fit_below_long_unobserved_stem(
+    tip_time, trait_scale, stem
+):
+    values = {
+        "A": (0.0, 1.0),
+        "B": (0.4, None),
+        "C": (1.2, 0.2),
+        "D": (None, -0.3),
+        "E": (1.7, 0.8),
+    }
+    values = {
+        name: tuple(None if trait is None else trait * trait_scale for trait in traits)
+        for name, traits in values.items()
+    }
+    errors = {
+        name: tuple(
+            0.1 * trait_scale if trait is not None else None for trait in traits
+        )
+        for name, traits in values.items()
+    }
+    observed_clade = (
+        f"((A:{tip_time / 2},B:{tip_time / 2})I:{tip_time / 2},"
+        f"(C:{tip_time / 2},D:{tip_time / 2})J:{tip_time / 2},E:{tip_time})M"
+    )
+    short_tree = tree_from(f"(({observed_clade}:0)K:0,F:2)R;")
+    long_tree = tree_from(f"(({observed_clade}:{stem})K:{3 * stem},F:2)R;")
+    fits = [
+        fit_dense_mvbm(tree, values, ("x", "y"), standard_errors=errors)
+        for tree in (short_tree, long_tree)
+    ]
+    (short_posterior, short_fit), (long_posterior, long_fit) = fits
+    assert long_fit.restricted_log_likelihood == short_fit.restricted_log_likelihood
+    np.testing.assert_array_equal(long_fit.sigma, short_fit.sigma)
+    for name in (*values, "I", "J", "M"):
+        np.testing.assert_array_equal(
+            long_posterior[long_tree[name]].mean, short_posterior[short_tree[name]].mean
+        )
+        np.testing.assert_array_equal(
+            long_posterior[long_tree[name]].covariance,
+            short_posterior[short_tree[name]].covariance,
+        )
+    for name, distance in (("K", stem), ("R", 4 * stem), ("F", 4 * stem)):
+        marginal = long_posterior[long_tree[name]]
+        origin = short_posterior[short_tree["M"]]
+        np.testing.assert_array_equal(marginal.mean, origin.mean)
+        np.testing.assert_allclose(
+            marginal.covariance,
+            origin.covariance + long_fit.sigma * distance,
+            rtol=2e-15,
+        )
+
+
 def test_dense_mvbm_exact_complete_case_agrees_with_fast_path_reasonably():
     from nwkit.multivariate_asr import compute_mvbm_marginals
 
