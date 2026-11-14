@@ -218,17 +218,17 @@ def _row_squared_norms(delta):
     return np.asarray(output)
 
 
-def _batched_disparities(design, values, counts):
-    means = np.zeros_like(values)
-    sums = np.zeros(values.shape[:2])
+def _batched_disparities(design, means, counts):
+    """Replace simulated states with their clade means after propagation."""
+    sums = np.zeros(means.shape[:2])
     for node in range(len(counts) - 1, -1, -1):
         if design.tip_rows[node] >= 0:
-            means[node] = values[node]
             continue
         children = design.children[node]
         first = children[0]
         merged = counts[first]
-        means[node] += means[first]
+        # Preserve the signed-zero behavior of a zero-initialized sum.
+        np.add(0.0, means[first], out=means[node])
         sums[node] += sums[first]
         for child in children[1:]:
             total = merged + counts[child]
@@ -288,12 +288,14 @@ def _simulate_chunk(payload):
                 values[design.parents[node]]
                 + square_roots[node] * innovations[node - 1]
             )
+        del innovations
         disparities = _batched_disparities(design, values, counts)
+        del values
         for column in range(replicas):
             curves[start + column] = design.weights @ (
                 disparities[:, column] / disparities[0, column]
             )
-        del innovations, values, disparities
+        del disparities
     return curves
 
 
