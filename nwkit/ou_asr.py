@@ -348,7 +348,7 @@ def _propagate_affine_up(factor, alpha, sigma2, theta_reference, length):
     if not math.isfinite(total_variance) or total_variance <= 0.0:
         raise ValueError("An OU pruning variance is not positive and finite.")
     exponent = alpha * length
-    intercept_slope = 1.0 - decay
+    intercept_slope = -math.expm1(-exponent)
     log_parent_variance = math.log(total_variance) + 2.0 * exponent
     if decay == 0.0 or log_parent_variance >= math.log(np.finfo(float).max):
         extra = _normal_nll_polynomial(

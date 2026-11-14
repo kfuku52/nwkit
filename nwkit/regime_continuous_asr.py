@@ -558,10 +558,13 @@ def _oum_theta_design_rank(tree, data, regime_assignment, alpha):
             value = np.zeros(len(regime_index), dtype=float)
             value[regime_index[regime_assignment.root_regime]] = 1.0
         else:
-            decay = math.exp(-alpha * float(node.dist))
+            exponent = alpha * float(node.dist)
+            decay = math.exp(-exponent)
             value = decay * coefficients[node.up]
             value = value.copy()
-            value[regime_index[regime_assignment.by_node[node]]] += 1.0 - decay
+            value[regime_index[regime_assignment.by_node[node]]] -= math.expm1(
+                -exponent
+            )
         coefficients[node] = value
     by_group: dict[int, np.ndarray] = {}
     for node, group in data.node_groups.items():

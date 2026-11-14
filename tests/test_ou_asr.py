@@ -16,6 +16,14 @@ def tree_from(source):
     return read_tree(source, "1", True, quiet=True, rooted="yes")
 
 
+def test_affine_ou_pruning_preserves_weak_attraction_to_the_optimum():
+    factor = ou_asr._AffineFactor(0.0, variance=1.0)
+    propagated = ou_asr._propagate_affine_up(
+        factor, alpha=1e-20, sigma2=2e-20, theta_reference=0.0, length=1.0
+    )
+    assert propagated.mean_slope == pytest.approx(-1e-20, abs=0.0, rel=1e-14)
+
+
 def ancestor_distances(node):
     result, distance = {node: 0.0}, 0.0
     while not node.is_root:
