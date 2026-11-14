@@ -2489,7 +2489,8 @@ def _draw_count(
 
 def _zero_truncated_negative_binomial(means, dispersion):
     size = 1.0 / dispersion
-    log_means = np.log(means)
+    with np.errstate(divide="ignore"):
+        log_means = np.log(means)
     log_relative_mean = log_means + math.log(dispersion)
     parameters: tuple[float | np.ndarray, ...]
     if dispersion < _SMALL_NB_DISPERSION:
@@ -2513,6 +2514,26 @@ def _draw_zero_truncated_count(
     dispersion: float | None,
 ) -> np.ndarray:
     dispersion = _negative_binomial_sampling_dispersion(family, dispersion)
+    if np.any(means < np.finfo(float).tiny):
+        return _draw_zero_truncated_count_with_underflow(rng, means, dispersion)
+    return _draw_representable_positive_counts(
+        rng.random(len(means)), means, dispersion
+    )
+
+
+def _draw_zero_truncated_count_with_underflow(rng, means, dispersion):
+    # P(Y > 1 | Y > 0) is below a rounding unit for underflowed means.
+    active = means >= np.finfo(float).tiny
+    uniforms = rng.random(len(means))
+    values = np.ones(len(means), dtype=float)
+    if np.any(active):
+        values[active] = _draw_representable_positive_counts(
+            uniforms[active], means[active], dispersion
+        )
+    return values
+
+
+def _draw_representable_positive_counts(uniforms, means, dispersion):
     if dispersion is not None:
         distribution, parameters, positive_probability, survival = (
             _zero_truncated_negative_binomial(means, dispersion)
@@ -2525,7 +2546,7 @@ def _draw_zero_truncated_count(
         def survival(counts, indices):
             return pdtrc(counts, means[indices])
 
-    tail = (1.0 - rng.random(len(means))) * positive_probability
+    tail = (1.0 - uniforms) * positive_probability
     quantiles = np.minimum(1.0 - tail, np.nextafter(1.0, 0.0))
     values = distribution.ppf(quantiles, *parameters).astype(float)
     return _verify_positive_count_quantiles(values, tail, survival)
@@ -2538,6 +2559,7 @@ def _verify_positive_count_quantiles(values, tail, survival):
     valid = (
         np.isfinite(values)
         & (values >= 1.0)
+        & (values <= 2**53)
         & (survival(values, indices) <= tail)
         & ((values == 1.0) | (survival(values - 1.0, indices) > tail))
     )
@@ -2561,7 +2583,7 @@ def _verify_positive_count_quantiles(values, tail, survival):
 
 
 def _draw_mixture_count(rng, linear, family, dispersion, zero_probability, offset):
-    means = np.exp(np.clip(linear + offset, -30.0, 30.0))
+    means = _count_bootstrap_means(linear, offset)
     if family.startswith("hurdle"):
         assert zero_probability is not None
         values = _draw_zero_truncated_count(rng, means, family, dispersion)
@@ -2572,6 +2594,14 @@ def _draw_mixture_count(rng, linear, family, dispersion, zero_probability, offse
         assert zero_probability is not None
         values[rng.random(len(values)) < zero_probability] = 0.0
     return values
+
+
+def _count_bootstrap_means(linear, offset):
+    with np.errstate(over="ignore", under="ignore"):
+        means = np.exp(linear + offset)
+    if not np.isfinite(means).all():
+        raise RuntimeError("A count bootstrap mean exceeds the floating-point range.")
+    return means
 
 
 def _draw_gamma(rng, linear, dispersion):

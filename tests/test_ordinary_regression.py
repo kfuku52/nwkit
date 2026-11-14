@@ -29,6 +29,7 @@ from nwkit.phylogenetic_glmm import (
     _censored_gaussian_log_likelihood,
     _draw_count,
     _draw_gamma,
+    _draw_mixture_count,
     _draw_zero_truncated_count,
     _multinomial_terms,
     _ordinal_terms,
@@ -172,6 +173,35 @@ def test_truncated_count_draw_preserves_support_and_extreme_upper_quantile(
     )
 
     np.testing.assert_array_equal(result, [1.0, 1.0, 2.0])
+
+
+def test_count_bootstrap_passes_the_unclipped_mean_to_the_generator():
+    class PoissonSampler:
+        def poisson(self, rate):
+            return rate
+
+    linear = np.array([31.0, 40.0, -38.0, -1000.0])
+    offset = np.array([1.0, -2.0, -3.0, 5.0])
+    result = _draw_mixture_count(
+        PoissonSampler(), linear, "poisson", None, None, offset
+    )
+    np.testing.assert_array_equal(result, np.exp(linear + offset))
+
+
+@pytest.mark.parametrize(
+    ("family", "dispersion"),
+    [("hurdle-poisson", None), ("hurdle-negative-binomial", 0.2)],
+)
+def test_hurdle_bootstrap_samples_ones_when_the_count_mean_underflows(
+    family, dispersion
+):
+    rng = np.random.default_rng(11)
+    linear = np.array([-1000.0, -715.0])
+    with np.errstate(divide="raise", invalid="raise", over="raise"):
+        result = _draw_mixture_count(
+            rng, linear, family, dispersion, 0.01, np.zeros_like(linear)
+        )
+    np.testing.assert_array_equal(result, [1.0, 1.0])
 
 
 def test_multinomial_likelihood_retains_tail_curvature_of_dominant_category():
