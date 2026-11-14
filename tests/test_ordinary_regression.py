@@ -26,6 +26,7 @@ from nwkit.ordinary_regression import (
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
     _censored_gaussian_log_likelihood,
+    _draw_count,
     _draw_zero_truncated_count,
     _multinomial_terms,
     _ordinal_terms,
@@ -46,6 +47,19 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree():
     return Tree(TREE_TEXT, parser=1)
+
+
+@pytest.mark.parametrize("dispersion", [1e-20, 1e-310])
+def test_near_poisson_negative_binomial_bootstrap_draws_keep_count_mean(dispersion):
+    rng = np.random.default_rng(18)
+    means = np.full(1200, 3.0)
+    counts = _draw_count(rng, means, "negative-binomial", dispersion)
+    truncated = _draw_zero_truncated_count(
+        rng, means, "hurdle-negative-binomial", dispersion
+    )
+    assert counts.mean() == pytest.approx(3.0, abs=0.15)
+    assert np.all(truncated > 0.0)
+    assert truncated.mean() == pytest.approx(3.0 / -math.expm1(-3.0), abs=0.15)
 
 
 def test_projection_of_joint_dense_predictor_uncertainty_matches_latent_loading():

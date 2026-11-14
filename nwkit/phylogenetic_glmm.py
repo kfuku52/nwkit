@@ -116,6 +116,13 @@ MAX_DENSE_GLMM_TIPS = 500
 MAX_SPARSE_GLMM_TIPS = 5000
 MAX_SPARSE_GLMM_LINEAR_PREDICTORS = 20000
 
+_SMALL_NB_DISPERSION = 1e-6
+_POISSON_LIMIT_DISPERSION = (np.finfo(float).eps / 2.0) ** 2
+# Coefficients of ((1+z)*log1p(z)/z - 1) for the Stirling log-gamma ratio.
+_NB_LOG_GAMMA_RATIO_SERIES = (0.0,) + tuple(
+    (-1.0) ** (order + 1) / (order * (order + 1)) for order in range(1, 9)
+)
+
 
 def _estimated_dense_glmm_gib(n_tips: int, random_dimension: int) -> float:
     """Conservative working-memory estimate for dense GLMM factorizations."""
@@ -1021,6 +1028,54 @@ def _log_positive_count_probability(log_zero, eta, log_relative_mean):
         return np.where(tiny_mean, eta, np.log(-np.expm1(log_zero)))
 
 
+def _negative_binomial_log_zero(log_means, log_relative_mean, dispersion):
+    with np.errstate(over="ignore", under="ignore"):
+        tiny = log_relative_mean < -36.0
+        log_zero = np.empty_like(log_means)
+        log_zero[tiny] = -np.exp(log_means[tiny])
+        log_zero[~tiny] = -np.logaddexp(0.0, log_relative_mean[~tiny]) / dispersion
+    return log_zero
+
+
+def _small_dispersion_log_rising_factorial(values, dispersion):
+    """Return log(Gamma(size + y) / (Gamma(size) * size**y))."""
+    relative_count = values * dispersion
+    small = relative_count < 1e-3
+    correction = np.empty_like(values)
+    z = relative_count[small]
+    correction[small] = values[small] * np.polynomial.polynomial.polyval(
+        z, _NB_LOG_GAMMA_RATIO_SERIES
+    )
+    z = relative_count[~small]
+    correction[~small] = values[~small] * ((1.0 + z) * (np.log1p(z) / z) - 1.0)
+    correction -= 0.5 * np.log1p(relative_count)
+    # DLMF 5.11.1. The next Stirling term is bounded by dispersion**3 / 360.
+    correction -= (dispersion / 12.0) * (relative_count / (1.0 + relative_count))
+    return np.where(values <= 1.0, 0.0, correction)
+
+
+def _negative_binomial_log_pmf(values, log_means, dispersion):
+    log_relative_mean = log_means + math.log(dispersion)
+    log_zero = _negative_binomial_log_zero(log_means, log_relative_mean, dispersion)
+    if dispersion < _SMALL_NB_DISPERSION:
+        log_pmf = (
+            _small_dispersion_log_rising_factorial(values, dispersion)
+            - gammaln(values + 1.0)
+            + values * (log_means - np.logaddexp(0.0, log_relative_mean))
+            + log_zero
+        )
+        return log_pmf, log_zero, log_relative_mean
+    size = 1.0 / dispersion
+    log_pmf = (
+        gammaln(values + size)
+        - gammaln(size)
+        - gammaln(values + 1.0)
+        + log_zero
+        - values * np.logaddexp(0.0, -log_relative_mean)
+    )
+    return log_pmf, log_zero, log_relative_mean
+
+
 def _count_log_likelihood(values, linear, family, dispersion, zero_probability, offset):
     log_means = linear + offset
     if "negative-binomial" not in family:
@@ -1032,16 +1087,8 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
     else:
         if dispersion is None or dispersion <= 0.0:
             raise ValueError("Negative-binomial dispersion must be positive.")
-        size = 1.0 / dispersion
-        log_size = math.log(size)
-        log_relative_mean = log_means - log_size
-        log_zero = -size * np.logaddexp(0.0, log_relative_mean)
-        log_pmf = (
-            gammaln(values + size)
-            - gammaln(size)
-            - gammaln(values + 1.0)
-            + log_zero
-            - values * np.logaddexp(0.0, -log_relative_mean)
+        log_pmf, log_zero, log_relative_mean = _negative_binomial_log_pmf(
+            values, log_means, dispersion
         )
     if family in {"poisson", "negative-binomial"}:
         return log_pmf
@@ -1236,15 +1283,30 @@ def _poisson_scalar_terms(values, linear, offset):
     return means - values, means
 
 
+def _negative_binomial_score_terms(log_means, log_relative_mean, log_dispersion):
+    log_denominator = np.logaddexp(0.0, log_relative_mean)
+    with np.errstate(over="ignore", under="ignore"):
+        log_scaled_mean = np.where(
+            log_relative_mean <= 0.0,
+            log_means - log_denominator,
+            -log_dispersion - np.logaddexp(0.0, -log_relative_mean),
+        )
+        scaled_mean = np.exp(log_scaled_mean)
+        complement = np.exp(-log_denominator)
+        zero_curvature = np.exp(log_scaled_mean - log_denominator)
+    return scaled_mean, complement, zero_curvature
+
+
 def _negative_binomial_scalar_terms(values, linear, offset, dispersion):
     assert dispersion is not None
-    size = 1.0 / dispersion
     log_means = linear + offset
-    log_denominator = np.logaddexp(math.log(size), log_means)
-    mean_fraction = expit(log_means - math.log(size))
-    inverse_denominator = np.exp(-log_denominator)
-    gradient = size * (mean_fraction - values * inverse_denominator)
-    curvature = size * mean_fraction * (size + values) * inverse_denominator
+    log_dispersion = math.log(dispersion)
+    log_relative_mean = log_means + log_dispersion
+    scaled_mean, complement, zero_curvature = _negative_binomial_score_terms(
+        log_means, log_relative_mean, log_dispersion
+    )
+    gradient = scaled_mean - values * complement
+    curvature = zero_curvature + (values * complement) * expit(log_relative_mean)
     return gradient, curvature
 
 
@@ -1286,11 +1348,15 @@ def _zero_truncation_terms(eta, dispersion):
         exponent = q
         leading_derivative = np.ones_like(q)
     else:
-        size = np.longdouble(1.0) / np.longdouble(dispersion)
-        log_relative_mean = eta - np.log(size)
-        fraction = np.exp(-_softplus_extended(-log_relative_mean))
-        q = size * fraction
-        exponent = size * _softplus_extended(log_relative_mean)
+        log_relative_mean = eta + np.log(np.longdouble(dispersion))
+        log_denominator = _softplus_extended(log_relative_mean)
+        with np.errstate(over="ignore", under="ignore"):
+            fraction = np.exp(-_softplus_extended(-log_relative_mean))
+            q = np.exp(eta - log_denominator)
+            tiny = log_relative_mean < -36.0
+            exponent = np.empty_like(eta)
+            exponent[tiny] = np.exp(eta[tiny])
+            exponent[~tiny] = log_denominator[~tiny] / dispersion
         leading_derivative = 1.0 - fraction
     correction = np.zeros_like(q)
     small = exponent <= 1.0
@@ -1324,13 +1390,19 @@ def _zero_component_count_scalar_terms(
     eta = np.asarray(linear + offset, dtype=float)
     negative_binomial = dispersion is not None
     if negative_binomial:
-        size = float(1.0 / dispersion)
-        fraction = expit(eta - math.log(size))
-        zero_log_probability = -size * np.logaddexp(0.0, eta - math.log(size))
-        zero_score = -size * fraction
-        zero_second = -size * fraction * (1.0 - fraction)
-        base_gradient, base_curvature = _negative_binomial_scalar_terms(
-            values, linear, offset, dispersion
+        log_dispersion = math.log(dispersion)
+        log_relative_mean = eta + log_dispersion
+        zero_log_probability = _negative_binomial_log_zero(
+            eta, log_relative_mean, dispersion
+        )
+        scaled_mean, complement, zero_curvature = _negative_binomial_score_terms(
+            eta, log_relative_mean, log_dispersion
+        )
+        zero_score = -scaled_mean
+        zero_second = -zero_curvature
+        base_gradient = scaled_mean - values * complement
+        base_curvature = zero_curvature + (values * complement) * expit(
+            log_relative_mean
         )
     else:
         with np.errstate(over="ignore"):
@@ -2105,18 +2177,57 @@ def _draw_categorical_responses(
     return simulated
 
 
+def _negative_binomial_sampling_dispersion(family, dispersion):
+    # At this limit the relative Gamma mixing deviation is below a rounding unit.
+    if (
+        "negative-binomial" in family
+        and dispersion is not None
+        and dispersion > _POISSON_LIMIT_DISPERSION
+    ):
+        return dispersion
+    return None
+
+
+def _draw_negative_binomial(rng, means, dispersion):
+    size = 1.0 / dispersion
+    if dispersion < _SMALL_NB_DISPERSION:
+        # Gamma-Poisson mixing preserves the rate when the NB success
+        # probability would round to one.
+        mixing = rng.gamma(size, size=means.shape) * dispersion
+        return rng.poisson(means * mixing).astype(float)
+    probability = size / (size + means)
+    return rng.negative_binomial(size, probability).astype(float)
+
+
 def _draw_count(
     rng: np.random.Generator,
     means: np.ndarray,
     family: str,
     dispersion: float | None,
 ) -> np.ndarray:
-    if "negative-binomial" in family:
-        assert dispersion is not None
-        size = 1.0 / dispersion
-        probability = size / (size + means)
-        return rng.negative_binomial(size, probability).astype(float)
+    dispersion = _negative_binomial_sampling_dispersion(family, dispersion)
+    if dispersion is not None:
+        return _draw_negative_binomial(rng, means, dispersion)
     return rng.poisson(means).astype(float)
+
+
+def _zero_truncated_negative_binomial(means, dispersion):
+    size = 1.0 / dispersion
+    log_means = np.log(means)
+    log_relative_mean = log_means + math.log(dispersion)
+    parameters: tuple[float | np.ndarray, ...]
+    if dispersion < _SMALL_NB_DISPERSION:
+        distribution, parameters = poisson_distribution, (means,)
+    else:
+        distribution, parameters = nbinom_distribution, (size, size / (size + means))
+    log_zero = _negative_binomial_log_zero(log_means, log_relative_mean, dispersion)
+    with np.errstate(under="ignore"):
+        failure_probability = np.exp(-np.logaddexp(0.0, -log_relative_mean))
+
+    def survival(counts, indices):
+        return betainc(counts + 1.0, size, failure_probability[indices])
+
+    return distribution, parameters, -np.expm1(log_zero), survival
 
 
 def _draw_zero_truncated_count(
@@ -2125,18 +2236,11 @@ def _draw_zero_truncated_count(
     family: str,
     dispersion: float | None,
 ) -> np.ndarray:
-    parameters: tuple[float | np.ndarray, ...]
-    if "negative-binomial" in family:
-        assert dispersion is not None
-        size = 1.0 / dispersion
-        distribution = nbinom_distribution
-        parameters = (size, size / (size + means))
-        log_relative_mean = np.log(means) - math.log(size)
-        positive_probability = -np.expm1(-size * np.logaddexp(0.0, log_relative_mean))
-        failure_probability = expit(log_relative_mean)
-
-        def survival(counts, indices):
-            return betainc(counts + 1.0, size, failure_probability[indices])
+    dispersion = _negative_binomial_sampling_dispersion(family, dispersion)
+    if dispersion is not None:
+        distribution, parameters, positive_probability, survival = (
+            _zero_truncated_negative_binomial(means, dispersion)
+        )
     else:
         distribution = poisson_distribution
         parameters = (means,)

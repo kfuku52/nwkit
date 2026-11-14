@@ -1,5 +1,6 @@
 """Invariance and resource-limit contracts at numerical model boundaries."""
 
+import math
 import weakref
 from decimal import Decimal, localcontext
 
@@ -28,6 +29,7 @@ from nwkit.phylogenetic_glmm import (
     _gamma_log_likelihood,
     _gamma_scalar_terms,
     _lognormal_scalar_terms,
+    _negative_binomial_scalar_terms,
     _scalar_initial_coefficient,
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
@@ -429,6 +431,35 @@ def test_hurdle_likelihood_retains_small_mean_limit(dispersion):
         np.log(0.8),
     ]
     np.testing.assert_allclose(log_likelihood, expected, rtol=0.0, atol=1e-12)
+
+
+@pytest.mark.parametrize("dispersion", [9e-7, 1e-14, 1e-20, 1e-310])
+def test_negative_binomial_likelihood_preserves_near_poisson_limit(dispersion):
+    counts = np.array([0.0, 1.0, 5.0, 1000.0, 10_000.0])
+    means = np.array([0.5, 1.0, 4.0, 1200.0, 10_000.0])
+    eta = np.log(means)
+    zero_offset = np.zeros_like(eta)
+    expected = []
+    for count, mean, log_mean in zip(counts, means, eta, strict=True):
+        expected.append(
+            math.fsum(math.log1p(dispersion * j) for j in range(int(count)))
+            - math.lgamma(count + 1.0)
+            + count * (log_mean - math.log1p(dispersion * mean))
+            - math.log1p(dispersion * mean) / dispersion
+        )
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        actual = _count_log_likelihood(
+            counts, eta, "negative-binomial", dispersion, None, zero_offset
+        )
+        gradient, curvature = _negative_binomial_scalar_terms(
+            counts, eta, zero_offset, dispersion
+        )
+    np.testing.assert_allclose(actual, expected, rtol=0.0, atol=7e-11)
+    denominator = 1.0 + dispersion * means
+    np.testing.assert_allclose(gradient, (means - counts) / denominator, atol=1e-10)
+    np.testing.assert_allclose(
+        curvature, means * (1.0 + dispersion * counts) / denominator**2, rtol=1e-12
+    )
 
 
 def test_gamma_likelihood_and_derivatives_scale_with_response_units():
