@@ -173,6 +173,33 @@ def test_mk_mixture_rejects_a_character_with_no_feasible_category(monkeypatch):
         compute_mk_mixture_marginals(tree, states, observed, likelihoods, rate=0.6)
 
 
+def test_fixed_mk_mixture_stationary_prior_for_an_asymmetric_graph():
+    tree = tree_from("((A:0.7,B:0.2,C:0.4):0.9,D:0.3,E:0.1,F:0.8)R;")
+    states = ("a", "b", "c")
+    names = tuple("ABCDEF")
+    observations = {
+        "first": dict(zip(names, "abcabc", strict=True)),
+        "second": dict(zip(names, "aabbcc", strict=True)),
+    }
+    one_hot = dict(zip(states, np.eye(3), strict=True))
+    likelihoods = {
+        character: {name: one_hot[value] for name, value in states_by_leaf.items()}
+        for character, states_by_leaf in observations.items()
+    }
+    graph = np.array([[False, True, True], [True, False, False], [False, True, False]])
+    _, result = compute_mk_mixture_marginals(
+        tree,
+        states,
+        observations,
+        likelihoods,
+        rate=0.6,
+        root_prior_mode="stationary",
+        transition_graph=graph,
+    )
+    np.testing.assert_allclose(result["root_prior"], [0.25, 0.5, 0.25], atol=1e-14)
+    assert np.isfinite(result["log_likelihood"])
+
+
 def test_batched_mk_mixture_matches_independent_character_likelihoods(monkeypatch):
     tree = tree_from("((A:0.7,B:0.2,C:0.4):0.9,D:0.3,E:0.1,F:0.8)R;")
     states, observed, likelihoods = character_data(

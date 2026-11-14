@@ -1736,6 +1736,11 @@ def compute_mk_mixture_marginals(
                 "rate makes the mixture distribution unidentifiable."
             )
         fixed_base = np.asarray([fixed_rate], dtype=float)
+    fixed_matrix = (
+        _build_rate_matrix(base_model, states, fixed_base, transition_graph)
+        if fixed_base is not None
+        else None
+    )
 
     initial_rate = _initial_rate_value(tree, rate, rate_bounds)
     initial_base = _initial_model_parameters(
@@ -1807,7 +1812,11 @@ def compute_mk_mixture_marginals(
             if fixed_base is not None
             else np.exp(np.asarray(parameters[: len(labels)], dtype=float))
         )
-        matrix = _build_rate_matrix(base_model, states, base, transition_graph)
+        matrix = (
+            fixed_matrix
+            if fixed_matrix is not None
+            else _build_rate_matrix(base_model, states, base, transition_graph)
+        )
         category_rates, weights, shape = mixture_parameters(parameters)
         return base, matrix, category_rates, weights, shape
 
@@ -1820,11 +1829,13 @@ def compute_mk_mixture_marginals(
     fixed_prior = _mixture_root_prior(
         root_prior_mode, states, observed_by_character, likelihoods_by_character
     )
+    if root_prior_mode == "stationary" and fixed_matrix is not None:
+        fixed_prior = stationary_distribution(fixed_matrix)
 
     def prior_for(matrix):
         return (
             stationary_distribution(matrix)
-            if root_prior_mode == "stationary"
+            if root_prior_mode == "stationary" and fixed_matrix is None
             else fixed_prior
         )
 
