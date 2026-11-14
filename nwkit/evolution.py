@@ -13,6 +13,7 @@ from nwkit.gaussian_tree import (
     GaussianTreeProcess,
     brownian_transition,
     exponential_rate_edge_variance,
+    ou_stationary_variance,
     ou_transition,
 )
 from nwkit.model_specs import (
@@ -198,53 +199,20 @@ def validate_evolution_parameter(model: str, parameter: float | None) -> float |
     return value
 
 
-def _exponential_time_transform(depth: float, rate_change: float) -> float:
-    if abs(rate_change * depth) < 1e-8:
-        return depth * (1.0 + 0.5 * rate_change * depth)
-    try:
-        value = math.expm1(rate_change * depth) / rate_change
-    except OverflowError as exc:
-        raise ValueError(
-            "The rate-change parameter overflows the tree time scale."
-        ) from exc
-    if not math.isfinite(value):
-        raise ValueError(
-            "The rate-change parameter produces non-finite branch lengths."
-        )
-    return value
-
-
-def _ou_ultrametric_depth(depth: float, height: float, alpha: float) -> float:
-    first = math.exp(-2.0 * alpha * (height - depth))
-    root = math.exp(-2.0 * alpha * height)
-    return (first - root) / (2.0 * alpha)
-
-
-def _transformed_node_depths(
-    tree,
-    model: str,
-    parameter: float,
-    base_depths: dict[Any, float],
-) -> dict[Any, float]:
-    height = _tree_height(tree, base_depths)
-    if model == "delta":
-        _require_ultrametric(tree, base_depths, model)
-        return {
-            node: height * (depth / height) ** parameter
-            for node, depth in base_depths.items()
-        }
-    if model in {"eb", "acdc"}:
-        return {
-            node: _exponential_time_transform(depth, parameter)
-            for node, depth in base_depths.items()
-        }
-    if model == "ou":
-        height = _require_ultrametric(tree, base_depths, model)
-        return {
-            node: _ou_ultrametric_depth(depth, height, parameter)
-            for node, depth in base_depths.items()
-        }
-    raise ValueError("Model '{}' is not a node-depth transform.".format(model))
+def _ou_contrast_variance(length, remaining_time, alpha):
+    if length == 0.0:
+        return 0.0
+    exponent = 2.0 * (alpha * length)
+    if exponent == 0.0:
+        innovation = length
+    elif exponent < 1.0:
+        innovation = length * (-math.expm1(-exponent) / exponent)
+    else:
+        innovation = ou_stationary_variance(alpha, 1.0) * -math.expm1(-exponent)
+    attenuation = 2.0 * (alpha * remaining_time)
+    if attenuation > 700.0 and innovation > 0.0:
+        return math.exp(math.log(innovation) - attenuation)
+    return innovation * math.exp(-attenuation)
 
 
 def transformed_edge_variances(
@@ -293,7 +261,14 @@ def transformed_edge_variances(
             )
             for node in tree.traverse()
         }
-    return _node_transform_edge_variances(tree, model, parameter, base_depths)
+    height = _require_ultrametric(tree, base_depths, model)
+    if model == "ou":
+        # Project each branch innovation to the common sampling time.
+        return {
+            node: _ou_contrast_variance(length, height - base_depths[node], parameter)
+            for node, length in base_edges.items()
+        }
+    return _delta_edge_variances(tree, parameter, base_depths, height)
 
 
 def _kappa_edge_variances(tree, base_edges, parameter):
@@ -329,13 +304,11 @@ def _lambda_edge_variances(tree, base_edges, base_depths, parameter):
     return transformed
 
 
-def _node_transform_edge_variances(tree, model, parameter, base_depths):
-    transformed_depths = _transformed_node_depths(
-        tree,
-        model,
-        parameter,
-        base_depths,
-    )
+def _delta_edge_variances(tree, parameter, base_depths, height):
+    transformed_depths = {
+        node: height * (depth / height) ** parameter
+        for node, depth in base_depths.items()
+    }
     edges = {
         node: (
             0.0
@@ -348,11 +321,7 @@ def _node_transform_edge_variances(tree, model, parameter, base_depths):
     tolerance = np.finfo(float).eps * scale * max(100, len(edges))
     for node, value in edges.items():
         if value < -tolerance or not math.isfinite(value):
-            raise ValueError(
-                "Evolutionary model '{}' produced invalid transformed branches.".format(
-                    model
-                )
-            )
+            raise ValueError("Evolutionary model 'delta' produced invalid branches.")
         if value < 0.0:
             edges[node] = 0.0
     return edges

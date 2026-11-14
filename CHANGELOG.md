@@ -34,6 +34,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   units so rescaling branches preserves the fitted trend and likelihood.
 - Apply the same ultrametricity tolerance to delta and OU contrasts across
   branch-length units.
+- Compute OU contrast branch variances directly so short branches and weak
+  attraction retain their Brownian-limit behavior.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
   Preserve fixed diffusion rates during trait scaling in stationary OU fits.

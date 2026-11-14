@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -188,6 +190,28 @@ def test_ou_tends_to_brownian_as_alpha_approaches_zero():
     brownian = build_evolutionary_covariance(_tree(), LEAF_NAMES)
     ou = build_evolutionary_covariance(_tree(), LEAF_NAMES, model="ou", parameter=1e-9)
     np.testing.assert_allclose(ou, brownian, rtol=1e-7, atol=1e-7)
+
+
+@pytest.mark.parametrize("alpha", [1e-18, 1e-300, 1e-323])
+def test_ou_contrasts_preserve_brownian_limit_below_absolute_roundoff(alpha):
+    tree = _tree()
+    brownian = transformed_edge_variances(tree)
+    ou = transformed_edge_variances(tree, model="ou", parameter=alpha)
+    assert ou == pytest.approx(brownian, rel=1e-14, abs=0.0)
+
+
+def test_ou_contrasts_preserve_short_branch_innovation_at_nonzero_depth():
+    tree = _tree("((A:1e-20,B:1e-20)I:1,C:1)R;")
+    alpha = 0.8
+    ou = transformed_edge_variances(tree, model="ou", parameter=alpha)
+    assert ou[tree["A"]] == pytest.approx(1e-20, rel=1e-14, abs=0.0)
+
+
+def test_ou_contrasts_scale_large_innovation_before_attenuation_underflows():
+    tree = _tree("((A:5e302,B:5e302)I:1e300,C:5.01e302)R;")
+    ou = transformed_edge_variances(tree, model="ou", parameter=8e-301)
+    expected = math.exp(math.log(-math.expm1(-1.6) / 1.6e-300) - 800.0)
+    assert ou[tree["I"]] == pytest.approx(expected, rel=2e-13, abs=0.0)
 
 
 def test_parameter_boundary_uses_explicit_natural_bounds():
