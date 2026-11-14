@@ -303,22 +303,46 @@ def _geometry(data: _ObservationData) -> _Geometry:
         lca,
         tuple(jumps),
     )
-    for first in range(count):
-        first_index = int(unique_nodes[first])
-        for second in range(first + 1):
-            second_index = int(unique_nodes[second])
-            ancestor = lca.common_ancestor_indices(first_index, second_index)
-            shared_value = depths[ancestor]
-            left_value = geometry.path_length(first_index, ancestor)
-            right_value = geometry.path_length(second_index, ancestor)
-            distance_value = left_value + right_value
-            shared[first, second] = shared[second, first] = shared_value
-            distance[first, second] = distance[second, first] = distance_value
-            left[first, second] = right[second, first] = left_value
-            right[first, second] = left[second, first] = right_value
+    lookup_ancestors = lca.indexed_ancestors()
+    path_lengths = _prepare_indexed_path_lengths(lca, jumps)
+    batch_size = max(1, 32_768 // max(1, count))
+    for start in range(0, count, batch_size):
+        stop = min(start + batch_size, count)
+        first = unique_nodes[start:stop, None]
+        second = unique_nodes[None, :]
+        ancestors = lookup_ancestors(first, second)
+        shared[start:stop] = depths[ancestors]
+        left[start:stop] = path_lengths(first, ancestors)
+        right[start:stop] = path_lengths(second, ancestors)
+        distance[start:stop] = left[start:stop] + right[start:stop]
     if np.any(~np.isfinite(distance)):
         raise ValueError("Multivariate tree distances exceed floating-point range.")
     return _expand_multivariate_geometry(geometry)
+
+
+def _prepare_indexed_path_lengths(lca, jumps):
+    depths = np.asarray(lca.depth, dtype=np.intp)
+    ancestors = np.asarray(lca.ancestors, dtype=np.intp)
+
+    def path_lengths(nodes, ancestor):
+        steps = depths[nodes] - depths[ancestor]
+        result = np.zeros(steps.shape, dtype=float)
+        correction = np.zeros_like(result)
+        current = np.broadcast_to(nodes, steps.shape)
+        for level, lengths in enumerate(jumps):
+            lift = steps & (1 << level)
+            length = np.where(lift, lengths[current], 0.0)
+            # Sum the selected jumps directly. Taking a difference of node
+            # depths can erase a short branch near the end of a long path.
+            total = result + length
+            correction += np.where(
+                result >= length, (result - total) + length, (length - total) + result
+            )
+            result = total
+            current = np.where(lift, ancestors[level, current], current)
+        return result + correction
+
+    return path_lengths
 
 
 def _expand_multivariate_geometry(geometry):
