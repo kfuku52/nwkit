@@ -42,6 +42,7 @@ def k_statistic(covariance, values):
 
 def _best_scalar(function, grid):
     """Search each grid interval and explicitly retain boundary optima."""
+
     candidates = [(float(x), function(float(x))) for x in grid]
     for left, right in zip(grid[:-1], grid[1:], strict=True):
         result = minimize_scalar(
@@ -125,22 +126,32 @@ def _error_rate_profile(covariance, values, errors):
         )
     whitened_y = np.empty(len(values), dtype=float)
     whitened_one = np.empty(len(values), dtype=float)
+    log_diagonal = np.empty_like(log_eigen)
+    weights = np.empty_like(log_eigen)
+    residual = np.empty_like(whitened_y)
+    gaussian_constant = len(values) * np.log(2 * np.pi)
 
     def evaluate(rate):
         if rate == 0 and k:
             return (-np.inf, 0.0, np.nan)
         log_rate = np.log(rate) if rate > 0 else -np.inf
-        log_diagonal = np.logaddexp(0, log_rate + log_eigen)
-        weights = np.exp(-log_diagonal / 2)
+        np.add(log_rate, log_eigen, out=log_diagonal)
+        np.logaddexp(0, log_diagonal, out=log_diagonal)
+        np.multiply(log_diagonal, -0.5, out=weights)
+        np.exp(weights, out=weights)
         if k:
-            whitened_y[:k] = exact_y / np.sqrt(rate)
-            whitened_one[:k] = exact_one / np.sqrt(rate)
-        whitened_y[k:] = noise_y * weights
-        whitened_one[k:] = noise_one * weights
+            standard_deviation = np.sqrt(rate)
+            np.divide(exact_y, standard_deviation, out=whitened_y[:k])
+            np.divide(exact_one, standard_deviation, out=whitened_one[:k])
+        np.multiply(noise_y, weights, out=whitened_y[k:])
+        np.multiply(noise_one, weights, out=whitened_one[k:])
         mean = float(whitened_one @ whitened_y / (whitened_one @ whitened_one))
-        q = float(np.sum((whitened_y - mean * whitened_one) ** 2))
+        np.multiply(mean, whitened_one, out=residual)
+        np.subtract(whitened_y, residual, out=residual)
+        np.square(residual, out=residual)
+        q = float(residual.sum())
         determinant = logdet + (k * log_rate if k else 0) + log_diagonal.sum()
-        likelihood = -0.5 * (len(values) * np.log(2 * np.pi) + determinant + q)
+        likelihood = -0.5 * (gaussian_constant + determinant + q)
         return float(likelihood), float(rate), float(mean + values[0])
 
     return evaluate, lower, upper
