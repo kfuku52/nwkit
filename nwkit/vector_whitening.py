@@ -13,6 +13,8 @@ from dataclasses import dataclass
 import numpy as np
 from scipy.linalg import get_lapack_funcs, solve_triangular
 
+from nwkit.gaussian_whitening import _normalize_mean_design
+
 
 def _cholesky(matrix, label):
     if not np.isfinite(matrix).all() or not np.allclose(
@@ -255,10 +257,8 @@ class VectorTreeWhitening:
 
 
 def _mean_design_qr(design):
-    norms = np.linalg.norm(design, axis=0)
-    if np.any(norms == 0):
-        raise ValueError("The observed mean design is rank deficient.")
-    q, r = np.linalg.qr(design / norms, mode="reduced")
+    normalized, norms = _normalize_mean_design(design)
+    q, r = np.linalg.qr(normalized, mode="reduced")
     # R has the singular values of the original normalized design. Use the
     # original dimensions when setting the rank tolerance.
     if design.shape[1]:

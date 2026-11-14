@@ -85,6 +85,20 @@ def test_gls_matches_dense_mean_covariance_and_likelihood():
         tree_gls(factor, y, np.column_stack([x[:, 0], x[:, 0]]))
 
 
+def test_gls_normalizes_design_with_subnormal_observation_variance():
+    compiled = CompiledTree.from_tree(read_tree(TREE, "auto", True, quiet=True))
+    indices = compiled.leaf_indices
+    variances = np.zeros(len(compiled.nodes))
+    variances[list(indices)] = 1e-310
+    factor = TreeWhitening.build(compiled, indices, np.zeros(len(variances)), variances)
+    response = np.arange(8) * 1e-155
+    design = np.ones((len(response), 1))
+    beta, _, quadratic, covariance = tree_gls(factor, response, design)
+    assert beta[0] == pytest.approx(3.5e-155, rel=1e-15, abs=0)
+    assert quadratic == pytest.approx(42.0, rel=1e-14)
+    assert covariance[0, 0] == 1e-310 / 8
+
+
 def test_whitening_rejects_invalid_inputs():
     compiled = CompiledTree.from_tree(read_tree(TREE, "auto", True, quiet=True))
     n = len(compiled.nodes)
