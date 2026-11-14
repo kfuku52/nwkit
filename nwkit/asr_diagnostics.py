@@ -133,6 +133,34 @@ def _summary_statistics(values):
     }
 
 
+def _predictive_work_units(observed, replicated):
+    """Scale extreme trait values before moments and tail counts are computed."""
+
+    size = max(
+        float(np.max(observed)),
+        -float(np.min(observed)),
+        float(np.max(replicated)),
+        -float(np.min(replicated)),
+    )
+    if not math.isfinite(size):
+        raise ValueError(
+            "Posterior predictive observations exceed floating-point range."
+        )
+    exponent = math.frexp(size)[1]
+    if -250 <= exponent <= 250:
+        return observed, replicated, 0
+    return np.ldexp(observed, -exponent), np.ldexp(replicated, -exponent), exponent
+
+
+def _restore_predictive_statistic(value, exponent):
+    try:
+        return math.ldexp(float(value), exponent)
+    except OverflowError as exc:
+        raise ValueError(
+            "A posterior predictive statistic exceeds floating-point range."
+        ) from exc
+
+
 def gaussian_posterior_predictive(
     process,
     values_by_leaf,
@@ -185,6 +213,7 @@ def gaussian_posterior_predictive(
         error_rng = np.random.default_rng(error_seed)
         replicated += error_rng.normal(0.0, errors, replicated.shape)
     observed = np.asarray([record[1] for record in records], dtype=float)
+    observed, replicated, exponent = _predictive_work_units(observed, replicated)
     observed_statistics = _summary_statistics(observed)
     replicate_statistics = _summary_statistics(replicated)
     rows = []
@@ -196,16 +225,21 @@ def gaussian_posterior_predictive(
         lower = (1.0 + float(np.sum(values <= observed_value))) / (
             num_simulations + 1.0
         )
+        statistic_exponent = 2 * exponent if statistic == "variance" else exponent
+        moments = {
+            "observed": observed_value,
+            "replicate_mean": np.mean(values),
+            "replicate_sd": np.std(values, ddof=1) if num_simulations > 1 else 0.0,
+            "replicate_q025": np.quantile(values, 0.025),
+            "replicate_q975": np.quantile(values, 0.975),
+        }
         rows.append(
             {
                 "statistic": statistic,
-                "observed": observed_value,
-                "replicate_mean": float(np.mean(values)),
-                "replicate_sd": (
-                    float(np.std(values, ddof=1)) if num_simulations > 1 else 0.0
-                ),
-                "replicate_q025": float(np.quantile(values, 0.025)),
-                "replicate_q975": float(np.quantile(values, 0.975)),
+                **{
+                    key: _restore_predictive_statistic(value, statistic_exponent)
+                    for key, value in moments.items()
+                },
                 "p_lower": lower,
                 "p_upper": upper,
                 "p_two_sided": min(1.0, 2.0 * min(lower, upper)),

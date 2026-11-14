@@ -24,6 +24,8 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   accumulate posterior variances without subtracting large squares.
 - Profile-likelihood intervals resolve crossings near the edge of the finite
   likelihood domain and in small parameter units.
+- Scale extreme Gaussian posterior predictive values before computing moments
+  to avoid overflowing statistics that are finite in the original units.
 - Fit shared MV-OU attraction in normalized time units so the initialization
   and search remain finite under extreme branch-length rescaling.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the

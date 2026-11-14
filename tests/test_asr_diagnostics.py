@@ -105,6 +105,22 @@ def test_single_posterior_predictive_replicate_has_defined_sd():
     assert (result["replicate_sd"] == 0.0).all()
 
 
+def test_posterior_predictive_keeps_large_constant_trait_moments_finite():
+    tree = tree_from("(A:1,B:1,C:1)R;")
+    process = build_evolutionary_process(
+        tree, model="brownian", root_mode="fixed", root_mean=1e308
+    ).scaled_variance(0.0)
+    with np.errstate(over="raise", invalid="raise"):
+        result = gaussian_posterior_predictive(
+            process, dict.fromkeys("ABC", 1e308), num_simulations=5, seed=8
+        ).set_index("statistic")
+    assert result.loc["mean", "observed"] == 1e308
+    assert result.loc["mean", "replicate_mean"] == 1e308
+    assert result.loc["variance", "observed"] == 0.0
+    assert (result["replicate_sd"] == 0.0).all()
+    assert (result["p_two_sided"] == 1.0).all()
+
+
 def test_callback_parametric_bootstrap_records_successes_and_failures():
     def simulator(seed):
         return int(np.random.default_rng(seed).integers(0, 10))
