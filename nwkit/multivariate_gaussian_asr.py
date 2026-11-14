@@ -16,6 +16,33 @@ _MAX_DENSE_OBSERVATIONS = 1000
 _MAX_POSTERIOR_BYTES = 256 * 1024**2
 
 
+def _stationary_diagonal_ou_covariance(covariance, log_alpha):
+    # Diffusion Cholesky rows are expressed relative to sqrt(2 * alpha_i).
+    # The stationary covariance then needs only the bounded ratio
+    # 2 * sqrt(alpha_i * alpha_j) / (alpha_i + alpha_j).
+    half_gap = 0.5 * np.abs(log_alpha[:, None] - log_alpha[None, :])
+    return covariance * (2.0 * np.exp(-half_gap) / (1.0 + np.exp(-2.0 * half_gap)))
+
+
+def _diagonal_ou_decay(first_rate, first_path, second_rate, second_path):
+    with np.errstate(over="ignore"):
+        return np.exp(-first_rate * first_path - second_rate * second_path)
+
+
+def _restore_diagonal_ou_diffusion(data, covariance, log_alpha):
+    log_scale = np.log(data.scales) + 0.5 * (math.log(2.0) + log_alpha)
+    with np.errstate(divide="ignore", over="ignore"):
+        log_values = (
+            np.log(np.abs(covariance)) + log_scale[:, None] + log_scale[None, :]
+        )
+        restored = np.copysign(np.exp(log_values), covariance)
+    if np.any(~np.isfinite(restored)):
+        raise ValueError(
+            "MV-OU-DIAG diffusion covariance exceeds floating-point range."
+        )
+    return restored
+
+
 @dataclass(frozen=True)
 class DenseMultivariateFit:
     trait_names: tuple[str, ...]
@@ -681,7 +708,9 @@ def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
     left = geometry.observed_left
     right = geometry.observed_right
     observed_beta = beta[data.trait_indices]
-    decay = np.exp(-observed_beta[:, None] * left - observed_beta[None, :] * right)
+    decay = _diagonal_ou_decay(
+        observed_beta[:, None], left, observed_beta[None, :], right
+    )
     covariance = (
         decay
         * stationary_sigma[data.trait_indices[:, None], data.trait_indices[None, :]]
@@ -706,7 +735,7 @@ def _diagonal_ou_posterior(
 
     def cross_covariance(node_index):
         _, left, right = geometry.cross(node_index)
-        decay = np.exp(-beta[:, None] * left - observed_beta[None, :] * right)
+        decay = _diagonal_ou_decay(beta[:, None], left, observed_beta[None, :], right)
         return decay * trait_covariance
 
     for _, nodes, cross, conditional_covariance in _posterior_covariance_batches(
@@ -1021,7 +1050,6 @@ def fit_dense_mvou_diag(
     _validate_posterior_size(data, compute_posterior)
     geometry = _cached_geometry(data, _geometry_cache)
     time_scale = float(np.max(geometry.observed_distance)) / 2.0 or 1.0
-    scaled_geometry = geometry.rescaled(time_scale)
 
     has_alpha_by_trait = alpha_by_trait is not None and not (
         isinstance(alpha_by_trait, str) and alpha_by_trait == ""
@@ -1048,13 +1076,6 @@ def fit_dense_mvou_diag(
         or physical_bounds[0] >= physical_bounds[1]
     ):
         raise ValueError("MV-OU-DIAG alpha bounds must be increasing and positive.")
-    beta_bounds = (
-        physical_bounds[0] * time_scale,
-        physical_bounds[1] * time_scale,
-    )
-    if not all(math.isfinite(value) and value > 0.0 for value in beta_bounds):
-        raise ValueError("MV-OU-DIAG scaled alpha bounds exceed floating-point range.")
-
     free_alpha = fixed_alpha is None
     if free_alpha:
         _validate_mvou_diag_alpha_design(data, geometry)
@@ -1070,54 +1091,45 @@ def fit_dense_mvou_diag(
         )
 
     if free_alpha:
-        log_beta_bounds = (math.log(beta_bounds[0]), math.log(beta_bounds[1]))
+        log_beta_bounds = (
+            math.log(physical_bounds[0]) + math.log(time_scale),
+            math.log(physical_bounds[1]) + math.log(time_scale),
+        )
         log_initial_beta = 0.5 * sum(log_beta_bounds)
-        initial_beta = np.full(dimension, math.exp(log_initial_beta), dtype=float)
         initial = [log_initial_beta] * dimension
         bounds = [log_beta_bounds] * dimension
+        analysis_geometry = geometry.rescaled(time_scale)
     else:
         assert fixed_alpha is not None
-        initial_beta = fixed_alpha * time_scale
-        if np.any(~np.isfinite(initial_beta)):
-            raise ValueError(
-                "MV-OU-DIAG fixed alpha values exceed floating-point range after "
-                "tree-time scaling."
-            )
         initial = []
         bounds = []
+        analysis_geometry = geometry
     diffusion_initial, diffusion_bounds = _initial_cholesky(dimension)
-    triangular_index = 0
-    for row in range(dimension):
-        for column in range(row + 1):
-            if row == column:
-                log_diagonal = 0.5 * math.log(2.0 * initial_beta[row])
-                diffusion_initial[triangular_index] = log_diagonal
-                lower, upper = diffusion_bounds[triangular_index]
-                assert lower is not None and upper is not None
-                diffusion_bounds[triangular_index] = (
-                    min(lower, log_diagonal - 10.0),
-                    max(upper, log_diagonal + 10.0),
-                )
-            triangular_index += 1
     initial.extend(diffusion_initial)
     bounds.extend(diffusion_bounds)
 
     def evaluate(parameters):
         offset = 0
         if free_alpha:
-            beta = np.exp(np.asarray(parameters[:dimension], dtype=float))
+            log_decay = np.asarray(parameters[:dimension], dtype=float)
+            beta = np.exp(log_decay)
             offset = dimension
         else:
-            beta = initial_beta
-        diffusion_scaled_time, _ = _decode_cholesky(parameters, dimension, offset)
-        stationary_sigma = diffusion_scaled_time / (beta[:, None] + beta[None, :])
-        stationary_sigma = (stationary_sigma + stationary_sigma.T) / 2.0
+            assert fixed_alpha is not None
+            beta = fixed_alpha
+            log_decay = np.log(beta)
+        correlation_scaled_diffusion, _ = _decode_cholesky(
+            parameters, dimension, offset
+        )
+        stationary_sigma = _stationary_diagonal_ou_covariance(
+            correlation_scaled_diffusion, log_decay
+        )
         covariance = _diagonal_ou_observation_covariance(
-            data, scaled_geometry, beta, stationary_sigma
+            data, analysis_geometry, beta, stationary_sigma
         )
         return (
             beta,
-            diffusion_scaled_time,
+            correlation_scaled_diffusion,
             stationary_sigma,
             covariance,
             _profile_mean(data, covariance, reml=False),
@@ -1130,7 +1142,7 @@ def fit_dense_mvou_diag(
             return 1e100
 
     optimized = deterministic_multistart(objective, initial, bounds, maxiter=1800)
-    beta, diffusion_scaled_time, sigma_scaled, _covariance, profile = evaluate(
+    beta, normalized_diffusion, sigma_scaled, _covariance, profile = evaluate(
         optimized.x
     )
     (
@@ -1144,7 +1156,7 @@ def fit_dense_mvou_diag(
     posterior = (
         _diagonal_ou_posterior(
             data,
-            scaled_geometry,
+            analysis_geometry,
             beta,
             sigma_scaled,
             theta_scaled,
@@ -1155,8 +1167,10 @@ def fit_dense_mvou_diag(
         else {}
     )
     sigma = _restore_sigma(data, sigma_scaled)
-    diffusion_sigma = _restore_sigma(data, diffusion_scaled_time / time_scale)
-    fitted_alpha = beta / time_scale
+    fitted_alpha = beta / time_scale if free_alpha else beta
+    diffusion_sigma = _restore_diagonal_ou_diffusion(
+        data, normalized_diffusion, np.log(fitted_alpha)
+    )
     theta = data.centers + data.scales * theta_scaled
     likelihood -= _likelihood_scale_adjustment(data, reml=False)
     eigenvalues = np.linalg.eigvalsh(sigma_scaled)

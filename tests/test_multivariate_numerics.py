@@ -205,6 +205,25 @@ def test_free_mvou_attraction_fit_is_invariant_to_extreme_time_units(scale):
     assert second.fit_status == first.fit_status
 
 
+def test_diagonal_ou_with_extreme_fixed_attraction_has_finite_diffusion():
+    original = tree()
+    values = np.asarray(list(VALUES.values()))
+    estimated_mean = values.mean(axis=0)
+    centered = values - estimated_mean
+    expected_sigma = centered.T @ centered / len(values)
+
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        _, fit = dense.fit_dense_mvou_diag(original, VALUES, ("x", "y"), alpha=1e308)
+
+    assert fit.optimizer_success
+    assert fit.alpha == 1e308
+    np.testing.assert_allclose(fit.theta, estimated_mean, atol=1e-7)
+    np.testing.assert_allclose(fit.sigma, expected_sigma, rtol=1e-5)
+    np.testing.assert_allclose(
+        fit.diffusion_sigma / 1e308, 2 * expected_sigma, rtol=1e-5
+    )
+
+
 def test_fast_bm_rank_and_likelihood_are_time_unit_invariant():
     fits = []
     for scale in (1.0, 1e16):
