@@ -26,6 +26,7 @@ from nwkit.ordinary_regression import (
 from nwkit.phylogenetic_glmm import (
     MAX_DENSE_GLMM_TIPS,
     _censored_gaussian_log_likelihood,
+    _draw_zero_truncated_count,
     _multinomial_terms,
     _ordinal_terms,
     _profile_endpoint,
@@ -44,6 +45,25 @@ LEAF_NAMES = ["A", "B", "C", "D", "E"]
 
 def _tree():
     return Tree(TREE_TEXT, parser=1)
+
+
+@pytest.mark.parametrize(
+    "family,dispersion",
+    [("hurdle-poisson", None), ("hurdle-negative-binomial", 0.2)],
+)
+def test_truncated_count_draw_preserves_support_and_extreme_upper_quantile(
+    family, dispersion
+):
+    class Uniforms:
+        def random(self, size):
+            assert size == 3
+            return np.array([0.0, 0.5, np.nextafter(1.0, 0.0)])
+
+    result = _draw_zero_truncated_count(
+        Uniforms(), np.full(3, 1e-14), family, dispersion
+    )
+
+    np.testing.assert_array_equal(result, [1.0, 1.0, 2.0])
 
 
 def test_multinomial_likelihood_retains_tail_curvature_of_dominant_category():

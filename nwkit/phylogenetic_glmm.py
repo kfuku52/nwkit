@@ -11,12 +11,14 @@ from scipy import sparse
 from scipy.linalg import cho_solve
 from scipy.optimize import brentq, linprog, minimize
 from scipy.special import (
+    betainc,
     betaln,
     digamma,
     expit,
     gammaln,
     log_ndtr,
     logsumexp,
+    pdtrc,
     polygamma,
 )
 from scipy.stats import chi2
@@ -2108,20 +2110,59 @@ def _draw_zero_truncated_count(
     family: str,
     dispersion: float | None,
 ) -> np.ndarray:
+    parameters: tuple[float | np.ndarray, ...]
     if "negative-binomial" in family:
         assert dispersion is not None
         size = 1.0 / dispersion
-        probability = size / (size + means)
-        zero_cdf = nbinom_distribution.cdf(0, size, probability)
-        quantiles = zero_cdf + rng.random(len(means)) * (1.0 - zero_cdf)
-        return nbinom_distribution.ppf(
-            np.minimum(quantiles, np.nextafter(1.0, 0.0)), size, probability
-        ).astype(float)
-    zero_cdf = poisson_distribution.cdf(0, means)
-    quantiles = zero_cdf + rng.random(len(means)) * (1.0 - zero_cdf)
-    return poisson_distribution.ppf(
-        np.minimum(quantiles, np.nextafter(1.0, 0.0)), means
-    ).astype(float)
+        distribution = nbinom_distribution
+        parameters = (size, size / (size + means))
+        log_relative_mean = np.log(means) - math.log(size)
+        positive_probability = -np.expm1(-size * np.logaddexp(0.0, log_relative_mean))
+        failure_probability = expit(log_relative_mean)
+
+        def survival(counts, indices):
+            return betainc(counts + 1.0, size, failure_probability[indices])
+    else:
+        distribution = poisson_distribution
+        parameters = (means,)
+        positive_probability = -np.expm1(-means)
+
+        def survival(counts, indices):
+            return pdtrc(counts, means[indices])
+
+    tail = (1.0 - rng.random(len(means))) * positive_probability
+    quantiles = np.minimum(1.0 - tail, np.nextafter(1.0, 0.0))
+    values = distribution.ppf(quantiles, *parameters).astype(float)
+    return _verify_positive_count_quantiles(values, tail, survival)
+
+
+def _verify_positive_count_quantiles(values, tail, survival):
+    # Direct CDF quantiles can round to the excluded zero mass or to the wrong
+    # count in a narrow tail. Verify the crossing in survival coordinates.
+    indices = np.arange(len(values))
+    valid = (
+        np.isfinite(values)
+        & (values >= 1.0)
+        & (survival(values, indices) <= tail)
+        & ((values == 1.0) | (survival(values - 1.0, indices) > tail))
+    )
+    for index in indices[~valid]:
+        target = tail[index]
+        lower, upper = 0, 1
+        while survival(float(upper), index) > target:
+            lower, upper = upper, 2 * upper
+            if upper > 2**53:
+                raise ValueError(
+                    "A zero-truncated count draw exceeds integer precision."
+                )
+        while upper - lower > 1:
+            middle = (lower + upper) // 2
+            if survival(float(middle), index) > target:
+                lower = middle
+            else:
+                upper = middle
+        values[index] = upper
+    return values
 
 
 def _draw_mixture_count(rng, linear, family, dispersion, zero_probability, offset):
