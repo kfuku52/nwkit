@@ -60,6 +60,17 @@ def test_trait_variance_output_avoids_squaring_extreme_scales():
     assert np.isfinite(restored["coefficient_covariance"]).all()
 
 
+def test_local_tip_ages_survive_rounding_of_root_to_tip_depths():
+    tree = ShiftTree.build(
+        read_tree("((a:1e-20,b:2e-20):1,c:1);", "auto", True, quiet=True)
+    )
+    tip = tree.compiled.leaf_index_by_name["a"]
+    layout = ShiftLayout.build(tree, [tree.branch_ids[tip]])
+    design = layout.design(tree, 1e20)
+    row = tree.leaf_names.index("a")
+    assert design[row, 1] == pytest.approx(-np.expm1(-1.0), abs=1e-15)
+
+
 def dense_reference(tree, layout, alpha, variance, noise, root):
     """Propagate independent branch innovations and regime forcing directly."""
     compiled = tree.compiled

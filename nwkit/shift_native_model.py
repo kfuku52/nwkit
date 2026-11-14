@@ -59,26 +59,35 @@ class ShiftTree:
         ids = assign_branch_ids(tree)
         branch_ids = tuple(ids[node] for node in compiled.nodes)
         intervals = {node: (i, i + 1) for i, node in enumerate(compiled.leaf_indices)}
+        normalized_times = times / height
         remaining = np.zeros(len(compiled.nodes))
+        shortest = np.full(len(compiled.nodes), np.inf)
+        exact_ultrametric = bool(np.ptp(heights) == 0)
+        # Equal depths measured from the root can hide differences among short
+        # descendant paths near the tips. Check local ages for the shortcut.
         for i in compiled.postorder:
             children = compiled.children[i]
             if children:
                 intervals[i] = (intervals[children[0]][0], intervals[children[-1]][1])
+                if shortest[i] != remaining[i]:
+                    exact_ultrametric = False
+            else:
+                shortest[i] = 0.0
             if i:
                 parent = compiled.parents[i]
-                remaining[parent] = max(
-                    remaining[parent], times[i] / height + remaining[i]
-                )
+                edge = normalized_times[i]
+                remaining[parent] = max(remaining[parent], edge + remaining[i])
+                shortest[parent] = min(shortest[parent], edge + shortest[i])
         return cls(
             compiled,
             branch_ids,
             height,
-            times / height,
+            normalized_times,
             tuple(np.asarray(levels[level], dtype=int) for level in sorted(levels)),
             tuple(int(i) for i in np.argsort(branch_ids)),
             tuple(intervals[i] for i in range(len(compiled.nodes))),
             remaining,
-            bool(np.ptp(heights) == 0),
+            exact_ultrametric,
         )
 
     @property
