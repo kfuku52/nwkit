@@ -530,6 +530,20 @@ def _known_se_estimates(
     )
 
 
+def _pooled_residual_variance(residuals, degrees_of_freedom):
+    residuals = np.asarray(residuals, dtype=float)
+    with np.errstate(over="ignore", under="ignore"):
+        variance = float(np.dot(residuals, residuals) / degrees_of_freedom)
+    if np.finfo(float).tiny <= variance < math.inf:
+        return variance, 0
+    largest = float(np.max(np.abs(residuals), initial=0.0))
+    if largest == 0.0 or not math.isfinite(largest):
+        return variance, 0
+    _, exponent = math.frexp(largest)
+    scaled = np.ldexp(residuals, -exponent)
+    return float((scaled @ scaled) / degrees_of_freedom), exponent
+
+
 def _pooled_no_batch(dataframe, leaf_names, trait):
     selected = dataframe[dataframe[trait].notna()].copy()
     grouped = selected.groupby("leaf_name", sort=False)[trait]
@@ -542,9 +556,10 @@ def _pooled_no_batch(dataframe, leaf_names, trait):
             "Pooled within-leaf variance for trait '{}' needs at least one "
             "residual biological-replicate degree of freedom.".format(trait)
         )
-    variance = float(np.dot(residuals, residuals) / degrees_of_freedom)
-    covariance = variance / counts.to_numpy(dtype=float)
-    within_sd = np.repeat(math.sqrt(max(variance, 0.0)), len(leaf_names))
+    variance, exponent = _pooled_residual_variance(residuals, degrees_of_freedom)
+    with np.errstate(over="ignore", under="ignore"):
+        covariance = np.ldexp(variance / counts.to_numpy(dtype=float), 2 * exponent)
+    within_sd = np.repeat(math.ldexp(math.sqrt(variance), exponent), len(leaf_names))
     return means.to_numpy(float), covariance, counts.to_numpy(int), within_sd
 
 
@@ -704,7 +719,7 @@ def _batch_adjusted_estimates(
 
 
 def _batch_mean_covariance(
-    variance, counts, cross_counts, average_batch, schur_cholesky
+    variance, counts, cross_counts, average_batch, schur_cholesky, exponent
 ):
     if cross_counts.shape[1]:
         batch_loading = cross_counts / counts[:, None] - average_batch[None, :]
@@ -714,7 +729,10 @@ def _batch_mean_covariance(
         )
     else:
         low_rank = np.empty((len(counts), 0), dtype=float)
-    return DiagonalLowRankCovariance(variance / counts, low_rank)
+    with np.errstate(over="ignore", under="ignore"):
+        return DiagonalLowRankCovariance(
+            np.ldexp(variance / counts, 2 * exponent), np.ldexp(low_rank, exponent)
+        )
 
 
 def _pooled_with_batch(dataframe, leaf_names, trait, batch):
@@ -771,11 +789,11 @@ def _pooled_with_batch(dataframe, leaf_names, trait, batch):
             "Batch-adjusted variance for trait '{}' needs positive residual degrees "
             "of freedom.".format(trait)
         )
-    variance = float(np.dot(residuals, residuals) / degrees_of_freedom)
+    variance, exponent = _pooled_residual_variance(residuals, degrees_of_freedom)
     mean_covariance = _batch_mean_covariance(
-        variance, counts, cross_counts, average_batch, schur_cholesky
+        variance, counts, cross_counts, average_batch, schur_cholesky, exponent
     )
-    within_sd = np.repeat(math.sqrt(max(variance, 0.0)), len(leaf_levels))
+    within_sd = np.repeat(math.ldexp(math.sqrt(variance), exponent), len(leaf_levels))
     return adjusted_means, mean_covariance, counts.astype(int), within_sd
 
 

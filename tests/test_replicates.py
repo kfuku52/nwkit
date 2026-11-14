@@ -86,6 +86,36 @@ def test_pooled_replicate_sampling_variance_scales_in_tiny_trait_units():
     np.testing.assert_allclose(estimates.tip_summary["standard_error"], 1e-95, atol=0.0)
 
 
+@pytest.mark.parametrize("batch", [None, "batch"])
+def test_pooled_variance_scales_before_summing_squared_residuals(batch):
+    amplitude = 1e154
+    names = ["A", "B", "C"]
+    data = pd.DataFrame(
+        {
+            "leaf_name": np.repeat(names, 4),
+            "sample": np.tile(["r1", "r2", "r3", "r4"], 3),
+            "batch": np.tile(["low", "low", "high", "high"], 3),
+            "trait": np.tile([-amplitude, amplitude, -amplitude, amplitude], 3),
+        }
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        fit = estimate_replicate_traits(
+            data, names, ["trait"], biological_id="sample", batch=batch
+        )
+    df = len(data) - len(names) - int(batch is not None)
+    expected = len(data) / df / 4.0
+    covariance = fit.sampling_covariance_by_trait["trait"]
+    diagonal = (
+        covariance.diagonal
+        if isinstance(covariance, DiagonalLowRankCovariance)
+        else covariance
+    )
+    np.testing.assert_allclose(diagonal / 1e308, expected)
+    np.testing.assert_allclose(
+        fit.tip_summary["standard_error"] / amplitude, np.sqrt(expected)
+    )
+
+
 def test_mixed_replicate_traits_treat_one_observation_as_an_exact_tip_value():
     dataframe = pd.DataFrame(
         [
