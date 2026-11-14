@@ -426,6 +426,27 @@ class TestDistanceMetrics:
             expected_distance
         )
 
+    def test_branch_metrics_retain_short_change_beside_shared_large_edge(
+        self, tmp_nwk, tmp_outfile
+    ):
+        first = tmp_nwk("(((A:1,B:1):1e300):1e-40,C:1,D:1);", "first.nwk")
+        second = tmp_nwk("(((A:1,B:1):1e300):0,C:1,D:1);", "second.nwk")
+        args = make_args(
+            infile=first,
+            infile2=second,
+            outfile=tmp_outfile,
+            format2="auto",
+            metric=["weighted-rf,branch-score"],
+            comparison="rooted",
+            input_rooted="yes",
+            infile2_rooted="yes",
+        )
+
+        dist_main(args)
+
+        rows = _read_tsv(tmp_outfile)
+        assert [float(row["distance"]) for row in rows] == [1e-40, 1e-40]
+
     @pytest.mark.parametrize(
         ("tree1", "tree2", "expected_distance"),
         [

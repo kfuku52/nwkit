@@ -2,6 +2,7 @@ import csv
 import math
 import sys
 from collections import defaultdict
+from fractions import Fraction
 from itertools import chain
 from typing import Any
 
@@ -202,21 +203,20 @@ def _matched_edge_vectors(tree1, tree2, comparison):
 
 def _stable_component_difference(positive, negative):
     if len(positive) <= 1 and len(negative) <= 1:
-        # Preserve the scaling but sum the two signed terms directly.
         left = positive[0] if positive else 0.0
         right = negative[0] if negative else 0.0
-        scale = max(abs(left), abs(right)) if positive else abs(right)
-        difference = scale * (left / scale - right / scale) if scale else 0.0
+        difference = left - right
     else:
-        scale = max(abs(value) for value in chain(positive, negative))
-        if scale == 0.0:
-            return 0.0
-        difference = scale * math.fsum(
-            [
-                *(value / scale for value in positive),
-                *(-value / scale for value in negative),
-            ]
-        )
+        try:
+            difference = math.fsum(chain(positive, (-value for value in negative)))
+        except OverflowError:
+            # The endpoints can each exceed float range even when their
+            # difference is finite. Accumulate the original binary lengths.
+            exact = sum(map(Fraction, positive)) - sum(map(Fraction, negative))
+            try:
+                difference = float(exact)
+            except OverflowError:
+                difference = math.inf
     if not math.isfinite(difference):
         raise ValueError("A branch-length difference is too large to represent.")
     return difference
