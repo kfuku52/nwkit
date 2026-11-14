@@ -354,7 +354,8 @@ def _transition_matrix(rate_matrix, branch_length):
     er_rate = _get_er_rate_from_matrix(rate_matrix)
     if er_rate is not None:
         return _er_transition_matrix(branch_length, er_rate, rate_matrix.shape[0])
-    return _general_transition_matrix(rate_matrix, branch_length)
+    prepared = _prepare_generator_exponential(rate_matrix)
+    return _transition_from_generator(rate_matrix, branch_length, prepared)
 
 
 def _validated_branch_length(branch_length):
@@ -367,20 +368,28 @@ def _validated_branch_length(branch_length):
     return value
 
 
-def _general_transition_matrix(rate_matrix, branch_length):
+def _prepare_generator_exponential(rate_matrix):
     absolute_rates = np.abs(rate_matrix)
     rate_scale = float(np.max(absolute_rates))
     if rate_scale == 0.0:
-        return np.eye(rate_matrix.shape[0], dtype=float)
+        return None
     scaled_rate_norm = float(np.max(np.sum(absolute_rates / rate_scale, axis=1)))
     log2_rate_norm = math.log2(rate_scale) + math.log2(scaled_rate_norm)
-    log2_exponent_norm = log2_rate_norm + math.log2(branch_length)
     # Use a nonnegative Poisson series for sparse state graphs. Padé
     # approximants can give large relative errors for endpoints that require
     # many jumps, even while their absolute error meets the expm tolerance.
     sparse_rates = np.count_nonzero(rate_matrix) < rate_matrix.size
     direct_norm = 2.0 if sparse_rates else _MAX_DIRECT_EXPONENT_NORM
-    if log2_exponent_norm <= math.log2(direct_norm):
+    return log2_rate_norm, sparse_rates, direct_norm
+
+
+def _transition_from_generator(rate_matrix, branch_length, prepared):
+    if prepared is None:
+        return np.eye(rate_matrix.shape[0], dtype=float)
+    log2_rate_norm, sparse_rates, direct_norm = prepared
+    log2_exponent_norm = log2_rate_norm + math.log2(branch_length)
+    log2_direct_norm = math.log2(direct_norm)
+    if log2_exponent_norm <= log2_direct_norm:
         exponent_norm = 2.0**log2_exponent_norm
         return _validated_transition_matrix(
             _exponentiate_generator(rate_matrix * branch_length, sparse_rates),
@@ -395,7 +404,7 @@ def _general_transition_matrix(rate_matrix, branch_length):
     # overflowing rate_norm * branch_length for finite inputs.
     squarings = max(
         1,
-        int(math.ceil(log2_exponent_norm - math.log2(direct_norm))),
+        int(math.ceil(log2_exponent_norm - log2_direct_norm)),
     )
     scaled_length = math.ldexp(branch_length, -squarings)
     scaled_norm = 2.0 ** (log2_exponent_norm - squarings)
@@ -1490,6 +1499,7 @@ def _transition_matrices_for_tree(tree, rate_matrix, *, prepared_branches=None):
 
     num_states = rate_matrix.shape[0]
     er_rate = _get_er_rate_from_matrix(rate_matrix)
+    prepared = _prepare_generator_exponential(rate_matrix) if er_rate is None else None
     branches = (
         _mk_branch_lengths(tree) if prepared_branches is None else prepared_branches
     )
@@ -1498,7 +1508,7 @@ def _transition_matrices_for_tree(tree, rate_matrix, *, prepared_branches=None):
     for node, length in branches:
         if length not in by_length:
             by_length[length] = (
-                _general_transition_matrix(rate_matrix, length)
+                _transition_from_generator(rate_matrix, length, prepared)
                 if er_rate is None
                 else _er_transition_matrix(length, er_rate, num_states)
             )
