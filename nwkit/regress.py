@@ -10,6 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from scipy import sparse
+from scipy.linalg import solve_triangular
 from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.stats import t as student_t
@@ -1527,6 +1528,26 @@ def _requires_dense_profile_covariance(fixed_covariance, components, component_f
     )
 
 
+def _dense_profile_gls(cholesky, design, response, rhs, return_details):
+    whitened = solve_triangular(cholesky, rhs, lower=True, check_finite=False)
+    whitened_design = whitened[:, :-1]
+    whitened_response = whitened[:, -1]
+    gram = whitened_design.T @ whitened_design
+    gram_sign, gram_logdet = np.linalg.slogdet(gram)
+    if gram_sign <= 0.0:
+        raise np.linalg.LinAlgError("The weighted regression design is singular.")
+    beta = np.linalg.solve(gram, whitened_design.T @ whitened_response)
+    whitened_residual = whitened_response - whitened_design @ beta
+    quadratic = float(whitened_residual @ whitened_residual)
+    residual, inverse_residual = None, None
+    if return_details:
+        residual = response - design @ beta
+        inverse_residual = solve_triangular(
+            cholesky, whitened_residual, lower=True, trans="T", check_finite=False
+        )
+    return beta, gram, gram_logdet, residual, inverse_residual, quadratic
+
+
 def _profile_covariance_fit(
     y,
     design,
@@ -1585,6 +1606,9 @@ def _profile_covariance_fit(
     centered_response, beta_offset = center_response(y, design)
     ordinary_beta = np.linalg.lstsq(design, centered_response, rcond=None)[0]
     ordinary_residual = centered_response - design @ ordinary_beta
+    dense_rhs = (
+        None if structured_model else np.column_stack((design, ordinary_residual))
+    )
     response_scale = residual_variance_scale(
         centered_response, ordinary_residual, _covariance_diagonal(fixed_covariance)
     )
@@ -1594,7 +1618,8 @@ def _profile_covariance_fit(
         normalized_components
     )
 
-    def evaluate(log_variances, response=ordinary_residual, return_details=False):
+    def evaluate(log_variances, return_details=False):
+        response = ordinary_residual
         variances = np.exp(np.asarray(log_variances, dtype=float))
         covariance = working_fixed_covariance.copy()
         if structured_model:
@@ -1654,18 +1679,11 @@ def _profile_covariance_fit(
             covariance_representation = covariance
             try:
                 cholesky = np.linalg.cholesky(covariance)
-                inverse_design = _solve_positive_definite(cholesky, design)
-                gram = design.T @ inverse_design
-                gram_sign, gram_logdet = np.linalg.slogdet(gram)
-                if gram_sign <= 0.0:
-                    return float("inf")
-                beta = np.linalg.solve(
-                    gram,
-                    design.T @ _solve_positive_definite(cholesky, response),
+                beta, gram, gram_logdet, residual, inverse_residual, quadratic = (
+                    _dense_profile_gls(
+                        cholesky, design, response, dense_rhs, return_details
+                    )
                 )
-                residual = response - design @ beta
-                inverse_residual = _solve_positive_definite(cholesky, residual)
-                quadratic = float(residual @ inverse_residual)
                 covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
             except np.linalg.LinAlgError:
                 return float("inf")
