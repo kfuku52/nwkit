@@ -2885,14 +2885,38 @@ def _fitted_random_covariance(
             allow_semidefinite=True,
         )
         tip_covariance += fit.component_variances["group"] * group_base
-    return np.kron(tip_covariance, np.eye(random_dimension)) + (
-        _project_predictor_uncertainty(
-            fit.coefficients,
+    return _expanded_glmm_covariance(
+        tip_covariance,
+        random_dimension,
+        fit.coefficients,
+        predictor_uncertainties,
+        predictor_columns,
+    )
+
+
+def _expanded_glmm_covariance(
+    tip_covariance,
+    random_dimension,
+    coefficients,
+    predictor_uncertainties,
+    predictor_columns,
+    *,
+    gmrf_factors=None,
+):
+    covariance = (
+        tip_covariance
+        if random_dimension == 1
+        else np.kron(tip_covariance, np.eye(random_dimension))
+    )
+    if predictor_uncertainties:
+        covariance += _project_predictor_uncertainty(
+            coefficients,
             predictor_uncertainties,
             predictor_columns,
-            n_tips,
+            len(tip_covariance),
+            gmrf_factors=gmrf_factors,
         )
-    )
+    return covariance
 
 
 def _draw_categorical_responses(
@@ -3582,11 +3606,12 @@ def _fit_scalar_phylogenetic_glmm(
         random_covariance = math.exp(float(log_variances[0])) * phylo_base
         if group_base is not None:
             random_covariance += math.exp(float(log_variances[1])) * group_base
-        expanded_covariance = random_covariance + _project_predictor_uncertainty(
+        expanded_covariance = _expanded_glmm_covariance(
+            random_covariance,
+            1,
             coefficients,
             predictor_uncertainties,
             predictor_columns,
-            n_tips,
             gmrf_factors=gmrf_factors,
         )
         covariance_cholesky = _positive_definite_cholesky(expanded_covariance)
@@ -4220,13 +4245,12 @@ def _fit_categorical_phylogenetic_glmm(
             random_covariance = (
                 random_covariance + np.exp(log_variances[1]) * group_base
             )
-        expanded_covariance = np.kron(
-            random_covariance, np.eye(random_dimension)
-        ) + _project_predictor_uncertainty(
+        expanded_covariance = _expanded_glmm_covariance(
+            random_covariance,
+            random_dimension,
             coefficients,
             predictor_uncertainties,
             predictor_columns,
-            len(design),
             gmrf_factors=gmrf_factors,
         )
         covariance_cholesky = _positive_definite_cholesky(expanded_covariance)
