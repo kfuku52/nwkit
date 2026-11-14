@@ -3,7 +3,6 @@
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-from itertools import product
 from typing import Any
 
 from ete4 import Tree
@@ -427,20 +426,25 @@ class Reconciliation:
 
     def _combine(self, left, right, keep_choices):
         result: dict[int, Cell] = {}
-        for first, second in product(left, right):
-            parent = self._species_index.common_ancestor_indices(first, second)
-            duplication, losses = self.local_cost(parent, first, second)
-            score = left[first].score + right[second].score + duplication + losses
-            count = left[first].count * right[second].count
-            current = result.get(parent)
-            if current is None or score < current.score:
-                result[parent] = Cell(
-                    score, count, [(first, second)] if keep_choices else None
-                )
-            elif score == current.score:
-                current.count += count
-                if current.choices is not None:
-                    current.choices.append((first, second))
+        depth = self.depth
+        lca = self._species_index.common_ancestor_indices
+        for first, first_cell in left.items():
+            partial = first_cell.score + depth[first]
+            for second, second_cell in right.items():
+                parent = lca(first, second)
+                score = partial + second_cell.score + depth[second] - 2 * depth[parent]
+                score += 1 if parent in (first, second) else -2
+                current = result.get(parent)
+                if current is None or score < current.score:
+                    result[parent] = Cell(
+                        score,
+                        first_cell.count * second_cell.count,
+                        [(first, second)] if keep_choices else None,
+                    )
+                elif score == current.score:
+                    current.count += first_cell.count * second_cell.count
+                    if current.choices is not None:
+                        current.choices.append((first, second))
         return result
 
     def _trace(self, index, mapped, rank):
