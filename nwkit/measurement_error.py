@@ -1238,15 +1238,24 @@ def _dense_eiv_covariance(
     predictor_uncertainties,
     predictor_columns,
     n_observations,
-    continuous_loadings,
+    prepared_uncertainties,
 ):
     covariance = fixed_covariance.copy()
     diagonal = np.diag_indices_from(covariance)
-    for columns, uncertainty, cached in zip(
-        predictor_columns, predictor_uncertainties, continuous_loadings, strict=True
+    loadings, fixed_covariances = prepared_uncertainties
+    for columns, uncertainty, cached, fixed in zip(
+        predictor_columns,
+        predictor_uncertainties,
+        loadings,
+        fixed_covariances,
+        strict=True,
     ):
-        covariance += _predictor_error_covariance(
-            beta, uncertainty, columns, n_observations, continuous_loading=cached
+        covariance += (
+            _predictor_error_covariance(
+                beta, uncertainty, columns, n_observations, continuous_loading=cached
+            )
+            if fixed is None
+            else scale_covariance_by_slope(fixed, float(beta[columns]))
         )
     for variance, (_, component) in zip(variances, normalized_components, strict=True):
         assert component is not None
@@ -1258,12 +1267,12 @@ def _dense_eiv_covariance(
     return (covariance + covariance.T) / 2.0
 
 
-def _cache_dense_continuous_uncertainties(uncertainties, columns, size, structured):
-    """Prepare slope-independent loadings once per small dense fit."""
-
+def _prepare_dense_predictor_uncertainties(uncertainties, columns, size, structured):
+    """Validate fixed predictor covariances and prepare reusable loadings."""
     if structured or size > MAX_DENSE_EIV_OBSERVATIONS:
-        return (None,) * len(uncertainties)
+        return (None,) * len(uncertainties), (None,) * len(uncertainties)
     prepared = []
+    raw_covariances = []
     for uncertainty, column in zip(uncertainties, columns, strict=True):
         if isinstance(uncertainty, ContinuousPredictorUncertainty):
             if not isinstance(column, (int, np.integer)):
@@ -1282,7 +1291,27 @@ def _cache_dense_continuous_uncertainties(uncertainties, columns, size, structur
             )
         else:
             prepared.append(None)
-    return tuple(prepared)
+        raw_covariances.append(
+            _dense_fixed_predictor_covariance(uncertainty, column, size)
+        )
+    return tuple(prepared), tuple(raw_covariances)
+
+
+def _dense_fixed_predictor_covariance(uncertainty, column, size):
+    if not isinstance(column, (int, np.integer)) or isinstance(
+        uncertainty,
+        (
+            ContinuousPredictorUncertainty,
+            GroupedPredictorUncertainty,
+            JointPredictorUncertainty,
+            GmrfPredictorUncertainty,
+        ),
+    ):
+        return None
+    covariance = _positive_semidefinite(uncertainty, "Predictor posterior covariance")
+    if covariance.shape != (size, size):
+        raise ValueError("Predictor posterior covariance has the wrong dimensions.")
+    return covariance
 
 
 def _conditional_eiv_covariance(
@@ -1299,7 +1328,7 @@ def _conditional_eiv_covariance(
     compute_marginal=False,
     gmrf_marginal_profiles=None,
     likelihood_groups=None,
-    dense_continuous_loadings=(),
+    dense_predictor_uncertainties=((), ()),
 ):
     if structured:
         diagonal, updates = _structured_eiv_base(fixed_covariance)
@@ -1396,7 +1425,7 @@ def _conditional_eiv_covariance(
         predictor_uncertainties,
         predictor_columns,
         n_observations,
-        dense_continuous_loadings,
+        dense_predictor_uncertainties,
     )
     return covariance, factor_covariance(covariance)
 
@@ -1615,7 +1644,7 @@ def fit_conditional_eiv_gaussian(
         normalized_components
     )
     bounds = [(None, None)] * num_coefficients + variance_bounds
-    dense_continuous_loadings = _cache_dense_continuous_uncertainties(
+    dense_predictor_uncertainties = _prepare_dense_predictor_uncertainties(
         predictor_uncertainties, predictor_columns, len(response), structured
     )
 
@@ -1639,7 +1668,7 @@ def fit_conditional_eiv_gaussian(
                 compute_marginal=return_details,
                 gmrf_marginal_profiles=gmrf_marginal_profiles,
                 likelihood_groups=likelihood_groups,
-                dense_continuous_loadings=dense_continuous_loadings,
+                dense_predictor_uncertainties=dense_predictor_uncertainties,
             )
         except (ValueError, np.linalg.LinAlgError):
             return float("inf")
@@ -1807,7 +1836,7 @@ def fit_conditional_eiv_gaussian(
             compute_marginal=False,
             gmrf_marginal_profiles=gmrf_marginal_profiles,
             likelihood_groups=likelihood_groups,
-            dense_continuous_loadings=dense_continuous_loadings,
+            dense_predictor_uncertainties=dense_predictor_uncertainties,
         )
         return _eiv_covariance_in_response_units(
             covariance, factor, response_exponent, len(response)
