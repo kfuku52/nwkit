@@ -5,7 +5,7 @@ import pytest
 from ete4 import Tree
 
 from nwkit.compiled_tree import CompiledTree
-from nwkit.vector_whitening import VectorTreeWhitening, vector_gls
+from nwkit.vector_whitening import VectorTreeWhitening, _mean_design_qr, vector_gls
 
 
 def dense_covariance(compiled, slopes, innovations, root):
@@ -84,6 +84,17 @@ def test_zero_process_with_noise_and_singular_rejection():
         VectorTreeWhitening.build(
             *args, np.zeros((3, p, p)), root_covariance=np.zeros((p, p))
         )
+
+
+def test_qr_rank_tolerance_uses_observation_count():
+    design = np.zeros((256, 2))
+    design[0] = [1.0, 1.0]
+    design[1, 1] = 1e-14
+    with pytest.raises(ValueError, match="rank deficient"):
+        _mean_design_qr(design)
+    design[1, 1] = 1e-12
+    q, r, norms = _mean_design_qr(design)
+    np.testing.assert_allclose((q @ r) * norms, design)
 
 
 def test_multifurcation_whitening_matches_dense_covariance():

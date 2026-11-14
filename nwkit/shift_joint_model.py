@@ -14,7 +14,7 @@ from scipy.linalg import solve_triangular
 
 from nwkit.gaussian_whitening import TreeWhitening
 from nwkit.shift_native_model import covariance_geometry
-from nwkit.vector_whitening import VectorTreeWhitening, vector_gls
+from nwkit.vector_whitening import VectorTreeWhitening, _mean_design_qr, vector_gls
 
 
 def integral_decay(rate, duration):
@@ -234,10 +234,7 @@ def evaluate_separable(
         )
     white = factor.apply(np.column_stack((data.values, design)))
     y, x = white[:, :p], white[:, p:]
-    norms = np.linalg.norm(x, axis=0)
-    if np.any(norms == 0) or np.linalg.matrix_rank(x / norms) < q:
-        raise ValueError("The observed mean design is rank deficient.")
-    basis, r = np.linalg.qr(x / norms, mode="reduced")
+    basis, r, norms = _mean_design_qr(x)
     coefficients = solve_triangular(r, basis.T @ y, check_finite=False) / norms[:, None]
     residual = y - basis @ (basis.T @ y)
     covariance = residual.T @ residual / n

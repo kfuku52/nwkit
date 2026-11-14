@@ -254,18 +254,30 @@ class VectorTreeWhitening:
         return output[:, 0] if vector else output
 
 
+def _mean_design_qr(design):
+    norms = np.linalg.norm(design, axis=0)
+    if np.any(norms == 0):
+        raise ValueError("The observed mean design is rank deficient.")
+    q, r = np.linalg.qr(design / norms, mode="reduced")
+    # R has the singular values of the original normalized design. Use the
+    # original dimensions when setting the rank tolerance.
+    if design.shape[1]:
+        singular_values = np.linalg.svd(r, compute_uv=False)
+        tolerance = singular_values[0] * max(design.shape) * np.finfo(r.dtype).eps
+        if np.count_nonzero(singular_values > tolerance) < design.shape[1]:
+            raise ValueError("The observed mean design is rank deficient.")
+    return q, r, norms
+
+
 def vector_gls(factor, response, design):
     """Profile linear means using QR, retaining their full joint covariance."""
     whitened = factor.apply(np.column_stack((response, design)))
     y, x = whitened[:, 0], whitened[:, 1:]
-    norms = np.linalg.norm(x, axis=0)
-    if np.any(norms == 0) or np.linalg.matrix_rank(x / norms) < x.shape[1]:
-        raise ValueError("The observed mean design is rank deficient.")
+    q, r, norms = _mean_design_qr(x)
     if len(y) <= x.shape[1]:
         raise ValueError(
             "Joint GLS needs residual observations beyond mean parameters."
         )
-    q, r = np.linalg.qr(x / norms, mode="reduced")
     coefficients = solve_triangular(r, q.T @ y, check_finite=False) / norms
     residual = y - q @ (q.T @ y)
     quadratic = float(residual @ residual)
