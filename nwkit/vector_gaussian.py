@@ -60,9 +60,7 @@ class VectorConditioning:
             # Compare the bits so signed zeros cannot alter the seeded basis.
             bits = covariance.tobytes()
             if bits != previous:
-                eigenvalues, eigenvectors = np.linalg.eigh(
-                    (covariance + covariance.T) / 2
-                )
+                eigenvalues, eigenvectors = np.linalg.eigh(_symmetric_part(covariance))
                 tolerance = (
                     np.finfo(float).eps
                     * max(1.0, float(np.max(np.abs(eigenvalues))))
@@ -92,6 +90,18 @@ def _array(value, shape, label):
     if result.shape != shape or not np.isfinite(result).all():
         raise ValueError(f"{label} must have shape {shape} and finite values.")
     return result
+
+
+def _symmetric_part(matrix):
+    try:
+        with np.errstate(over="raise"):
+            return (matrix + matrix.T) / 2
+    except FloatingPointError:
+        with np.errstate(over="ignore"):
+            average = (matrix + matrix.T) / 2
+        overflowed = np.isinf(average) & np.isfinite(matrix) & np.isfinite(matrix.T)
+        average[overflowed] = matrix[overflowed] / 2 + matrix.T[overflowed] / 2
+        return average
 
 
 def _cholesky(matrix, label):
@@ -237,7 +247,7 @@ def _propagate(
         # equal innovation precisions loses weak/missing-subtree information.
         gain = np.linalg.solve(update, np.eye(len(free)))
         posterior_covariance = gain @ conditional_prior_covariance
-        posterior_covariance = (posterior_covariance + posterior_covariance.T) / 2
+        posterior_covariance = _symmetric_part(posterior_covariance)
         effective_precision = local_precision @ gain
         effective_linear = gain.T @ reduced_linear
         sign, logdet = np.linalg.slogdet(update)
@@ -256,7 +266,7 @@ def _propagate(
             )
             + effective_linear @ mean
         )
-    message_precision = (message_precision + message_precision.T) / 2
+    message_precision = _symmetric_part(message_precision)
     message = (message_precision, message_linear, constant)
     if not retain_conditional:
         return message, None
@@ -374,7 +384,7 @@ def _prune_vector_tree(process, compiled, local, conditionals=None):
                 continue
             if branch is not None:
                 if branch_covariance is None:
-                    branch_covariance = (branch[2] + branch[2].T) / 2
+                    branch_covariance = _symmetric_part(branch[2])
                 slopes[index], intercepts[index], covariances[index] = (
                     branch[0],
                     branch[1],

@@ -152,6 +152,27 @@ def test_unobserved_subtree_keeps_its_branch_transitions():
     assert likelihood == result.log_likelihood
 
 
+def test_vector_conditioning_preserves_extreme_finite_covariances():
+    process, compiled = fixture()
+    covariance = np.diag([1.25e308, np.nextafter(0.0, 1.0)])
+    independent = VectorTransition(np.zeros((2, 2)), np.zeros(2), covariance)
+    process = VectorProcess(
+        process.tree,
+        2,
+        dict.fromkeys(compiled.nodes[1:], independent),
+        np.zeros(2),
+        covariance,
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        result = condition_vector_tree(process, {})
+        draws = result.sample(1000, seed=12) / np.sqrt(covariance.diagonal())
+    expected = np.broadcast_to(covariance, result.covariances.shape)
+    np.testing.assert_array_equal(result.covariances, expected)
+    np.testing.assert_array_equal(result.conditional_covariances, expected)
+    np.testing.assert_allclose(draws[:, :, 0].std(axis=0), 1.0, atol=0.09)
+    assert result.log_likelihood == 0.0
+
+
 def test_zero_length_branches_preserve_exact_observations():
     from nwkit.vector_processes import vector_brownian_process
 
