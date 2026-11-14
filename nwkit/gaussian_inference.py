@@ -873,6 +873,39 @@ def _simulate_single_draw(process, compiled, root, rng):
     return GaussianSamples(compiled.nodes, draws[None, :])
 
 
+def prepare_gaussian_single_draw(process, compiled, root_values):
+    """Prepare a reusable one-draw simulator with fixed branch transitions."""
+    compiled.require_tree(process.tree)
+    parents = compiled.parents[1:]
+    transitions = [process.transitions[node] for node in compiled.nodes[1:]]
+    positive = tuple(item.variance > 0.0 for item in transitions)
+    deviations = np.asarray(
+        [math.sqrt(item.variance) for item in transitions if item.variance > 0.0]
+    )
+    branches = tuple(
+        (parent, item.slope, item.intercept, stochastic)
+        for parent, item, stochastic in zip(parents, transitions, positive, strict=True)
+    )
+
+    def draw(rng):
+        root = _simulation_root_draws(process, root_values, 1, rng)
+        innovations = iter(rng.normal(0.0, deviations).tolist())
+        states = [float(root[0])]
+        for parent, slope, intercept, stochastic in branches:
+            value = slope * states[parent] + intercept
+            if stochastic:
+                value += next(innovations)
+            states.append(value)
+        values = np.asarray(states)
+        if not np.isfinite(values).all():
+            raise ValueError(
+                "A Gaussian process simulation exceeds floating-point range."
+            )
+        return values
+
+    return draw
+
+
 def _simulation_root_draws(process, root_values, num_samples, rng):
     if root_values is None:
         if process.root.mode == "flat":

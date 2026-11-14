@@ -10,8 +10,8 @@ from nwkit.compiled_tree import CompiledTree
 from nwkit.continuous_asr_process import fitted_scalar_process
 from nwkit.gaussian_inference import (
     condition_gaussian_tree,
+    prepare_gaussian_single_draw,
     sample_gaussian_posterior,
-    simulate_gaussian_process,
 )
 from nwkit.util import assign_branch_ids, get_node_class
 
@@ -80,23 +80,21 @@ def _tip_bootstrap_simulator(process, observed, errors):
         for name, index in compiled.leaf_index_by_name.items()
         if observed.get(name) is not None
     ]
+    draw = prepare_gaussian_single_draw(process, compiled, root_values)
+    names = [item[0] for item in records]
+    indices = np.asarray([item[1] for item in records], dtype=int)
+    deviations = np.asarray([item[2] for item in records], dtype=float)
+    noisy = deviations > 0.0
+    positive_deviations = deviations[noisy]
 
     def simulate(seed):
         process_seed, error_seed = np.random.SeedSequence(seed).spawn(2)
-        simulated = simulate_gaussian_process(
-            process,
-            num_samples=1,
-            seed=int(process_seed.generate_state(1)[0]),
-            root_values=root_values,
-            compiled_tree=compiled,
-        )
+        rng = np.random.default_rng(int(process_seed.generate_state(1)[0]))
+        values = draw(rng)[indices]
         error_rng = np.random.default_rng(error_seed)
+        values[noisy] += error_rng.normal(0.0, positive_deviations)
         result = dict.fromkeys(observed)
-        for name, index, error in records:
-            value = float(simulated.values[0, index])
-            if error > 0.0:
-                value += float(error_rng.normal(0.0, error))
-            result[name] = value
+        result.update(zip(names, values.tolist(), strict=True))
         return result
 
     return simulate
