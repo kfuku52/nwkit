@@ -322,6 +322,32 @@ def _sparse_covariance_model(state, leaves, precision, innovations, normalizatio
     )
 
 
+def _fill_direct_covariance(
+    covariance, requested, lca, ancestor_factors, loadings, variances
+):
+    ancestor_at = lca.indexed_ancestors()
+    count = len(requested)
+    batch_size = max(1, 16_384 // count)
+    with np.errstate(over="ignore", under="ignore", invalid="ignore"):
+        for start in range(0, count, batch_size):
+            stop = min(count, start + batch_size)
+            first = requested[start:stop, None]
+            ancestors = ancestor_at(first, requested[None, :])
+            values = ancestor_factors[ancestors]
+            if loadings is not None:
+                values = loadings[first] * loadings[requested[None, :]] * values
+                same_node = first == requested[None, :]
+                values = np.where(same_node, variances[ancestors], values)
+                if not np.isfinite(values).all():
+                    return False
+                if np.any(
+                    (values == 0.0) & (ancestor_factors[ancestors] > 0.0) & ~same_node
+                ):
+                    return False
+            covariance[start:stop, :] = values
+    return True
+
+
 @dataclass(frozen=True)
 class GaussianTreeProcess:
     """A rooted scalar linear-Gaussian process in original tree-node space."""
@@ -452,6 +478,11 @@ class GaussianTreeProcess:
 
         covariance = np.empty((len(nodes), len(nodes)), dtype=float)
         common_ancestor = lca.common_ancestor_indices
+        if len(requested) >= 32 and unit_loadings:
+            _fill_direct_covariance(
+                covariance, np.asarray(requested), lca, variances, None, variances
+            )
+            return covariance
         if unit_loadings:
             for first, first_index in enumerate(requested):
                 covariance[first, first] = variances[first_index]
@@ -464,6 +495,16 @@ class GaussianTreeProcess:
             with np.errstate(over="ignore", under="ignore", divide="ignore"):
                 ancestor_factor = variances / (cumulative_loading * cumulative_loading)
             direct_loadings = bool(np.isfinite(ancestor_factor).all())
+            if direct_loadings and len(requested) >= 32:
+                if _fill_direct_covariance(
+                    covariance,
+                    np.asarray(requested),
+                    lca,
+                    ancestor_factor,
+                    cumulative_loading,
+                    variances,
+                ):
+                    return covariance
             if direct_loadings:
                 for first, first_index in enumerate(requested):
                     covariance[first, first] = variances[first_index]

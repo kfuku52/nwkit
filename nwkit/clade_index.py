@@ -2,6 +2,8 @@ import csv
 import hashlib
 from io import StringIO
 
+import numpy as np
+
 CLADE_ID_PREFIX = "clade-sha256:"
 
 
@@ -102,3 +104,29 @@ class LcaIndex:
                 index1 = ancestors[index1]
                 index2 = ancestors[index2]
         return self.ancestors[0][index1]
+
+    def indexed_ancestors(self):
+        """Return a vectorized lookup for pairs of node indices."""
+
+        depths = np.asarray(self.depth, dtype=np.intp)
+        ancestors = np.asarray(self.ancestors, dtype=np.intp)
+
+        def lookup(first, second):
+            swap = depths[first] < depths[second]
+            deeper = np.where(swap, second, first)
+            shallower = np.where(swap, first, second)
+            difference = depths[deeper] - depths[shallower]
+            for level, level_ancestors in enumerate(ancestors):
+                deeper = np.where(
+                    difference & (1 << level), level_ancestors[deeper], deeper
+                )
+            equal = deeper == shallower
+            for level_ancestors in ancestors[::-1]:
+                higher_deep = level_ancestors[deeper]
+                higher_shallow = level_ancestors[shallower]
+                lift = higher_deep != higher_shallow
+                deeper = np.where(lift, higher_deep, deeper)
+                shallower = np.where(lift, higher_shallow, shallower)
+            return np.where(equal, deeper, ancestors[0, deeper])
+
+        return lookup

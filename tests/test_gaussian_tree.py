@@ -150,6 +150,22 @@ def test_stationary_process_covariance_is_the_ou_asr_dense_oracle():
         )
 
 
+@pytest.mark.parametrize("model,parameter", [("brownian", None), ("ou", 0.6)])
+def test_batched_covariance_matches_pairs_with_mixed_and_repeated_nodes(
+    model, parameter
+):
+    tree = tree_from("(((A:1,B:2)I:0.5,C:3)J:0.1,(D:0.4,E:2.5)K:0.3)R;")
+    process = build_evolutionary_process(tree, model=model, parameter=parameter)
+    distinct_nodes = list(tree.traverse(strategy="postorder"))
+    cov = process.covariance(distinct_nodes)
+    selected = [4, 3, 0, 8, 1, 2, 8, 6, 7, 5] * 4
+    result = process.covariance([distinct_nodes[index] for index in selected])
+    np.testing.assert_allclose(
+        result, cov[np.ix_(selected, selected)], rtol=2e-15, atol=0.0
+    )
+    np.testing.assert_array_equal(result, result.T)
+
+
 def test_positive_asr_eb_uses_the_shared_acdc_branch_process():
     tree = tree_from("((A:0.4,B:1.2)I:0.7,C:1.5,D:0.8)R;")
     values = {"A": -1.0, "B": 2.0, "C": 4.0, "D": None}
