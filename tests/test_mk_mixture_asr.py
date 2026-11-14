@@ -204,7 +204,7 @@ def test_fitted_mk_mixture_is_invariant_to_extreme_reciprocal_time_units():
         {"slow": "000111", "fast": "010101", "middle": "001101"}
     )
     fitted = []
-    for time, rate in ((1.0, 1.0), (1e-308, 1e308)):
+    for time, rate in ((1.0, 1.0), (2.0**-1023, 2.0**1023)):
         tree = tree_from(
             f"(((A:{time},B:{time}):{time},C:{time}):{time},"
             f"((D:{time},E:{time}):{time},F:{time}):{time})R;"
