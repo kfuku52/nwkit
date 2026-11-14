@@ -554,7 +554,7 @@ def _edge_logsumexp(values):
 
 
 def _probabilities_from_logs(values):
-    normalizer = float(logsumexp(values))
+    normalizer = float(_edge_logsumexp(values))
     if not math.isfinite(normalizer):
         raise ValueError("Failed to calculate posterior state probabilities.")
     return np.exp(values - normalizer)
@@ -678,7 +678,7 @@ def _log_likelihood(
         prepared_leaves=prepared_leaves,
         prepared_branches=prepared_branches,
     )
-    root_term = float(logsumexp(_log_probabilities(root_prior) + inside[tree]))
+    root_term = float(_edge_logsumexp(_log_probabilities(root_prior) + inside[tree]))
     return log_scales[tree] + root_term
 
 
@@ -1323,7 +1323,7 @@ def _compute_log_outside_likelihoods(
             parent_log_weight = outside[node] + sibling_log_sum
             matrix = _log_probabilities(transition_matrices[child])
             outside[child] = _edge_logsumexp(matrix.T + parent_log_weight[None, :])
-            total = float(logsumexp(outside[child]))
+            total = float(_edge_logsumexp(outside[child]))
             if math.isfinite(total):
                 outside[child] -= total
             suffix_log_sum = suffix_log_sum + terms[child_index]
