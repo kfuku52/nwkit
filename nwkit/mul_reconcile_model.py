@@ -279,7 +279,7 @@ def reconcile_genes(genes, species, parser, max_state_pairs=10000000):
 
 def _reconcile_indexed_genes(genes, species, max_state_pairs, *, keep_choices=True):
     species_index = None
-    cache = None if keep_choices else {}
+    cache: dict[int, dict[int, Cell]] | None = None if keep_choices else {}
     for gene in genes:
         if species_index is None:
             species_index = _SpeciesIndex(species)
