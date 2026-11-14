@@ -1155,15 +1155,19 @@ class CountLikelihood:
         result = np.full_like(self.counts, np.nan)
         observed = ~np.isnan(self.counts)
         tip_columns = {node: col for col, node in enumerate(self.tree.tip_nodes)}
+        clade_bits, required = self._simulation_selection_bits()
         branch_plan = lru_cache(maxsize=16)(
-            lambda scale: self._simulation_branches(rates, scale, event, tip_columns)
+            lambda scale: self._simulation_branches(
+                rates, scale, event, tip_columns, clade_bits
+            )
         )
         for row in range(len(result)):
             for _ in range(max_attempts):
                 scale = float(rng.choice(self.rate_scales))
                 plan = branch_plan(scale)
                 latent = [int(rng.geometric(1 / root_mean))]
-                for parent, probabilities, pulse, after, column in plan:
+                covered = 0
+                for parent, probabilities, pulse, after, column, bit in plan:
                     count = _simulate_edge(latent[parent], probabilities, rng)
                     if pulse is not None:
                         count += int(
@@ -1174,16 +1178,11 @@ class CountLikelihood:
                         count = _simulate_edge(count, after, rng)
                     latent.append(count)
                     if column is not None and observed[row, column]:
-                        result[row, column] = rng.binomial(
-                            count, self.detection[column]
-                        )
-                selected = np.nansum(result[row]) > 0
-                if self.ascertainment == "root-clades":
-                    selected = all(
-                        np.nansum(result[row, columns]) > 0
-                        for columns in self.root_clade_columns
-                    )
-                if selected:
+                        detected = rng.binomial(count, self.detection[column])
+                        result[row, column] = detected
+                        if detected:
+                            covered |= bit
+                if covered == required:
                     break
             else:
                 raise ValueError(
@@ -1191,7 +1190,16 @@ class CountLikelihood:
                 )
         return result
 
-    def _simulation_branches(self, rates, scale, event, tip_columns):
+    def _simulation_selection_bits(self):
+        if self.ascertainment != "root-clades":
+            return dict.fromkeys(range(len(self.tree.tip_names)), 1), 1
+        return {
+            int(column): 1 << group
+            for group, columns in enumerate(self.root_clade_columns)
+            for column in columns
+        }, (1 << len(self.root_clade_columns)) - 1
+
+    def _simulation_branches(self, rates, scale, event, tip_columns, clade_bits):
         plan = []
         for node, time in enumerate(self.tree.lengths[1:], 1):
             duplication, loss = rates[self.branch_groups[node]] * scale
@@ -1207,8 +1215,16 @@ class CountLikelihood:
                 post = _birth_death_probabilities(
                     duplication, loss, time * (1 - pulse.fraction)
                 )[2:]
+            column = tip_columns.get(node)
             plan.append(
-                (self.tree.parents[node], pre, pulse, post, tip_columns.get(node))
+                (
+                    self.tree.parents[node],
+                    pre,
+                    pulse,
+                    post,
+                    column,
+                    clade_bits.get(column, 0),
+                )
             )
         return plan
 
