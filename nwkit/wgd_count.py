@@ -275,13 +275,18 @@ def _paths(args):
     return paths
 
 
-def wgd_count_main(args):
-    paths = _paths(args)
+def _adequacy_draw_count(args, paths):
     adequacy_draws = getattr(args, "background_adequacy_draws", 0)
     if adequacy_draws != 0 and (adequacy_draws < 4 or "model_out" not in paths):
         raise ValueError(
             "--background-adequacy-draws requires at least four draws and --model-out."
         )
+    return adequacy_draws
+
+
+def wgd_count_main(args):
+    paths = _paths(args)
+    adequacy_draws = _adequacy_draw_count(args, paths)
     workers = getattr(args, "bootstrap_workers", 1)
     scan_workers = getattr(args, "scan_workers", 1)
     if workers < 1:

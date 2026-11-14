@@ -9,7 +9,7 @@ def _statistics(model):
     tip_labels = [
         (i, name) for i, name in enumerate(tree.tip_names) if observed[:, i].any()
     ]
-    clades = [set() for _ in tree.parents]
+    clades: list[set[int]] = [set() for _ in tree.parents]
     for column, node in enumerate(tree.tip_nodes):
         clades[node].add(column)
     for node in range(len(tree.parents) - 1, 0, -1):
