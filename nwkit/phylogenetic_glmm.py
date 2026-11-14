@@ -604,13 +604,13 @@ def _ordinal_terms_with_widths(
     return log_likelihood, gradient, curvature
 
 
-def _dense_weight_matrix(weights: np.ndarray) -> np.ndarray:
+def _weighted_dense_hessian(precision, weights):
     if weights.ndim == 1:
-        return np.diag(weights)
+        return precision + np.diag(weights)
+    matrix = precision.copy()
     dimension = weights.shape[1]
-    matrix = np.zeros((len(weights) * dimension,) * 2, dtype=float)
     indices = np.arange(len(weights) * dimension).reshape(-1, dimension)
-    matrix[indices[:, :, None], indices[:, None, :]] = weights
+    matrix[indices[:, :, None], indices[:, None, :]] += weights
     return matrix
 
 
@@ -810,7 +810,7 @@ def _dense_latent_mode(precision, likelihood_terms, label, mode):
         return value, likelihood_gradient, weights
 
     def factor_hessian(weights):
-        return _positive_definite_cholesky(_dense_weight_matrix(weights) + precision)
+        return _positive_definite_cholesky(_weighted_dense_hessian(precision, weights))
 
     state = evaluate(mode)
     converged = False
