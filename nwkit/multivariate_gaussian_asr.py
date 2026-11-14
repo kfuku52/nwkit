@@ -604,39 +604,77 @@ def _posterior(
         if flat_root and mean_factor is not None
         else None
     )
-    posterior = {}
-    for node_index, node in enumerate(geometry.compiled.nodes):
+    trait_covariance = sigma[:, data.trait_indices]
+
+    def cross_covariance(node_index):
         shared, left, right = geometry.cross(node_index)
-        scalar_cross = shared if flat_root else np.exp(-alpha * (left + right))
-        scalar_variance = geometry.depths[node_index] if flat_root else 1.0
-        cross = scalar_cross[None, :] * sigma[:, data.trait_indices]
-        scaled_mean = mean + cross @ solved_residual
-        solved_cross = cho_solve(factor, cross.T, check_finite=False)
-        covariance = scalar_variance * sigma - cross @ solved_cross
-        if flat_root and len(free_mean_indices):
-            adjustment = np.zeros((dimension, len(free_mean_indices)), dtype=float)
-            adjustment[free_mean_indices, np.arange(len(free_mean_indices))] = 1.0
-            adjustment -= cross @ solved_design
-            assert mean_covariance is not None
-            covariance += adjustment @ mean_covariance @ adjustment.T
-        covariance = (covariance + covariance.T) / 2.0
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-        tolerance = (
-            np.finfo(float).eps
-            * max(1.0, float(np.max(np.abs(eigenvalues))))
-            * max(100, dimension)
-        )
-        if float(np.min(eigenvalues)) < -tolerance:
-            raise ValueError(
-                "A multivariate posterior covariance is not positive semidefinite."
-            )
-        covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)) @ eigenvectors.T
-        restored_mean = data.centers + data.scales * scaled_mean
-        restored_covariance = _restore_sigma(data, covariance)
-        posterior[node] = MultivariateGaussianMarginal(
-            restored_mean, restored_covariance
-        )
+        cross = shared if flat_root else np.exp(-alpha * (left + right))
+        return cross[None, :] * trait_covariance
+
+    adjustment_base = np.zeros((dimension, len(free_mean_indices)), dtype=float)
+    adjustment_base[free_mean_indices, np.arange(len(free_mean_indices))] = 1.0
+    prior_scales = (
+        geometry.depths if flat_root else np.ones(len(geometry.compiled.nodes))
+    )
+    posterior = {}
+    for start, nodes, cross, conditional_covariance in _posterior_covariance_batches(
+        data, geometry, factor, cross_covariance
+    ):
+        scalars = prior_scales[start : start + len(nodes), None, None]
+        covariance = scalars * sigma - conditional_covariance
+        if mean_covariance is not None:
+            adjustment = adjustment_base - cross @ solved_design
+            covariance += adjustment @ mean_covariance @ adjustment.swapaxes(1, 2)
+        means = mean + cross @ solved_residual
+        posterior.update(_restored_posterior_marginals(data, nodes, means, covariance))
     return posterior
+
+
+def _posterior_covariance_batches(data, geometry, factor, cross_covariance):
+    dimension = len(data.trait_names)
+    observations = len(data.values)
+    batch_size = max(1, 32_768 // (dimension * observations))
+    all_nodes = geometry.compiled.nodes
+    for start in range(0, len(all_nodes), batch_size):
+        nodes = all_nodes[start : start + batch_size]
+        cross = np.stack(
+            [cross_covariance(index) for index in range(start, start + len(nodes))]
+        )
+        solved_cross = cho_solve(
+            factor, cross.reshape(-1, observations).T, check_finite=False
+        )
+        yield (
+            start,
+            nodes,
+            cross,
+            cross @ solved_cross.T.reshape(cross.shape).swapaxes(1, 2),
+        )
+
+
+def _restored_posterior_marginals(data, nodes, means, covariance):
+    covariance = (covariance + covariance.swapaxes(1, 2)) / 2.0
+    eigenvalues, eigenvectors = np.linalg.eigh(covariance)
+    tolerance = (
+        np.finfo(float).eps
+        * np.maximum(1.0, np.max(np.abs(eigenvalues), axis=1))
+        * max(100, len(data.trait_names))
+    )
+    if np.any(eigenvalues[:, 0] < -tolerance):
+        raise ValueError(
+            "A multivariate posterior covariance is not positive semidefinite."
+        )
+    covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)[:, None, :]) @ (
+        eigenvectors.swapaxes(1, 2)
+    )
+    return {
+        node: MultivariateGaussianMarginal(
+            data.centers + data.scales * node_mean,
+            _restore_sigma(data, node_covariance),
+        )
+        for node, node_mean, node_covariance in zip(
+            nodes, means, covariance, strict=True
+        )
+    }
 
 
 def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
@@ -652,13 +690,6 @@ def _diagonal_ou_observation_covariance(data, geometry, beta, stationary_sigma):
     return (covariance + covariance.T) / 2.0
 
 
-def _diagonal_ou_cross_covariance(data, geometry, node_index, beta, stationary_sigma):
-    _, left, right = geometry.cross(node_index)
-    observed_beta = beta[data.trait_indices]
-    decay = np.exp(-beta[:, None] * left - observed_beta[None, :] * right)
-    return decay * stationary_sigma[:, data.trait_indices]
-
-
 def _diagonal_ou_posterior(
     data,
     geometry,
@@ -669,30 +700,25 @@ def _diagonal_ou_posterior(
     factor,
 ):
     solved_residual = cho_solve(factor, residual, check_finite=False)
+    observed_beta = beta[data.trait_indices]
+    trait_covariance = stationary_sigma[:, data.trait_indices]
     posterior = {}
-    dimension = len(data.trait_names)
-    for node_index, node in enumerate(geometry.compiled.nodes):
-        cross = _diagonal_ou_cross_covariance(
-            data, geometry, node_index, beta, stationary_sigma
-        )
-        scaled_mean = mean + cross @ solved_residual
-        solved_cross = cho_solve(factor, cross.T, check_finite=False)
-        covariance = stationary_sigma - cross @ solved_cross
-        covariance = (covariance + covariance.T) / 2.0
-        eigenvalues, eigenvectors = np.linalg.eigh(covariance)
-        tolerance = (
-            np.finfo(float).eps
-            * max(1.0, float(np.max(np.abs(eigenvalues))))
-            * max(100, dimension)
-        )
-        if float(np.min(eigenvalues)) < -tolerance:
-            raise ValueError(
-                "A multivariate posterior covariance is not positive semidefinite."
+
+    def cross_covariance(node_index):
+        _, left, right = geometry.cross(node_index)
+        decay = np.exp(-beta[:, None] * left - observed_beta[None, :] * right)
+        return decay * trait_covariance
+
+    for _, nodes, cross, conditional_covariance in _posterior_covariance_batches(
+        data, geometry, factor, cross_covariance
+    ):
+        posterior.update(
+            _restored_posterior_marginals(
+                data,
+                nodes,
+                mean + cross @ solved_residual,
+                stationary_sigma - conditional_covariance,
             )
-        covariance = (eigenvectors * np.maximum(eigenvalues, 0.0)) @ eigenvectors.T
-        posterior[node] = MultivariateGaussianMarginal(
-            data.centers + data.scales * scaled_mean,
-            _restore_sigma(data, covariance),
         )
     return posterior
 

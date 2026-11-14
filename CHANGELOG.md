@@ -83,6 +83,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.
 - Reuse multivariate ASR branch distances across observations at the same node.
 - Batch common-ancestor lookups when building dense Gaussian covariances.
+- Solve for dense multivariate posterior covariances in bounded node batches.
 - Check BMS-DRIFT rate identifiability from observed subtree splits without
   constructing every pairwise path.
 - Compute transformed and directional-drift Brownian likelihoods without
