@@ -187,7 +187,7 @@ class NestedLowRankFactor:
 
 def _positive_diagonal(values: np.ndarray) -> np.ndarray:
     diagonal = np.asarray(values, dtype=float)
-    if diagonal.ndim != 1 or np.any(diagonal <= 0.0):
+    if diagonal.ndim != 1 or not np.all((diagonal > 0.0) & np.isfinite(diagonal)):
         raise np.linalg.LinAlgError("Covariance diagonal is not positive.")
     return diagonal
 
@@ -195,6 +195,22 @@ def _positive_diagonal(values: np.ndarray) -> np.ndarray:
 def _factor_sparse_lu(matrix, label: str) -> SuperLU:
     solver, _ = _factor_sparse_lu_with_pivots(matrix, label)
     return solver
+
+
+def _symmetric_sparse_factor_input(matrix, label):
+    with np.errstate(over="ignore"):
+        difference = matrix - matrix.T
+    if not difference.nnz:
+        return matrix
+    scale = float(np.max(np.abs(matrix.data), initial=0.0))
+    relative_asymmetry = float(np.max(np.abs(difference.data))) / scale
+    tolerance = np.finfo(float).eps * matrix.shape[0] * 100.0
+    if relative_asymmetry > tolerance:
+        raise np.linalg.LinAlgError("{} is not symmetric.".format(label))
+    # Average the two triangles identically without doubling the diagonal.
+    symmetric = (matrix * 0.5 + matrix.T * 0.5).tocsc()
+    symmetric.setdiag(matrix.diagonal())
+    return symmetric
 
 
 def _factor_sparse_lu_with_pivots(matrix, label: str) -> tuple[SuperLU, np.ndarray]:
@@ -212,12 +228,7 @@ def _factor_sparse_lu_with_pivots(matrix, label: str) -> tuple[SuperLU, np.ndarr
         raise np.linalg.LinAlgError("{} must be non-empty and square.".format(label))
     if not np.isfinite(matrix.data).all():
         raise np.linalg.LinAlgError("{} contains non-finite values.".format(label))
-    difference = matrix - matrix.T
-    scale = max(1.0, float(np.max(np.abs(matrix.data), initial=0.0)))
-    tolerance = np.finfo(float).eps * scale * matrix.shape[0] * 100.0
-    if difference.nnz and float(np.max(np.abs(difference.data))) > tolerance:
-        raise np.linalg.LinAlgError("{} is not symmetric.".format(label))
-    matrix = ((matrix + matrix.T) * 0.5).tocsc()
+    matrix = _symmetric_sparse_factor_input(matrix, label)
     if np.any(matrix.diagonal() <= 0.0):
         raise np.linalg.LinAlgError("{} is not positive definite.".format(label))
     try:

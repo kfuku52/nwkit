@@ -120,6 +120,18 @@ def test_sparse_precision_helpers_reject_indefinite_matrices_before_solving():
         gaussian.sparse_precision_update_diagonal(sparse.eye(2), precision)
 
 
+@pytest.mark.parametrize("scale", [2.0**-900, 2.0**1023])
+def test_sparse_precision_validation_and_solve_use_relative_units(scale):
+    reference = np.array([[1.0, 0.25], [0.25, 1.0]])
+    matrix = sparse.csc_matrix(scale * reference)
+    with np.errstate(over="raise", invalid="raise"):
+        factor = gaussian._factor_sparse_lu(matrix, "Sparse precision")
+        np.testing.assert_allclose(factor.solve(scale * reference[:, 1]), [0.0, 1.0])
+        asymmetric = sparse.csc_matrix(scale * np.array([[1.0, 0.5], [0.25, 1.0]]))
+        with pytest.raises(np.linalg.LinAlgError, match="not symmetric"):
+            gaussian._factor_sparse_lu(asymmetric, "Sparse precision")
+
+
 def test_sparse_precision_diagonal_reuses_states_with_distinct_observation_loadings():
     precision = np.array([[2.0, -0.3], [-0.3, 1.5]])
     loading = np.array([[0.0, 2.0], [0.5, 0.0], [0.0, 0.0], [0.0, -1.5]])
