@@ -273,29 +273,31 @@ class TopologyLikelihood:
         # L_g = H F_g(z), where F'_g = c_g F_left F_right. Every F is
         # a positive polynomial of degree at most the observed tip count - 1.
         for node, children in enumerate(self.gene.children):
+            if not children:
+                coefficients = logs[node : node + 1].astype(dtype, copy=False)
+                polynomials[node] = coefficients
+                result[node] = dtype(log_h) + coefficients[0]
+                continue
             coefficients = np.full(
                 (self.tip_counts[node], columns), -np.inf, dtype=dtype
             )
             coefficients[0] = logs[node]
-            if children:
-                left, right = (polynomials.pop(child) for child in children)
-                for i in np.flatnonzero(np.isfinite(left[:, 0])):
-                    for j in np.flatnonzero(np.isfinite(right[:, 0])):
-                        power = i + j + 1
-                        factor = dtype(
-                            math.log(self.coefficients[node]) - math.log(power)
+            left, right = (polynomials.pop(child) for child in children)
+            for i in np.flatnonzero(np.isfinite(left[:, 0])):
+                for j in np.flatnonzero(np.isfinite(right[:, 0])):
+                    power = i + j + 1
+                    factor = dtype(math.log(self.coefficients[node]) - math.log(power))
+                    coefficients[power, 0] = np.logaddexp(
+                        coefficients[power, 0], factor + left[i, 0] + right[j, 0]
+                    )
+                    if columns > 1:
+                        coefficients[power, 1:] = np.logaddexp(
+                            coefficients[power, 1:],
+                            factor
+                            + np.logaddexp(
+                                left[i, 1:] + right[j, 0], left[i, 0] + right[j, 1:]
+                            ),
                         )
-                        coefficients[power, 0] = np.logaddexp(
-                            coefficients[power, 0], factor + left[i, 0] + right[j, 0]
-                        )
-                        if columns > 1:
-                            coefficients[power, 1:] = np.logaddexp(
-                                coefficients[power, 1:],
-                                factor
-                                + np.logaddexp(
-                                    left[i, 1:] + right[j, 0], left[i, 0] + right[j, 1:]
-                                ),
-                            )
             polynomials[node] = coefficients
             powers = np.arange(len(coefficients), dtype=dtype) * dtype(log_z)
             powers[0] = 0
