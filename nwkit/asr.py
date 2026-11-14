@@ -2986,36 +2986,69 @@ def _run_stochastic_simulations(spec, seed_sequences, threads):
         )
 
 
-def _stochastic_map_rows(
+def _stochastic_map_table(
     tree, states, node_to_branch_id, total_counts, any_counts, num_simulations
 ):
-    rows = list()
-    for node in tree.traverse():
-        if node.is_root:
-            continue
-        branch_id = node_to_branch_id[node]
-        for from_index, from_state in enumerate(states):
-            for to_index, to_state in enumerate(states):
-                if from_index == to_index:
-                    continue
-                count_key = (branch_id, from_index, to_index)
-                total_count = total_counts.get(count_key, 0)
-                any_count = any_counts.get(count_key, 0)
-                rows.append(
-                    {
-                        "branch_id": branch_id,
-                        "parent": node_to_branch_id[node.up],
-                        "node_class": get_node_class(node),
-                        "name": "" if node.name in [None, ""] else str(node.name),
-                        "from_state": from_state,
-                        "to_state": to_state,
-                        "total_count": total_count,
-                        "mean_count": total_count / float(num_simulations),
-                        "posterior_frequency": any_count / float(num_simulations),
-                        "num_simulations": num_simulations,
-                    }
-                )
-    return rows
+    nodes = [node for node in tree.traverse() if not node.is_root]
+    branch_ids = [node_to_branch_id[node] for node in nodes]
+    pairs = [
+        (first, second)
+        for first in range(len(states))
+        for second in range(len(states))
+        if first != second
+    ]
+    row_count = len(nodes) * len(pairs)
+    total = _stochastic_map_count_column(total_counts, branch_ids, pairs, row_count)
+    any_count = _stochastic_map_count_column(any_counts, branch_ids, pairs, row_count)
+    return pd.DataFrame(
+        {
+            "branch_id": np.repeat(np.asarray(branch_ids, dtype=np.int64), len(pairs)),
+            "parent": np.repeat(
+                np.asarray(
+                    [node_to_branch_id[node.up] for node in nodes], dtype=np.int64
+                ),
+                len(pairs),
+            ),
+            "node_class": np.repeat(
+                np.asarray([get_node_class(node) for node in nodes], dtype=object),
+                len(pairs),
+            ),
+            "name": np.repeat(
+                np.asarray(
+                    [
+                        "" if node.name in (None, "") else str(node.name)
+                        for node in nodes
+                    ],
+                    dtype=object,
+                ),
+                len(pairs),
+            ),
+            "from_state": np.tile(
+                np.asarray([states[first] for first, _ in pairs], dtype=object),
+                len(nodes),
+            ),
+            "to_state": np.tile(
+                np.asarray([states[second] for _, second in pairs], dtype=object),
+                len(nodes),
+            ),
+            "total_count": total,
+            "mean_count": total / float(num_simulations),
+            "posterior_frequency": any_count / float(num_simulations),
+            "num_simulations": num_simulations,
+        }
+    )
+
+
+def _stochastic_map_count_column(counts, branch_ids, pairs, row_count):
+    return np.fromiter(
+        (
+            counts.get((branch_id, first, second), 0)
+            for branch_id in branch_ids
+            for first, second in pairs
+        ),
+        dtype=np.int64,
+        count=row_count,
+    )
 
 
 def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, threads=1):
@@ -3029,7 +3062,7 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
     total_counts, any_counts = _run_stochastic_simulations(
         spec, seed_sequences, threads
     )
-    rows = _stochastic_map_rows(
+    return _stochastic_map_table(
         tree,
         states,
         node_to_branch_id,
@@ -3037,19 +3070,6 @@ def _simulate_stochastic_maps(tree, states, fit, num_simulations, seed=None, thr
         any_counts,
         num_simulations,
     )
-    columns = (
-        "branch_id",
-        "parent",
-        "node_class",
-        "name",
-        "from_state",
-        "to_state",
-        "total_count",
-        "mean_count",
-        "posterior_frequency",
-        "num_simulations",
-    )
-    return pd.DataFrame(rows, columns=columns)
 
 
 def _write_stochastic_map(tree, states, fit, args):
