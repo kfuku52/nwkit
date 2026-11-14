@@ -40,6 +40,20 @@ def test_multilag_and_antithetic_ess():
     assert diagnose(cases["antithetic"])["ess_mean"] > cases["antithetic"].size
 
 
+@pytest.mark.parametrize("exponent", [-1000, 1024])
+def test_mean_diagnostics_are_stable_across_trace_units(exponent):
+    values = np.random.default_rng(57).uniform(-0.99, 0.99, size=(4, 1000))
+    reference = diagnose(values)
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        result = diagnose(np.ldexp(values, exponent))
+    for metric in ("rhat", "ess_bulk", "ess_tail", "ess_mean"):
+        assert result[metric] == pytest.approx(reference[metric], rel=1e-12)
+    assert np.ldexp(result["mcse_mean"], -exponent) == pytest.approx(
+        reference["mcse_mean"], rel=1e-12
+    )
+    assert result["status"] == reference["status"] == "ok"
+
+
 @pytest.mark.parametrize(
     "shape,status",
     [

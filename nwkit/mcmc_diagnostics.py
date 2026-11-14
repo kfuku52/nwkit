@@ -34,7 +34,7 @@ def _rank_binary(x):
 
 
 def _constant(x):
-    return bool(np.any(np.ptp(x, axis=1) == 0))
+    return bool(np.any(x.max(axis=1) == x.min(axis=1)))
 
 
 def _rhat(x):
@@ -107,10 +107,20 @@ def diagnose(values, *, indicator=False, structural=False):
     binary = indicator and isinstance(values, np.ndarray) and values.dtype.kind == "b"
     ranked = _rank_binary(split) if binary else _rank(split)
     rank_rhat = _rhat(ranked)
+    exponent = 0
     if indicator:
         # Folding a balanced binary variable can be identically constant.
         result["rhat"] = rank_rhat
     else:
+        # The raw trace can exceed the range for a squared deviation or an
+        # FFT power. Scaling by a power of two retains precision for those
+        # calculations. The bulk ranks above use the original trace.
+        input_exponent = math.frexp(max(abs(float(x.min())), abs(float(x.max()))))[1]
+        if not -450 <= input_exponent <= 450:
+            exponent = input_exponent
+            with np.errstate(under="ignore"):
+                x = np.ldexp(x, -exponent)
+            split = _split(x)
         folded_rhat = _rhat(_rank(_split(np.abs(x - np.median(x)))))
         result["rhat"] = float(np.maximum(rank_rhat, folded_rhat))
         tails = [
@@ -119,7 +129,9 @@ def diagnose(values, *, indicator=False, structural=False):
         result["ess_tail"] = float(np.min(tails))
     result["ess_bulk"] = _ess(ranked)
     result["ess_mean"] = _ess(split)
-    result["mcse_mean"] = float(np.sqrt(np.var(x, ddof=1) / result["ess_mean"]))
+    mcse = np.sqrt(np.var(x, ddof=1) / result["ess_mean"])
+    with np.errstate(over="ignore", under="ignore"):
+        result["mcse_mean"] = float(np.ldexp(mcse, exponent))
     required = [result[k] for k in ("rhat", "ess_bulk", "ess_mean", "mcse_mean")]
     if not indicator:
         required.append(result["ess_tail"])
