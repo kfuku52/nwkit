@@ -74,6 +74,18 @@ def test_real_cli_and_metadata_no_uncalibrated_probability(tmp_path):
     )
 
 
+def test_state_bound_failure_names_the_family_and_tip(tmp_path):
+    tree, counts = inputs(tmp_path)
+    counts.write_text("family_id\tA\tB\tC\nf1\t1\t1\t1\nlarge\t1\t852\t1\n")
+    out = tmp_path / "events.tsv"
+    with pytest.raises(ValueError) as failure:
+        main(command(tree, counts) + ["-o", str(out)])
+    error = str(failure.value)
+    assert "--max-states=64 must be at least 1708" in error
+    assert "largest observed count is 852 in family 'large', tip 'B'" in error
+    assert not out.exists()
+
+
 @pytest.mark.parametrize(
     "event_bound,background_bound,burst_bound", list(product((False, True), repeat=3))
 )

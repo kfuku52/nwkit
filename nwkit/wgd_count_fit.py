@@ -233,6 +233,11 @@ def _fit_at_bound(
     )
 
 
+def initial_count_bound(maximum, initial=None):
+    minimum = max(8, int(maximum) + 2)
+    return minimum if initial is None else max(minimum, initial.max_count)
+
+
 def fit_counts(
     model: CountLikelihood,
     *,
@@ -247,12 +252,11 @@ def fit_counts(
     """Fit and independently check per-family truncation error at twice the bound."""
     if not np.isfinite(state_tolerance) or state_tolerance <= 0:
         raise ValueError("State tolerance must be finite and positive.")
-    bound = max(8, int(np.nanmax(model.counts)) + 2)
-    if initial is not None:
-        bound = max(bound, initial.max_count)
+    bound = initial_count_bound(np.nanmax(model.counts), initial)
     if bound * 2 > max_states:
         raise ValueError(
-            "--max-states must allow at least twice the initial count bound."
+            f"--max-states={max_states} must allow at least twice the initial count bound "
+            f"({bound}); this fit requires at least {2 * bound}."
         )
     while 2 * bound <= max_states:
         fit = _fit_at_bound(

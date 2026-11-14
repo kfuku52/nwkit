@@ -26,7 +26,12 @@ from nwkit.wgd_count_checkpoint import (
     checkpoint_inputs,
     open_checkpoint,
 )
-from nwkit.wgd_count_fit import _burst_model, calibrate_scan, scan_counts
+from nwkit.wgd_count_fit import (
+    _burst_model,
+    calibrate_scan,
+    initial_count_bound,
+    scan_counts,
+)
 from nwkit.wgd_count_model import CountLikelihood, CountTree, rate_categories
 
 
@@ -273,6 +278,15 @@ def wgd_count_main(args):
         branch_groups=groups,
         ascertainment=args.ascertainment,
     )
+    maximum = np.nanmax(counts)
+    bound = initial_count_bound(maximum)
+    if 2 * bound > args.max_states:
+        row, column = np.unravel_index(np.nanargmax(counts), counts.shape)
+        raise ValueError(
+            f"--max-states={args.max_states} must be at least {2 * bound} for the "
+            f"state-doubling check; the largest observed count is {int(maximum)} "
+            f"in family {families[row]!r}, tip {design.tip_names[column]!r}."
+        )
     selected = None
     if args.candidate_branches:
         requested = [int(value) for value in args.candidate_branches.split(",")]
