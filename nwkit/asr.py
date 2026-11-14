@@ -289,7 +289,13 @@ def _er_transition_matrix(branch_length, rate, num_states):
         return np.ones((1, 1), dtype=float)
     if rate < 0.0:
         raise ValueError("Mk transition rate must be non-negative.")
-    exponent = -float(num_states) * (float(rate) * float(branch_length))
+    return _er_transition_from_elapsed_rate(
+        float(rate) * float(branch_length), num_states
+    )
+
+
+def _er_transition_from_elapsed_rate(elapsed_rate, num_states):
+    exponent = -float(num_states) * elapsed_rate
     decay = math.exp(exponent)
     # expm1 preserves tiny positive transitions when exp rounds to one.
     off_diagonal = -math.expm1(exponent) / float(num_states)
@@ -383,17 +389,28 @@ def _prepare_generator_exponential(rate_matrix):
     return log2_rate_norm, sparse_rates, direct_norm
 
 
-def _transition_from_generator(rate_matrix, branch_length, prepared):
+def _transition_from_generator(
+    rate_matrix, branch_length, prepared, time_multiplier=1.0
+):
     if prepared is None:
         return np.eye(rate_matrix.shape[0], dtype=float)
     log2_rate_norm, sparse_rates, direct_norm = prepared
-    log2_exponent_norm = log2_rate_norm + math.log2(branch_length)
+    if time_multiplier == 1.0:
+        log2_time = math.log2(branch_length)
+    else:
+        time_mantissa, time_exponent = _mk_scaled_time(branch_length, time_multiplier)
+        log2_time = math.log2(time_mantissa) + time_exponent
+    log2_exponent_norm = log2_rate_norm + log2_time
     log2_direct_norm = math.log2(direct_norm)
     if log2_exponent_norm <= log2_direct_norm:
         exponent_norm = 2.0**log2_exponent_norm
+        exponent = (
+            rate_matrix * branch_length
+            if time_multiplier == 1.0
+            else _mk_timed_generator(rate_matrix, time_mantissa, time_exponent)
+        )
         return _validated_transition_matrix(
-            _exponentiate_generator(rate_matrix * branch_length, sparse_rates),
-            exponent_norm,
+            _exponentiate_generator(exponent, sparse_rates), exponent_norm
         )
 
     # scipy.linalg.expm is backward stable, but on very long CTMC branches its
@@ -406,19 +423,40 @@ def _transition_from_generator(rate_matrix, branch_length, prepared):
         1,
         int(math.ceil(log2_exponent_norm - log2_direct_norm)),
     )
-    scaled_length = math.ldexp(branch_length, -squarings)
     scaled_norm = 2.0 ** (log2_exponent_norm - squarings)
-    exponent = rate_matrix * scaled_length
+    if time_multiplier == 1.0:
+        time_mantissa, time_exponent = math.frexp(branch_length)
+    exponent = _mk_timed_generator(
+        rate_matrix, time_mantissa, time_exponent - squarings
+    )
     if np.any((rate_matrix > 0.0) & (exponent < np.finfo(float).tiny)):
         extra_squarings = int(math.ceil(math.log2(direct_norm / 2.0)))
         return _log_space_transition_matrix(
-            rate_matrix, branch_length, squarings + extra_squarings
+            rate_matrix,
+            time_mantissa,
+            time_exponent - squarings - extra_squarings,
+            squarings + extra_squarings,
         )
     matrix = _validated_transition_matrix(
         _exponentiate_generator(exponent, sparse_rates), scaled_norm
     )
     exponent_norm = 2.0**log2_exponent_norm if log2_exponent_norm < 1023.0 else math.inf
     return _square_markov_matrix(matrix, squarings, exponent_norm)
+
+
+def _mk_scaled_time(branch_length, multiplier):
+    length, length_exponent = math.frexp(branch_length)
+    scale, scale_exponent = math.frexp(multiplier)
+    time, adjustment = math.frexp(length * scale)
+    return time, length_exponent + scale_exponent + adjustment
+
+
+def _mk_timed_generator(matrix, time_mantissa, time_exponent):
+    if -1021 <= time_exponent <= 1024:
+        return matrix * math.ldexp(time_mantissa, time_exponent)
+    mantissas, exponents = np.frexp(matrix)
+    with np.errstate(under="ignore"):
+        return np.ldexp(mantissas * time_mantissa, exponents + time_exponent)
 
 
 def _square_markov_matrix(matrix, squarings, exponent_norm):
@@ -442,17 +480,16 @@ def _log_matrix_product(first, second):
     return result
 
 
-def _log_space_transition_matrix(rate_matrix, branch_length, squarings):
+def _log_space_transition_matrix(rate_matrix, time_mantissa, time_exponent, squarings):
     """Preserve positive rates too small to represent before squaring."""
 
     num_states = len(rate_matrix)
     diagonal = np.diag_indices(num_states)
-    time_mantissa, time_exponent = math.frexp(branch_length)
     intensity = float(np.max(-rate_matrix[diagonal]))
     intensity_mantissa, intensity_exponent = math.frexp(intensity)
     scaled_intensity = math.ldexp(
         intensity_mantissa * time_mantissa,
-        intensity_exponent + time_exponent - squarings,
+        intensity_exponent + time_exponent,
     )
     # Form λI + Qt in log space. Combine binary exponents before converting
     # to logs so the common shift cannot cancel large log magnitudes.
@@ -460,7 +497,7 @@ def _log_space_transition_matrix(rate_matrix, branch_length, squarings):
     jump_rates[diagonal] += intensity
     mantissas, exponents = np.frexp(jump_rates)
     jump = _log_probabilities(mantissas * time_mantissa) + (
-        exponents.astype(int) + time_exponent - squarings
+        exponents.astype(int) + time_exponent
     ) * math.log(2.0)
     term = np.full_like(jump, -math.inf)
     term[diagonal] = 0.0
@@ -543,11 +580,15 @@ def _get_er_rate_from_matrix(rate_matrix):
     rate = float(off_diagonal_rates[0])
     if rate < 0.0:
         return None
-    if not np.allclose(off_diagonal_rates, rate, rtol=10**-12, atol=0.0):
-        return None
-    expected_diagonal = np.full(num_states, -rate * float(num_states - 1), dtype=float)
-    if not np.allclose(np.diag(rate_matrix), expected_diagonal, rtol=10**-12, atol=0.0):
-        return None
+    # The relative error threshold can itself be subnormal for tiny rates.
+    with np.errstate(under="ignore"):
+        if not np.allclose(off_diagonal_rates, rate, rtol=10**-12, atol=0.0):
+            return None
+        expected_diagonal = -rate * float(num_states - 1)
+        if not np.allclose(
+            np.diag(rate_matrix), expected_diagonal, rtol=10**-12, atol=0.0
+        ):
+            return None
     return rate
 
 
@@ -1494,7 +1535,9 @@ def _mk_branch_lengths(tree):
     )
 
 
-def _transition_matrices_for_tree(tree, rate_matrix, *, prepared_branches=None):
+def _transition_matrices_for_tree(
+    tree, rate_matrix, *, prepared_branches=None, time_multiplier=1.0
+):
     """Build each unique branch-length transition once for one generator."""
 
     num_states = rate_matrix.shape[0]
@@ -1507,13 +1550,40 @@ def _transition_matrices_for_tree(tree, rate_matrix, *, prepared_branches=None):
     by_node = {}
     for node, length in branches:
         if length not in by_length:
-            by_length[length] = (
-                _transition_from_generator(rate_matrix, length, prepared)
-                if er_rate is None
-                else _er_transition_matrix(length, er_rate, num_states)
-            )
+            if er_rate is None:
+                by_length[length] = _transition_from_generator(
+                    rate_matrix, length, prepared, time_multiplier
+                )
+            elif time_multiplier == 1.0:
+                by_length[length] = _er_transition_matrix(length, er_rate, num_states)
+            else:
+                time, time_exponent = _mk_scaled_time(length, time_multiplier)
+                rate, rate_exponent = math.frexp(er_rate)
+                try:
+                    elapsed_rate = math.ldexp(
+                        time * rate, time_exponent + rate_exponent
+                    )
+                except OverflowError:
+                    elapsed_rate = math.inf
+                by_length[length] = _er_transition_from_elapsed_rate(
+                    elapsed_rate, num_states
+                )
         by_node[node] = by_length[length]
     return by_node
+
+
+def _mixture_category_transitions(tree, matrix, rate, branches):
+    with np.errstate(over="ignore", under="ignore"):
+        scaled = matrix * rate
+    # Keep the time multiplier in binary components if scaling the generator
+    # would round a positive rate to a subnormal value or to infinity.
+    if np.isfinite(scaled).all() and not np.any(
+        (matrix > 0.0) & (scaled < np.finfo(float).tiny)
+    ):
+        return _transition_matrices_for_tree(tree, scaled, prepared_branches=branches)
+    return _transition_matrices_for_tree(
+        tree, matrix, prepared_branches=branches, time_multiplier=float(rate)
+    )
 
 
 def _discrete_gamma_category_rates(shape, categories):
@@ -1844,8 +1914,8 @@ def compute_mk_mixture_marginals(
         transitions = []
         columns = []
         for rate, weight in zip(category_rates, weights, strict=True):
-            transition = _transition_matrices_for_tree(
-                tree, matrix * rate, prepared_branches=prepared_branches
+            transition = _mixture_category_transitions(
+                tree, matrix, rate, prepared_branches
             )
             if retain:
                 transitions.append(transition)

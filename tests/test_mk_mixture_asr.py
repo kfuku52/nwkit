@@ -1,8 +1,10 @@
+import math
 from types import SimpleNamespace
 
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.linalg import expm
 from scipy.special import logsumexp
 
 import nwkit.asr as asr
@@ -151,6 +153,77 @@ def test_mk_mixture_averages_only_categories_with_posterior_mass():
         np.testing.assert_allclose(values[tree], [0.5, 0.5])
         np.testing.assert_allclose(values[tree["A"]], likelihoods[character]["A"])
         np.testing.assert_allclose(values[tree["B"]], likelihoods[character]["B"])
+
+
+@pytest.mark.parametrize(
+    "rate,time,multiplier",
+    [
+        (1e308, 1e-308, 3.0),
+        (1e308, 1e308, 3.0),
+        (1e-320, 1e308, 1e-5),
+        (1e-320, 1.5e308, 2.0),
+    ],
+)
+def test_mk_mixture_category_preserves_reciprocal_rate_and_branch_units(
+    rate, time, multiplier
+):
+    tree = tree_from(f"(A:{time},B:{time})R;")
+    matrix = rate * np.array([[-1.0, 1.0], [1.0, -1.0]])
+    with np.errstate(over="raise", invalid="raise", under="raise"):
+        transitions = asr._mixture_category_transitions(
+            tree, matrix, multiplier, asr._mk_branch_lengths(tree)
+        )
+    expected = -0.5 * math.expm1(-2.0 * ((rate * time) * multiplier))
+    for transition in transitions.values():
+        np.testing.assert_allclose(
+            transition,
+            [[1.0 - expected, expected], [expected, 1.0 - expected]],
+            atol=0.0,
+            rtol=3e-15,
+        )
+
+
+@pytest.mark.parametrize(
+    "rate,time,multiplier", [(4e307, 1e-308, 3.0), (2.0**-1060, 1e308, 2.0)]
+)
+def test_mk_mixture_category_preserves_asymmetric_generator_units(
+    rate, time, multiplier
+):
+    tree = tree_from(f"(A:{time},B:0)R;")
+    generator = np.array([[-2.0, 2.0, 0.0], [1.0, -2.0, 1.0], [0.0, 2.0, -2.0]])
+    transitions = asr._mixture_category_transitions(
+        tree, rate * generator, multiplier, asr._mk_branch_lengths(tree)
+    )
+    expected = expm(generator * ((rate * time) * multiplier))
+    np.testing.assert_allclose(transitions[tree["A"]], expected, atol=0.0, rtol=4e-15)
+    np.testing.assert_array_equal(transitions[tree["B"]], np.eye(3))
+
+
+def test_fitted_mk_mixture_is_invariant_to_extreme_reciprocal_time_units():
+    states, observed, likelihoods = character_data(
+        {"slow": "000111", "fast": "010101", "middle": "001101"}
+    )
+    fitted = []
+    for time, rate in ((1.0, 1.0), (1e-308, 1e308)):
+        tree = tree_from(
+            f"(((A:{time},B:{time}):{time},C:{time}):{time},"
+            f"((D:{time},E:{time}):{time},F:{time}):{time})R;"
+        )
+        fitted.append(
+            compute_mk_mixture_marginals(
+                tree, states, observed, likelihoods, rate=rate, categories=4
+            )
+        )
+    (reference, expected), (scaled, actual) = fitted
+    assert actual["log_likelihood"] == pytest.approx(
+        expected["log_likelihood"], abs=1e-10
+    )
+    for character in reference:
+        np.testing.assert_allclose(
+            list(scaled[character].values()),
+            list(reference[character].values()),
+            atol=1e-7,
+        )
 
 
 def test_mk_mixture_rejects_a_character_with_no_feasible_category(monkeypatch):
