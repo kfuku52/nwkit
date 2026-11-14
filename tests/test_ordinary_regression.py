@@ -273,7 +273,14 @@ def test_ordinal_likelihood_keeps_logistic_tail_mass_and_gradient():
     expected = 2.0 * (-999.0 + np.log(-np.expm1(-2.0))) - 2002.0
     assert likelihood == pytest.approx(expected, abs=1e-11)
     np.testing.assert_array_equal(gradient, [1.0, -1.0, 1.0, -1.0])
-    np.testing.assert_array_equal(curvature, np.full(4, 1e-9))
+    np.testing.assert_array_equal(curvature, np.zeros(4))
+
+
+def test_ordinal_likelihood_retains_representable_tail_curvature():
+    counts = np.array([[0, 1, 0], [1, 0, 0]])
+    _, _, curvature = _ordinal_terms(counts, np.full(2, 50.0), np.array([-1.0, 1.0]))
+    first, last = np.exp(-np.array([51.0, 49.0]))
+    np.testing.assert_allclose(curvature, [first + last, first], rtol=1e-13, atol=0.0)
 
 
 def test_ordinal_likelihood_keeps_width_when_centered_thresholds_round_together():

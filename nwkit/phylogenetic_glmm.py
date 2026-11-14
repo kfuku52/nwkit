@@ -543,31 +543,47 @@ def _ordinal_thresholds(parameters: np.ndarray) -> np.ndarray:
 
 
 def _ordinal_log_probabilities(
-    centered_thresholds: np.ndarray, thresholds: np.ndarray
+    centered_thresholds: np.ndarray, interval_log_widths: np.ndarray
 ) -> np.ndarray:
     log_probabilities = np.zeros(
-        (len(centered_thresholds), len(thresholds) + 1), dtype=float
+        (len(centered_thresholds), centered_thresholds.shape[1] + 1), dtype=float
     )
     # The logistic interval mass is sigmoid(upper) * sigmoid(-lower)
     # times (1 - exp(lower - upper)). Its width is independent of the predictor.
     log_probabilities[:, :-1] = -np.logaddexp(0.0, -centered_thresholds)
     log_probabilities[:, 1:] -= np.logaddexp(0.0, centered_thresholds)
-    with np.errstate(divide="ignore", over="ignore"):
-        log_probabilities[:, 1:-1] += np.log(-np.expm1(-np.diff(thresholds)))
+    log_probabilities[:, 1:-1] += interval_log_widths
     return log_probabilities
 
 
+def _ordinal_interval_log_widths(thresholds):
+    with np.errstate(divide="ignore", over="ignore"):
+        return np.log(-np.expm1(-np.diff(thresholds)))
+
+
 def _ordinal_terms(
-    counts: np.ndarray, linear: np.ndarray, thresholds: np.ndarray
+    counts: np.ndarray,
+    linear: np.ndarray,
+    thresholds: np.ndarray,
+) -> tuple[float, np.ndarray, np.ndarray]:
+    return _ordinal_terms_with_widths(
+        counts, linear, thresholds, _ordinal_interval_log_widths(thresholds)
+    )
+
+
+def _ordinal_terms_with_widths(
+    counts: np.ndarray,
+    linear: np.ndarray,
+    thresholds: np.ndarray,
+    interval_log_widths: np.ndarray,
 ) -> tuple[float, np.ndarray, np.ndarray]:
     with np.errstate(over="ignore"):
         centered = thresholds[None, :] - linear[:, None]
-    log_probabilities = _ordinal_log_probabilities(centered, thresholds)
+    log_probabilities = _ordinal_log_probabilities(centered, interval_log_widths)
     below = expit(centered)
     above = expit(-centered)
     gradient = np.sum(counts[:, :-1] * above - counts[:, 1:] * below, axis=1)
     curvature = np.sum((counts[:, :-1] + counts[:, 1:]) * below * above, axis=1)
-    curvature = np.maximum(curvature, 1e-9)
     log_likelihood = float(
         np.sum(
             np.multiply(
@@ -765,10 +781,13 @@ def _random_mode(
         if initial is None
         else np.asarray(initial, dtype=float).copy()
     )
+    interval_log_widths = _ordinal_interval_log_widths(thresholds)
 
     def terms(candidate: np.ndarray) -> tuple[float, np.ndarray, np.ndarray]:
         if family == "ordinal":
-            return _ordinal_terms(counts, fixed_linear + candidate, thresholds)
+            return _ordinal_terms_with_widths(
+                counts, fixed_linear + candidate, thresholds, interval_log_widths
+            )
         dimension = fixed_linear.shape[1]
         return _multinomial_terms(
             counts, fixed_linear + candidate.reshape(len(counts), dimension)
@@ -2881,7 +2900,8 @@ def _draw_categorical_responses(
         linear = fixed[:, 0] + latent.reshape(len(fixed))
         with np.errstate(over="ignore"):
             centered = fit.thresholds[None, :] - linear[:, None]
-        probabilities = np.exp(_ordinal_log_probabilities(centered, fit.thresholds))
+        log_widths = _ordinal_interval_log_widths(fit.thresholds)
+        probabilities = np.exp(_ordinal_log_probabilities(centered, log_widths))
     else:
         linear = fixed + latent.reshape(fixed.shape)
         probabilities = np.exp(_multinomial_log_probabilities(linear))
@@ -4161,10 +4181,13 @@ def _fit_categorical_phylogenetic_glmm(
             if latent is None:
                 raise ValueError("Sparse phylogenetic covariance is unavailable.")
             fixed_linear = design @ coefficients
+            interval_log_widths = _ordinal_interval_log_widths(thresholds)
 
             def likelihood_terms(linear):
                 if family == "ordinal":
-                    return _ordinal_terms(counts, linear, thresholds)
+                    return _ordinal_terms_with_widths(
+                        counts, linear, thresholds, interval_log_widths
+                    )
                 return _multinomial_terms(
                     counts, linear.reshape(len(design), random_dimension)
                 )
