@@ -312,6 +312,10 @@ class TopologyLikelihood:
         log_h = log_survives + log_success - 2 * denominator
         if duplication == 0:
             return new_survival, logs.astype(dtype) + log_h
+        if np.all(np.isneginf(logs[:, 0])):
+            # Duplication multiplies existing subtree probabilities; an edge
+            # with no possible observed descendants cannot create any.
+            return new_survival, logs.copy()
         log_z = log_b - denominator
         columns = logs.shape[1]
         polynomials: dict[int, np.ndarray] = {}
