@@ -129,6 +129,8 @@ def _observations(
         raise ValueError(
             "Unknown vector observation tips: " + ", ".join(sorted(unknown))
         )
+    zero_covariance = np.zeros((d, d))
+    previous_noisy_covariance = None
     for name, values in observed.items():
         if values is None:
             continue
@@ -143,7 +145,7 @@ def _observations(
         if error_covariances is not None and name not in error_covariances:
             raise ValueError(f"Observation covariance is required for tip '{name}'.")
         covariance = (
-            np.zeros((d, d))
+            zero_covariance
             if error_covariances is None
             else _array(error_covariances[name], (d, d), "Observation covariance")
         )
@@ -157,9 +159,11 @@ def _observations(
         precision, linear, constant = np.zeros((d, d)), np.zeros(d), 0.0
         fixed = {int(indices[i]): float(y[i]) for i in exact}
         if len(noisy):
-            inverse, logdet = _inverse(
-                covariance[np.ix_(noisy, noisy)], "Observation covariance"
-            )
+            noisy_covariance = covariance[np.ix_(noisy, noisy)]
+            bits = noisy_covariance.tobytes()
+            if bits != previous_noisy_covariance:
+                inverse, logdet = _inverse(noisy_covariance, "Observation covariance")
+                previous_noisy_covariance = bits
             selected = indices[noisy]
             precision[np.ix_(selected, selected)] += inverse
             linear[selected] += inverse @ y[noisy]

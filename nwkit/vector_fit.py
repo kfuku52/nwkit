@@ -82,10 +82,11 @@ def normalized_vector_observations(data):
         data.node_indices, data.trait_indices, data.values, data.errors, strict=True
     ):
         name = str(data.compiled.nodes[index].name)
-        observed.setdefault(name, [None] * dimension)[trait] = float(value)
-        errors.setdefault(name, np.zeros((dimension, dimension)))[trait, trait] = (
-            error**2
-        )
+        if name not in observed:
+            observed[name] = [None] * dimension
+            errors[name] = np.zeros((dimension, dimension))
+        observed[name][trait] = float(value)
+        errors[name][trait, trait] = error**2
     return observed, errors
 
 
