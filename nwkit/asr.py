@@ -26,6 +26,7 @@ from nwkit.asr_input import (
     resolve_trait_type,
 )
 from nwkit.asr_models import model_names
+from nwkit.compiled_tree import CompiledTree
 from nwkit.discrete_asr_models import (
     FREQUENCY_RATIO_BOUNDS,
     model_equivalence_family,
@@ -66,6 +67,7 @@ _MAX_COVARION_LOG_SPREAD = math.log(1e4)
 _MAX_FREE_TRANSITION_PARAMETERS = 256
 # A direct, stable reduction avoids SciPy's setup cost for small state spaces.
 _MAX_DIRECT_LOG_SUM_STATES = 16
+_MAX_MIXTURE_EDGE_VALUES = 262_144
 
 
 def _parse_comma_list(value, option_name):
@@ -485,9 +487,9 @@ def _log_probabilities(values):
 
 
 def _edge_logsumexp(values):
-    if values.shape[1] <= _MAX_DIRECT_LOG_SUM_STATES:
-        return np.logaddexp.reduce(values, axis=1)
-    return logsumexp(values, axis=1)
+    if values.shape[-1] <= _MAX_DIRECT_LOG_SUM_STATES:
+        return np.logaddexp.reduce(values, axis=-1)
+    return logsumexp(values, axis=-1)
 
 
 def _probabilities_from_logs(values):
@@ -1413,6 +1415,65 @@ def _discrete_gamma_category_rates(shape, categories):
     return rates
 
 
+def _mixture_log_tip_likelihoods(compiled, likelihoods_by_character):
+    return {
+        index: _log_probabilities(
+            np.asarray(
+                [
+                    likelihood[compiled.nodes[index].name]
+                    for likelihood in likelihoods_by_character.values()
+                ],
+                dtype=float,
+            )
+        )
+        for index in compiled.leaf_indices
+    }
+
+
+def _mixture_character_batches(likelihoods_by_character, num_states):
+    batch_size = max(1, _MAX_MIXTURE_EDGE_VALUES // (num_states * num_states))
+    items = tuple(likelihoods_by_character.items())
+    return [
+        dict(items[start : start + batch_size])
+        for start in range(0, len(items), batch_size)
+    ]
+
+
+def _mixture_log_likelihoods(compiled, tips, log_prior, transitions):
+    """Prune one rate category for all characters together."""
+
+    inside = tips.copy()
+    log_scales = np.zeros(len(next(iter(tips.values()))))
+    for index in compiled.postorder:
+        children = compiled.children[index]
+        if not children:
+            continue
+        likelihood = np.zeros((len(log_scales), len(log_prior)))
+        for child in children:
+            matrix = _log_probabilities(transitions[compiled.nodes[child]])
+            likelihood += _edge_logsumexp(matrix[None] + inside.pop(child)[:, None, :])
+        scale = np.max(likelihood, axis=1)
+        inside[index] = likelihood - np.where(np.isfinite(scale), scale, 0.0)[:, None]
+        log_scales += scale
+    return log_scales + logsumexp(log_prior + inside[0], axis=1)
+
+
+def _mixture_root_prior(mode, states, observed_by_character, likelihoods_by_character):
+    equal = np.full(len(states), 1.0 / len(states))
+    if mode in {"equal", "stationary"}:
+        return equal
+    if mode != "empirical":
+        raise ValueError(f"Unsupported MK-MIXTURE root prior: {mode}.")
+    counts = np.zeros(len(states), dtype=float)
+    for character, likelihood_by_leaf in likelihoods_by_character.items():
+        for leaf_name, value in observed_by_character[character].items():
+            if value is None:
+                continue
+            likelihood = likelihood_by_leaf[leaf_name]
+            counts += likelihood / likelihood.sum()
+    return counts / counts.sum() if counts.sum() > 0.0 else equal
+
+
 def compute_mk_mixture_marginals(
     tree,
     states,
@@ -1542,64 +1603,41 @@ def compute_mk_mixture_marginals(
         category_rates, weights, shape = mixture_parameters(parameters)
         return base, matrix, category_rates, weights, shape
 
+    compiled = CompiledTree.from_tree(tree)
+    log_tip_batches = [
+        _mixture_log_tip_likelihoods(compiled, batch)
+        for batch in _mixture_character_batches(likelihoods_by_character, len(states))
+    ]
+    fixed_prior = _mixture_root_prior(
+        root_prior_mode, states, observed_by_character, likelihoods_by_character
+    )
+
     def prior_for(matrix):
-        if root_prior_mode == "stationary":
-            return stationary_distribution(matrix)
-        if root_prior_mode == "equal":
-            return np.full(len(states), 1.0 / len(states), dtype=float)
-        if root_prior_mode != "empirical":
-            raise ValueError(f"Unsupported MK-MIXTURE root prior: {root_prior_mode}.")
-        counts = np.zeros(len(states), dtype=float)
-        for character, likelihood_by_leaf in likelihoods_by_character.items():
-            observed = observed_by_character[character]
-            for leaf_name, value in observed.items():
-                if value is None:
-                    continue
-                likelihood = likelihood_by_leaf[leaf_name]
-                counts += likelihood / likelihood.sum()
         return (
-            counts / counts.sum()
-            if counts.sum() > 0.0
-            else np.full(len(states), 1.0 / len(states), dtype=float)
+            stationary_distribution(matrix)
+            if root_prior_mode == "stationary"
+            else fixed_prior
         )
 
-    def character_scores(
-        matrix,
-        category_rates,
-        weights,
-        root_prior,
-        transition_matrices_by_category=None,
-    ):
-        if transition_matrices_by_category is None:
-            transition_matrices_by_category = [
-                _transition_matrices_for_tree(tree, matrix * category_rate)
-                for category_rate in category_rates
+    def character_scores(matrix, category_rates, weights, root_prior):
+        log_prior = _log_probabilities(root_prior)
+        transitions = [
+            _transition_matrices_for_tree(tree, matrix * rate)
+            for rate in category_rates
+        ]
+        scores = np.column_stack(
+            [
+                math.log(weight)
+                + np.concatenate(
+                    [
+                        _mixture_log_likelihoods(compiled, tips, log_prior, transition)
+                        for tips in log_tip_batches
+                    ]
+                )
+                for weight, transition in zip(weights, transitions, strict=True)
             ]
-        scores = {}
-        total = 0.0
-        for character, likelihood_by_leaf in likelihoods_by_character.items():
-            values = np.asarray(
-                [
-                    math.log(weight)
-                    + _log_likelihood(
-                        tree,
-                        likelihood_by_leaf,
-                        root_prior,
-                        matrix * category_rate,
-                        fixed_transition_matrices=transition_matrices,
-                    )
-                    for category_rate, weight, transition_matrices in zip(
-                        category_rates,
-                        weights,
-                        transition_matrices_by_category,
-                        strict=True,
-                    )
-                ]
-            )
-            score = float(logsumexp(values))
-            scores[character] = values
-            total += score
-        return total, scores, transition_matrices_by_category
+        )
+        return sum(map(float, logsumexp(scores, axis=1))), scores, transitions
 
     def objective(parameters):
         try:
@@ -1621,10 +1659,10 @@ def compute_mk_mixture_marginals(
     )
     posterior_by_character = {}
     category_posterior_by_character = {}
-    for character, likelihood_by_leaf in likelihoods_by_character.items():
-        category_probabilities = np.exp(
-            scores[character] - logsumexp(scores[character])
-        )
+    for (character, likelihood_by_leaf), log_scores in zip(
+        likelihoods_by_character.items(), scores, strict=True
+    ):
+        category_probabilities = np.exp(log_scores - logsumexp(log_scores))
         category_posterior_by_character[character] = category_probabilities
         posterior_by_character[character] = _average_mk_category_posteriors(
             tree,

@@ -30,6 +30,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 
 - Reuse equal-rates detection across branches and reduce small-state Mk
   likelihood messages with NumPy in log space.
+- Batch Mk mixture likelihoods across characters and reuse fixed root priors.
 - Compute Gaussian posterior predictive statistics for all replicates in
   one pass per statistic.
 - Batch joint Gaussian posterior draws using precomputed branch conditionals.

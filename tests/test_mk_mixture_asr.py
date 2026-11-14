@@ -1,7 +1,9 @@
 import numpy as np
 import pandas as pd
 import pytest
+from scipy.special import logsumexp
 
+import nwkit.asr as asr
 from nwkit.asr import (
     _discrete_gamma_category_rates,
     compute_mk_mixture_marginals,
@@ -147,6 +149,38 @@ def test_mk_mixture_averages_only_categories_with_posterior_mass():
         np.testing.assert_allclose(values[tree], [0.5, 0.5])
         np.testing.assert_allclose(values[tree["A"]], likelihoods[character]["A"])
         np.testing.assert_allclose(values[tree["B"]], likelihoods[character]["B"])
+
+
+def test_batched_mk_mixture_matches_independent_character_likelihoods(monkeypatch):
+    tree = tree_from("((A:0.7,B:0.2,C:0.4):0.9,D:0.3,E:0.1,F:0.8)R;")
+    states, observed, likelihoods = character_data(
+        {"first": "000111", "second": "010101", "third": "001101"}
+    )
+    observed["second"]["A"] = None
+    likelihoods["second"]["A"] = np.ones(2)
+    monkeypatch.setattr(asr, "_MAX_MIXTURE_EDGE_VALUES", 8)
+    _, fit = compute_mk_mixture_marginals(
+        tree, states, observed, likelihoods, rate=0.6, root_prior_mode="empirical"
+    )
+    expected_total = 0.0
+    for character, tips in likelihoods.items():
+        terms = [
+            np.log(weight)
+            + asr._log_likelihood(
+                tree, tips, fit["root_prior"], fit["rate_matrix"] * rate
+            )
+            for rate, weight in zip(
+                fit["mixture_category_rates"], fit["mixture_weights"], strict=True
+            )
+        ]
+        score = logsumexp(terms)
+        expected_total += score
+        np.testing.assert_allclose(
+            fit["category_posterior_by_character"][character],
+            np.exp(terms - score),
+            atol=1e-13,
+        )
+    assert fit["log_likelihood"] == pytest.approx(expected_total, abs=1e-12)
 
 
 @pytest.mark.parametrize("informative_zero_edges", [False, True])
