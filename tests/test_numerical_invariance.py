@@ -31,6 +31,7 @@ from nwkit.phylogenetic_glmm import (
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
 )
+from nwkit.regression_pipeline import _positive_semidefinite_loading
 from nwkit.sparse_laplace import JointPredictorUncertainty
 
 pytestmark = pytest.mark.filterwarnings(r"error::RuntimeWarning:nwkit\.")
@@ -54,6 +55,18 @@ def test_gaussian_covariance_readers_retain_small_variances(validate, diagonal):
         np.testing.assert_array_equal(validate(values, "Sampling covariance"), values)
         with pytest.raises(ValueError, match="positive semidefinite"):
             validate(-values, "Sampling covariance")
+
+
+@pytest.mark.parametrize("exponent", [-1060, 1023])
+def test_categorical_sampling_loading_preserves_covariance_units(exponent):
+    covariance = np.ldexp(np.array([[1.0, 0.5], [0.5, 0.25]]), exponent)
+    with np.errstate(over="raise", invalid="raise"):
+        loading = _positive_semidefinite_loading(covariance, 2)
+    assert loading.shape == (2, 1)
+    np.testing.assert_allclose(
+        np.ldexp(loading @ loading.T, -exponent),
+        [[1.0, 0.5], [0.5, 0.25]],
+    )
 
 
 def test_latent_predictor_retains_small_correlated_sampling_uncertainty():

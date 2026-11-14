@@ -1217,17 +1217,13 @@ def _prepare_reconciled_tip_predictors(
 
 
 def _positive_semidefinite_loading(matrix, dimension):
-    scale = max(1.0, float(np.max(np.abs(matrix))))
-    tolerance = np.finfo(float).eps * scale * max(1, dimension) * 100.0
-    if float(np.max(np.abs(matrix - matrix.T))) > tolerance:
-        raise ValueError("Categorical predictor sampling covariance must be symmetric.")
-    eigenvalues, eigenvectors = np.linalg.eigh((matrix + matrix.T) / 2.0)
-    if float(np.min(eigenvalues)) < -tolerance:
+    if np.shape(matrix) != (dimension, dimension):
         raise ValueError(
-            "Categorical predictor sampling covariance must be positive semidefinite."
+            "Categorical predictor sampling covariance has invalid dimensions."
         )
-    positive = eigenvalues > tolerance
-    return eigenvectors[:, positive] * np.sqrt(eigenvalues[positive])
+    return _positive_semidefinite_factor(
+        matrix, "Categorical predictor sampling covariance"
+    )
 
 
 def _categorical_sampling_factor(sampling_covariance, n_tips, n_terms):
@@ -1533,23 +1529,26 @@ def _attach_evolution_diagnostics(
     return updated
 
 
+def _scaled_symmetric_sampling_covariance(matrix, label):
+    matrix = np.asarray(matrix, dtype=float)
+    if not np.isfinite(matrix).all():
+        raise ValueError("{} must contain finite values.".format(label))
+    _, exponent = math.frexp(float(np.max(np.abs(matrix), initial=0.0)))
+    scaled = np.ldexp(matrix, -exponent)
+    tolerance = np.finfo(float).eps * len(matrix) * 100.0
+    if float(np.max(np.abs(scaled - scaled.T), initial=0.0)) > tolerance:
+        raise ValueError("{} must be symmetric.".format(label))
+    return (scaled + scaled.T) * 0.5, exponent, tolerance
+
+
 def _positive_semidefinite_factor(matrix: np.ndarray, label: str) -> np.ndarray:
-    symmetric = (
-        np.asarray(matrix, dtype=float) + np.asarray(matrix, dtype=float).T
-    ) / 2.0
-    eigenvalues, eigenvectors = np.linalg.eigh(symmetric)
-    tolerance = (
-        np.finfo(float).eps
-        * max(1.0, float(np.max(np.abs(symmetric))))
-        * max(1, len(symmetric))
-        * 100.0
-    )
-    if float(eigenvalues.min()) < -tolerance:
-        raise ValueError("{} is not positive semidefinite.".format(label))
+    scaled, exponent, tolerance = _scaled_symmetric_sampling_covariance(matrix, label)
+    eigenvalues, eigenvectors = np.linalg.eigh(scaled)
+    if float(eigenvalues.min(initial=0.0)) < -tolerance:
+        raise ValueError("{} must be positive semidefinite.".format(label))
     positive = eigenvalues > tolerance
-    if not positive.any():
-        return np.zeros((len(symmetric), 0), dtype=float)
-    return eigenvectors[:, positive] * np.sqrt(eigenvalues[positive])
+    roots = np.sqrt(np.ldexp(eigenvalues[positive], exponent % 2))
+    return eigenvectors[:, positive] * np.ldexp(roots, exponent // 2)
 
 
 def _prepare_response_tip_simulator(
