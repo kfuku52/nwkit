@@ -18,6 +18,7 @@ from nwkit.gaussian import (
     factor_diagonal_low_rank_updates,
     factor_diagonal_sparse_precision_updates,
     factor_logdet,
+    finite_mean,
     grouped_average_marginal_logdet,
     grouped_mean_covariance_diagonal,
     is_diagonal,
@@ -933,7 +934,7 @@ def _prepare_eiv_components(components, component_factors, n_observations):
         positive = diagonal[diagonal > 0.0]
         if not len(positive):
             raise ValueError("Variance component '{}' has zero diagonal.".format(name))
-        scale = float(np.mean(positive))
+        scale = finite_mean(positive)
         normalized_components.append(
             (name, None if prepared is None else prepared / scale)
         )

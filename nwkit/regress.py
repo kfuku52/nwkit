@@ -22,6 +22,7 @@ from nwkit.gaussian import (
     effective_likelihood_settings,
     factor_diagonal_low_rank_updates,
     factor_logdet,
+    finite_mean,
     grouped_average_marginal_logdet,
     grouped_mean_covariance_diagonal,
     is_diagonal,
@@ -1343,7 +1344,7 @@ def _prepare_component_matrices(n_observations, components, component_factors):
         if not len(positive):
             raise ValueError("Variance component '{}' has zero diagonal.".format(name))
         component_matrices.append((name, prepared_matrix))
-        component_scales.append(float(np.mean(positive)))
+        component_scales.append(finite_mean(positive))
     return component_matrices, component_scales
 
 

@@ -87,6 +87,27 @@ def test_gaussian_fit_is_invariant_to_an_intercept_shift(sampling, reml):
         )
 
 
+def test_gaussian_component_variance_is_invariant_to_large_covariance_units():
+    design, response = _data()
+    scale = 2.0**1023
+    covariance = np.ones(len(response))
+    kwargs = {"reml": True}
+    fixed = np.zeros(len(response))
+    before = regress._profile_covariance_fit(
+        response, design, fixed, [("rate", covariance)], **kwargs
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        after = regress._profile_covariance_fit(
+            response, design, fixed, [("rate", scale * covariance)], **kwargs
+        )
+    np.testing.assert_array_equal(after["beta"], before["beta"])
+    np.testing.assert_array_equal(after["beta_covariance"], before["beta_covariance"])
+    assert after["objective"] == before["objective"]
+    assert scale * after["component_variances"]["rate"] == pytest.approx(
+        before["component_variances"]["rate"]
+    )
+
+
 @pytest.mark.parametrize("scale", [1e-6, 1e6])
 def test_gaussian_variance_follows_response_units(scale):
     design, response = _data()

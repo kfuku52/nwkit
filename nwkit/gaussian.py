@@ -26,15 +26,25 @@ def center_response(response, design, *, excluded_columns=()):
             and values[0] != 0.0
             and np.all(values == values[0])
         ):
-            mean = float(np.mean(response))
+            mean = finite_mean(response)
             offset[column] = mean / float(values[0])
             return response - mean, offset
     return response, offset
 
 
+def finite_mean(values):
+    """Average finite values without overflowing their sum."""
+    values = np.asarray(values, dtype=float)
+    magnitude = float(np.max(np.abs(values), initial=0.0))
+    if magnitude <= np.finfo(float).max / max(values.size, 1):
+        return float(np.mean(values))
+    _, exponent = math.frexp(magnitude)
+    return math.ldexp(float(np.mean(np.ldexp(values, -exponent))), exponent)
+
+
 def residual_variance_scale(response, residual, sampling_diagonal):
     """Choose variance bounds in residual units, independent of a fitted mean."""
-    sampling_scale = float(np.mean(sampling_diagonal))
+    sampling_scale = finite_mean(sampling_diagonal)
     residual_scale = float(np.mean(np.square(residual)))
     # The floor follows response units and only affects a numerically exact
     # fit. The response passed here has already had its intercept removed.
