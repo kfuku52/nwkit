@@ -56,6 +56,25 @@ def _categorical_technical_observations(dataframe, traits, biological_id, techni
             raise ValueError(
                 "Technical IDs must be unique within each leaf_name/biological ID."
             )
+    if not duplicated.any() and not dataframe.empty:
+        return _categorical_single_rows(dataframe, key, traits, biological_id)
+    return _categorical_grouped_rows(dataframe, key, traits, biological_id)
+
+
+def _categorical_single_rows(dataframe, key, traits, biological_id):
+    observations = dataframe[key + list(traits)].copy()
+    observations[biological_id] = observations[biological_id].astype(str)
+    for trait in traits:
+        states = observations[trait]
+        observed = states.notna()
+        normalized = np.full(len(states), None, dtype=object)
+        normalized[observed.to_numpy()] = states[observed].astype(str).to_numpy()
+        observations[trait] = normalized
+        observations[f"_n_technical_{trait}"] = observed.astype(int)
+    return observations
+
+
+def _categorical_grouped_rows(dataframe, key, traits, biological_id):
     rows = []
     for group_key, group in dataframe.groupby(key, sort=False, dropna=False):
         row: dict[str, object] = {
@@ -102,11 +121,15 @@ def estimate_categorical_traits(
     observations = _categorical_technical_observations(
         dataframe, traits, biological_id, technical_id
     )
+    rows_by_leaf = observations.groupby("leaf_name", sort=False, observed=True).indices
     values_by_trait: dict[str, dict[str, object]] = {}
     models = {}
     summary_rows = []
     for trait in traits:
-        levels = sorted(set(observations[trait].dropna().astype(str)))
+        selected = observations[trait].notna()
+        observed = observations.loc[selected, ["leaf_name", trait]]
+        states = observed[trait].astype(str)
+        levels = sorted(set(states))
         if len(levels) < 2:
             raise ValueError(
                 "Categorical trait '{}' needs at least two observed levels.".format(
@@ -114,18 +137,22 @@ def estimate_categorical_traits(
                 )
             )
         values_by_leaf = {}
-        for leaf_name in leaf_names:
-            selected = observations.loc[
-                observations["leaf_name"] == leaf_name, trait
-            ].dropna()
-            if selected.empty:
+        counts_by_leaf = (
+            pd.crosstab(observed["leaf_name"], states)
+            .reindex(index=leaf_names, columns=levels, fill_value=0)
+            .to_numpy(dtype=int)
+        )
+        level_array = np.asarray(levels, dtype=object)
+        technical = observations[f"_n_technical_{trait}"].to_numpy(dtype=int)
+        for leaf_name, counts in zip(leaf_names, counts_by_leaf, strict=True):
+            count = int(counts.sum())
+            if count == 0:
                 raise ValueError(
                     "Categorical trait '{}' has no observations for tree tip '{}'.".format(
                         trait, leaf_name
                     )
                 )
-            counts = selected.astype(str).value_counts().reindex(levels, fill_value=0)
-            observed_levels = counts[counts > 0].index.tolist()
+            observed_levels = level_array[counts > 0].tolist()
             if policy == "error" and len(observed_levels) != 1:
                 raise ValueError(
                     "Biological replicates disagree for categorical trait '{}' at "
@@ -134,27 +161,22 @@ def estimate_categorical_traits(
                         trait, leaf_name
                     )
                 )
-            probabilities = counts.to_numpy(dtype=float) / float(counts.sum())
+            probabilities = counts / float(count)
             values_by_leaf[leaf_name] = (
                 CategoricalObservation(
                     dict(zip(levels, probabilities, strict=True)),
-                    int(counts.sum()),
+                    count,
                 )
                 if policy == "counts" or len(observed_levels) > 1
                 else observed_levels[0]
             )
-            technical_count = int(
-                observations.loc[
-                    observations["leaf_name"] == leaf_name,
-                    "_n_technical_{}".format(trait),
-                ].sum()
-            )
+            technical_count = int(technical[rows_by_leaf[leaf_name]].sum())
             summary_rows.append(
                 {
                     "tree_id": tree_id,
                     "leaf_name": leaf_name,
                     "trait": trait,
-                    "n_biological": int(counts.sum()),
+                    "n_biological": count,
                     "n_technical": technical_count,
                     "mean": "",
                     "within_sd": "",
@@ -163,7 +185,8 @@ def estimate_categorical_traits(
                     "batch_adjusted": "no",
                     "state": observed_levels[0] if len(observed_levels) == 1 else "",
                     "state_counts": ";".join(
-                        "{}:{}".format(level, int(counts[level])) for level in levels
+                        f"{level}:{value}"
+                        for level, value in zip(levels, counts, strict=True)
                     ),
                     "state_probabilities": ";".join(
                         "{}:{:.17g}".format(level, probabilities[index])
@@ -222,15 +245,20 @@ def estimate_likelihood_replicates(
         None,
         technical_aggregation,
     )
+    rows_by_leaf = observations.groupby("leaf_name", sort=False, observed=True).indices
     values_by_trait: dict[str, dict[str, object]] = {}
     summary_rows = []
     for trait in traits:
         values_by_leaf: dict[str, object] = {}
+        trait_values = observations[trait].to_numpy(float)
+        technical_counts = observations[f"_n_technical_{trait}"].to_numpy(dtype=int)
+        keep_missing = trait in allow_missing_traits
         for leaf_name in leaf_names:
-            selected = observations.loc[observations["leaf_name"] == leaf_name, trait]
-            if trait not in allow_missing_traits:
-                selected = selected.dropna()
-            values = tuple(float(value) for value in selected)
+            rows = rows_by_leaf.get(leaf_name, [])
+            selected = trait_values[rows]
+            if not keep_missing:
+                selected = selected[~np.isnan(selected)]
+            values = tuple(selected.tolist())
             if not values:
                 raise ValueError(
                     "Trait '{}' has no observations for tree tip '{}'.".format(
@@ -238,12 +266,7 @@ def estimate_likelihood_replicates(
                     )
                 )
             values_by_leaf[leaf_name] = ReplicatedObservation(values)
-            technical_count = int(
-                observations.loc[
-                    observations["leaf_name"] == leaf_name,
-                    "_n_technical_{}".format(trait),
-                ].sum()
-            )
+            technical_count = int(technical_counts[rows].sum())
             summary_rows.append(
                 _likelihood_summary_row(
                     tree_id, leaf_name, trait, values, technical_count
