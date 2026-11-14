@@ -122,6 +122,35 @@ def test_correlation_pca_and_lambda_are_invariant_to_units():
     assert np.abs(second.scores) == pytest.approx(np.abs(first.scores), abs=1e-5)
 
 
+@pytest.mark.parametrize("model", ["BM", "LAMBDA"])
+def test_correlation_pca_handles_extreme_finite_trait_units(model):
+    matrix = covariance()
+    values = np.array(
+        [
+            [-1, 0.5],
+            [-0.8, -0.5],
+            [0.8, 0.8],
+            [1, -1],
+            [-0.4, 0.3],
+            [0.4, -0.2],
+            [0.5, -0.3],
+            [-0.5, 1],
+        ]
+    )
+    units = np.array([1e308, 1e-305])
+    reference = fit_pca(matrix, values, model=model, mode="corr")
+    with np.errstate(over="raise", invalid="raise"):
+        fit = fit_pca(matrix, values * units, model=model, mode="corr")
+    assert fit.lambda_value == pytest.approx(reference.lambda_value)
+    np.testing.assert_allclose(fit.eigenvalues, reference.eigenvalues, atol=1e-13)
+    np.testing.assert_allclose(fit.scores, reference.scores, atol=1e-13)
+    np.testing.assert_allclose(fit.center / units, reference.center, atol=1e-13)
+    np.testing.assert_allclose(fit.scale / units, reference.scale, atol=1e-13)
+    assert fit.log_likelihood == pytest.approx(
+        reference.log_likelihood - len(values) * np.log(units).sum(), abs=1e-11
+    )
+
+
 def test_spectral_lambda_profile_agrees_with_cholesky():
     matrix = np.kron(np.eye(9), covariance())
     rng = np.random.default_rng(256)

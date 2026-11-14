@@ -218,6 +218,14 @@ def fit_pca(covariance, values, *, model="BM", mode="cov", lambda_value=None):
         raise ValueError(
             "PCA requires nonconstant trait columns; remove constant columns."
         )
+    # Correlation PCA is invariant to positive column rescaling. Keep the
+    # intermediate differences and GLS products in range for extreme units.
+    exponents = None
+    if mode == "corr":
+        _, powers = np.frexp(np.max(np.abs(values), axis=0))
+        if np.any(np.abs(powers) > 450):
+            exponents = np.where(np.abs(powers) > 450, powers, 0)
+            values = np.ldexp(values, -exponents)
     lam, estimated = _lambda(covariance, values, model, lambda_value)
     covariance = _scaled_covariance(covariance, lam)
     factor, center, residual = _centered(covariance, values)
@@ -250,6 +258,14 @@ def fit_pca(covariance, values, *, model="BM", mode="cov", lambda_value=None):
         likelihood = float(_likelihood_from_white(factor, unscaled_white, n, p))
     except ValueError:
         likelihood = None
+    if exponents is not None:
+        with np.errstate(over="ignore", under="ignore"):
+            center = np.ldexp(center, exponents)
+            scale = np.ldexp(scale, exponents)
+        if not np.isfinite(scale).all() or np.any(scale <= 0):
+            raise ValueError("Trait variances cannot be represented; rescale units.")
+        if likelihood is not None:
+            likelihood -= n * int(exponents.sum()) * np.log(2)
     return PhylogeneticPCA(
         center=_finite(center, "GLS center"),
         scale=scale,

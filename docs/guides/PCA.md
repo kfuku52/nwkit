@@ -74,6 +74,9 @@ forming an explicit inverse. It calculates
 scores = ((X - center) / scale) @ rotation
 ```
 
+Correlation PCA rescales extreme trait units internally and returns the GLS
+center, evolutionary standard deviations, and likelihood in the input units.
+
 Scores remain associated with species; they are not whitened contrast rows.
 The `loading` field is the evolutionary correlation between a trait and a PC.
 `rotation` gives the coefficients used by the score transformation. Explained
