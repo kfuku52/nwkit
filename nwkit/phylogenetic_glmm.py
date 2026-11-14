@@ -2681,12 +2681,11 @@ def _glmm_component_modes(
     mode: np.ndarray,
     random_dimension: int,
 ) -> dict[str, np.ndarray]:
-    latent_score = precision @ mode
     n_observations = len(phylogenetic_base)
+    latent_score = (precision @ mode).reshape(n_observations, random_dimension)
 
     def component_mode(name: str, covariance: np.ndarray) -> np.ndarray:
-        expanded = np.kron(components[name] * covariance, np.eye(random_dimension))
-        return (expanded @ latent_score).reshape(n_observations, random_dimension)
+        return (components[name] * covariance) @ latent_score
 
     modes = {"phylogenetic": component_mode("phylogenetic", phylogenetic_base)}
     if group_base is not None:
