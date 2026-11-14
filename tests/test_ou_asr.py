@@ -475,6 +475,27 @@ def test_ou_power_of_two_scaling_handles_large_finite_trait_units():
     )
 
 
+def test_stationary_ou_fit_preserves_variance_when_doubling_alpha_overflows():
+    values = {"A": 0.25, "B": 0.7, "C": -0.1}
+    regular = tree_from("(A:1,B:2,C:3)R;")
+    short = tree_from("(A:1e-308,B:2e-308,C:3e-308)R;")
+    first, reference = compute_ou_marginals(
+        regular, values, alpha=1.0, sigma2=1.0, theta=0.1
+    )
+    second, scaled = compute_ou_marginals(
+        short,
+        values,
+        alpha=1e308,
+        sigma2=1e308,
+        theta=0.1,
+        alpha_bounds=(1e-308, 1e308),
+    )
+    assert scaled.root_variance == reference.root_variance == 0.5
+    assert scaled.log_likelihood == pytest.approx(reference.log_likelihood, abs=1e-12)
+    assert second[short].mean == pytest.approx(first[regular].mean)
+    assert second[short].variance == pytest.approx(first[regular].variance)
+
+
 def test_ou_requires_positive_alpha_and_sigma2():
     tree = tree_from("(A:1,B:1)R;")
     values = {"A": 0.0, "B": 1.0}

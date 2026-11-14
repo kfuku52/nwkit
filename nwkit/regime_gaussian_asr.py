@@ -21,6 +21,7 @@ from nwkit.gaussian_inference import (
 from nwkit.gaussian_tree import (
     GaussianRootPrior,
     GaussianTreeProcess,
+    ou_stationary_variance,
     ou_transition,
 )
 from nwkit.optimization import MultistartResult, deterministic_multistart
@@ -174,7 +175,9 @@ def build_regime_ou_process(
         )
         transitions[node] = transition
     root_regime = regime_assignment.root_regime
-    root_variance = sigma_values[root_regime] / (2.0 * alpha_values[root_regime])
+    root_variance = ou_stationary_variance(
+        alpha_values[root_regime], sigma_values[root_regime]
+    )
     if not math.isfinite(root_variance) or root_variance <= 0.0:
         raise ValueError("The OU regime root variance is outside floating-point range.")
     return GaussianTreeProcess(

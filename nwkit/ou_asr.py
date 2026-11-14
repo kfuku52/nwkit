@@ -1,6 +1,7 @@
 """Linear-time single-optimum Ornstein-Uhlenbeck ancestral reconstruction."""
 
 import math
+import sys
 from dataclasses import dataclass, replace
 from typing import Any
 
@@ -14,7 +15,7 @@ from nwkit.continuous_asr import (
     _observations_by_group,
     _tree_groups,
 )
-from nwkit.gaussian_tree import ou_transition
+from nwkit.gaussian_tree import ou_stationary_variance, ou_transition
 
 _LOG_2PI = math.log(2.0 * math.pi)
 _LOG_2 = math.log(2.0)
@@ -232,6 +233,7 @@ def _prepare_data(
     standard_errors,
     *,
     process_sd=0.0,
+    minimum_trait_exponent=-sys.float_info.max_exp,
     tree_validated=False,
 ):
     node_groups, parents, lengths = _tree_groups(tree, validated=tree_validated)
@@ -253,6 +255,7 @@ def _prepare_data(
         process_sd,
     )
     trait_exponent = math.frexp(size)[1] - 1 if size > 0.0 else 0
+    trait_exponent = max(trait_exponent, minimum_trait_exponent)
     children: list[list[int]] = [[] for _ in parents]
     for child, parent in enumerate(parents):
         if parent >= 0:
@@ -394,7 +397,7 @@ def _profile_theta(data, alpha, sigma2, theta_reference):
                 theta_reference,
                 data.lengths[group],
             )
-    root_variance = sigma2 / (2.0 * alpha)
+    root_variance = ou_stationary_variance(alpha, sigma2)
     result = _combine_affine(
         _AffineFactor(theta_reference, 1.0, root_variance), inside[0]
     )
@@ -436,7 +439,7 @@ def _prune(data, alpha, sigma2, theta):
             upward[group] = _propagate_up(
                 factor, alpha, sigma2, theta, data.lengths[group]
             )
-    root_variance = sigma2 / (2.0 * alpha)
+    root_variance = ou_stationary_variance(alpha, sigma2)
     posterior_root = _combine(
         _Factor(GaussianMarginal(theta, root_variance)), inside[0]
     )
@@ -446,7 +449,7 @@ def _prune(data, alpha, sigma2, theta):
 
 
 def _smooth(data, alpha, sigma2, theta, inside, upward):
-    root_variance = sigma2 / (2.0 * alpha)
+    root_variance = ou_stationary_variance(alpha, sigma2)
     outside = [_Factor(None) for _ in data.parents]
     outside[0] = _Factor(GaussianMarginal(theta, root_variance))
     posterior = [None for _ in data.parents]
@@ -804,7 +807,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
                 math.exp(values["log_alpha"]) if alpha_estimated else float(alpha)
             )
             current_sigma2 = (
-                2.0 * current_alpha * math.exp(values["log_root_variance"])
+                current_alpha * (2.0 * math.exp(values["log_root_variance"]))
                 if sigma2_estimated
                 else float(sigma2)
             )
@@ -920,7 +923,7 @@ def _fit_parameters(data, alpha, sigma2, theta, alpha_bounds):
             statuses.append("alpha_lower_boundary")
         elif fitted_alpha >= alpha_bounds[1] * (1.0 - tolerance):
             statuses.append("alpha_upper_boundary")
-    fitted_root_variance = fitted_sigma2 / (2.0 * fitted_alpha)
+    fitted_root_variance = ou_stationary_variance(fitted_alpha, fitted_sigma2)
     if sigma2_estimated:
         if fitted_root_variance <= root_variance_bounds[0] * (1.0 + tolerance):
             statuses.append("root_variance_lower_boundary")
@@ -987,10 +990,14 @@ def compute_ou_marginals(
     )
     fixed_theta = None if theta is None else _finite_number(theta, "--theta")
     process_sd = 0.0
+    minimum_trait_exponent = -sys.float_info.max_exp
     if fixed_sigma2 is not None and fixed_sigma2 > 0.0:
+        # Rescaling the trait must also leave its fixed diffusion representable.
+        sigma2_exponent = math.frexp(fixed_sigma2)[1]
+        minimum_trait_exponent = (sigma2_exponent - sys.float_info.max_exp + 1) // 2
         scale_alpha = fixed_alpha if fixed_alpha is not None else bounds[0]
         if scale_alpha > 0.0:
-            root_variance = fixed_sigma2 / (2.0 * scale_alpha)
+            root_variance = ou_stationary_variance(scale_alpha, fixed_sigma2)
             if math.isfinite(root_variance):
                 process_sd = math.sqrt(root_variance)
     data = _prepare_data(
@@ -998,6 +1005,7 @@ def compute_ou_marginals(
         values_by_leaf,
         standard_errors,
         process_sd=process_sd,
+        minimum_trait_exponent=minimum_trait_exponent,
         tree_validated=_tree_validated,
     )
     scaled_sigma2 = (

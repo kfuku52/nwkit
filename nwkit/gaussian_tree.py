@@ -574,6 +574,15 @@ def brownian_transition(variance: float) -> GaussianTransition:
     return GaussianTransition(1.0, 0.0, variance)
 
 
+def ou_stationary_variance(alpha: float, variance_rate: float) -> float:
+    """Convert OU diffusion to stationary variance for positive alpha."""
+
+    denominator = 2.0 * alpha
+    if math.isfinite(denominator):
+        return variance_rate / denominator
+    return 0.5 * (variance_rate / alpha)
+
+
 def ou_transition(
     length: float,
     alpha: float,
@@ -588,13 +597,7 @@ def ou_transition(
         raise ValueError("OU transition parameters must be finite.")
     if alpha <= 0.0 or variance_rate < 0.0:
         raise ValueError("OU requires non-negative variance and positive alpha.")
-    # Divide by alpha before halving when doubling alpha would overflow.
-    denominator = 2.0 * alpha
-    root_variance = (
-        variance_rate / denominator
-        if math.isfinite(denominator)
-        else 0.5 * (variance_rate / alpha)
-    )
+    root_variance = ou_stationary_variance(alpha, variance_rate)
     if not math.isfinite(root_variance):
         raise ValueError("The stationary OU variance exceeds floating-point range.")
     return (

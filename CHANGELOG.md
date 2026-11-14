@@ -30,6 +30,7 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
   and search remain finite under extreme branch-length rescaling.
 - Retain finite OU stationary variances at extreme attraction rates and
   reconstruct diagnostics with the root variance recorded by the fit.
+  Preserve fixed diffusion rates during trait scaling in stationary OU fits.
 - Refine scalar likelihoods in normalized parameter units, prioritizing the
   strongest grid minima and reporting convergence for the selected fit.
 - Reject COVARION and MK-MIXTURE fits when no positive-length branch can
