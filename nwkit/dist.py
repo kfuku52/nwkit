@@ -222,7 +222,7 @@ def _stable_component_difference(positive, negative):
     return difference
 
 
-def _vector_distances(vector1, vector2):
+def _vector_distances(vector1, vector2, metrics):
     keys = chain(vector1, (key for key in vector2 if key not in vector1))
     differences = [
         _stable_component_difference(
@@ -231,14 +231,21 @@ def _vector_distances(vector1, vector2):
         )
         for key in keys
     ]
-    try:
-        weighted_rf = math.fsum(abs(difference) for difference in differences)
-    except OverflowError as exc:
-        raise ValueError("The weighted RF distance is too large to represent.") from exc
-    branch_score = math.hypot(*differences)
-    if not math.isfinite(weighted_rf) or not math.isfinite(branch_score):
-        raise ValueError("The branch-length distance is too large to represent.")
-    return weighted_rf, branch_score
+    results = {}
+    if "weighted-rf" in metrics:
+        try:
+            weighted_rf = math.fsum(abs(difference) for difference in differences)
+        except OverflowError as exc:
+            raise ValueError(
+                "The weighted RF distance is too large to represent."
+            ) from exc
+        results["weighted-rf"] = (weighted_rf, "")
+    if "branch-score" in metrics:
+        branch_score = math.hypot(*differences)
+        if not math.isfinite(branch_score):
+            raise ValueError("The branch-length distance is too large to represent.")
+        results["branch-score"] = (branch_score, "")
+    return results
 
 
 def _binary_root_sides(tree):
@@ -543,9 +550,7 @@ def _calculate_distances(tree1, tree2, leaf_names, metrics, comparison):
         results["normalized-rf"] = (normalized_rf, 1.0)
     if {"weighted-rf", "branch-score"}.intersection(metrics):
         vector1, vector2 = _matched_edge_vectors(tree1, tree2, comparison)
-        weighted_rf, branch_score = _vector_distances(vector1, vector2)
-        results["weighted-rf"] = (weighted_rf, "")
-        results["branch-score"] = (branch_score, "")
+        results.update(_vector_distances(vector1, vector2, metrics))
     if "path-topological" in metrics:
         results["path-topological"] = (
             _path_distance(tree1, tree2, leaf_names, topological=True),

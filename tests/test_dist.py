@@ -5,7 +5,7 @@ from itertools import combinations
 import pytest
 from ete4 import Tree
 
-from nwkit.dist import _path_distance, dist_main
+from nwkit.dist import _calculate_distances, _path_distance, dist_main
 from tests.helpers import make_args
 
 
@@ -134,6 +134,15 @@ class TestDistMain:
 
 
 class TestDistanceMetrics:
+    def test_branch_score_remains_available_when_weighted_rf_overflows(self):
+        first = Tree("(A:1e308,B:1e308,C:0);", parser=1)
+        second = Tree("(A:0,B:0,C:0);", parser=1)
+        names = ["A", "B", "C"]
+        result = _calculate_distances(first, second, names, ("branch-score",), "rooted")
+        assert result == {"branch-score": (math.sqrt(2) * 1e308, "")}
+        with pytest.raises(ValueError, match="weighted RF distance is too large"):
+            _calculate_distances(first, second, names, ("weighted-rf",), "rooted")
+
     def test_topological_path_rows_match_explicit_paths(self, monkeypatch):
         monkeypatch.setattr("nwkit.dist.PATH_MATRIX_MAX_TAXA", 0)
         first = Tree("(((B,C),A),((D),E,F));", parser=1)
