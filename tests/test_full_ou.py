@@ -103,10 +103,11 @@ def test_fixed_full_ou_matches_independent_dense_gls(scale):
     assert posterior[tree].covariance.shape == (2, 2)
 
 
-def test_fixed_full_ou_normalizes_subnormal_diffusion():
+@pytest.mark.parametrize("rate", [0.5, 1.0])
+def test_fixed_full_ou_normalizes_subnormal_diffusion(rate):
     scale = np.array([2.0**-538, 1.0])
     values = {"A": [0, 0.3], "B": [0.5, 0.1], "C": [0.25, 1], "D": [-0.125, -0.7]}
-    attraction = 0.5 * np.eye(2)
+    attraction = rate * np.eye(2)
     _, reference = fit_full_mvou(
         _tree(), values, ("x", "y"), attraction=attraction, diffusion=np.diag([4, 1])
     )
@@ -119,7 +120,7 @@ def test_fixed_full_ou_normalizes_subnormal_diffusion():
             diffusion=np.diag([2.0**-1074, 1.0]),
         )
     np.testing.assert_allclose(fit.theta / scale, reference.theta, atol=1e-12)
-    np.testing.assert_array_equal(fit.sigma, np.diag([2.0**-1074, 1.0]))
+    np.testing.assert_array_equal(fit.sigma, np.diag([2.0**-1074, 1.0]) / (2 * rate))
     assert fit.log_likelihood + 4 * np.log(scale[0]) == pytest.approx(
         reference.log_likelihood, abs=1e-12
     )
