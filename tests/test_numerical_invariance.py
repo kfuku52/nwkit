@@ -22,6 +22,7 @@ from nwkit.measurement_error import (
 )
 from nwkit.optimization import FitResourceError, ScalarFitCache
 from nwkit.phylogenetic_glmm import (
+    _count_log_likelihood,
     _zero_component_count_scalar_terms,
     _zero_truncation_terms,
 )
@@ -333,6 +334,24 @@ def test_explicit_dense_opt_in_keeps_the_full_lambda_search(monkeypatch):
     )
     assert observed["objective"] == pytest.approx(expected["objective"])
     assert observed["evolution_parameter"] > 0.0
+
+
+@pytest.mark.parametrize("dispersion", [None, 0.2])
+def test_hurdle_likelihood_retains_small_mean_limit(dispersion):
+    family = "hurdle-poisson" if dispersion is None else "hurdle-negative-binomial"
+    counts = np.array([0.0, 1.0, 2.0, 1.0])
+    eta = np.array([-1000.0, -1000.0, -1000.0, -100.0])
+    log_likelihood = _count_log_likelihood(
+        counts, eta, family, dispersion, 0.2, np.zeros(len(eta))
+    )
+
+    expected = [
+        np.log(0.2),
+        np.log(0.8),
+        np.log(0.8) - 1000.0 + np.log((1.0 + (dispersion or 0.0)) / 2.0),
+        np.log(0.8),
+    ]
+    np.testing.assert_allclose(log_likelihood, expected, rtol=0.0, atol=1e-12)
 
 
 @pytest.mark.parametrize("dispersion", [None, 0.2])

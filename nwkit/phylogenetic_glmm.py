@@ -964,47 +964,36 @@ def _reported_log_likelihood(
     return -float(fitted_objective - penalty_value)
 
 
-def _count_log_pmf(
-    values: np.ndarray, means: np.ndarray, family: str, dispersion: float | None
-) -> tuple[np.ndarray, np.ndarray]:
-    if "negative-binomial" not in family:
-        log_pmf = values * np.log(means) - means - gammaln(values + 1.0)
-        return log_pmf, -means
-    if dispersion is None or dispersion <= 0.0:
-        raise ValueError("Negative-binomial dispersion must be positive.")
-    size = 1.0 / dispersion
-    log_pmf = (
-        gammaln(values + size)
-        - gammaln(size)
-        - gammaln(values + 1.0)
-        + size * (np.log(size) - np.log(size + means))
-        + values * (np.log(means) - np.log(size + means))
-    )
-    log_zero = size * (np.log(size) - np.log(size + means))
-    return log_pmf, log_zero
+def _log_positive_count_probability(log_zero, eta, log_relative_mean):
+    # For small mean and relative mean, Pr(Y > 0) = exp(eta) to
+    # leading order, even if the count probability underflows.
+    tiny_mean = (eta < -36.0) & (log_relative_mean < -36.0)
+    with np.errstate(divide="ignore"):
+        return np.where(tiny_mean, eta, np.log(-np.expm1(log_zero)))
 
 
 def _count_log_likelihood(values, linear, family, dispersion, zero_probability, offset):
     log_means = linear + offset
-    with np.errstate(over="ignore", invalid="ignore"):
-        means = np.exp(log_means)
     if "negative-binomial" not in family:
+        with np.errstate(over="ignore"):
+            means = np.exp(log_means)
         log_pmf = values * log_means - means - gammaln(values + 1.0)
         log_zero = -means
+        log_relative_mean = log_means
     else:
         if dispersion is None or dispersion <= 0.0:
             raise ValueError("Negative-binomial dispersion must be positive.")
         size = 1.0 / dispersion
         log_size = math.log(size)
-        log_denominator = np.logaddexp(log_size, log_means)
+        log_relative_mean = log_means - log_size
+        log_zero = -size * np.logaddexp(0.0, log_relative_mean)
         log_pmf = (
             gammaln(values + size)
             - gammaln(size)
             - gammaln(values + 1.0)
-            + size * (log_size - log_denominator)
-            + values * (log_means - log_denominator)
+            + log_zero
+            - values * np.logaddexp(0.0, -log_relative_mean)
         )
-        log_zero = size * (log_size - log_denominator)
     if family in {"poisson", "negative-binomial"}:
         return log_pmf
     if zero_probability is None or not 0.0 < zero_probability < 1.0:
@@ -1018,7 +1007,9 @@ def _count_log_likelihood(values, linear, family, dispersion, zero_probability, 
             np.logaddexp(log_pi, log_one_minus_pi + log_zero),
             log_one_minus_pi + log_pmf,
         )
-    positive_normalizer = np.log(np.maximum(-np.expm1(log_zero), 1e-300))
+    positive_normalizer = _log_positive_count_probability(
+        log_zero, log_means, log_relative_mean
+    )
     return np.where(
         is_zero,
         log_pi,
