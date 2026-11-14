@@ -247,6 +247,8 @@ def _run_drift(
     sigma2,
     standard_errors,
     tree_validated,
+    *,
+    compute_posterior=True,
 ):
     residual_values = {
         name: None
@@ -260,6 +262,7 @@ def _run_drift(
         sigma2=sigma2,
         standard_errors=standard_errors,
         _tree_validated=tree_validated,
+        _compute_posterior=compute_posterior,
     )
     posterior = {
         node: GaussianMarginal(marginal.mean + drift * depths[node], marginal.variance)
@@ -395,54 +398,49 @@ def compute_bm_drift_marginals(
             float(np.ptp(responses)) / float(np.ptp(tip_depths)),
             np.finfo(float).eps,
         )
-        try:
-            boundary_candidate = _run_drift(
+
+        def fit_at(current_drift, *, compute_posterior):
+            return _run_drift(
                 tree,
                 values_by_leaf,
                 depths,
                 leaf_by_name,
-                ordinary_slope,
+                current_drift,
                 fixed_sigma2,
                 standard_errors,
                 _tree_validated,
+                compute_posterior=compute_posterior,
             )
-        except (ValueError, ArithmeticError):
-            boundary_candidate = None
+
+        def trial_fit(current_drift):
+            try:
+                _, fit = fit_at(current_drift, compute_posterior=False)
+            except (ValueError, ArithmeticError):
+                return None
+            return fit
+
+        boundary_candidate = trial_fit(ordinary_slope)
         if (
             boundary_candidate is not None
-            and boundary_candidate[1].sigma2 == 0.0
-            and boundary_candidate[1].restricted_log_likelihood is None
+            and boundary_candidate.sigma2 == 0.0
+            and boundary_candidate.restricted_log_likelihood is None
         ):
             fitted_drift = ordinary_slope
-            posterior, bm_fit = boundary_candidate
             evaluations = 1
             success = True
             message = "exact zero-diffusion boundary"
         else:
-            cache = {}
-            if boundary_candidate is not None:
-                cache[ordinary_slope] = boundary_candidate
+            objectives = {}
 
             def evaluate(current_drift):
                 key = float(current_drift)
-                if key not in cache:
-                    try:
-                        cache[key] = _run_drift(
-                            tree,
-                            values_by_leaf,
-                            depths,
-                            leaf_by_name,
-                            key,
-                            fixed_sigma2,
-                            standard_errors,
-                            _tree_validated,
-                        )
-                    except (ValueError, ArithmeticError):
-                        cache[key] = None
-                result = cache[key]
-                if result is None or result[1].restricted_log_likelihood is None:
-                    return 1e100
-                return -result[1].restricted_log_likelihood
+                if key not in objectives:
+                    fit = (
+                        boundary_candidate if key == ordinary_slope else trial_fit(key)
+                    )
+                    likelihood = None if fit is None else fit.restricted_log_likelihood
+                    objectives[key] = 1e100 if likelihood is None else -likelihood
+                return objectives[key]
 
             fitted_drift, objective, optimizer_message = _minimize_unbounded_profile(
                 evaluate,
@@ -452,19 +450,10 @@ def compute_bm_drift_marginals(
             )
             if not math.isfinite(objective) or objective >= 1e99:
                 raise ValueError("Failed to estimate a finite BM-DRIFT trend.")
-            posterior, bm_fit = _run_drift(
-                tree,
-                values_by_leaf,
-                depths,
-                leaf_by_name,
-                fitted_drift,
-                fixed_sigma2,
-                standard_errors,
-                _tree_validated,
-            )
-            evaluations = len(cache)
+            evaluations = len(objectives)
             success = True
             message = f"adaptive unbounded profile; {optimizer_message}"
+        posterior, bm_fit = fit_at(fitted_drift, compute_posterior=True)
     fit = BrownianDriftFit(
         sigma2=bm_fit.sigma2,
         sigma2_estimated=bm_fit.sigma2_estimated,

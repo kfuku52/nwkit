@@ -54,8 +54,9 @@ All notable changes made after the `v0.21.1` tagged release are tracked here.
 - Build posterior sample table metadata once per node and repeat it across draws.
 - Reuse the fixed simulation root and compiled tree across parametric bootstrap replicates.
 - Reuse multivariate ASR branch distances across observations at the same node.
-- Compute transformed Brownian likelihoods without reconstructing every node
-  during the evolution-parameter search or confidence-interval profiling.
+- Compute transformed and directional-drift Brownian likelihoods without
+  reconstructing every node during parameter searches and confidence-interval
+  profiling.
 - Reuse continuous predictor loadings during dense errors-in-variables PGLS
   optimization, including automatic evolutionary-parameter searches.
 - Read singleton likelihood-group variances directly from the dense
