@@ -3,6 +3,7 @@
 import math
 from dataclasses import dataclass
 from functools import lru_cache
+from itertools import islice
 
 import numpy as np
 from scipy.stats import binom
@@ -169,11 +170,27 @@ def _trio_pairs(trio):
 
 
 def trio_values(trios, estimates):
-    values = np.full(len(trios), np.nan)
-    for index, trio in enumerate(trios):
-        distances = [estimates.get(pair, np.nan) for pair in _trio_pairs(trio)]
-        if np.all(np.isfinite(distances)):
-            values[index] = corrected_ks(*distances)
+    values = np.empty(len(trios))
+    iterator = iter(trios)
+    # Bound temporary storage while evaluating the corrections in arrays.
+    for start in range(0, len(trios), 4096):
+        stop = min(start + 4096, len(trios))
+        distances = np.array(
+            [
+                [estimates.get(pair, np.nan) for pair in _trio_pairs(trio)]
+                for trio in islice(iterator, stop - start)
+            ],
+            dtype=float,
+        )
+        complete = np.isfinite(distances).all(axis=1)
+        if np.any((distances < 0).any(axis=1) & complete):
+            raise ValueError("Pairwise Ks distances must be finite and nonnegative.")
+        with np.errstate(over="ignore", invalid="ignore"):
+            corrected = _ks_difference(*distances.T)
+        corrected[~complete] = np.nan
+        if np.any(np.isinf(corrected)):
+            raise ValueError("Corrected Ks must be representable as a finite float.")
+        values[start:stop] = corrected
     return values
 
 
