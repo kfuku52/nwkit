@@ -1688,6 +1688,21 @@ def test_censored_gaussian_interval_scales_before_overflowing_subtraction():
     assert actual == pytest.approx(expected, abs=1e-12)
 
 
+def test_censored_gaussian_scales_exact_and_one_sided_observations():
+    dispersion = 1e308
+    with np.errstate(over="raise", invalid="raise"):
+        actual = _censored_gaussian_log_likelihood(
+            np.array([-1e308, np.nan, np.nan]),
+            np.array([1e308, 1e308, -1e308]),
+            dispersion,
+            np.array([np.nan, np.nan, 1e308]),
+            np.array([np.nan, -1e308, np.nan]),
+        )
+    exact = -2.0 - math.log(dispersion) - 0.5 * math.log(math.tau)
+    one_sided = math.log(0.5 * math.erfc(math.sqrt(2.0)))
+    np.testing.assert_allclose(actual, [exact, one_sided, one_sided], atol=1e-12)
+
+
 def test_censored_gaussian_never_reports_a_nonfinite_successful_fit():
     try:
         result = fit_ordinary_regression(

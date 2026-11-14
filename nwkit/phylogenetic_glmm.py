@@ -1310,15 +1310,21 @@ def _censored_gaussian_log_likelihood(
     right = ~np.isnan(lower) & np.isnan(upper)
     interval = ~np.isnan(lower) & ~np.isnan(upper)
     result = np.empty(len(values), dtype=float)
-    standardized = (values - linear) / dispersion
-    standardized_exact = standardized[exact]
-    result[exact] = (
-        (-0.5 * standardized_exact) * standardized_exact
-        - math.log(dispersion)
-        - 0.5 * math.log(math.tau)
-    )
-    result[left] = log_ndtr((upper[left] - linear[left]) / dispersion)
-    result[right] = log_ndtr((linear[right] - lower[right]) / dispersion)
+    with np.errstate(over="ignore"):
+        standardized_exact = _standardized_censor_bounds(
+            values[exact], linear[exact], dispersion
+        )
+        result[exact] = (
+            (-0.5 * standardized_exact) * standardized_exact
+            - math.log(dispersion)
+            - 0.5 * math.log(math.tau)
+        )
+        result[left] = log_ndtr(
+            _standardized_censor_bounds(upper[left], linear[left], dispersion)
+        )
+        result[right] = log_ndtr(
+            _standardized_censor_bounds(linear[right], lower[right], dispersion)
+        )
     if np.any(interval):
         result[interval] = _normal_censor_interval_log_mass(
             lower[interval], upper[interval], linear[interval], dispersion
