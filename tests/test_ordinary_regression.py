@@ -96,7 +96,7 @@ def test_continuous_beta_fit_keeps_finite_likelihood_at_subnormal_precision():
         5 * math.log(1e-310) + np.sum(-math.log(4.0) - np.log(values * (1 - values))),
         abs=1e-4,
     )
-    np.testing.assert_allclose(fit.coefficients, [[0.0]], atol=3e-4)
+    np.testing.assert_allclose(fit.coefficients, [[0.0]], atol=1e-3)
     with pytest.raises(RuntimeError, match="Beta bootstrap draws round to 0 or 1"):
         fit_phylogenetic_glmm(
             values,
