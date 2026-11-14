@@ -468,6 +468,50 @@ def test_root_clade_selection_matches_positive_geometric_sum(tips, mean, loss):
         )
 
 
+@pytest.mark.parametrize("loss", [740.0, 1000.0])
+def test_rare_observed_selection_preserves_pulse_mixture_and_missingness(loss):
+    design = CountTree(
+        (-1, 0, 0, 0),
+        (0.0, 0.0, 1.0, 1.0),
+        (1, 2, 3),
+        ("A", "B", "C"),
+        (0, 1, 2, 3),
+        ("ABC", "A", "B", "C"),
+    )
+    model = CountLikelihood(
+        design,
+        np.array([[np.nan, 1, 0], [1, np.nan, np.nan]]),
+        rate_scales=np.array([1.0, 1.5]),
+    )
+    event = MultiplicationEvent(3, 0.5)
+    actual = model.family_log_likelihoods([[0.0, loss]], 2.0, 96, event)
+    # In this rare-survival limit a single copy survives. At either rate,
+    # its relative chances in B and C are 1 and 1.5 because C has a pulse.
+    # With only the zero-length A observed, the likelihood is the root prior.
+    np.testing.assert_allclose(actual, np.log([1 / 2.5, 1 / 2]), atol=1e-12)
+
+
+@pytest.mark.parametrize("rare_clades,root_moment", [(1, 2), (2, 6)])
+def test_rare_root_clade_selection_preserves_size_biased_root(rare_clades, root_moment):
+    tips = 1 + rare_clades
+    design = CountTree(
+        (-1,) + (0,) * tips,
+        (0.0, 0.0) + (1.0,) * rare_clades,
+        tuple(range(1, tips + 1)),
+        tuple(f"S{i}" for i in range(tips)),
+        tuple(range(tips + 1)),
+        tuple(f"clade{i}" for i in range(tips + 1)),
+    )
+    counts = np.ones((2, tips))
+    counts[1, 0] = 2
+    model = CountLikelihood(design, counts, ascertainment="root-clades")
+    # Observing all rare clades weights each possible root count n by
+    # n**rare_clades. The first two moments of Geometric(1/2) are 2 and 6.
+    expected = np.log([0.5 / root_moment, 0.25 * 2**rare_clades / root_moment])
+    actual = model.family_log_likelihoods([[0.0, 1000.0]], 2.0, 8)
+    np.testing.assert_allclose(actual, expected, atol=1e-12)
+
+
 @pytest.mark.parametrize(
     "nodes,names",
     [((1, 2, 2), ("A", "B", "B")), ((1, 1, 2), ("A", "A", "B")), ((1, 2), ("A", "A"))],

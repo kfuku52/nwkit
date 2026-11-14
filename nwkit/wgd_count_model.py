@@ -15,6 +15,7 @@ _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
 _PULSE_BATCH_ENTRIES = 4096
 _TRANSITION_CACHE_BYTES = 8 * 1024**2
 _TRANSITION_CACHE_ENTRIES = 4096
+_SELECTION_PROBABILITY_FLOOR = np.finfo(float).tiny / np.finfo(float).eps
 
 
 def _log_pruning_contribution(matrix, values):
@@ -107,27 +108,9 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
     if time == 0 or duplication == loss == 0:
         np.fill_diagonal(result, 0.0)
         return result
-    with np.errstate(divide="ignore"):
-        if duplication == loss:
-            log_product = np.log(duplication) + np.log(time)
-            log_denominator = np.logaddexp(0.0, log_product)
-            log_a = log_b = log_product - log_denominator
-            log_survival = log_success = -log_denominator
-        else:
-            delta = abs(duplication - loss)
-            log_change = np.log(-np.expm1(-delta * time))
-            log_denominator = np.logaddexp(
-                np.log(delta), np.log(min(duplication, loss)) + log_change
-            )
-            log_a = np.log(loss) + log_change - log_denominator
-            log_b = np.log(duplication) + log_change - log_denominator
-            complement = np.log(delta) - log_denominator
-            attenuated = complement - delta * time
-            log_survival, log_success = (
-                (complement, attenuated)
-                if duplication > loss
-                else (attenuated, complement)
-            )
+    log_a, log_b, log_survival, log_success = _birth_death_log_probabilities(
+        duplication, loss, time
+    )
     descendants = np.arange(1, max_count + 1)[None, :]
     gamma_table = gammaln(np.arange(max_count + 2))
     # All nonpositive integer gamma arguments are poles. A read-only shifted
@@ -162,6 +145,35 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
         result[count, 1:] = logsumexp(terms, axis=0)
         result[count, 0] = count * log_a
     return result
+
+
+def _birth_death_log_probabilities(duplication, loss, time):
+    if time == 0 or duplication == loss == 0:
+        return -np.inf, -np.inf, 0.0, 0.0
+    if duplication == loss:
+        log_product = np.log(duplication) + np.log(time)
+        log_denominator = np.logaddexp(0.0, log_product)
+        log_probability = log_product - log_denominator
+        return log_probability, log_probability, -log_denominator, -log_denominator
+    delta = abs(duplication - loss)
+    log_delta = np.log(delta)
+    product = delta * time
+    with np.errstate(divide="ignore"):
+        log_change = (
+            log_delta + np.log(time)
+            if product < np.finfo(float).tiny
+            else np.log(-np.expm1(-product))
+        )
+        log_denominator = np.logaddexp(
+            log_delta, np.log(min(duplication, loss)) + log_change
+        )
+        log_a = np.log(loss) + log_change - log_denominator
+        log_b = np.log(duplication) + log_change - log_denominator
+    complement = log_delta - log_denominator
+    attenuated = complement - product
+    if duplication > loss:
+        return log_a, log_b, complement, attenuated
+    return log_a, log_b, attenuated, complement
 
 
 def _log_matrix_product(left, right):
@@ -209,6 +221,46 @@ def _union_survival(probabilities):
     return result
 
 
+def _log_complement(log_probability):
+    with np.errstate(divide="ignore"):
+        return np.where(
+            log_probability < -np.log(2),
+            np.log1p(-np.exp(log_probability)),
+            np.log(-np.expm1(log_probability)),
+        )
+
+
+def _log_union_survival(logs):
+    seen = np.full(logs.shape[0], -np.inf)
+    absent = np.zeros(logs.shape[0])
+    for log_probability in logs.T:
+        seen = np.logaddexp(seen, absent + log_probability)
+        absent += _log_complement(log_probability)
+    return np.minimum(seen, 0.0)
+
+
+def _root_clade_coverage(logs, log_absent, log_continue, log_normalizer):
+    # Each ancestral copy observes an independent subset of root clades.
+    # Geometric continuation gives a triangular coverage recurrence.
+    covered = {0: np.zeros(len(logs))}
+    for missing in range(1, 1 << logs.shape[1]):
+        columns = [i for i in range(logs.shape[1]) if missing & (1 << i)]
+        terms = [logs[:, columns].sum(axis=1)]
+        observed = (missing - 1) & missing
+        while observed:
+            present = [i for i in columns if observed & (1 << i)]
+            absent = [i for i in columns if not observed & (1 << i)]
+            terms.append(
+                log_continue
+                + logs[:, present].sum(axis=1)
+                + log_absent[:, absent].sum(axis=1)
+                + covered[missing ^ observed]
+            )
+            observed = (observed - 1) & missing
+        covered[missing] = logsumexp(terms, axis=0) - log_normalizer(columns)
+    return covered[(1 << logs.shape[1]) - 1]
+
+
 def _root_clade_log_survival(probabilities, mean):
     """Exact geometric-root selection, without alternating subtraction."""
     p = 1.0 / mean
@@ -232,31 +284,52 @@ def _root_clade_log_survival(probabilities, mean):
                 - np.log(p + continuation * union)
             )
 
-        # Each ancestral copy observes an independent subset of root clades.
-        # Geometric continuation gives a triangular coverage recurrence; remove
-        # its empty-subset self-loop with p + continuation * P(any observation).
-        log_absent = np.log1p(-probabilities)
-        log_continue = np.log(continuation)
-        covered = {0: np.zeros(len(probabilities))}
-        for missing in range(1, 1 << probabilities.shape[1]):
-            columns = [i for i in range(probabilities.shape[1]) if missing & (1 << i)]
-            terms = [logs[:, columns].sum(axis=1)]
-            observed = (missing - 1) & missing
-            while observed:
-                present = [i for i in columns if observed & (1 << i)]
-                absent = [i for i in columns if not observed & (1 << i)]
-                terms.append(
-                    log_continue
-                    + logs[:, present].sum(axis=1)
-                    + log_absent[:, absent].sum(axis=1)
-                    + covered[missing ^ observed]
-                )
-                observed = (observed - 1) & missing
+        # Remove the empty-subset self-loop using the chance of stopping or
+        # observing at least one of the clades still needed.
+        def log_normalizer(columns):
             union = _union_survival(probabilities[:, columns])
-            covered[missing] = logsumexp(terms, axis=0) - np.log(
-                p + continuation * union
-            )
-        return covered[(1 << probabilities.shape[1]) - 1]
+            return np.log(p + continuation * union)
+
+        return _root_clade_coverage(
+            logs, np.log1p(-probabilities), np.log(continuation), log_normalizer
+        )
+
+
+def _log_pulse_survival(log_survival, event):
+    # For one ancestral copy, observe the original lineage or at least one
+    # retained extra. Work with the log hazard of observing any extra copy.
+    extra = np.log(event.retention) + log_survival
+    cutoff = np.log(np.finfo(float).eps)
+    with np.errstate(divide="ignore", over="ignore"):
+        log_hazard = np.log(event.multiplicity - 1) + np.where(
+            extra < cutoff, extra, np.log(-_log_complement(extra))
+        )
+        log_extra_survival = np.where(
+            log_hazard < cutoff, log_hazard, _log_complement(-np.exp(log_hazard))
+        )
+    return np.minimum(
+        np.logaddexp(log_survival, _log_complement(log_survival) + log_extra_survival),
+        0.0,
+    )
+
+
+def _selection_log_from_survival(logs, mean, ascertainment):
+    if ascertainment == "observed":
+        logs = _log_union_survival(logs)[:, None]
+    if mean == 1:
+        return logs.sum(axis=1)
+    log_stop = -np.log(mean)
+    log_continue = np.log1p(-1 / mean)
+
+    def log_normalizer(columns):
+        union = _log_union_survival(logs[:, columns])
+        return np.logaddexp(log_stop, log_continue + union)
+
+    if logs.shape[1] == 1:
+        return logs[:, 0] - log_normalizer([0])
+    return _root_clade_coverage(
+        logs, _log_complement(logs), log_continue, log_normalizer
+    )
 
 
 def rate_categories(shape: float | None, categories: int = 4) -> np.ndarray:
@@ -462,7 +535,9 @@ class CountLikelihood:
                     [self.subtree_missing[child] for child in self.children[node]],
                     axis=0,
                 )
-        self._transition_cache = OrderedDict()
+        self._transition_cache: OrderedDict[
+            tuple[bool, float, float, float, int], np.ndarray
+        ] = OrderedDict()
         self._transition_cache_bytes = 0
 
     def _cached_transition(self, duplication, loss, time, max_count, *, log=False):
@@ -636,6 +711,7 @@ class CountLikelihood:
             node: np.where(self.patterns[:, column], 0.0, self.detection[column])
             for column, node in enumerate(self.tree.tip_nodes)
         }
+        rare = np.zeros(len(self.patterns), dtype=bool)
 
         def propagate(survival, duplication, loss, time):
             _, _, survives, success = _birth_death_probabilities(
@@ -645,8 +721,10 @@ class CountLikelihood:
             # their rounded sum can fall below one. Rewrite 1-b+b*s as
             # (1-b)*(1-s)+s, so s=1 stays exact and propagation cannot turn a
             # valid survival into a probability above one before a pulse.
+            numerator = survives * survival
+            rare[:] |= (survival > 0) & (numerator < _SELECTION_PROBABILITY_FLOOR)
             return np.divide(
-                survives * survival,
+                numerator,
                 success * (1.0 - survival) + survival,
                 out=np.zeros_like(survival),
                 where=survival > 0,
@@ -675,13 +753,65 @@ class CountLikelihood:
         root_children = np.column_stack(
             [survivals[child] for child in self.children[0]]
         )
-        if self.ascertainment == "root-clades":
-            return _root_clade_log_survival(root_children, root_mean)
-        survival = _union_survival(root_children)
-        with np.errstate(divide="ignore"):
-            return np.log(survival) - np.log(
-                1 / root_mean + (1 - 1 / root_mean) * survival
+
+        def condition(probabilities):
+            if self.ascertainment == "root-clades":
+                return _root_clade_log_survival(probabilities, root_mean)
+            survival = _union_survival(probabilities)
+            with np.errstate(divide="ignore"):
+                return np.log(survival) - np.log(
+                    1 / root_mean + (1 - 1 / root_mean) * survival
+                )
+
+        if not np.any(rare):
+            return condition(root_children)
+        result = np.empty(len(rare))
+        result[rare] = self._rare_selection_logs(rates, scale, root_mean, event, rare)
+        if not np.all(rare):
+            result[~rare] = condition(root_children[~rare])
+        return result
+
+    def _rare_selection_logs(self, rates, scale, root_mean, event, rare):
+        survivals = {
+            node: np.where(self.patterns[rare, column], -np.inf, np.log(detection))
+            for column, (node, detection) in enumerate(
+                zip(self.tree.tip_nodes, self.detection, strict=True)
             )
+        }
+
+        def propagate(survival, duplication, loss, time):
+            _, _, log_survives, log_success = _birth_death_log_probabilities(
+                duplication, loss, time
+            )
+            result = np.full_like(survival, -np.inf)
+            present = np.isfinite(survival)
+            logs = survival[present]
+            result[present] = log_survives - np.logaddexp(
+                0, log_success + _log_complement(logs) - logs
+            )
+            return result
+
+        for node in range(len(self.tree.parents) - 1, 0, -1):
+            if node not in survivals:
+                survivals[node] = _log_union_survival(
+                    np.column_stack([survivals[child] for child in self.children[node]])
+                )
+            duplication, loss = rates[self.branch_groups[node]] * scale
+            time = self.tree.lengths[node]
+            survival = survivals[node]
+            if event is not None and event.node == node and event.retention != 0:
+                survival = propagate(
+                    survival, duplication, loss, time * (1 - event.fraction)
+                )
+                survival = _log_pulse_survival(survival, event)
+                time *= event.fraction
+            survivals[node] = propagate(survival, duplication, loss, time)
+        root_children = np.column_stack(
+            [survivals[child] for child in self.children[0]]
+        )
+        return _selection_log_from_survival(
+            root_children, root_mean, self.ascertainment
+        )
 
     def family_log_likelihoods(
         self, rates, root_mean, max_count, event=None, *, _split_zero_event=False

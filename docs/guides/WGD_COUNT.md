@@ -87,6 +87,9 @@ Pruning sums latent copy counts and averages family rate categories. Survival
 conditioning is applied **after** averaging categories. Missing tips have a
 flat observation likelihood. Zero observed copies have a binomial observation
 likelihood, not the same treatment as missing data.
+When survival probabilities approach the floating-point limit, the likelihood
+computes observation conditioning in log space for the affected missingness
+patterns.
 
 State probabilities and root tails are never renormalized to hide omitted
 mass. Every fitted model is checked by doubling the maximum count state and
