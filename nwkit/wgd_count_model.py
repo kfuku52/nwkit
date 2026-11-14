@@ -8,7 +8,7 @@ from collections import OrderedDict
 from dataclasses import dataclass
 
 import numpy as np
-from scipy.special import gammaln, logsumexp
+from scipy.special import logsumexp
 from scipy.stats import binom, gamma
 
 _LOG_PRUNING_WORKSPACE_BYTES = 1024**2
@@ -112,39 +112,27 @@ def _birth_death_log_transition(duplication, loss, time, max_count):
     log_a, log_b, log_survival, log_success = _birth_death_log_probabilities(
         duplication, loss, time
     )
-    descendants = np.arange(1, max_count + 1)[None, :]
-    gamma_table = gammaln(np.arange(max_count + 2))
-    # All nonpositive integer gamma arguments are poles. A read-only shifted
-    # view reuses the descendant/survivor differences without an M-by-M table.
-    gamma_offsets = np.r_[
-        np.full(max_count - 1, np.inf), gamma_table[1 : max_count + 1]
-    ]
-    gamma_difference = np.lib.stride_tricks.sliding_window_view(
-        gamma_offsets, max_count
-    )[::-1]
-    for count in range(1, max_count + 1):
-        surviving = np.arange(1, count + 1)[:, None]
-        # Sum over the number of surviving ancestral lineages. Conditional
-        # descendants follow a negative binomial, not a killed finite CTMC.
-        with np.errstate(invalid="ignore"):
-            extinct = np.where(count == surviving, 0.0, (count - surviving) * log_a)
-            extra = np.where(
-                descendants == surviving, 0.0, (descendants - surviving) * log_b
+    result[1:, 0] = np.arange(1, max_count + 1) * log_a
+    log_one = log_survival + log_success
+    positive = np.full(max_count, -np.inf)
+    for descendants in range(1, max_count + 1):
+        # For n ancestors and k descendants, the last ancestor produces
+        # exactly one copy with probability d, or a positive geometric tail
+        # with continuation b. Its positive contribution obeys
+        # d*P[n-1,k-1] + b*positive[n,k-1]. Its extinction adds a*P[n-1,k].
+        positive = np.logaddexp(
+            log_one + result[:-1, descendants - 1], log_b + positive
+        )
+        column = positive.copy()
+        # Double the number of ancestor terms accumulated at each step.
+        # Terms are nonnegative, and impossible states stay at -inf.
+        shift = 1
+        while shift < max_count:
+            column[shift:] = np.logaddexp(
+                column[shift:], shift * log_a + column[:-shift]
             )
-            terms = (
-                gamma_table[count + 1]
-                - gamma_table[2 : count + 2, None]
-                - gamma_table[1 : count + 1, None][::-1]
-                + extinct
-                + surviving * (log_survival + log_success)
-                + gamma_table[None, 1 : max_count + 1]
-                - gamma_table[1 : count + 1, None]
-                - gamma_difference[:count]
-                + extra
-            )
-        terms[descendants < surviving] = -np.inf
-        result[count, 1:] = logsumexp(terms, axis=0)
-        result[count, 0] = count * log_a
+            shift *= 2
+        result[1:, descendants] = column
     return result
 
 
