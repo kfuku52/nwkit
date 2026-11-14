@@ -299,24 +299,18 @@ def _sparse_multivariate_latent_model(
     trait_identity = sparse.eye(n_traits, format="csr")
     for name in trait_covariances:
         model = component_model(name, decoded)
-        trait_covariance = model.covariance_scale * np.asarray(
-            trait_covariances[name], dtype=float
-        )
-        trait_sign, trait_logdet = np.linalg.slogdet(trait_covariance)
-        if trait_sign <= 0.0:
-            raise np.linalg.LinAlgError(
-                "Multivariate trait covariance is not positive definite."
-            )
-        trait_precision = np.linalg.inv(trait_covariance)
+        # Mix independent latent traits through the observation loading.
+        # Precision then remains well scaled when trait variance is near zero.
+        trait_covariance = np.asarray(trait_covariances[name], dtype=float)
+        trait_factor = _positive_cholesky(trait_covariance)
+        trait_transform = trait_factor * np.sqrt(model.covariance_scale)
         precision_blocks.append(
-            sparse.kron(trait_precision, model.precision, format="csc")
+            sparse.kron(trait_identity, model.precision, format="csc")
         )
         loading_blocks.append(
-            sparse.kron(trait_identity, model.tip_loading, format="csr")
+            sparse.kron(trait_transform, model.tip_loading, format="csr")
         )
-        prior_logdet += (
-            model.n_states * trait_logdet + n_traits * model.logdet_covariance
-        )
+        prior_logdet += n_traits * model.logdet_covariance
     if fixed_covariance is not None:
         if isinstance(fixed_covariance, DiagonalLowRankCovariance):
             diagonal = np.asarray(fixed_covariance.diagonal, dtype=float)
