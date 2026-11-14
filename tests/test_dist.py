@@ -143,8 +143,7 @@ class TestDistanceMetrics:
         with pytest.raises(ValueError, match="weighted RF distance is too large"):
             _calculate_distances(first, second, names, ("weighted-rf",), "rooted")
 
-    def test_topological_path_rows_match_explicit_paths(self, monkeypatch):
-        monkeypatch.setattr("nwkit.dist.PATH_MATRIX_MAX_TAXA", 0)
+    def test_topological_path_rows_match_explicit_paths(self):
         first = Tree("(((B,C),A),((D),E,F));", parser=1)
         second = Tree("(F,(A,(E,(C,D))),B);", parser=1)
         names = list("EBCAFD")

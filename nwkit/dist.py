@@ -248,23 +248,10 @@ def _vector_distances(vector1, vector2, metrics):
     return results
 
 
-def _binary_root_sides(tree):
-    root_children = tree.get_children()
-    if len(root_children) != 2:
-        return None
-    sides = dict()
-    for side, child in enumerate(root_children):
-        for leaf in child.leaves():
-            sides[leaf.name] = side
-    return sides
-
-
-def _path_matrix_is_safe(tree1, tree2, num_taxa, topological):
+def _path_matrix_is_safe(tree1, tree2, num_taxa):
     if num_taxa > PATH_MATRIX_MAX_TAXA:
         return False
-    if topological:
-        return True
-    positive_lengths = list()
+    min_length = math.inf
     max_length = 0.0
     edge_count = 0
     for tree in (tree1, tree2):
@@ -275,45 +262,36 @@ def _path_matrix_is_safe(tree1, tree2, num_taxa, topological):
             length = float(node.dist)
             max_length = max(max_length, length)
             if length > 0.0:
-                positive_lengths.append(length)
+                min_length = min(min_length, length)
     if max_length == 0.0:
         return True
     if max_length > (sys.float_info.max / max(4, edge_count * 2)):
         return False
-    min_length = min(positive_lengths)
     return (max_length / min_length) <= PATH_MATRIX_MAX_DYNAMIC_RANGE
 
 
-def _ordered_distance_matrix(tree, leaf_names, topological):
+def _ordered_distance_matrix(tree, leaf_names):
     import numpy as np
 
     leaves = list(tree.leaves())
-    matrix = np.asarray(
-        tree.distance_matrix(topological=topological, squared=True),
-        dtype=float,
-    )
-    if topological:
-        root_sides = _binary_root_sides(tree)
-        if root_sides is not None:
-            sides = np.asarray([root_sides[leaf.name] for leaf in leaves])
-            matrix -= sides[:, None] != sides[None, :]
+    matrix = np.asarray(tree.distance_matrix(squared=True), dtype=float)
     index_by_name = {str(leaf.name): index for index, leaf in enumerate(leaves)}
     order = np.asarray([index_by_name[str(name)] for name in leaf_names])
     return matrix[np.ix_(order, order)]
 
 
-def _path_distance_matrix(tree1, tree2, leaf_names, topological):
+def _path_distance_matrix(tree1, tree2, leaf_names):
     import numpy as np
 
-    matrix1 = _ordered_distance_matrix(tree1, leaf_names, topological)
-    matrix2 = _ordered_distance_matrix(tree2, leaf_names, topological)
+    matrix1 = _ordered_distance_matrix(tree1, leaf_names)
+    matrix2 = _ordered_distance_matrix(tree2, leaf_names)
     upper = (matrix1 - matrix2)[np.triu_indices(len(leaf_names), 1)]
     if upper.size == 0:
         return 0.0
     scale = float(np.max(np.abs(upper)))
     if scale == 0.0:
         # Rounded path sums can agree even when a branch length changed.
-        return 0.0 if topological else None
+        return None
     matrix_scale = max(
         float(np.max(matrix1)),
         float(np.max(matrix2)),
@@ -518,22 +496,12 @@ def _weighted_path_distance(tree1, tree2, leaf_names):
 
 
 def _path_distance(tree1, tree2, leaf_names, topological):
-    if _path_matrix_is_safe(
-        tree1,
-        tree2,
-        num_taxa=len(leaf_names),
-        topological=topological,
-    ):
-        matrix_distance = _path_distance_matrix(
-            tree1,
-            tree2,
-            leaf_names,
-            topological,
-        )
-        if matrix_distance is not None:
-            return matrix_distance
     if topological:
         return _topological_path_distance(tree1, tree2, leaf_names)
+    if _path_matrix_is_safe(tree1, tree2, len(leaf_names)):
+        matrix_distance = _path_distance_matrix(tree1, tree2, leaf_names)
+        if matrix_distance is not None:
+            return matrix_distance
     return _weighted_path_distance(tree1, tree2, leaf_names)
 
 
