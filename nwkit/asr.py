@@ -2,6 +2,7 @@ import math
 import multiprocessing
 import sys
 from collections import defaultdict
+from collections.abc import Callable
 from concurrent.futures import ProcessPoolExecutor
 from copy import copy
 from typing import Any
@@ -652,7 +653,12 @@ def _compute_log_inside_likelihoods(
     log_scales = dict()
     child_terms: dict[Any, Any] = {}
     transition_matrices = dict()
-    prepared_generators = {}
+    prepared_generators: dict[
+        int,
+        tuple[
+            Callable[[float], np.ndarray], dict[float, tuple[np.ndarray, np.ndarray]]
+        ],
+    ] = {}
     for node in tree.traverse(strategy="postorder"):
         if node.is_leaf:
             inside[node] = (
