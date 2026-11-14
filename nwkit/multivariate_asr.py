@@ -14,7 +14,7 @@ from nwkit.continuous_asr import (
     _tree_groups,
     compute_bm_marginals,
 )
-from nwkit.continuous_asr_io import _summary
+from nwkit.continuous_asr_io import _normal_interval_multiplier, _summary
 from nwkit.util import assign_branch_ids, get_node_class, write_tree
 
 _LOG_2PI = math.log(2.0 * math.pi)
@@ -358,51 +358,85 @@ def multivariate_output_table(
     *,
     errors=None,
 ):
-    ids = assign_branch_ids(tree)
-    rows = []
-    for node in selected_nodes:
-        observed_vector = observed.get(str(node.name)) if node.is_leaf else None
+    selected_nodes = tuple(selected_nodes)
+    traits = np.asarray(trait_names, dtype=object)
+    trait_count = len(traits)
+    metadata = _multivariate_node_metadata(selected_nodes, assign_branch_ids(tree))
+    columns = {
+        **{name: np.repeat(values, trait_count) for name, values in metadata.items()},
+        "trait": np.tile(traits, len(selected_nodes)),
+        **_multivariate_observed_columns(selected_nodes, observed, errors, trait_count),
+        **_multivariate_marginal_columns(
+            selected_nodes, posterior, trait_count, ci_level
+        ),
+    }
+    return _asr_table_from_columns(columns)
+
+
+def _multivariate_observed_columns(nodes, observed, errors, trait_count):
+    shape = (len(nodes), trait_count)
+    value = np.full(shape, "", dtype=object)
+    se = np.full(shape, "", dtype=object)
+    imputed = np.zeros(shape, dtype=bool)
+    for index, node in enumerate(nodes):
+        if not node.is_leaf:
+            continue
+        name = str(node.name)
+        vector = observed.get(name)
+        error = None if errors is None else errors.get(name)
+        for trait in range(trait_count):
+            measurement = None if vector is None else vector[trait]
+            imputed[index, trait] = measurement is None
+            if measurement is not None:
+                value[index, trait] = measurement
+                deviation = None if error is None else error[trait]
+                se[index, trait] = 0.0 if deviation is None else deviation
+    return {
+        "observed_value": _numeric_observations(value.ravel()),
+        "observed_se": _numeric_observations(se.ravel()),
+        "is_imputed": imputed.ravel(),
+    }
+
+
+def _numeric_observations(values):
+    return (
+        pd.Series(values.tolist()).to_numpy()
+        if len(values) and not np.any(values == "")
+        else values
+    )
+
+
+def _multivariate_marginal_columns(nodes, posterior, trait_count, ci_level):
+    means = np.empty((len(nodes), trait_count), dtype=float)
+    variances = np.empty_like(means)
+    for index, node in enumerate(nodes):
         marginal = posterior[node]
-        for trait_index, trait in enumerate(trait_names):
-            value = None if observed_vector is None else observed_vector[trait_index]
-            error_vector = errors.get(str(node.name)) if errors is not None else None
-            error = None if error_vector is None else error_vector[trait_index]
-            scalar = GaussianMarginal(
-                float(marginal.mean[trait_index]),
-                float(marginal.covariance[trait_index, trait_index]),
-            )
-            rows.append(
-                {
-                    "branch_id": ids[node],
-                    "parent": -1 if node.is_root else ids[node.up],
-                    "node_class": get_node_class(node),
-                    "name": "" if node.name in (None, "") else str(node.name),
-                    "trait": trait,
-                    "observed_value": "" if value is None else value,
-                    "observed_se": ""
-                    if value is None
-                    else (0.0 if error is None else error),
-                    "is_imputed": bool(node.is_leaf and value is None),
-                    **_summary(scalar, ci_level),
-                }
-            )
-    columns = [
-        "branch_id",
-        "parent",
-        "node_class",
-        "name",
-        "trait",
-        "observed_value",
-        "observed_se",
-        "is_imputed",
-        "mean",
-        "variance",
-        "sd",
-        "ci_lower",
-        "ci_upper",
-        "ci_level",
-    ]
-    return pd.DataFrame(rows, columns=columns)
+        means[index] = marginal.mean[:trait_count]
+        variances[index] = np.diag(marginal.covariance)[:trait_count]
+    if np.any(variances < 0.0):
+        raise ValueError("An ancestral marginal variance is negative.")
+    sd = np.sqrt(variances)
+    width = _normal_interval_multiplier(ci_level) * sd
+    with np.errstate(over="ignore", invalid="ignore"):
+        lower, upper = means - width, means + width
+    if not np.isfinite(lower).all() or not np.isfinite(upper).all():
+        raise ValueError(
+            "An ancestral interval exceeds floating-point range; rescale the trait units."
+        )
+    return {
+        "mean": means.ravel(),
+        "variance": variances.ravel(),
+        "sd": sd.ravel(),
+        "ci_lower": lower.ravel(),
+        "ci_upper": upper.ravel(),
+        "ci_level": np.full(means.size, ci_level),
+    }
+
+
+def _asr_table_from_columns(columns):
+    if not len(columns["branch_id"]):
+        return pd.DataFrame(columns=tuple(columns))
+    return pd.DataFrame(columns)
 
 
 def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
@@ -412,7 +446,7 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
     first, second = np.triu_indices(len(traits))
     pair_count = len(first)
     node_count = len(selected_nodes)
-    metadata = _multivariate_covariance_metadata(selected_nodes, ids)
+    metadata = _multivariate_node_metadata(selected_nodes, ids)
     covariance = np.empty((node_count, pair_count), dtype=float)
     correlation = np.empty((node_count, pair_count), dtype=object)
     for index, node in enumerate(selected_nodes):
@@ -423,12 +457,9 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
         )
     covariance_column = covariance.ravel()
     correlation_column = correlation.ravel()
-    if not covariance_column.size:
-        covariance_column = covariance_column.astype(object)
-        metadata = {name: values.astype(object) for name, values in metadata.items()}
-    elif not np.any(correlation_column == ""):
+    if correlation_column.size and not np.any(correlation_column == ""):
         correlation_column = correlation_column.astype(float)
-    return pd.DataFrame(
+    return _asr_table_from_columns(
         {
             **{
                 name: np.repeat(values, pair_count) for name, values in metadata.items()
@@ -441,7 +472,7 @@ def multivariate_covariance_table(tree, selected_nodes, posterior, trait_names):
     )
 
 
-def _multivariate_covariance_metadata(nodes, ids):
+def _multivariate_node_metadata(nodes, ids):
     return {
         "branch_id": np.asarray([ids[node] for node in nodes], dtype=int),
         "parent": np.asarray(
