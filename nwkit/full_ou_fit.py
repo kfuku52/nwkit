@@ -53,8 +53,7 @@ def _fixed_parameters(data, attraction, diffusion):
     attraction = _scale_similarity(np.asarray(attraction), columns, rows)
     # Observation scales are powers of two. Apply both exponents at once so
     # their product need not be representable in the original units.
-    exponents = 1 - np.frexp(data.scales)[1]
-    covariance_exponents = exponents[:, None] + exponents[None, :]
+    covariance_exponents = -data.covariance_scale_exponents
     diffusion = np.ldexp(np.asarray(diffusion, dtype=float), covariance_exponents)
     covariance = np.ldexp(process.root_covariance, covariance_exponents)
     return attraction, diffusion, covariance

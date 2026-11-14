@@ -2,6 +2,7 @@
 
 import math
 from dataclasses import dataclass, replace
+from functools import cached_property
 
 import numpy as np
 from scipy.linalg import cho_factor, cho_solve
@@ -68,6 +69,12 @@ class _ObservationData:
     count_by_trait: np.ndarray
     num_observed_tips: int
     num_effective_positions: int
+
+    @cached_property
+    def covariance_scale_exponents(self):
+        """Binary exponents for converting covariance to original trait units."""
+        exponents = np.frexp(self.scales)[1] - 1
+        return exponents[:, None] + exponents[None, :]
 
 
 @dataclass(frozen=True)
@@ -539,7 +546,7 @@ def _initial_cholesky(dimension):
 
 
 def _restore_sigma(data, sigma):
-    return sigma * data.scales[:, None] * data.scales[None, :]
+    return np.ldexp(sigma, data.covariance_scale_exponents)
 
 
 def _likelihood_scale_adjustment(data, *, reml):
