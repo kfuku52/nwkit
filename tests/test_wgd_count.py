@@ -205,6 +205,20 @@ def test_bootstrap_tail_audit_distinguishes_both_limits():
     }
 
 
+def test_bootstrap_exceedances_include_ties_at_the_numerical_threshold():
+    from types import SimpleNamespace
+
+    from nwkit.wgd_count_fit import bootstrap_exceedances
+
+    threshold = 1.0 - 1e-9
+    below = np.nextafter(threshold, 0.0)
+    statistics = (2.0, below, threshold, 0.0, threshold)
+    candidates = [SimpleNamespace(improvement=value) for value in (1.0, 3.0, 0.0)]
+    np.testing.assert_array_equal(
+        bootstrap_exceedances(statistics, candidates), [3, 0, 5]
+    )
+
+
 def test_real_bootstrap_checkpoint_resumes_holes_and_matches_outputs(
     tmp_path, monkeypatch
 ):

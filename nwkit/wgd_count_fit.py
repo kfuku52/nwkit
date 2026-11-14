@@ -547,6 +547,13 @@ def _parallel_bootstrap(
     return statistics
 
 
+def bootstrap_exceedances(statistics, candidates):
+    """Count simulated search maxima at or above each candidate's threshold."""
+    ordered = np.sort(statistics)
+    thresholds = [candidate.improvement - 1e-9 for candidate in candidates]
+    return len(ordered) - ordered.searchsorted(thresholds, side="left")
+
+
 def calibrate_scan(
     model: CountLikelihood,
     observed: CountScan,
@@ -640,9 +647,9 @@ def calibrate_scan(
     if len(completed) != draws:
         raise RuntimeError("Count bootstrap finished without every draw.")
     candidates = []
-    for candidate in observed.candidates:
-        exceedances = sum(value >= candidate.improvement - 1e-9 for value in completed)
-        p_value = (1 + exceedances) / (1 + draws)
+    exceedances = bootstrap_exceedances(completed, observed.candidates)
+    for candidate, count in zip(observed.candidates, exceedances, strict=True):
+        p_value = (1 + int(count)) / (1 + draws)
         mc_se = float(np.sqrt(p_value * (1 - p_value) / (draws + 1)))
         candidates.append(replace(candidate, p_value=p_value, p_value_mc_se=mc_se))
     return replace(

@@ -28,6 +28,7 @@ from nwkit.wgd_count_checkpoint import (
 )
 from nwkit.wgd_count_fit import (
     _burst_model,
+    bootstrap_exceedances,
     calibrate_scan,
     initial_count_bound,
     scan_counts,
@@ -172,26 +173,29 @@ def bootstrap_tail_audit(result, design, alpha):
     if not result.bootstrap_statistics:
         return None
     draws = len(result.bootstrap_statistics)
+    counts = bootstrap_exceedances(result.bootstrap_statistics, result.candidates)
+    lower = np.zeros(len(counts))
+    upper = np.ones(len(counts))
+    has_exceedances = counts > 0
+    has_misses = counts < draws
+    lower_counts = counts[has_exceedances]
+    upper_counts = counts[has_misses]
+    lower[has_exceedances] = beta.ppf(0.025, lower_counts, draws - lower_counts + 1)
+    upper[has_misses] = beta.ppf(0.975, upper_counts + 1, draws - upper_counts)
     details = []
-    for candidate in result.candidates:
-        count = sum(
-            value >= candidate.improvement - 1e-9
-            for value in result.bootstrap_statistics
-        )
-        lower = 0.0 if count == 0 else float(beta.ppf(0.025, count, draws - count + 1))
-        upper = (
-            1.0 if count == draws else float(beta.ppf(0.975, count + 1, draws - count))
-        )
+    for candidate, count, low, high in zip(
+        result.candidates, counts, lower, upper, strict=True
+    ):
         details.append(
             {
                 "branch_id": design.branch_ids[candidate.node],
-                "num_exceedances": count,
-                "tail_probability_lower": lower,
-                "tail_probability_upper": upper,
+                "num_exceedances": int(count),
+                "tail_probability_lower": float(low),
+                "tail_probability_upper": float(high),
                 "alpha_resolution": "below"
-                if upper < alpha
+                if high < alpha
                 else "above"
-                if lower > alpha
+                if low > alpha
                 else "overlaps",
             }
         )
