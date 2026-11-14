@@ -29,6 +29,7 @@ from nwkit.rooting_state import require_rooted
 from nwkit.util import assign_branch_ids, get_node_class, validate_unique_named_leaves
 
 _ndtri_exp = getattr(special, "ndtri_exp", None)
+_MAX_FLOAT = float(np.finfo(float).max)
 
 
 @dataclass(frozen=True, slots=True)
@@ -498,6 +499,49 @@ def _liability_bounds(constraints, thresholds, estimated):
     }
 
 
+def _liability_moment_units(compiled, process, thresholds, retained_draws):
+    # Ordinary trees can accumulate squared deviations in their input units.
+    # For extreme branch lengths or thresholds, allow each node's units to
+    # grow with the magnitude of its actual draws.
+    limit = math.frexp(math.sqrt(_MAX_FLOAT / (256 * retained_draws)))[1] - 1
+    branch_variance = max(
+        (edge.variance for edge in process.transitions.values()), default=1.0
+    )
+    size = max(
+        math.sqrt(branch_variance) * math.sqrt(len(compiled.nodes)),
+        float(np.max(np.abs(thresholds))),
+    )
+    exponents = (
+        None
+        if size < math.ldexp(1.0, limit)
+        else np.zeros(len(compiled.nodes), dtype=int)
+    )
+    return limit, exponents
+
+
+def _scaled_liability_values(values, mean, m2, limit, exponents):
+    if exponents is None:
+        return values
+    _, value_exponents = np.frexp(values)
+    shift = np.maximum(value_exponents - limit - exponents, 0)
+    if np.any(shift):
+        np.ldexp(mean, -shift, out=mean)
+        np.ldexp(m2, -2 * shift, out=m2)
+        exponents += shift
+    return np.ldexp(values, -exponents)
+
+
+def _liability_moments(mean, m2, draws, exponents):
+    variance = np.maximum(0.0, m2 / draws)
+    with np.errstate(over="ignore"):
+        if exponents is not None:
+            mean = np.ldexp(mean, exponents)
+            variance = np.ldexp(variance, 2 * exponents)
+    if not np.isfinite(mean).all() or not np.isfinite(variance).all():
+        raise ValueError("An ordinal liability summary exceeds floating-point range.")
+    return mean, variance
+
+
 def compute_threshold_marginals(
     tree,
     states,
@@ -572,6 +616,10 @@ def compute_threshold_marginals(
     probability_counts = np.zeros((len(compiled.nodes), len(states)), dtype=float)
     liability_mean = np.zeros(len(compiled.nodes), dtype=float)
     liability_m2 = np.zeros(len(compiled.nodes), dtype=float)
+    total_draws = chains * num_samples
+    moment_limit, moment_exponents = _liability_moment_units(
+        compiled, process, initial_thresholds, total_draws
+    )
     threshold_mean = initial_thresholds.copy()
     diagnostic_traces = np.empty(
         (chains, num_samples, 1 + max(0, len(states) - 2)), dtype=float
@@ -610,9 +658,12 @@ def compute_threshold_marginals(
             categories = np.searchsorted(current_thresholds, values, side="left")
             probability_counts[np.arange(len(values)), categories] += 1.0
             retained_draws += 1
-            centered = values - liability_mean
+            moment_values = _scaled_liability_values(
+                values, liability_mean, liability_m2, moment_limit, moment_exponents
+            )
+            centered = moment_values - liability_mean
             liability_mean += centered / retained_draws
-            liability_m2 += centered * (values - liability_mean)
+            liability_m2 += centered * (moment_values - liability_mean)
             _accumulate_threshold_mean(
                 threshold_mean, current_thresholds, retained_draws, estimate_thresholds
             )
@@ -620,12 +671,13 @@ def compute_threshold_marginals(
             if len(current_thresholds) > 1:
                 diagnostic_traces[chain_index, retained, 1:] = current_thresholds[1:]
             retained += 1
-    total_draws = chains * num_samples
     posterior = {
         node: probability_counts[index] / total_draws
         for index, node in enumerate(compiled.nodes)
     }
-    variances = np.maximum(0.0, liability_m2 / total_draws)
+    liability_mean, variances = _liability_moments(
+        liability_mean, liability_m2, total_draws, moment_exponents
+    )
     liabilities = {
         node: GaussianMarginal(float(liability_mean[index]), float(variances[index]))
         for index, node in enumerate(compiled.nodes)

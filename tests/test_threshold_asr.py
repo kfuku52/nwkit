@@ -294,6 +294,34 @@ def test_threshold_ess_rejects_apparent_agreement_of_constant_separated_chains()
     assert ess[0] == pytest.approx(400.0 / 199.0)
 
 
+def test_threshold_liability_variance_stays_finite_when_sum_of_squares_overflows():
+    variance = 1.7e308
+    tree = read_tree(
+        f"(A:{variance},B:{variance})R;", "1", True, rooted="yes", quiet=True
+    )
+    with np.errstate(over="raise", invalid="raise"):
+        _, fit = compute_threshold_marginals(
+            tree,
+            ("low", "high"),
+            {"A": "low", "B": "high"},
+            {"A": np.array([1.0, 0.0]), "B": np.array([0.0, 1.0])},
+            thresholds="0",
+            num_samples=500,
+            burnin=30,
+            chains=2,
+            seed=4,
+        )
+
+    for name, sign in (("A", -1), ("B", 1)):
+        marginal = fit.liability_marginals[tree[name]]
+        assert marginal.mean / math.sqrt(variance) == pytest.approx(
+            sign * math.sqrt(2.0 / math.pi), abs=0.07
+        )
+        assert marginal.variance / variance == pytest.approx(
+            1.0 - 2.0 / math.pi, abs=0.06
+        )
+
+
 def test_ordinal_thresholds_are_sampled_in_identified_order():
     tree = tree_from("((A:1,B:1):1,(C:1,D:1):1,E:2,F:2)R;")
     states = ("small", "medium", "large")
