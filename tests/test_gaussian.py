@@ -19,6 +19,13 @@ def test_grouped_dense_covariance_uses_the_correct_rows_in_group_order(groups):
     )
 
 
+def test_grouped_dense_covariance_keeps_large_finite_mean_variance():
+    covariance = np.array([[1.6e308, 8e307], [8e307, 1.2e308]])
+    with np.errstate(over="raise", invalid="raise"):
+        observed = gaussian.grouped_mean_covariance_diagonal(covariance, [0, 0])
+    np.testing.assert_allclose(observed, [1.1e308], rtol=1e-15)
+
+
 @pytest.mark.parametrize("columns", [None, 2])
 def test_diagonal_cholesky_solve_keeps_finite_results_at_subnormal_variance(columns):
     diagonal = np.ldexp(np.array([1.0, 2.0, 4.0]), -1060)

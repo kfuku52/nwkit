@@ -1155,7 +1155,7 @@ def _grouped_dense_covariance_diagonal(covariance, groups, counts):
         end = ends[group]
         count = counts[group]
         selected = order[end - count : end]
-        result[group] = covariance[np.ix_(selected, selected)].sum() / np.square(count)
+        result[group] = finite_mean(covariance[np.ix_(selected, selected)])
     return result
 
 
