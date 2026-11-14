@@ -125,6 +125,30 @@ def test_vector_flat_root_matches_scalar_independent_traits():
     assert result.log_likelihood == pytest.approx(likelihood)
 
 
+def test_unobserved_subtree_keeps_its_branch_transitions():
+    process, compiled = fixture()
+    first_tip = compiled.leaf_index_by_name["A"]
+    process.transitions[compiled.nodes[first_tip]] = VectorTransition(
+        np.eye(2), np.zeros(2), np.zeros((2, 2))
+    )
+    observed_index = 2 * compiled.leaf_index_by_name["C"]
+    result = condition_vector_tree(process, {"C": [1.2, None]})
+    mean, covariance = dense_joint(process, compiled)
+    cross = covariance[:, observed_index]
+    variance = covariance[observed_index, observed_index]
+    expected_mean = mean + cross * ((1.2 - mean[observed_index]) / variance)
+    expected_covariance = covariance - np.outer(cross, cross) / variance
+    np.testing.assert_allclose(result.means.ravel(), expected_mean, atol=1e-12)
+    for index, actual in enumerate(result.covariances):
+        coordinates = slice(2 * index, 2 * index + 2)
+        np.testing.assert_allclose(
+            actual, expected_covariance[coordinates, coordinates], atol=1e-12
+        )
+    assert result.log_likelihood == pytest.approx(
+        multivariate_normal.logpdf(1.2, mean[observed_index], variance), abs=1e-12
+    )
+
+
 def test_zero_length_branches_preserve_exact_observations():
     from nwkit.vector_processes import vector_brownian_process
 

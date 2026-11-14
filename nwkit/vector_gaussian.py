@@ -100,10 +100,10 @@ def _inverse(matrix, label):
     )
 
 
-def _observations(d, compiled, observed, error_covariances) -> list[_ObservationFactor]:
-    factors: list[_ObservationFactor] = [
-        (np.zeros((d, d)), np.zeros(d), 0.0, {}) for _ in compiled.nodes
-    ]
+def _observations(
+    d, compiled, observed, error_covariances
+) -> list[_ObservationFactor | None]:
+    factors: list[_ObservationFactor | None] = [None] * len(compiled.nodes)
     unknown = set(observed) - set(compiled.leaf_index_by_name)
     if unknown:
         raise ValueError(
@@ -134,8 +134,8 @@ def _observations(d, compiled, observed, error_covariances) -> list[_Observation
                 "An exact observed coordinate cannot have nonzero error covariance."
             )
         noisy = np.flatnonzero(np.diag(covariance) != 0)
-        precision, linear, constant, fixed = factors[compiled.leaf_index_by_name[name]]
-        fixed.update({int(indices[i]): float(y[i]) for i in exact})
+        precision, linear, constant = np.zeros((d, d)), np.zeros(d), 0.0
+        fixed = {int(indices[i]): float(y[i]) for i in exact}
         if len(noisy):
             inverse, logdet = _inverse(
                 covariance[np.ix_(noisy, noisy)], "Observation covariance"
@@ -283,7 +283,7 @@ def prepare_vector_conditioning(
     compiled, dimension, observed, *, error_covariances=None
 ):
     """Reuse the observation factors while fitting processes on one topology."""
-    factors: list[_ObservationFactor] | None = None
+    factors: list[_ObservationFactor | None] | None = None
 
     def condition(process):
         nonlocal factors
@@ -306,14 +306,13 @@ def _condition_vector_tree(process, compiled, local):
     identity = np.eye(d)
     zero_covariance = np.zeros((d, d))
     zero_intercept = np.zeros(d)
+    empty: _ObservationFactor = (zero_covariance, zero_intercept, 0.0, {})
     previous_transition = object()
     branch = None
+    branch_covariance = None
     for index in compiled.postorder:
         if index == 0:
             break
-        precision, linear, constant, fixed = local[index]
-        parent = compiled.parents[index]
-        parent_precision, parent_linear, parent_constant, parent_fixed = local[parent]
         transition = process.transitions[compiled.nodes[index]]
         if transition is not previous_transition:
             previous_transition = transition
@@ -327,6 +326,26 @@ def _condition_vector_tree(process, compiled, local):
                 branch = None
             else:
                 branch = _validated_positive_transition(transition, d)
+            branch_covariance = None
+        factor = local[index]
+        if factor is None:
+            # A subtree without observations leaves its branch prior unchanged.
+            if branch is None:
+                slopes[index] = identity
+            else:
+                if branch_covariance is None:
+                    branch_covariance = (branch[2] + branch[2].T) / 2
+                slopes[index], intercepts[index], covariances[index] = (
+                    branch[0],
+                    branch[1],
+                    branch_covariance,
+                )
+            continue
+        precision, linear, constant, fixed = factor
+        parent = compiled.parents[index]
+        parent_precision, parent_linear, parent_constant, parent_fixed = (
+            local[parent] or empty
+        )
         if branch is None:
             if fixed:
                 # Cached local observation factors can be shared between fits.
@@ -350,7 +369,7 @@ def _condition_vector_tree(process, compiled, local):
             parent_constant + message[2],
             parent_fixed,
         )
-    precision, linear, constant, fixed = local[0]
+    precision, linear, constant, fixed = local[0] or empty
     intercepts[0], covariances[0], likelihood = _root(
         precision, linear, constant, fixed, process
     )
