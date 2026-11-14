@@ -381,11 +381,18 @@ def test_missing_constant_and_trait_order(tmp_path, capsys):
     assert first.iloc[0].num_tests == 1
 
 
-def test_missing_uses_retained_mrca(tmp_path, capsys):
+@pytest.mark.parametrize("stem", ["0.7", "1e120"])
+def test_missing_uses_retained_mrca(tmp_path, capsys, stem):
     frame = pd.DataFrame(
         {"leaf_name": list("ABCDEFGH"), "x": [1, 2, 3, 4, None, None, None, None]}
     )
-    result = run_cli(tmp_path, capsys, ["--test", "no"], frame)
+    result = run_cli(
+        tmp_path,
+        capsys,
+        ["--test", "no"],
+        frame,
+        f"(((A:0.7,B:0.7):0.8,(C:0.9,D:0.9):0.6):{stem},(E:1,F:1,G:1,H:1):1);",
+    )
     reduced = run_cli(
         tmp_path,
         capsys,

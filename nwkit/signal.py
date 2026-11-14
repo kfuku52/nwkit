@@ -79,9 +79,6 @@ def _inputs(args):
     process = build_evolutionary_process(
         tree, model="brownian", root_mode="fixed", allow_zero=True
     )
-    covariance = process.tip_covariance(names)
-    if not np.all(np.isfinite(covariance)):
-        raise ValueError("Tree covariance must be finite.")
     table, _, _ = read_tip_table(
         args.trait,
         tree_leaf_names=names,
@@ -108,10 +105,10 @@ def _inputs(args):
                     f"Observed trait '{column}' requires finite, non-negative SEs."
                 )
         data.append((column, values, errors))
-    return covariance, data
+    return process, names, data
 
 
-def _trait_rows(covariance, column, values, errors, args):
+def _trait_rows(covariance_for, column, values, errors, args):
     observed = np.isfinite(values)
     n = int(observed.sum())
     methods = ["K", "lambda"] if args.method == "both" else [args.method]
@@ -127,9 +124,7 @@ def _trait_rows(covariance, column, values, errors, args):
         status = "constant_trait"
     if status:
         return [dict(base, method=method, status=status) for method in methods]
-    covariance = covariance[np.ix_(observed, observed)].copy()
-    # Pruning to the observed tips drops the shared stem above their MRCA.
-    covariance -= np.min(covariance)
+    covariance = covariance_for(observed)
     try:
         np.linalg.cholesky(covariance)
     except np.linalg.LinAlgError:
@@ -231,6 +226,21 @@ def _method_result(method, covariance, values, errors, args, rng):
     return result
 
 
+def _observed_covariance(process, names, observed):
+    tips = process.ordered_leaves(
+        [name for name, keep in zip(names, observed, strict=True) if keep]
+    )
+    # Start at the retained MRCA. Subtracting a shared stem from absolute
+    # root depths would lose short paths when the stem is much longer.
+    ancestor = process.tree.common_ancestor(tips)
+    if ancestor is process.tree:
+        return process.covariance(tips)
+    local = build_evolutionary_process(
+        ancestor, model="brownian", root_mode="fixed", allow_zero=True
+    )
+    return local.covariance(tips)
+
+
 def signal_main(args):
     outputs = [] if args.outfile == "-" else [args.outfile]
     validate_outputs_do_not_replace_inputs(
@@ -238,10 +248,20 @@ def signal_main(args):
         [("--outfile", path) for path in outputs],
     )
     validate_output_targets(outputs)
-    covariance, data = _inputs(args)
+    process, names, data = _inputs(args)
+    previous_mask = previous_covariance = None
+
+    def covariance_for(observed):
+        nonlocal previous_mask, previous_covariance
+        mask = observed.tobytes()
+        if previous_covariance is None or mask != previous_mask:
+            previous_covariance = _observed_covariance(process, names, observed)
+            previous_mask = mask
+        return previous_covariance.copy()
+
     rows = []
     for column, values, errors in data:
-        rows.extend(_trait_rows(covariance, column, values, errors, args))
+        rows.extend(_trait_rows(covariance_for, column, values, errors, args))
     for method in ("K", "lambda"):
         tested = [row for row in rows if row["method"] == method and "p_value" in row]
         p_values = [row["p_value"] for row in tested]
