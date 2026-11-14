@@ -709,10 +709,7 @@ def solve_factor(
     factor = np.asarray(factor, dtype=float)
     values = np.asarray(values, dtype=float)
     if factor.ndim == 1:
-        inverse_diagonal = 1.0 / np.square(factor)
-        if values.ndim == 1:
-            return inverse_diagonal * values
-        return inverse_diagonal[:, None] * values
+        return _solve_diagonal_cholesky(factor, values)
     return cho_solve((factor, True), values)
 
 
@@ -730,6 +727,13 @@ def _solve_sparse_precision_factor(factor, values):
         if projected.ndim == 1
         else projected / factor.diagonal[:, None]
     )
+
+
+def _solve_diagonal_cholesky(factor, values):
+    scale = factor if values.ndim == 1 else factor[:, None]
+    # Applying the two triangular solves sequentially retains finite results
+    # when forming the reciprocal variance would overflow.
+    return (values / scale) / scale
 
 
 def factor_logdet(

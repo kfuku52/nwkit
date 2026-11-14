@@ -19,6 +19,20 @@ def test_grouped_dense_covariance_uses_the_correct_rows_in_group_order(groups):
     )
 
 
+@pytest.mark.parametrize("columns", [None, 2])
+def test_diagonal_cholesky_solve_keeps_finite_results_at_subnormal_variance(columns):
+    diagonal = np.ldexp(np.array([1.0, 2.0, 4.0]), -1060)
+    values = np.array([-2.0, 0.0, 3.0])
+    rhs = diagonal * values
+    if columns:
+        rhs = np.column_stack([rhs, -rhs])
+        values = np.column_stack([values, -values])
+    factor = gaussian.factor_covariance(np.diag(diagonal))
+    with np.errstate(over="raise", invalid="raise"):
+        solution = gaussian.solve_factor(factor, rhs)
+    np.testing.assert_allclose(solution, values, rtol=1e-15, atol=0.0)
+
+
 @pytest.mark.parametrize("kind", ["dense", "low-rank", "grouped", "nested"])
 @pytest.mark.parametrize("vector", [True, False])
 def test_cholesky_solves_match_dense_oracle_without_refactorization(
