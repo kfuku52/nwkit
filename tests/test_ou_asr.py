@@ -26,6 +26,27 @@ def test_affine_ou_pruning_preserves_weak_attraction_to_the_optimum():
 
 def test_ou_tail_likelihood_remains_finite_when_the_square_alone_overflows():
     assert ou_asr._log_normal_density(1.7e154, 0.0, 1.0) == pytest.approx(-1.445e308)
+    assert ou_asr._normal_nll_polynomial(1.7e154, 0.0, 1.0)[2] == pytest.approx(
+        1.445e308
+    )
+
+
+def test_ou_combines_finite_messages_with_an_overflowing_variance_sum():
+    variance = 1.7e308
+    left = ou_asr._Factor(ou_asr.GaussianMarginal(0.5, variance))
+    right = ou_asr._Factor(ou_asr.GaussianMarginal(2.0, variance))
+    combined = ou_asr._combine(left, right)
+    log_density = -0.5 * (math.log(math.tau) + math.log(variance) + math.log(2.0))
+    assert combined.marginal == ou_asr.GaussianMarginal(1.25, 8.5e307)
+    assert combined.log_weight == pytest.approx(log_density)
+    affine = ou_asr._combine_affine(
+        ou_asr._AffineFactor(0.5, 0.25, variance),
+        ou_asr._AffineFactor(2.0, 0.5, variance),
+    )
+    assert affine.mean_offset == 1.25
+    assert affine.mean_slope == 0.375
+    assert affine.variance == 8.5e307
+    assert affine.nll_constant == pytest.approx(-log_density)
 
 
 def ancestor_distances(node):

@@ -18,6 +18,7 @@ from nwkit.continuous_asr import (
 )
 from nwkit.evolution import _finite_rate_bound
 from nwkit.gaussian_inference import _normal_log_density as _log_normal_density
+from nwkit.gaussian_inference import _normal_log_overlap
 from nwkit.gaussian_tree import (
     _scaled_gaussian_variance,
     ou_stationary_variance,
@@ -98,17 +99,13 @@ def _combine(first, second):
         return _Factor(first.marginal, first.log_weight + second.log_weight)
     left, right = first.marginal, second.marginal
     variance_sum = left.variance + right.variance
-    if not math.isfinite(variance_sum):
-        raise ValueError(
-            "An OU conditional variance exceeds floating-point range; rescale units."
-        )
     if variance_sum == 0.0:
         if left.mean != right.mean:
             raise ValueError(
                 "Conflicting exact observations have zero likelihood under the OU model."
             )
         return _Factor(left, first.log_weight + second.log_weight)
-    log_overlap = _log_normal_density(left.mean, right.mean, variance_sum)
+    log_overlap = _normal_log_overlap(left, right, variance_sum)
     if left.variance == 0.0:
         marginal = left
     elif right.variance == 0.0:
@@ -136,15 +133,44 @@ def _normal_nll_polynomial(mean_offset, mean_slope, variance):
     scale = math.sqrt(variance)
     standardized_offset = mean_offset / scale
     standardized_slope = mean_slope / scale
+    return _nll_from_standardized(
+        standardized_offset, standardized_slope, math.log(variance)
+    )
+
+
+def _nll_from_standardized(standardized_offset, standardized_slope, log_variance):
     if not all(
         math.isfinite(value) for value in (standardized_offset, standardized_slope)
     ):
         raise ValueError("An OU profiled likelihood exceeds floating-point range.")
+    square = standardized_offset * standardized_offset
+    constant = 0.5 * (_LOG_2PI + log_variance + square)
+    if not math.isfinite(constant):
+        constant = (
+            0.5 * (_LOG_2PI + log_variance)
+            + (0.5 * standardized_offset) * standardized_offset
+        )
     return (
         0.5 * standardized_slope * standardized_slope,
         standardized_offset * standardized_slope,
-        0.5
-        * (_LOG_2PI + math.log(variance) + standardized_offset * standardized_offset),
+        constant,
+    )
+
+
+def _affine_ou_overlap(first, second, variance_sum):
+    if math.isfinite(variance_sum):
+        return _normal_nll_polynomial(
+            first.mean_offset - second.mean_offset,
+            first.mean_slope - second.mean_slope,
+            variance_sum,
+        )
+    largest = max(first.variance, second.variance)
+    ratio = min(first.variance, second.variance) / largest
+    scale = math.sqrt(largest) * math.sqrt(1.0 + ratio)
+    return _nll_from_standardized(
+        first.mean_offset / scale - second.mean_offset / scale,
+        first.mean_slope / scale - second.mean_slope / scale,
+        math.log(largest) + math.log1p(ratio),
     )
 
 
@@ -167,10 +193,6 @@ def _combine_affine(first, second):
             nll_constant=constant,
         )
     variance_sum = first.variance + second.variance
-    if not math.isfinite(variance_sum):
-        raise ValueError(
-            "An OU conditional variance exceeds floating-point range; rescale units."
-        )
     if variance_sum == 0.0:
         if (
             first.mean_offset != second.mean_offset
@@ -185,11 +207,7 @@ def _combine_affine(first, second):
             nll_linear=linear,
             nll_constant=constant,
         )
-    extra = _normal_nll_polynomial(
-        first.mean_offset - second.mean_offset,
-        first.mean_slope - second.mean_slope,
-        variance_sum,
-    )
+    extra = _affine_ou_overlap(first, second, variance_sum)
     quadratic += extra[0]
     linear += extra[1]
     constant += extra[2]
