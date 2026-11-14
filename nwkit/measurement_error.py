@@ -182,12 +182,22 @@ def _latent_predictor_profile_moments(observed, cholesky, include_intercept):
     prior_mean = 0.0
     if include_intercept:
         whitened_ones = whitened[:, 1]
-        denominator = float(whitened_ones @ whitened_ones)
-        if not math.isfinite(denominator) or denominator <= 0.0:
-            raise np.linalg.LinAlgError("Predictor intercept information is invalid.")
-        prior_mean = float(whitened_ones @ whitened_values) / denominator
+        prior_mean = _whitened_predictor_intercept(whitened_ones, whitened_values)
         whitened_values = whitened_values - prior_mean * whitened_ones
     return prior_mean, float(whitened_values @ whitened_values)
+
+
+def _whitened_predictor_intercept(whitened_ones, whitened_values):
+    with np.errstate(over="ignore"):
+        denominator = float(whitened_ones @ whitened_ones)
+        numerator = float(whitened_ones @ whitened_values)
+    if math.isfinite(denominator) and math.isfinite(numerator) and denominator > 0.0:
+        return numerator / denominator
+    scale = float(np.max(np.abs(whitened_ones)))
+    if not math.isfinite(scale) or scale == 0.0:
+        raise np.linalg.LinAlgError("Predictor intercept information is invalid.")
+    weights = whitened_ones / scale
+    return float(weights @ (whitened_values / scale) / (weights @ weights))
 
 
 def _condition_dense_predictor(prior, sampling, factor, residual, prior_mean):

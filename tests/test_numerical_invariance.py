@@ -114,6 +114,17 @@ def test_latent_predictor_retains_small_correlated_sampling_uncertainty():
     )
 
 
+def test_latent_predictor_keeps_intercept_when_precision_sum_overflows():
+    values = np.array([0.0, 1e-160, 0.3, -0.3])
+    prior = np.diag([0.0, 0.0, 1.0, 1.0])
+    sampling = np.array([1e-310, 1e-310, 0.1, 0.1])
+    with np.errstate(over="raise", invalid="raise", divide="raise"):
+        fitted = fit_latent_predictor(values, prior, sampling, include_intercept=True)
+    assert np.isfinite(fitted.log_likelihood)
+    assert fitted.prior_mean == pytest.approx(5e-161, rel=1e-10, abs=0.0)
+    np.testing.assert_array_equal(fitted.covariance[:2, :2], np.zeros((2, 2)))
+
+
 @pytest.mark.parametrize("sampling", [0.0, 0.1])
 @pytest.mark.parametrize("reml", [False, True])
 def test_gaussian_fit_is_invariant_to_an_intercept_shift(sampling, reml):
