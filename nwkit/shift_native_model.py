@@ -384,17 +384,32 @@ def evaluate_trait(
     )
 
 
-def _restore_trait_variance(values, scale, rate=1.0, time=1.0, *, extra_power=0):
+def _restore_trait_variance(
+    values, scale, rate=1.0, time=1.0, *, column_scale=None, extra_power=0
+):
     """Restore variance with the scale, rate, and time powers combined first."""
     mantissa, exponent = np.frexp(values)
-    scale_part, scale_power = math.frexp(scale)
+    scale_part, scale_power = np.frexp(scale)
+    if column_scale is None:
+        scale_factor, scale_exponent = scale_part**2, 2 * scale_power
+    else:
+        column_part, column_power = np.frexp(column_scale)
+        scale_factor = scale_part * column_part
+        scale_exponent = scale_power + column_power
     rate_part, rate_power = math.frexp(rate)
     time_part, time_power = math.frexp(time)
     with np.errstate(over="ignore", under="ignore"):
         return np.ldexp(
-            mantissa * scale_part**2 * rate_part / time_part,
-            exponent + 2 * scale_power + rate_power - time_power + extra_power,
+            mantissa * scale_factor * rate_part / time_part,
+            exponent + scale_exponent + rate_power - time_power + extra_power,
         )
+
+
+def restore_trait_covariance(matrix, scales, time=1.0):
+    """Restore a covariance matrix in the original trait and tree units."""
+    return _restore_trait_variance(
+        matrix, scales[:, None], time=time, column_scale=scales[None]
+    )
 
 
 def restore_trait_fit(data, trait, fit):

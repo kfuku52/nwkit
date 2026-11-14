@@ -11,7 +11,7 @@ from nwkit.shift_joint_screen import JointQuickProfile, joint_group_lasso_screen
 from nwkit.shift_native_bootstrap import simulate_native_data
 from nwkit.shift_native_fit import NativeFitOptions, fit_native_layout
 from nwkit.shift_native_heuristic import NativeSearchOptions, heuristic_native_search
-from nwkit.shift_native_model import ShiftLayout
+from nwkit.shift_native_model import ShiftLayout, evaluate_trait
 from nwkit.shift_simulation import simulate_shift, simulation_from_fit
 from nwkit.shift_simulation_cli import explicit_simulation
 from tests.test_shift_joint_covariance import dense_ou, fixture_data
@@ -102,6 +102,30 @@ def test_fitted_simulation_and_joint_quick_profile():
     assert spec.coefficients.shape == (1, 2)
     with pytest.raises(ValueError, match="memory"):
         joint_group_lasso_screen(data, fitted, memory_limit=1)
+
+
+@pytest.mark.parametrize("joint", [False, True])
+def test_fitted_simulation_restores_representable_extreme_covariance(joint):
+    data = fixture_data()
+    data = replace(data, scales=np.array([1e155, 1e153]))
+    layout = ShiftLayout.build(data.tree)
+    result = {"layout": layout, "root_model": "OUfixedRoot"}
+    variance = 1e-5
+    if joint:
+        result["joint_fit"] = evaluate_joint(
+            data, layout, [0.5, 0.5], np.eye(2) * variance, np.zeros(2)
+        )
+    else:
+        result["fits"] = [
+            evaluate_trait(data, layout, j, 0.5, variance) for j in range(2)
+        ]
+    spec = simulation_from_fit(data, result)
+    expected = np.diag([1e305, 1e301])
+    np.testing.assert_allclose(spec.covariance_coordinate, expected, rtol=5e-16, atol=0)
+    np.testing.assert_array_equal(spec.measurement_covariance, np.zeros((2, 2)))
+    np.testing.assert_array_equal(
+        spec.sampling_variances, np.zeros_like(data.variances)
+    )
 
 
 def test_joint_heuristic_search_uses_correlated_screen():

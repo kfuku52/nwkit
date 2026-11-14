@@ -15,6 +15,7 @@ from nwkit.shift_native_identifiability import covariance_identifiability
 from nwkit.shift_native_model import (
     NativeTraitFit,
     covariance_geometry,
+    restore_trait_covariance,
     restore_trait_fit,
 )
 from nwkit.vector_whitening import VectorObservationPlan
@@ -720,21 +721,22 @@ def _joint_result(data, layout, options, alpha, process, joint, records):
     alpha_parameters = (
         0 if alpha is not None else (1 if options.alpha_model == "shared" else p)
     )
-    scale = data.scales[:, None] * data.scales[None]
     joint_metadata = {
         "alpha_model": options.alpha_model,
-        "process_tip_covariance": (joint.process_tip_covariance * scale).tolist(),
+        "process_tip_covariance": restore_trait_covariance(
+            joint.process_tip_covariance, data.scales
+        ).tolist(),
         "diffusion_covariance": None
         if joint.diffusion_covariance is None
-        else (joint.diffusion_covariance * scale / data.tree.height).tolist(),
-        "measurement_covariance": np.diag(
-            joint.measurement_variance * data.scales**2
+        else restore_trait_covariance(
+            joint.diffusion_covariance, data.scales, data.tree.height
+        ).tolist(),
+        "measurement_covariance": restore_trait_covariance(
+            np.diag(joint.measurement_variance), data.scales
         ).tolist(),
         "coefficient_order": "trait_major_then_scaled_regime_coefficients",
-        "coefficient_covariance": (
-            joint.coefficient_covariance
-            * np.repeat(data.scales, q)[:, None]
-            * np.repeat(data.scales, q)[None]
+        "coefficient_covariance": restore_trait_covariance(
+            joint.coefficient_covariance, np.repeat(data.scales, q)
         ).tolist(),
         "covariance_parameter_count": covariance_parameters,
         "alpha_parameter_count": alpha_parameters,
