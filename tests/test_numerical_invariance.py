@@ -50,6 +50,41 @@ from nwkit.sparse_laplace import JointPredictorUncertainty
 pytestmark = pytest.mark.filterwarnings(r"error::RuntimeWarning:nwkit\.")
 
 
+def test_dense_pgls_preserves_nearly_collinear_coefficient_direction():
+    x = np.linspace(-1.0, 1.0, 16)
+    distinct = np.cos(9.0 * x)
+    separation = 1e-8
+    design = np.column_stack([np.ones(len(x)), x, x + separation * distinct])
+    # Use a well-conditioned change of basis before forming the reference.
+    reference_design = design.copy()
+    reference_design[:, 2] = (design[:, 2] - x) / separation
+    response = 1.0 + 5.0 * x + 0.25 * reference_design[:, 2] + 0.1 * np.sin(17.0 * x)
+    covariance = np.eye(len(x)) + 0.1 * np.outer(x, x)
+    cholesky = np.linalg.cholesky(covariance)
+    whitened = np.linalg.solve(cholesky, reference_design)
+    values = np.linalg.solve(cholesky, response)
+    basis, singular, rotation = np.linalg.svd(whitened, full_matrices=False)
+    beta = rotation.T @ ((basis.T @ values) / singular)
+    residual = values - whitened @ beta
+    variance = float(residual @ residual) / (len(x) - design.shape[1])
+    transform = np.array(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, -1.0 / separation], [0.0, 0.0, 1.0 / separation]]
+    )
+    inverse = transform @ (rotation.T / singular)
+    uncertainty = inverse @ inverse.T * variance
+
+    actual = regress._profile_covariance_fit(
+        response,
+        design,
+        np.zeros(len(x)),
+        [("evolutionary_rate", covariance)],
+        reml=True,
+    )
+    np.testing.assert_allclose(actual["beta"], transform @ beta, atol=2e-6, rtol=2e-7)
+    np.testing.assert_allclose(actual["beta_covariance"], uncertainty, rtol=2e-6)
+    assert actual["component_variances"]["evolutionary_rate"] == pytest.approx(variance)
+
+
 def _data():
     rng = np.random.default_rng(52)
     x = rng.normal(size=40)

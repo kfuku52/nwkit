@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 from scipy import sparse
-from scipy.linalg import solve_triangular
+from scipy.linalg import qr, solve_triangular
 from scipy.optimize import minimize
 from scipy.stats import chi2
 from scipy.stats import t as student_t
@@ -1539,11 +1539,9 @@ def _dense_profile_gls(cholesky, design, response, rhs, return_details):
     whitened = solve_triangular(cholesky, rhs, lower=True, check_finite=False)
     whitened_design = whitened[:, :-1]
     whitened_response = whitened[:, -1]
-    gram = whitened_design.T @ whitened_design
-    gram_sign, gram_logdet = np.linalg.slogdet(gram)
-    if gram_sign <= 0.0:
-        raise np.linalg.LinAlgError("The weighted regression design is singular.")
-    beta = np.linalg.solve(gram, whitened_design.T @ whitened_response)
+    beta, beta_covariance, gram_logdet = _whitened_regression(
+        whitened_design, whitened_response, return_details
+    )
     whitened_residual = whitened_response - whitened_design @ beta
     quadratic = float(whitened_residual @ whitened_residual)
     residual, inverse_residual = None, None
@@ -1552,7 +1550,76 @@ def _dense_profile_gls(cholesky, design, response, rhs, return_details):
         inverse_residual = solve_triangular(
             cholesky, whitened_residual, lower=True, trans="T", check_finite=False
         )
-    return beta, gram, gram_logdet, residual, inverse_residual, quadratic
+    return (
+        beta,
+        beta_covariance,
+        gram_logdet,
+        residual,
+        inverse_residual,
+        quadratic,
+    )
+
+
+def _whitened_regression(design, response, return_details):
+    gram = design.T @ design
+    sign, logdet = np.linalg.slogdet(gram)
+    if sign <= 0.0 or _ill_conditioned_gram(gram):
+        basis, triangular, order = qr(
+            design, mode="economic", pivoting=True, check_finite=False
+        )
+        return _pivoted_regression(basis, triangular, order, response, return_details)
+    beta = np.linalg.solve(gram, design.T @ response)
+    return beta, np.linalg.inv(gram) if return_details else None, logdet
+
+
+def _ill_conditioned_gram(gram):
+    if len(gram) <= 1:
+        return False
+    if len(gram) == 2:
+        # trace provides the scale without a second small matrix factorization.
+        first, second = float(gram[0, 0]), float(gram[1, 1])
+        scale = max(first, second)
+        if scale == 0.0:
+            return True
+        first, second = first / scale, second / scale
+        cross = float(gram[0, 1]) / scale
+        determinant = first * second - cross * cross
+        return determinant <= math.sqrt(np.finfo(float).eps) * (first + second) ** 2
+    eigenvalues = np.linalg.eigvalsh(gram)
+    return eigenvalues[0] <= math.sqrt(np.finfo(float).eps) * eigenvalues[-1]
+
+
+def _pivoted_regression(basis, triangular, order, response, return_details):
+    diagonal = np.abs(np.diag(triangular))
+    if len(diagonal) != len(order) or diagonal[-1] <= (
+        np.finfo(float).eps * max(basis.shape) * diagonal[0]
+    ):
+        raise np.linalg.LinAlgError("The weighted regression design is singular.")
+    beta = np.empty(len(order))
+    beta[order] = solve_triangular(triangular, basis.T @ response, check_finite=False)
+    covariance = None
+    if return_details:
+        inverse = solve_triangular(triangular, np.eye(len(order)), check_finite=False)
+        covariance = np.empty_like(inverse)
+        covariance[np.ix_(order, order)] = inverse @ inverse.T
+    return beta, covariance, 2.0 * float(np.log(diagonal).sum())
+
+
+def _structured_gls_coefficients(cholesky, design, response, inverse_design, details):
+    gram = design.T @ inverse_design
+    sign, logdet = np.linalg.slogdet(gram)
+    if sign <= 0.0:
+        raise np.linalg.LinAlgError("The weighted regression design is singular.")
+    beta = np.linalg.solve(
+        gram, design.T @ _solve_positive_definite(cholesky, response)
+    )
+    return beta, np.linalg.inv(gram) if details else None, logdet
+
+
+def _regression_precentering(design, beta, structured):
+    if not structured and _ill_conditioned_gram(design.T @ design):
+        return np.zeros_like(beta)
+    return beta
 
 
 def _structured_profile_covariance(diagonal, updates, required):
@@ -1636,13 +1703,17 @@ def _profile_covariance_fit(
         )
     centered_response, beta_offset = center_response(working_response, design)
     ordinary_beta = np.linalg.lstsq(design, centered_response, rcond=None)[0]
+    initial_residual = centered_response - design @ ordinary_beta
+    # For nearly collinear columns, reconstructing the ordinary fitted values
+    # injects rounding errors along the same weakly identified direction.
+    ordinary_beta = _regression_precentering(design, ordinary_beta, structured_model)
     ordinary_residual = centered_response - design @ ordinary_beta
     dense_rhs = (
         None if structured_model else np.column_stack((design, ordinary_residual))
     )
     need_grouped_covariance = likelihood_groups is not None
     response_scale = residual_variance_scale(
-        centered_response, ordinary_residual, sampling_diagonal
+        centered_response, initial_residual, sampling_diagonal
     )
     lower_variance = max(response_scale * 1e-12, np.finfo(float).tiny)
     upper_variance = max(response_scale * 1e6, lower_variance * 1e6)
@@ -1681,13 +1752,8 @@ def _profile_covariance_fit(
                     cholesky = np.sqrt(covariance)
                     covariance_representation = covariance
                 inverse_design = _solve_positive_definite(cholesky, design)
-                gram = design.T @ inverse_design
-                gram_sign, gram_logdet = np.linalg.slogdet(gram)
-                if gram_sign <= 0.0:
-                    return float("inf")
-                beta = np.linalg.solve(
-                    gram,
-                    design.T @ _solve_positive_definite(cholesky, response),
+                beta, beta_covariance, gram_logdet = _structured_gls_coefficients(
+                    cholesky, design, response, inverse_design, return_details
                 )
                 residual = response - design @ beta
                 inverse_residual = _solve_positive_definite(cholesky, residual)
@@ -1705,10 +1771,15 @@ def _profile_covariance_fit(
             covariance_representation = covariance
             try:
                 cholesky = np.linalg.cholesky(covariance)
-                beta, gram, gram_logdet, residual, inverse_residual, quadratic = (
-                    _dense_profile_gls(
-                        cholesky, design, response, dense_rhs, return_details
-                    )
+                (
+                    beta,
+                    beta_covariance,
+                    gram_logdet,
+                    residual,
+                    inverse_residual,
+                    quadratic,
+                ) = _dense_profile_gls(
+                    cholesky, design, response, dense_rhs, return_details
                 )
                 covariance_logdet = 2.0 * float(np.log(np.diag(cholesky)).sum())
             except np.linalg.LinAlgError:
@@ -1743,7 +1814,6 @@ def _profile_covariance_fit(
             return float("inf")
         if not return_details:
             return objective
-        beta_covariance = np.linalg.inv(gram)
         component_variances = {
             name: float(variance / scale)
             for variance, (name, _), scale in zip(
