@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 from scipy import special
+from scipy.fft import irfft, next_fast_len, rfft
 from scipy.special import log_ndtr, ndtri
 from scipy.stats import truncnorm
 
@@ -291,6 +292,33 @@ def _update_thresholds(values, allowed_categories, thresholds, rng):
         thresholds[threshold_index] = rng.uniform(lower, upper)
 
 
+def _effective_sample_size(centered, pooled):
+    chains, samples = centered.shape
+    total_draws = chains * samples
+    if pooled == 0.0 or samples < 3:
+        return float(total_draws)
+
+    fft_size = next_fast_len(2 * samples - 1, real=True)
+    frequency = rfft(centered, n=fft_size, axis=1)
+    covariance = (
+        irfft(np.mean(frequency.real**2 + frequency.imag**2, axis=0), n=fft_size)[
+            :samples
+        ]
+        / samples
+    )
+    correlations = 1.0 - (covariance[0] - covariance) / pooled
+    correlations[0] = 1.0
+    paired = correlations[: 2 * (samples // 2)].reshape(-1, 2).sum(axis=1)
+    # Geyer's initial positive, monotone sequence of paired correlations.
+    nonpositive = np.flatnonzero(paired <= 0.0)
+    if len(nonpositive):
+        paired = paired[: nonpositive[0]]
+    autocorrelation_time = max(
+        1.0, 2.0 * float(np.minimum.accumulate(paired).sum()) - 1.0
+    )
+    return total_draws / autocorrelation_time
+
+
 def _rhat_and_ess(traces):
     traces = np.asarray(traces, dtype=float)
     chains, samples, dimensions = traces.shape
@@ -298,24 +326,24 @@ def _rhat_and_ess(traces):
     ess = np.full(dimensions, chains * samples, dtype=float)
     for dimension in range(dimensions):
         values = traces[:, :, dimension]
-        if chains > 1 and samples > 1:
-            within = float(np.mean(np.var(values, axis=1, ddof=1)))
-            between = samples * float(np.var(np.mean(values, axis=1), ddof=1))
-            if within > 0.0:
-                pooled = ((samples - 1.0) / samples) * within + between / samples
-                rhat[dimension] = math.sqrt(max(0.0, pooled / within))
-            else:
-                rhat[dimension] = 1.0 if between == 0.0 else math.inf
-        if samples > 2:
-            centered = values - np.mean(values, axis=1, keepdims=True)
-            denominator = float(np.sum(centered * centered))
-            if denominator > 0.0:
-                rho = float(np.sum(centered[:, :-1] * centered[:, 1:]) / denominator)
-                rho = min(0.99, max(-0.99, rho))
-                ess[dimension] = min(
-                    chains * samples,
-                    chains * samples * (1.0 - rho) / (1.0 + rho),
-                )
+        if samples < 2:
+            continue
+        _, exponent = math.frexp(float(np.max(np.abs(values))))
+        scaled = np.ldexp(values, -exponent)
+        means = np.mean(scaled, axis=1, keepdims=True)
+        centered = scaled - means
+        within = float(np.sum(centered**2)) / (chains * (samples - 1))
+        between = float(np.var(means, ddof=1)) if chains > 1 else 0.0
+        pooled = (1.0 - 1.0 / samples) * within + between
+        if chains > 1:
+            rhat[dimension] = (
+                math.sqrt(pooled / within)
+                if within > 0.0
+                else 1.0
+                if between == 0.0
+                else math.inf
+            )
+        ess[dimension] = _effective_sample_size(centered, pooled)
     return rhat, ess
 
 

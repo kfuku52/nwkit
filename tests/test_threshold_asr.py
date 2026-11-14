@@ -5,6 +5,7 @@ from scipy.stats import truncnorm
 
 from nwkit.cli import main
 from nwkit.threshold_asr import (
+    _rhat_and_ess,
     _truncated_draw,
     _truncated_quantile,
     build_threshold_process,
@@ -155,6 +156,28 @@ def test_threshold_allows_zero_burnin_and_marks_single_chain_rhat_unavailable():
     assert fit.burnin == 0
     assert np.isnan(fit.rhat_max)
     assert "mcmc_rhat_unavailable" in fit.fit_status
+
+
+def test_threshold_ess_detects_dependence_beyond_the_first_lag():
+    rng = np.random.default_rng(2874)
+    traces = rng.normal(size=(4, 4096, 1))
+    for sample in range(2, traces.shape[1]):
+        traces[:, sample, :] += 0.75 * traces[:, sample - 2, :]
+    rhat, ess = _rhat_and_ess(traces)
+    # Independent even and odd AR(1) subchains have zero lag-one correlation.
+    # Their integrated autocorrelation time is (1 + 0.75) / (1 - 0.75).
+    assert rhat[0] == pytest.approx(1.0, abs=0.01)
+    assert ess[0] == pytest.approx(traces.size / 7.0, rel=0.2)
+    scaled_rhat, scaled_ess = _rhat_and_ess(traces * 1e200)
+    np.testing.assert_allclose(scaled_rhat, rhat)
+    np.testing.assert_allclose(scaled_ess, ess)
+
+
+def test_threshold_ess_rejects_apparent_agreement_of_constant_separated_chains():
+    traces = np.broadcast_to(np.arange(4.0)[:, None, None], (4, 100, 1))
+    rhat, ess = _rhat_and_ess(traces)
+    assert np.isinf(rhat[0])
+    assert ess[0] == pytest.approx(400.0 / 199.0)
 
 
 def test_ordinal_thresholds_are_sampled_in_identified_order():

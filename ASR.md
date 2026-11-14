@@ -239,10 +239,12 @@ thinning and chains controlled by `--liability-samples`,
 `--liability-burnin`, `--liability-thin`, and `--liability-chains`.
 Ambiguous ordered observations constrain liabilities to the union of their
 allowed category intervals and remain valid as estimated thresholds move.
-`--liability-out` reports posterior liability moments; `--model-out` reports
-maximum R-hat, minimum lag-one ESS, and diagnostic status. Threshold inference
-requires positive branch lengths and does not report a marginal likelihood or
-support CTMC stochastic mapping.
+`--liability-out` reports posterior liability moments. The model table reports
+maximum R-hat, minimum ESS, and diagnostic status. ESS incorporates
+between-chain variance and a
+[positive monotone sequence of paired autocorrelations](https://mc-stan.org/docs/2_33/reference-manual/effective-sample-size.html).
+Threshold inference requires positive branch lengths and does not report a
+marginal likelihood or support CTMC stochastic mapping.
 R-hat requires at least two chains and two retained draws per chain; otherwise
 it is reported as unavailable rather than as apparent convergence. Burn-in may
 be zero, while retained draws, thinning, and chain counts must be positive.
