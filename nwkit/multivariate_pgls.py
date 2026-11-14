@@ -459,6 +459,17 @@ def _dense_covariance_inputs(components, n_tips, fixed_covariance, use_sparse):
     return component_covariance, fixed_dense
 
 
+def _observed_trait_design(design, observed_indices, n_traits):
+    n_tips, columns = design.shape
+    trait_indices, tip_indices = np.divmod(observed_indices, n_tips)
+    observed_design = np.zeros((len(observed_indices), n_traits * columns))
+    target_columns = trait_indices[:, None] * columns + np.arange(columns)
+    observed_design[np.arange(len(observed_indices))[:, None], target_columns] = design[
+        tip_indices
+    ]
+    return observed_design
+
+
 def _rescale_covariance_rows(matrix, exponents):
     if sparse.issparse(matrix):
         scaled = matrix.tocoo(copy=True)
@@ -613,8 +624,7 @@ def fit_multivariate_pgls(
     observed_indices = np.flatnonzero(observed.reshape(-1, order="F"))
     observed_covariance_index = np.ix_(observed_indices, observed_indices)
     observed_response = response_vector[observed_indices]
-    full_design = np.kron(np.eye(n_traits), design)
-    observed_design = full_design[observed_indices]
+    observed_design = _observed_trait_design(design, observed_indices, n_traits)
     observed_rhs = np.column_stack([observed_design, observed_response])
     dense_component, fixed_dense = _dense_covariance_inputs(
         covariance_components, n_tips, fixed_covariance, use_sparse
