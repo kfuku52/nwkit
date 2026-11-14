@@ -659,7 +659,9 @@ def fit_multivariate_pgls(
         whitened_response = whitened[:, -1]
         information = whitened_design.T @ whitened_design
         information_factor = _positive_cholesky(information)
-        beta_covariance = _coefficient_covariance(information_factor, compute_covariance)
+        beta_covariance = _coefficient_covariance(
+            information_factor, compute_covariance
+        )
         coefficients = cho_solve(
             (information_factor, True),
             whitened_design.T @ whitened_response,
