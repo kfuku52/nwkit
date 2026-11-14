@@ -163,6 +163,15 @@ def _requires_multiple_root_copies(gene_tree, species_side):
     return sorted(masks[child] for child in gene_tree.children[-1]) != [1, 2]
 
 
+def _fixed_doublings(species_tree, events):
+    by_node = _validate_fixed_events(species_tree, tuple(events))
+    if any(event.multiplicity != 2 for event in by_node.values()):
+        raise ValueError(
+            "Fixed-topology likelihood requires all fixed background events to be doublings."
+        )
+    return by_node
+
+
 class TopologyLikelihood:
     def __init__(
         self,
@@ -177,11 +186,7 @@ class TopologyLikelihood:
         fixed_events=(),
     ):
         self.tree, self.gene = species_tree, gene_tree
-        self._fixed_by_node = _validate_fixed_events(species_tree, tuple(fixed_events))
-        if any(event.multiplicity != 2 for event in self._fixed_by_node.values()):
-            raise ValueError(
-                "Fixed-topology likelihood requires all fixed background events to be doublings."
-            )
+        self._fixed_by_node = _fixed_doublings(species_tree, fixed_events)
         self.children = species_tree.children
         if any(len(children) not in {0, 2} for children in self.children):
             raise ValueError("Fixed-topology DL/WGD requires a binary species tree.")
